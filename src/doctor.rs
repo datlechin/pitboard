@@ -111,7 +111,7 @@ pub fn run() -> Vec<Check> {
         }
     });
 
-    checks.push(match store::resolve_backend(&service) {
+    checks.push(match store::resolve(&service) {
         Ok(store::Backend::Keychain) => ok("credential store", "keychain"),
         Ok(store::Backend::File) => warn(
             "credential store",
@@ -130,55 +130,53 @@ pub fn run() -> Vec<Check> {
         ),
     });
 
-    checks.push(
-        match store::read_document(&service, store::Owner::ClaudeCode) {
-            Ok(Some(doc)) => {
-                let keys: Vec<&str> = doc
-                    .as_object()
-                    .map(|o| o.keys().map(String::as_str).collect())
-                    .unwrap_or_default();
-                match doc.get("claudeAiOauth").and_then(Value::as_object) {
-                    Some(o) => {
-                        let fp = o
-                            .get("refreshToken")
-                            .and_then(Value::as_str)
-                            .map(store::fingerprint)
-                            .unwrap_or_else(|| "none".into());
-                        let expires = o.get("refreshTokenExpiresAt").and_then(Value::as_i64);
-                        let left = expires
-                            .map(|ms| (ms / 1000 - crate::time::now()) / 86_400)
-                            .unwrap_or(-1);
-                        let detail =
-                            format!("refresh {fp}  ·  {left} days left  ·  document keys {keys:?}");
-                        if left < 3 {
-                            warn(
-                                "credential",
-                                detail,
-                                "This login expires soon and will need signing in again.",
-                            )
-                        } else {
-                            ok("credential", detail)
-                        }
+    checks.push(match store::read(&service, store::Owner::ClaudeCode) {
+        Ok(Some(doc)) => {
+            let keys: Vec<&str> = doc
+                .as_object()
+                .map(|o| o.keys().map(String::as_str).collect())
+                .unwrap_or_default();
+            match doc.get("claudeAiOauth").and_then(Value::as_object) {
+                Some(o) => {
+                    let fp = o
+                        .get("refreshToken")
+                        .and_then(Value::as_str)
+                        .map(store::fingerprint)
+                        .unwrap_or_else(|| "none".into());
+                    let expires = o.get("refreshTokenExpiresAt").and_then(Value::as_i64);
+                    let left = expires
+                        .map(|ms| (ms / 1000 - crate::time::now()) / 86_400)
+                        .unwrap_or(-1);
+                    let detail =
+                        format!("refresh {fp}  ·  {left} days left  ·  document keys {keys:?}");
+                    if left < 3 {
+                        warn(
+                            "credential",
+                            detail,
+                            "This login expires soon and will need signing in again.",
+                        )
+                    } else {
+                        ok("credential", detail)
                     }
-                    None => fail(
-                        "credential",
-                        format!("document has no claudeAiOauth, keys are {keys:?}"),
-                        "The credential shape changed.",
-                    ),
                 }
+                None => fail(
+                    "credential",
+                    format!("document has no claudeAiOauth, keys are {keys:?}"),
+                    "The credential shape changed.",
+                ),
             }
-            Ok(None) => warn(
-                "credential",
-                "nothing stored",
-                "Nothing is signed in for this slot.",
-            ),
-            Err(e) => fail(
-                "credential",
-                e.to_string(),
-                "Do not write to the store while this is failing.",
-            ),
-        },
-    );
+        }
+        Ok(None) => warn(
+            "credential",
+            "nothing stored",
+            "Nothing is signed in for this slot.",
+        ),
+        Err(e) => fail(
+            "credential",
+            e.to_string(),
+            "Do not write to the store while this is failing.",
+        ),
+    });
 
     checks.push(match (config.as_ref().ok().and_then(usage::from_config_cache), &identity) {
         (Some(s), Some(id)) if s.account_uuid.as_deref() == Some(id.account_uuid.as_str()) => ok(

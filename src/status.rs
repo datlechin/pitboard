@@ -32,7 +32,7 @@ pub fn gather() -> Report {
         identity,
         snapshot,
         snapshot_is_foreign,
-        backend: store::resolve_backend(&service).map_err(|e| e.to_string()),
+        backend: store::resolve(&service).map_err(|e| e.to_string()),
         service,
         config_file: claude::config_file().display().to_string(),
     }
@@ -51,7 +51,11 @@ fn label(kind: &str, scope: Option<&str>) -> String {
     }
 }
 
-pub fn render_human(r: &Report) -> String {
+pub fn render_human(
+    r: &Report,
+    accounts: &[crate::state::Account],
+    active: Option<&str>,
+) -> String {
     let mut out = String::new();
     match &r.identity {
         Some(id) => {
@@ -118,10 +122,29 @@ pub fn render_human(r: &Report) -> String {
     };
     out.push_str(&format!("\n  store     {backend}\n"));
     out.push_str(&format!("  config    {}\n", r.config_file));
+
+    if !accounts.is_empty() {
+        out.push('\n');
+        for a in accounts {
+            let mark = if Some(a.label.as_str()) == active {
+                "*"
+            } else {
+                " "
+            };
+            let parked = match a.newest() {
+                Some(g) => format!("parked {}", time::format_local(g.parked_at, "%d %b %H:%M")),
+                None => "not parked".to_string(),
+            };
+            out.push_str(&format!(
+                "{mark} {:<10} {:<34} {}\n",
+                a.label, a.email, parked
+            ));
+        }
+    }
     out
 }
 
-pub fn render_json(r: &Report) -> Value {
+pub fn render_json(r: &Report, accounts: &[crate::state::Account], active: Option<&str>) -> Value {
     json!({
         "schema": 1,
         "account": r.identity.as_ref().map(|id| json!({
@@ -151,6 +174,13 @@ pub fn render_json(r: &Report) -> Value {
             "error": r.backend.as_ref().err(),
         },
         "config_file": r.config_file,
+        "accounts": accounts.iter().map(|a| json!({
+            "label": a.label,
+            "email": a.email,
+            "account_uuid": a.account_uuid,
+            "active": Some(a.label.as_str()) == active,
+            "parked_at": a.newest().map(|g| g.parked_at),
+        })).collect::<Vec<_>>(),
     })
 }
 

@@ -12,6 +12,10 @@ categories = ["command-line-utilities"]
 readme = "README.md"
 exclude = ["/.github", "/docs", "/tests/fixtures"]
 
+[lib]
+name = "pitboard"
+path = "src/lib.rs"
+
 [[bin]]
 name = "pitboard"
 path = "src/main.rs"
@@ -29,4 +33,3 @@ opt-level = "z"
 lto = true
 codegen-units = 1
 strip = true
-panic = "abort"

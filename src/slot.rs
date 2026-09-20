@@ -5,6 +5,7 @@
 //! that behaviour; nothing here is our own invention. If Claude Code changes it,
 //! this is the only file that has to change.
 
+use crate::hex;
 use sha2::{Digest, Sha256};
 use unicode_normalization::UnicodeNormalization;
 
@@ -38,11 +39,7 @@ fn is_accepted_account(s: &str) -> bool {
 /// trailing-slash normalisation. A path that differs by one byte is a different slot.
 pub fn dir_hash(dir: &str) -> String {
     let normalised: String = dir.nfc().collect();
-    Sha256::digest(normalised.as_bytes())
-        .iter()
-        .take(4)
-        .map(|b| format!("{b:02x}"))
-        .collect()
+    hex::encode(&Sha256::digest(normalised.as_bytes())[..4])
 }
 
 /// The keychain service name for the slot selected by `dir`.

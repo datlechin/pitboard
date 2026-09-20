@@ -10,6 +10,17 @@ pub fn now() -> i64 {
     unsafe { libc::time(std::ptr::null_mut()) }
 }
 
+/// Milliseconds since the epoch. Park generations are named with this, because two
+/// parks of one account inside the same second must not resolve to the same name.
+pub fn now_millis() -> i64 {
+    let mut tv = libc::timeval {
+        tv_sec: 0,
+        tv_usec: 0,
+    };
+    unsafe { libc::gettimeofday(&mut tv, std::ptr::null_mut()) };
+    tv.tv_sec * 1_000 + tv.tv_usec as i64 / 1_000
+}
+
 /// Parse `2026-09-20T22:20:00.095287+00:00` (and the `Z` spelling) to epoch seconds.
 ///
 /// Returns `None` rather than guessing when the shape is not what we expect: a wrong
