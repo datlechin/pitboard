@@ -1,0 +1,32 @@
+[package]
+name = "pitboard"
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.85"
+license = "Apache-2.0"
+description = "Park and restore your own Claude Code logins on one machine, and see what each one has left."
+repository = "https://github.com/ngoquocdat/pitboard"
+homepage = "https://github.com/ngoquocdat/pitboard"
+keywords = ["cli", "keychain", "credentials", "macos"]
+categories = ["command-line-utilities"]
+readme = "README.md"
+exclude = ["/.github", "/docs", "/tests/fixtures"]
+
+[[bin]]
+name = "pitboard"
+path = "src/main.rs"
+
+[dependencies]
+# Deliberately small. Every addition needs a reason in the PR description.
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+sha2 = "0.10"
+unicode-normalization = "0.1"
+libc = "0.2"
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"
