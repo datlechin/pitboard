@@ -107,18 +107,22 @@ fn cmd_enroll(label: &str) -> std::process::ExitCode {
 fn cmd_use(label: &str) -> std::process::ExitCode {
     match switch::switch(label) {
         Ok(outcome) => {
-            match outcome.from {
-                Some(from) => println!("signed in as `{}`, parked `{from}`", outcome.to),
-                None => println!("signed in as `{}`", outcome.to),
-            }
+            println!(
+                "signed in as `{}`, parked `{}` at {}",
+                outcome.to, outcome.from, outcome.parked.service
+            );
             println!(
                 "a Claude Code session already running picks this up within {} seconds",
                 switch::ADOPTION_CEILING_SECONDS
             );
-            if !outcome.config_reasserted {
+            if let Some(warning) = outcome.config_warning {
                 eprintln!(
-                    "note: Claude Code rewrote its config during the switch; it will correct itself on its next call"
+                    "note: the credential moved but the config did not ({warning}); \
+                     Claude Code corrects this on its next call"
                 );
+            }
+            for service in outcome.stuck_generations {
+                eprintln!("note: {service} could not be removed from the keychain");
             }
             std::process::ExitCode::SUCCESS
         }

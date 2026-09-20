@@ -12,13 +12,25 @@ fn home() -> PathBuf {
         .unwrap_or_default()
 }
 
-fn env_path(key: &str) -> Option<PathBuf> {
-    std::env::var_os(key).map(PathBuf::from)
+/// `CLAUDE_CONFIG_DIR` as Claude Code reads it: with `||`, so an empty value is falsy
+/// and means unset.
+fn config_dir_env() -> Option<String> {
+    std::env::var("CLAUDE_CONFIG_DIR")
+        .ok()
+        .filter(|v| !v.is_empty())
 }
 
-/// `$CLAUDE_CONFIG_DIR`, else `~/.claude`.
+/// `CLAUDE_SECURESTORAGE_CONFIG_DIR` as Claude Code reads it: with `!== undefined`, so an
+/// empty value is *set*, and pins the default slot while still selecting an empty storage
+/// directory. The two variables genuinely differ here.
+fn secure_storage_env() -> Option<String> {
+    std::env::var("CLAUDE_SECURESTORAGE_CONFIG_DIR").ok()
+}
+
 pub fn config_dir() -> PathBuf {
-    env_path("CLAUDE_CONFIG_DIR").unwrap_or_else(|| home().join(".claude"))
+    config_dir_env()
+        .map(PathBuf::from)
+        .unwrap_or_else(|| home().join(".claude"))
 }
 
 /// Claude Code prefers a legacy `<config dir>/.config.json` when one exists, and
@@ -29,16 +41,17 @@ pub fn config_file() -> PathBuf {
     if legacy.is_file() {
         return legacy;
     }
-    env_path("CLAUDE_CONFIG_DIR")
+    config_dir_env()
+        .map(PathBuf::from)
         .unwrap_or_else(home)
         .join(".claude.json")
 }
 
 /// The directory whose path string selects the credential slot.
 pub fn storage_dir() -> String {
-    match std::env::var("CLAUDE_SECURESTORAGE_CONFIG_DIR") {
-        Ok(v) if !v.is_empty() => v,
-        _ => config_dir().to_string_lossy().into_owned(),
+    match secure_storage_env() {
+        Some(v) => v,
+        None => config_dir().to_string_lossy().into_owned(),
     }
 }
 
@@ -47,9 +60,9 @@ pub fn storage_dir() -> String {
 /// An explicitly empty `CLAUDE_SECURESTORAGE_CONFIG_DIR` pins the default slot even
 /// when `CLAUDE_CONFIG_DIR` is set; that asymmetry is deliberate in Claude Code.
 pub fn is_default_slot() -> bool {
-    match std::env::var("CLAUDE_SECURESTORAGE_CONFIG_DIR") {
-        Ok(v) => v.is_empty(),
-        Err(_) => std::env::var_os("CLAUDE_CONFIG_DIR").is_none(),
+    match secure_storage_env() {
+        Some(v) => v.is_empty(),
+        None => config_dir_env().is_none(),
     }
 }
 

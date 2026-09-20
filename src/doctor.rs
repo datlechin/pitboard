@@ -90,12 +90,21 @@ pub fn run() -> Vec<Check> {
 
     // Which slot this process would read, and whether the derivation still holds.
     let service = claude::live_service();
+    // The account name is half the lookup: a $USER that fails Claude Code's filter falls
+    // back to a literal, and without showing it a wrong derivation looks like an empty store.
+    let account = slot::account_name();
     checks.push(if claude::is_default_slot() {
-        ok("slot", format!("default  ·  {service}"))
+        ok(
+            "slot",
+            format!("default  ·  {service}  ·  account {account}"),
+        )
     } else {
         ok(
             "slot",
-            format!("{service}  (selected by {})", claude::storage_dir()),
+            format!(
+                "{service}  ·  account {account}  (selected by {})",
+                claude::storage_dir()
+            ),
         )
     });
     checks.push({

@@ -1,8 +1,8 @@
 //! Where an account's credential waits while another one is signed in.
 //!
 //! Generations are append-only. No failure path deletes one: if a write goes wrong the
-//! previous generation is still the newest, and the account is still reachable. Pruning
-//! only ever runs after a switch has completed.
+//! previous generation is still there. Pruning runs only after the state that stopped
+//! referencing a generation is durable.
 
 use crate::state::{Account, Generation, retained};
 use crate::{store, time};
@@ -12,11 +12,13 @@ pub fn service_name(account_uuid: &str, at_millis: i64) -> String {
     format!("pitboard-park-{account_uuid}-{at_millis}")
 }
 
-/// A name no generation already occupies.
+/// Claim a name no generation occupies, before anything is written to it.
 ///
-/// Generations are append-only, so reusing a name would silently destroy the previous
-/// one. Two parks of the same account can land in the same millisecond.
-fn free_service_name(account_uuid: &str) -> Result<String, String> {
+/// Reserving separately from writing lets the caller record its intent first, so a run
+/// that dies mid-park leaves a name that recovery can go looking for. Two parks of one
+/// account can land in the same millisecond, and reusing a name would destroy the
+/// generation already there.
+pub fn reserve(account_uuid: &str) -> Result<String, String> {
     let start = time::now_millis();
     for offset in 0..1_000 {
         let candidate = service_name(account_uuid, start + offset);
@@ -29,31 +31,31 @@ fn free_service_name(account_uuid: &str) -> Result<String, String> {
     Err(format!("cannot find a free park slot for {account_uuid}"))
 }
 
-/// Copy an account's `claudeAiOauth` into a fresh generation and prove it reads back.
-pub fn store_generation(account_uuid: &str, oauth: &Value) -> Result<Generation, String> {
-    let service = free_service_name(account_uuid)?;
+/// Write a credential into a reserved name and prove it reads back.
+pub fn store_at(service: &str, oauth: &Value) -> Result<Generation, String> {
     let body = serde_json::to_string(oauth).map_err(|e| e.to_string())?;
-
-    if store::too_large(&service, &body) {
-        return Err(format!(
-            "credential for {account_uuid} is too large to park"
-        ));
+    if store::too_large(service, &body) {
+        return Err(format!("credential is too large to park in {service}"));
     }
-    store::keychain_write(&service, &body)?;
-    match store::keychain_read(&service).map_err(|e| e.to_string())? {
+    store::keychain_write(service, &body)?;
+    match store::keychain_read(service).map_err(|e| e.to_string())? {
         Some(back) if back == body => {}
         _ => return Err(format!("{service} did not read back as written")),
     }
-
     Ok(Generation {
-        service,
+        service: service.to_string(),
         parked_at: time::now(),
-        refresh_fingerprint: oauth
-            .get("refreshToken")
-            .and_then(Value::as_str)
-            .map(store::fingerprint)
-            .unwrap_or_default(),
+        refresh_fingerprint: fingerprint_of(oauth),
+        installed_at: None,
     })
+}
+
+pub fn fingerprint_of(oauth: &Value) -> String {
+    oauth
+        .get("refreshToken")
+        .and_then(Value::as_str)
+        .map(store::fingerprint)
+        .unwrap_or_default()
 }
 
 pub fn load(generation: &Generation) -> Result<Value, String> {
@@ -68,12 +70,7 @@ pub fn load(generation: &Generation) -> Result<Value, String> {
     let value: Value = serde_json::from_str(&raw)
         .map_err(|e| format!("{} is not valid JSON: {e}", generation.service))?;
 
-    let fingerprint = value
-        .get("refreshToken")
-        .and_then(Value::as_str)
-        .map(store::fingerprint)
-        .unwrap_or_default();
-    if fingerprint != generation.refresh_fingerprint {
+    if fingerprint_of(&value) != generation.refresh_fingerprint {
         return Err(format!(
             "{} holds a different credential than the one parked there",
             generation.service
@@ -82,18 +79,26 @@ pub fn load(generation: &Generation) -> Result<Value, String> {
     Ok(value)
 }
 
-/// Delete generations past the retention window. Never called on a failure path.
-pub fn prune(account: &mut Account) {
+/// Delete generations past the retention window, reporting the ones that resisted.
+pub fn prune(account: &mut Account) -> Vec<String> {
     let keep: Vec<String> = retained(&account.generations)
         .iter()
         .map(|g| g.service.clone())
         .collect();
+    let mut stuck = Vec::new();
     account.generations.retain(|g| {
         if keep.contains(&g.service) {
             return true;
         }
-        store::delete(&g.service).is_err()
+        match store::delete(&g.service) {
+            Ok(()) => false,
+            Err(_) => {
+                stuck.push(g.service.clone());
+                true
+            }
+        }
     });
+    stuck
 }
 
 #[cfg(test)]
@@ -111,5 +116,10 @@ mod tests {
             s.starts_with("pitboard-park-"),
             "must never collide with a Claude Code item"
         );
+    }
+
+    #[test]
+    fn a_credential_with_no_refresh_token_fingerprints_to_nothing_rather_than_panicking() {
+        assert_eq!(fingerprint_of(&serde_json::json!({"accessToken": "a"})), "");
     }
 }

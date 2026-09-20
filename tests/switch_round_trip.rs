@@ -51,6 +51,15 @@ impl Env {
         }
     }
 
+    fn command(&self, args: &[&str]) -> Command {
+        let mut c = Command::new(env!("CARGO_BIN_EXE_pitboard"));
+        c.args(args)
+            .env("CLAUDE_CONFIG_DIR", &self.root)
+            .env_remove("CLAUDE_SECURESTORAGE_CONFIG_DIR")
+            .env("PITBOARD_HOME", self.root.join("pitboard"));
+        c
+    }
+
     fn run(&self, args: &[&str]) -> (String, String, i32) {
         let out = Command::new(env!("CARGO_BIN_EXE_pitboard"))
             .args(args)
@@ -236,4 +245,139 @@ fn forgetting_the_signed_in_account_is_refused() {
     let (_, err, code) = env.run(&["forget", "alpha"]);
     assert_eq!(code, 1);
     assert!(err.contains("signed in"), "{err}");
+}
+
+#[test]
+fn a_used_label_cannot_be_taken_by_another_account() {
+    let env = Env::new("labelreuse");
+    env.sign_in(&env.uuid('a'), "a@example.com", &env.uuid('o'), "refresh-a");
+    env.run(&["enroll", "shared"]);
+
+    env.sign_in(&env.uuid('b'), "b@example.com", &env.uuid('p'), "refresh-b");
+    let (_, err, code) = env.run(&["enroll", "shared"]);
+
+    assert_eq!(
+        code, 1,
+        "reusing a label for a different account must be refused"
+    );
+    assert!(err.contains("already refers to"), "{err}");
+
+    let state = env.state();
+    assert_eq!(
+        state["accounts"].as_array().unwrap().len(),
+        1,
+        "the first account must still be there"
+    );
+    let kept = &state["accounts"][0];
+    assert_eq!(kept["email"], "a@example.com");
+    assert!(
+        !kept["generations"].as_array().unwrap().is_empty(),
+        "and its parked credential must still be reachable"
+    );
+}
+
+#[test]
+fn a_credential_that_was_installed_is_never_restored_a_second_time() {
+    let env = Env::new("consumed");
+    env.sign_in(&env.uuid('a'), "a@example.com", &env.uuid('o'), "refresh-a");
+    env.run(&["enroll", "alpha"]);
+    env.sign_in(&env.uuid('b'), "b@example.com", &env.uuid('p'), "refresh-b");
+    env.run(&["enroll", "beta"]);
+
+    env.run(&["use", "alpha"]);
+    env.run(&["use", "beta"]);
+    let (_, err, code) = env.run(&["use", "alpha"]);
+    assert_eq!(
+        code, 0,
+        "the fresh park made on the way out must be restorable: {err}"
+    );
+    assert_eq!(env.live()["claudeAiOauth"]["refreshToken"], "refresh-a");
+
+    let state = env.state();
+    let alpha = state["accounts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|a| a["label"] == "alpha")
+        .unwrap();
+    let consumed = alpha["generations"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|g| !g["installed_at"].is_null())
+        .count();
+    assert!(
+        consumed >= 2,
+        "every generation that was installed must be marked, so a rotated token is never          offered again; got {alpha:#}"
+    );
+}
+
+#[test]
+fn an_account_whose_only_copy_was_already_used_is_refused_not_destroyed() {
+    let env = Env::new("exhausted");
+    env.sign_in(&env.uuid('a'), "a@example.com", &env.uuid('o'), "refresh-a");
+    env.run(&["enroll", "alpha"]);
+    env.sign_in(&env.uuid('b'), "b@example.com", &env.uuid('p'), "refresh-b");
+    env.run(&["enroll", "beta"]);
+    env.run(&["use", "alpha"]);
+
+    // Simulate the loss of the fresh park that `use alpha` made for beta: the exact state
+    // a run killed between installing the credential and saving state would leave.
+    let path = env.root.join("pitboard/state.json");
+    let mut state: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+    for account in state["accounts"].as_array_mut().unwrap() {
+        if account["label"] == "beta" {
+            for g in account["generations"].as_array_mut().unwrap() {
+                g["installed_at"] = serde_json::json!(1789935600);
+            }
+        }
+    }
+    std::fs::write(&path, state.to_string()).unwrap();
+
+    let (_, err, code) = env.run(&["use", "beta"]);
+    assert_eq!(code, 1);
+    assert!(err.contains("no restorable parked credential"), "{err}");
+    assert_eq!(
+        env.live()["claudeAiOauth"]["refreshToken"],
+        "refresh-a",
+        "a refusal must leave the working credential in place"
+    );
+}
+
+#[test]
+fn two_switches_at_once_do_not_interleave() {
+    let env = Env::new("concurrent");
+    env.sign_in(&env.uuid('a'), "a@example.com", &env.uuid('o'), "refresh-a");
+    env.run(&["enroll", "alpha"]);
+    env.sign_in(&env.uuid('b'), "b@example.com", &env.uuid('p'), "refresh-b");
+    env.run(&["enroll", "beta"]);
+    env.run(&["use", "alpha"]);
+
+    let mut first = env.command(&["use", "beta"]).spawn().unwrap();
+    let mut second = env.command(&["use", "beta"]).spawn().unwrap();
+    let a = first.wait().unwrap().code().unwrap_or(-1);
+    let b = second.wait().unwrap().code().unwrap_or(-1);
+
+    assert_eq!(
+        [a, b].iter().filter(|c| **c == 0).count(),
+        1,
+        "exactly one of two simultaneous switches may succeed (got {a} and {b})"
+    );
+    assert_eq!(env.live()["claudeAiOauth"]["refreshToken"], "refresh-b");
+
+    let state = env.state();
+    let alpha = state["accounts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|a| a["label"] == "alpha")
+        .unwrap();
+    for g in alpha["generations"].as_array().unwrap() {
+        let service = g["service"].as_str().unwrap();
+        assert!(
+            service.contains(&env.uuid('a')),
+            "alpha must never be filed under another account's uuid: {service}"
+        );
+    }
 }

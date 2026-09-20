@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 
-const SCHEMA: u32 = 1;
+const SCHEMA: u32 = 2;
 const CLOUD_MARKERS: [&str; 5] = [
     "Dropbox",
     "Google Drive",
@@ -24,6 +24,14 @@ pub struct Generation {
     pub service: String,
     pub parked_at: i64,
     pub refresh_fingerprint: String,
+    /// When these bytes were last installed into the live slot.
+    ///
+    /// Claude Code rotates the refresh token in place from that moment on, so the parked
+    /// copy is superseded. Presenting a superseded token returns invalid_grant, and Claude
+    /// Code answers that by zeroing the live credential. A consumed generation is therefore
+    /// never restored again.
+    #[serde(default)]
+    pub installed_at: Option<i64>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -41,6 +49,18 @@ pub struct Account {
 impl Account {
     pub fn newest(&self) -> Option<&Generation> {
         self.generations.iter().max_by_key(|g| g.parked_at)
+    }
+
+    /// The newest generation that has not already been installed and superseded.
+    pub fn restorable(&self) -> Option<&Generation> {
+        self.generations
+            .iter()
+            .filter(|g| g.installed_at.is_none())
+            .max_by_key(|g| g.parked_at)
+    }
+
+    pub fn references(&self, service: &str) -> bool {
+        self.generations.iter().any(|g| g.service == service)
     }
 }
 
@@ -70,6 +90,28 @@ impl State {
 
     pub fn by_uuid(&self, uuid: &str) -> Option<&Account> {
         self.accounts.iter().find(|a| a.account_uuid == uuid)
+    }
+
+    pub fn attach(&mut self, label: &str, generation: Generation) {
+        if let Some(account) = self.accounts.iter_mut().find(|a| a.label == label) {
+            account.generations.push(generation);
+        }
+    }
+
+    pub fn mark_installed(&mut self, label: &str, service: &str, at: i64) {
+        if let Some(account) = self.accounts.iter_mut().find(|a| a.label == label) {
+            if let Some(g) = account
+                .generations
+                .iter_mut()
+                .find(|g| g.service == service)
+            {
+                g.installed_at = Some(at);
+            }
+        }
+    }
+
+    pub fn references(&self, service: &str) -> bool {
+        self.accounts.iter().any(|a| a.references(service))
     }
 
     pub fn upsert(&mut self, account: Account) {
@@ -183,6 +225,7 @@ mod tests {
             service: format!("pitboard-park-x-{at}"),
             parked_at: at,
             refresh_fingerprint: "f".into(),
+            installed_at: None,
         }
     }
 
@@ -213,6 +256,30 @@ mod tests {
         let p = Path::new("/Users/x/Library/Mobile Documents/com~apple~CloudDocs/pitboard");
         assert!(check_location(p).is_err());
         assert!(check_location(Path::new("/Users/x/.pitboard")).is_ok());
+    }
+
+    #[test]
+    fn a_generation_that_was_installed_is_never_offered_again() {
+        let mut account = Account {
+            label: "a".into(),
+            account_uuid: "u".into(),
+            email: "a@b.c".into(),
+            organization_uuid: "o".into(),
+            oauth_account: serde_json::json!({}),
+            generations: vec![generation(100), generation(200)],
+        };
+        assert_eq!(account.restorable().unwrap().parked_at, 200);
+        account.generations[1].installed_at = Some(250);
+        assert_eq!(
+            account.restorable().unwrap().parked_at,
+            100,
+            "a superseded copy must not be offered"
+        );
+        account.generations[0].installed_at = Some(260);
+        assert!(
+            account.restorable().is_none(),
+            "refuse rather than restore a dead token"
+        );
     }
 
     #[test]
