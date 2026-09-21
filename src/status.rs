@@ -318,11 +318,10 @@ pub fn render_human(report: &Report) -> String {
         .max()
         .unwrap_or(0);
     let email_width = report.rows.iter().map(|r| r.email.len()).max().unwrap_or(0);
-    let shown = |w: &&Window| !(w.percent == 0.0 && w.scope.is_some());
     let name_width = report
         .rows
         .iter()
-        .flat_map(|r| r.usage.iter().flat_map(|u| u.windows.iter().filter(shown)))
+        .flat_map(|r| r.usage.iter().flat_map(|u| u.windows.iter()))
         .map(|w| window_name(w).chars().count())
         .max()
         .unwrap_or(0);
@@ -347,11 +346,7 @@ pub fn render_human(report: &Report) -> String {
             standing(row, now)
         );
 
-        let windows: Vec<&Window> = row
-            .usage
-            .iter()
-            .flat_map(|u| u.windows.iter().filter(shown))
-            .collect();
+        let windows: Vec<&Window> = row.usage.iter().flat_map(|u| u.windows.iter()).collect();
         if windows.is_empty() {
             let why = row.stale.and_then(Stale::explanation);
             block.push_str(&format!(
@@ -694,6 +689,27 @@ mod tests {
             column("much-longer-label@example.com"),
             "{text}"
         );
+    }
+
+    /// An unused model limit is still a limit: at 0% it says there is room.
+    #[test]
+    fn every_limit_is_shown_including_one_not_yet_used() {
+        let s = state(&["work"]);
+        let mut live = reading(30.0, Source::Live, None);
+        live.windows.push(Window {
+            kind: "weekly_scoped".into(),
+            scope: Some("Fable".into()),
+            percent: 0.0,
+            resets_at: Some(NOW + 86_400),
+            is_active: false,
+        });
+        let f = facts("work-uuid", Ok(live), vec![Err(Stale::NothingParked)]);
+        let text = plain(&render_human(&report(assemble(&s, &f, nothing_remembered))));
+        let fable = text
+            .lines()
+            .find(|l| l.contains("week · Fable"))
+            .expect(&text);
+        assert!(fable.contains("0%"), "{fable}");
     }
 
     #[test]

@@ -34,9 +34,10 @@ pub struct Snapshot {
     pub source: Source,
 }
 
+/// A share of a limit. Past 100 is real, once a limit is exceeded; below zero is not.
 fn percent(v: &Value) -> Option<f64> {
     let p = v.as_f64()?;
-    (p.is_finite() && (0.0..=100.0).contains(&p)).then_some(p)
+    (p.is_finite() && p >= 0.0).then_some(p)
 }
 
 fn window_from_limit(l: &Value) -> Option<Window> {
@@ -170,15 +171,20 @@ mod tests {
 
     #[test]
     fn a_nonsense_percentage_is_dropped_rather_than_drawn() {
+        for nonsense in [serde_json::json!(-5), serde_json::json!("75")] {
+            let mut c = real_config();
+            c["cachedUsageUtilization"]["utilization"]["limits"][0]["percent"] = nonsense;
+            assert_eq!(from_config_cache(&c).unwrap().windows.len(), 2);
+        }
+    }
+
+    #[test]
+    fn an_exceeded_limit_is_kept_not_dropped() {
         let mut c = real_config();
-        c["cachedUsageUtilization"]["utilization"]["limits"][0]["percent"] =
-            serde_json::json!(4000);
+        c["cachedUsageUtilization"]["utilization"]["limits"][0]["percent"] = serde_json::json!(104);
         let s = from_config_cache(&c).unwrap();
-        assert_eq!(
-            s.windows.len(),
-            2,
-            "the out-of-range window should be dropped"
-        );
+        assert_eq!(s.windows.len(), 3);
+        assert_eq!(s.windows[0].percent, 104.0);
     }
 
     #[test]
