@@ -58,14 +58,13 @@ pub fn state_accounts(env: &Env) -> Vec<serde_json::Value> {
     env.state()["accounts"].as_array().unwrap().clone()
 }
 
+/// Distinct per test and per role. Park item names contain the account id and every test
+/// shares one keychain, so two tests must never derive the same id.
 pub fn uuid_for(test: &str, who: char) -> String {
-    let tag: String = test
-        .chars()
-        .filter(char::is_ascii_alphanumeric)
-        .take(8)
-        .collect();
-    let padded = format!("{tag:x<8}");
-    format!("{padded}-{who}111-4111-8111-111111111111")
+    format!(
+        "{}-{who}111-4111-8111-111111111111",
+        pitboard::slot::dir_hash(test)
+    )
 }
 
 pub fn account() -> String {

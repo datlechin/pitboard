@@ -33,11 +33,21 @@ fn is_identifier(key: &str) -> bool {
         && k.bytes().all(|b| b.is_ascii_hexdigit() || b == b'-')
 }
 
+/// Whether an entry is tagged with one of these ids: the value itself, or one of its direct
+/// fields, equal to it exactly.
+///
+/// Both caches Claude Code keeps per account carry the id as a direct field. Looking deeper,
+/// or matching a substring, would treat a container such as `projects` as belonging to one
+/// account because some project inside it mentions one, and drop every project's settings.
 fn mentions(value: &Value, identifiers: &[&str]) -> bool {
-    let text = value.to_string();
-    identifiers
-        .iter()
-        .any(|id| !id.is_empty() && text.contains(id))
+    let is_one = |v: &Value| {
+        v.as_str()
+            .is_some_and(|s| identifiers.iter().any(|id| !id.is_empty() && s == *id))
+    };
+    match value {
+        Value::Object(fields) => fields.values().any(is_one),
+        other => is_one(other),
+    }
 }
 
 /// Whether a top-level config entry belongs to the account being switched away from.
@@ -223,6 +233,29 @@ mod tests {
     #[test]
     fn an_empty_object_is_not_treated_as_partitioned() {
         assert!(!is_partitioned(&serde_json::json!({})));
+    }
+
+    /// Only a direct field is evidence that a whole entry belongs to one account. `projects`
+    /// maps paths to per-project settings; a uuid somewhere deep inside one project must not
+    /// take every project's settings with it.
+    #[test]
+    fn a_container_with_the_outgoing_id_buried_deep_inside_is_kept() {
+        let mut c = config();
+        c["projects"]["/Users/x/code"]["lastSession"] =
+            serde_json::json!({"org": OLD_ORG, "at": 1});
+        splice_identity(&mut c, &serde_json::json!({}), &[OLD_ACCOUNT, OLD_ORG]);
+        assert!(
+            c["projects"]["/Users/x/code"].is_object(),
+            "every project's settings would have been dropped"
+        );
+    }
+
+    #[test]
+    fn an_id_that_merely_contains_the_outgoing_one_is_not_a_match() {
+        let mut c = config();
+        c["unrelated"] = serde_json::json!({"note": format!("prefix-{OLD_ACCOUNT}-suffix")});
+        splice_identity(&mut c, &serde_json::json!({}), &[OLD_ACCOUNT, OLD_ORG]);
+        assert!(c.get("unrelated").is_some());
     }
 
     #[test]

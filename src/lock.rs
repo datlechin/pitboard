@@ -104,21 +104,12 @@ fn start(path: PathBuf) -> Guard {
             let (flag, wake) = &*stop;
             let mut stopped = flag.lock().unwrap_or_else(|e| e.into_inner());
             loop {
-                // Checked before waiting: a guard dropped before this thread reaches the
-                // wait would otherwise signal into an empty room and be missed entirely.
-                if *stopped {
-                    return;
-                }
-                let (next, timeout) = wake
-                    .wait_timeout(stopped, HEARTBEAT)
+                // Checks the flag before waiting and after every wakeup, spurious or not.
+                let (next, _) = wake
+                    .wait_timeout_while(stopped, HEARTBEAT, |stop| !*stop)
                     .unwrap_or_else(|e| e.into_inner());
                 stopped = next;
-                if *stopped {
-                    return;
-                }
-                // Waiting on a deadline rather than sleeping in slices keeps the interval
-                // exact: seventy-five chained sleeps drifted the first beat to 7.9 seconds.
-                if timeout.timed_out() && touch(&path).is_err() {
+                if *stopped || touch(&path).is_err() {
                     return;
                 }
             }

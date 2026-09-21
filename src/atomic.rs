@@ -13,8 +13,8 @@ use std::path::Path;
 pub enum Perms {
     /// 0600 regardless of umask or of what is already there.
     Secret,
-    /// Whatever is at the path now, without following a symlink to borrow its mode.
-    /// `Secret` when nothing is there yet.
+    /// Exactly the mode of the file at the path now, tighter or looser than 0600. `Secret`
+    /// when nothing is there yet, or when the path is a symlink.
     MatchExisting,
 }
 
@@ -34,8 +34,10 @@ pub fn write(path: &Path, contents: &[u8], perms: Perms) -> io::Result<()> {
     ));
 
     let result = (|| -> io::Result<()> {
-        // Always created private, then widened if asked: a brief too-restrictive window is
-        // safe, a brief too-open one is not.
+        // Created private, then given the existing file's mode if asked: a moment spent too
+        // closed is safe, a moment spent too open is not. A symlink's own mode says nothing
+        // about the file it names, and the rename replaces the link rather than following
+        // it, as Claude Code's own writes do.
         let mut file = OpenOptions::new()
             .write(true)
             .create_new(true)
@@ -43,17 +45,12 @@ pub fn write(path: &Path, contents: &[u8], perms: Perms) -> io::Result<()> {
             .open(&temp)?;
         file.write_all(contents)?;
         file.sync_all()?;
-        if let Perms::MatchExisting = perms {
-            // A symlink's own mode is always wide open and says nothing about the file it
-            // points at, so borrowing from one would quietly publish a secret. The rename
-            // replaces the link rather than following it, which is what Claude Code's own
-            // writes do to its config.
-            if let Ok(existing) = std::fs::symlink_metadata(path) {
-                let mode = existing.permissions().mode() & 0o777;
-                if !existing.file_type().is_symlink() && mode > 0o600 {
-                    std::fs::set_permissions(&temp, std::fs::Permissions::from_mode(mode))?;
-                }
-            }
+        if let Perms::MatchExisting = perms
+            && let Ok(existing) = std::fs::symlink_metadata(path)
+            && !existing.file_type().is_symlink()
+        {
+            let mode = existing.permissions().mode() & 0o777;
+            std::fs::set_permissions(&temp, std::fs::Permissions::from_mode(mode))?;
         }
         std::fs::rename(&temp, path)
     })();
@@ -114,6 +111,21 @@ mod tests {
             mode_of(&path),
             0o644,
             "tightening another tool's file would surprise it"
+        );
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn match_existing_keeps_a_file_as_closed_as_it_already_was() {
+        let dir = scratch("tighter");
+        let path = dir.join("claude.json");
+        std::fs::write(&path, b"old").unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o400)).unwrap();
+        write(&path, b"new", Perms::MatchExisting).unwrap();
+        assert_eq!(
+            mode_of(&path),
+            0o400,
+            "loosening another tool's file is as wrong as tightening it"
         );
         std::fs::remove_dir_all(&dir).unwrap();
     }

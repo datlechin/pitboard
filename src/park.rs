@@ -78,31 +78,61 @@ pub fn load(label: &str, generation: &Generation) -> Result<Value> {
     Ok(value)
 }
 
-/// Delete generations past the retention window, reporting the ones that resisted.
-pub fn prune(account: &mut Account) -> Vec<String> {
+/// Remove generations past the retention window from an account, and return their items.
+///
+/// Nothing is deleted here. The caller saves state first and deletes these afterwards, so
+/// durable state never refers to an item that no longer exists; the worst a crash between
+/// the two can leave is an item nothing refers to.
+pub fn retire(account: &mut Account) -> Vec<String> {
     let keep: Vec<String> = retained(&account.generations)
         .iter()
         .map(|g| g.service.clone())
         .collect();
-    let mut stuck = Vec::new();
-    account.generations.retain(|g| {
-        if keep.contains(&g.service) {
-            return true;
-        }
-        match store::vault_delete(&g.service) {
-            Ok(()) => false,
-            Err(_) => {
-                stuck.push(g.service.clone());
-                true
-            }
-        }
-    });
-    stuck
+    let (kept, retired): (Vec<Generation>, Vec<Generation>) = account
+        .generations
+        .drain(..)
+        .partition(|g| keep.contains(&g.service));
+    account.generations = kept;
+    retired.into_iter().map(|g| g.service).collect()
+}
+
+/// Delete retired items, returning the ones that resisted.
+pub fn delete(services: &[String]) -> Vec<String> {
+    services
+        .iter()
+        .filter(|s| store::vault_delete(s).is_err())
+        .cloned()
+        .collect()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn retiring_removes_old_generations_from_state_without_touching_any_item() {
+        let generation = |at: i64| Generation {
+            service: format!("pitboard-park-retire-{at}"),
+            parked_at: at,
+            refresh_fingerprint: "f".into(),
+            installed_at: None,
+        };
+        let mut account = Account {
+            label: "a".into(),
+            account_uuid: "u".into(),
+            email: "a@b.c".into(),
+            organization_uuid: "o".into(),
+            oauth_account: serde_json::json!({}),
+            generations: (1..=8).map(generation).collect(),
+        };
+        let retired = retire(&mut account);
+        assert_eq!(account.generations.len(), 5, "the five newest stay");
+        assert_eq!(retired.len(), 3);
+        assert!(
+            retired.iter().all(|s| !account.references(s)),
+            "a retired item must no longer be referenced"
+        );
+    }
 
     #[test]
     fn service_names_carry_the_account_and_the_moment() {

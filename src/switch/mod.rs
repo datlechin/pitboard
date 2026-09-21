@@ -193,15 +193,14 @@ pub fn switch(label: &str) -> Result<Outcome> {
     let config_warning =
         update_config(&target, &outgoing.account_uuid, &outgoing.organization_uuid).err();
 
-    let mut stuck_generations = Vec::new();
-    if let Some(account) = state
+    let retired = state
         .accounts
         .iter_mut()
         .find(|a| a.label == outgoing_label)
-    {
-        stuck_generations = park::prune(account);
-    }
+        .map(park::retire)
+        .unwrap_or_default();
     state::save(&state)?;
+    let stuck_generations = park::delete(&retired);
     let _ = std::fs::remove_file(journal_path());
 
     Ok(Outcome::Switched {
