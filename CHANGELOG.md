@@ -5,6 +5,10 @@ All notable changes are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-09-21
+
+First release.
+
 ### Added
 - `enroll`, `use`, `forget`, `status`, `doctor` and `statusline`.
 - Live usage in `status`, asked of Anthropic for every enrolled account at once, with
@@ -23,3 +27,6 @@ All notable changes are recorded here. The format follows
 ### State file
 - Schema 3: one parked login per account, with when it expires. Earlier files are refused
   rather than migrated; nothing was ever released that wrote them.
+
+[Unreleased]: https://github.com/datlechin/pitboard/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/datlechin/pitboard/releases/tag/v0.1.0
