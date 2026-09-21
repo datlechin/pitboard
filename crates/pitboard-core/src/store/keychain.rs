@@ -14,8 +14,10 @@ use std::time::Duration;
 
 use super::SECURITY;
 
-/// Claude Code's own ceiling on an interactive `security` command line.
-const MAX_COMMAND_BYTES: usize = 4032;
+/// Claude Code's own ceiling on an interactive `security` command line. Past it Claude
+/// Code passes the credential as an argument instead, where `ps` can read it; pitboard
+/// refuses rather than do that, so this is a real ceiling here and not a transport choice.
+pub(super) const MAX_COMMAND_BYTES: usize = 4032;
 
 /// `security` exits with the low byte of the `OSStatus`: `errSecItemNotFound`.
 const ITEM_NOT_FOUND: i32 = 44;
@@ -194,6 +196,13 @@ impl RawStore for Keychain {
 
     fn too_large(&self, service: &str, contents: &str) -> bool {
         command_for(&self.account, service, contents).len() > MAX_COMMAND_BYTES
+    }
+
+    fn cost(&self, service: &str, contents: &str) -> Option<(usize, usize)> {
+        Some((
+            command_for(&self.account, service, contents).len(),
+            MAX_COMMAND_BYTES,
+        ))
     }
 }
 

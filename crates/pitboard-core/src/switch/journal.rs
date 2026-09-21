@@ -129,10 +129,13 @@ fn apply(state: &mut State, journal: &Journal, repair: Repair) {
     if repair.drop {
         state.discard(&journal.park_service);
     }
-    if let Some((uuid, park)) = repair.hold
-        && let Some(label) = state.by_uuid(&uuid).map(|a| a.label.clone())
-    {
-        state.park(&label, park);
+    if let Some((uuid, park)) = repair.hold {
+        match state.by_uuid(&uuid).map(|a| a.label.clone()) {
+            Some(label) => state.park(&label, park),
+            // The account it belongs to is gone, so nothing will ever restore this copy.
+            // Listing it is what gets it deleted rather than left in the keychain.
+            None => state.discard(&park.service),
+        }
     }
     if repair.landed && state.get(&journal.to_label).is_some() {
         state.active = Some(journal.to_label.clone());

@@ -28,6 +28,18 @@ pub fn load(ctx: &Context) -> HashMap<String, Snapshot> {
         .collect()
 }
 
+/// Drop what was remembered for an account that is no longer enrolled. Nothing here is
+/// secret, but an account someone has dropped should leave no trace behind either.
+pub fn forget(ctx: &Context, account_uuid: &str) {
+    let mut all = load(ctx);
+    if all.remove(account_uuid).is_none() {
+        return;
+    }
+    if let Ok(body) = serde_json::to_string(&all) {
+        let _ = atomic::write(&path(ctx), body.as_bytes(), atomic::Perms::Secret);
+    }
+}
+
 /// Keep live readings for when their account can no longer be asked.
 pub fn remember(ctx: &Context, readings: &[(String, Snapshot)]) {
     if readings.is_empty() {

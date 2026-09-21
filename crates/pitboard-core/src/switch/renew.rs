@@ -7,7 +7,7 @@ use crate::api::{self, ApiError};
 use crate::context::Context;
 use crate::error::{Error, Result};
 use crate::state::{Park, State};
-use crate::{park, state, time};
+use crate::{park, state, store, time};
 use serde_json::Value;
 
 /// Renewed this long before its access token expires, so a read just after still answers.
@@ -118,8 +118,26 @@ fn renew(ctx: &Context, state: &mut State, label: &str, held: &Park) -> Result<R
         .unwrap_or_default();
     let store =
         || park::reserve(ctx, &uuid).and_then(|service| park::store_at(ctx, &service, &next));
-    let parked = store().or_else(|_| store())?;
-    state.park(label, parked);
-    state::save(ctx, state)?;
+    let parked = match store().or_else(|_| store()) {
+        Ok(parked) => parked,
+        Err(e) => {
+            // Anthropic has already spent the old refresh token, so the copy pitboard holds
+            // is dead whatever happens next. Dropping it now means status stops offering a
+            // login that cannot work and says to sign in again instead.
+            state.discard(&held.service);
+            let _ = state::save(ctx, state);
+            return Err(Error::RenewalFailed {
+                label: label.to_string(),
+                detail: e.to_string(),
+            });
+        }
+    };
+    state.park(label, parked.clone());
+    if let Err(e) = state::save(ctx, state) {
+        // Nothing that survives names the copy just written. The record on disk still
+        // points at the spent one, which the next renewal will be refused and drop.
+        let _ = store::vault_delete(ctx, &parked.service);
+        return Err(e);
+    }
     Ok(Renewal::Renewed)
 }

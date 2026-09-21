@@ -39,6 +39,8 @@ pub struct Facts {
     pub backend: Result<store::Backend, store::Error>,
     pub credential_file: PathBuf,
     pub credential: Result<Option<Value>, store::Error>,
+    /// What the live login costs against the store's ceiling, where there is one.
+    pub credential_cost: Option<(usize, usize)>,
     pub home: PathBuf,
     pub home_mode: Option<u32>,
     pub machine_id_known: bool,
@@ -59,13 +61,18 @@ pub struct ParkFact {
     pub unreadable: Option<String>,
 }
 
-fn park_facts(ctx: &Context, state: &State) -> Vec<ParkFact> {
+fn park_facts(ctx: &Context, state: &State, live_uuid: Option<&str>) -> Vec<ParkFact> {
     state
         .accounts
         .iter()
         .map(|a| ParkFact {
             label: a.label.clone(),
-            active: state.active.as_deref() == Some(a.label.as_str()),
+            // What Claude Code's config says, when it says anything. pitboard's own
+            // record of its last switch says nothing about a sign-in made elsewhere.
+            active: match live_uuid {
+                Some(uuid) => a.account_uuid == uuid,
+                None => state.active.as_deref() == Some(a.label.as_str()),
+            },
             park: a.parked.clone(),
             unreadable: a.parked.as_ref().and_then(|p| {
                 park::load(ctx, &a.label, p).err().map(|e| match e {
@@ -83,18 +90,23 @@ pub fn gather(ctx: &Context) -> Facts {
     let state = crate::state::load(ctx);
     let service = claude::live_service(ctx);
     let home = home::dir(ctx);
+    let identity = config.as_ref().ok().and_then(claude::identity);
     Facts {
         security_tool: cfg!(target_os = "macos")
             .then(|| store::SECURITY.to_string())
             .filter(|p| std::fs::metadata(p).is_ok()),
         config_path: claude::config_file(ctx),
-        identity: config.as_ref().ok().and_then(claude::identity),
+        identity: identity.clone(),
         config,
         account: slot::account_name(ctx),
         default_slot: claude::is_default_slot(ctx),
         storage_dir: claude::storage_dir(ctx),
         backend: store::resolve(ctx, &service),
         credential_file: store::credential_file(ctx),
+        credential_cost: store::read_raw(ctx, &service)
+            .ok()
+            .flatten()
+            .and_then(|raw| store::cost(ctx, &service, &raw)),
         credential: store::read(ctx, &service),
         home_mode: mode_of(&home),
         home,
@@ -102,7 +114,7 @@ pub fn gather(ctx: &Context) -> Facts {
         hover_rest_env: ctx.hover_rest,
         parks: state
             .as_ref()
-            .map(|s| park_facts(ctx, s))
+            .map(|s| park_facts(ctx, s, identity.as_ref().map(|i| i.account_uuid.as_str())))
             .unwrap_or_default(),
         state,
         interrupted: switch::interrupted(ctx),
@@ -216,6 +228,24 @@ pub fn evaluate(facts: &Facts) -> Vec<Check> {
             )
         },
     ));
+
+    // A login that grows past the ceiling cannot be switched at all, and it grows by things
+    // done elsewhere, so it is worth saying before the day it refuses.
+    if let Some((bytes, limit)) = facts.credential_cost {
+        let detail = format!("{bytes} of {limit} bytes");
+        checks.push(if bytes * 10 >= limit * 9 {
+            warn(
+                "credential_size",
+                "login size",
+                detail,
+                "pitboard writes a login through the keychain's stdin, which is bounded. \
+                 Past the limit a switch is refused rather than putting a token on a \
+                 command line where any process could read it.",
+            )
+        } else {
+            ok("credential_size", "login size", detail)
+        });
+    }
 
     checks.push(match &facts.backend {
         Ok(store::Backend::Keychain) => ok("credential_store", "credential store", "keychain"),
@@ -517,6 +547,7 @@ mod tests {
                 subscription: None,
                 rate_limit_tier: None,
             }),
+            credential_cost: Some((900, 4032)),
             service: "Claude Code-credentials".into(),
             account: "someone".into(),
             default_slot: true,

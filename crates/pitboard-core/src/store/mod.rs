@@ -80,6 +80,12 @@ pub(crate) trait RawStore: Send + Sync {
     fn too_large(&self, _service: &str, _contents: &str) -> bool {
         false
     }
+
+    /// What this document would cost against that ceiling, and what the ceiling is.
+    /// `None` where there is no ceiling.
+    fn cost(&self, _service: &str, _contents: &str) -> Option<(usize, usize)> {
+        None
+    }
 }
 
 /// Backends that may hold Claude Code's live credential, in the order it looks.
@@ -236,6 +242,11 @@ pub fn vault_delete(ctx: &Context, service: &str) -> Result<(), Error> {
 
 pub fn too_large(ctx: &Context, service: &str, contents: &str) -> bool {
     vault(ctx).too_large(service, contents)
+}
+
+/// The bytes a document would need and the bytes there are, where that is bounded.
+pub fn cost(ctx: &Context, service: &str, contents: &str) -> Option<(usize, usize)> {
+    vault(ctx).cost(service, contents)
 }
 
 /// A handle for comparing and logging tokens without the secret leaving this process.

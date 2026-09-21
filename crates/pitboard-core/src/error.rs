@@ -12,6 +12,18 @@ pub enum Error {
     StateOnSyncedDrive { path: PathBuf, marker: String },
 
     #[error(
+        "the login for `{label}` needs {bytes} bytes and pitboard can write {limit}. \
+         Claude Code writes a login this size by putting it on a command line, where any \
+         process can read it; pitboard will not. Sign out of anything that added to this \
+         login (an enterprise gateway, a second OAuth grant) and try again."
+    )]
+    CredentialTooLarge {
+        label: String,
+        bytes: usize,
+        limit: usize,
+    },
+
+    #[error(
         "`{program}` is not on this machine, and pitboard signs in with Claude Code's own \
          sign-in. Install Claude Code, or point pitboard at it."
     )]
@@ -268,6 +280,7 @@ impl Error {
         match self {
             StateOnSyncedDrive { .. } => "state_on_synced_drive",
             ClaudeProgramMissing { .. } => "claude_program_missing",
+            CredentialTooLarge { .. } => "credential_too_large",
             CustomOauthEndpoint => "custom_oauth_endpoint",
             StateUnreadable { .. } => "state_unreadable",
             StateCorrupt { .. } => "state_corrupt",

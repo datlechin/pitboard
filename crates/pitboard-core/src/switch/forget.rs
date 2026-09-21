@@ -11,7 +11,19 @@ pub fn forget(settled: Settled, label: &str) -> Result<(String, Vec<Warning>)> {
         mut state,
         ctx,
     } = settled;
-    if state.active.as_deref() == Some(label) {
+    // Who is signed in is a fact about the machine. pitboard's record of its last switch
+    // is stale the moment someone signs in with Claude Code's own `/login`, and forgetting
+    // the account that is actually in use throws away the only record of it.
+    let live_uuid = crate::claude::load_config(&ctx)
+        .ok()
+        .as_ref()
+        .and_then(crate::claude::identity)
+        .map(|id| id.account_uuid);
+    let signed_in = match (&live_uuid, state.get(label)) {
+        (Some(uuid), Some(account)) => &account.account_uuid == uuid,
+        _ => state.active.as_deref() == Some(label),
+    };
+    if signed_in {
         return Err(Error::CannotForgetActiveAccount {
             label: label.to_string(),
         });
@@ -20,6 +32,7 @@ pub fn forget(settled: Settled, label: &str) -> Result<(String, Vec<Warning>)> {
         label: label.to_string(),
     })?;
     state::save(&ctx, &state)?;
+    crate::readings::forget(&ctx, &account.account_uuid);
     let pending = purge(&ctx, &mut state);
     Ok((
         account.email,

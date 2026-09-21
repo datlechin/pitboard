@@ -221,8 +221,11 @@ pub fn switch(settled: Settled, label: &str) -> Result<(Outcome, Vec<Warning>)> 
     // nothing.
     let next = splice(&before, &incoming)?;
     if store::too_large(ctx, &service, &next) {
-        return Err(Error::LiveCredentialShapeUnexpected {
-            detail: "the login to install is past the keychain's size limit".into(),
+        let (bytes, limit) = store::cost(ctx, &service, &next).unwrap_or_default();
+        return Err(Error::CredentialTooLarge {
+            label: label.to_string(),
+            bytes,
+            limit,
         });
     }
 
