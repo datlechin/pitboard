@@ -28,5 +28,6 @@ let package = Package(
             linkerSettings: [.unsafeFlags(["-Xlinker", "-rpath", "-Xlinker", "@executable_path/../Frameworks"])]
         ),
         .testTarget(name: "PitboardKitTests", dependencies: ["PitboardKit"]),
+        .testTarget(name: "PitboardTests", dependencies: ["Pitboard"]),
     ]
 )

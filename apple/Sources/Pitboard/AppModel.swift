@@ -47,12 +47,7 @@ final class AppModel {
     }
 
     /// The account in use and its tightest limit, as the menu bar reads it.
-    var title: String {
-        guard let account = status?.accounts.first(where: \.signedIn) else { return "pitboard" }
-        let name = account.label ?? "unenrolled"
-        guard let tightest = account.usage?.windows.map(\.percent).max() else { return name }
-        return "\(name) \(Int(tightest.rounded()))%"
-    }
+    var title: String { menuTitle(for: status) }
 
     var updated: String {
         guard let updatedAt else { return "not read yet" }
@@ -92,4 +87,13 @@ final class AppModel {
         }
         return error.localizedDescription
     }
+}
+
+/// What the menu bar says: the account in use and the limit closest to its end. Nothing is
+/// known until the first read, and an account signed in but not enrolled has no name here.
+func menuTitle(for status: Status?) -> String {
+    guard let account = status?.accounts.first(where: \.signedIn) else { return "pitboard" }
+    let name = account.label ?? "unenrolled"
+    guard let tightest = account.usage?.windows.map(\.percent).max() else { return name }
+    return "\(name) \(Int(tightest.rounded()))%"
 }

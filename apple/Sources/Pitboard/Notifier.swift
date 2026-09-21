@@ -31,43 +31,12 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     }
 
     func consider(_ status: Status) {
-        guard let current = status.accounts.first(where: \.signedIn), let label = current.label
-        else { return }
-        for window in current.usage?.windows ?? [] where window.percent >= 100 {
-            guard told[window.kind] != (window.resetsAt ?? 0) else { continue }
-            guard let spare = mostLeft(in: status, like: window) else { continue }
-            told[window.kind] = window.resetsAt ?? 0
-            tell(label, ran: window, switchTo: spare)
-        }
-    }
-
-    /// The account with the most room left in the same kind of window, among those that
-    /// can be switched to now.
-    private func mostLeft(in status: Status, like window: Limits) -> Account? {
-        status.accounts
-            .filter { $0.switchable && $0.label != nil }
-            .min { left($0, like: window) < left($1, like: window) }
-            .flatMap { left($0, like: window) < 100 ? $0 : nil }
-    }
-
-    private func left(_ account: Account, like window: Limits) -> Double {
-        account.usage?.windows.first { $0.kind == window.kind && $0.scope == window.scope }?
-            .percent ?? 100
-    }
-
-    private func tell(_ label: String, ran window: Limits, switchTo spare: Account) {
-        guard let to = spare.label else { return }
-        let content = UNMutableNotificationContent()
-        content.title =
-            "\(label) has no \(window.kind == "session" ? "5-hour" : "weekly") limit left"
-        content.body =
-            "\(to) has \(100 - Int(left(spare, like: window).rounded()))% of its own left."
-        content.categoryIdentifier = Self.category
-        content.userInfo = ["label": to]
+        guard let advice = Advice.about(status, unless: told) else { return }
+        told[advice.window.kind] = advice.window.resetsAt ?? 0
         centre.add(
             UNNotificationRequest(
-                identifier: "\(window.kind)-\(window.resetsAt ?? 0)", content: content,
-                trigger: nil))
+                identifier: "\(advice.window.kind)-\(advice.window.resetsAt ?? 0)",
+                content: advice.notification, trigger: nil))
     }
 
     nonisolated func userNotificationCenter(
@@ -78,5 +47,53 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
             let label = response.notification.request.content.userInfo["label"] as? String
         else { return }
         await MainActor.run { onSwitch?(label) }
+    }
+}
+
+/// An account has run out, and another has room.
+struct Advice {
+    /// The account that ran out, and the window it ran out of.
+    let ran: String
+    let window: Limits
+    /// The account offered instead, and what it has left in the same kind of window.
+    let use: String
+    let left: Int
+
+    /// Nothing to say unless the account in use has exhausted a window that has not been
+    /// mentioned yet and an account that can be switched to now has room in the same kind
+    /// of window. Weekly limits are per account, so the comparison is like for like.
+    static func about(_ status: Status, unless told: [String: Int64]) -> Advice? {
+        guard let current = status.accounts.first(where: \.signedIn), let ran = current.label
+        else { return nil }
+        for window in current.usage?.windows ?? [] where window.percent >= 100 {
+            guard told[window.kind] != (window.resetsAt ?? 0) else { continue }
+            let spare = status.accounts
+                .filter { $0.switchable && $0.label != nil }
+                .min { used($0, like: window) < used($1, like: window) }
+            guard let spare, let use = spare.label, used(spare, like: window) < 100 else {
+                continue
+            }
+            return Advice(
+                ran: ran, window: window, use: use,
+                left: 100 - Int(used(spare, like: window).rounded()))
+        }
+        return nil
+    }
+
+    /// What an account has used of the same window, counting a window it does not report
+    /// as spent: an account whose limits are unknown is not one to recommend.
+    private static func used(_ account: Account, like window: Limits) -> Double {
+        account.usage?.windows.first { $0.kind == window.kind && $0.scope == window.scope }?
+            .percent ?? 100
+    }
+
+    var notification: UNNotificationContent {
+        let content = UNMutableNotificationContent()
+        let limit = window.kind == "session" ? "5-hour" : "weekly"
+        content.title = "\(ran) has no \(limit) limit left"
+        content.body = "\(use) has \(left)% of its own left."
+        content.categoryIdentifier = "limit"
+        content.userInfo = ["label": use]
+        return content
     }
 }
