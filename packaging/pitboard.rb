@@ -13,7 +13,7 @@ class Pitboard < Formula
   depends_on "rust" => :build
 
   def install
-    system "cargo", "install", *std_cargo_args
+    system "cargo", "install", *std_cargo_args(path: "crates/pitboard")
     generate_completions_from_executable(bin/"pitboard", "completions")
     (man1/"pitboard.1").write Utils.safe_popen_read(bin/"pitboard", "manpage")
   end

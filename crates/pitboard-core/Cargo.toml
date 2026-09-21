@@ -1,0 +1,32 @@
+[package]
+name = "pitboard-core"
+description = "The engine behind pitboard: parking and restoring Claude Code logins. Serves pitboard's own front ends."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+readme = "../../README.md"
+keywords = ["claude", "keychain", "credentials"]
+categories = ["authentication"]
+
+[features]
+# Internals the integration tests reach into. Not part of the library's API.
+test-support = []
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+jiff.workspace = true
+sha2.workspace = true
+hex.workspace = true
+unicode-normalization.workspace = true
+machine-uid.workspace = true
+libc.workspace = true
+ureq.workspace = true
+rustls.workspace = true
+
+[lints]
+workspace = true

@@ -50,7 +50,7 @@ jobs:
       # Asserts a read-latency threshold that concurrent `security` calls can breach, so it
       # runs alone. It exists only on macOS.
       - if: runner.os == 'macOS'
-        run: cargo test --locked --test keychain_write_is_harmless writing_preserves_attributes
+        run: cargo test --locked -p pitboard --test keychain_write_is_harmless writing_preserves_attributes
 
   deny:
     runs-on: ubuntu-latest

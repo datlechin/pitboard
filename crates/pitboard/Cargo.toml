@@ -1,0 +1,30 @@
+[package]
+name = "pitboard"
+description = "Park and restore your own Claude Code logins on one machine, and see what each one has left."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+readme = "../../README.md"
+keywords = ["cli", "keychain", "credentials", "macos", "linux"]
+categories = ["command-line-utilities"]
+
+[dependencies]
+pitboard-core.workspace = true
+anstream.workspace = true
+anstyle.workspace = true
+clap.workspace = true
+clap_complete.workspace = true
+clap_mangen.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+pitboard-core = { workspace = true, features = ["test-support"] }
+insta.workspace = true
+mockito.workspace = true
+serde_json.workspace = true
+
+[lints]
+workspace = true

@@ -26,6 +26,16 @@ pub fn local(epoch: i64, pattern: &str) -> String {
         .unwrap_or_default()
 }
 
+/// What a person reads for a moment: "14:02", or with the date once it is not today.
+pub fn moment(epoch: i64, now: i64) -> String {
+    let pattern = if local(epoch, "%F") == local(now, "%F") {
+        "%H:%M"
+    } else {
+        "%b %-d %H:%M"
+    };
+    local(epoch, pattern)
+}
+
 /// A length of time to the precision a person reads: "6d 4h", "2h 05m", "47m", "<1m".
 pub fn span(seconds: i64) -> String {
     let s = seconds.max(0);
@@ -74,6 +84,13 @@ mod tests {
         assert_eq!(span(60 * 47), "47m");
         assert_eq!(span(3600 * 2 + 60 * 5), "2h 05m");
         assert_eq!(span(86_400 * 6 + 3600 * 4 + 59), "6d 4h");
+    }
+
+    #[test]
+    fn a_moment_today_is_just_its_time() {
+        let now = now();
+        assert_eq!(moment(now, now).len(), 5);
+        assert!(moment(now - 3 * 86_400, now).len() > 5);
     }
 
     #[test]

@@ -5,7 +5,6 @@
 use crate::context::Context;
 use crate::error::Error;
 use crate::state::{Park, State};
-use crate::ui::{self, BAD, DIM, GOOD, WARN, pad, paint};
 use crate::{claude, home, park, slot, store, switch, time, usage};
 use serde_json::{Value, json};
 use std::path::PathBuf;
@@ -437,7 +436,7 @@ fn judge_park(fact: &ParkFact, now: i64) -> Check {
         Some(at) if at <= now => warn(
             "parked_login",
             name,
-            format!("its parked login expired {}", ui::moment(at, now)),
+            format!("its parked login expired {}", time::moment(at, now)),
             renew,
         ),
         Some(at) if at - now < RENEW_WITHIN => warn(
@@ -502,54 +501,6 @@ pub fn run(ctx: &Context) -> Diagnosis {
 /// No check failed. Warnings are advice; a failure means an assumption broke.
 pub fn healthy(checks: &[Check]) -> bool {
     checks.iter().all(|c| c.level != Level::Fail)
-}
-
-pub fn render_human(checks: &[Check]) -> String {
-    let width = checks
-        .iter()
-        .map(|c| c.name.chars().count())
-        .max()
-        .unwrap_or(0);
-    let mut out = String::new();
-    for c in checks {
-        let mark = match c.level {
-            Level::Ok => paint(GOOD, "✓"),
-            Level::Warn => paint(WARN, "!"),
-            Level::Fail => paint(BAD, "✗"),
-        };
-        out.push_str(&format!("{mark} {}  {}\n", pad(&c.name, width), c.detail));
-        if !c.advice.is_empty() {
-            out.push_str(&format!(
-                "  {}  {}\n",
-                pad("", width),
-                paint(DIM, &c.advice)
-            ));
-        }
-    }
-    let count = |level| checks.iter().filter(|c| c.level == level).count();
-    let summary = match (count(Level::Fail), count(Level::Warn)) {
-        (0, 0) => paint(GOOD, "Everything pitboard relies on holds."),
-        (0, w) => paint(WARN, format!("{w} to look at; nothing is broken.")),
-        (f, _) => paint(
-            BAD,
-            format!("{f} broken: do not switch accounts until fixed."),
-        ),
-    };
-    out.push_str(&format!("\n{summary}\n"));
-    out
-}
-
-pub fn render_json(diagnosis: &Diagnosis) -> Value {
-    json!({
-        "environment": diagnosis.environment,
-        "checks": diagnosis.checks.iter().map(|c| json!({
-            "code": c.code,
-            "name": c.name,
-            "level": match c.level { Level::Ok => "ok", Level::Warn => "warn", Level::Fail => "fail" },
-            "detail": c.detail,
-            "advice": c.advice,
-        })).collect::<Vec<_>>(),
-    })
 }
 
 #[cfg(test)]
@@ -766,15 +717,5 @@ mod tests {
         assert_eq!(check(&checks, "interrupted_switch").level, Level::Warn);
         assert_eq!(check(&checks, "discarded").level, Level::Warn);
         assert!(healthy(&checks), "neither stops pitboard working");
-    }
-
-    #[test]
-    fn the_summary_says_whether_anything_is_broken() {
-        let plain =
-            |checks: &[Check]| anstream::adapter::strip_str(&render_human(checks)).to_string();
-        assert!(plain(&evaluate(&facts())).ends_with("Everything pitboard relies on holds.\n"));
-        let mut f = facts();
-        f.credential = Ok(Some(json!({"slackTag": {}})));
-        assert!(plain(&evaluate(&f)).contains("1 broken"));
     }
 }

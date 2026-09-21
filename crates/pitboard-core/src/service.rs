@@ -112,8 +112,8 @@ impl Pitboard {
     }
 
     /// The status line for Claude Code's session JSON. Reads only files.
-    pub fn statusline(&self, session: &str) -> String {
-        statusline::run(&self.ctx, session)
+    pub fn statusline(&self, session: &str) -> statusline::StatusLine {
+        statusline::read(&self.ctx, session)
     }
 
     /// The enrolled account under `label`, if any, read without taking the lock.

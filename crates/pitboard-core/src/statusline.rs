@@ -8,7 +8,6 @@
 
 use crate::context::Context;
 use crate::state::State;
-use crate::ui::{self, BOLD, DIM, paint};
 use crate::usage::Snapshot;
 use serde_json::Value;
 use std::collections::HashMap;
@@ -16,8 +15,30 @@ use std::collections::HashMap;
 /// Older than this, a remembered reading shows its age.
 const FRESH_FOR: i64 = 15 * 60;
 
-/// The five-hour and weekly shares, in that order, when known.
-type Shares = (Option<f64>, Option<f64>);
+/// The share of the five-hour and weekly limits already used, when known.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct Shares {
+    pub five_hour: Option<f64>,
+    pub weekly: Option<f64>,
+}
+
+/// An enrolled account other than the one in use.
+#[derive(Debug, PartialEq)]
+pub struct Entry {
+    pub label: String,
+    pub shares: Shares,
+    /// Seconds since this was measured, once that is worth knowing.
+    pub age: Option<i64>,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct StatusLine {
+    /// The account Claude Code's config names, or `None` when it is not enrolled.
+    pub current: Option<String>,
+    /// What Claude Code passed for the session's own account.
+    pub session: Shares,
+    pub others: Vec<Entry>,
+}
 
 /// What Claude Code passes for the session's own account, under `rate_limits`.
 fn session_shares(input: &Value, now: i64) -> Shares {
@@ -31,10 +52,13 @@ fn session_shares(input: &Value, now: i64) -> Shares {
             used
         })
     };
-    (share("five_hour"), share("seven_day"))
+    Shares {
+        five_hour: share("five_hour"),
+        weekly: share("seven_day"),
+    }
 }
 
-/// A remembered reading. A window whose reset has passed since is shown as reset.
+/// A remembered reading. A window whose reset has passed since counts as reset.
 fn remembered_shares(snapshot: &Snapshot, now: i64) -> Shares {
     let share = |kinds: &[&str]| {
         snapshot
@@ -49,56 +73,47 @@ fn remembered_shares(snapshot: &Snapshot, now: i64) -> Shares {
                 }
             })
     };
-    (
-        share(&["session", "five_hour"]),
-        share(&["weekly_all", "seven_day"]),
-    )
+    Shares {
+        five_hour: share(&["session", "five_hour"]),
+        weekly: share(&["weekly_all", "seven_day"]),
+    }
 }
 
-fn shares(shares: Shares) -> String {
-    let one = |share: Option<f64>| match share {
-        Some(p) => paint(ui::level(p), format!("{p:.0}%")),
-        None => paint(DIM, "?"),
-    };
-    format!("{}{}{}", one(shares.0), paint(DIM, "·"), one(shares.1))
-}
-
-/// The line itself. `signed_in` is the account Claude Code's config names.
-pub fn render(
+/// `signed_in` is the account Claude Code's config names.
+fn line(
     input: &Value,
     state: &State,
     signed_in: Option<&str>,
     remembered: &HashMap<String, Snapshot>,
     now: i64,
-) -> String {
+) -> StatusLine {
     let current = signed_in.and_then(|uuid| state.by_uuid(uuid));
-    let mut parts = vec![format!(
-        "{} {}",
-        paint(BOLD, current.map_or("unenrolled", |a| a.label.as_str())),
-        shares(session_shares(input, now))
-    )];
-    for account in &state.accounts {
-        if current.is_some_and(|c| c.account_uuid == account.account_uuid) {
-            continue;
-        }
-        let reading = remembered.get(&account.account_uuid);
-        let age = reading
-            .and_then(|r| r.observed_at)
-            .filter(|at| now - at > FRESH_FOR)
-            .map(|at| paint(DIM, format!(" ({})", crate::time::span(now - at))))
-            .unwrap_or_default();
-        parts.push(format!(
-            "{} {}{age}",
-            paint(DIM, &account.label),
-            shares(reading.map_or((None, None), |r| remembered_shares(r, now)))
-        ));
+    let others = state
+        .accounts
+        .iter()
+        .filter(|a| current.is_none_or(|c| c.account_uuid != a.account_uuid))
+        .map(|account| {
+            let reading = remembered.get(&account.account_uuid);
+            Entry {
+                label: account.label.clone(),
+                shares: reading.map_or_else(Shares::default, |r| remembered_shares(r, now)),
+                age: reading
+                    .and_then(|r| r.observed_at)
+                    .map(|at| now - at)
+                    .filter(|age| *age > FRESH_FOR),
+            }
+        })
+        .collect();
+    StatusLine {
+        current: current.map(|a| a.label.clone()),
+        session: session_shares(input, now),
+        others,
     }
-    parts.join("  ")
 }
 
-/// Reads Claude Code's JSON from `input`. Never fails: a status bar has nowhere to show an
+/// Reads Claude Code's session JSON. Never fails: a status bar has nowhere to show an
 /// error, so whatever cannot be read is left out.
-pub fn run(ctx: &Context, input: &str) -> String {
+pub fn read(ctx: &Context, input: &str) -> StatusLine {
     let input: Value = serde_json::from_str(input).unwrap_or(Value::Null);
     let state = crate::state::load(ctx).unwrap_or_default();
     let signed_in = crate::claude::load_config(ctx)
@@ -106,7 +121,7 @@ pub fn run(ctx: &Context, input: &str) -> String {
         .as_ref()
         .and_then(crate::claude::identity)
         .map(|id| id.account_uuid);
-    render(
+    line(
         &input,
         &state,
         signed_in.as_deref(),
@@ -155,8 +170,11 @@ mod tests {
         }
     }
 
-    fn plain(styled: &str) -> String {
-        anstream::adapter::strip_str(styled).to_string()
+    fn shares(five_hour: f64, weekly: f64) -> Shares {
+        Shares {
+            five_hour: Some(five_hour),
+            weekly: Some(weekly),
+        }
     }
 
     #[test]
@@ -175,19 +193,33 @@ mod tests {
                 reading(90.0, 88.0, NOW - 3 * 3_600, NOW - 1),
             ),
         ]);
-        let line = plain(&render(
-            &input,
-            &state(),
-            Some("work-uuid"),
-            &remembered,
-            NOW,
-        ));
-        assert_eq!(line, "work 46%·70%  personal 12%·40%  side 0%·0% (3h 00m)");
+        let line = line(&input, &state(), Some("work-uuid"), &remembered, NOW);
+        assert_eq!(line.current.as_deref(), Some("work"));
+        assert_eq!(line.session, shares(46.4, 70.0));
+        assert_eq!(
+            line.others,
+            [
+                Entry {
+                    label: "personal".into(),
+                    shares: shares(12.0, 40.0),
+                    age: None,
+                },
+                Entry {
+                    label: "side".into(),
+                    shares: shares(0.0, 0.0),
+                    age: Some(3 * 3_600),
+                },
+            ],
+            "a window past its reset counts as reset, and an old reading says how old"
+        );
     }
 
     #[test]
-    fn what_is_unknown_is_shown_as_unknown_not_as_zero() {
-        let line = plain(&render(&json!({}), &state(), None, &HashMap::new(), NOW));
-        assert_eq!(line, "unenrolled ?·?  work ?·?  personal ?·?  side ?·?");
+    fn what_is_unknown_is_left_unknown_not_zero() {
+        let line = line(&json!({}), &state(), None, &HashMap::new(), NOW);
+        assert_eq!(line.current, None);
+        assert_eq!(line.session, Shares::default());
+        assert!(line.others.iter().all(|e| e.shares == Shares::default()));
+        assert_eq!(line.others.len(), 3);
     }
 }

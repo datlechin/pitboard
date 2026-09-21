@@ -1,58 +1,46 @@
-[package]
-name = "pitboard"
+[workspace]
+resolver = "3"
+members = ["crates/pitboard-core", "crates/pitboard"]
+
+[workspace.package]
 version = "0.1.1"
 edition = "2024"
 rust-version = "1.98"
 license = "Apache-2.0"
-description = "Park and restore your own Claude Code logins on one machine, and see what each one has left."
 repository = "https://github.com/datlechin/pitboard"
 homepage = "https://github.com/datlechin/pitboard"
-keywords = ["cli", "keychain", "credentials", "macos", "linux"]
-categories = ["command-line-utilities"]
-readme = "README.md"
-exclude = ["/.github", "/packaging", "/deny.toml", "/rustfmt.toml"]
 
-[lib]
-name = "pitboard"
-path = "src/lib.rs"
-
-[[bin]]
-name = "pitboard"
-path = "src/main.rs"
-
-[dependencies]
-# Deliberately small. Every addition needs a reason in the PR description.
+[workspace.dependencies]
+pitboard-core = { path = "crates/pitboard-core", version = "=0.1.1" }
+anstream = "1"
+anstyle = "1"
 clap = { version = "4", features = ["derive"] }
 clap_complete = "4"
 clap_mangen = "0.3"
-anstream = "1"
-anstyle = "1"
+hex = "0.4"
+insta = { version = "1.48", features = ["json", "redactions"] }
+jiff = "0.2"
+libc = "0.2"
+machine-uid = "0.6"
+mockito = "1.7.2"
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
-thiserror = "2"
-jiff = "0.2"
 sha2 = "0.11"
-hex = "0.4"
+thiserror = "2"
 unicode-normalization = "0.1"
-machine-uid = "0.6"
-libc = "0.2"
 # TLS: rustls for the protocol, the operating system for deciding which certificates to
 # trust. No bundled root store, so a corporate or system trust setting is honoured.
 ureq = { version = "3", default-features = false, features = ["rustls-no-provider", "platform-verifier"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+
+[workspace.lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+
+[workspace.lints.clippy]
+undocumented_unsafe_blocks = "warn"
 
 [profile.release]
 opt-level = "z"
 lto = true
 codegen-units = 1
 strip = true
-
-[lints.rust]
-unsafe_op_in_unsafe_fn = "deny"
-
-[lints.clippy]
-undocumented_unsafe_blocks = "warn"
-
-[dev-dependencies]
-insta = { version = "1.48", features = ["json", "redactions"] }
-mockito = "1.7.2"

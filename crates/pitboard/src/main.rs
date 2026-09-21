@@ -1,15 +1,18 @@
 use anstream::{ColorChoice, eprintln, print, println};
 use anstyle::{AnsiColor, Style};
 use clap::{CommandFactory, Parser, Subcommand};
-use pitboard::context::Context;
-use pitboard::error::Error;
-use pitboard::service::{Changing, Done, Failed, Pitboard, Warning};
-use pitboard::switch::{self, Enrolled, Outcome};
-use pitboard::ui::{BOLD, paint};
-use pitboard::{doctor, status};
+use pitboard_core::context::Context;
+use pitboard_core::doctor;
+use pitboard_core::error::Error;
+use pitboard_core::service::{Changing, Done, Failed, Pitboard, Warning};
+use pitboard_core::switch::{self, Enrolled, Outcome};
 use serde_json::{Value, json};
 use std::io::Read;
 use std::process::ExitCode;
+use ui::{BOLD, paint};
+
+mod render;
+mod ui;
 
 /// Bumped only when a field changes shape. Adding a field or an error code is not a
 /// breaking change for a consumer; renaming or removing one is.
@@ -189,8 +192,8 @@ fn status(pitboard: &Pitboard) -> Report {
             warnings: warnings(&found),
             ..Report::done(
                 "status",
-                status::render_json(&value),
-                status::render_human(&value),
+                render::status::json(&value),
+                render::status::human(&value),
             )
         },
         Err(e) => Report::failed(Some("status"), e),
@@ -205,8 +208,8 @@ fn doctor(pitboard: &Pitboard) -> Report {
         exit: if healthy { 0 } else { 3 },
         ..Report::done(
             "doctor",
-            doctor::render_json(&diagnosis),
-            doctor::render_human(&diagnosis.checks),
+            render::doctor::json(&diagnosis),
+            render::doctor::human(&diagnosis.checks),
         )
     }
 }
@@ -216,7 +219,7 @@ fn doctor(pitboard: &Pitboard) -> Report {
 fn statusline(pitboard: &Pitboard) -> Report {
     let mut input = String::new();
     let _ = std::io::stdin().read_to_string(&mut input);
-    let line = pitboard.statusline(&input);
+    let line = render::statusline::human(&pitboard.statusline(&input));
     if std::env::var_os("NO_COLOR").is_none() {
         ColorChoice::Always.write_global();
     }

@@ -94,7 +94,7 @@ fn writing_preserves_attributes_and_does_not_slow_later_reads() {
     let (_, baseline) = timed_read(&svc);
 
     let payload = r#"{"claudeAiOauth":{"accessToken":"a","refreshToken":"b","expiresAt":1}}"#;
-    let wrote = pitboard::store::vault_write(&common::ctx(), &svc, payload);
+    let wrote = pitboard_core::testing::vault_write(&common::ctx(), &svc, payload);
 
     let (back, after) = timed_read(&svc);
     let after_attrs = attributes(&svc);
@@ -119,7 +119,7 @@ fn an_oversize_credential_is_refused_before_anything_is_written() {
     remove(&svc);
     seed(&svc, "original");
 
-    let err = pitboard::store::vault_write(&common::ctx(), &svc, &"x".repeat(2100))
+    let err = pitboard_core::testing::vault_write(&common::ctx(), &svc, &"x".repeat(2100))
         .expect_err("a credential past the command limit must be refused");
 
     let (still, _) = timed_read(&svc);

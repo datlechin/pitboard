@@ -9,8 +9,8 @@
 #![allow(dead_code)]
 
 /// This test process's own environment: the machine's real keychain account and slot.
-pub fn ctx() -> pitboard::context::Context {
-    pitboard::context::Context::from_env()
+pub fn ctx() -> pitboard_core::context::Context {
+    pitboard_core::context::Context::from_env()
 }
 
 /// Refuse a service name that this machine's Claude Code would actually read.
@@ -21,12 +21,12 @@ pub fn ctx() -> pitboard::context::Context {
 pub fn guard_not_live(service: &str) {
     assert_ne!(
         service,
-        pitboard::slot::LIVE_SERVICE,
+        pitboard_core::testing::LIVE_SERVICE,
         "a test must never address the default credential slot"
     );
     assert_ne!(
         service,
-        pitboard::claude::live_service(&ctx()),
+        pitboard_core::testing::live_service(&ctx()),
         "a test must never address the slot this machine's Claude Code reads"
     );
 }
@@ -36,10 +36,10 @@ fn the_guard_refuses_the_slots_that_hold_a_real_login() {
     guard_not_live("pitboard-citest-1");
     guard_not_live("Claude Code-credentials-deadbeef");
 
-    let caught = std::panic::catch_unwind(|| guard_not_live(pitboard::slot::LIVE_SERVICE));
+    let caught = std::panic::catch_unwind(|| guard_not_live(pitboard_core::testing::LIVE_SERVICE));
     assert!(caught.is_err(), "the default slot must be refused");
     let caught =
-        std::panic::catch_unwind(|| guard_not_live(&pitboard::claude::live_service(&ctx())));
+        std::panic::catch_unwind(|| guard_not_live(&pitboard_core::testing::live_service(&ctx())));
     assert!(caught.is_err(), "this machine's live slot must be refused");
 }
 
@@ -67,7 +67,7 @@ pub fn state_accounts(env: &Env) -> Vec<serde_json::Value> {
 pub fn uuid_for(test: &str, who: char) -> String {
     format!(
         "{}-{who}111-4111-8111-111111111111",
-        pitboard::slot::dir_hash(test)
+        pitboard_core::testing::dir_hash(test)
     )
 }
 
@@ -81,7 +81,7 @@ impl Env {
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(&root).unwrap();
 
-        let service = pitboard::slot::service_for_dir(&root.to_string_lossy());
+        let service = pitboard_core::testing::service_for_dir(&root.to_string_lossy());
         guard_not_live(&service);
 
         let mut server = mockito::Server::new();
@@ -192,7 +192,7 @@ impl Env {
     pub fn write_park(&self, service: &str, contents: &str) {
         guard_not_live(service);
         if cfg!(target_os = "macos") {
-            pitboard::store::vault_write(&ctx(), service, contents).unwrap();
+            pitboard_core::testing::vault_write(&ctx(), service, contents).unwrap();
         } else {
             let vault = self.root.join("pitboard/vault");
             std::fs::create_dir_all(&vault).unwrap();
@@ -202,7 +202,7 @@ impl Env {
 
     pub fn is_parked(&self, service: &str) -> bool {
         if cfg!(target_os = "macos") {
-            pitboard::store::vault_read(&ctx(), service)
+            pitboard_core::testing::vault_read(&ctx(), service)
                 .unwrap()
                 .is_some()
         } else {
@@ -214,7 +214,7 @@ impl Env {
 
     pub fn delete_park(&self, service: &str) {
         if cfg!(target_os = "macos") {
-            let _ = pitboard::store::vault_delete(&ctx(), service);
+            let _ = pitboard_core::testing::vault_delete(&ctx(), service);
         }
     }
 
@@ -297,7 +297,7 @@ impl Env {
 
     fn write_live(&self, credential: &str) {
         if cfg!(target_os = "macos") {
-            pitboard::store::vault_write(&ctx(), &self.service, credential).unwrap();
+            pitboard_core::testing::vault_write(&ctx(), &self.service, credential).unwrap();
         } else {
             std::fs::write(self.live_path(), credential).unwrap();
         }
@@ -305,7 +305,7 @@ impl Env {
 
     pub fn live(&self) -> serde_json::Value {
         let raw = if cfg!(target_os = "macos") {
-            pitboard::store::vault_read(&ctx(), &self.service)
+            pitboard_core::testing::vault_read(&ctx(), &self.service)
                 .unwrap()
                 .unwrap()
         } else {

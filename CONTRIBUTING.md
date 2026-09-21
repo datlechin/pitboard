@@ -1,5 +1,12 @@
 # Contributing
 
+## Layout
+
+- `crates/pitboard-core`: the engine. Parking, switching, recovery, the stores, usage. It
+  reads no environment variable except in `Context::from_env`, and prints nothing.
+- `crates/pitboard`: the command line. Arguments, rendering for people, and the `--json`
+  contract, pinned by the snapshots in `crates/pitboard/tests/snapshots`.
+
 ## Before you change anything
 
 The local loop is the same as CI:
@@ -15,8 +22,14 @@ On macOS, run the keychain latency test on its own — contention from other con
 `security` calls can breach its threshold:
 
 ```sh
-cargo test --test keychain_write_is_harmless -- --test-threads=1
+cargo test -p pitboard --test keychain_write_is_harmless -- --test-threads=1
 ```
+
+Some code compiles only on Linux, so lint for it before pushing, for example with
+`cargo zigbuild clippy --target x86_64-unknown-linux-gnu --all-targets`.
+
+A contract snapshot changes only when the `--json` contract changes on purpose. Review the
+difference with `cargo insta review`, and say in the change why the contract moved.
 
 ## Rules this project learned the hard way
 

@@ -846,12 +846,20 @@ dependencies = [
  "clap",
  "clap_complete",
  "clap_mangen",
- "hex",
  "insta",
+ "mockito",
+ "pitboard-core",
+ "serde_json",
+]
+
+[[package]]
+name = "pitboard-core"
+version = "0.1.1"
+dependencies = [
+ "hex",
  "jiff",
  "libc",
  "machine-uid",
- "mockito",
  "rustls",
  "serde",
  "serde_json",

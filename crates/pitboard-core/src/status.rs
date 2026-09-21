@@ -8,13 +8,9 @@
 use crate::api::{self, ApiError, Owner};
 use crate::context::Context;
 use crate::state::{Park, State};
-use crate::ui::{self, BAD, BOLD, DIM, GOOD, WARN, pad, paint};
-use crate::usage::{Snapshot, Source, Window};
+use crate::usage::{Snapshot, Source};
 use crate::{claude, park, readings, store, time};
-use serde_json::{Value, json};
-
-/// A parked login this close to expiring is worth renewing now.
-const RENEW_WITHIN: i64 = 3 * 86_400;
+use serde_json::Value;
 
 /// Why a reading is not live.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
@@ -46,7 +42,7 @@ impl Stale {
     }
 
     /// Only what is worth a word: a parked login going quiet is how parking works.
-    fn explanation(self) -> Option<&'static str> {
+    pub fn explanation(self) -> Option<&'static str> {
         match self {
             Stale::NothingSignedIn => Some("nothing is signed in"),
             Stale::SessionExpired => Some("Claude Code's session has expired; `claude` renews it"),
@@ -250,194 +246,12 @@ fn assemble(state: &State, facts: &Facts, recall: impl Fn(&str) -> Option<Snapsh
     rows
 }
 
-fn window_name(w: &Window) -> String {
-    let base = match w.kind.as_str() {
-        "session" | "five_hour" => "5h",
-        "weekly_all" | "seven_day" | "weekly_scoped" => "week",
-        other => other,
-    };
-    match &w.scope {
-        Some(scope) => format!("{base} · {scope}"),
-        None => base.to_string(),
-    }
-}
-
-/// Whether the account can be switched to, and what to do when it cannot.
-fn standing(row: &Row, now: i64) -> String {
-    let label = row.label.as_deref().unwrap_or("<label>");
-    let sign_in_again = format!("pitboard enroll {label} --sign-in");
-    if row.signed_in {
-        return match row.label {
-            Some(_) => paint(GOOD, "signed in"),
-            None => format!(
-                "{} {}",
-                paint(GOOD, "signed in"),
-                paint(WARN, "· not enrolled: pitboard enroll <label>")
-            ),
-        };
-    }
-    match &row.parked {
-        None => paint(WARN, format!("nothing parked · {sign_in_again}")),
-        Some(p) if !p.restorable_at(now) => paint(BAD, format!("login expired · {sign_in_again}")),
-        Some(p) => match p.refresh_expires_at {
-            Some(at) if at - now < RENEW_WITHIN => paint(
-                WARN,
-                format!(
-                    "ready · expires in {} · {sign_in_again}",
-                    time::span(at - now)
-                ),
-            ),
-            Some(at) => format!(
-                "{} {}",
-                paint(GOOD, "ready"),
-                paint(DIM, format!("· good for {}", time::span(at - now)))
-            ),
-            None => paint(GOOD, "ready"),
-        },
-    }
-}
-
-fn provenance(usage: &Snapshot, now: i64) -> Option<String> {
-    let at = usage.observed_at?;
-    match usage.source {
-        Source::Live => None,
-        Source::ClaudeCodeCache => Some(format!(
-            "from Claude Code, measured {}",
-            ui::moment(at, now)
-        )),
-        Source::Remembered => Some(format!(
-            "measured {}, {} ago",
-            ui::moment(at, now),
-            time::span(now - at)
-        )),
-    }
-}
-
-pub fn render_human(report: &Report) -> String {
-    let now = report.now;
-    if report.rows.is_empty() {
-        return "Nothing is signed in and no account is enrolled.\n\
-                Run `claude` and sign in, then `pitboard enroll <label>`.\n"
-            .into();
-    }
-    let label_width = report
-        .rows
-        .iter()
-        .filter_map(|r| r.label.as_deref().map(str::len))
-        .max()
-        .unwrap_or(0);
-    let email_width = report.rows.iter().map(|r| r.email.len()).max().unwrap_or(0);
-    let name_width = report
-        .rows
-        .iter()
-        .flat_map(|r| r.usage.iter().flat_map(|u| u.windows.iter()))
-        .map(|w| window_name(w).chars().count())
-        .max()
-        .unwrap_or(0);
-
-    let mut blocks = Vec::new();
-    for row in &report.rows {
-        let marker = if row.signed_in {
-            paint(GOOD, "●")
-        } else {
-            paint(DIM, "○")
-        };
-        let label = match label_width {
-            0 => String::new(),
-            width => format!(
-                "{}  ",
-                paint(BOLD, pad(row.label.as_deref().unwrap_or_default(), width))
-            ),
-        };
-        let mut block = format!(
-            "{marker} {label}{}  {}\n",
-            paint(DIM, pad(&row.email, email_width)),
-            standing(row, now)
-        );
-
-        let windows: Vec<&Window> = row.usage.iter().flat_map(|u| u.windows.iter()).collect();
-        if windows.is_empty() {
-            let why = row.stale.and_then(Stale::explanation);
-            block.push_str(&format!(
-                "    {}\n",
-                paint(
-                    DIM,
-                    match why {
-                        Some(why) => format!("no usage known · {why}"),
-                        None => "no usage known yet".into(),
-                    }
-                )
-            ));
-        }
-        for w in &windows {
-            let resets = w.resets_at.map_or_else(String::new, |at| {
-                if at <= now {
-                    "resetting now".into()
-                } else {
-                    format!("resets in {}", time::span(at - now))
-                }
-            });
-            block.push_str(&format!(
-                "    {}  {}  {}  {}\n",
-                pad(&window_name(w), name_width),
-                ui::bar(w.percent, 10),
-                paint(ui::level(w.percent), format!("{:>3.0}%", w.percent)),
-                paint(DIM, resets)
-            ));
-        }
-        if !windows.is_empty() {
-            let note = row.usage.as_ref().and_then(|u| provenance(u, now));
-            let why = row.stale.and_then(Stale::explanation);
-            let line = match (note, why) {
-                (Some(note), Some(why)) => {
-                    format!("{} {}", paint(DIM, note), paint(WARN, format!("· {why}")))
-                }
-                (Some(note), None) => paint(DIM, note),
-                (None, Some(why)) => paint(WARN, why),
-                (None, None) => String::new(),
-            };
-            if !line.is_empty() {
-                block.push_str(&format!("    {}  {line}\n", pad("", name_width)));
-            }
-        }
-        blocks.push(block);
-    }
-    blocks.join("\n")
-}
-
-pub fn render_json(report: &Report) -> Value {
-    json!({
-        "signed_in": report.signed_in.as_ref().ok().map(|o| json!({
-            "account_uuid": o.account_uuid,
-            "email": o.email,
-            "organization_uuid": o.organization_uuid,
-        })),
-        "signed_in_error": report.signed_in.as_ref().err(),
-        "accounts": report.rows.iter().map(|r| json!({
-            "label": r.label,
-            "email": r.email,
-            "account_uuid": r.account_uuid,
-            "signed_in": r.signed_in,
-            "switchable": r.switchable(report.now),
-            "parked": r.parked.as_ref().map(|p| json!({
-                "parked_at": p.parked_at,
-                "access_expires_at": p.access_expires_at,
-                "refresh_expires_at": p.refresh_expires_at,
-            })),
-            "usage": r.usage.as_ref().map(|u| json!({
-                "source": u.source,
-                "observed_at": u.observed_at,
-                "windows": u.windows,
-            })),
-            "stale": r.stale,
-        })).collect::<Vec<_>>(),
-    })
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::state::Account;
+    use crate::usage::Window;
+    use serde_json::json;
 
     const NOW: i64 = 1_789_935_000;
 
@@ -507,18 +321,6 @@ mod tests {
 
     fn nothing_remembered(_: &str) -> Option<Snapshot> {
         None
-    }
-
-    fn report(rows: Vec<Row>) -> Report {
-        Report {
-            now: NOW,
-            rows,
-            signed_in: Ok(owner("work-uuid")),
-        }
-    }
-
-    fn plain(styled: &str) -> String {
-        anstream::adapter::strip_str(styled).to_string()
     }
 
     #[test]
@@ -598,7 +400,7 @@ mod tests {
     }
 
     #[test]
-    fn what_cannot_be_asked_shows_what_was_remembered() {
+    fn what_cannot_be_asked_falls_back_to_what_was_remembered() {
         let s = state(&["work", "personal"]);
         let f = facts(
             "work-uuid",
@@ -614,11 +416,7 @@ mod tests {
             .find(|r| r.label.as_deref() == Some("personal"))
             .unwrap();
         assert_eq!(personal.usage.as_ref().unwrap().source, Source::Remembered);
-        let text = plain(&render_human(&report(rows)));
-        assert!(
-            text.contains("measured") && text.contains("2h 00m ago"),
-            "{text}"
-        );
+        assert_eq!(personal.stale, Some(Stale::ParkedAccessExpired));
     }
 
     #[test]
@@ -633,122 +431,5 @@ mod tests {
         assert_eq!(rows[0].label.as_deref(), Some("beta"));
         assert!(rows[0].signed_in && !rows[0].switchable(NOW));
         assert!(!rows[1].signed_in);
-    }
-
-    #[test]
-    fn a_signed_in_account_that_is_not_enrolled_says_how_to_enroll_it() {
-        let s = state(&["alpha"]);
-        let f = facts(
-            "stranger",
-            Ok(reading(5.0, Source::Live, None)),
-            vec![Err(Stale::NothingParked)],
-        );
-        let rows = assemble(&s, &f, nothing_remembered);
-        assert_eq!(rows[0].label, None);
-        assert!(plain(&render_human(&report(rows))).contains("pitboard enroll <label>"));
-    }
-
-    #[test]
-    fn an_account_that_cannot_be_switched_to_says_how_to_fix_it() {
-        let mut s = state(&["work", "expired", "empty", "soon"]);
-        s.accounts[1].parked = Some(parked(NOW - 1));
-        s.accounts[2].parked = None;
-        s.accounts[3].parked = Some(parked(NOW + 86_400));
-        let f = facts(
-            "work-uuid",
-            Ok(reading(1.0, Source::Live, None)),
-            vec![Err(Stale::NothingParked); 4],
-        );
-        let rows = assemble(&s, &f, nothing_remembered);
-        assert!(
-            rows.iter()
-                .all(|r| !r.switchable(NOW) || r.label.as_deref() == Some("soon"))
-        );
-        let text = plain(&render_human(&report(rows)));
-        for (label, says) in [
-            (
-                "expired",
-                "login expired · pitboard enroll expired --sign-in",
-            ),
-            ("empty", "nothing parked · pitboard enroll empty --sign-in"),
-            ("soon", "expires in 1d 0h · pitboard enroll soon --sign-in"),
-        ] {
-            let line = text
-                .lines()
-                .find(|l| l.contains(&format!(" {label} ")))
-                .unwrap();
-            assert!(line.contains(says), "{line}");
-        }
-    }
-
-    #[test]
-    fn columns_line_up_whatever_the_label_and_email_lengths() {
-        let s = state(&["a", "much-longer-label"]);
-        let f = facts(
-            "a-uuid",
-            Ok(reading(5.0, Source::Live, None)),
-            vec![Err(Stale::NothingParked), Err(Stale::NothingParked)],
-        );
-        let text = plain(&render_human(&report(assemble(&s, &f, nothing_remembered))));
-        let column = |email: &str| {
-            let line = text.lines().find(|l| l.contains(email)).unwrap();
-            line[..line.find(email).unwrap()].chars().count()
-        };
-        assert_eq!(
-            column("a@example.com"),
-            column("much-longer-label@example.com"),
-            "{text}"
-        );
-    }
-
-    /// An unused model limit is still a limit: at 0% it says there is room.
-    #[test]
-    fn every_limit_is_shown_including_one_not_yet_used() {
-        let s = state(&["work"]);
-        let mut live = reading(30.0, Source::Live, None);
-        live.windows.push(Window {
-            kind: "weekly_scoped".into(),
-            scope: Some("Fable".into()),
-            percent: 0.0,
-            resets_at: Some(NOW + 86_400),
-            is_active: false,
-        });
-        let f = facts("work-uuid", Ok(live), vec![Err(Stale::NothingParked)]);
-        let text = plain(&render_human(&report(assemble(&s, &f, nothing_remembered))));
-        let fable = text
-            .lines()
-            .find(|l| l.contains("week · Fable"))
-            .expect(&text);
-        assert!(fable.contains("0%"), "{fable}");
-    }
-
-    #[test]
-    fn the_human_view_never_prints_a_keychain_item_name() {
-        let s = state(&["work"]);
-        let f = facts(
-            "work-uuid",
-            Ok(reading(30.0, Source::Live, None)),
-            vec![Err(Stale::NothingParked)],
-        );
-        let text = render_human(&report(assemble(&s, &f, nothing_remembered)));
-        assert!(!text.contains("pitboard-park-"), "{text}");
-    }
-
-    #[test]
-    fn the_json_says_where_every_number_came_from_and_what_can_be_switched_to() {
-        let s = state(&["work", "personal"]);
-        let f = facts(
-            "work-uuid",
-            Ok(reading(30.0, Source::Live, None)),
-            vec![Err(Stale::NothingParked), Err(Stale::ParkedAccessExpired)],
-        );
-        let value = render_json(&report(assemble(&s, &f, nothing_remembered)));
-        assert_eq!(value["accounts"][0]["usage"]["source"], "live");
-        assert_eq!(value["accounts"][0]["switchable"], false);
-        assert_eq!(value["accounts"][1]["switchable"], true);
-        assert_eq!(value["accounts"][1]["stale"], "parked_access_expired");
-        assert!(value["accounts"][1]["parked"]["refresh_expires_at"].is_i64());
-        assert!(value["accounts"][1]["parked"].get("service").is_none());
-        assert_eq!(value["signed_in"]["account_uuid"], "work-uuid");
     }
 }
