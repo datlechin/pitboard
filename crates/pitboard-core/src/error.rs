@@ -3,6 +3,21 @@
 
 use std::path::PathBuf;
 
+/// The labels an account list holds, rendered for a message: " Enrolled: `a`, `b`." or
+/// nothing at all when none are.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct Enrolled(pub Vec<String>);
+
+impl std::fmt::Display for Enrolled {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.0.is_empty() {
+            return write!(f, " Nothing is enrolled yet.");
+        }
+        let labels: Vec<String> = self.0.iter().map(|l| format!("`{l}`")).collect();
+        write!(f, " Enrolled: {}.", labels.join(", "))
+    }
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error(
@@ -115,10 +130,14 @@ pub enum Error {
     LiveCredentialShapeUnexpected { detail: String },
 
     #[error(
-        "no account is enrolled as `{label}`. Run `pitboard status` to see the ones that \
-         are, or `pitboard enroll {label} --sign-in` to add it."
+        "no account is enrolled as `{label}`.{enrolled} Run `pitboard enroll {label} \
+         --sign-in` to add it."
     )]
-    AccountUnknown { label: String },
+    AccountUnknown {
+        label: String,
+        /// The labels that do exist, so a typo costs no second command.
+        enrolled: Enrolled,
+    },
 
     #[error(
         "`{label}` has no parked login to switch to: the last one went back into use and \
@@ -351,7 +370,10 @@ mod tests {
         let samples = [
             Error::LiveCredentialAbsent,
             Error::ParkSlotExhausted,
-            Error::AccountUnknown { label: "x".into() },
+            Error::AccountUnknown {
+                label: "x".into(),
+                enrolled: Enrolled::default(),
+            },
             Error::NothingParked { label: "x".into() },
             Error::ParkedLoginExpired { label: "x".into() },
             Error::LabelTaken {
@@ -372,7 +394,14 @@ mod tests {
             Error::LiveCredentialShapeUnexpected { detail: "x".into() }.exit_code(),
             3
         );
-        assert_eq!(Error::AccountUnknown { label: "x".into() }.exit_code(), 1);
+        assert_eq!(
+            Error::AccountUnknown {
+                label: "x".into(),
+                enrolled: Enrolled::default()
+            }
+            .exit_code(),
+            1
+        );
     }
 
     #[test]
@@ -382,6 +411,7 @@ mod tests {
             Error::LiveCredentialAbsent.to_string(),
             Error::AccountUnknown {
                 label: "work".into(),
+                enrolled: Enrolled(vec!["personal".into()]),
             }
             .to_string(),
             Error::NothingParked {

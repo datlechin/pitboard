@@ -163,6 +163,7 @@ pub fn switch(settled: Settled, label: &str) -> Result<(Outcome, Vec<Warning>)> 
         .cloned()
         .ok_or_else(|| Error::AccountUnknown {
             label: label.to_string(),
+            enrolled: state.labels(),
         })?;
 
     // Asked before taking Claude Code's lock so the round trip does not hold up its writes,

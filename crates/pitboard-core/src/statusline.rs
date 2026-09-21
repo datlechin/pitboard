@@ -8,7 +8,7 @@
 
 use crate::context::Context;
 use crate::state::State;
-use crate::usage::Snapshot;
+use crate::usage::{Snapshot, Source, Window};
 use serde_json::Value;
 use std::collections::HashMap;
 
@@ -112,8 +112,38 @@ fn line(
     }
 }
 
+/// What Claude Code passed about the session's own account, as a reading worth keeping.
+/// Free: these are numbers the session already had, not a question asked of anyone.
+fn session_snapshot(input: &Value, uuid: &str, now: i64) -> Option<Snapshot> {
+    let limits = input.get("rate_limits")?;
+    let window = |name: &str| -> Option<Window> {
+        let w = limits.get(name)?;
+        Some(Window {
+            kind: name.to_string(),
+            scope: None,
+            percent: w.get("used_percentage")?.as_f64()?,
+            resets_at: w.get("resets_at").and_then(Value::as_i64),
+            is_active: true,
+        })
+    };
+    let windows: Vec<Window> = ["five_hour", "seven_day"]
+        .iter()
+        .filter_map(|name| window(name))
+        .collect();
+    (!windows.is_empty()).then(|| Snapshot {
+        windows,
+        observed_at: Some(now),
+        account_uuid: Some(uuid.to_string()),
+        source: Source::Live,
+    })
+}
+
 /// Reads Claude Code's session JSON. Never fails: a status bar has nowhere to show an
 /// error, so whatever cannot be read is left out.
+///
+/// It also keeps what the session told it about the account in use, so the accounts a
+/// person actually works in stop reading as unknown without anyone running `pitboard` by
+/// hand. It still asks nobody anything: no network, no credential.
 pub fn read(ctx: &Context, input: &str) -> StatusLine {
     let input: Value = serde_json::from_str(input).unwrap_or(Value::Null);
     let state = crate::state::load(ctx).unwrap_or_default();
@@ -122,13 +152,18 @@ pub fn read(ctx: &Context, input: &str) -> StatusLine {
         .as_ref()
         .and_then(crate::claude::identity)
         .map(|id| id.account_uuid);
-    line(
-        &input,
-        &state,
-        signed_in.as_deref(),
-        &crate::readings::load(ctx),
-        crate::time::now(),
-    )
+    let now = crate::time::now();
+    let remembered = crate::readings::load(ctx);
+    if let Some(uuid) = signed_in.as_deref() {
+        let stale = remembered
+            .get(uuid)
+            .and_then(|r| r.observed_at)
+            .is_none_or(|at| now - at > FRESH_FOR);
+        if stale && let Some(snapshot) = session_snapshot(&input, uuid, now) {
+            crate::readings::remember(ctx, &[(uuid.to_string(), snapshot)]);
+        }
+    }
+    line(&input, &state, signed_in.as_deref(), &remembered, now)
 }
 
 #[cfg(test)]

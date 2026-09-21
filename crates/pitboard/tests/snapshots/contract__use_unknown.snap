@@ -12,7 +12,7 @@ expression: "serde_json :: json! ({ \"exit\" : code, \"envelope\" : value })"
     "warnings": [],
     "error": {
       "code": "account_unknown",
-      "message": "no account is enrolled as `nobody`. Run `pitboard status` to see the ones that are, or `pitboard enroll nobody --sign-in` to add it."
+      "message": "no account is enrolled as `nobody`. Enrolled: `alpha`, `beta`. Run `pitboard enroll nobody --sign-in` to add it."
     }
   }
 }

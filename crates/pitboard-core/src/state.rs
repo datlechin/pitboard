@@ -75,6 +75,12 @@ impl Default for State {
 }
 
 impl State {
+    /// Every label enrolled, for a message that would otherwise send someone to another
+    /// command to find out.
+    pub fn labels(&self) -> crate::error::Enrolled {
+        crate::error::Enrolled(self.accounts.iter().map(|a| a.label.clone()).collect())
+    }
+
     pub fn get(&self, label: &str) -> Option<&Account> {
         self.accounts.iter().find(|a| a.label == label)
     }
@@ -137,8 +143,10 @@ impl State {
         if self.active.as_deref() == Some(from) {
             self.active = Some(to.to_string());
         }
+        let enrolled = self.labels();
         let account = self.get_mut(from).ok_or_else(|| Error::AccountUnknown {
             label: from.to_string(),
+            enrolled,
         })?;
         account.label = to.to_string();
         Ok(account)

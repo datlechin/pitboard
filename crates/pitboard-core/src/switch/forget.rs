@@ -28,8 +28,10 @@ pub fn forget(settled: Settled, label: &str) -> Result<(String, Vec<Warning>)> {
             label: label.to_string(),
         });
     }
+    let enrolled = state.labels();
     let account = state.remove(label).ok_or_else(|| Error::AccountUnknown {
         label: label.to_string(),
+        enrolled,
     })?;
     state::save(&ctx, &state)?;
     crate::readings::forget(&ctx, &account.account_uuid);
