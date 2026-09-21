@@ -92,7 +92,8 @@ fn renew(ctx: &Context, state: &mut State, label: &str, held: &Park) -> Result<R
         scopes = DEFAULT_SCOPES.map(str::to_owned).to_vec();
     }
 
-    let fresh = match api::renew(ctx, refresh, &scopes) {
+    let client_id = oauth["clientId"].as_str();
+    let fresh = match api::renew(ctx, refresh, &scopes, client_id) {
         Ok(fresh) => fresh,
         Err(ApiError::InvalidGrant) => {
             state.discard(&held.service);

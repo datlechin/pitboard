@@ -97,6 +97,8 @@ pub struct Identity {
     pub rate_limit_tier: Option<String>,
 }
 
+/// The three organization fields are written by separate fetches, not by the profile save,
+/// so a config that has never made them is normal and they stay `None`.
 pub fn identity(config: &Value) -> Option<Identity> {
     let o = config.get("oauthAccount")?.as_object()?;
     let s = |k: &str| o.get(k).and_then(Value::as_str).map(str::to_owned);
@@ -151,5 +153,18 @@ mod tests {
 
         assert!(identity(&serde_json::json!({})).is_none());
         assert!(identity(&serde_json::json!({"oauthAccount": {"accountUuid": "u"}})).is_none());
+    }
+
+    /// What 2.1.278 actually writes when it saves a profile: the organization fields come
+    /// from other fetches and are often absent. An account is still identified.
+    #[test]
+    fn identity_survives_a_config_with_no_organization_fields() {
+        let written = serde_json::json!({"oauthAccount": {
+            "accountUuid": "u", "emailAddress": "a@b.c", "organizationUuid": "o",
+            "billingType": "subscription", "seatTier": "max_20x"}});
+        let id = identity(&written).expect("should parse");
+        assert_eq!(id.organization_uuid, "o");
+        assert_eq!(id.organization_name, None);
+        assert_eq!(id.subscription, None);
     }
 }

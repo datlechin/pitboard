@@ -133,11 +133,19 @@ fn get(ctx: &Context, path: &str, access_token: &str) -> Result<Value, ApiError>
 
 /// The request Claude Code makes to renew its own login, for a parked one. The scopes asked
 /// for are the ones the login already has, so the answer can never be `invalid_scope`.
-pub fn renew(ctx: &Context, refresh_token: &str, scopes: &[String]) -> Result<Renewed, ApiError> {
+///
+/// A login issued to another client carries its own `clientId`, and Claude Code renews it
+/// as that client. Renewing it as the first-party one would be a different login.
+pub fn renew(
+    ctx: &Context,
+    refresh_token: &str,
+    scopes: &[String],
+    client_id: Option<&str>,
+) -> Result<Renewed, ApiError> {
     let body = serde_json::json!({
         "grant_type": "refresh_token",
         "refresh_token": refresh_token,
-        "client_id": CLIENT_ID,
+        "client_id": client_id.unwrap_or(CLIENT_ID),
         "scope": scopes.join(" "),
     });
     let mut response = agent()

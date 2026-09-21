@@ -28,9 +28,10 @@ use serde_json::Value;
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::PathBuf;
 
-/// Claude Code re-reads the credential store behind a cache anchored at each process's
-/// first read. Measured over three runs on one machine: swapping at t+8, t+20 and t+28
-/// seconds all took effect at t+32.3, t+33.5 and t+32.95 from process start.
+/// Claude Code serves the credential from a 30 second cache whose clock restarts on every
+/// read or write, so a session picks up a swap within about 30 seconds of its last read
+/// rather than of its start. Measured over three runs on one machine: swapping at t+8, t+20
+/// and t+28 seconds took effect at t+32.3, t+33.5 and t+32.95 from process start.
 pub const ADOPTION_CEILING_SECONDS: u32 = 33;
 
 pub enum Outcome {

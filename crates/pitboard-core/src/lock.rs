@@ -1,7 +1,13 @@
-//! The lock Claude Code takes around every credential write: proper-lockfile's, a directory
+//! The lock Claude Code takes around credential writes: proper-lockfile's, a directory
 //! created by `mkdir`, kept alive by touching its mtime, released by `rmdir`, and treated as
 //! abandoned once older than `STALE`. Only the same lock taken the same way excludes Claude
 //! Code. A process killed outright leaves the directory behind for staleness to reclaim.
+//!
+//! One path is not excluded: measured in 2.1.278, `/logout` retries for its own 7.5 seconds
+//! and then deletes the credential with no lock held at all. Every other write, the OAuth
+//! refresh included, fails with ELOCKED instead. So holding this lock makes a switch safe
+//! against Claude Code writing underneath it, but not against a logout that has given up
+//! waiting.
 
 use std::io;
 use std::path::{Path, PathBuf};

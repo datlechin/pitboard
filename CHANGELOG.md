@@ -15,11 +15,22 @@ All notable changes are recorded here. The format follows
 - A Homebrew tap: `brew install datlechin/tap/pitboard`, and `--cask` for the app.
 
 ### Fixed
+- The keychain account name now falls back to the passwd entry when `USER` is not in the
+  environment, which is what Claude Code does. Without it, pitboard run from a launchd
+  agent, a cron job or an app opened from Finder read a different keychain item than the
+  one Claude Code writes, and reported no login where there was one.
+- Renewing a parked login issued to another client now renews it as that client, instead of
+  as the first-party one.
 - The app's build number now counts up with its version. 0.1.2 shipped with the build
   number the template carried, which Sparkle would have read as newer than the release
   after it.
 
 ### Internal
+- Every assumption pitboard makes about Claude Code re-checked against 2.1.278. Three
+  comments described behaviour that has changed: the credential cache is a rolling window
+  rather than one anchored at process start, `/logout` gives up on the write lock after 7.5
+  seconds and deletes without it, and the organization fields in the config come from
+  separate fetches and are usually absent.
 - A release now fails if the update feed is missing or unsigned, and a job after the release
   reads the feed back the way an installed copy will.
 - Dead code, duplicated constants and a thrice-written test fixture removed.
