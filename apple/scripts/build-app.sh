@@ -42,6 +42,10 @@ cp "$binary" "$app/Contents/MacOS/Pitboard"
 sed "s/>0\.0\.0</>$version</" apple/Resources/Info.plist > "$app/Contents/Info.plist"
 printf 'APPL????' > "$app/Contents/PkgInfo"
 
+swift apple/scripts/make-icon.swift apple/build
+iconutil --convert icns --output "$app/Contents/Resources/AppIcon.icns" \
+    apple/build/AppIcon.iconset
+
 sparkle=$(find apple/.build/artifacts -type d -name Sparkle.framework | head -1)
 [ -n "$sparkle" ] || { echo "Sparkle.framework not built" >&2; exit 1; }
 ditto "$sparkle" "$app/Contents/Frameworks/Sparkle.framework"

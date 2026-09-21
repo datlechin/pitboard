@@ -64,7 +64,7 @@ jobs:
       # PitboardBindings is generated, so only what is written by hand is checked.
       - run: >
           swift format lint --strict --recursive --configuration apple/.swift-format
-          apple/Sources/Pitboard apple/Sources/PitboardKit apple/Tests
+          apple/Sources/Pitboard apple/Sources/PitboardKit apple/Tests apple/scripts
       # Proves the core still links into the app, that its bindings still match, and that
       # the bundle still assembles and signs.
       - run: ./apple/scripts/build-app.sh
