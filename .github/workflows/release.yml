@@ -207,6 +207,10 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      # Provenance: GitHub signs a statement of which workflow, at which commit, built
+      # each file, so a downloader can check it with `gh attestation verify`.
+      id-token: write
+      attestations: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -234,6 +238,11 @@ jobs:
           else
             cargo publish --locked --workspace
           fi
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: |
+            ${{ runner.temp }}/dist/*.tar.gz
+            ${{ runner.temp }}/dist/*.zip
       - name: What changed
         env:
           VERSION: ${{ needs.guard.outputs.version }}

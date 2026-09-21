@@ -182,8 +182,14 @@ it changes nothing and keeps the record for a later run. `pitboard doctor` repor
 state, and `pitboard log` is the record of every change it has made.
 
 **Why trust the download?** The macOS app is signed with a Developer ID and notarised by
-Apple, and its update feed is signed too. Every release carries `SHA256SUMS`, and CI builds
-it all in the open from the tag. Or build it yourself: `cargo install pitboard`.
+Apple, and its update feed is signed too. Every release carries `SHA256SUMS` and a build
+provenance attestation, so you can check which workflow at which commit produced a file:
+
+```sh
+gh attestation verify Pitboard-v0.1.5-macos.zip --repo datlechin/pitboard
+```
+
+Or build it yourself: `cargo install pitboard`.
 
 ## How it works
 

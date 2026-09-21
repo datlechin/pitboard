@@ -81,6 +81,8 @@ release still happens and the app is signed ad-hoc, which Gatekeeper warns about
 | `SPARKLE_PUBLIC_KEY`, `SPARKLE_PRIVATE_KEY` | `apple/.build/artifacts/sparkle/Sparkle/bin/generate_keys --account pitboard` once, then the same with `-x -` to read the private one |
 
 The signing identity is read from the certificate itself, so there is no secret for it.
+Every archive is attested, so a downloader can check what built it with
+`gh attestation verify <file> --repo datlechin/pitboard`.
 
 Never change the update key once a release carries it. An app checks the feed's signature
 against the key it was built with, so a new key strands every copy already installed.

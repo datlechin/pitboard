@@ -33,6 +33,7 @@ final class AppModel {
 
     init(service: PitboardService = PitboardService(settings: .forCurrentUser())) {
         self.service = service
+        notifier.start()
         notifier.onSwitch = { [weak self] label in
             Task { await self?.use(label) }
         }

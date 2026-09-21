@@ -2,11 +2,15 @@
 # unexpectedly-licensed transitive dependency is a realistic, high-consequence risk.
 
 [graph]
+# What is actually shipped. The Linux releases are musl, and a musl build pulls in
+# different crates than a gnu one, so checking only gnu checks something nobody downloads.
 targets = [
   "aarch64-apple-darwin",
   "x86_64-apple-darwin",
   "x86_64-unknown-linux-gnu",
   "aarch64-unknown-linux-gnu",
+  "x86_64-unknown-linux-musl",
+  "aarch64-unknown-linux-musl",
 ]
 
 [advisories]

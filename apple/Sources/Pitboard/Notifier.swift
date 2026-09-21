@@ -16,10 +16,11 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     /// window is mentioned once rather than every few minutes until it resets.
     private(set) var told: [String: Int64] = [:]
 
-    /// Permission is asked for when there is finally something to say, not at launch, where
-    /// a prompt arrives before the app has shown what it is for.
-    func tell(_ advice: Advice) {
-        told[advice.window.kind] = advice.window.resetsAt ?? 0
+    /// Claiming the delegate is free and asks nothing of anyone, and it has to happen at
+    /// launch: a notification left in Notification Center and clicked later, including
+    /// right after an update relaunches the app, is delivered the moment there is someone
+    /// to deliver it to.
+    func start() {
         centre.delegate = self
         centre.setNotificationCategories([
             UNNotificationCategory(
@@ -30,6 +31,12 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
                 ],
                 intentIdentifiers: [])
         ])
+    }
+
+    /// Permission is asked for when there is finally something to say, not at launch, where
+    /// a prompt arrives before the app has shown what it is for.
+    func tell(_ advice: Advice) {
+        told[advice.window.kind] = advice.window.resetsAt ?? 0
         let request = UNNotificationRequest(
             identifier: "\(advice.window.kind)-\(advice.window.resetsAt ?? 0)",
             content: advice.notification, trigger: nil)
