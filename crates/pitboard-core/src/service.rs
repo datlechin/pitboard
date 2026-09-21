@@ -24,6 +24,11 @@ pub enum Warning {
         label: String,
     },
     RenewalFailed(Error),
+    /// The environment authenticates Claude Code some other way, so the login pitboard
+    /// moved is not the one a session will use.
+    AuthOverridden {
+        names: Vec<String>,
+    },
 }
 
 impl Warning {
@@ -34,6 +39,7 @@ impl Warning {
             Warning::ConfigNotUpdated(e) | Warning::RenewalFailed(e) => e.code(),
             Warning::ParksPendingRemoval(_) => "parks_pending_removal",
             Warning::ParkedLoginRefused { .. } => "parked_login_refused",
+            Warning::AuthOverridden { .. } => "auth_overridden",
         }
     }
 }
@@ -52,6 +58,12 @@ impl fmt::Display for Warning {
                 f,
                 "Anthropic no longer accepts the parked login for `{label}`. Run `pitboard \
                  enroll {label} --sign-in` to sign in to it again."
+            ),
+            Warning::AuthOverridden { names } => write!(
+                f,
+                "{} is set, so Claude Code signs in with it and not with the login pitboard \
+                 moved. Unset it for the switch to take effect.",
+                names.join(" and ")
             ),
         }
     }
@@ -167,6 +179,11 @@ impl Pitboard {
             }
         })?;
         let mut warnings = Vec::new();
+        if !self.ctx.overriding_auth().is_empty() {
+            warnings.push(Warning::AuthOverridden {
+                names: self.ctx.overriding_auth().to_vec(),
+            });
+        }
         if let Some(r) = recovered {
             audit::record(&self.ctx, "recover", &r.to, r.code());
             warnings.push(Warning::Recovered(r));

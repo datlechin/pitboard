@@ -98,6 +98,10 @@ pub struct Report {
 /// Everything gathered from the machine and the network, so assembling it touches neither.
 struct Facts {
     signed_in: Option<Result<Owner, ApiError>>,
+    /// The account Claude Code's own config names. It can be a day behind the login it
+    /// describes, so it never decides a switch; it only keeps the row that is signed in
+    /// from reading as though nobody is, when Anthropic cannot be asked.
+    config_uuid: Option<String>,
     live_usage: Result<Snapshot, Stale>,
     /// One per enrolled account, in order.
     parked_usage: Vec<Result<Snapshot, Stale>>,
@@ -165,14 +169,16 @@ pub fn gather(ctx: &Context, state: &State) -> Report {
         )
     });
 
+    let config = claude::load_config(ctx).ok();
     let facts = Facts {
         signed_in,
         live_usage,
         parked_usage,
-        claude_code_cache: claude::load_config(ctx)
-            .ok()
+        claude_code_cache: config.as_ref().and_then(crate::usage::from_config_cache),
+        config_uuid: config
             .as_ref()
-            .and_then(crate::usage::from_config_cache),
+            .and_then(claude::identity)
+            .map(|id| id.account_uuid),
     };
     let remembered = readings::load(ctx);
     let rows = assemble(state, &facts, |uuid| remembered.get(uuid).cloned());
@@ -203,7 +209,10 @@ pub fn gather(ctx: &Context, state: &State) -> Report {
 fn assemble(state: &State, facts: &Facts, recall: impl Fn(&str) -> Option<Snapshot>) -> Vec<Row> {
     let live_uuid = match &facts.signed_in {
         Some(Ok(owner)) => Some(owner.account_uuid.as_str()),
-        _ => None,
+        // Unreachable is not the same as absent. Anthropic decides who is signed in; when
+        // it cannot be reached, Claude Code's own config is the only answer there is.
+        Some(Err(_)) => facts.config_uuid.as_deref(),
+        None => None,
     };
     // Claude Code's cache counts only when it was measured for the account in question.
     let cached_for = |uuid: &str| {
@@ -327,10 +336,37 @@ mod tests {
     ) -> Facts {
         Facts {
             signed_in: Some(Ok(owner(signed_in))),
+            config_uuid: None,
             live_usage: live,
             parked_usage: parked,
             claude_code_cache: None,
         }
+    }
+
+    /// Anthropic decides who is signed in, but unreachable is not absent. Without this the
+    /// account in use renders as one with nothing parked, advising a sign-in it does not
+    /// need.
+    #[test]
+    fn an_unreachable_anthropic_leaves_the_signed_in_row_signed_in() {
+        let state = state(&["alpha", "beta"]);
+        let facts = Facts {
+            signed_in: Some(Err(ApiError::Network("offline".into()))),
+            config_uuid: Some("alpha-uuid".into()),
+            live_usage: Err(Stale::Unreachable),
+            parked_usage: vec![Err(Stale::Unreachable), Err(Stale::Unreachable)],
+            claude_code_cache: None,
+        };
+        let rows = assemble(&state, &facts, nothing_remembered);
+        let a = rows
+            .iter()
+            .find(|r| r.account_uuid == "alpha-uuid")
+            .unwrap();
+        assert!(
+            a.signed_in,
+            "the account in use is still the account in use"
+        );
+        let b = rows.iter().find(|r| r.account_uuid == "beta-uuid").unwrap();
+        assert!(!b.signed_in);
     }
 
     fn nothing_remembered(_: &str) -> Option<Snapshot> {

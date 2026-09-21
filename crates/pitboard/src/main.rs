@@ -7,7 +7,7 @@ use pitboard_core::error::Error;
 use pitboard_core::service::{Changing, Done, Failed, Pitboard, Warning};
 use pitboard_core::switch::{self, Enrolled, Outcome};
 use serde_json::{Value, json};
-use std::io::Read;
+use std::io::{IsTerminal, Read, Write};
 use std::process::ExitCode;
 use ui::{BOLD, paint};
 
@@ -57,6 +57,9 @@ enum Command {
     Forget {
         /// The label to drop
         label: String,
+        /// Do not ask first
+        #[arg(short = 'y', long)]
+        yes: bool,
     },
     /// Change the label an account is enrolled under
     Rename {
@@ -92,6 +95,9 @@ struct Report {
     warnings: Vec<Value>,
     human: String,
     exit: u8,
+    /// A command that produced a report and still failed. The envelope then carries both
+    /// what was found and why the exit code is not zero.
+    failure: Option<(&'static str, String)>,
 }
 
 impl Report {
@@ -102,6 +108,7 @@ impl Report {
             warnings: Vec::new(),
             human,
             exit: 0,
+            failure: None,
         }
     }
 
@@ -112,15 +119,19 @@ impl Report {
             result: Err(error),
             warnings: Vec::new(),
             human: String::new(),
+            failure: None,
         }
     }
 }
 
 fn emit(report: Report, as_json: bool) -> ExitCode {
     if as_json {
-        let (data, error) = match &report.result {
-            Ok(data) => (data.clone(), Value::Null),
-            Err(e) => (
+        let (data, error) = match (&report.result, &report.failure) {
+            (Ok(data), None) => (data.clone(), Value::Null),
+            (Ok(data), Some((code, message))) => {
+                (data.clone(), json!({ "code": code, "message": message }))
+            }
+            (Err(e), _) => (
                 Value::Null,
                 json!({ "code": e.code(), "message": e.to_string() }),
             ),
@@ -203,9 +214,20 @@ fn status(pitboard: &Pitboard) -> Report {
 fn doctor(pitboard: &Pitboard) -> Report {
     let diagnosis = pitboard.doctor();
     let healthy = doctor::healthy(&diagnosis.checks);
+    let failed = diagnosis
+        .checks
+        .iter()
+        .filter(|c| c.level == doctor::Level::Fail)
+        .count();
     Report {
         // A failed check means an assumption pitboard relies on no longer holds.
         exit: if healthy { 0 } else { 3 },
+        failure: (!healthy).then(|| {
+            (
+                "checks_failed",
+                format!("{failed} check(s) failed; see data.checks"),
+            )
+        }),
         ..Report::done(
             "doctor",
             render::doctor::json(&diagnosis),
@@ -218,7 +240,11 @@ fn doctor(pitboard: &Pitboard) -> Report {
 /// though stdout is not a terminal, unless `NO_COLOR` asks otherwise. The JSON form is plain.
 fn statusline(pitboard: &Pitboard) -> Report {
     let mut input = String::new();
-    let _ = std::io::stdin().read_to_string(&mut input);
+    // Claude Code pipes the session in. Typed at a prompt there is nothing to read, and
+    // waiting for a terminal that will never send anything reads as a hung command.
+    if !std::io::stdin().is_terminal() {
+        let _ = std::io::stdin().read_to_string(&mut input);
+    }
     let line = render::statusline::human(&pitboard.statusline(&input));
     if std::env::var_os("NO_COLOR").is_none() {
         ColorChoice::Always.write_global();
@@ -349,8 +375,40 @@ fn main() -> ExitCode {
         } => enroll_signing_in(&pitboard, &label),
         Command::Enroll { label, .. } => enrolled(&label, pitboard.enroll_current(&label)),
         Command::Use { label } => use_account(&pitboard, &label),
-        Command::Forget { label } => forget(&pitboard, &label),
+        Command::Forget { label, yes } => {
+            // The way back is a browser sign-in for that account, which is the cost
+            // pitboard exists to spare people. Asked only where there is someone to ask:
+            // a pipe, a script and --json go straight through.
+            if !yes
+                && !cli.json
+                && std::io::stdin().is_terminal()
+                && std::io::stderr().is_terminal()
+            {
+                eprint!(
+                    "Forget {} and delete its parked login? \
+                     Adding it again needs a browser sign-in. [y/N] ",
+                    label
+                );
+                let _ = std::io::stderr().flush();
+                let mut answer = String::new();
+                let _ = std::io::stdin().read_line(&mut answer);
+                if !matches!(answer.trim(), "y" | "Y" | "yes") {
+                    return ExitCode::SUCCESS;
+                }
+            }
+            forget(&pitboard, &label)
+        }
         Command::Rename { from, to } => rename(&pitboard, &from, &to),
+        // These write a file for a shell or for man, not a report, so there is no envelope
+        // to put them in. Asking for one is a command line that cannot be satisfied.
+        Command::Completions { .. } | Command::Manpage if cli.json => Report {
+            exit: 2,
+            failure: Some((
+                "output_is_not_a_report",
+                "this command writes a generated file to stdout, so it has no JSON form".into(),
+            )),
+            ..Report::done("generate", json!({}), String::new())
+        },
         Command::Completions { shell } => {
             clap_complete::generate(
                 shell,

@@ -238,9 +238,22 @@ pub fn switch(settled: Settled, label: &str) -> Result<(Outcome, Vec<Warning>)> 
         },
     )?;
 
-    let parked = park::store_at(ctx, &park_service, &oauth_of(&before)?)?;
+    // Until the incoming login is installed there is nothing for a later run to finish, so
+    // a failure here takes the record of intent away with it. A copy that was written but
+    // could not be recorded is deleted: nothing that survives would name it.
+    let parked = match park::store_at(ctx, &park_service, &oauth_of(&before)?) {
+        Ok(parked) => parked,
+        Err(e) => {
+            clear_journal(ctx);
+            return Err(e);
+        }
+    };
     state.park(&outgoing_label, parked.clone());
-    state::save(ctx, &state)?;
+    if let Err(e) = state::save(ctx, &state) {
+        let _ = store::vault_delete(ctx, &parked.service);
+        clear_journal(ctx);
+        return Err(e);
+    }
 
     if let Err(e) = install(ctx, &service, &next, &before_raw, &outgoing_label, label) {
         if !only_copy_left(&e) {

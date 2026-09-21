@@ -3,6 +3,12 @@
 //! native apps, which reach it through [`service::Pitboard`] with an explicit
 //! [`context::Context`].
 
+#[cfg(not(unix))]
+compile_error!(
+    "pitboard supports macOS and Linux. Claude Code stores its login differently on \
+     Windows, and pitboard has not been written for it."
+);
+
 pub mod api;
 pub mod context;
 pub mod doctor;

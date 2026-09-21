@@ -45,7 +45,8 @@ impl Settings {
         if let Some(program) = self.claude_program {
             ctx = ctx.with_claude_program(PathBuf::from(program));
         }
-        ctx
+        // These bindings exist for the app, so a change made through them says so.
+        ctx.with_caller("app".into())
     }
 }
 

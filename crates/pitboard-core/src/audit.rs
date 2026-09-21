@@ -1,5 +1,6 @@
-//! One line per change pitboard makes. Labels, codes and times only, no email addresses or
-//! account identifiers, so it is safe to paste into a bug report.
+//! One line per change pitboard makes: when, which front end asked, what was asked, of
+//! what, and how it ended. Labels, codes and times only, no email addresses or account
+//! identifiers, so it is safe to paste into a bug report.
 
 use crate::context::Context;
 use crate::{home, time};
@@ -17,14 +18,15 @@ fn path(ctx: &Context) -> PathBuf {
 
 /// A failure to audit never fails the operation it describes.
 pub fn record(ctx: &Context, verb: &str, subject: &str, outcome: &str) {
-    let _ = append(ctx, &line(time::now(), verb, subject, outcome));
+    let _ = append(ctx, &line(time::now(), &ctx.caller, verb, subject, outcome));
 }
 
-fn line(at: i64, verb: &str, subject: &str, outcome: &str) -> String {
+fn line(at: i64, caller: &str, verb: &str, subject: &str, outcome: &str) -> String {
     let clean = |s: &str| s.replace(['\n', '\r', '\t'], " ");
     format!(
-        "{}\t{}\t{}\t{}\n",
+        "{}\t{}\t{}\t{}\t{}\n",
         time::local(at, "%Y-%m-%dT%H:%M:%S%:z"),
+        clean(caller),
         clean(verb),
         clean(subject),
         clean(outcome)
@@ -51,12 +53,12 @@ mod tests {
 
     #[test]
     fn a_line_is_one_line_whatever_the_input() {
-        let l = line(1_789_935_600, "use", "work\ninjected", "ok");
+        let l = line(1_789_935_600, "cli", "use", "work\ninjected", "ok");
         assert_eq!(
             l.matches('\n').count(),
             1,
             "a label must not be able to forge entries"
         );
-        assert_eq!(l.split('\t').count(), 4);
+        assert_eq!(l.split('\t').count(), 5);
     }
 }

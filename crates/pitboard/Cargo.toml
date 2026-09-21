@@ -11,6 +11,13 @@ readme = "../../README.md"
 keywords = ["cli", "keychain", "credentials", "macos", "linux"]
 categories = ["command-line-utilities"]
 
+# cargo-binstall fetches the release the workflow already builds instead of compiling the
+# tree, which is minutes of work for someone who only wants the binary.
+[package.metadata.binstall]
+pkg-url = "{ repo }/releases/download/v{ version }/{ name }-v{ version }-{ target }.tar.gz"
+pkg-fmt = "tgz"
+bin-dir = "{ name }-v{ version }-{ target }/{ bin }{ binary-ext }"
+
 [dependencies]
 pitboard-core.workspace = true
 anstream.workspace = true

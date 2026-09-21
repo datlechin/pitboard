@@ -18,6 +18,12 @@ pub struct Context {
     /// `CLAUDE_CODE_CUSTOM_OAUTH_URL`. Set, it renames both the keychain item and the config
     /// file Claude Code uses, so pitboard would be reading and writing the wrong ones.
     pub(crate) custom_oauth: bool,
+    /// Environment variables that make Claude Code use something other than the login
+    /// pitboard moves, so a switch would change nothing it can see.
+    pub(crate) overriding_auth: Vec<String>,
+    /// Which front end asked, for the audit log. A change made from the menu bar and one
+    /// typed at a prompt read the same otherwise.
+    pub(crate) caller: String,
     /// The `claude` that runs a sign-in; a bare name is looked up on `PATH`.
     pub(crate) claude_program: PathBuf,
     /// Where Anthropic's endpoints are reached instead, for tests; `api` honours loopback only.
@@ -38,6 +44,8 @@ impl Context {
             secure_storage_dir: None,
             user: None,
             custom_oauth: false,
+            overriding_auth: Vec::new(),
+            caller: "unknown".into(),
             claude_program: PathBuf::from("claude"),
             api_base: None,
             hover_rest: false,
@@ -63,6 +71,17 @@ impl Context {
     }
 
     /// The login name whose keychain account Claude Code stores under.
+    /// Environment variables that authenticate Claude Code some other way, if any.
+    pub fn overriding_auth(&self) -> &[String] {
+        &self.overriding_auth
+    }
+
+    /// Names the front end in the audit log.
+    pub fn with_caller(mut self, caller: String) -> Context {
+        self.caller = caller;
+        self
+    }
+
     pub fn with_user(mut self, user: String) -> Context {
         self.user = Some(user);
         self
@@ -88,12 +107,26 @@ impl Context {
             secure_storage_dir: var("CLAUDE_SECURESTORAGE_CONFIG_DIR"),
             user: var("USER"),
             custom_oauth: var("CLAUDE_CODE_CUSTOM_OAUTH_URL").is_some_and(|v| !v.is_empty()),
+            overriding_auth: OVERRIDING_AUTH
+                .iter()
+                .filter(|name| var(name).is_some_and(|v| !v.is_empty()))
+                .map(|name| (*name).to_string())
+                .collect(),
+            caller: "cli".into(),
             claude_program: PathBuf::from("claude"),
             api_base: var("PITBOARD_API_BASE"),
             hover_rest: var("CLAUDE_CODE_HOVER_REST").is_some_and(|v| v == "1" || v == "true"),
         }
     }
 }
+
+/// Set, any of these makes Claude Code authenticate with something other than the login in
+/// the credential store, so moving that login changes nothing a session would notice.
+const OVERRIDING_AUTH: [&str; 3] = [
+    "ANTHROPIC_API_KEY",
+    "ANTHROPIC_AUTH_TOKEN",
+    "CLAUDE_CODE_OAUTH_TOKEN",
+];
 
 #[cfg(test)]
 mod tests {
