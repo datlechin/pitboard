@@ -1,13 +1,13 @@
-# Homebrew formula for a personal tap, such as datlechin/homebrew-pitboard.
+# Homebrew formula for the tap datlechin/homebrew-tap.
 #
-# It builds from source on purpose. Without a Developer ID certificate a prebuilt binary
-# cannot be notarised, and Gatekeeper would warn on first launch; a local build carries no
-# quarantine flag. Replace the url and sha256 with those of a tagged release.
+# It builds from source on purpose. The released binaries are signed ad hoc, and a local
+# build carries no quarantine flag at all. Update url, sha256 and version on each release
+# with packaging/update-tap.sh.
 class Pitboard < Formula
   desc "Park and restore your own Claude Code logins"
   homepage "https://github.com/datlechin/pitboard"
-  url "https://github.com/datlechin/pitboard/archive/refs/tags/v0.1.0.tar.gz"
-  sha256 "REPLACE_WITH_THE_RELEASE_TARBALL_SHA256"
+  url "https://github.com/datlechin/pitboard/archive/refs/tags/v0.1.2.tar.gz"
+  sha256 "5e5a4fe59e2ade59e6dab973a5faa0011a7f8781a4e0aa3dfdad9e47457b0c4b"
   license "Apache-2.0"
 
   depends_on "rust" => :build
