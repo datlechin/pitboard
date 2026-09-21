@@ -23,6 +23,15 @@ file already has.
 
 ### Everywhere else
 
+Every switch copies Claude Code's config file to `~/.pitboard/backups/claude.json.<time>`
+before rewriting the account it names, and the ten newest are kept. That copy holds
+whatever Claude Code keeps in its config, which includes the signed-in email address, the
+account and organization identifiers, and the path of every project you have used it in. It
+holds no token. `pitboard uninstall` removes it along with everything else pitboard wrote.
+
+The audit log is one tab-separated line per change: the time, which front end asked, the
+verb, the label, and how it ended. Labels, codes and times only.
+
 pitboard's account list, `~/.pitboard/state.json`, holds
 each account's email address and Anthropic account and organization identifiers, but no
 token. `~/.pitboard/usage.json` holds the last usage reading per account. The audit log
@@ -81,6 +90,11 @@ IP address.
 
 If a switch is interrupted, the next `pitboard use`, `enroll` or `forget` finishes it first
 and says what it found. Run `pitboard doctor` if anything still looks wrong.
+
+To remove pitboard, run `pitboard uninstall`: it deletes every parked login before
+deleting its own directory, in that order, because the account list is the only index of
+those keychain items. Deleting the directory first leaves live refresh tokens on the
+machine with nothing able to name them.
 
 Never copy `~/.pitboard` to another machine. pitboard refuses to read a state file written
 elsewhere, and a parked login presented from a second machine can end the login on both.

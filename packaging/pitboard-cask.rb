@@ -13,6 +13,9 @@ cask "pitboard" do
 
   auto_updates true
   depends_on macos: :sonoma
+  # The app shows accounts and switches between them; enrolling one is still the command
+  # line's job, and the app tells people to run it.
+  depends_on formula: "pitboard"
 
   app "Pitboard.app"
 

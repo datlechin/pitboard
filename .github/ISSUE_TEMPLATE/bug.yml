@@ -1,0 +1,40 @@
+name: Something went wrong
+description: A command did the wrong thing, or said something that was not true
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        `pitboard doctor --json` answers most of what a report needs. It prints labels,
+        codes, paths and times: no tokens, no email addresses, no account identifiers.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: The command you ran, what it printed, and what you expected instead.
+      placeholder: |
+        $ pitboard use work
+        ...
+    validations:
+      required: true
+  - type: textarea
+    id: doctor
+    attributes:
+      label: pitboard doctor --json
+      render: json
+    validations:
+      required: true
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: "`pitboard --version`, `claude --version`, and your macOS or Linux version."
+      placeholder: "pitboard 0.1.4, Claude Code 2.1.278, macOS 26.1"
+    validations:
+      required: true
+  - type: textarea
+    id: audit
+    attributes:
+      label: The last few lines of ~/.pitboard/audit.log
+      description: Optional. Times, verbs and labels only, so it is safe to paste.
+      render: text

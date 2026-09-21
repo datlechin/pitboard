@@ -8,6 +8,15 @@
       name="description"
       content="Switch between your own Claude Code logins, and see how much each one has left."
     />
+    <meta property="og:title" content="pitboard" />
+    <meta
+      property="og:description"
+      content="Switch between your own Claude Code logins, and see how much each one has left."
+    />
+    <meta property="og:image" content="https://datlechin.github.io/pitboard/panel.png" />
+    <meta property="og:url" content="https://datlechin.github.io/pitboard/" />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
     <style>
       :root {
         color-scheme: light dark;
@@ -115,7 +124,11 @@
     <h2>Install</h2>
     <pre>brew install datlechin/tap/pitboard        # the command line
 brew install --cask datlechin/tap/pitboard # the menu bar app</pre>
-    <p>Or <code>cargo install pitboard</code>. The app needs macOS 14 or later.</p>
+    <p>
+      Or <code>cargo install pitboard</code>, or <code>cargo binstall pitboard</code> to
+      fetch the built binary. The app needs macOS 14 or later. To remove it all,
+      <code>pitboard uninstall</code> deletes every parked login and pitboard's own files.
+    </p>
 
     <h2>Use</h2>
     <pre>pitboard enroll personal
@@ -125,6 +138,20 @@ pitboard use work    # switch</pre>
     <p>
       A Claude Code session that is already open picks up the switch within about 33 seconds.
       You do not have to restart it.
+    </p>
+
+    <h2>Where your logins live</h2>
+    <p>
+      On macOS each parked login is a keychain item of its own, read and written only through
+      <code>/usr/bin/security</code>, the one program the item's access list trusts. Nothing
+      is sent anywhere except to Anthropic: which account a login belongs to, and what it has
+      left. There is no telemetry.
+      <a href="https://github.com/datlechin/pitboard/blob/main/SECURITY.md">SECURITY.md</a>
+      is the full inventory of what pitboard writes and what it defends against.
+    </p>
+    <p>
+      Pre-release. macOS is tested; on Linux it builds and its tests pass, but how Claude Code
+      stores its login there has not been checked on a real signed-in install.
     </p>
 
     <h2>What it will not do</h2>

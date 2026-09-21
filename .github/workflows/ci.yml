@@ -70,6 +70,20 @@ jobs:
       - run: ./apple/scripts/build-app.sh
       - run: swift test --package-path apple
 
+  # The floor the manifests promise, built the way someone on an older toolchain builds it.
+  msrv:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: |
+          floor=$(sed -n '/^\[workspace.package\]/,/^\[/s/^rust-version = "\(.*\)"/\1/p' Cargo.toml)
+          rustup toolchain install "$floor" --profile minimal
+          echo "FLOOR=$floor" >> "$GITHUB_ENV"
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - run: cargo "+$FLOOR" check --workspace --all-targets --locked
+
   deny:
     runs-on: ubuntu-latest
     steps:

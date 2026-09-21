@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: A security problem
+    url: https://github.com/datlechin/pitboard/security/advisories/new
+    about: Report privately instead. pitboard handles OAuth refresh tokens.

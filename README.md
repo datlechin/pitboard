@@ -2,6 +2,12 @@
 
 Switch between your own Claude Code logins, and see how much each one has left.
 
+[![CI](https://github.com/datlechin/pitboard/actions/workflows/ci.yml/badge.svg)](https://github.com/datlechin/pitboard/actions/workflows/ci.yml)
+[![crates.io](https://img.shields.io/crates/v/pitboard.svg)](https://crates.io/crates/pitboard)
+[![Licence](https://img.shields.io/badge/licence-Apache--2.0-blue.svg)](LICENSE)
+
+<img src="docs/panel.png" alt="The pitboard menu bar panel, listing three accounts with their five hour and weekly limits" width="380">
+
 If you have more than one Claude subscription, changing accounts normally means signing out
 and back in through a browser. pitboard keeps a copy of each login and puts the one you ask
 for where Claude Code reads it. Your history, sessions, settings and projects stay where
@@ -17,10 +23,14 @@ brew install datlechin/tap/pitboard        # the command line
 brew install --cask datlechin/tap/pitboard # the menu bar app, macOS 14 or later
 ```
 
-Or `cargo install pitboard` for the command line on its own. The app is also a signed and
-notarised download on the
-[latest release](https://github.com/datlechin/pitboard/releases/latest) if you would rather
-not use Homebrew.
+Or `cargo install pitboard`, or `cargo binstall pitboard` to fetch the built binary instead
+of compiling it. On Linux, the
+[latest release](https://github.com/datlechin/pitboard/releases/latest) carries static
+binaries for x86_64 and aarch64; the app is a signed and notarised download there too.
+
+Removing it: `pitboard uninstall` deletes every parked login and pitboard's own files,
+leaving the account you are signed in to signed in. Then remove the binary with whatever
+installed it.
 
 ## Set up
 
@@ -72,6 +82,7 @@ Other commands:
 - `pitboard rename wrong right` fixes a label without signing in again.
 - `pitboard forget work` drops an account.
 - `pitboard doctor` checks everything pitboard depends on, including every parked login.
+- `pitboard uninstall` deletes every parked login and pitboard's own files.
 
 ## Status line
 
@@ -98,10 +109,11 @@ The menu bar shows the account in use and its tightest limit. Open the panel to 
 account's limits and switch with one click. When an account runs out, the app says so once
 and offers the account with the most left.
 
-It calls the same core as the command line, so nothing else has to be installed. Usage is
-read when you open the panel and every few minutes while the app runs. "Open at login" is
-in the menu at the bottom right. A copy from a release keeps itself up to date. One you
-build yourself does not, because it carries no update key:
+It calls the same core as the command line rather than running `pitboard` for each answer.
+Adding and dropping accounts is still the command line's job, which is why the cask
+installs that too. Usage is read when you open the panel and every few minutes while the
+app runs. "Open at login" is in the menu at the bottom right. A copy from a release keeps
+itself up to date. One you build yourself does not, because it carries no update key:
 
 ```sh
 ./apple/scripts/build-app.sh
@@ -110,8 +122,10 @@ cp -R apple/build/Pitboard.app /Applications/
 
 ## Scripting
 
-Every command takes `--json` and prints the same envelope, including on failure and for a
-mistyped command line: `{v, command, ok, data, warnings, error}`. Error codes are stable.
+Every command that reports a result takes `--json` and prints the same envelope, including
+on failure and for a mistyped command line: `{v, command, ok, data, warnings, error}`.
+Error codes are stable. `completions` and `manpage` write a generated file to stdout, so
+they have no JSON form and refuse the flag rather than ignore it.
 Exit codes: 0 done, 1 not done, 2 command line wrong, 3 a login or Claude Code's files are
 in a state pitboard will not act on.
 
