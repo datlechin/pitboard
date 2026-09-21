@@ -45,6 +45,8 @@ pub fn parse_rfc3339(s: &str) -> Option<i64> {
         let v = s.get(r)?.parse::<i32>().ok()?;
         (min..=max).contains(&v).then_some(v)
     };
+    // SAFETY: `tm` is a plain C struct of integers plus, on some platforms, a nullable
+    // `const char *` zone pointer. All-zero is a valid value for every field.
     let mut tm: libc::tm = unsafe { std::mem::zeroed() };
     tm.tm_year = field(0..4, 1970, 9999)? - 1900;
     tm.tm_mon = field(5..7, 1, 12)? - 1;
@@ -74,6 +76,8 @@ pub fn parse_rfc3339(s: &str) -> Option<i64> {
             magnitude
         }
     };
+    // SAFETY: `tm` is a valid, initialised struct owned by this frame, and every field has
+    // been range-checked above, so `timegm` reads only what it was given.
     let utc = unsafe { libc::timegm(&mut tm) };
     Some(utc as i64 - offset)
 }
@@ -81,9 +85,14 @@ pub fn parse_rfc3339(s: &str) -> Option<i64> {
 /// Format an epoch as local time with the given `strftime` pattern.
 pub fn format_local(epoch: i64, pattern: &str) -> String {
     let t = epoch as libc::time_t;
+    // SAFETY: as above, all-zero is a valid `tm`.
     let mut tm: libc::tm = unsafe { std::mem::zeroed() };
     let mut buf = [0u8; 128];
     let pat = format!("{pattern}\0");
+    // SAFETY: `t` and `tm` are live locals; `pat` is NUL-terminated because it was built
+    // with a trailing `\0`; `strftime` is told the buffer's true length and writes at most
+    // that many bytes, returning 0 rather than overrunning when the result would not fit,
+    // and on success the buffer is NUL-terminated within those bytes.
     unsafe {
         if libc::localtime_r(&t, &mut tm).is_null() {
             return String::new();

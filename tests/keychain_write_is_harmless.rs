@@ -1,3 +1,5 @@
+#![cfg(target_os = "macos")]
+
 //! Proves the production writer leaves a keychain item exactly as it found it.
 //!
 //! A foreign in-process write replaces the item's partition list with the caller's code

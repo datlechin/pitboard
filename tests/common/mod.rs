@@ -119,7 +119,7 @@ impl Env {
             },
             "slackTag": {"machineBound": true}
         });
-        pitboard::store::vault_write(&self.service, &credential.to_string()).unwrap();
+        self.write_live(&credential.to_string());
 
         let config = serde_json::json!({
             "oauthAccount": {
@@ -136,8 +136,26 @@ impl Env {
         uuid_for(&self.name, who)
     }
 
+    /// Where this platform's Claude Code keeps the live credential: the keychain slot on
+    /// macOS, and `.credentials.json` in the config directory everywhere else.
+    fn live_path(&self) -> PathBuf {
+        self.root.join(".credentials.json")
+    }
+
+    fn write_live(&self, credential: &str) {
+        if cfg!(target_os = "macos") {
+            pitboard::store::vault_write(&self.service, credential).unwrap();
+        } else {
+            std::fs::write(self.live_path(), credential).unwrap();
+        }
+    }
+
     pub fn live(&self) -> serde_json::Value {
-        let raw = pitboard::store::vault_read(&self.service).unwrap().unwrap();
+        let raw = if cfg!(target_os = "macos") {
+            pitboard::store::vault_read(&self.service).unwrap().unwrap()
+        } else {
+            std::fs::read_to_string(self.live_path()).unwrap()
+        };
         serde_json::from_str(&raw).unwrap()
     }
 
@@ -154,7 +172,10 @@ impl Env {
 
 impl Drop for Env {
     fn drop(&mut self) {
-        if let Ok(state) = std::fs::read_to_string(self.root.join("pitboard/state.json"))
+        // Off macOS every credential this harness created lives under `root`, which the
+        // final line removes. On macOS they are keychain items and must be deleted by name.
+        if cfg!(target_os = "macos")
+            && let Ok(state) = std::fs::read_to_string(self.root.join("pitboard/state.json"))
             && let Ok(v) = serde_json::from_str::<serde_json::Value>(&state)
         {
             for a in v["accounts"].as_array().into_iter().flatten() {
@@ -167,15 +188,17 @@ impl Drop for Env {
                 }
             }
         }
-        let _ = Command::new(SECURITY)
-            .args([
-                "delete-generic-password",
-                "-a",
-                &account(),
-                "-s",
-                &self.service,
-            ])
-            .output();
+        if cfg!(target_os = "macos") {
+            let _ = Command::new(SECURITY)
+                .args([
+                    "delete-generic-password",
+                    "-a",
+                    &account(),
+                    "-s",
+                    &self.service,
+                ])
+                .output();
+        }
         let _ = std::fs::remove_dir_all(&self.root);
     }
 }

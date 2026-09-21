@@ -7,10 +7,10 @@ license = "Apache-2.0"
 description = "Park and restore your own Claude Code logins on one machine, and see what each one has left."
 repository = "https://github.com/ngoquocdat/pitboard"
 homepage = "https://github.com/ngoquocdat/pitboard"
-keywords = ["cli", "keychain", "credentials", "macos"]
+keywords = ["cli", "keychain", "credentials", "macos", "linux"]
 categories = ["command-line-utilities"]
 readme = "README.md"
-exclude = ["/.github", "/docs", "/tests/fixtures"]
+exclude = ["/.github", "/packaging", "/deny.toml", "/clippy.toml", "/rustfmt.toml"]
 
 [lib]
 name = "pitboard"
@@ -39,3 +39,9 @@ opt-level = "z"
 lto = true
 codegen-units = 1
 strip = true
+
+[lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+
+[lints.clippy]
+undocumented_unsafe_blocks = "warn"

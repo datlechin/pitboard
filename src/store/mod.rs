@@ -186,34 +186,34 @@ pub fn fingerprint(secret: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::cell::RefCell;
     use std::collections::HashMap;
+    use std::sync::Mutex;
 
     /// A backend that can be told to fail, so the policies around a write can be tested
     /// without breaking a real keychain — which is neither safe nor deterministic.
     struct Fake {
         kind: Backend,
-        stored: RefCell<HashMap<String, String>>,
+        stored: Mutex<HashMap<String, String>>,
         fail_write: bool,
         /// What a read returns after a write, when it should differ from what was written.
         corrupt_readback: Option<String>,
     }
 
-    // The fakes are only ever used from one test thread at a time.
-    unsafe impl Sync for Fake {}
-
     impl Fake {
         fn empty(kind: Backend) -> Fake {
             Fake {
                 kind,
-                stored: RefCell::new(HashMap::new()),
+                stored: Mutex::new(HashMap::new()),
                 fail_write: false,
                 corrupt_readback: None,
             }
         }
         fn holding(kind: Backend, service: &str, value: &str) -> Fake {
             let f = Fake::empty(kind);
-            f.stored.borrow_mut().insert(service.into(), value.into());
+            f.stored
+                .lock()
+                .unwrap()
+                .insert(service.into(), value.into());
             f
         }
     }
@@ -223,10 +223,10 @@ mod tests {
             self.kind
         }
         fn contains(&self, service: &str) -> Result<bool, Error> {
-            Ok(self.stored.borrow().contains_key(service))
+            Ok(self.stored.lock().unwrap().contains_key(service))
         }
         fn read(&self, service: &str) -> Result<Option<String>, Error> {
-            Ok(self.stored.borrow().get(service).cloned())
+            Ok(self.stored.lock().unwrap().get(service).cloned())
         }
         fn write(&self, service: &str, contents: &str) -> Result<(), Error> {
             if self.fail_write {
@@ -236,7 +236,7 @@ mod tests {
                 .corrupt_readback
                 .clone()
                 .unwrap_or_else(|| contents.to_string());
-            self.stored.borrow_mut().insert(service.into(), stored);
+            self.stored.lock().unwrap().insert(service.into(), stored);
             match self.read(service)? {
                 Some(back) if back == contents => Ok(()),
                 _ => Err(Error::NotDurable(format!(
@@ -245,7 +245,7 @@ mod tests {
             }
         }
         fn delete(&self, service: &str) -> Result<(), Error> {
-            self.stored.borrow_mut().remove(service);
+            self.stored.lock().unwrap().remove(service);
             Ok(())
         }
     }

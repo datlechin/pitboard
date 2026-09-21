@@ -151,7 +151,13 @@ fn enroll(label: &str) -> Report {
     match outcome {
         Ok(account) => Report {
             command: "enroll",
-            human: format!("enrolled {} as `{label}`\n", account.email),
+            // The step people get stuck on is the next one, so say it.
+            human: format!(
+                "enrolled {} as `{label}`, and parked a copy of its login\n\n\
+                 To add another account: sign in as it the usual way (`claude`, then /login),\n\
+                 then run `pitboard enroll <label>` again. This one is safe while you do.\n",
+                account.email
+            ),
             result: Ok(json!({ "label": label, "email": account.email })),
             warnings: Vec::new(),
             exit: 0,
