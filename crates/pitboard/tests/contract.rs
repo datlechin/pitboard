@@ -4,17 +4,8 @@
 
 mod common;
 
-use common::Env;
+use common::{Env, two_accounts};
 use serde_json::Value;
-
-fn two_accounts(name: &str) -> Env {
-    let mut env = Env::new(name);
-    let (a, o, b, p) = (env.uuid('a'), env.uuid('o'), env.uuid('b'), env.uuid('p'));
-    env.sign_in(&a, "a@example.com", &o, "refresh-a");
-    env.run(&["enroll", "alpha"]);
-    env.enroll_by_signing_in("beta", &b, "b@example.com", &p, "refresh-b");
-    env
-}
 
 fn json(env: &Env, args: &[&str]) -> (Value, i32) {
     let mut with_json = args.to_vec();

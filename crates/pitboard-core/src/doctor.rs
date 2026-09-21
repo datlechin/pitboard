@@ -82,9 +82,10 @@ pub fn gather(ctx: &Context) -> Facts {
     let config = claude::load_config(ctx);
     let state = crate::state::load(ctx);
     let service = claude::live_service(ctx);
+    let home = home::dir(ctx);
     Facts {
         security_tool: cfg!(target_os = "macos")
-            .then(|| "/usr/bin/security".to_string())
+            .then(|| store::SECURITY.to_string())
             .filter(|p| std::fs::metadata(p).is_ok()),
         config_path: claude::config_file(ctx),
         identity: config.as_ref().ok().and_then(claude::identity),
@@ -95,8 +96,8 @@ pub fn gather(ctx: &Context) -> Facts {
         backend: store::resolve(ctx, &service),
         credential_file: store::credential_file(ctx),
         credential: store::read(ctx, &service),
-        home: home::dir(ctx),
-        home_mode: mode_of(&home::dir(ctx)),
+        home_mode: mode_of(&home),
+        home,
         machine_id_known: crate::state::machine_id() != "unknown",
         hover_rest_env: ctx.hover_rest,
         parks: state
@@ -162,7 +163,7 @@ pub fn evaluate(facts: &Facts) -> Vec<Check> {
             None => fail(
                 "security_tool",
                 "security tool",
-                "/usr/bin/security is missing",
+                format!("{} is missing", store::SECURITY),
                 "pitboard reads the keychain the same way Claude Code does. Without it, nothing works.",
             ),
         });
@@ -200,25 +201,21 @@ pub fn evaluate(facts: &Facts) -> Vec<Check> {
         ),
     });
 
-    checks.push(if facts.default_slot {
-        ok(
-            "slot",
-            "slot",
+    checks.push(ok(
+        "slot",
+        "slot",
+        if facts.default_slot {
             format!(
                 "default  ·  {}  ·  account {}",
                 facts.service, facts.account
-            ),
-        )
-    } else {
-        ok(
-            "slot",
-            "slot",
+            )
+        } else {
             format!(
                 "{}  ·  account {}  (selected by {})",
                 facts.service, facts.account, facts.storage_dir
-            ),
-        )
-    });
+            )
+        },
+    ));
 
     checks.push(match &facts.backend {
         Ok(store::Backend::Keychain) => ok("credential_store", "credential store", "keychain"),
@@ -408,7 +405,7 @@ fn judge_credential(facts: &Facts) -> Check {
 }
 
 /// A parked login this close to expiring is worth renewing now.
-const RENEW_WITHIN: i64 = 3 * 86_400;
+pub const RENEW_WITHIN: i64 = 3 * 86_400;
 
 fn judge_park(fact: &ParkFact, now: i64) -> Check {
     let name = format!("account {}", fact.label);

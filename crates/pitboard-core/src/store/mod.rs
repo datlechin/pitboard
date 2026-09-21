@@ -8,8 +8,13 @@ mod vault;
 
 use crate::context::Context;
 use crate::{claude, slot};
+
 use serde_json::Value;
 use std::path::PathBuf;
+
+/// The only program trusted to read Claude Code's keychain item. Named here so the backend
+/// that runs it and the doctor check that looks for it cannot drift apart.
+pub(crate) const SECURITY: &str = "/usr/bin/security";
 
 /// Where a credential lives. `Keychain` never occurs off macOS: the platform's backend list
 /// rules it out, so callers need no platform checks of their own.

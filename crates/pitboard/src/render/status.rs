@@ -1,13 +1,11 @@
 //! `pitboard status` for a person and for a program.
 
 use crate::ui::{self, BAD, BOLD, DIM, GOOD, WARN, pad, paint};
+use pitboard_core::doctor::RENEW_WITHIN;
 use pitboard_core::status::{Report, Row, Stale};
 use pitboard_core::time;
 use pitboard_core::usage::{Snapshot, Source, Window};
 use serde_json::{Value, json};
-
-/// A parked login this close to expiring is worth renewing now.
-const RENEW_WITHIN: i64 = 3 * 86_400;
 
 fn window_name(w: &Window) -> String {
     let base = match w.kind.as_str() {
@@ -23,8 +21,6 @@ fn window_name(w: &Window) -> String {
 
 /// Whether the account can be switched to, and what to do when it cannot.
 fn standing(row: &Row, now: i64) -> String {
-    let label = row.label.as_deref().unwrap_or("<label>");
-    let sign_in_again = format!("pitboard enroll {label} --sign-in");
     if row.signed_in {
         return match row.label {
             Some(_) => paint(GOOD, "signed in"),
@@ -35,6 +31,8 @@ fn standing(row: &Row, now: i64) -> String {
             ),
         };
     }
+    let label = row.label.as_deref().unwrap_or("<label>");
+    let sign_in_again = format!("pitboard enroll {label} --sign-in");
     match &row.parked {
         None => paint(WARN, format!("nothing parked · {sign_in_again}")),
         Some(p) if !p.restorable_at(now) => paint(BAD, format!("login expired · {sign_in_again}")),
@@ -115,8 +113,8 @@ pub fn human(report: &Report) -> String {
         );
 
         let windows: Vec<&Window> = row.usage.iter().flat_map(|u| u.windows.iter()).collect();
+        let why = row.stale.and_then(Stale::explanation);
         if windows.is_empty() {
-            let why = row.stale.and_then(Stale::explanation);
             block.push_str(&format!(
                 "    {}\n",
                 paint(
@@ -127,26 +125,24 @@ pub fn human(report: &Report) -> String {
                     }
                 )
             ));
-        }
-        for w in &windows {
-            let resets = w.resets_at.map_or_else(String::new, |at| {
-                if at <= now {
-                    "resetting now".into()
-                } else {
-                    format!("resets in {}", time::span(at - now))
-                }
-            });
-            block.push_str(&format!(
-                "    {}  {}  {}  {}\n",
-                pad(&window_name(w), name_width),
-                ui::bar(w.percent, 10),
-                paint(ui::level(w.percent), format!("{:>3.0}%", w.percent)),
-                paint(DIM, resets)
-            ));
-        }
-        if !windows.is_empty() {
+        } else {
+            for w in &windows {
+                let resets = w.resets_at.map_or_else(String::new, |at| {
+                    if at <= now {
+                        "resetting now".into()
+                    } else {
+                        format!("resets in {}", time::span(at - now))
+                    }
+                });
+                block.push_str(&format!(
+                    "    {}  {}  {}  {}\n",
+                    pad(&window_name(w), name_width),
+                    ui::bar(w.percent, 10),
+                    paint(ui::level(w.percent), format!("{:>3.0}%", w.percent)),
+                    paint(DIM, resets)
+                ));
+            }
             let note = row.usage.as_ref().and_then(|u| provenance(u, now));
-            let why = row.stale.and_then(Stale::explanation);
             let line = match (note, why) {
                 (Some(note), Some(why)) => {
                     format!("{} {}", paint(DIM, note), paint(WARN, format!("· {why}")))

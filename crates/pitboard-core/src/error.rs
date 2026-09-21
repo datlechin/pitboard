@@ -297,7 +297,7 @@ impl Error {
     }
 
     /// 1 when a request could not be met; 2 when the command line was wrong; 3 when a login
-    /// or Claude Code's files are in a state pitboard cannot safely act on — an unexpected
+    /// or Claude Code's files are in a state pitboard cannot safely act on: an unexpected
     /// format, or a login that could not be put back.
     pub fn exit_code(&self) -> u8 {
         use Error::*;

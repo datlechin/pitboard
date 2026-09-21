@@ -15,7 +15,7 @@ pub fn output_within(mut command: Command, input: &[u8], limit: Duration) -> io:
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()?;
-    let drain = |pipe: Option<Box<dyn Read + Send>>| {
+    fn drain<R: Read + Send + 'static>(pipe: Option<R>) -> thread::JoinHandle<Vec<u8>> {
         thread::spawn(move || {
             let mut bytes = Vec::new();
             if let Some(mut pipe) = pipe {
@@ -23,19 +23,9 @@ pub fn output_within(mut command: Command, input: &[u8], limit: Duration) -> io:
             }
             bytes
         })
-    };
-    let stdout = drain(
-        child
-            .stdout
-            .take()
-            .map(|p| Box::new(p) as Box<dyn Read + Send>),
-    );
-    let stderr = drain(
-        child
-            .stderr
-            .take()
-            .map(|p| Box::new(p) as Box<dyn Read + Send>),
-    );
+    }
+    let stdout = drain(child.stdout.take());
+    let stderr = drain(child.stderr.take());
     // Dropping stdin closes it, which is how a helper reading commands learns there are no
     // more. A helper that exits without reading is not an error.
     if let Some(mut stdin) = child.stdin.take() {

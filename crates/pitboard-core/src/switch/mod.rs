@@ -43,7 +43,7 @@ pub enum Outcome {
     AlreadyActive { label: String },
 }
 
-pub(super) fn oauth_of(document: &Value) -> Result<Value> {
+fn oauth_of(document: &Value) -> Result<Value> {
     document
         .get("claudeAiOauth")
         .cloned()
@@ -124,7 +124,7 @@ fn lock_file(ctx: &Context) -> Result<(std::fs::File, PathBuf)> {
 
 /// Who a live access token belongs to. When this cannot be answered, nothing moves: a login
 /// filed under a guessed account takes two accounts with it.
-pub(super) fn identify(ctx: &Context, access_token: &str) -> Result<api::Owner> {
+fn identify(ctx: &Context, access_token: &str) -> Result<api::Owner> {
     api::owner(ctx, access_token).map_err(|e| match e {
         api::ApiError::Unauthorized => Error::SessionExpired,
         other => Error::IdentityUnverifiable {
@@ -133,7 +133,7 @@ pub(super) fn identify(ctx: &Context, access_token: &str) -> Result<api::Owner> 
     })
 }
 
-pub(super) fn access_token(document: &Value) -> Result<String> {
+fn access_token(document: &Value) -> Result<String> {
     document["claudeAiOauth"]["accessToken"]
         .as_str()
         .map(str::to_owned)
@@ -351,7 +351,7 @@ fn update_config(
     outgoing_account: &str,
     outgoing_org: &str,
 ) -> Result<()> {
-    let path = configfile::path(ctx);
+    let path = claude::config_file(ctx);
     configfile::backup(ctx, &path)?;
     let mut config = claude::load_config(ctx)?;
     configfile::splice_identity(

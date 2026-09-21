@@ -7,7 +7,7 @@
 
 use crate::context::Context;
 use crate::error::{Error, Result};
-use crate::{atomic, claude, home, time};
+use crate::{atomic, home, time};
 use serde_json::{Map, Value};
 use std::path::{Path, PathBuf};
 
@@ -113,10 +113,6 @@ pub fn write(path: &Path, config: &Value) -> Result<()> {
             detail: e.to_string(),
         }
     })
-}
-
-pub fn path(ctx: &Context) -> PathBuf {
-    claude::config_file(ctx)
 }
 
 #[cfg(test)]

@@ -10,7 +10,7 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     var onSwitch: ((String) -> Void)?
 
     private let centre = UNUserNotificationCenter.current()
-    private nonisolated static let category = "limit"
+    fileprivate nonisolated static let category = "limit"
     private nonisolated static let action = "switch"
     /// The reset time of the window each kind was last reported for, so one exhausted
     /// window is mentioned once rather than every few minutes until it resets.
@@ -92,7 +92,7 @@ struct Advice {
         let limit = window.kind == "session" ? "5-hour" : "weekly"
         content.title = "\(ran) has no \(limit) limit left"
         content.body = "\(use) has \(left)% of its own left."
-        content.categoryIdentifier = "limit"
+        content.categoryIdentifier = Notifier.category
         content.userInfo = ["label": use]
         return content
     }

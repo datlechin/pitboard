@@ -16,7 +16,7 @@ pub fn ctx() -> pitboard_core::context::Context {
 /// Refuse a service name that this machine's Claude Code would actually read.
 ///
 /// A slot hashed from a scratch directory is safe by construction and is exactly what the
-/// round-trip tests need, so the family as a whole is not off limits — only the two names
+/// round-trip tests need, so the family as a whole is not off limits, only the two names
 /// that resolve to a real login here.
 pub fn guard_not_live(service: &str) {
     assert_ne!(
@@ -55,11 +55,19 @@ pub struct Env {
     /// Stands in for Anthropic. It answers who a token belongs to exactly the way the real
     /// profile endpoint does, so the binary identifies accounts through its real code path.
     server: mockito::ServerGuard,
-    mocks: std::cell::RefCell<Vec<mockito::Mock>>,
+    mocks: Vec<mockito::Mock>,
 }
 
-pub fn state_accounts(env: &Env) -> Vec<serde_json::Value> {
-    env.state()["accounts"].as_array().unwrap().clone()
+/// alpha signed in and enrolled, beta enrolled by signing in privately.
+pub fn two_accounts(name: &str) -> Env {
+    let mut env = Env::new(name);
+    let (a, o, b, p) = (env.uuid('a'), env.uuid('o'), env.uuid('b'), env.uuid('p'));
+    env.sign_in(&a, "a@example.com", &o, "refresh-a");
+    let (_, err, code) = env.run(&["enroll", "alpha"]);
+    assert_eq!(code, 0, "enroll alpha: {err}");
+    let (_, err, code) = env.enroll_by_signing_in("beta", &b, "b@example.com", &p, "refresh-b");
+    assert_eq!(code, 0, "enroll beta: {err}");
+    env
 }
 
 /// Distinct per test and per role. Park item names contain the account id and every test
@@ -101,7 +109,7 @@ impl Env {
             service,
             name: name.to_string(),
             server,
-            mocks: std::cell::RefCell::new(vec![usage]),
+            mocks: vec![usage],
         }
     }
 
@@ -248,7 +256,7 @@ impl Env {
             .with_status(401)
             .with_body(r#"{"type":"error","error":{"type":"authentication_error"}}"#)
             .create();
-        self.mocks.borrow_mut().push(mock);
+        self.mocks.push(mock);
     }
 
     /// Teach the fake Anthropic who a token belongs to.
@@ -266,7 +274,7 @@ impl Env {
                 .to_string(),
             )
             .create();
-        self.mocks.borrow_mut().push(mock);
+        self.mocks.push(mock);
     }
 
     pub fn sign_in(&mut self, uuid: &str, email: &str, org: &str, refresh: &str) {

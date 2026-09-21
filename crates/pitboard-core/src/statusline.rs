@@ -40,17 +40,24 @@ pub struct StatusLine {
     pub others: Vec<Entry>,
 }
 
+/// A window whose reset has passed since counts as reset.
+fn used_share(percent: f64, resets_at: Option<i64>, now: i64) -> f64 {
+    if resets_at.is_some_and(|at| at <= now) {
+        0.0
+    } else {
+        percent
+    }
+}
+
 /// What Claude Code passes for the session's own account, under `rate_limits`.
 fn session_shares(input: &Value, now: i64) -> Shares {
     let share = |window: &str| {
         let w = input.get("rate_limits")?.get(window)?;
-        let resets_at = w.get("resets_at").and_then(Value::as_i64);
-        let used = w.get("used_percentage")?.as_f64()?;
-        Some(if resets_at.is_some_and(|at| at <= now) {
-            0.0
-        } else {
-            used
-        })
+        Some(used_share(
+            w.get("used_percentage")?.as_f64()?,
+            w.get("resets_at").and_then(Value::as_i64),
+            now,
+        ))
     };
     Shares {
         five_hour: share("five_hour"),
@@ -58,20 +65,14 @@ fn session_shares(input: &Value, now: i64) -> Shares {
     }
 }
 
-/// A remembered reading. A window whose reset has passed since counts as reset.
+/// A remembered reading.
 fn remembered_shares(snapshot: &Snapshot, now: i64) -> Shares {
     let share = |kinds: &[&str]| {
         snapshot
             .windows
             .iter()
             .find(|w| w.scope.is_none() && kinds.contains(&w.kind.as_str()))
-            .map(|w| {
-                if w.resets_at.is_some_and(|at| at <= now) {
-                    0.0
-                } else {
-                    w.percent
-                }
-            })
+            .map(|w| used_share(w.percent, w.resets_at, now))
     };
     Shares {
         five_hour: share(&["session", "five_hour"]),

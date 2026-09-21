@@ -50,8 +50,7 @@ private struct AccountRow: View {
                 Spacer()
                 standing
             }
-            ForEach(Array(account.usage?.windows.enumerated() ?? [].enumerated()), id: \.offset)
-            {
+            ForEach(Array((account.usage?.windows ?? []).enumerated()), id: \.offset) {
                 _, window in
                 Limit(window: window)
             }

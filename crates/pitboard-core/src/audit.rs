@@ -1,5 +1,5 @@
-//! One line per change pitboard makes. Labels, codes and times only — no email addresses or
-//! account identifiers — so it is safe to paste into a bug report.
+//! One line per change pitboard makes. Labels, codes and times only, no email addresses or
+//! account identifiers, so it is safe to paste into a bug report.
 
 use crate::context::Context;
 use crate::{home, time};

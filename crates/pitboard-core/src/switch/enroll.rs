@@ -2,7 +2,7 @@
 //!
 //! A parked copy is only safe if the live slot is replaced the moment it is taken; otherwise
 //! Claude Code keeps rotating the same token and the copy goes stale. So the account signed
-//! in now is recorded but not parked — its first switch parks it at exactly that moment —
+//! in now is recorded but not parked. Its first switch parks it at exactly that moment,
 //! and any other account is signed in inside a private directory, where the live slot is
 //! never touched and the vault is the new login's only holder.
 
@@ -164,8 +164,9 @@ fn park_signed_in(
     claim(state, label, &owner)?;
     let service = park::reserve(ctx, &owner.account_uuid)?;
     let fresh = park::store_at(ctx, &service, &oauth_of(&login.document)?)?;
-    let previous = state.get(label).and_then(|a| a.parked.clone());
-    let renewed = state.get(label).is_some();
+    let existing = state.get(label);
+    let previous = existing.and_then(|a| a.parked.clone());
+    let renewed = existing.is_some();
     state.upsert(account(label, &owner, previous));
     state.park(label, fresh);
     // Unrecorded, the new login would be an item nothing refers to, never deleted.

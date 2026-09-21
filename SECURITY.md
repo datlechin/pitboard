@@ -5,19 +5,25 @@ says where they live, what pitboard defends against, and what it does not.
 
 ## Where your credentials are
 
-**macOS.** Claude Code's own login stays in the keychain item it created. Parked copies are
+### macOS
+
+Claude Code's own login stays in the keychain item it created. Parked copies are
 keychain items named `pitboard-park-<account>-<time>`, in your login keychain. They are
 read and written only through `/usr/bin/security`, the one application the item's access
 list trusts. No token is ever passed on a command line, where `ps` could see it; it goes
 to `security` on standard input.
 
-**Linux.** Claude Code keeps its login in a plaintext file, `.credentials.json`, in its
+### Linux
+
+Claude Code keeps its login in a plaintext file, `.credentials.json`, in its
 config directory. That is Claude Code's design and pitboard cannot change it. Parked copies
 live in `~/.pitboard/vault/`, one file per copy, each 0600, in a directory held at 0700.
-Any process running as your user can read them — the same exposure Claude Code's own file
-already has.
+Any process running as your user can read them, which is the exposure Claude Code's own
+file already has.
 
-**Never written anywhere else.** pitboard's account list, `~/.pitboard/state.json`, holds
+### Everywhere else
+
+pitboard's account list, `~/.pitboard/state.json`, holds
 each account's email address and Anthropic account and organization identifiers, but no
 token. `~/.pitboard/usage.json` holds the last usage reading per account. The audit log
 holds labels, codes and times only.
@@ -28,7 +34,7 @@ pitboard makes two read-only requests to `https://api.anthropic.com`, each carry
 access token: `/api/oauth/profile`, to learn which account a login belongs to, and
 `/api/oauth/usage`, for the numbers `pitboard status` shows.
 
-It sends a refresh token in exactly one case: to renew a **parked** login whose access
+It sends a refresh token in one case only: renewing a parked login whose access
 token has expired, through `https://platform.claude.com/v1/oauth/token` with Claude Code's
 own client id, the request Claude Code makes to renew its own login. A parked login is held
 by pitboard alone, so renewing it puts no second holder on its refresh chain. The new
@@ -81,8 +87,8 @@ elsewhere, and a parked login presented from a second machine can end the login 
 
 ## Reporting a vulnerability
 
-Please report privately through GitHub's **Report a vulnerability** button on this
-repository's Security tab, rather than in a public issue.
+Report privately through the "Report a vulnerability" button on this repository's Security
+tab rather than in a public issue.
 
-This is maintained by one person. Reports are acknowledged as soon as possible, and
-anything that could expose a credential is handled before all other work.
+One person maintains this. Reports are answered as soon as possible, and anything that
+could expose a credential is handled before other work.

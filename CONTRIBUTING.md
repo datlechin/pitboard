@@ -23,8 +23,8 @@ cargo test
 cargo deny check
 ```
 
-On macOS, run the keychain latency test on its own — contention from other concurrent
-`security` calls can breach its threshold:
+On macOS, run the keychain latency test on its own. Other `security` calls running at the
+same time push it over its threshold:
 
 ```sh
 cargo test -p pitboard --test keychain_write_is_harmless -- --test-threads=1
@@ -38,22 +38,21 @@ difference with `cargo insta review`, and say in the change why the contract mov
 
 ## Rules this project learned the hard way
 
-1. **Red before green.** Before a change that alters behaviour, write or find a test that
-   fails against the current code. Apply the change and watch that same test pass. A test
-   that has never failed has never proved anything — this project shipped one that passed
-   identically whether the code under it worked or not.
+1. Red before green. Before changing behaviour, write or find a test that fails against
+   the current code, then watch that same test pass. A test that has never failed has
+   proved nothing. This project once shipped one that passed whether the code under it
+   worked or not.
 
-2. **"It still compiles" is not evidence an edit applied.** An edit that silently did
-   nothing leaves the old code in place, and the old code compiles. Re-read the region you
-   are about to change immediately before changing it, and after every edit look at the
-   diff. An empty or unexpectedly small diff is the symptom.
+2. Compiling is not evidence that an edit applied. An edit that did nothing leaves the old
+   code in place, and the old code compiles. Read the region again right before changing
+   it, and look at the diff after. An empty or surprisingly small diff is the symptom.
 
-3. **Never write to a keychain item a real login lives in.** Tests name their items from
+3. Never write to a keychain item that holds a real login. Tests name their items after
    their own identity and call `common::guard_not_live` before the first write.
 
-4. **Measure rather than infer anything about Claude Code.** Its behaviour here is
-   undocumented. A claim about it needs an experiment, and the experiment belongs in the
-   commit message or a test.
+4. Measure Claude Code, do not guess at it. Its behaviour here is undocumented, so a claim
+   about it needs an experiment, and the experiment belongs in a test or the commit
+   message.
 
 ## Releasing
 
@@ -71,9 +70,8 @@ release still happens and the app is signed ad-hoc, which Gatekeeper warns about
 
 The signing identity is read from the certificate itself, so there is no secret for it.
 
-The update key must never change once a release carries it: an app checks the feed's
-signature against the key it was built with, so a new key strands every copy already
-installed.
+Never change the update key once a release carries it. An app checks the feed's signature
+against the key it was built with, so a new key strands every copy already installed.
 
 ## Dependencies
 

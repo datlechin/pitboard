@@ -1,10 +1,10 @@
 //! Drives the real binary through complete switches against a synthetic Claude Code
-//! installation — its own config directory, keychain slot and state — with a stand-in for
+//! installation, with its own config directory, keychain slot and state, and a stand-in for
 //! Anthropic that answers who each token belongs to.
 
 mod common;
 
-use common::Env;
+use common::{Env, two_accounts};
 
 fn accounts(env: &Env) -> Vec<serde_json::Value> {
     env.state()["accounts"].as_array().unwrap().clone()
@@ -15,18 +15,6 @@ fn account(env: &Env, label: &str) -> serde_json::Value {
         .into_iter()
         .find(|a| a["label"] == label)
         .unwrap_or_else(|| panic!("{label} is not enrolled"))
-}
-
-/// alpha signed in and enrolled, beta enrolled by signing in privately.
-fn two_accounts(name: &str) -> Env {
-    let mut env = Env::new(name);
-    let (a, o, b, p) = (env.uuid('a'), env.uuid('o'), env.uuid('b'), env.uuid('p'));
-    env.sign_in(&a, "a@example.com", &o, "refresh-a");
-    let (_, err, code) = env.run(&["enroll", "alpha"]);
-    assert_eq!(code, 0, "enroll alpha: {err}");
-    let (_, err, code) = env.enroll_by_signing_in("beta", &b, "b@example.com", &p, "refresh-b");
-    assert_eq!(code, 0, "enroll beta: {err}");
-    env
 }
 
 fn envelope(out: &str) -> serde_json::Value {

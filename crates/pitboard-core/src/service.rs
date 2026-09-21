@@ -82,10 +82,6 @@ impl Pitboard {
         Pitboard { ctx }
     }
 
-    pub fn context(&self) -> &Context {
-        &self.ctx
-    }
-
     /// Who is signed in and what every account has left. Parked logins whose access has
     /// lapsed are renewed first, so every account is asked live.
     pub fn status(&self) -> Result<Done<status::Report>> {

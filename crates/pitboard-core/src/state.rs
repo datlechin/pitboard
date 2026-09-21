@@ -103,13 +103,7 @@ impl State {
     /// login that is still signed in.
     pub fn discard(&mut self, service: &str) {
         for account in &mut self.accounts {
-            if account
-                .parked
-                .as_ref()
-                .is_some_and(|p| p.service == service)
-            {
-                account.parked = None;
-            }
+            account.parked.take_if(|p| p.service == service);
         }
         if !self.discarded.iter().any(|listed| listed == service) {
             self.discarded.push(service.to_string());

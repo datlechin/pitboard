@@ -83,13 +83,11 @@ fn renew(ctx: &Context, state: &mut State, label: &str, held: &Park) -> Result<R
     let refresh = oauth["refreshToken"].as_str().unwrap_or_default();
     let mut scopes: Vec<String> = oauth["scopes"]
         .as_array()
-        .map(|all| {
-            all.iter()
-                .filter_map(Value::as_str)
-                .map(str::to_owned)
-                .collect()
-        })
-        .unwrap_or_default();
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .map(str::to_owned)
+        .collect();
     if scopes.is_empty() {
         scopes = DEFAULT_SCOPES.map(str::to_owned).to_vec();
     }

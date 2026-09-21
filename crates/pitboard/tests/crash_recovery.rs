@@ -1,22 +1,13 @@
 //! Confirms that recovery reads a real journal and a real park item correctly.
 //!
 //! Every way a switch can be killed is a unit test over the pure decision in
-//! `switch::journal`. What only the real binary shows is that the shell around it — the
-//! journal file, the parked login, the question put to Anthropic — feeds that decision the
+//! `switch::journal`. What only the real binary shows is that the shell around it (the
+//! journal file, the parked login, the question put to Anthropic) feeds that decision the
 //! right facts.
 
 mod common;
 
-use common::Env;
-
-fn two_accounts(name: &str) -> Env {
-    let mut env = Env::new(name);
-    let (a, o, b, p) = (env.uuid('a'), env.uuid('o'), env.uuid('b'), env.uuid('p'));
-    env.sign_in(&a, "a@example.com", &o, "refresh-a");
-    env.run(&["enroll", "alpha"]);
-    env.enroll_by_signing_in("beta", &b, "b@example.com", &p, "refresh-b");
-    env
-}
+use common::{Env, two_accounts};
 
 /// A switch from alpha to beta that died after parking alpha and before installing beta.
 fn interrupted_switch(env: &Env) -> String {

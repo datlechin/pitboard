@@ -18,9 +18,8 @@ identity=${SIGN_IDENTITY:--}
 # before the site does.
 FEED=https://github.com/datlechin/pitboard/releases/latest/download/appcast.xml
 app=apple/build/Pitboard.app
-rm -rf "$app"
-mkdir -p apple/build
 
+# This clears apple/build and makes it again, so nothing from a previous build survives.
 ./apple/scripts/build-xcframework.sh
 # One build per architecture, then lipo: `--arch x --arch y` builds through Xcode's build
 # system instead, which does not find the core's static library in every toolchain.
@@ -64,7 +63,7 @@ if [ -n "${SPARKLE_PUBLIC_KEY:-}" ]; then
 fi
 
 # Notarization wants the hardened runtime and a secure timestamp; an ad-hoc signature can
-# have neither — under the hardened runtime it would refuse to load its own framework,
+# have neither. Under the hardened runtime it would refuse to load its own framework,
 # since ad-hoc signatures share no team.
 if [ "$identity" = "-" ]; then
     options="--timestamp=none"

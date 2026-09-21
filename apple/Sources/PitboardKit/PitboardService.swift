@@ -25,14 +25,6 @@ public final class PitboardService: Sendable {
         try await run(on: changes) { try $0.switchTo(label: label) }
     }
 
-    public func enrollCurrent(_ label: String) async throws -> Enrolled {
-        try await run(on: changes) { try $0.enrollCurrent(label: label) }
-    }
-
-    public func forget(_ label: String) async throws -> Changed {
-        try await run(on: changes) { try $0.forget(label: label) }
-    }
-
     public func rename(_ from: String, to: String) async throws -> Changed {
         try await run(on: changes) { try $0.rename(from: from, to: to) }
     }

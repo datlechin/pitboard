@@ -24,7 +24,6 @@ serde_json.workspace = true
 pitboard-core = { workspace = true, features = ["test-support"] }
 insta.workspace = true
 mockito.workspace = true
-serde_json.workspace = true
 
 [lints]
 workspace = true

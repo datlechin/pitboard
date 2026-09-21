@@ -12,17 +12,13 @@
 
 mod common;
 
-use common::guard_not_live;
+use common::{account, guard_not_live};
 use std::process::Command;
 use std::time::{Duration, Instant};
 
 const SECURITY: &str = "/usr/bin/security";
 /// An unpoisoned read is ~20ms; a poisoned one is measured in seconds.
 const POISONED: Duration = Duration::from_millis(200);
-
-fn account() -> String {
-    std::env::var("USER").unwrap_or_else(|_| "claude-code-user".into())
-}
 
 fn service() -> String {
     format!("pitboard-citest-{}", std::process::id())

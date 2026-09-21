@@ -18,7 +18,7 @@ const MAX_BACKOFF: Duration = Duration::from_millis(1_000);
 #[derive(Debug, thiserror::Error)]
 pub enum LockError {
     #[error("another process is writing credentials right now; try again in a few seconds")]
-    Busy(PathBuf),
+    Busy,
     #[error("cannot take the credential write lock: {0}")]
     Io(#[source] io::Error),
 }
@@ -29,7 +29,7 @@ type Stop = Arc<(Mutex<bool>, Condvar)>;
 impl LockError {
     pub fn code(&self) -> &'static str {
         match self {
-            LockError::Busy(_) => "switch_in_progress",
+            LockError::Busy => "switch_in_progress",
             LockError::Io(_) => "lock_unavailable",
         }
     }
@@ -87,7 +87,7 @@ pub fn acquire(target: &Path) -> Result<Guard, LockError> {
             backoff = (backoff * 2).min(MAX_BACKOFF);
         }
     }
-    Err(LockError::Busy(path))
+    Err(LockError::Busy)
 }
 
 fn start(path: PathBuf) -> Guard {
@@ -152,7 +152,7 @@ mod tests {
         let t = scratch("busy");
         let _held = acquire(&t).expect("first acquire");
         // The holder heartbeats, so this must exhaust its retries rather than steal it.
-        assert!(matches!(acquire(&t), Err(LockError::Busy(_))));
+        assert!(matches!(acquire(&t), Err(LockError::Busy)));
     }
 
     #[test]
