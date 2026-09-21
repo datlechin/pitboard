@@ -4,6 +4,7 @@
 
 use anstyle::{AnsiColor, Style};
 use std::fmt::Display;
+use unicode_width::UnicodeWidthStr;
 
 pub const BOLD: Style = Style::new().bold();
 pub const DIM: Style = Style::new().dimmed();
@@ -15,9 +16,17 @@ pub fn paint(style: Style, text: impl Display) -> String {
     format!("{style}{text}{style:#}")
 }
 
-/// Left-aligned in `width` columns. Pad before painting: escape codes take no columns.
+/// Left-aligned in `width` columns of a terminal, which is not the same as characters: an
+/// accented letter can be one column and a CJK one is two. Pad before painting: escape
+/// codes take no columns at all.
 pub fn pad(text: &str, width: usize) -> String {
-    format!("{text:<width$}")
+    let shown = UnicodeWidthStr::width(text);
+    format!("{text}{}", " ".repeat(width.saturating_sub(shown)))
+}
+
+/// What a terminal gives this text, for working out a column width.
+pub fn columns(text: &str) -> usize {
+    UnicodeWidthStr::width(text)
 }
 
 /// How alarming a share of a limit is.
@@ -57,9 +66,15 @@ mod tests {
         assert_eq!(plain(&bar(150.0, 10)), "██████████");
     }
 
+    /// A terminal lines columns up by what it draws. A CJK character is two columns and an
+    /// accented Latin one is still one, so counting characters puts everything after a name
+    /// out of line.
     #[test]
-    fn padding_counts_characters_not_bytes() {
+    fn padding_counts_what_a_terminal_shows() {
         assert_eq!(pad("░", 3), "░  ");
-        assert_eq!(pad("longer", 3), "longer");
+        assert_eq!(pad("longer", 3), "longer", "never truncates");
+        assert_eq!(pad("công", 8), "công    ", "an accent is one column");
+        assert_eq!(pad("工作", 8), "工作    ", "and a CJK character is two");
+        assert_eq!(columns("工作"), 4);
     }
 }

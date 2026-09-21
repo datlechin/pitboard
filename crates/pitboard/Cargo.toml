@@ -26,6 +26,7 @@ clap.workspace = true
 clap_complete.workspace = true
 clap_mangen.workspace = true
 serde_json.workspace = true
+unicode-width.workspace = true
 
 [dev-dependencies]
 pitboard-core = { workspace = true, features = ["test-support"] }

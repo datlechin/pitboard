@@ -33,6 +33,9 @@ serde_json = { version = "1", features = ["preserve_order"] }
 sha2 = "0.11"
 thiserror = "2"
 unicode-normalization = "0.1"
+# Columns are counted in what a terminal shows, not in characters: a CJK label is two
+# columns wide per character and would push everything after it out of line.
+unicode-width = "0.2"
 # The generator must be this exact version too: bindings check method checksums at load time.
 uniffi = "=0.32.1"
 # TLS: rustls for the protocol, the operating system for deciding which certificates to

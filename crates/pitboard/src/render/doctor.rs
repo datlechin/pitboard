@@ -1,13 +1,13 @@
 //! `pitboard doctor` for a person and for a program.
 
-use crate::ui::{BAD, DIM, GOOD, WARN, pad, paint};
+use crate::ui::{self, BAD, DIM, GOOD, WARN, pad, paint};
 use pitboard_core::doctor::{Check, Diagnosis, Level};
 use serde_json::{Value, json};
 
 pub fn human(checks: &[Check]) -> String {
     let width = checks
         .iter()
-        .map(|c| c.name.chars().count())
+        .map(|c| ui::columns(&c.name))
         .max()
         .unwrap_or(0);
     let mut out = String::new();

@@ -1012,6 +1012,7 @@ dependencies = [
  "mockito",
  "pitboard-core",
  "serde_json",
+ "unicode-width",
 ]
 
 [[package]]

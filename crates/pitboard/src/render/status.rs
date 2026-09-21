@@ -80,15 +80,20 @@ pub fn human(report: &Report) -> String {
     let label_width = report
         .rows
         .iter()
-        .filter_map(|r| r.label.as_deref().map(str::len))
+        .filter_map(|r| r.label.as_deref().map(ui::columns))
         .max()
         .unwrap_or(0);
-    let email_width = report.rows.iter().map(|r| r.email.len()).max().unwrap_or(0);
+    let email_width = report
+        .rows
+        .iter()
+        .map(|r| ui::columns(&r.email))
+        .max()
+        .unwrap_or(0);
     let name_width = report
         .rows
         .iter()
         .flat_map(|r| r.usage.iter().flat_map(|u| u.windows.iter()))
-        .map(|w| window_name(w).chars().count())
+        .map(|w| ui::columns(&window_name(w)))
         .max()
         .unwrap_or(0);
 
