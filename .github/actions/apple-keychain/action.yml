@@ -1,0 +1,56 @@
+name: Apple keychain
+description: >
+  Imports the Developer ID certificate into a keychain of this job's own and reports the
+  identity it holds. Used by every job that signs something, so the import exists once.
+
+inputs:
+  certificate:
+    description: Base64 of the .p12 holding the Developer ID Application certificate.
+    required: true
+  password:
+    description: The password that .p12 was exported with.
+    required: true
+
+outputs:
+  identity:
+    description: The signing identity, empty when no certificate was given.
+    value: ${{ steps.import.outputs.identity }}
+  signed:
+    description: "'true' when there is a certificate to sign with."
+    value: ${{ steps.import.outputs.signed }}
+
+runs:
+  using: composite
+  steps:
+    - id: import
+      shell: bash
+      env:
+        CERTIFICATE: ${{ inputs.certificate }}
+        CERTIFICATE_PASSWORD: ${{ inputs.password }}
+      run: |
+        if [ -z "$CERTIFICATE" ]; then
+          echo "no Developer ID certificate: signing ad-hoc" >&2
+          echo "signed=false" >> "$GITHUB_OUTPUT"
+          echo "identity=-" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+        # A keychain of this job's own, unlocked, and left unlocked for six hours so a long
+        # notarisation cannot relock it mid-run. The runner is thrown away after.
+        keychain=$RUNNER_TEMP/signing.keychain-db
+        security create-keychain -p "" "$keychain"
+        security set-keychain-settings -lut 21600 "$keychain"
+        security unlock-keychain -p "" "$keychain"
+        echo "$CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/certificate.p12"
+        security import "$RUNNER_TEMP/certificate.p12" -P "$CERTIFICATE_PASSWORD" \
+          -A -t cert -f pkcs12 -k "$keychain"
+        rm -f "$RUNNER_TEMP/certificate.p12"
+        security set-key-partition-list -S apple-tool:,apple: -k "" "$keychain" > /dev/null
+        security list-keychain -d user -s "$keychain" login.keychain
+        identity=$(security find-identity -v -p codesigning |
+          sed -n 's/.*"\(Developer ID Application:.*\)"/\1/p' | head -1)
+        if [ -z "$identity" ]; then
+          echo "that certificate is not a Developer ID Application one" >&2
+          exit 1
+        fi
+        echo "identity=$identity" >> "$GITHUB_OUTPUT"
+        echo "signed=true" >> "$GITHUB_OUTPUT"

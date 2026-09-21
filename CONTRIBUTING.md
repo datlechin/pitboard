@@ -54,6 +54,11 @@ difference with `cargo insta review`, and say in the change why the contract mov
    about it needs an experiment, and the experiment belongs in a test or the commit
    message.
 
+## The site
+
+`website/` is one page, published to usepitboard.com by the Pages workflow. `docs/` holds
+the documentation source, which belongs at docs.usepitboard.com and does not exist yet.
+
 ## The state file
 
 `state.json` carries a `schema`. The command line and the app hold their own copy of the
