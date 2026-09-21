@@ -155,7 +155,10 @@ fn giving_up_on_an_unfinishable_switch_keeps_every_login() {
     // Anthropic no longer recognises the session, so the live owner cannot be learned.
     env.expire("access-refresh-a");
     let (_, err, code) = env.run(&["use", "beta"]);
-    assert_ne!(code, 0, "a switch cannot proceed over an unfinished one: {err}");
+    assert_ne!(
+        code, 0,
+        "a switch cannot proceed over an unfinished one: {err}"
+    );
 
     let (out, err, code) = env.run(&["abandon"]);
     assert_eq!(code, 0, "{err}");
@@ -166,6 +169,9 @@ fn giving_up_on_an_unfinishable_switch_keeps_every_login() {
         "the record is gone, so the next command is not blocked by it"
     );
 
-    let (_, err, code) = env.run(&["doctor"]);
-    assert!(!err.contains("interrupted"), "doctor is no longer blocked: {err}");
+    let (_, err, _) = env.run(&["doctor"]);
+    assert!(
+        !err.contains("interrupted"),
+        "doctor is no longer blocked: {err}"
+    );
 }
