@@ -5,7 +5,7 @@
 # with packaging/update-tap.sh.
 class Pitboard < Formula
   desc "Park and restore your own Claude Code logins"
-  homepage "https://github.com/datlechin/pitboard"
+  homepage "https://usepitboard.com"
   url "https://github.com/datlechin/pitboard/archive/refs/tags/v0.1.2.tar.gz"
   sha256 "5e5a4fe59e2ade59e6dab973a5faa0011a7f8781a4e0aa3dfdad9e47457b0c4b"
   license "Apache-2.0"

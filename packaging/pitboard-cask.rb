@@ -9,7 +9,7 @@ cask "pitboard" do
   url "https://github.com/datlechin/pitboard/releases/download/v#{version}/Pitboard-v#{version}-macos.zip"
   name "pitboard"
   desc "Menu bar view of every Claude account's limits, and one click to switch"
-  homepage "https://github.com/datlechin/pitboard"
+  homepage "https://usepitboard.com"
 
   auto_updates true
   depends_on macos: :sonoma

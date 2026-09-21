@@ -13,7 +13,7 @@ edition = "2024"
 rust-version = "1.91"
 license = "Apache-2.0"
 repository = "https://github.com/datlechin/pitboard"
-homepage = "https://github.com/datlechin/pitboard"
+homepage = "https://usepitboard.com"
 
 [workspace.dependencies]
 pitboard-core = { path = "crates/pitboard-core", version = "=0.1.4" }

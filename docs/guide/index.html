@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>pitboard guide</title>
+    <meta
+      name="description"
+      content="How to install pitboard, add accounts, switch between them, and get out of trouble."
+    />
+    <meta property="og:title" content="pitboard guide" />
+    <meta property="og:url" content="https://usepitboard.com/guide/" />
+    <meta property="og:type" content="article" />
+    <style>
+      :root {
+        color-scheme: light dark;
+        --ink: #16181d;
+        --dim: #5d6470;
+        --line: #e1e4e9;
+        --page: #ffffff;
+        --panel: #f6f7f9;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --ink: #e8eaed;
+          --dim: #9aa2af;
+          --line: #262a31;
+          --page: #0e1013;
+          --panel: #15181d;
+        }
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0 auto;
+        padding: 72px 16px 96px;
+        max-width: 46rem;
+        background: var(--page);
+        color: var(--ink);
+        font:
+          16px/1.6 -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          system-ui,
+          sans-serif;
+      }
+      h1 {
+        margin: 0 0 4px;
+        font-size: 2rem;
+        letter-spacing: -0.02em;
+      }
+      h2 {
+        margin: 40px 0 8px;
+        font-size: 1.05rem;
+      }
+      p {
+        margin: 0 0 16px;
+      }
+      .lead {
+        color: var(--dim);
+        font-size: 1.1rem;
+        margin-bottom: 32px;
+      }
+      img {
+        width: 100%;
+        max-width: 420px;
+        height: auto;
+        display: block;
+        margin: 8px 0 32px;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+      }
+      pre {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 12px 14px;
+        overflow-x: auto;
+        font-size: 0.9rem;
+        margin: 0 0 12px;
+      }
+      ul {
+        margin: 0 0 16px;
+        padding-left: 20px;
+        color: var(--dim);
+      }
+      li {
+        margin-bottom: 6px;
+      }
+      a {
+        color: inherit;
+      }
+      footer {
+        margin-top: 56px;
+        padding-top: 20px;
+        border-top: 1px solid var(--line);
+        color: var(--dim);
+        font-size: 0.9rem;
+      }
+    </style>
+  </head>
+  <body>
+    <p><a href="/">pitboard</a> · guide</p>
+    <h1>Guide</h1>
+    <p class="lead">
+      Everything pitboard does, in the order you meet it.
+    </p>
+
+    <h2>Install</h2>
+    <pre>brew install datlechin/tap/pitboard        # the command line
+brew install --cask datlechin/tap/pitboard # the menu bar app, macOS 14 or later</pre>
+    <p>
+      Or <code>cargo install pitboard</code>, or <code>cargo binstall pitboard</code> to fetch
+      the built binary. On Linux the
+      <a href="https://github.com/datlechin/pitboard/releases/latest">latest release</a>
+      carries static binaries for x86_64 and aarch64.
+    </p>
+
+    <h2>Add your accounts</h2>
+    <pre>pitboard enroll personal
+pitboard enroll work --sign-in</pre>
+    <p>
+      The first records the account you are signed in as now. The second runs Claude Code's
+      own sign-in in a separate directory, so the login you are using stays where it is. Do
+      not use <code>/login</code> to add an account: that replaces the login in use, and
+      pitboard cannot keep a copy of a login it did not see leave.
+    </p>
+    <p>
+      Sign in as the account you mean to add. The browser is probably still signed in as the
+      first one, and Claude Code will hand that back; pitboard then says the account is
+      already enrolled.
+    </p>
+
+    <h2>Every day</h2>
+    <pre>pitboard             # who is signed in, and what each account has left
+pitboard use work    # switch</pre>
+    <p>
+      A Claude Code session that is already open picks up the switch within about 33 seconds,
+      without restarting. Each account holds one parked login: switching to an account uses
+      that login up, and switching away parks a fresh one.
+    </p>
+
+    <h2>When something is wrong</h2>
+    <ul>
+      <li><code>pitboard doctor</code> checks everything pitboard depends on.</li>
+      <li><code>pitboard log</code> shows what pitboard has changed, and when.</li>
+      <li>
+        <code>pitboard enroll work --sign-in</code> signs in again to an account whose parked
+        login expired or went missing.
+      </li>
+      <li>
+        <code>pitboard abandon</code> gives up on an interrupted switch that cannot be
+        finished, keeping every login. Only needed when recovery cannot reach Anthropic.
+      </li>
+      <li><code>pitboard uninstall</code> deletes every parked login and pitboard's own files.</li>
+    </ul>
+
+    <h2>In Claude Code's status line</h2>
+    <pre>{ "statusLine": { "type": "command", "command": "pitboard statusline" } }</pre>
+    <p>
+      In <code>~/.claude/settings.json</code>. It reads the session Claude Code passes it and
+      pitboard's own files: no network, no credential touched.
+    </p>
+
+    <h2>Scripting</h2>
+    <p>
+      Every command that reports a result takes <code>--json</code> and prints the same
+      envelope, including on failure:
+      <code>{v, command, ok, data, warnings, error}</code>. Error codes are stable. Exit
+      codes: 0 done, 1 not done, 2 command line wrong, 3 a login or Claude Code's files are in
+      a state pitboard will not act on.
+    </p>
+
+    <h2>Large logins</h2>
+    <p>
+      macOS reads at most 4097 bytes of command from standard input, and a login with MCP
+      server tokens in it can be larger. Claude Code then writes it on the argument line,
+      where any process running as you can read it while the call lasts, and it does that for
+      the same login on every refresh. pitboard refuses instead, unless
+      <code>PITBOARD_ARGV_FALLBACK=1</code> says to do what Claude Code does.
+    </p>
+
+    <h2>What it will not do</h2>
+    <ul>
+      <li>No switching by itself on any server signal.</li>
+      <li>No pooling or proxying of requests.</li>
+      <li>No failover when an account is on hold.</li>
+      <li>No renewing of the login you are signed in as. That is Claude Code's job.</li>
+      <li>
+        No copying parked logins between machines. Presenting a refresh token another machine
+        has rotated makes Claude Code drop the login on both.
+      </li>
+    </ul>
+
+    <footer>
+      <a href="/">Home</a> ·
+      <a href="https://github.com/datlechin/pitboard">Source</a> ·
+      <a href="https://github.com/datlechin/pitboard/blob/main/SECURITY.md">Security</a> ·
+      Apache-2.0 · Not affiliated with Anthropic
+    </footer>
+  </body>
+</html>

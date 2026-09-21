@@ -1,6 +1,7 @@
 # pitboard
 
 Switch between your own Claude Code logins, and see how much each one has left.
+[usepitboard.com](https://usepitboard.com)
 
 [![CI](https://github.com/datlechin/pitboard/actions/workflows/ci.yml/badge.svg)](https://github.com/datlechin/pitboard/actions/workflows/ci.yml)
 [![crates.io](https://img.shields.io/crates/v/pitboard.svg)](https://crates.io/crates/pitboard)
@@ -133,6 +134,8 @@ Exit codes: 0 done, 1 not done, 2 command line wrong, 3 a login or Claude Code's
 in a state pitboard will not act on.
 
 Shell completions: `pitboard completions zsh` (or `bash`, `fish`, `elvish`, `powershell`).
+
+The same ground, on one page: [usepitboard.com/guide](https://usepitboard.com/guide/).
 
 ## What it will not do
 
