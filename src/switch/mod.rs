@@ -12,10 +12,10 @@ mod journal;
 
 pub use enroll::{Enrolled, enroll};
 pub use forget::forget;
-pub use journal::Recovered;
+pub use journal::{Recovered, pending as interrupted};
 
 use crate::error::{Error, Result};
-use crate::state::{Account, Generation, State};
+use crate::state::{Account, Park, State};
 use crate::{api, claude, configfile, home, lock, park, state, store, time};
 use journal::{Journal, clear_journal, reconcile, write_journal};
 use serde_json::Value;
@@ -31,7 +31,7 @@ pub enum Outcome {
     Switched {
         from: String,
         to: String,
-        parked: Generation,
+        parked: Park,
         /// The login moved but the config still names the previous account. Claude Code
         /// does not correct that on its own; the next switch rewrites it.
         config_warning: Option<Error>,
@@ -56,6 +56,12 @@ pub(super) fn oauth_of(document: &Value) -> Result<Value> {
 pub struct Settled {
     _exclusive: std::fs::File,
     state: State,
+}
+
+impl Settled {
+    pub fn account(&self, label: &str) -> Option<&Account> {
+        self.state.get(label)
+    }
 }
 
 /// What recovery found is returned apart from the `Settled`, so it can be reported whether
@@ -90,7 +96,7 @@ fn purge(state: &mut State) -> usize {
 /// when a process ends, so there is no staleness rule for two runs to both satisfy.
 fn exclusive() -> Result<std::fs::File> {
     let path = home::dir().join("state.lock");
-    let fail = |source| Error::RecoveryFailed {
+    let fail = |source| Error::HomeUnwritable {
         path: path.clone(),
         source,
     };
@@ -147,6 +153,10 @@ pub fn switch(settled: Settled, label: &str) -> Result<Outcome> {
     let outgoing = identify(&identified_with)?;
 
     if outgoing.account_uuid == target.account_uuid {
+        if state.active.as_deref() != Some(label) {
+            state.active = Some(label.to_string());
+            state::save(&state)?;
+        }
         return Ok(Outcome::AlreadyActive {
             label: label.to_string(),
         });
@@ -157,13 +167,15 @@ pub fn switch(settled: Settled, label: &str) -> Result<Outcome> {
         .ok_or_else(|| Error::LiveAccountNotEnrolled {
             email: outgoing.email.clone(),
         })?;
-    let generation = target
-        .restorable()
-        .cloned()
-        .ok_or_else(|| Error::AccountNotRestorable {
+    let held = target.parked.clone().ok_or_else(|| Error::NothingParked {
+        label: label.to_string(),
+    })?;
+    if !held.restorable_at(time::now()) {
+        return Err(Error::ParkedLoginExpired {
             label: label.to_string(),
-        })?;
-    let incoming = park::load(label, &generation)?;
+        });
+    }
+    let incoming = park::load(label, &held)?;
 
     let storage = PathBuf::from(claude::storage_dir()).join(".storage-write");
     let guard = lock::acquire(&storage)?;
@@ -197,37 +209,29 @@ pub fn switch(settled: Settled, label: &str) -> Result<Outcome> {
         to_label: label.to_string(),
         to_uuid: target.account_uuid.clone(),
         park_service: park_service.clone(),
-        incoming_service: generation.service.clone(),
+        incoming_service: held.service.clone(),
     })?;
 
     let parked = park::store_at(&park_service, &oauth_of(&before)?)?;
-    state.attach(&outgoing_label, parked.clone());
+    state.park(&outgoing_label, parked.clone());
     state::save(&state)?;
 
     if let Err(e) = install(&service, &next, &before_raw, &outgoing_label, label) {
-        // The outgoing account is still signed in and Claude Code keeps rotating the token
-        // this copy holds. Restoring it once stale would zero the login, so it is retired.
-        state.mark_installed(&outgoing_label, &parked.service, time::now());
+        if !only_copy_left(&e) {
+            state.discard(&parked.service);
+        }
         state::save(&state)?;
         clear_journal();
+        purge(&mut state);
         return Err(e);
     }
-    state.mark_installed(label, &generation.service, time::now());
+    state.discard(&held.service);
     state.active = Some(label.to_string());
     state::save(&state)?;
     drop(guard);
 
     let config_warning =
         update_config(&target, &outgoing.account_uuid, &outgoing.organization_uuid).err();
-
-    let retired = state
-        .accounts
-        .iter_mut()
-        .find(|a| a.label == outgoing_label)
-        .map(park::retire)
-        .unwrap_or_default();
-    state.discarded.extend(retired);
-    state::save(&state)?;
     let parks_pending = purge(&mut state);
     clear_journal();
 
@@ -238,6 +242,13 @@ pub fn switch(settled: Settled, label: &str) -> Result<Outcome> {
         config_warning,
         parks_pending,
     })
+}
+
+/// After a failed install, whether the copy just parked is the outgoing account's only login.
+/// Once its old login is back in place, the copy is a second holder that Claude Code will
+/// rotate past; if it could not be put back, the copy is all that is left of it.
+fn only_copy_left(failure: &Error) -> bool {
+    matches!(failure, Error::SwitchCorrupted { .. })
 }
 
 /// The live document with `claudeAiOauth` replaced. Every other key belongs to this machine.
@@ -390,6 +401,17 @@ mod tests {
             "b",
         );
         assert!(matches!(result, Err(Error::SwitchCorrupted { .. })));
+    }
+
+    #[test]
+    fn a_copy_is_kept_after_a_failed_install_only_when_it_is_all_that_is_left() {
+        let (from, to, detail) = ("a".to_string(), "b".to_string(), String::new());
+        assert!(!only_copy_left(&Error::SwitchRolledBack {
+            from: from.clone(),
+            to: to.clone(),
+            detail: detail.clone(),
+        }));
+        assert!(only_copy_left(&Error::SwitchCorrupted { from, to, detail }));
     }
 
     #[test]

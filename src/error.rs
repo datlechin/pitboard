@@ -44,6 +44,13 @@ pub enum Error {
     )]
     StateWrongMachine { path: PathBuf },
 
+    #[error("could not write to pitboard's directory at {path}: {source}")]
+    HomeUnwritable {
+        path: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
+
     #[error("could not save pitboard's account list at {path}: {source}")]
     StateWriteFailed {
         path: PathBuf,
@@ -85,16 +92,22 @@ pub enum Error {
 
     #[error(
         "no account is enrolled as `{label}`. Run `pitboard status` to see the ones that \
-         are, or `pitboard enroll {label}` while signed in as it."
+         are, or `pitboard enroll {label} --sign-in` to add it."
     )]
     AccountUnknown { label: String },
 
     #[error(
-        "`{label}` has no restorable parked login — its last copy was already used and \
-         Claude Code has rotated past it. Sign in as that account again, then \
-         `pitboard enroll {label}`."
+        "`{label}` has no parked login to switch to: the last one went back into use and \
+         Claude Code has moved on from it. Run `pitboard enroll {label} --sign-in` to sign \
+         in to it again."
     )]
-    AccountNotRestorable { label: String },
+    NothingParked { label: String },
+
+    #[error(
+        "the parked login for `{label}` has expired. Run `pitboard enroll {label} --sign-in` \
+         to sign in to it again."
+    )]
+    ParkedLoginExpired { label: String },
 
     #[error(
         "{email} is signed in but not enrolled, so it cannot be parked. \
@@ -118,14 +131,14 @@ pub enum Error {
     ParkSlotExhausted,
 
     #[error(
-        "the parked login for `{label}` is missing. Run `pitboard doctor`; you may need \
-         to sign in as it again and re-enroll."
+        "the parked login for `{label}` is missing. Run `pitboard enroll {label} --sign-in` \
+         to sign in to it again."
     )]
     ParkedCredentialMissing { label: String },
 
     #[error(
-        "the parked login for `{label}` is not the one pitboard recorded ({detail}). \
-         Treat it as unusable: sign in as that account again and re-enroll."
+        "the parked login for `{label}` is not the one pitboard recorded ({detail}). Run \
+         `pitboard enroll {label} --sign-in` to replace it."
     )]
     ParkedCredentialCorrupt { label: String, detail: String },
 
@@ -180,7 +193,8 @@ pub enum Error {
 
     #[error(
         "could not sign in as `{to}`, and could not put `{from}` back either ({detail}). \
-         Run `claude` and sign in again, then `pitboard enroll` to bring that account back."
+         `{from}`'s login is still parked: run `claude` and sign in to any enrolled account, \
+         then `pitboard use {from}`."
     )]
     SwitchCorrupted {
         from: String,
@@ -212,6 +226,10 @@ pub enum Error {
     #[error("the sign-in did not finish, so nothing was enrolled.")]
     SignInIncomplete,
 
+    /// The command line itself was wrong; the message is clap's.
+    #[error("{0}")]
+    Usage(String),
+
     #[error(transparent)]
     Store(#[from] crate::store::Error),
 
@@ -230,13 +248,15 @@ impl Error {
             StateVersionMismatch { .. } => "state_version_mismatch",
             StateWrongMachine { .. } => "state_wrong_machine",
             StateWriteFailed { .. } => "state_write_failed",
+            HomeUnwritable { .. } => "home_unwritable",
             ClaudeConfigMissing { .. } => "claude_config_missing",
             ClaudeConfigUnreadable { .. } => "claude_config_unreadable",
             ClaudeConfigNotJson { .. } => "claude_config_not_json",
             LiveCredentialAbsent => "live_credential_absent",
             LiveCredentialShapeUnexpected { .. } => "live_credential_shape_unexpected",
             AccountUnknown { .. } => "account_unknown",
-            AccountNotRestorable { .. } => "account_not_restorable",
+            NothingParked { .. } => "nothing_parked",
+            ParkedLoginExpired { .. } => "parked_login_expired",
             LiveAccountNotEnrolled { .. } => "live_account_not_enrolled",
             AlreadyEnrolled { .. } => "already_enrolled",
             LabelTaken { .. } => "label_taken",
@@ -256,14 +276,15 @@ impl Error {
             RecoveryUndetermined { .. } => "recovery_undetermined",
             ClaudeNotFound => "claude_not_found",
             SignInIncomplete => "sign_in_incomplete",
+            Usage(_) => "usage",
             Store(e) => e.code(),
             Lock(e) => e.code(),
         }
     }
 
-    /// 1 when a request could not be met; 3 when a login or Claude Code's files are in a
-    /// state pitboard cannot safely act on — an unexpected format, or a login that could not
-    /// be put back.
+    /// 1 when a request could not be met; 2 when the command line was wrong; 3 when a login
+    /// or Claude Code's files are in a state pitboard cannot safely act on — an unexpected
+    /// format, or a login that could not be put back.
     pub fn exit_code(&self) -> u8 {
         use Error::*;
         match self {
@@ -271,6 +292,7 @@ impl Error {
             | ClaudeConfigNotJson { .. }
             | SwitchCorrupted { .. }
             | RecoveryRecordCorrupt { .. } => 3,
+            Usage(_) => 2,
             Store(e) => e.exit_code(),
             _ => 1,
         }
@@ -289,7 +311,8 @@ mod tests {
             Error::LiveCredentialAbsent,
             Error::ParkSlotExhausted,
             Error::AccountUnknown { label: "x".into() },
-            Error::AccountNotRestorable { label: "x".into() },
+            Error::NothingParked { label: "x".into() },
+            Error::ParkedLoginExpired { label: "x".into() },
             Error::LabelTaken {
                 label: "x".into(),
                 email: "e".into(),
@@ -320,7 +343,15 @@ mod tests {
                 label: "work".into(),
             }
             .to_string(),
-            Error::AccountNotRestorable {
+            Error::NothingParked {
+                label: "work".into(),
+            }
+            .to_string(),
+            Error::ParkedLoginExpired {
+                label: "work".into(),
+            }
+            .to_string(),
+            Error::ParkedCredentialMissing {
                 label: "work".into(),
             }
             .to_string(),

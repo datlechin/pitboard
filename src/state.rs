@@ -6,22 +6,35 @@
 //! both.
 
 use crate::error::{Error, Result};
-use crate::{atomic, home, time};
+use crate::{atomic, home};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::path::PathBuf;
 
-const SCHEMA: u32 = 2;
+const SCHEMA: u32 = 3;
+
+/// A login held for an account while another is signed in. There is at most one per
+/// account: once installed it is Claude Code's again, and Claude Code rotates it from then
+/// on, so a copy kept back would only ever present a token it has moved past.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-pub struct Generation {
+pub struct Park {
     pub service: String,
     pub parked_at: i64,
     pub refresh_fingerprint: String,
-    /// When this copy stopped being restorable: it was installed, or retired. Claude Code
-    /// rotates the token from then on, and presenting a superseded one makes it zero the
-    /// live credential.
-    #[serde(default)]
-    pub installed_at: Option<i64>,
+    /// Until then its usage can be asked; the access token is not renewed while parked.
+    pub access_expires_at: Option<i64>,
+    /// Until then it can be restored.
+    pub refresh_expires_at: Option<i64>,
+}
+
+impl Park {
+    pub fn restorable_at(&self, now: i64) -> bool {
+        self.refresh_expires_at.is_none_or(|at| at > now)
+    }
+
+    pub fn askable_at(&self, now: i64) -> bool {
+        self.access_expires_at.is_none_or(|at| at > now)
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -33,25 +46,7 @@ pub struct Account {
     /// Written into Claude Code's config on switching here. Only what Anthropic confirmed,
     /// so Claude Code fetches the rest of its profile itself.
     pub oauth_account: Value,
-    pub generations: Vec<Generation>,
-}
-
-impl Account {
-    pub fn newest(&self) -> Option<&Generation> {
-        self.generations.iter().max_by_key(|g| g.parked_at)
-    }
-
-    /// The newest generation that has not already been installed and superseded.
-    pub fn restorable(&self) -> Option<&Generation> {
-        self.generations
-            .iter()
-            .filter(|g| g.installed_at.is_none())
-            .max_by_key(|g| g.parked_at)
-    }
-
-    pub fn references(&self, service: &str) -> bool {
-        self.generations.iter().any(|g| g.service == service)
-    }
+    pub parked: Option<Park>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -87,32 +82,60 @@ impl State {
         self.accounts.iter().find(|a| a.account_uuid == uuid)
     }
 
-    pub fn attach(&mut self, label: &str, generation: Generation) {
-        if let Some(account) = self.accounts.iter_mut().find(|a| a.label == label) {
-            account.generations.push(generation);
+    fn get_mut(&mut self, label: &str) -> Option<&mut Account> {
+        self.accounts.iter_mut().find(|a| a.label == label)
+    }
+
+    /// Hold `park` for the account, discarding whatever it replaces.
+    pub fn park(&mut self, label: &str, park: Park) {
+        let service = park.service.clone();
+        if let Some(previous) = self
+            .get_mut(label)
+            .and_then(|account| account.parked.replace(park))
+            && previous.service != service
+        {
+            self.discard(&previous.service);
         }
     }
 
-    pub fn mark_installed(&mut self, label: &str, service: &str, at: i64) {
-        if let Some(account) = self.accounts.iter_mut().find(|a| a.label == label)
-            && let Some(g) = account
-                .generations
-                .iter_mut()
-                .find(|g| g.service == service)
-        {
-            g.installed_at = Some(at);
+    /// Stop holding `service` and list it for deletion: it has been installed, or it copies a
+    /// login that is still signed in.
+    pub fn discard(&mut self, service: &str) {
+        for account in &mut self.accounts {
+            if account
+                .parked
+                .as_ref()
+                .is_some_and(|p| p.service == service)
+            {
+                account.parked = None;
+            }
+        }
+        if !self.discarded.iter().any(|listed| listed == service) {
+            self.discarded.push(service.to_string());
         }
     }
 
     pub fn references(&self, service: &str) -> bool {
-        self.accounts.iter().any(|a| a.references(service))
+        self.accounts
+            .iter()
+            .any(|a| a.parked.as_ref().is_some_and(|p| p.service == service))
     }
 
     pub fn upsert(&mut self, account: Account) {
-        match self.accounts.iter_mut().find(|a| a.label == account.label) {
+        match self.get_mut(&account.label) {
             Some(existing) => *existing = account,
             None => self.accounts.push(account),
         }
+    }
+
+    /// Drop the account, listing its park for deletion.
+    pub fn remove(&mut self, label: &str) -> Option<Account> {
+        let index = self.accounts.iter().position(|a| a.label == label)?;
+        let account = self.accounts.remove(index);
+        if let Some(park) = &account.parked {
+            self.discard(&park.service);
+        }
+        Some(account)
     }
 }
 
@@ -166,31 +189,9 @@ pub fn save(state: &State) -> Result<()> {
     atomic::write(&path, body.as_bytes(), atomic::Perms::Secret).map_err(write)
 }
 
-/// Generations worth keeping: the five newest, plus anything from the last 45 days.
-pub fn retained(generations: &[Generation]) -> Vec<&Generation> {
-    let cutoff = time::now() - 45 * 86_400;
-    let mut sorted: Vec<&Generation> = generations.iter().collect();
-    sorted.sort_by_key(|g| std::cmp::Reverse(g.parked_at));
-    sorted
-        .iter()
-        .enumerate()
-        .filter(|(i, g)| *i < 5 || g.parked_at >= cutoff)
-        .map(|(_, g)| *g)
-        .collect()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    fn generation(at: i64) -> Generation {
-        Generation {
-            service: format!("pitboard-park-x-{at}"),
-            parked_at: at,
-            refresh_fingerprint: "f".into(),
-            installed_at: None,
-        }
-    }
 
     #[test]
     fn machine_id_is_stable_and_real() {
@@ -207,58 +208,85 @@ mod tests {
         );
     }
 
-    #[test]
-    fn retention_keeps_five_however_old_they_are() {
-        let ancient: Vec<Generation> = (0..8).map(|i| generation(1_000 + i)).collect();
-        let kept = retained(&ancient);
-        assert_eq!(kept.len(), 5);
-        assert_eq!(kept[0].parked_at, 1_007, "newest first");
+    fn park(service: &str) -> Park {
+        Park {
+            service: service.into(),
+            parked_at: 100,
+            refresh_fingerprint: "f".into(),
+            access_expires_at: Some(200),
+            refresh_expires_at: Some(300),
+        }
     }
 
-    #[test]
-    fn retention_also_keeps_anything_recent() {
-        let now = time::now();
-        let recent: Vec<Generation> = (0..9).map(|i| generation(now - i * 86_400)).collect();
-        assert_eq!(retained(&recent).len(), 9);
-    }
-
-    #[test]
-    fn a_generation_that_was_installed_is_never_offered_again() {
-        let mut account = Account {
-            label: "a".into(),
-            account_uuid: "u".into(),
-            email: "a@b.c".into(),
+    fn account(label: &str, parked: Option<Park>) -> Account {
+        Account {
+            label: label.into(),
+            account_uuid: format!("{label}-uuid"),
+            email: format!("{label}@example.com"),
             organization_uuid: "o".into(),
             oauth_account: serde_json::json!({}),
-            generations: vec![generation(100), generation(200)],
-        };
-        assert_eq!(account.restorable().unwrap().parked_at, 200);
-        account.generations[1].installed_at = Some(250);
+            parked,
+        }
+    }
+
+    #[test]
+    fn a_new_park_discards_the_one_it_replaces() {
+        let mut s = State::default();
+        s.upsert(account("work", Some(park("old"))));
+        s.park("work", park("new"));
         assert_eq!(
-            account.restorable().unwrap().parked_at,
-            100,
-            "a superseded copy must not be offered"
+            s.get("work").unwrap().parked.as_ref().unwrap().service,
+            "new"
         );
-        account.generations[0].installed_at = Some(260);
+        assert_eq!(s.discarded, ["old"]);
+        assert!(!s.references("old"));
+    }
+
+    #[test]
+    fn discarding_releases_whichever_account_held_it_and_lists_it_once() {
+        let mut s = State::default();
+        s.upsert(account("work", Some(park("current"))));
+        s.discard("something-else");
+        assert!(s.get("work").unwrap().parked.is_some());
+        s.discard("current");
+        s.discard("current");
+        assert!(s.get("work").unwrap().parked.is_none());
+        assert_eq!(s.discarded, ["something-else", "current"]);
+    }
+
+    #[test]
+    fn removing_an_account_lists_its_park_for_deletion() {
+        let mut s = State::default();
+        s.upsert(account("work", Some(park("p"))));
+        assert_eq!(s.remove("work").unwrap().label, "work");
+        assert!(s.accounts.is_empty());
+        assert_eq!(s.discarded, ["p"]);
+    }
+
+    #[test]
+    fn a_park_is_restorable_until_its_login_expires() {
+        let p = park("p");
+        assert!(p.askable_at(199) && !p.askable_at(200));
+        assert!(p.restorable_at(299) && !p.restorable_at(300));
+        let unknown = Park {
+            access_expires_at: None,
+            refresh_expires_at: None,
+            ..park("p")
+        };
         assert!(
-            account.restorable().is_none(),
-            "refuse rather than restore a dead token"
+            unknown.restorable_at(i64::MAX),
+            "no expiry recorded is not expired"
         );
     }
 
     #[test]
     fn accounts_are_replaced_by_label_not_duplicated() {
         let mut s = State::default();
-        let mk = |email: &str| Account {
-            label: "work".into(),
-            account_uuid: "u".into(),
-            email: email.into(),
-            organization_uuid: "o".into(),
-            oauth_account: serde_json::json!({}),
-            generations: vec![],
-        };
-        s.upsert(mk("a@b.c"));
-        s.upsert(mk("d@e.f"));
+        s.upsert(account("work", None));
+        s.upsert(Account {
+            email: "d@e.f".into(),
+            ..account("work", None)
+        });
         assert_eq!(s.accounts.len(), 1);
         assert_eq!(s.get("work").unwrap().email, "d@e.f");
     }

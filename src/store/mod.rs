@@ -19,6 +19,16 @@ pub enum Backend {
     Absent,
 }
 
+impl Backend {
+    pub fn name(self) -> &'static str {
+        match self {
+            Backend::Keychain => "keychain",
+            Backend::File => "file",
+            Backend::Absent => "absent",
+        }
+    }
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     /// The store could not be interrogated. Never treat this as "no credential".

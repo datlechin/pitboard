@@ -79,6 +79,10 @@ mod tests {
     #[test]
     fn formats_in_the_local_zone() {
         assert_eq!(local(0, "%Y").len(), 4);
-        assert_eq!(local(i64::MAX, "%Y"), "", "out of range is empty, not a panic");
+        assert_eq!(
+            local(i64::MAX, "%Y"),
+            "",
+            "out of range is empty, not a panic"
+        );
     }
 }

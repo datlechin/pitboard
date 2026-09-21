@@ -6,13 +6,19 @@ All notable changes are recorded here. The format follows
 ## [Unreleased]
 
 ### Added
-- `enroll`, `use`, `forget`, `status` and `doctor`.
-- Live usage in `status`, asked of Anthropic for every enrolled account at once.
-- `--json` on every command, emitting a versioned envelope with stable error codes.
+- `enroll`, `use`, `forget`, `status`, `doctor` and `statusline`.
+- Live usage in `status`, asked of Anthropic for every enrolled account at once, with
+  which accounts can be switched to and until when.
+- `enroll <label> --sign-in` on an enrolled label renews its parked login.
+- A switch refuses a parked login that has expired instead of installing it.
+- `doctor` checks every parked login, and reports an interrupted switch.
+- `--json` on every command, emitting a versioned envelope with stable error codes, also
+  for a mistyped command line.
 - Shell completions and a man page, generated from the command definition.
-- Linux support, using a file vault for parked logins. Not yet confirmed on a real install.
+- Linux support, using a file vault for parked logins. Not yet confirmed against a
+  signed-in Claude Code on Linux.
 - An audit log of every change pitboard makes.
 
 ### State file
-- Schema 2. Earlier schema-1 files are refused rather than migrated; nothing was ever
-  released that wrote them.
+- Schema 3: one parked login per account, with when it expires. Earlier files are refused
+  rather than migrated; nothing was ever released that wrote them.

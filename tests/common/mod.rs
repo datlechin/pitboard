@@ -273,6 +273,23 @@ impl Env {
         let raw = std::fs::read_to_string(self.root.join("pitboard/state.json")).unwrap();
         serde_json::from_str(&raw).unwrap()
     }
+
+    /// Change the account index the way only time or another tool would.
+    pub fn edit_state(&self, edit: impl FnOnce(&mut serde_json::Value)) {
+        let mut state = self.state();
+        edit(&mut state);
+        std::fs::write(self.root.join("pitboard/state.json"), state.to_string()).unwrap();
+    }
+
+    /// The item holding an account's parked login, if it has one.
+    pub fn parked_service(&self, label: &str) -> Option<String> {
+        self.state()["accounts"]
+            .as_array()?
+            .iter()
+            .find(|a| a["label"] == label)?["parked"]["service"]
+            .as_str()
+            .map(str::to_owned)
+    }
 }
 
 impl Drop for Env {
@@ -287,8 +304,7 @@ impl Drop for Env {
                 .as_array()
                 .into_iter()
                 .flatten()
-                .flat_map(|a| a["generations"].as_array().into_iter().flatten())
-                .map(|g| &g["service"])
+                .map(|a| &a["parked"]["service"])
                 .chain(v["discarded"].as_array().into_iter().flatten());
             for s in parked.filter_map(serde_json::Value::as_str) {
                 let _ = Command::new(SECURITY)
@@ -313,12 +329,16 @@ impl Drop for Env {
 
 /// A credential shaped like Claude Code's, keyed so the fake Anthropic can tell who owns it.
 pub fn credential(refresh: &str) -> serde_json::Value {
+    let now_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_millis() as i64;
     serde_json::json!({
         "claudeAiOauth": {
             "accessToken": format!("access-{refresh}"),
             "refreshToken": refresh,
-            "expiresAt": 1789928611576i64,
-            "refreshTokenExpiresAt": 1792216138576i64,
+            "expiresAt": now_ms + 8 * 3_600_000,
+            "refreshTokenExpiresAt": now_ms + 30 * 86_400_000,
             "scopes": ["user:inference", "user:profile"],
             "subscriptionType": "max"
         },

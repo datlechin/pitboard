@@ -1,8 +1,8 @@
-//! Where an account's login waits while another is signed in. Generations are append-only
-//! and no failure path deletes one.
+//! Where an account's login waits while another is signed in. Nothing here decides what to
+//! delete: a park no account refers to is listed in `State::discarded` and purged from there.
 
 use crate::error::{Error, Result};
-use crate::state::{Account, Generation, State, retained};
+use crate::state::{Park, State};
 use crate::{store, time};
 use serde_json::Value;
 
@@ -11,8 +11,7 @@ pub fn service_name(account_uuid: &str, at_millis: i64) -> String {
 }
 
 /// Claim a free name before writing to it, so the caller can record it first and recovery
-/// can find a park left by a run that died. Reusing a name would destroy the generation
-/// already there.
+/// can find a park left by a run that died. Reusing a name would destroy the park there.
 pub fn reserve(account_uuid: &str) -> Result<String> {
     let start = time::now_millis();
     for offset in 0..1_000 {
@@ -24,22 +23,30 @@ pub fn reserve(account_uuid: &str) -> Result<String> {
     Err(Error::ParkSlotExhausted)
 }
 
-/// Write a credential into a reserved name and prove it reads back.
-pub fn store_at(service: &str, oauth: &Value) -> Result<Generation> {
-    let refresh_fingerprint = fingerprint_of(oauth);
-    if refresh_fingerprint.is_empty() {
+/// Write a login into a reserved name and prove it reads back.
+pub fn store_at(service: &str, oauth: &Value) -> Result<Park> {
+    let park = describe(service, time::now(), oauth);
+    if park.refresh_fingerprint.is_empty() {
         return Err(Error::LiveCredentialShapeUnexpected {
             detail: "it has no refresh token, so it could never be restored".into(),
         });
     }
     let body = serde_json::to_string(oauth).expect("an oauth block is always serialisable");
     store::vault_write(service, &body)?;
-    Ok(Generation {
+    Ok(park)
+}
+
+/// What the account index records about a login: nothing secret.
+pub fn describe(service: &str, parked_at: i64, oauth: &Value) -> Park {
+    // Claude Code records both expiries in epoch milliseconds.
+    let expiry = |key: &str| oauth.get(key).and_then(Value::as_i64).map(|ms| ms / 1000);
+    Park {
         service: service.to_string(),
-        parked_at: time::now(),
-        refresh_fingerprint,
-        installed_at: None,
-    })
+        parked_at,
+        refresh_fingerprint: fingerprint_of(oauth),
+        access_expires_at: expiry("expiresAt"),
+        refresh_expires_at: expiry("refreshTokenExpiresAt"),
+    }
 }
 
 pub fn fingerprint_of(oauth: &Value) -> String {
@@ -51,39 +58,21 @@ pub fn fingerprint_of(oauth: &Value) -> String {
 }
 
 /// Takes the label so a failure names the account, not an item the user has never seen.
-pub fn load(label: &str, generation: &Generation) -> Result<Value> {
-    let raw =
-        store::vault_read(&generation.service)?.ok_or_else(|| Error::ParkedCredentialMissing {
-            label: label.to_string(),
-        })?;
+pub fn load(label: &str, park: &Park) -> Result<Value> {
+    let raw = store::vault_read(&park.service)?.ok_or_else(|| Error::ParkedCredentialMissing {
+        label: label.to_string(),
+    })?;
     let value: Value = serde_json::from_str(&raw).map_err(|e| Error::ParkedCredentialCorrupt {
         label: label.to_string(),
         detail: e.to_string(),
     })?;
-    if generation.refresh_fingerprint.is_empty()
-        || fingerprint_of(&value) != generation.refresh_fingerprint
-    {
+    if park.refresh_fingerprint.is_empty() || fingerprint_of(&value) != park.refresh_fingerprint {
         return Err(Error::ParkedCredentialCorrupt {
             label: label.to_string(),
             detail: "it does not match the fingerprint pitboard recorded".into(),
         });
     }
     Ok(value)
-}
-
-/// Drop generations past retention from the account and return their items, deleting
-/// nothing: the caller lists them in `State::discarded` in the same save.
-pub fn retire(account: &mut Account) -> Vec<String> {
-    let keep: Vec<String> = retained(&account.generations)
-        .iter()
-        .map(|g| g.service.clone())
-        .collect();
-    let (kept, retired): (Vec<Generation>, Vec<Generation>) = account
-        .generations
-        .drain(..)
-        .partition(|g| keep.contains(&g.service));
-    account.generations = kept;
-    retired.into_iter().map(|g| g.service).collect()
 }
 
 /// Delete every discarded item, keeping listed only those that resisted. Returns how many
@@ -100,27 +89,21 @@ mod tests {
     use super::*;
 
     #[test]
-    fn retiring_removes_old_generations_from_state_without_touching_any_item() {
-        let generation = |at: i64| Generation {
-            service: format!("pitboard-park-retire-{at}"),
-            parked_at: at,
-            refresh_fingerprint: "f".into(),
-            installed_at: None,
-        };
-        let mut account = Account {
-            label: "a".into(),
-            account_uuid: "u".into(),
-            email: "a@b.c".into(),
-            organization_uuid: "o".into(),
-            oauth_account: serde_json::json!({}),
-            generations: (1..=8).map(generation).collect(),
-        };
-        let retired = retire(&mut account);
-        assert_eq!(account.generations.len(), 5, "the five newest stay");
-        assert_eq!(retired.len(), 3);
-        assert!(
-            retired.iter().all(|s| !account.references(s)),
-            "a retired item must no longer be referenced"
+    fn a_park_records_when_its_login_stops_working() {
+        let park = describe(
+            "pitboard-park-x-1",
+            50,
+            &serde_json::json!({
+                "refreshToken": "r",
+                "expiresAt": 1_790_000_000_123i64,
+                "refreshTokenExpiresAt": 1_792_000_000_999i64
+            }),
+        );
+        assert_eq!(park.access_expires_at, Some(1_790_000_000));
+        assert_eq!(park.refresh_expires_at, Some(1_792_000_000));
+        assert_eq!(
+            park.refresh_fingerprint,
+            fingerprint_of(&serde_json::json!({"refreshToken": "r"}))
         );
     }
 

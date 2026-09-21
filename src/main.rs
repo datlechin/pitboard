@@ -1,13 +1,20 @@
+use anstream::{eprintln, print, println};
+use anstyle::{AnsiColor, Style};
 use clap::{CommandFactory, Parser, Subcommand};
 use pitboard::error::Error;
-use pitboard::switch::{Enrolled, Outcome};
-use pitboard::{audit, doctor, state, status, switch};
+use pitboard::switch::{Enrolled, Outcome, Settled};
+use pitboard::ui::{BOLD, paint};
+use pitboard::{audit, doctor, state, status, statusline, switch};
 use serde_json::{Value, json};
+use std::io::Read;
 use std::process::ExitCode;
 
 /// Bumped only when a field changes shape. Adding a field or an error code is not a
 /// breaking change for a consumer; renaming or removing one is.
 const CONTRACT: u32 = 1;
+
+const ERROR: Style = AnsiColor::Red.on_default().bold();
+const WARNING: Style = AnsiColor::Yellow.on_default().bold();
 
 /// Park and restore your own Claude Code logins, and see what each one has left.
 #[derive(Parser)]
@@ -24,31 +31,32 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// What is signed in, and how much of it is left (the default)
+    /// What is signed in, and how much each account has left (the default)
     Status,
     /// Add an account: the one signed in now, or with --sign-in, another one
     Enroll {
         /// A short name for this account, such as `personal` or `work`
         label: String,
-        /// Sign in to a different account through Claude Code's own sign-in, without
-        /// signing out of the one in use now
+        /// Sign in through Claude Code's own sign-in, without signing out of the account in
+        /// use. For an enrolled label, this renews its parked login.
         #[arg(long)]
         sign_in: bool,
     },
-    /// Sign in as an enrolled account
+    /// Switch Claude Code to an enrolled account
     Use {
         /// The label the account was enrolled under
         label: String,
     },
-    /// Drop an account and the logins parked for it
+    /// Drop an account and its parked login
     Forget {
         /// The label to drop
         label: String,
     },
-    /// Check that pitboard's model of Claude Code still holds on this machine
+    /// Check that what pitboard relies on still holds on this machine
     Doctor,
-    /// Print shell completions
-    #[command(hide = true)]
+    /// One line for Claude Code's status bar; reads its session JSON on stdin
+    Statusline,
+    /// Print a shell completion script
     Completions { shell: clap_complete::Shell },
     /// Print the man page
     #[command(hide = true)]
@@ -57,69 +65,81 @@ enum Command {
 
 /// What a command produced, before it is rendered for a person or a program.
 struct Report {
-    command: &'static str,
+    command: Option<&'static str>,
     result: Result<Value, Error>,
     warnings: Vec<Value>,
     human: String,
     exit: u8,
 }
 
-fn warning(error: &Error) -> Value {
-    json!({ "code": error.code(), "message": error.to_string() })
+impl Report {
+    fn done(command: &'static str, data: Value, human: String) -> Report {
+        Report {
+            command: Some(command),
+            result: Ok(data),
+            warnings: Vec::new(),
+            human,
+            exit: 0,
+        }
+    }
+
+    fn failed(command: Option<&'static str>, error: Error) -> Report {
+        Report {
+            command,
+            exit: error.exit_code(),
+            result: Err(error),
+            warnings: Vec::new(),
+            human: String::new(),
+        }
+    }
+}
+
+fn warning(code: &str, message: impl std::fmt::Display) -> Value {
+    json!({ "code": code, "message": message.to_string() })
 }
 
 fn parks_pending(count: usize) -> Value {
-    json!({
-        "code": "parks_pending_removal",
-        "message": format!(
+    warning(
+        "parks_pending_removal",
+        format!(
             "{count} parked login(s) no longer in use could not be removed yet; \
              pitboard tries again on its next change"
         ),
-    })
+    )
 }
 
 fn emit(report: Report, as_json: bool) -> ExitCode {
-    let name = env!("CARGO_BIN_NAME");
     if as_json {
-        let envelope = match &report.result {
-            Ok(data) => json!({
-                "v": CONTRACT,
-                "command": report.command,
-                "ok": report.exit == 0,
-                "data": data,
-                "warnings": report.warnings,
-                "error": null,
-            }),
-            Err(e) => json!({
-                "v": CONTRACT,
-                "command": report.command,
-                "ok": false,
-                "data": null,
-                "warnings": report.warnings,
-                "error": { "code": e.code(), "message": e.to_string() },
-            }),
+        let (data, error) = match &report.result {
+            Ok(data) => (data.clone(), Value::Null),
+            Err(e) => (
+                Value::Null,
+                json!({ "code": e.code(), "message": e.to_string() }),
+            ),
         };
+        let envelope = json!({
+            "v": CONTRACT,
+            "command": report.command,
+            "ok": report.result.is_ok() && report.exit == 0,
+            "data": data,
+            "warnings": report.warnings,
+            "error": error,
+        });
         println!("{envelope}");
     } else {
         match &report.result {
             Ok(_) => print!("{}", report.human),
-            Err(e) => eprintln!("{name}: {e}"),
+            Err(e) => eprintln!("{} {e}", paint(ERROR, "error:")),
         }
         for w in &report.warnings {
-            eprintln!("note: {}", w["message"].as_str().unwrap_or_default());
+            eprintln!(
+                "{} {}",
+                paint(WARNING, "warning:"),
+                w["message"].as_str().unwrap_or_default()
+            );
         }
     }
     ExitCode::from(report.exit)
-}
-
-fn failure(command: &'static str, error: Error) -> Report {
-    Report {
-        command,
-        exit: error.exit_code(),
-        result: Err(error),
-        warnings: Vec::new(),
-        human: String::new(),
-    }
 }
 
 fn status() -> Report {
@@ -127,87 +147,100 @@ fn status() -> Report {
     // enrolled logins are gone.
     let state = match state::load() {
         Ok(s) => s,
-        Err(e) => return failure("status", e),
+        Err(e) => return Report::failed(Some("status"), e),
     };
     let report = status::gather(&state);
-    Report {
-        command: "status",
-        human: format!("\n{}", status::render_human(&report)),
-        result: Ok(status::render_json(&report)),
-        warnings: Vec::new(),
-        exit: 0,
-    }
+    Report::done(
+        "status",
+        status::render_json(&report),
+        status::render_human(&report),
+    )
 }
 
 fn doctor() -> Report {
-    let checks = doctor::run();
-    let healthy = doctor::healthy(&checks);
+    let diagnosis = doctor::run();
+    let healthy = doctor::healthy(&diagnosis.checks);
     Report {
-        command: "doctor",
-        human: format!("\n{}", doctor::render_human(&checks)),
-        result: Ok(doctor::render_json(&checks)),
-        warnings: Vec::new(),
-        // A failed check means an assumption about Claude Code no longer holds.
+        // A failed check means an assumption pitboard relies on no longer holds.
         exit: if healthy { 0 } else { 3 },
+        ..Report::done(
+            "doctor",
+            doctor::render_json(&diagnosis),
+            doctor::render_human(&diagnosis.checks),
+        )
     }
+}
+
+fn statusline() -> Report {
+    let mut input = String::new();
+    let _ = std::io::stdin().read_to_string(&mut input);
+    let line = statusline::run(&input);
+    Report::done("statusline", json!({ "line": line }), format!("{line}\n"))
 }
 
 /// Runs a command that changes state once any interrupted switch is settled. What settling
 /// found is reported whether or not the command then succeeds.
-fn changing(
-    command: &'static str,
-    label: &str,
-    run: impl FnOnce(switch::Settled) -> Report,
-) -> Report {
+fn changing(command: &'static str, label: &str, run: impl FnOnce(Settled) -> Report) -> Report {
     let (settled, recovered) = match switch::settle() {
         Ok(settled) => settled,
         Err(e) => {
             audit::record(command, label, e.code());
-            return failure(command, e);
+            return Report::failed(Some(command), e);
         }
     };
     let recovered = recovered.map(|r| {
         audit::record("recover", &r.to, r.code());
-        json!({ "code": r.code(), "message": r.to_string() })
+        warning(r.code(), &r)
     });
     let mut report = run(settled);
     report.warnings.splice(0..0, recovered);
     report
 }
 
-fn enroll(settled: switch::Settled, label: &str, sign_in: bool) -> Report {
+fn enroll(settled: Settled, label: &str, sign_in: bool) -> Report {
+    if sign_in {
+        let who = settled
+            .account(label)
+            .map_or_else(|| "the account to add".to_string(), |a| a.email.clone());
+        eprintln!(
+            "Opening Claude Code's sign-in. Sign in as {who}; the account in use now stays \
+             signed in."
+        );
+    }
     let outcome = switch::enroll(settled, label, sign_in);
     audit::record(
         "enroll",
         label,
         outcome.as_ref().map_or_else(|e| e.code(), |_| "ok"),
     );
-    match outcome {
-        Ok(Enrolled::Current { email }) => Report {
-            command: "enroll",
-            human: format!(
-                "enrolled {email}, the account signed in now, as `{label}`\n\n\
-                 To add another account without signing out of this one:\n  \
-                 pitboard enroll <label> --sign-in\n"
-            ),
-            result: Ok(json!({ "label": label, "email": email, "signed_in_now": true })),
-            warnings: Vec::new(),
-            exit: 0,
-        },
-        Ok(Enrolled::SignedIn { email }) => Report {
-            command: "enroll",
-            human: format!(
-                "enrolled {email} as `{label}`; switch to it with `pitboard use {label}`\n"
-            ),
-            result: Ok(json!({ "label": label, "email": email, "signed_in_now": false })),
-            warnings: Vec::new(),
-            exit: 0,
-        },
-        Err(e) => failure("enroll", e),
-    }
+    let name = paint(BOLD, label);
+    let (kind, email, human) = match outcome {
+        Ok(Enrolled::Current { email }) => {
+            let human = format!(
+                "Enrolled {name} ({email}), the account signed in now.\n\
+                 Add another without signing out of it: pitboard enroll <label> --sign-in\n"
+            );
+            ("current", email, human)
+        }
+        Ok(Enrolled::SignedIn { email }) => {
+            let human =
+                format!("Enrolled {name} ({email}). Switch to it with: pitboard use {label}\n");
+            ("signed_in", email, human)
+        }
+        Ok(Enrolled::Renewed { email }) => {
+            let human = format!("Renewed {name} ({email}): its parked login is a fresh one.\n");
+            ("renewed", email, human)
+        }
+        Err(e) => return Report::failed(Some("enroll"), e),
+    };
+    Report::done(
+        "enroll",
+        json!({ "label": label, "email": email, "enrolled": kind }),
+        human,
+    )
 }
 
-fn use_account(settled: switch::Settled, label: &str) -> Report {
+fn use_account(settled: Settled, label: &str) -> Report {
     let outcome = switch::switch(settled, label);
     audit::record(
         "use",
@@ -219,13 +252,11 @@ fn use_account(settled: switch::Settled, label: &str) -> Report {
         },
     );
     match outcome {
-        Ok(Outcome::AlreadyActive { label }) => Report {
-            command: "use",
-            human: format!("`{label}` is already signed in\n"),
-            result: Ok(json!({ "to": label, "changed": false })),
-            warnings: Vec::new(),
-            exit: 0,
-        },
+        Ok(Outcome::AlreadyActive { label }) => Report::done(
+            "use",
+            json!({ "to": label, "changed": false }),
+            format!("{} is already signed in.\n", paint(BOLD, &label)),
+        ),
         Ok(Outcome::Switched {
             from,
             to,
@@ -233,33 +264,36 @@ fn use_account(settled: switch::Settled, label: &str) -> Report {
             config_warning,
             parks_pending: pending,
         }) => {
-            let mut warnings: Vec<Value> = config_warning.iter().map(warning).collect();
-            if pending > 0 {
-                warnings.push(parks_pending(pending));
-            }
-            Report {
-                command: "use",
-                human: format!(
-                    "signed in as `{to}`, parked `{from}`'s previous login\n\
-                     a Claude Code session already running picks this up within {} seconds\n",
-                    switch::ADOPTION_CEILING_SECONDS
-                ),
-                result: Ok(json!({
+            let mut report = Report::done(
+                "use",
+                json!({
                     "from": from,
                     "to": to,
                     "changed": true,
                     "parked_at": parked.parked_at,
                     "adoption_ceiling_seconds": switch::ADOPTION_CEILING_SECONDS,
-                })),
-                warnings,
-                exit: 0,
-            }
+                }),
+                format!(
+                    "Switched to {}; {} is parked.\n\
+                     Claude Code sessions already running follow within {} seconds.\n",
+                    paint(BOLD, &to),
+                    paint(BOLD, &from),
+                    switch::ADOPTION_CEILING_SECONDS
+                ),
+            );
+            report.warnings.extend(
+                config_warning
+                    .iter()
+                    .map(|e| warning(e.code(), e))
+                    .chain((pending > 0).then(|| parks_pending(pending))),
+            );
+            report
         }
-        Err(e) => failure("use", e),
+        Err(e) => Report::failed(Some("use"), e),
     }
 }
 
-fn forget(settled: switch::Settled, label: &str) -> Report {
+fn forget(settled: Settled, label: &str) -> Report {
     let outcome = switch::forget(settled, label);
     audit::record(
         "forget",
@@ -267,26 +301,45 @@ fn forget(settled: switch::Settled, label: &str) -> Report {
         outcome.as_ref().map_or_else(|e| e.code(), |_| "ok"),
     );
     match outcome {
-        Ok((email, pending)) => Report {
-            command: "forget",
-            human: format!("forgot `{label}` ({email})\n"),
-            result: Ok(json!({ "label": label, "email": email })),
-            warnings: if pending > 0 {
-                vec![parks_pending(pending)]
-            } else {
-                Vec::new()
-            },
-            exit: 0,
-        },
-        Err(e) => failure("forget", e),
+        Ok((email, pending)) => {
+            let mut report = Report::done(
+                "forget",
+                json!({ "label": label, "email": email }),
+                format!("Forgot {} ({email}).\n", paint(BOLD, label)),
+            );
+            report
+                .warnings
+                .extend((pending > 0).then(|| parks_pending(pending)));
+            report
+        }
+        Err(e) => Report::failed(Some("forget"), e),
     }
 }
 
+/// A usage error keeps clap's own rendering, unless the caller asked for JSON, which is
+/// promised for every outcome.
+fn parse() -> Result<Cli, ExitCode> {
+    Cli::try_parse().map_err(|e| {
+        let wants_json = std::env::args_os().any(|arg| arg == "--json");
+        if wants_json && e.use_stderr() {
+            let message = e.render().to_string().trim().to_string();
+            emit(Report::failed(None, Error::Usage(message)), true)
+        } else {
+            let _ = e.print();
+            ExitCode::from(e.exit_code().clamp(0, 255) as u8)
+        }
+    })
+}
+
 fn main() -> ExitCode {
-    let cli = Cli::parse();
+    let cli = match parse() {
+        Ok(cli) => cli,
+        Err(exit) => return exit,
+    };
     let report = match cli.command.unwrap_or(Command::Status) {
         Command::Status => status(),
         Command::Doctor => doctor(),
+        Command::Statusline => statusline(),
         Command::Enroll { label, sign_in } => {
             changing("enroll", &label, |s| enroll(s, &label, sign_in))
         }

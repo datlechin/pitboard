@@ -29,14 +29,15 @@ fn two_accounts(name: &str) -> Env {
     env
 }
 
+fn envelope(out: &str) -> serde_json::Value {
+    serde_json::from_str(out).unwrap_or_else(|e| panic!("not JSON ({e}): {out}"))
+}
+
 #[test]
 fn enrolling_the_current_account_parks_nothing_while_it_stays_signed_in() {
     let env = two_accounts("current");
     assert!(
-        account(&env, "alpha")["generations"]
-            .as_array()
-            .unwrap()
-            .is_empty(),
+        env.parked_service("alpha").is_none(),
         "a copy taken while Claude Code keeps rotating the token would go stale"
     );
     assert_eq!(
@@ -44,21 +45,21 @@ fn enrolling_the_current_account_parks_nothing_while_it_stays_signed_in() {
         "refresh-a",
         "signing in another account must not touch the live slot"
     );
-    assert_eq!(
-        account(&env, "beta")["generations"]
-            .as_array()
-            .unwrap()
-            .len(),
-        1
+    let beta = env.parked_service("beta").expect("beta is parked");
+    assert!(env.is_parked(&beta));
+    assert!(
+        account(&env, "beta")["parked"]["refresh_expires_at"].is_i64(),
+        "when a parked login stops working is recorded"
     );
 }
 
 #[test]
 fn a_full_switch_moves_the_identity_and_nothing_else() {
     let env = two_accounts("full");
+    let beta_park = env.parked_service("beta").unwrap();
     let (out, err, code) = env.run(&["use", "beta"]);
     assert_eq!(code, 0, "switch failed: {err}");
-    assert!(out.contains("parked `alpha`"), "{out}");
+    assert!(out.contains("Switched to beta; alpha is parked"), "{out}");
 
     let live = env.live();
     assert_eq!(live["claudeAiOauth"]["refreshToken"], "refresh-b");
@@ -78,36 +79,35 @@ fn a_full_switch_moves_the_identity_and_nothing_else() {
 
     assert_eq!(env.state()["active"], "beta");
     assert!(
-        !account(&env, "alpha")["generations"]
-            .as_array()
-            .unwrap()
-            .is_empty(),
+        env.parked_service("alpha").is_some(),
         "the outgoing account is parked at the moment it is replaced"
     );
+    assert!(
+        env.parked_service("beta").is_none() && !env.is_parked(&beta_park),
+        "the installed copy is Claude Code's now; keeping it would only offer a stale token"
+    );
+    assert_eq!(env.state()["discarded"], serde_json::json!([]));
     assert!(!env.root.join("pitboard/journal.json").exists());
 }
 
 #[test]
-fn switching_back_and_forth_restores_each_account() {
+fn switching_back_and_forth_restores_each_account_and_leaves_no_copies_behind() {
     let env = two_accounts("backforth");
+    let mut seen = Vec::new();
     for (target, token) in [
         ("beta", "refresh-b"),
         ("alpha", "refresh-a"),
         ("beta", "refresh-b"),
     ] {
+        seen.extend(env.parked_service(target));
         let (_, err, code) = env.run(&["use", target]);
         assert_eq!(code, 0, "use {target}: {err}");
         assert_eq!(env.live()["claudeAiOauth"]["refreshToken"], token);
+        assert!(env.parked_service(target).is_none());
     }
-    let consumed = account(&env, "beta")["generations"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .filter(|g| !g["installed_at"].is_null())
-        .count();
     assert!(
-        consumed >= 2,
-        "every copy that was installed must be marked, so it is never offered again"
+        seen.iter().all(|s| !env.is_parked(s)),
+        "every copy that was installed is deleted, never offered again"
     );
 }
 
@@ -120,11 +120,7 @@ fn switching_to_the_account_already_signed_in_succeeds_and_changes_nothing() {
     let (out, _, code) = env.run(&["use", "alpha"]);
     assert_eq!(code, 0);
     assert!(out.contains("already signed in"), "{out}");
-    assert_eq!(
-        env.state(),
-        before,
-        "no generation should have been created"
-    );
+    assert_eq!(env.state(), before, "nothing should have been parked");
 }
 
 /// Identity comes from Anthropic, not from Claude Code's config, which can be a day stale.
@@ -143,10 +139,7 @@ fn a_stale_config_cannot_make_a_switch_file_the_credential_under_the_wrong_accou
         "the config claimed beta, but the live login is alpha's"
     );
     assert!(
-        !account(&env, "alpha")["generations"]
-            .as_array()
-            .unwrap()
-            .is_empty(),
+        env.parked_service("alpha").is_some(),
         "alpha's login must be parked under alpha"
     );
 }
@@ -178,11 +171,40 @@ fn a_used_label_cannot_be_taken_by_another_account() {
 }
 
 #[test]
-fn enrolling_an_account_that_is_already_enrolled_points_at_sign_in() {
+fn enrolling_an_account_under_a_second_label_points_at_sign_in() {
     let env = two_accounts("dupe");
     let (_, err, code) = env.run(&["enroll", "another"]);
     assert_eq!(code, 1);
     assert!(err.contains("--sign-in"), "{err}");
+}
+
+#[test]
+fn enrolling_the_signed_in_account_again_is_not_an_error() {
+    let env = two_accounts("again");
+    let before = env.state();
+    let (_, err, code) = env.run(&["enroll", "alpha"]);
+    assert_eq!(code, 0, "{err}");
+    assert_eq!(env.state()["accounts"], before["accounts"]);
+}
+
+/// The way back for an account whose parked login was used or expired, and what every
+/// message about one says to run.
+#[test]
+fn signing_in_to_an_enrolled_account_again_renews_its_parked_login() {
+    let mut env = two_accounts("renew");
+    let old = env.parked_service("beta").unwrap();
+    let (b, p) = (env.uuid('b'), env.uuid('p'));
+
+    let (out, err, code) = env.enroll_by_signing_in("beta", &b, "b@example.com", &p, "refresh-b2");
+
+    assert_eq!(code, 0, "{err}");
+    assert!(out.contains("Renewed beta"), "{out}");
+    let new = env.parked_service("beta").unwrap();
+    assert_ne!(new, old);
+    assert!(!env.is_parked(&old), "the login it replaces is deleted");
+    let (_, err, code) = env.run(&["use", "beta"]);
+    assert_eq!(code, 0, "{err}");
+    assert_eq!(env.live()["claudeAiOauth"]["refreshToken"], "refresh-b2");
 }
 
 #[test]
@@ -194,21 +216,16 @@ fn forgetting_the_signed_in_account_is_refused() {
 }
 
 #[test]
-fn forgetting_an_account_deletes_its_parked_logins() {
+fn forgetting_an_account_deletes_its_parked_login() {
     let env = two_accounts("forget-parked");
-    let parked: Vec<String> = account(&env, "beta")["generations"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|g| g["service"].as_str().unwrap().to_string())
-        .collect();
-    assert!(parked.iter().all(|s| env.is_parked(s)));
+    let parked = env.parked_service("beta").unwrap();
+    assert!(env.is_parked(&parked));
 
     let (_, err, code) = env.run(&["forget", "beta"]);
 
     assert_eq!(code, 0, "{err}");
     assert!(accounts(&env).iter().all(|a| a["label"] != "beta"));
-    assert!(parked.iter().all(|s| !env.is_parked(s)));
+    assert!(!env.is_parked(&parked));
     assert_eq!(
         env.state()["discarded"],
         serde_json::json!([]),
@@ -217,24 +234,48 @@ fn forgetting_an_account_deletes_its_parked_logins() {
 }
 
 #[test]
-fn an_account_whose_only_copy_was_already_used_is_refused_not_destroyed() {
+fn an_account_with_nothing_parked_is_refused_with_the_way_back() {
     let env = two_accounts("exhausted");
-    let path = env.root.join("pitboard/state.json");
-    let mut state: serde_json::Value =
-        serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
-    for a in state["accounts"].as_array_mut().unwrap() {
-        if a["label"] == "beta" {
-            for g in a["generations"].as_array_mut().unwrap() {
-                g["installed_at"] = serde_json::json!(1_789_935_600);
+    env.edit_state(|s| {
+        for a in s["accounts"].as_array_mut().unwrap() {
+            a["parked"] = serde_json::Value::Null;
+        }
+    });
+
+    let (out, _, code) = env.run(&["use", "beta", "--json"]);
+
+    assert_eq!(code, 1);
+    let envelope = envelope(&out);
+    assert_eq!(envelope["error"]["code"], "nothing_parked");
+    assert!(
+        envelope["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("pitboard enroll beta --sign-in")
+    );
+    assert_eq!(env.live()["claudeAiOauth"]["refreshToken"], "refresh-a");
+}
+
+#[test]
+fn an_expired_parked_login_is_refused_rather_than_installed() {
+    let env = two_accounts("expired");
+    env.edit_state(|s| {
+        for a in s["accounts"].as_array_mut().unwrap() {
+            if a["label"] == "beta" {
+                a["parked"]["refresh_expires_at"] = serde_json::json!(1_000);
             }
         }
-    }
-    std::fs::write(&path, state.to_string()).unwrap();
+    });
 
-    let (_, err, code) = env.run(&["use", "beta"]);
+    let (out, _, code) = env.run(&["use", "beta", "--json"]);
+
     assert_eq!(code, 1);
-    assert!(err.contains("no restorable parked login"), "{err}");
-    assert_eq!(env.live()["claudeAiOauth"]["refreshToken"], "refresh-a");
+    assert_eq!(envelope(&out)["error"]["code"], "parked_login_expired");
+    assert_eq!(
+        env.live()["claudeAiOauth"]["refreshToken"],
+        "refresh-a",
+        "installing a dead login would leave nothing signed in"
+    );
 }
 
 /// Two simultaneous switches must never interleave. pitboard's runs exclude each other with
@@ -269,12 +310,45 @@ fn two_switches_at_once_do_not_interleave() {
         .count();
     assert_eq!(already, 1, "the second run must see the first one's result");
     assert_eq!(env.live()["claudeAiOauth"]["refreshToken"], "refresh-b");
+    assert!(env.parked_service("alpha").is_some());
+}
+
+#[test]
+fn a_mistyped_command_line_still_answers_in_json_when_asked() {
+    let env = Env::new("usage");
+    let (out, _, code) = env.run(&["use", "--json"]);
+    assert_eq!(code, 2);
+    let envelope = envelope(&out);
+    assert_eq!(envelope["ok"], false);
+    assert_eq!(envelope["error"]["code"], "usage");
+}
+
+#[test]
+fn the_status_line_names_the_account_in_use_and_the_others() {
+    let env = two_accounts("statusline");
+    let session = serde_json::json!({"rate_limits": {
+        "five_hour": {"used_percentage": 46.0, "resets_at": 4_000_000_000i64},
+        "seven_day": {"used_percentage": 70.0, "resets_at": 4_000_000_000i64}
+    }});
+    let mut child = env
+        .command(&["statusline"])
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    use std::io::Write;
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(session.to_string().as_bytes())
+        .unwrap();
+    let out = child.wait_with_output().unwrap();
+
+    assert!(out.status.success());
     assert_eq!(
-        account(&env, "alpha")["generations"]
-            .as_array()
-            .unwrap()
-            .len(),
-        1,
-        "exactly one park, from exactly one switch"
+        String::from_utf8_lossy(&out.stdout),
+        "alpha 46%·70%  beta ?·?\n",
+        "no terminal, so no styling"
     );
 }

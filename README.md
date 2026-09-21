@@ -7,9 +7,9 @@ and back in through a browser every time. pitboard keeps a copy of each login yo
 and moves the one you ask for into the place Claude Code reads. Your history, sessions,
 settings and projects stay exactly where they are — only the identity changes.
 
-**Status: pre-release.** macOS is the tested platform. Linux is implemented but its
-behaviour is inferred from a macOS build of Claude Code and has not yet been confirmed on a
-real Linux install.
+**Status: pre-release.** macOS is the tested platform. On Linux pitboard builds and its
+test suite passes, but how Claude Code stores its login there is inferred from its macOS
+build and has not yet been confirmed on a signed-in Linux install.
 
 ## Getting started
 
@@ -17,39 +17,79 @@ real Linux install.
 cargo install pitboard
 ```
 
-Enroll the account you are signed in as now:
+Enroll the account you are signed in as now, then add the others without signing out of
+it:
 
 ```sh
 pitboard enroll personal
+pitboard enroll work --sign-in
 ```
 
-Add another account without signing out of this one:
+`--sign-in` runs Claude Code's own sign-in in a private directory, so the login in use is
+never touched. Do not add accounts with `/login` instead: that replaces the login in use,
+and pitboard cannot keep a copy of a login it did not see leave.
+
+## Every day
+
+```sh
+pitboard            # who is signed in, what each account has left, which can be used
+pitboard use work   # switch
+```
+
+```text
+● personal  me@example.com  signed in
+    5h    ██████░░░░   59%  resets in 1h 10m
+    week  ███████░░░   73%  resets in 5d 18h
+
+○ work      me@company.com  ready · good for 26d 4h
+    5h    █░░░░░░░░░   12%  resets in 3h 02m
+    week  ████░░░░░░   40%  resets in 2d 4h
+```
+
+Usage is asked of Anthropic each time, for every account at once. A parked login can answer
+until its access token expires, a few hours after Claude Code last renewed it; after that
+pitboard shows the last number it measured, and when.
+
+A Claude Code session that is already running picks up a switch within about 33 seconds,
+without restarting. Until then it keeps using the previous account.
+
+Each account keeps one parked login. It is used up when you switch to that account, and a
+fresh one is parked when you switch away. If one expires or goes missing, sign in to that
+account again; the rest of pitboard's record of it stays as it is:
 
 ```sh
 pitboard enroll work --sign-in
 ```
 
-That runs Claude Code's own sign-in in a private directory, so the login you are using is
-never touched. Do not add accounts by signing in with `/login` instead: that replaces the
-login in use, and pitboard cannot keep a copy of a login it did not see leave.
+`pitboard doctor` checks everything pitboard relies on, including every parked login.
 
-From then on:
+## In Claude Code's status bar
 
-```sh
-pitboard            # who is signed in, and how much each account has left
-pitboard use work   # switch
-pitboard doctor     # check that pitboard's model of Claude Code still holds
+`pitboard statusline` prints one line naming the account in use and what every enrolled
+account has left:
+
+```text
+personal 59%·73%  work 12%·40%
 ```
 
-Usage is asked of Anthropic each time, for every account at once. A parked account can be
-asked for about twelve hours after it was parked; after that pitboard shows the last number
-it measured, and says when.
+It reads the session Claude Code passes on stdin, and pitboard's own files; it never calls
+the network or touches a login. Add it to `~/.claude/settings.json`:
 
-A Claude Code session that is already running picks up a switch within about 33 seconds,
-without restarting. Until then it keeps using the previous account.
+```json
+{ "statusLine": { "type": "command", "command": "pitboard statusline" } }
+```
+
+To combine it with a status line of your own, pipe the same input to it:
+`echo "$input" | pitboard statusline`.
+
+## Scripting
 
 Every command accepts `--json` and emits the same versioned envelope, including on
-failure: `{v, command, ok, data, warnings, error}`. Error codes are stable.
+failure and for a mistyped command line: `{v, command, ok, data, warnings, error}`. Error
+codes are stable. Exit codes: 0 done, 1 not done, 2 command line wrong, 3 a login or
+Claude Code's files are in a state pitboard will not act on.
+
+Shell completions: `pitboard completions zsh` (or `bash`, `fish`, `elvish`, `powershell`).
 
 ## What it will not do
 
@@ -74,9 +114,9 @@ Honestly listed, because none of these are pitboard's to fix:
 - **The prompt cache** is per account, so the first message after a switch rebuilds it. On
   this project's own measurements that costs about the same as leaving a session idle for
   an hour — which a five-hour limit usually means has happened anyway.
-- **Usage for a parked account** is live for about twelve hours after it was parked, and
-  after that is the last number pitboard measured. Another machine using the same account
-  since then is counted once it can be asked again.
+- **Usage for a parked account** is live until its access token expires, and after that is
+  the last number pitboard measured. Another machine using the same account since then is
+  counted once it can be asked again.
 
 ## How it works
 

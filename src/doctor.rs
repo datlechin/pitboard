@@ -3,7 +3,9 @@
 //! judging so every judgement can be tested.
 
 use crate::error::Error;
-use crate::{claude, home, slot, store, usage};
+use crate::state::{Park, State};
+use crate::ui::{self, BAD, DIM, GOOD, WARN, pad, paint};
+use crate::{claude, home, park, slot, store, switch, time, usage};
 use serde_json::{Value, json};
 use std::path::PathBuf;
 
@@ -17,7 +19,7 @@ pub enum Level {
 pub struct Check {
     /// Stable, snake_case, safe for a program to branch on.
     pub code: &'static str,
-    pub name: &'static str,
+    pub name: String,
     pub level: Level,
     pub detail: String,
     /// What the user should do. Empty when there is nothing to do.
@@ -42,11 +44,43 @@ pub struct Facts {
     pub machine_id_known: bool,
     /// `CLAUDE_CODE_HOVER_REST`, which switches on the successor credential backend.
     pub hover_rest_env: bool,
+    pub state: Result<State, Error>,
+    /// Each enrolled account's parked login, read back from the vault.
+    pub parks: Vec<ParkFact>,
+    pub interrupted: bool,
     pub now: i64,
+}
+
+pub struct ParkFact {
+    pub label: String,
+    pub active: bool,
+    pub park: Option<Park>,
+    /// Why it cannot be read back, if it cannot.
+    pub unreadable: Option<String>,
+}
+
+fn park_facts(state: &State) -> Vec<ParkFact> {
+    state
+        .accounts
+        .iter()
+        .map(|a| ParkFact {
+            label: a.label.clone(),
+            active: state.active.as_deref() == Some(a.label.as_str()),
+            park: a.parked.clone(),
+            unreadable: a.parked.as_ref().and_then(|p| {
+                park::load(&a.label, p).err().map(|e| match e {
+                    Error::ParkedCredentialMissing { .. } => "missing from the vault".into(),
+                    Error::ParkedCredentialCorrupt { detail, .. } => detail,
+                    other => other.to_string(),
+                })
+            }),
+        })
+        .collect()
 }
 
 pub fn gather() -> Facts {
     let config = claude::load_config();
+    let state = crate::state::load();
     let service = claude::live_service();
     Facts {
         security_tool: cfg!(target_os = "macos")
@@ -66,6 +100,9 @@ pub fn gather() -> Facts {
         machine_id_known: crate::state::machine_id() != "unknown",
         hover_rest_env: std::env::var("CLAUDE_CODE_HOVER_REST")
             .is_ok_and(|v| v == "1" || v == "true"),
+        parks: state.as_ref().map(park_facts).unwrap_or_default(),
+        state,
+        interrupted: switch::interrupted(),
         service,
         now: crate::time::now(),
     }
@@ -76,10 +113,10 @@ fn mode_of(path: &std::path::Path) -> Option<u32> {
     Some(std::fs::metadata(path).ok()?.permissions().mode() & 0o777)
 }
 
-fn ok(code: &'static str, name: &'static str, detail: impl Into<String>) -> Check {
+fn ok(code: &'static str, name: impl Into<String>, detail: impl Into<String>) -> Check {
     Check {
         code,
-        name,
+        name: name.into(),
         level: Level::Ok,
         detail: detail.into(),
         advice: String::new(),
@@ -87,13 +124,13 @@ fn ok(code: &'static str, name: &'static str, detail: impl Into<String>) -> Chec
 }
 fn warn(
     code: &'static str,
-    name: &'static str,
+    name: impl Into<String>,
     detail: impl Into<String>,
     advice: impl Into<String>,
 ) -> Check {
     Check {
         code,
-        name,
+        name: name.into(),
         level: Level::Warn,
         detail: detail.into(),
         advice: advice.into(),
@@ -101,13 +138,13 @@ fn warn(
 }
 fn fail(
     code: &'static str,
-    name: &'static str,
+    name: impl Into<String>,
     detail: impl Into<String>,
     advice: impl Into<String>,
 ) -> Check {
     Check {
         code,
-        name,
+        name: name.into(),
         level: Level::Fail,
         detail: detail.into(),
         advice: advice.into(),
@@ -239,11 +276,10 @@ pub fn evaluate(facts: &Facts) -> Vec<Check> {
                 "usage cache",
                 format!("{} windows", s.windows.len()),
             ),
-            (None, _) => warn(
+            (None, _) => ok(
                 "usage_cache",
                 "usage cache",
-                "absent",
-                "Claude Code writes it after a call that reports usage.",
+                "absent; Claude Code writes it after a call that reports usage",
             ),
         },
     );
@@ -259,10 +295,50 @@ pub fn evaluate(facts: &Facts) -> Vec<Check> {
             "home",
             "pitboard home",
             format!("{} is mode {mode:o}", facts.home.display()),
-            "Park names contain account identifiers, so the directory should be 0700. \
-             pitboard tightens it on its next write.",
+            format!(
+                "Park names contain account identifiers, so only you should read it: \
+                 `chmod 700 {}`.",
+                facts.home.display()
+            ),
         ),
     });
+
+    checks.push(match &facts.state {
+        Ok(state) => ok(
+            "state",
+            "accounts",
+            match state.accounts.len() {
+                0 => "none enrolled yet".to_string(),
+                1 => "1 enrolled".to_string(),
+                n => format!("{n} enrolled"),
+            },
+        ),
+        Err(e) => fail(
+            "state",
+            "accounts",
+            e.to_string(),
+            "pitboard will not switch until its account list can be read.",
+        ),
+    });
+    checks.extend(facts.parks.iter().map(|p| judge_park(p, facts.now)));
+    if facts.interrupted {
+        checks.push(warn(
+            "interrupted_switch",
+            "interrupted switch",
+            "a switch did not finish",
+            "The next `pitboard use`, `enroll` or `forget` finishes it before anything else.",
+        ));
+    }
+    if let Ok(state) = &facts.state
+        && !state.discarded.is_empty()
+    {
+        checks.push(warn(
+            "discarded",
+            "old parked logins",
+            format!("{} waiting to be deleted", state.discarded.len()),
+            "pitboard deletes them on its next change; if they stay, check the keychain is unlocked.",
+        ));
+    }
 
     if !facts.machine_id_known {
         checks.push(warn(
@@ -329,6 +405,53 @@ fn judge_credential(facts: &Facts) -> Check {
     }
 }
 
+/// A parked login this close to expiring is worth renewing now.
+const RENEW_WITHIN: i64 = 3 * 86_400;
+
+fn judge_park(fact: &ParkFact, now: i64) -> Check {
+    let name = format!("account {}", fact.label);
+    let renew = format!("Run `pitboard enroll {} --sign-in`.", fact.label);
+    let Some(park) = &fact.park else {
+        return if fact.active {
+            ok(
+                "parked_login",
+                name,
+                "signed in; parked when you switch away",
+            )
+        } else {
+            warn("parked_login", name, "nothing parked to switch to", renew)
+        };
+    };
+    if let Some(why) = &fact.unreadable {
+        return fail(
+            "parked_login",
+            name,
+            format!("its parked login is unusable: {why}"),
+            renew,
+        );
+    }
+    match park.refresh_expires_at {
+        Some(at) if at <= now => warn(
+            "parked_login",
+            name,
+            format!("its parked login expired {}", ui::moment(at, now)),
+            renew,
+        ),
+        Some(at) if at - now < RENEW_WITHIN => warn(
+            "parked_login",
+            name,
+            format!("its parked login expires in {}", time::span(at - now)),
+            renew,
+        ),
+        Some(at) => ok(
+            "parked_login",
+            name,
+            format!("parked, good for {}", time::span(at - now)),
+        ),
+        None => ok("parked_login", name, "parked"),
+    }
+}
+
 /// Claude Code's successor credential backend: a stub in every build so far, but compiled
 /// in and switched on from the server.
 fn judge_storage_v5(facts: &Facts) -> Check {
@@ -352,8 +475,25 @@ fn judge_storage_v5(facts: &Facts) -> Check {
     }
 }
 
-pub fn run() -> Vec<Check> {
-    evaluate(&gather())
+/// The checks, and where Claude Code's files were found, for a program to read rather than
+/// parse out of the checks' wording.
+pub struct Diagnosis {
+    pub checks: Vec<Check>,
+    pub environment: Value,
+}
+
+pub fn run() -> Diagnosis {
+    let facts = gather();
+    Diagnosis {
+        checks: evaluate(&facts),
+        environment: json!({
+            "config_file": facts.config_path,
+            "storage_dir": facts.storage_dir,
+            "credential_service": facts.service,
+            "credential_store": facts.backend.as_ref().map_or("unreadable", |b| b.name()),
+            "home": facts.home,
+        }),
+    }
 }
 
 /// No check failed. Warnings are advice; a failure means an assumption broke.
@@ -362,25 +502,46 @@ pub fn healthy(checks: &[Check]) -> bool {
 }
 
 pub fn render_human(checks: &[Check]) -> String {
+    let width = checks
+        .iter()
+        .map(|c| c.name.chars().count())
+        .max()
+        .unwrap_or(0);
     let mut out = String::new();
     for c in checks {
         let mark = match c.level {
-            Level::Ok => "ok  ",
-            Level::Warn => "warn",
-            Level::Fail => "FAIL",
+            Level::Ok => paint(GOOD, "✓"),
+            Level::Warn => paint(WARN, "!"),
+            Level::Fail => paint(BAD, "✗"),
         };
-        out.push_str(&format!("  {mark}  {:<18}{}\n", c.name, c.detail));
+        out.push_str(&format!("{mark} {}  {}\n", pad(&c.name, width), c.detail));
         if !c.advice.is_empty() {
-            out.push_str(&format!("        {:<18}{}\n", "", c.advice));
+            out.push_str(&format!(
+                "  {}  {}\n",
+                pad("", width),
+                paint(DIM, &c.advice)
+            ));
         }
     }
+    let count = |level| checks.iter().filter(|c| c.level == level).count();
+    let summary = match (count(Level::Fail), count(Level::Warn)) {
+        (0, 0) => paint(GOOD, "Everything pitboard relies on holds."),
+        (0, w) => paint(WARN, format!("{w} to look at; nothing is broken.")),
+        (f, _) => paint(
+            BAD,
+            format!("{f} broken: do not switch accounts until fixed."),
+        ),
+    };
+    out.push_str(&format!("\n{summary}\n"));
     out
 }
 
-pub fn render_json(checks: &[Check]) -> Value {
+pub fn render_json(diagnosis: &Diagnosis) -> Value {
     json!({
-        "checks": checks.iter().map(|c| json!({
+        "environment": diagnosis.environment,
+        "checks": diagnosis.checks.iter().map(|c| json!({
             "code": c.code,
+            "name": c.name,
             "level": match c.level { Level::Ok => "ok", Level::Warn => "warn", Level::Fail => "fail" },
             "detail": c.detail,
             "advice": c.advice,
@@ -419,8 +580,32 @@ mod tests {
             home_mode: Some(0o700),
             machine_id_known: true,
             hover_rest_env: false,
-            now: 1_789_935_600,
+            state: Ok(State::default()),
+            parks: Vec::new(),
+            interrupted: false,
+            now: NOW,
         }
+    }
+
+    const NOW: i64 = 1_789_935_600;
+
+    fn parked(label: &str, refresh_expires_at: Option<i64>) -> ParkFact {
+        ParkFact {
+            label: label.into(),
+            active: false,
+            park: Some(Park {
+                service: format!("pitboard-park-{label}-1"),
+                parked_at: NOW - 86_400,
+                refresh_fingerprint: "f".into(),
+                access_expires_at: None,
+                refresh_expires_at,
+            }),
+            unreadable: None,
+        }
+    }
+
+    fn named<'a>(checks: &'a [Check], name: &str) -> &'a Check {
+        checks.iter().find(|c| c.name == name).expect(name)
     }
 
     fn check<'a>(checks: &'a [Check], code: &str) -> &'a Check {
@@ -510,12 +695,83 @@ mod tests {
     }
 
     #[test]
-    fn check_codes_are_unique() {
-        let checks = evaluate(&facts());
-        let mut codes: Vec<&str> = checks.iter().map(|c| c.code).collect();
-        codes.sort_unstable();
-        let before = codes.len();
-        codes.dedup();
-        assert_eq!(codes.len(), before);
+    fn each_check_is_told_apart_by_code_and_name() {
+        let mut f = facts();
+        f.parks = vec![parked("work", None), parked("personal", None)];
+        let checks = evaluate(&f);
+        let mut keys: Vec<(&str, &str)> =
+            checks.iter().map(|c| (c.code, c.name.as_str())).collect();
+        keys.sort_unstable();
+        let before = keys.len();
+        keys.dedup();
+        assert_eq!(keys.len(), before);
+    }
+
+    #[test]
+    fn every_parked_login_is_judged_and_a_way_back_is_offered() {
+        let mut f = facts();
+        let mut unusable = parked("broken", Some(NOW + 30 * 86_400));
+        unusable.unreadable = Some("missing from the vault".into());
+        f.parks = vec![
+            parked("fine", Some(NOW + 20 * 86_400)),
+            parked("soon", Some(NOW + 86_400)),
+            parked("gone", Some(NOW - 1)),
+            unusable,
+            ParkFact {
+                label: "empty".into(),
+                active: false,
+                park: None,
+                unreadable: None,
+            },
+            ParkFact {
+                label: "live".into(),
+                active: true,
+                park: None,
+                unreadable: None,
+            },
+        ];
+        let checks = evaluate(&f);
+        for (name, level) in [
+            ("account fine", Level::Ok),
+            ("account soon", Level::Warn),
+            ("account gone", Level::Warn),
+            ("account broken", Level::Fail),
+            ("account empty", Level::Warn),
+            ("account live", Level::Ok),
+        ] {
+            let c = named(&checks, name);
+            assert_eq!(c.level, level, "{name}: {}", c.detail);
+            if level != Level::Ok {
+                let label = name.trim_start_matches("account ");
+                assert!(
+                    c.advice
+                        .contains(&format!("pitboard enroll {label} --sign-in"))
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn an_interrupted_switch_and_leftover_parks_are_reported() {
+        let mut f = facts();
+        f.interrupted = true;
+        f.state = Ok(State {
+            discarded: vec!["pitboard-park-x-1".into()],
+            ..State::default()
+        });
+        let checks = evaluate(&f);
+        assert_eq!(check(&checks, "interrupted_switch").level, Level::Warn);
+        assert_eq!(check(&checks, "discarded").level, Level::Warn);
+        assert!(healthy(&checks), "neither stops pitboard working");
+    }
+
+    #[test]
+    fn the_summary_says_whether_anything_is_broken() {
+        let plain =
+            |checks: &[Check]| anstream::adapter::strip_str(&render_human(checks)).to_string();
+        assert!(plain(&evaluate(&facts())).ends_with("Everything pitboard relies on holds.\n"));
+        let mut f = facts();
+        f.credential = Ok(Some(json!({"slackTag": {}})));
+        assert!(plain(&evaluate(&f)).contains("1 broken"));
     }
 }

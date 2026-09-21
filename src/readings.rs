@@ -1,9 +1,9 @@
 //! The last usage reading pitboard took for each account.
 //!
-//! A parked account's access token expires about twelve hours after it was parked, and
-//! pitboard will not refresh it, so after that the only honest thing to show is the last
-//! number actually measured and when. Nothing here is secret; it is a disposable cache,
-//! so it is written last-writer-wins without taking a lock.
+//! A parked login's access token stops working hours after it was issued, and pitboard does
+//! not renew it, so from then on the only honest thing to show is the last number actually
+//! measured, and when. Nothing here is secret; it is a disposable cache, written
+//! last-writer-wins without a lock.
 
 use crate::usage::{Snapshot, Source};
 use crate::{atomic, home};
@@ -14,21 +14,20 @@ fn path() -> PathBuf {
     home::dir().join("usage.json")
 }
 
-fn load() -> HashMap<String, Snapshot> {
+pub fn load() -> HashMap<String, Snapshot> {
     std::fs::read_to_string(path())
         .ok()
-        .and_then(|raw| serde_json::from_str(&raw).ok())
+        .and_then(|raw| serde_json::from_str::<HashMap<String, Snapshot>>(&raw).ok())
         .unwrap_or_default()
+        .into_iter()
+        .map(|(uuid, mut snapshot)| {
+            snapshot.source = Source::Remembered;
+            (uuid, snapshot)
+        })
+        .collect()
 }
 
-/// The last live reading for an account, marked as remembered rather than live.
-pub fn recall(account_uuid: &str) -> Option<Snapshot> {
-    load().remove(account_uuid).map(|mut s| {
-        s.source = Source::Remembered;
-        s
-    })
-}
-
+/// Keep live readings for when their account can no longer be asked.
 pub fn remember(readings: &[(String, Snapshot)]) {
     if readings.is_empty() {
         return;

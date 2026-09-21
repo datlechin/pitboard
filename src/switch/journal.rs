@@ -6,8 +6,8 @@
 //! nothing and keeps the record.
 
 use super::{Error, Result, identify};
-use crate::state::{Generation, State};
-use crate::{atomic, claude, home, park, state, store, time};
+use crate::state::{Park, State};
+use crate::{atomic, claude, home, park, state, store};
 use serde_json::Value;
 use std::path::PathBuf;
 
@@ -19,7 +19,7 @@ pub(super) struct Journal {
     pub(super) to_label: String,
     pub(super) to_uuid: String,
     pub(super) park_service: String,
-    /// The generation being installed, so recovery marks exactly that copy as consumed.
+    /// The park being installed, so recovery consumes exactly that copy.
     pub(super) incoming_service: String,
 }
 
@@ -74,6 +74,11 @@ pub(super) fn write_journal(entry: &Journal) -> Result<()> {
     atomic::write(&path, body.as_bytes(), atomic::Perms::Secret).map_err(fail)
 }
 
+/// A switch was interrupted, and the next command that changes state will finish it.
+pub fn pending() -> bool {
+    journal_path().exists()
+}
+
 /// The switch reached a state the account index fully describes.
 pub(super) fn clear_journal() {
     let _ = std::fs::remove_file(journal_path());
@@ -82,61 +87,55 @@ pub(super) fn clear_journal() {
 struct Found {
     /// The park the record reserved: written, never written, or `None` if unreadable.
     parked: Option<Option<Value>>,
-    /// Whether the live credential belongs to the destination, or `None` if unknown.
-    landed: Option<bool>,
+    /// The account the live login belongs to, or `None` if that cannot be learned.
+    live_owner: Option<String>,
 }
 
 #[derive(Default, Debug, PartialEq)]
 struct Repair {
-    /// Keyed by account id, not label: the label may have been reused since.
-    attach: Option<(String, Generation)>,
-    mark_installed: Option<(String, String)>,
-    set_active: Option<String>,
+    /// Hold the interrupted run's park for the account it came from. Keyed by account id,
+    /// not label: the label may have been reused since.
+    hold: Option<(String, Park)>,
+    /// The interrupted run's park copies a login that is still signed in, so Claude Code
+    /// will rotate past it.
+    drop: bool,
+    /// The destination's login is live: it is active, and its park was consumed.
+    landed: bool,
 }
 
 /// `None` when the facts do not settle what happened.
 fn repair_for(state: &State, journal: &Journal, found: &Found) -> Option<Repair> {
     let parked = found.parked.as_ref()?;
-    let landed = found.landed?;
-    let mut repair = Repair::default();
-
-    if let Some(oauth) = parked
+    let owner = found.live_owner.as_deref()?;
+    let mut repair = Repair {
+        landed: owner == journal.to_uuid,
+        ..Repair::default()
+    };
+    if owner == journal.from_uuid {
+        repair.drop = parked.is_some();
+    } else if let Some(oauth) = parked
         && !state.references(&journal.park_service)
     {
-        repair.attach = Some((
+        repair.hold = Some((
             journal.from_uuid.clone(),
-            Generation {
-                service: journal.park_service.clone(),
-                parked_at: journal.started_at,
-                refresh_fingerprint: park::fingerprint_of(oauth),
-                installed_at: None,
-            },
+            park::describe(&journal.park_service, journal.started_at, oauth),
         ));
-    }
-    if landed {
-        repair.set_active = Some(journal.to_label.clone());
-        if state
-            .get(&journal.to_label)
-            .is_some_and(|a| a.references(&journal.incoming_service))
-        {
-            repair.mark_installed =
-                Some((journal.to_label.clone(), journal.incoming_service.clone()));
-        }
     }
     Some(repair)
 }
 
-fn apply(state: &mut State, repair: Repair, at: i64) {
-    if let Some((uuid, generation)) = repair.attach
+fn apply(state: &mut State, journal: &Journal, repair: Repair) {
+    if repair.drop {
+        state.discard(&journal.park_service);
+    }
+    if let Some((uuid, park)) = repair.hold
         && let Some(label) = state.by_uuid(&uuid).map(|a| a.label.clone())
     {
-        state.attach(&label, generation);
+        state.park(&label, park);
     }
-    if let Some((label, service)) = repair.mark_installed {
-        state.mark_installed(&label, &service, at);
-    }
-    if let Some(label) = repair.set_active {
-        state.active = Some(label);
+    if repair.landed && state.get(&journal.to_label).is_some() {
+        state.active = Some(journal.to_label.clone());
+        state.discard(&journal.incoming_service);
     }
 }
 
@@ -147,7 +146,7 @@ fn read_park(service: &str) -> Option<Option<Value>> {
     }
 }
 
-fn landed_on(to_uuid: &str) -> std::result::Result<bool, String> {
+fn live_owner() -> std::result::Result<String, String> {
     let live = store::read(&claude::live_service())
         .map_err(|e| e.to_string())?
         .ok_or("nothing is signed in")?;
@@ -155,7 +154,7 @@ fn landed_on(to_uuid: &str) -> std::result::Result<bool, String> {
         .as_str()
         .ok_or("the signed-in credential has no access token")?;
     identify(token)
-        .map(|owner| owner.account_uuid == to_uuid)
+        .map(|owner| owner.account_uuid)
         .map_err(|e| e.to_string())
 }
 
@@ -171,22 +170,22 @@ pub(super) fn reconcile(state: &mut State) -> Result<Option<Recovered>> {
     let journal = serde_json::from_str::<Journal>(&raw)
         .map_err(|source| Error::RecoveryRecordCorrupt { path, source })?;
 
-    let landed = landed_on(&journal.to_uuid);
+    let owner = live_owner();
     let found = Found {
         parked: read_park(&journal.park_service),
-        landed: landed.as_ref().ok().copied(),
+        live_owner: owner.as_ref().ok().cloned(),
     };
     let Some(repair) = repair_for(state, &journal, &found) else {
         return Err(Error::RecoveryUndetermined {
             from: journal.from_label,
             to: journal.to_label,
-            detail: landed
+            detail: owner
                 .err()
                 .unwrap_or_else(|| "its parked login could not be read".into()),
         });
     };
-    let finished = repair.set_active.is_some();
-    apply(state, repair, time::now());
+    let finished = repair.landed;
+    apply(state, &journal, repair);
     state::save(state)?;
     clear_journal();
 
@@ -217,28 +216,27 @@ mod tests {
         }
     }
 
-    fn account(label: &str, services: &[&str]) -> Account {
+    fn account(label: &str, parked: Option<&str>) -> Account {
         Account {
             label: label.into(),
             account_uuid: format!("{label}-uuid"),
             email: format!("{label}@example.com"),
             organization_uuid: format!("{label}-org"),
             oauth_account: serde_json::json!({}),
-            generations: services
-                .iter()
-                .map(|s| Generation {
-                    service: (*s).into(),
-                    parked_at: 1_699_000_000,
-                    refresh_fingerprint: "f".into(),
-                    installed_at: None,
-                })
-                .collect(),
+            parked: parked.map(|s| Park {
+                service: s.into(),
+                parked_at: 1_699_000_000,
+                refresh_fingerprint: "f".into(),
+                access_expires_at: None,
+                refresh_expires_at: None,
+            }),
         }
     }
 
-    fn state(accounts: Vec<Account>) -> State {
+    /// `from` signed in with nothing parked, `to` parked: the state before a switch.
+    fn before() -> State {
         State {
-            accounts,
+            accounts: vec![account("from", None), account("to", Some(INCOMING))],
             ..State::default()
         }
     }
@@ -249,94 +247,87 @@ mod tests {
         ))
     }
 
+    fn found(parked: Option<Option<Value>>, owner: Option<&str>) -> Found {
+        Found {
+            parked,
+            live_owner: owner.map(str::to_owned),
+        }
+    }
+
     /// Killed after reserving the park name but before writing it.
     #[test]
     fn nothing_parked_and_nothing_installed_changes_nothing() {
-        let s = state(vec![account("from", &[]), account("to", &[INCOMING])]);
-        let repair = repair_for(
-            &s,
-            &journal(),
-            &Found {
-                parked: Some(None),
-                landed: Some(false),
-            },
-        );
+        let repair = repair_for(&before(), &journal(), &found(Some(None), Some("from-uuid")));
         assert_eq!(repair, Some(Repair::default()));
     }
 
-    /// Killed after the park was written, before state recorded it.
+    /// Killed after the park was written, before the install. `from` is still signed in, so
+    /// the park is a second copy of a live login and Claude Code will rotate past it.
     #[test]
-    fn an_orphaned_park_is_attached_to_the_account_it_came_from() {
-        let s = state(vec![account("from", &[]), account("to", &[INCOMING])]);
-        let repair = repair_for(
-            &s,
-            &journal(),
-            &Found {
-                parked: written(),
-                landed: Some(false),
-            },
-        )
-        .unwrap();
-        let (uuid, generation) = repair.attach.expect("the orphan must be recovered");
-        assert_eq!(
-            uuid, "from-uuid",
-            "attached by account id, never by a label"
-        );
-        assert_eq!(generation.service, PARK);
-    }
+    fn a_park_of_a_login_still_signed_in_is_dropped_not_kept() {
+        for s in [before(), {
+            let mut recorded = before();
+            recorded.park("from", account("x", Some(PARK)).parked.unwrap());
+            recorded
+        }] {
+            let repair = repair_for(&s, &journal(), &found(written(), Some("from-uuid"))).unwrap();
+            assert!(repair.drop && repair.hold.is_none() && !repair.landed);
 
-    #[test]
-    fn an_already_recorded_park_is_not_attached_twice() {
-        let s = state(vec![account("from", &[PARK]), account("to", &[INCOMING])]);
-        let repair = repair_for(
-            &s,
-            &journal(),
-            &Found {
-                parked: written(),
-                landed: Some(false),
-            },
-        )
-        .unwrap();
-        assert_eq!(repair.attach, None);
+            let mut applied = s;
+            apply(&mut applied, &journal(), repair);
+            assert!(!applied.references(PARK));
+            assert!(applied.discarded.contains(&PARK.to_string()));
+        }
     }
 
     /// Killed after the install, before state recorded it. Claude Code may already have
     /// rotated the token.
     #[test]
-    fn a_landed_install_marks_exactly_the_copy_it_consumed() {
-        let s = state(vec![account("from", &[PARK]), account("to", &[INCOMING])]);
-        let repair = repair_for(
-            &s,
-            &journal(),
-            &Found {
-                parked: written(),
-                landed: Some(true),
-            },
-        )
-        .unwrap();
-        assert_eq!(repair.set_active.as_deref(), Some("to"));
+    fn a_landed_switch_holds_the_outgoing_login_and_consumes_the_incoming_one() {
+        let mut s = before();
+        let repair = repair_for(&s, &journal(), &found(written(), Some("to-uuid"))).unwrap();
+        let (uuid, park) = repair.hold.clone().expect("the orphan must be recovered");
+        assert_eq!(uuid, "from-uuid", "held by account id, never by a label");
+        assert_eq!(park.service, PARK);
+        assert!(repair.landed);
+
+        apply(&mut s, &journal(), repair);
+        assert_eq!(s.active.as_deref(), Some("to"));
         assert_eq!(
-            repair.mark_installed,
-            Some(("to".into(), INCOMING.into())),
+            s.get("from").unwrap().parked.as_ref().unwrap().service,
+            PARK
+        );
+        assert!(
+            s.get("to").unwrap().parked.is_none(),
             "the copy now live must never be offered again"
         );
+        assert!(s.discarded.contains(&INCOMING.to_string()));
+    }
+
+    /// Someone signed in as a third account since: the orphan may be the only copy of
+    /// `from`'s login, and the destination's park may still be good.
+    #[test]
+    fn a_third_account_signed_in_since_keeps_both_parks() {
+        let mut s = before();
+        let repair = repair_for(&s, &journal(), &found(written(), Some("other-uuid"))).unwrap();
+        apply(&mut s, &journal(), repair);
+        assert!(s.references(PARK) && s.references(INCOMING));
+        assert!(s.discarded.is_empty());
+    }
+
+    #[test]
+    fn an_already_recorded_park_is_not_held_twice() {
+        let mut s = before();
+        s.park("from", account("x", Some(PARK)).parked.unwrap());
+        let repair = repair_for(&s, &journal(), &found(written(), Some("to-uuid"))).unwrap();
+        assert_eq!(repair.hold, None);
     }
 
     #[test]
     fn an_unknown_outcome_changes_nothing_and_keeps_the_record() {
-        let s = state(vec![account("from", &[]), account("to", &[INCOMING])]);
-        for found in [
-            Found {
-                parked: written(),
-                landed: None,
-            },
-            Found {
-                parked: None,
-                landed: Some(true),
-            },
-        ] {
+        for unknown in [found(written(), None), found(None, Some("to-uuid"))] {
             assert_eq!(
-                repair_for(&s, &journal(), &found),
+                repair_for(&before(), &journal(), &unknown),
                 None,
                 "could-not-tell must never be read as nothing-there"
             );
@@ -344,37 +335,20 @@ mod tests {
     }
 
     #[test]
-    fn a_target_forgotten_since_the_crash_is_still_activated_but_nothing_is_marked() {
-        let s = state(vec![account("from", &[PARK])]);
-        let repair = repair_for(
-            &s,
-            &journal(),
-            &Found {
-                parked: written(),
-                landed: Some(true),
-            },
-        )
-        .unwrap();
-        assert_eq!(repair.mark_installed, None);
-    }
-
-    #[test]
-    fn attaching_to_an_account_forgotten_since_the_crash_is_skipped_not_misfiled() {
-        let mut s = state(vec![account("other", &[])]);
-        apply(
-            &mut s,
-            Repair {
-                attach: Some((
-                    "from-uuid".into(),
-                    account("from", &[PARK]).generations[0].clone(),
-                )),
-                ..Repair::default()
-            },
-            0,
-        );
+    fn a_park_whose_account_was_forgotten_is_not_filed_under_another() {
+        let mut s = State {
+            accounts: vec![account("other", None)],
+            ..State::default()
+        };
+        let repair = repair_for(&s, &journal(), &found(written(), Some("to-uuid"))).unwrap();
+        apply(&mut s, &journal(), repair);
         assert!(
             !s.references(PARK),
             "a park must never be filed under whatever account happens to hold a label"
+        );
+        assert_eq!(
+            s.active, None,
+            "a destination that is gone is not made active"
         );
     }
 }

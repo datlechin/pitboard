@@ -50,9 +50,10 @@ IP address.
   behind are removed on the next write to the same directory.
 - A locked or unreadable keychain: reported as unreadable, never taken to mean that no
   login is there.
-- Restoring a login Claude Code has already moved past: a copy that has been installed is
-  never offered again, because presenting a superseded refresh token makes Claude Code
-  discard the login.
+- Restoring a login Claude Code has already moved past: each account keeps one parked
+  login, deleted as soon as it is installed, and a copy of a login that is still signed in
+  is never kept, because presenting a superseded refresh token makes Claude Code discard
+  the login. A parked login past its expiry is refused rather than installed.
 - Writing alongside a running Claude Code: pitboard takes the same lock Claude Code takes
   around every credential write.
 - A state directory inside a cloud-synced folder: refused, because a parked login belongs

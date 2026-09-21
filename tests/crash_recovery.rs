@@ -18,32 +18,6 @@ fn two_accounts(name: &str) -> Env {
     env
 }
 
-fn beta_generation(env: &Env) -> String {
-    env.state()["accounts"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|a| a["label"] == "beta")
-        .unwrap()["generations"][0]["service"]
-        .as_str()
-        .unwrap()
-        .to_string()
-}
-
-fn generations_of(env: &Env, label: &str) -> Vec<String> {
-    env.state()["accounts"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|a| a["label"] == label)
-        .unwrap()["generations"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|g| g["service"].as_str().unwrap().to_string())
-        .collect()
-}
-
 /// A switch from alpha to beta that died after parking alpha and before installing beta.
 fn interrupted_switch(env: &Env) -> String {
     let orphan = format!("pitboard-park-{}-1789900000000", env.uuid('a'));
@@ -59,28 +33,60 @@ fn interrupted_switch(env: &Env) -> String {
         "to_label": "beta",
         "to_uuid": env.uuid('b'),
         "park_service": orphan,
-        "incoming_service": beta_generation(env),
+        "incoming_service": env.parked_service("beta").unwrap(),
     });
     std::fs::write(env.root.join("pitboard/journal.json"), journal.to_string()).unwrap();
     orphan
 }
 
+/// alpha is still signed in, so the orphan is a second copy of a login Claude Code keeps
+/// rotating: it must go, not be kept as alpha's way back.
 #[test]
-fn a_park_the_state_never_recorded_is_recovered_on_the_next_run() {
+fn a_park_of_a_login_still_signed_in_is_dropped_on_the_next_run() {
     let env = two_accounts("orphan");
     let orphan = interrupted_switch(&env);
-    assert!(!generations_of(&env, "alpha").contains(&orphan));
 
     let (_, err, code) = env.run(&["use", "beta"]);
 
     assert_eq!(code, 0, "{err}");
     assert!(err.contains("had not finished"), "{err}");
-    assert!(
-        generations_of(&env, "alpha").contains(&orphan),
-        "the orphaned park must be attached back to the account it came from"
+    assert!(!env.is_parked(&orphan), "the stale copy must be deleted");
+    assert_ne!(
+        env.parked_service("alpha").as_deref(),
+        Some(orphan.as_str())
     );
     assert!(!env.root.join("pitboard/journal.json").exists());
-    env.delete_park(&orphan);
+}
+
+/// Killed after the install: beta is live, and the orphan is now alpha's only copy.
+#[test]
+fn a_park_the_state_never_recorded_is_kept_once_its_switch_landed() {
+    let mut env = two_accounts("landed");
+    let orphan = interrupted_switch(&env);
+    let beta_park = env.parked_service("beta").unwrap();
+    let (b, p) = (env.uuid('b'), env.uuid('p'));
+    env.sign_in(&b, "b@example.com", &p, "refresh-b");
+
+    let (out, err, code) = env.run(&["status", "--json"]);
+    assert_eq!(code, 0, "{err}");
+    assert!(
+        out.contains("\"signed_in\":true"),
+        "status settles nothing: {out}"
+    );
+
+    let (_, err, code) = env.run(&["use", "alpha"]);
+    assert_eq!(code, 0, "{err}");
+    assert!(err.contains("had in fact finished"), "{err}");
+    assert!(
+        !env.is_parked(&beta_park),
+        "beta's installed copy is consumed"
+    );
+    assert_eq!(
+        env.live()["claudeAiOauth"]["refreshToken"],
+        "refresh-a",
+        "the recovered orphan is what alpha switches back to"
+    );
+    assert!(!env.is_parked(&orphan));
 }
 
 /// Recovery that cannot tell what happened must change nothing and keep its record, so a

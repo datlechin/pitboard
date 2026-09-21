@@ -6,16 +6,20 @@
 //! and any other account is signed in inside a private directory, where the live slot is
 //! never touched and the vault is the new login's only holder.
 
-use super::{Error, Result, Settled, access_token, identify, oauth_of};
+use super::{Error, Result, Settled, access_token, identify, oauth_of, purge};
 use crate::api::Owner;
-use crate::state::{Account, Generation};
+use crate::state::{Account, Park, State};
 use crate::{claude, home, park, state, store};
 use serde_json::{Value, json};
 use std::process::Command;
 
 pub enum Enrolled {
+    /// The account signed in now, recorded without parking: its first switch parks it.
     Current { email: String },
+    /// Another account, signed in privately and parked.
     SignedIn { email: String },
+    /// An enrolled account signed in to again: its parked login is now the new one.
+    Renewed { email: String },
 }
 
 pub fn enroll(settled: Settled, label: &str, sign_in: bool) -> Result<Enrolled> {
@@ -23,12 +27,6 @@ pub fn enroll(settled: Settled, label: &str, sign_in: bool) -> Result<Enrolled> 
         _exclusive,
         mut state,
     } = settled;
-    if let Some(taken) = state.get(label) {
-        return Err(Error::LabelTaken {
-            label: label.to_string(),
-            email: taken.email.clone(),
-        });
-    }
     if sign_in {
         sign_in_new(label, &mut state)
     } else {
@@ -36,25 +34,42 @@ pub fn enroll(settled: Settled, label: &str, sign_in: bool) -> Result<Enrolled> 
     }
 }
 
-fn record_current(label: &str, state: &mut state::State) -> Result<Enrolled> {
-    let live = store::read(&claude::live_service())?.ok_or(Error::LiveCredentialAbsent)?;
-    let owner = identify(&access_token(&live)?)?;
-    if let Some(existing) = state.by_uuid(&owner.account_uuid) {
+/// A label names one account for good: its own, or one not enrolled under another label.
+fn claim(state: &State, label: &str, owner: &Owner) -> Result<()> {
+    if let Some(taken) = state.get(label)
+        && taken.account_uuid != owner.account_uuid
+    {
+        return Err(Error::LabelTaken {
+            label: label.to_string(),
+            email: taken.email.clone(),
+        });
+    }
+    if let Some(existing) = state.by_uuid(&owner.account_uuid)
+        && existing.label != label
+    {
         return Err(Error::AlreadyEnrolled {
-            email: owner.email,
+            email: owner.email.clone(),
             label: existing.label.clone(),
         });
     }
-    state.upsert(account(label, &owner, Vec::new()));
+    Ok(())
+}
+
+fn record_current(label: &str, state: &mut State) -> Result<Enrolled> {
+    let live = store::read(&claude::live_service())?.ok_or(Error::LiveCredentialAbsent)?;
+    let owner = identify(&access_token(&live)?)?;
+    claim(state, label, &owner)?;
+    let parked = state.get(label).and_then(|a| a.parked.clone());
+    state.upsert(account(label, &owner, parked));
     state.active = Some(label.to_string());
     state::save(state)?;
     Ok(Enrolled::Current { email: owner.email })
 }
 
-fn sign_in_new(label: &str, state: &mut state::State) -> Result<Enrolled> {
+fn sign_in_new(label: &str, state: &mut State) -> Result<Enrolled> {
     let dir = home::dir().join("signin");
     let _ = std::fs::remove_dir_all(&dir);
-    home::create_private(&dir).map_err(|source| Error::RecoveryFailed {
+    home::create_private(&dir).map_err(|source| Error::HomeUnwritable {
         path: dir.clone(),
         source,
     })?;
@@ -82,17 +97,23 @@ fn sign_in_new(label: &str, state: &mut state::State) -> Result<Enrolled> {
                 detail: e.to_string(),
             })?;
         let owner = identify(&access_token(&document)?)?;
-        if let Some(existing) = state.by_uuid(&owner.account_uuid) {
-            return Err(Error::AlreadyEnrolled {
-                email: owner.email,
-                label: existing.label.clone(),
-            });
-        }
+        claim(state, label, &owner)?;
         let service = park::reserve(&owner.account_uuid)?;
-        let generation: Generation = park::store_at(&service, &oauth_of(&document)?)?;
-        state.upsert(account(label, &owner, vec![generation]));
-        state::save(state)?;
-        Ok(Enrolled::SignedIn { email: owner.email })
+        let fresh = park::store_at(&service, &oauth_of(&document)?)?;
+        let previous = state.get(label).and_then(|a| a.parked.clone());
+        let renewed = state.get(label).is_some();
+        state.upsert(account(label, &owner, previous));
+        state.park(label, fresh);
+        // Unrecorded, the new login would be an item nothing refers to, never deleted.
+        state::save(state).inspect_err(|_| {
+            let _ = store::vault_delete(&service);
+        })?;
+        purge(state);
+        Ok(if renewed {
+            Enrolled::Renewed { email: owner.email }
+        } else {
+            Enrolled::SignedIn { email: owner.email }
+        })
     })();
 
     let _ = store::discard_signin(&dir);
@@ -102,7 +123,7 @@ fn sign_in_new(label: &str, state: &mut state::State) -> Result<Enrolled> {
 
 /// Only what Anthropic just confirmed. Leaving the rest out makes Claude Code fetch its own
 /// profile after a switch rather than trust a copy pitboard wrote.
-fn account(label: &str, owner: &Owner, generations: Vec<Generation>) -> Account {
+fn account(label: &str, owner: &Owner, parked: Option<Park>) -> Account {
     Account {
         label: label.to_string(),
         account_uuid: owner.account_uuid.clone(),
@@ -113,6 +134,6 @@ fn account(label: &str, owner: &Owner, generations: Vec<Generation>) -> Account 
             "emailAddress": owner.email,
             "organizationUuid": owner.organization_uuid,
         }),
-        generations,
+        parked,
     }
 }

@@ -1,5 +1,5 @@
-//! Where pitboard parks credentials on platforms with no keychain: one 0600 file per parked
-//! generation, inside pitboard's own 0700 directory.
+//! Where pitboard parks logins on platforms with no keychain: one 0600 file per parked
+//! login, inside pitboard's own 0700 directory.
 
 use super::{Backend, Error, RawStore};
 use crate::{atomic, home};

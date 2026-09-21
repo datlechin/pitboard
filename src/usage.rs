@@ -115,17 +115,6 @@ pub fn from_config_cache(config: &Value) -> Option<Snapshot> {
     })
 }
 
-pub fn bar(percent: f64, width: usize) -> String {
-    let filled = ((percent / 100.0) * width as f64)
-        .round()
-        .clamp(0.0, width as f64) as usize;
-    format!(
-        "{}{}",
-        "\u{2588}".repeat(filled),
-        "\u{2591}".repeat(width - filled)
-    )
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -195,13 +184,5 @@ mod tests {
     #[test]
     fn missing_cache_is_not_an_error() {
         assert!(from_config_cache(&serde_json::json!({})).is_none());
-    }
-
-    #[test]
-    fn bars_are_the_width_they_claim() {
-        assert_eq!(bar(0.0, 10).chars().count(), 10);
-        assert_eq!(bar(100.0, 10).chars().count(), 10);
-        assert_eq!(bar(62.0, 10), "██████░░░░");
-        assert_eq!(bar(150.0, 10), "██████████");
     }
 }

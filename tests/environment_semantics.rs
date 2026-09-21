@@ -5,10 +5,10 @@
 use std::path::PathBuf;
 use std::process::Command;
 
-fn status(home: &PathBuf, config_dir: Option<&str>) -> serde_json::Value {
+fn environment(home: &PathBuf, config_dir: Option<&str>) -> serde_json::Value {
     let mut command = Command::new(env!("CARGO_BIN_EXE_pitboard"));
     command
-        .args(["status", "--json"])
+        .args(["doctor", "--json"])
         .env("HOME", home)
         .env("PITBOARD_HOME", home.join("pitboard"))
         .env_remove("CLAUDE_SECURESTORAGE_CONFIG_DIR");
@@ -18,10 +18,10 @@ fn status(home: &PathBuf, config_dir: Option<&str>) -> serde_json::Value {
     };
     let out = command.output().expect("run pitboard");
     let envelope: serde_json::Value =
-        serde_json::from_slice(&out.stdout).expect("status --json should be valid JSON");
+        serde_json::from_slice(&out.stdout).expect("doctor --json should be valid JSON");
     assert_eq!(envelope["v"], 1, "the contract version must be present");
-    assert_eq!(envelope["command"], "status");
-    envelope["data"].clone()
+    assert_eq!(envelope["command"], "doctor");
+    envelope["data"]["environment"].clone()
 }
 
 fn scratch(name: &str) -> PathBuf {
@@ -35,15 +35,15 @@ fn scratch(name: &str) -> PathBuf {
 #[test]
 fn an_empty_config_dir_means_unset() {
     let home = scratch("empty");
-    let unset = status(&home, None);
-    let empty = status(&home, Some(""));
+    let unset = environment(&home, None);
+    let empty = environment(&home, Some(""));
 
     assert_eq!(
         empty["config_file"], unset["config_file"],
         "an empty CLAUDE_CONFIG_DIR must resolve exactly as an unset one"
     );
     assert_eq!(
-        empty["store"]["service"], "Claude Code-credentials",
+        empty["credential_service"], "Claude Code-credentials",
         "and must leave pitboard on the default credential slot"
     );
     let _ = std::fs::remove_dir_all(&home);
