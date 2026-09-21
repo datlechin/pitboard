@@ -5,6 +5,10 @@ All notable changes are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+- Each usage row in `--json` carries `severity`, Anthropic's own grade for that limit. A
+  field added to the v1 envelope; nothing was removed or renamed.
+
 ## [0.1.4] - 2026-09-22
 
 ### Fixed
