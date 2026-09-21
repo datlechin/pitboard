@@ -54,9 +54,21 @@ difference with `cargo insta review`, and say in the change why the contract mov
    about it needs an experiment, and the experiment belongs in a test or the commit
    message.
 
+## The state file
+
+`state.json` carries a `schema`. The command line and the app hold their own copy of the
+core and update by different routes, so on one machine an older pitboard will meet a file a
+newer one wrote. Reading forwards is `state::migrate`: each bump adds an arm that rewrites
+the document and falls through to the next. Reading backwards is not possible and says
+which half to upgrade. A bump needs a test that loads a file the previous version wrote.
+
 ## Releasing
 
-A tag `v<version>` releases: the crates to crates.io, the command line for four targets,
+A tag `v<version>` releases; a tag like `v0.2.0-rc1` is a pre-release, which skips
+crates.io and publishes no update feed, so nobody's installed copy updates into it. The
+guard job refuses a tag that disagrees with the manifest or has no CHANGELOG section.
+
+A release the crates to crates.io, the command line for four targets,
 and the app, signed and notarised when these repository secrets are set. Without them the
 release still happens and the app is signed ad-hoc, which Gatekeeper warns about.
 

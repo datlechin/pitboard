@@ -68,14 +68,21 @@ pub enum Error {
     },
 
     #[error(
-        "{path} was written by a different version of pitboard. \
-         Upgrade pitboard, or delete the file and enroll your accounts again."
+        "{path} was written by a newer pitboard (its format is {found}, this one reads \
+         {expected}). The command line and the app update separately, so upgrade whichever \
+         is behind: `brew upgrade pitboard`, or the app's own Check for Updates."
     )]
-    StateVersionMismatch {
+    StateFromNewerVersion {
         path: PathBuf,
         found: u32,
         expected: u32,
     },
+
+    #[error(
+        "{path} is in a format ({found}) no version of pitboard has ever written. Delete it \
+         and enroll your accounts again."
+    )]
+    StateVersionUnknown { path: PathBuf, found: u32 },
 
     #[error(
         "{path} was written on another computer. Parked logins do not move between \
@@ -303,7 +310,8 @@ impl Error {
             CustomOauthEndpoint => "custom_oauth_endpoint",
             StateUnreadable { .. } => "state_unreadable",
             StateCorrupt { .. } => "state_corrupt",
-            StateVersionMismatch { .. } => "state_version_mismatch",
+            StateFromNewerVersion { .. } => "state_from_newer_version",
+            StateVersionUnknown { .. } => "state_version_unknown",
             StateWrongMachine { .. } => "state_wrong_machine",
             StateWriteFailed { .. } => "state_write_failed",
             HomeUnwritable { .. } => "home_unwritable",

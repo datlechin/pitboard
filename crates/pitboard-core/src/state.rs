@@ -184,21 +184,47 @@ pub fn load(ctx: &Context) -> Result<State> {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(State::default()),
         Err(source) => return Err(Error::StateUnreadable { path, source }),
     };
-    let state: State = serde_json::from_str(&raw).map_err(|source| Error::StateCorrupt {
+    let mut document: serde_json::Value =
+        serde_json::from_str(&raw).map_err(|source| Error::StateCorrupt {
+            path: path.clone(),
+            source,
+        })?;
+    migrate(&mut document, &path)?;
+    let state: State = serde_json::from_value(document).map_err(|source| Error::StateCorrupt {
         path: path.clone(),
         source,
     })?;
-    if state.schema != SCHEMA {
-        return Err(Error::StateVersionMismatch {
-            path,
-            found: state.schema,
-            expected: SCHEMA,
-        });
-    }
     if state.machine != machine_id() {
         return Err(Error::StateWrongMachine { path });
     }
     Ok(state)
+}
+
+/// Brings an older file up to the current format in place.
+///
+/// The command line and the app carry their own copy of this crate and update by different
+/// routes, so on one machine an older pitboard will meet a file a newer one wrote. Reading
+/// forwards is what this is for; reading backwards is not possible, and says so.
+fn migrate(document: &mut serde_json::Value, path: &std::path::Path) -> Result<()> {
+    // Each future bump adds an arm that rewrites the document and falls through to the
+    // next, so a file two versions behind is brought all the way forward in one read.
+    let found = document
+        .get("schema")
+        .and_then(serde_json::Value::as_u64)
+        .unwrap_or_default() as u32;
+    match found {
+        SCHEMA => Ok(()),
+        // Nothing released wrote 1 or 2: the schema reached 3 before the first release.
+        0..SCHEMA => Err(Error::StateVersionUnknown {
+            path: path.to_path_buf(),
+            found,
+        }),
+        _ => Err(Error::StateFromNewerVersion {
+            path: path.to_path_buf(),
+            found,
+            expected: SCHEMA,
+        }),
+    }
 }
 
 pub fn save(ctx: &Context, state: &State) -> Result<()> {
@@ -215,6 +241,46 @@ pub fn save(ctx: &Context, state: &State) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
+    /// A file written by the version in people's hands today. The command line and the app
+    /// update separately, so a file one of them wrote has to keep loading in the other.
+    #[test]
+    fn the_format_shipped_in_0_1_x_still_loads() {
+        let written = serde_json::json!({
+            "schema": 3,
+            "machine": machine_id(),
+            "accounts": [{
+                "label": "work",
+                "account_uuid": "acc-1",
+                "email": "a@b.c",
+                "organization_uuid": "org-1",
+                "oauth_account": {"emailAddress": "a@b.c"},
+                "parked": {
+                    "service": "pitboard-park-acc-1-1789935600123",
+                    "parked_at": 1_789_935_600,
+                    "refresh_fingerprint": "abcd",
+                    "access_expires_at": 1_789_999_999,
+                    "refresh_expires_at": 1_792_000_000
+                }
+            }],
+            "active": "work",
+            "discarded": []
+        });
+        let mut document = written.clone();
+        migrate(&mut document, std::path::Path::new("/tmp/state.json")).expect("still current");
+        let state: State = serde_json::from_value(document).expect("still parses");
+        assert_eq!(state.get("work").unwrap().email, "a@b.c");
+        assert_eq!(state.active.as_deref(), Some("work"));
+    }
+
+    /// The other direction cannot work, and the message has to say which half to upgrade.
+    #[test]
+    fn a_file_from_a_newer_pitboard_says_so() {
+        let mut document = serde_json::json!({"schema": SCHEMA + 1});
+        let err = migrate(&mut document, std::path::Path::new("/tmp/state.json")).unwrap_err();
+        assert_eq!(err.code(), "state_from_newer_version");
+        assert!(err.to_string().contains("upgrade whichever"), "{err}");
+    }
+
     use super::*;
 
     #[test]
