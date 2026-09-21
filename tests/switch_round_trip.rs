@@ -207,6 +207,31 @@ fn signing_in_to_an_enrolled_account_again_renews_its_parked_login() {
     assert_eq!(env.live()["claudeAiOauth"]["refreshToken"], "refresh-b2");
 }
 
+/// A label typed wrong at enroll time is fixed without signing in again, whichever account
+/// it names.
+#[test]
+fn renaming_keeps_the_login_and_the_new_label_switches() {
+    let env = two_accounts("rename");
+    let beta_park = env.parked_service("beta").unwrap();
+
+    for (from, to) in [("alpha", "personal"), ("beta", "work")] {
+        let (out, err, code) = env.run(&["rename", from, to]);
+        assert_eq!(code, 0, "{err}");
+        assert!(out.contains(&format!("Renamed {from} to {to}")), "{out}");
+    }
+    assert_eq!(env.state()["active"], "personal");
+    assert_eq!(env.parked_service("work"), Some(beta_park.clone()));
+    assert!(env.is_parked(&beta_park), "a rename deletes nothing");
+
+    let (_, err, code) = env.run(&["use", "work"]);
+    assert_eq!(code, 0, "{err}");
+    assert_eq!(env.live()["claudeAiOauth"]["refreshToken"], "refresh-b");
+
+    let (_, err, code) = env.run(&["rename", "personal", "work"]);
+    assert_eq!(code, 1);
+    assert!(err.contains("already refers to"), "{err}");
+}
+
 #[test]
 fn forgetting_the_signed_in_account_is_refused() {
     let env = two_accounts("forget");

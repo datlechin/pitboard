@@ -61,6 +61,8 @@ account again; the rest of pitboard's record of it stays as it is:
 pitboard enroll work --sign-in
 ```
 
+A label typed wrong is changed without signing in again: `pitboard rename wrong right`.
+
 `pitboard doctor` checks everything pitboard relies on, including every parked login.
 
 ## In Claude Code's status bar

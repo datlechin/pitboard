@@ -36,6 +36,7 @@ enum Command {
     /// Add an account: the one signed in now, or with --sign-in, another one
     Enroll {
         /// A short name for this account, such as `personal` or `work`
+        #[arg(value_parser = new_label)]
         label: String,
         /// Sign in through Claude Code's own sign-in, without signing out of the account in
         /// use. For an enrolled label, this renews its parked login.
@@ -52,6 +53,14 @@ enum Command {
         /// The label to drop
         label: String,
     },
+    /// Change the label an account is enrolled under
+    Rename {
+        /// The label it has now
+        from: String,
+        /// The label it should have
+        #[arg(value_parser = new_label)]
+        to: String,
+    },
     /// Check that what pitboard relies on still holds on this machine
     Doctor,
     /// One line for Claude Code's status bar; reads its session JSON on stdin
@@ -61,6 +70,14 @@ enum Command {
     /// Print the man page
     #[command(hide = true)]
     Manpage,
+}
+
+/// A label is typed on the command line from then on, so it cannot be empty or hold spaces.
+fn new_label(text: &str) -> Result<String, String> {
+    if text.is_empty() || text.chars().any(|c| c.is_whitespace() || c.is_control()) {
+        return Err("a label must be one word, such as `personal` or `work`".into());
+    }
+    Ok(text.to_string())
 }
 
 /// What a command produced, before it is rendered for a person or a program.
@@ -316,6 +333,27 @@ fn forget(settled: Settled, label: &str) -> Report {
     }
 }
 
+fn rename(settled: Settled, from: &str, to: &str) -> Report {
+    let outcome = switch::rename(settled, from, to);
+    audit::record(
+        "rename",
+        &format!("{from} -> {to}"),
+        outcome.as_ref().map_or_else(|e| e.code(), |_| "ok"),
+    );
+    match outcome {
+        Ok(email) => Report::done(
+            "rename",
+            json!({ "from": from, "to": to, "email": email }),
+            format!(
+                "Renamed {} to {} ({email}).\n",
+                paint(BOLD, from),
+                paint(BOLD, to)
+            ),
+        ),
+        Err(e) => Report::failed(Some("rename"), e),
+    }
+}
+
 /// A usage error keeps clap's own rendering, unless the caller asked for JSON, which is
 /// promised for every outcome.
 fn parse() -> Result<Cli, ExitCode> {
@@ -345,6 +383,7 @@ fn main() -> ExitCode {
         }
         Command::Use { label } => changing("use", &label, |s| use_account(s, &label)),
         Command::Forget { label } => changing("forget", &label, |s| forget(s, &label)),
+        Command::Rename { from, to } => changing("rename", &from, |s| rename(s, &from, &to)),
         Command::Completions { shell } => {
             clap_complete::generate(
                 shell,
@@ -392,6 +431,21 @@ mod tests {
                 .unwrap()
                 .json
         );
+    }
+
+    #[test]
+    fn a_new_label_is_one_word() {
+        assert!(Cli::try_parse_from(["pitboard", "rename", "a", "personal"]).is_ok());
+        for bad in ["", "two words", "tab\there"] {
+            assert!(
+                Cli::try_parse_from(["pitboard", "rename", "a", bad]).is_err(),
+                "{bad:?}"
+            );
+            assert!(
+                Cli::try_parse_from(["pitboard", "enroll", bad]).is_err(),
+                "{bad:?}"
+            );
+        }
     }
 
     #[test]

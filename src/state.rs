@@ -128,6 +128,27 @@ impl State {
         }
     }
 
+    /// Enroll the account under `from` as `to` instead. Only the label changes: parked
+    /// logins are named by account, not by label.
+    pub fn relabel(&mut self, from: &str, to: &str) -> Result<&Account> {
+        if from != to
+            && let Some(taken) = self.get(to)
+        {
+            return Err(Error::LabelTaken {
+                label: to.to_string(),
+                email: taken.email.clone(),
+            });
+        }
+        if self.active.as_deref() == Some(from) {
+            self.active = Some(to.to_string());
+        }
+        let account = self.get_mut(from).ok_or_else(|| Error::AccountUnknown {
+            label: from.to_string(),
+        })?;
+        account.label = to.to_string();
+        Ok(account)
+    }
+
     /// Drop the account, listing its park for deletion.
     pub fn remove(&mut self, label: &str) -> Option<Account> {
         let index = self.accounts.iter().position(|a| a.label == label)?;
@@ -252,6 +273,44 @@ mod tests {
         s.discard("current");
         assert!(s.get("work").unwrap().parked.is_none());
         assert_eq!(s.discarded, ["something-else", "current"]);
+    }
+
+    #[test]
+    fn relabelling_keeps_the_account_its_park_and_whether_it_is_active() {
+        let mut s = State::default();
+        s.upsert(account("wrong", Some(park("p"))));
+        s.upsert(account("other", None));
+        s.active = Some("wrong".into());
+
+        assert_eq!(
+            s.relabel("wrong", "right").unwrap().email,
+            "wrong@example.com"
+        );
+        assert!(s.get("wrong").is_none());
+        let renamed = s.get("right").unwrap();
+        assert_eq!(renamed.account_uuid, "wrong-uuid");
+        assert_eq!(renamed.parked.as_ref().unwrap().service, "p");
+        assert_eq!(s.active.as_deref(), Some("right"));
+        assert!(s.discarded.is_empty(), "nothing is deleted by a rename");
+    }
+
+    #[test]
+    fn relabelling_refuses_a_taken_label_and_an_unknown_one() {
+        let mut s = State::default();
+        s.upsert(account("a", None));
+        s.upsert(account("b", None));
+        s.active = Some("a".into());
+        assert!(matches!(s.relabel("a", "b"), Err(Error::LabelTaken { .. })));
+        assert!(matches!(
+            s.relabel("nobody", "c"),
+            Err(Error::AccountUnknown { .. })
+        ));
+        assert_eq!(
+            s.active.as_deref(),
+            Some("a"),
+            "a refused rename changes nothing"
+        );
+        assert!(s.relabel("a", "a").is_ok());
     }
 
     #[test]

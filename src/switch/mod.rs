@@ -9,10 +9,12 @@
 mod enroll;
 mod forget;
 mod journal;
+mod rename;
 
 pub use enroll::{Enrolled, enroll};
 pub use forget::forget;
 pub use journal::{Recovered, pending as interrupted};
+pub use rename::rename;
 
 use crate::error::{Error, Result};
 use crate::state::{Account, Park, State};
