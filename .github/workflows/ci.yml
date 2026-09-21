@@ -61,9 +61,10 @@ jobs:
       - run: rustup toolchain install
       - run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-      # Proves the core still links into a native app and its bindings still match.
-      - run: ./apple/scripts/build-xcframework.sh
-      - run: swift test --package-path apple/PitboardKit
+      # Proves the core still links into the app, that its bindings still match, and that
+      # the bundle still assembles and signs.
+      - run: ./apple/scripts/build-app.sh
+      - run: swift test --package-path apple
 
   deny:
     runs-on: ubuntu-latest

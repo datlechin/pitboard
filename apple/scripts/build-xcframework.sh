@@ -6,7 +6,7 @@ set -eu
 cd "$(dirname "$0")/../.."
 export MACOSX_DEPLOYMENT_TARGET=14.0
 out=apple/build
-package=apple/PitboardKit
+package=apple
 generated=$package/Sources/PitboardBindings
 rm -rf "$out"
 mkdir -p "$out/bindings" "$out/headers" "$generated"
