@@ -85,6 +85,25 @@ the network or touches a login. Add it to `~/.claude/settings.json`:
 To combine it with a status line of your own, pipe the same input to it:
 `echo "$input" | pitboard statusline`.
 
+## In the menu bar
+
+pitboard also comes as a small macOS app: the account in use and its tightest limit in the
+menu bar, every account's limits in the panel, and one click to switch.
+
+It is not released as a signed download yet. To build and install it from a clone:
+
+```sh
+./apple/scripts/build-app.sh
+cp -R apple/build/Pitboard.app /Applications/
+```
+
+It is the same core the CLI uses, called directly — not the `pitboard` binary in a
+subprocess — so it needs nothing else installed. Usage is read when you open the panel and
+every few minutes while it runs; "Open at login" is under the menu at the bottom right.
+
+A copy downloaded from a release keeps itself up to date; one built from a clone carries no
+update key and so never checks.
+
 ## Scripting
 
 Every command accepts `--json` and emits the same versioned envelope, including on

@@ -8,6 +8,7 @@ private typealias Limits = PitboardBindings.Window
 
 struct MenuView: View {
     let model: AppModel
+    let updater: Updater
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -30,7 +31,7 @@ struct MenuView: View {
                 ProgressView().controlSize(.small)
             }
             Divider()
-            Footer(model: model)
+            Footer(model: model, updater: updater)
         }
         .padding(14)
         .frame(width: 340)
@@ -113,6 +114,7 @@ private struct Limit: View {
 
 private struct Footer: View {
     let model: AppModel
+    let updater: Updater
     @State private var openAtLogin = SMAppService.mainApp.status == .enabled
 
     var body: some View {
@@ -121,6 +123,9 @@ private struct Footer: View {
             Spacer()
             Button("Refresh") { Task { await model.refresh() } }
             Menu {
+                if updater.available {
+                    Button("Check for Updates…") { updater.check() }
+                }
                 Toggle("Open at login", isOn: $openAtLogin)
                     .onChange(of: openAtLogin) { _, wanted in
                         try? wanted ? SMAppService.mainApp.register() : SMAppService.mainApp.unregister()

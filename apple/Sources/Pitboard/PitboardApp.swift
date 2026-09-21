@@ -5,10 +5,11 @@ import SwiftUI
 @main
 struct PitboardApp: App {
     @State private var model = AppModel()
+    @State private var updater = Updater()
 
     var body: some Scene {
         MenuBarExtra {
-            MenuView(model: model)
+            MenuView(model: model, updater: updater)
         } label: {
             Text(model.title)
         }
