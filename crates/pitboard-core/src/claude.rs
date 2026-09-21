@@ -27,6 +27,21 @@ pub fn config_file(ctx: &Context) -> PathBuf {
         .join(".claude.json")
 }
 
+/// Where the `claude` that signs someone in actually is, if it is anywhere. A bare name is
+/// looked up in PATH the way a shell would.
+pub fn program(ctx: &Context) -> Option<PathBuf> {
+    let named = &ctx.claude_program;
+    if named.components().count() > 1 {
+        return std::fs::metadata(named).is_ok().then(|| named.clone());
+    }
+    std::env::var_os("PATH")?
+        .to_string_lossy()
+        .split(':')
+        .filter(|dir| !dir.is_empty())
+        .map(|dir| PathBuf::from(dir).join(named))
+        .find(|candidate| std::fs::metadata(candidate).is_ok())
+}
+
 /// The directory whose path string selects the credential slot.
 pub fn storage_dir(ctx: &Context) -> String {
     storage_dir_from(
@@ -115,6 +130,28 @@ pub fn identity(config: &Value) -> Option<Identity> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A bare name is looked up the way a shell looks it up, so pitboard and the person's
+    /// own shell disagree about whether Claude Code is installed only if PATH differs.
+    #[test]
+    fn a_program_is_found_on_path_and_a_missing_one_is_not() {
+        let ctx = Context::new(std::path::PathBuf::from("/home/x"));
+        assert_eq!(
+            program(&ctx.clone().with_claude_program("ls".into())),
+            Some(std::path::PathBuf::from("/bin/ls"))
+        );
+        assert_eq!(
+            program(
+                &ctx.clone()
+                    .with_claude_program("no-such-program-anywhere".into())
+            ),
+            None
+        );
+        assert_eq!(
+            program(&ctx.with_claude_program("/nowhere/at/all/claude".into())),
+            None
+        );
+    }
 
     #[test]
     fn an_empty_storage_dir_pins_the_default_slot_even_with_a_config_dir() {

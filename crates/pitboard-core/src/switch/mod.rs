@@ -11,12 +11,14 @@ mod forget;
 mod journal;
 mod rename;
 mod renew;
+mod uninstall;
 
 pub use enroll::{Enrolled, SignIn, enroll, sign_in};
 pub use forget::forget;
 pub use journal::{Recovered, pending as interrupted};
 pub use rename::rename;
 pub use renew::{Renewal, renew_parked};
+pub use uninstall::{Removed, uninstall};
 
 use crate::context::Context;
 use crate::error::{Error, Result};

@@ -12,6 +12,12 @@ pub enum Error {
     StateOnSyncedDrive { path: PathBuf, marker: String },
 
     #[error(
+        "`{program}` is not on this machine, and pitboard signs in with Claude Code's own \
+         sign-in. Install Claude Code, or point pitboard at it."
+    )]
+    ClaudeProgramMissing { program: String },
+
+    #[error(
         "CLAUDE_CODE_CUSTOM_OAUTH_URL is set, so Claude Code keeps its login under a \
          different name than the one pitboard reads. Unset it to use pitboard."
     )]
@@ -261,6 +267,7 @@ impl Error {
         use Error::*;
         match self {
             StateOnSyncedDrive { .. } => "state_on_synced_drive",
+            ClaudeProgramMissing { .. } => "claude_program_missing",
             CustomOauthEndpoint => "custom_oauth_endpoint",
             StateUnreadable { .. } => "state_unreadable",
             StateCorrupt { .. } => "state_corrupt",

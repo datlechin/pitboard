@@ -34,7 +34,11 @@ fn line(at: i64, caller: &str, verb: &str, subject: &str, outcome: &str) -> Stri
 }
 
 fn append(ctx: &Context, line: &str) -> std::io::Result<()> {
-    home::ensure(ctx)?;
+    // Never makes the home itself. Every change settles first, which makes it; and after an
+    // uninstall there is no home to write into and nothing left to describe.
+    if !std::fs::metadata(home::dir(ctx)).is_ok_and(|m| m.is_dir()) {
+        return Ok(());
+    }
     let path = path(ctx);
     if std::fs::metadata(&path).is_ok_and(|m| m.len() > LIMIT_BYTES) {
         std::fs::rename(&path, path.with_extension("log.1"))?;

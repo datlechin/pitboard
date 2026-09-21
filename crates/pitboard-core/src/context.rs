@@ -71,6 +71,16 @@ impl Context {
     }
 
     /// The login name whose keychain account Claude Code stores under.
+    /// Whether a custom OAuth endpoint is configured, which moves Claude Code's login.
+    pub fn custom_oauth(&self) -> bool {
+        self.custom_oauth
+    }
+
+    /// The `claude` pitboard would run to sign someone in.
+    pub fn claude_program(&self) -> &std::path::Path {
+        &self.claude_program
+    }
+
     /// Environment variables that authenticate Claude Code some other way, if any.
     pub fn overriding_auth(&self) -> &[String] {
         &self.overriding_auth

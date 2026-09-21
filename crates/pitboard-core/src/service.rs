@@ -7,7 +7,7 @@ use crate::doctor::{self, Diagnosis};
 use crate::error::{Error, Result};
 use crate::state::{self, Account};
 use crate::switch::{self, Enrolled, Outcome, Recovered, Renewal, Settled, SignIn};
-use crate::{audit, status, statusline};
+use crate::{audit, claude, status, statusline};
 use std::fmt;
 
 /// Something to know about that did not stop the operation.
@@ -142,8 +142,25 @@ impl Pitboard {
     /// Claude Code's own sign-in in a private directory. It takes no lock but its own, so a
     /// person taking their time in a browser never holds up a switch.
     pub fn sign_in(&self, label: &str) -> Result<SignIn> {
-        switch::sign_in(&self.ctx)
+        self.before_signing_in()
+            .and_then(|()| switch::sign_in(&self.ctx))
             .inspect_err(|e| audit::record(&self.ctx, "enroll", label, e.code()))
+    }
+
+    /// Everything that can refuse an enrolment and is knowable before the new login exists.
+    /// Checked first, so a person does not sign in through a browser only to be told the
+    /// state file belongs to another machine or that `claude` is not installed.
+    fn before_signing_in(&self) -> Result<()> {
+        if self.ctx.custom_oauth() {
+            return Err(Error::CustomOauthEndpoint);
+        }
+        state::load(&self.ctx)?;
+        if claude::program(&self.ctx).is_none() {
+            return Err(Error::ClaudeProgramMissing {
+                program: self.ctx.claude_program().display().to_string(),
+            });
+        }
+        Ok(())
     }
 
     pub fn enroll_signed_in(&self, label: &str, login: SignIn) -> Changing<Enrolled> {
@@ -155,6 +172,14 @@ impl Pitboard {
     /// Returns the account's email.
     pub fn forget(&self, label: &str) -> Changing<String> {
         self.changing("forget", label, |settled| switch::forget(settled, label))
+    }
+
+    /// Deletes every parked login and pitboard's own directory. Claude Code's login is
+    /// left alone: whoever is signed in stays signed in.
+    pub fn uninstall(&self) -> Changing<switch::Removed> {
+        self.changing("uninstall", "", |settled| {
+            switch::uninstall(settled).map(|r| (r, Vec::new()))
+        })
     }
 
     /// Returns the account's email.
@@ -220,3 +245,13 @@ impl Audited for Outcome {
 
 impl Audited for Enrolled {}
 impl Audited for String {}
+
+impl Audited for switch::Removed {
+    fn audit_code(&self) -> &'static str {
+        if self.pending > 0 {
+            "parks_pending_removal"
+        } else {
+            "ok"
+        }
+    }
+}

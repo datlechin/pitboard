@@ -61,6 +61,12 @@ enum Command {
         #[arg(short = 'y', long)]
         yes: bool,
     },
+    /// Delete every parked login and pitboard's own files
+    Uninstall {
+        /// Do not ask first
+        #[arg(short = 'y', long)]
+        yes: bool,
+    },
     /// Change the label an account is enrolled under
     Rename {
         /// The label it has now
@@ -331,6 +337,35 @@ fn forget(pitboard: &Pitboard, label: &str) -> Report {
     })
 }
 
+fn uninstall(pitboard: &Pitboard) -> Report {
+    changed("uninstall", pitboard.uninstall(), |removed| {
+        let mut human = format!(
+            "Removed {} parked login(s). Claude Code's login is untouched.\n",
+            removed.parks
+        );
+        if removed.pending > 0 {
+            human.push_str(&format!(
+                "{} could not be deleted, so ~/.pitboard was kept; run `pitboard \
+                 uninstall` again.\n",
+                removed.pending
+            ));
+        } else if removed.home_removed {
+            human.push_str(
+                "~/.pitboard is gone. Uninstall the binary itself with your \
+                            package manager.\n",
+            );
+        }
+        (
+            json!({
+                "parks_removed": removed.parks,
+                "parks_pending": removed.pending,
+                "home_removed": removed.home_removed,
+            }),
+            human,
+        )
+    })
+}
+
 fn rename(pitboard: &Pitboard, from: &str, to: &str) -> Report {
     changed("rename", pitboard.rename(from, to), |email| {
         (
@@ -397,6 +432,25 @@ fn main() -> ExitCode {
                 }
             }
             forget(&pitboard, &label)
+        }
+        Command::Uninstall { yes } => {
+            if !yes
+                && !cli.json
+                && std::io::stdin().is_terminal()
+                && std::io::stderr().is_terminal()
+            {
+                eprint!(
+                    "Delete every parked login and ~/.pitboard? The account you are signed \
+                     in to stays signed in; the others need a browser sign-in again. [y/N] "
+                );
+                let _ = std::io::stderr().flush();
+                let mut answer = String::new();
+                let _ = std::io::stdin().read_line(&mut answer);
+                if !matches!(answer.trim(), "y" | "Y" | "yes") {
+                    return ExitCode::SUCCESS;
+                }
+            }
+            uninstall(&pitboard)
         }
         Command::Rename { from, to } => rename(&pitboard, &from, &to),
         // These write a file for a shell or for man, not a report, so there is no envelope

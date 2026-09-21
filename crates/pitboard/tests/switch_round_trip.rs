@@ -518,3 +518,27 @@ fn the_status_line_names_the_account_in_use_and_the_others() {
         "alpha 46%·70%  beta ?·?\n"
     );
 }
+
+/// Uninstalling has one job beyond deleting files: the parked logins are live refresh
+/// tokens, and ~/.pitboard is the only index of them. Removing the directory without them
+/// would leave credentials on the machine that nothing can name.
+#[test]
+fn uninstalling_takes_the_parked_logins_with_it() {
+    let env = two_accounts("uninstall-clean");
+    let parked = env
+        .parked_service("beta")
+        .expect("beta was enrolled by signing in, so it has a parked login");
+    assert!(env.is_parked(&parked), "the park is there to begin with");
+
+    let (out, err, code) = env.run(&["uninstall", "--yes"]);
+    assert_eq!(code, 0, "{err}");
+    assert!(out.contains("Removed 1 parked login"), "{out}");
+
+    assert!(!env.is_parked(&parked), "the parked login is gone");
+    assert!(
+        !env.root.join("pitboard").exists(),
+        "pitboard's own directory is gone"
+    );
+    // The account that was signed in is still signed in: uninstalling is not a logout.
+    assert_eq!(env.live()["claudeAiOauth"]["refreshToken"], "refresh-a");
+}
