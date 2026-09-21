@@ -5,11 +5,62 @@ All notable changes are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-09-22
+
+Everything a stranger hits in the first ten minutes, every state a person could be stuck in,
+and what the app was missing to stand on its own.
+
 ### Added
+- `pitboard log` shows what pitboard has changed and when, from the record it was already
+  keeping. The log now names which front end asked.
+- `pitboard uninstall` deletes every parked login and then pitboard's own files, in that
+  order, because the account list is the only index of those keychain items.
+- `pitboard abandon` gives up on an interrupted switch that cannot be finished, keeping
+  every login. The way out when recovery cannot reach Anthropic.
 - `pitboard status --offline` answers from what was last measured, without asking Anthropic
-  or touching a login. It answers in milliseconds and works with no network.
+  or touching a login. Milliseconds instead of seconds, and it works with no network.
+- `forget` asks before deleting a parked login, unless `--yes` or `--json`.
 - Each usage row in `--json` carries `severity`, Anthropic's own grade for that limit. A
   field added to the v1 envelope; nothing was removed or renamed.
+- The app: each account's email, when each limit resets, when a parked login stops working,
+  doctor's checks on demand, its own version, a mark in the menu bar, and VoiceOver labels.
+  It can record the account in use, drop an account, and run Claude Code's own sign-in for
+  a new one, showing what that sign-in says rather than borrowing a terminal.
+- `cargo binstall pitboard` fetches the built binary instead of compiling the tree.
+
+### Fixed
+- `pitboard statusline` typed at a prompt waited for input that was never coming. It reads
+  stdin only when something is piping into it.
+- Offline, the account in use rendered as one with nothing parked, advising a sign-in it did
+  not need.
+- A switch that failed before installing anything left its journal behind, so the next
+  command announced a recovery for something that never happened.
+- `enroll --sign-in` checked what could refuse the enrolment only after the browser sign-in.
+- The status line showed `?·?` for every account but the one in use until someone ran
+  `pitboard` by hand. It now keeps the numbers Claude Code hands it.
+- doctor and forget read pitboard's record of its last switch rather than who is signed in,
+  so a sign-in made with Claude Code's own `/login` made both wrong.
+- Three ways a parked login could be left in the keychain with nothing naming it.
+- A renewal that could not be written left the account with a login already spent.
+- The keychain ceiling has its own error, saying the size, the limit, and what to do. A
+  login with MCP server tokens in it is past that limit, which is not theory.
+- `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN` and `CLAUDE_CODE_OAUTH_TOKEN` raise a warning
+  on every change: Claude Code signs in with those, not with the login pitboard moved.
+- Columns line up in what a terminal draws, so a label in Chinese or Japanese no longer
+  pushes everything after it out of line.
+- One state file serves every credential slot, and what was switched to in one slot is no
+  longer claimed in another.
+- The menu bar showed the largest percentage of any limit, so a row scoped to one model
+  read as though everything had stopped.
+- Windows gets one sentence instead of a screen of type errors.
+
+### Internal
+- MSRV is 1.91, measured by building it, and CI builds at whatever the manifest claims.
+- The state file can be read forwards, and says which half to upgrade when it cannot.
+- A release is guarded, re-runnable, and carries build provenance; the macOS command line
+  binaries are signed and notarised like the app. A tag like `v0.2.0-rc1` is a pre-release:
+  no crates.io, no update feed.
+- The app can be tested without a keychain, and is.
 
 ## [0.1.4] - 2026-09-22
 
@@ -97,7 +148,8 @@ First release.
 - Schema 3: one parked login per account, with when it expires. Earlier files are refused
   rather than migrated; nothing was ever released that wrote them.
 
-[Unreleased]: https://github.com/datlechin/pitboard/compare/v0.1.4...HEAD
+[Unreleased]: https://github.com/datlechin/pitboard/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/datlechin/pitboard/compare/v0.1.4...v0.2.0
 [0.1.4]: https://github.com/datlechin/pitboard/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/datlechin/pitboard/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/datlechin/pitboard/compare/v0.1.1...v0.1.2
