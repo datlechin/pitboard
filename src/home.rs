@@ -4,6 +4,7 @@
 //! It is forced to 0700 rather than left to the umask. On a shared Linux machine the park
 //! filenames contain account identifiers, so listing the directory is itself a leak.
 
+use crate::error::{Error, Result};
 use std::io;
 use std::path::{Path, PathBuf};
 
@@ -39,15 +40,14 @@ pub fn restrict(path: &Path) -> io::Result<()> {
     std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700))
 }
 
-pub fn check_location(path: &Path) -> Result<(), String> {
+pub fn check_location(path: &Path) -> Result<()> {
     let resolved = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
     let text = resolved.to_string_lossy();
     match SYNCED.iter().find(|marker| text.contains(**marker)) {
-        Some(marker) => Err(format!(
-            "{} looks like it is inside {marker}, which syncs to other machines. \
-             Parked logins belong to one machine; set PITBOARD_HOME to a local folder.",
-            resolved.display()
-        )),
+        Some(marker) => Err(Error::StateOnSyncedDrive {
+            path: resolved.clone(),
+            marker: (*marker).to_string(),
+        }),
         None => Ok(()),
     }
 }

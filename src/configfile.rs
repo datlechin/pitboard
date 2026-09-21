@@ -6,6 +6,7 @@
 //! caches are dropped by shape rather than by name, because the set of account-derived
 //! keys changes between releases and a copied list is wrong in both directions.
 
+use crate::error::{Error, Result};
 use crate::{atomic, claude, home, time};
 use serde_json::{Map, Value};
 use std::path::{Path, PathBuf};
@@ -75,16 +76,20 @@ fn backups_dir() -> PathBuf {
 ///
 /// Claude Code maintains a backup ring of its own, but it churns through it in minutes
 /// under normal use, so it cannot be relied on to still hold a pre-switch copy.
-pub fn backup(path: &Path) -> Result<PathBuf, String> {
+pub fn backup(path: &Path) -> Result<PathBuf> {
+    let fail = |source| Error::ConfigBackupFailed {
+        path: path.to_path_buf(),
+        source,
+    };
     let dir = backups_dir();
-    std::fs::create_dir_all(&dir).map_err(|e| format!("cannot create {}: {e}", dir.display()))?;
+    std::fs::create_dir_all(&dir).map_err(fail)?;
     let target = dir.join(format!("claude.json.{}", time::now()));
-    std::fs::copy(path, &target).map_err(|e| format!("cannot back up {}: {e}", path.display()))?;
+    std::fs::copy(path, &target).map_err(fail)?;
 
     let mut existing: Vec<PathBuf> = std::fs::read_dir(&dir)
-        .map_err(|e| e.to_string())?
-        .filter_map(Result::ok)
-        .map(|e| e.path())
+        .map_err(fail)?
+        .filter_map(std::result::Result::ok)
+        .map(|entry| entry.path())
         .filter(|p| {
             p.file_name()
                 .is_some_and(|n| n.to_string_lossy().starts_with("claude.json."))
@@ -99,10 +104,15 @@ pub fn backup(path: &Path) -> Result<PathBuf, String> {
 
 /// Write through a temp file in the same directory, so a reader never sees a partial config.
 /// Claude Code's file, not ours, so it keeps the permissions its owner gave it.
-pub fn write(path: &Path, config: &Value) -> Result<(), String> {
-    let body = serde_json::to_string(config).map_err(|e| e.to_string())?;
-    atomic::write(path, body.as_bytes(), atomic::Perms::MatchExisting)
-        .map_err(|e| format!("cannot replace {}: {e}", path.display()))
+/// Claude Code's file, not ours, so it keeps the permissions its owner gave it.
+pub fn write(path: &Path, config: &Value) -> Result<()> {
+    let body = serde_json::to_string(config).expect("a loaded config is always serialisable");
+    atomic::write(path, body.as_bytes(), atomic::Perms::MatchExisting).map_err(|e| {
+        Error::ConfigWriteFailed {
+            path: path.to_path_buf(),
+            detail: e.to_string(),
+        }
+    })
 }
 
 pub fn path() -> PathBuf {

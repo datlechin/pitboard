@@ -4,6 +4,7 @@
 //! previous generation is still there. Pruning runs only after the state that stopped
 //! referencing a generation is durable.
 
+use crate::error::{Error, Result};
 use crate::state::{Account, Generation, retained};
 use crate::{store, time};
 use serde_json::Value;
@@ -18,30 +19,21 @@ pub fn service_name(account_uuid: &str, at_millis: i64) -> String {
 /// that dies mid-park leaves a name that recovery can go looking for. Two parks of one
 /// account can land in the same millisecond, and reusing a name would destroy the
 /// generation already there.
-pub fn reserve(account_uuid: &str) -> Result<String, String> {
+pub fn reserve(account_uuid: &str) -> Result<String> {
     let start = time::now_millis();
     for offset in 0..1_000 {
         let candidate = service_name(account_uuid, start + offset);
-        match store::keychain_read(&candidate) {
-            Ok(None) => return Ok(candidate),
-            Ok(Some(_)) => continue,
-            Err(e) => return Err(e.to_string()),
+        if store::vault_read(&candidate)?.is_none() {
+            return Ok(candidate);
         }
     }
-    Err(format!("cannot find a free park slot for {account_uuid}"))
+    Err(Error::ParkSlotExhausted)
 }
 
 /// Write a credential into a reserved name and prove it reads back.
-pub fn store_at(service: &str, oauth: &Value) -> Result<Generation, String> {
-    let body = serde_json::to_string(oauth).map_err(|e| e.to_string())?;
-    if store::too_large(service, &body) {
-        return Err(format!("credential is too large to park in {service}"));
-    }
-    store::keychain_write(service, &body)?;
-    match store::keychain_read(service).map_err(|e| e.to_string())? {
-        Some(back) if back == body => {}
-        _ => return Err(format!("{service} did not read back as written")),
-    }
+pub fn store_at(service: &str, oauth: &Value) -> Result<Generation> {
+    let body = serde_json::to_string(oauth).expect("an oauth block is always serialisable");
+    store::vault_write(service, &body)?;
     Ok(Generation {
         service: service.to_string(),
         parked_at: time::now(),
@@ -58,23 +50,22 @@ pub fn fingerprint_of(oauth: &Value) -> String {
         .unwrap_or_default()
 }
 
-pub fn load(generation: &Generation) -> Result<Value, String> {
-    let raw = store::keychain_read(&generation.service)
-        .map_err(|e| e.to_string())?
-        .ok_or_else(|| {
-            format!(
-                "the parked credential {} is gone from the keychain",
-                generation.service
-            )
+/// The label is carried in so a failure names the account the user knows, rather than the
+/// keychain item they have never seen.
+pub fn load(label: &str, generation: &Generation) -> Result<Value> {
+    let raw =
+        store::vault_read(&generation.service)?.ok_or_else(|| Error::ParkedCredentialMissing {
+            label: label.to_string(),
         })?;
-    let value: Value = serde_json::from_str(&raw)
-        .map_err(|e| format!("{} is not valid JSON: {e}", generation.service))?;
-
+    let value: Value = serde_json::from_str(&raw).map_err(|e| Error::ParkedCredentialCorrupt {
+        label: label.to_string(),
+        detail: e.to_string(),
+    })?;
     if fingerprint_of(&value) != generation.refresh_fingerprint {
-        return Err(format!(
-            "{} holds a different credential than the one parked there",
-            generation.service
-        ));
+        return Err(Error::ParkedCredentialCorrupt {
+            label: label.to_string(),
+            detail: "it does not match the fingerprint pitboard recorded".into(),
+        });
     }
     Ok(value)
 }
@@ -90,7 +81,7 @@ pub fn prune(account: &mut Account) -> Vec<String> {
         if keep.contains(&g.service) {
             return true;
         }
-        match store::delete(&g.service) {
+        match store::vault_delete(&g.service) {
             Ok(()) => false,
             Err(_) => {
                 stuck.push(g.service.clone());

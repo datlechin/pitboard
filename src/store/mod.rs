@@ -1,27 +1,17 @@
-//! Reading and writing Claude Code's credential store.
+//! Reading and writing credentials, both Claude Code's live one and pitboard's parked ones.
 
 mod file;
+#[cfg(target_os = "macos")]
 mod keychain;
+#[cfg(not(target_os = "macos"))]
+mod vault;
 
 use crate::{claude, hex, slot};
 use serde_json::Value;
 use std::path::PathBuf;
 
-/// Whose item is being read. Claude Code treats several `security` exit codes as
-/// "absent"; for an item we are about to overwrite, only 44 may mean that. Mistaking
-/// "could not tell" for "nothing there" would destroy a credential.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Owner {
-    ClaudeCode,
-    Pitboard,
-}
-
-pub enum Presence {
-    Present(String),
-    Absent,
-    Failed(String),
-}
-
+/// Where a credential actually lives. Reported for display; which values can occur is
+/// decided by the platform's backend list, not by a runtime check in the caller.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Backend {
     Keychain,
@@ -43,40 +33,96 @@ pub enum Error {
     NotDurable(String),
 }
 
+impl Error {
+    pub fn code(&self) -> &'static str {
+        match self {
+            Error::Unreadable(_) => "credential_store_unreadable",
+            Error::Malformed(_) => "credential_not_json",
+            Error::Write(_) => "credential_write_failed",
+            Error::NotDurable(_) => "credential_not_durable",
+        }
+    }
+
+    /// A credential that is present but unreadable as JSON means Claude Code's format
+    /// moved under us, which is a different answer from a write that simply failed.
+    pub fn exit_code(&self) -> u8 {
+        match self {
+            Error::Malformed(_) => 3,
+            _ => 1,
+        }
+    }
+}
+
+/// One credential store.
+///
+/// `write` must verify its own result: doing it here rather than in the caller is what
+/// keeps a write to one resolve plus one read-back, instead of resolving the backend a
+/// second time just to check itself.
+pub(crate) trait RawStore: Send + Sync {
+    fn kind(&self) -> Backend;
+    fn contains(&self, service: &str) -> Result<bool, Error>;
+    fn read(&self, service: &str) -> Result<Option<String>, Error>;
+    fn write(&self, service: &str, contents: &str) -> Result<(), Error>;
+    fn delete(&self, service: &str) -> Result<(), Error>;
+    /// Only the keychain has a hard ceiling.
+    fn too_large(&self, _service: &str, _contents: &str) -> bool {
+        false
+    }
+}
+
+/// Backends that may hold Claude Code's live credential, in the order it looks.
+///
+/// On macOS it writes the plaintext file and deletes the keychain item when a keychain
+/// write fails outright, so both can be the live one at different times.
+#[cfg(target_os = "macos")]
+fn live_chain() -> [&'static dyn RawStore; 2] {
+    [&keychain::LIVE, &file::LIVE]
+}
+#[cfg(not(target_os = "macos"))]
+fn live_chain() -> [&'static dyn RawStore; 1] {
+    [&file::LIVE]
+}
+
+/// Where pitboard's own parked credentials go. Never Claude Code's fallback file.
+#[cfg(target_os = "macos")]
+fn vault() -> &'static dyn RawStore {
+    &keychain::VAULT
+}
+#[cfg(not(target_os = "macos"))]
+fn vault() -> &'static dyn RawStore {
+    &vault::FILE
+}
+
 pub fn credential_file() -> PathBuf {
     PathBuf::from(claude::storage_dir()).join(slot::CRED_FILE)
 }
 
-/// Where the credential is right now.
+/// Which backend holds the live credential right now.
 ///
 /// Resolved on every call, never cached: Claude Code migrates between backends when a
 /// keychain write fails, so a remembered answer goes wrong without warning.
+fn resolve_backend(service: &str) -> Result<Option<&'static dyn RawStore>, Error> {
+    for backend in live_chain() {
+        if backend.contains(service)? {
+            return Ok(Some(backend));
+        }
+    }
+    Ok(None)
+}
+
 pub fn resolve(service: &str) -> Result<Backend, Error> {
-    match keychain::attributes(service) {
-        Presence::Present(_) => Ok(Backend::Keychain),
-        Presence::Failed(m) => Err(Error::Unreadable(m)),
-        Presence::Absent => Ok(if credential_file().is_file() {
-            Backend::File
-        } else {
-            Backend::Absent
-        }),
+    Ok(resolve_backend(service)?.map_or(Backend::Absent, |b| b.kind()))
+}
+
+pub fn read_raw(service: &str) -> Result<Option<String>, Error> {
+    match resolve_backend(service)? {
+        Some(backend) => backend.read(service),
+        None => Ok(None),
     }
 }
 
-pub fn read_raw(service: &str, owner: Owner) -> Result<Option<String>, Error> {
-    match resolve(service)? {
-        Backend::Absent => Ok(None),
-        Backend::Keychain => match keychain::read(service, owner) {
-            Presence::Present(s) => Ok(Some(s)),
-            Presence::Absent => Ok(None),
-            Presence::Failed(m) => Err(Error::Unreadable(m)),
-        },
-        Backend::File => file::read(&credential_file()).map_err(Error::Unreadable),
-    }
-}
-
-pub fn read(service: &str, owner: Owner) -> Result<Option<Value>, Error> {
-    match read_raw(service, owner)? {
+pub fn read(service: &str) -> Result<Option<Value>, Error> {
+    match read_raw(service)? {
         None => Ok(None),
         Some(raw) => serde_json::from_str(&raw)
             .map(Some)
@@ -84,51 +130,30 @@ pub fn read(service: &str, owner: Owner) -> Result<Option<Value>, Error> {
     }
 }
 
-/// Write, then read back and compare.
+/// Write the live credential where it already lives.
 ///
-/// The backend is whichever one currently holds the credential. A failed keychain write
-/// is never answered by writing the plaintext file: that is Claude Code's own demotion
-/// to perform, and doing it here would quietly downgrade where the user's token lives.
-pub fn write_raw(service: &str, owner: Owner, contents: &str) -> Result<(), Error> {
-    let backend = match resolve(service)? {
-        Backend::File => Backend::File,
-        _ => Backend::Keychain,
-    };
-    match backend {
-        Backend::File => file::write(&credential_file(), contents).map_err(Error::Write)?,
-        _ => keychain::write(service, contents).map_err(Error::Write)?,
-    }
-    match read_raw(service, owner)? {
-        Some(back) if back == contents => Ok(()),
-        Some(_) => Err(Error::NotDurable(format!(
-            "{service} holds different bytes than were just written"
-        ))),
-        None => Err(Error::NotDurable(format!("{service} reads back empty"))),
-    }
+/// A failed keychain write is never answered by writing the plaintext file: that demotion
+/// is Claude Code's to perform, and doing it here would quietly downgrade where the user's
+/// token is kept.
+pub fn write_raw(service: &str, contents: &str) -> Result<(), Error> {
+    let backend = resolve_backend(service)?.unwrap_or(live_chain()[0]);
+    backend.write(service, contents)
 }
 
-/// Write to a named keychain item, bypassing backend resolution.
-///
-/// Park generations are always keychain items: they are ours, and they must never
-/// follow Claude Code's fallback to a plaintext file.
-pub fn keychain_write(service: &str, contents: &str) -> Result<(), String> {
-    keychain::write(service, contents)
+pub fn vault_read(service: &str) -> Result<Option<String>, Error> {
+    vault().read(service)
 }
 
-pub fn keychain_read(service: &str) -> Result<Option<String>, Error> {
-    match keychain::read(service, Owner::Pitboard) {
-        Presence::Present(s) => Ok(Some(s)),
-        Presence::Absent => Ok(None),
-        Presence::Failed(m) => Err(Error::Unreadable(m)),
-    }
+pub fn vault_write(service: &str, contents: &str) -> Result<(), Error> {
+    vault().write(service, contents)
 }
 
-pub fn delete(service: &str) -> Result<(), Error> {
-    keychain::delete(service).map_err(Error::Write)
+pub fn vault_delete(service: &str) -> Result<(), Error> {
+    vault().delete(service)
 }
 
 pub fn too_large(service: &str, contents: &str) -> bool {
-    keychain::too_large(service, contents)
+    vault().too_large(service, contents)
 }
 
 /// A stable handle for a token, so credentials can be compared and logged without the
@@ -149,5 +174,15 @@ mod tests {
         assert_eq!(fp, fingerprint("sk-ant-example"));
         assert_ne!(fp, fingerprint("sk-ant-example2"));
         assert!(!fp.contains("sk-ant"));
+    }
+
+    #[test]
+    fn the_live_chain_never_offers_a_keychain_off_macos() {
+        let kinds: Vec<Backend> = live_chain().iter().map(|b| b.kind()).collect();
+        if cfg!(target_os = "macos") {
+            assert_eq!(kinds, vec![Backend::Keychain, Backend::File]);
+        } else {
+            assert_eq!(kinds, vec![Backend::File]);
+        }
     }
 }

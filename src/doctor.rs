@@ -70,7 +70,7 @@ pub fn run() -> Vec<Check> {
         ),
         Err(e) => fail(
             "config file",
-            e.clone(),
+            e.to_string(),
             "Claude Code may not have run on this machine yet.",
         ),
     });
@@ -127,7 +127,7 @@ pub fn run() -> Vec<Check> {
         ),
     });
 
-    checks.push(match store::read(&service, store::Owner::ClaudeCode) {
+    checks.push(match store::read(&service) {
         Ok(Some(doc)) => {
             let keys: Vec<&str> = doc
                 .as_object()

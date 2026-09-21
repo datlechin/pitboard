@@ -1,3 +1,5 @@
+use pitboard::error::Error;
+use pitboard::switch::Outcome;
 use pitboard::{doctor, state, status, switch};
 
 const USAGE: &str = "\
@@ -36,7 +38,7 @@ fn main() -> std::process::ExitCode {
         },
         Some((&"forget", rest)) => match rest.first() {
             Some(label) => cmd_forget(label),
-            None => misuse("forget needs a label"),
+            None => misuse("forget needs a label, for example `pitboard forget personal`"),
         },
         Some((&"version", _)) => {
             println!("{} {}", env!("CARGO_BIN_NAME"), env!("CARGO_PKG_VERSION"));
@@ -56,9 +58,11 @@ fn misuse(message: &str) -> std::process::ExitCode {
     std::process::ExitCode::from(2)
 }
 
-fn failed(message: impl std::fmt::Display) -> std::process::ExitCode {
-    eprintln!("{}: {message}", env!("CARGO_BIN_NAME"));
-    std::process::ExitCode::FAILURE
+/// The exit code comes from the error itself: 3 says an assumption about Claude Code
+/// stopped holding, which is a different answer from a request that could not be met.
+fn failed(error: Error) -> std::process::ExitCode {
+    eprintln!("{}: {error}", env!("CARGO_BIN_NAME"));
+    std::process::ExitCode::from(error.exit_code())
 }
 
 fn cmd_status(json: bool) -> std::process::ExitCode {
@@ -109,23 +113,31 @@ fn cmd_enroll(label: &str) -> std::process::ExitCode {
 
 fn cmd_use(label: &str) -> std::process::ExitCode {
     match switch::switch(label) {
-        Ok(outcome) => {
-            println!(
-                "signed in as `{}`, parked `{}` at {}",
-                outcome.to, outcome.from, outcome.parked.service
-            );
+        Ok(Outcome::AlreadyActive { label }) => {
+            println!("`{label}` is already signed in");
+            std::process::ExitCode::SUCCESS
+        }
+        Ok(Outcome::Switched {
+            from,
+            to,
+            config_warning,
+            stuck_generations,
+            ..
+        }) => {
+            println!("signed in as `{to}`, parked `{from}`'s previous login");
             println!(
                 "a Claude Code session already running picks this up within {} seconds",
                 switch::ADOPTION_CEILING_SECONDS
             );
-            if let Some(warning) = outcome.config_warning {
-                eprintln!(
-                    "note: the credential moved but the config did not ({warning}); \
-                     Claude Code corrects this on its next call"
-                );
+            if let Some(warning) = config_warning {
+                eprintln!("note: {warning}");
             }
-            for service in outcome.stuck_generations {
-                eprintln!("note: {service} could not be removed from the keychain");
+            if !stuck_generations.is_empty() {
+                eprintln!(
+                    "note: {} old parked login(s) for `{from}` could not be removed; \
+                     harmless, run `pitboard doctor` to check",
+                    stuck_generations.len()
+                );
             }
             std::process::ExitCode::SUCCESS
         }
@@ -137,8 +149,12 @@ fn cmd_forget(label: &str) -> std::process::ExitCode {
     match switch::forget(label) {
         Ok((email, stuck)) => {
             println!("forgot `{label}` ({email})");
-            for service in stuck {
-                eprintln!("note: {service} could not be removed from the keychain");
+            if !stuck.is_empty() {
+                eprintln!(
+                    "note: {} parked login(s) for `{label}` are still in the keychain; \
+                     harmless, run `pitboard doctor` to check",
+                    stuck.len()
+                );
             }
             std::process::ExitCode::SUCCESS
         }

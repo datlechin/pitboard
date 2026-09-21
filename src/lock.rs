@@ -33,6 +33,15 @@ pub enum LockError {
 /// release immediate instead of waiting out the current interval.
 type Stop = Arc<(Mutex<bool>, Condvar)>;
 
+impl LockError {
+    pub fn code(&self) -> &'static str {
+        match self {
+            LockError::Busy(_) => "switch_in_progress",
+            LockError::Io(_) => "lock_unavailable",
+        }
+    }
+}
+
 pub struct Guard {
     path: PathBuf,
     stop: Stop,

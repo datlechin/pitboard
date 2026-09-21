@@ -1,13 +1,13 @@
-//! All keychain access execs `/usr/bin/security`.
+//! The macOS backend. Every call execs `/usr/bin/security`.
 //!
 //! The item's Decrypt ACL trusts only `/usr/bin/security`. A foreign in-process read
-//! through the Security framework permanently appends the caller to that ACL and its
-//! code hash to the partition list, and a poisoned partition list costs `/usr/bin/security`
+//! through the Security framework permanently appends the caller to that ACL and its code
+//! hash to the partition list, and a poisoned partition list costs `/usr/bin/security`
 //! 1-3 seconds per read instead of 0.02 — which Claude Code then pays on every credential
 //! re-read, silently. Writing through `security -U` leaves cdat, the ACL and the partition
 //! list byte-identical; only mtime moves.
 
-use super::{Owner, Presence};
+use super::{Backend, Error, RawStore};
 use crate::{hex, slot};
 use std::io::Write;
 use std::process::{Command, Stdio};
@@ -16,6 +16,37 @@ const SECURITY: &str = "/usr/bin/security";
 
 /// Claude Code's own ceiling on an interactive `security` command line.
 const MAX_COMMAND_BYTES: usize = 4032;
+
+/// Whose item is being read.
+///
+/// Claude Code treats several `security` exit codes as "absent". For an item pitboard is
+/// about to overwrite, only 44 may mean that: mistaking "could not tell" for "nothing
+/// there" destroys a credential. This distinction is about how `security` reports itself,
+/// so it lives here rather than in any signature a caller sees.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Owner {
+    ClaudeCode,
+    Pitboard,
+}
+
+pub(super) struct Keychain {
+    owner: Owner,
+}
+
+/// The slot Claude Code reads.
+pub(super) const LIVE: Keychain = Keychain {
+    owner: Owner::ClaudeCode,
+};
+/// Where pitboard parks credentials of its own.
+pub(super) const VAULT: Keychain = Keychain {
+    owner: Owner::Pitboard,
+};
+
+enum Presence {
+    Present(String),
+    Absent,
+    Failed(String),
+}
 
 fn classify(owner: Owner, code: Option<i32>, stdout: String, stderr: String) -> Presence {
     match code {
@@ -43,23 +74,7 @@ fn run(args: &[&str], owner: Owner) -> Presence {
     }
 }
 
-pub fn attributes(service: &str) -> Presence {
-    let account = slot::account_name();
-    run(
-        &["find-generic-password", "-a", &account, "-s", service],
-        Owner::ClaudeCode,
-    )
-}
-
-pub fn read(service: &str, owner: Owner) -> Presence {
-    let account = slot::account_name();
-    run(
-        &["find-generic-password", "-a", &account, "-s", service, "-w"],
-        owner,
-    )
-}
-
-/// The command `write` will send, so its length can be checked before anything is changed.
+/// The command `write` will send, so its length can be checked before anything changes.
 fn command_for(account: &str, service: &str, secret: &str) -> String {
     format!(
         "add-generic-password -U -a \"{account}\" -s \"{service}\" -X {}\n",
@@ -67,64 +82,107 @@ fn command_for(account: &str, service: &str, secret: &str) -> String {
     )
 }
 
-pub fn projected_command_bytes(service: &str, secret: &str) -> usize {
-    command_for(&slot::account_name(), service, secret).len()
-}
-
-pub fn too_large(service: &str, secret: &str) -> bool {
-    projected_command_bytes(service, secret) > MAX_COMMAND_BYTES
-}
-
-/// Update in place, secret on stdin.
-///
-/// `-X` takes hex so the value survives any byte; `-i` keeps it out of argv, where `ps`
-/// would expose it. Both `-a` and `-s` are quoted because `security -i` splits on
-/// whitespace and every real service name contains a space.
-pub fn write(service: &str, secret: &str) -> Result<(), String> {
-    if too_large(service, secret) {
-        return Err(format!(
-            "credential is {} bytes, past the {MAX_COMMAND_BYTES}-byte command limit",
-            projected_command_bytes(service, secret)
-        ));
-    }
-    let account = slot::account_name();
-    if account.contains('"') || service.contains('"') {
-        return Err("account or service name contains a quote".into());
-    }
-    let mut child = Command::new(SECURITY)
-        .arg("-i")
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(|e| format!("cannot exec {SECURITY}: {e}"))?;
-    child
-        .stdin
-        .take()
-        .ok_or("no stdin on security")?
-        .write_all(command_for(&account, service, secret).as_bytes())
-        .map_err(|e| format!("cannot write to security: {e}"))?;
-    let out = child
-        .wait_with_output()
-        .map_err(|e| format!("security did not finish: {e}"))?;
-    match out.status.code() {
-        Some(0) => Ok(()),
-        other => Err(format!(
-            "security exited {}: {}",
-            other.map_or_else(|| "on a signal".into(), |c| c.to_string()),
-            String::from_utf8_lossy(&out.stderr).trim()
-        )),
+impl Keychain {
+    fn find(&self, service: &str, with_data: bool) -> Presence {
+        let account = slot::account_name();
+        let mut args = vec!["find-generic-password", "-a", &account, "-s", service];
+        if with_data {
+            args.push("-w");
+        }
+        run(&args, self.owner)
     }
 }
 
-pub fn delete(service: &str) -> Result<(), String> {
-    let account = slot::account_name();
-    match run(
-        &["delete-generic-password", "-a", &account, "-s", service],
-        Owner::Pitboard,
-    ) {
-        Presence::Present(_) | Presence::Absent => Ok(()),
-        Presence::Failed(m) => Err(m),
+impl RawStore for Keychain {
+    fn kind(&self) -> Backend {
+        Backend::Keychain
+    }
+
+    fn contains(&self, service: &str) -> Result<bool, Error> {
+        match self.find(service, false) {
+            Presence::Present(_) => Ok(true),
+            Presence::Absent => Ok(false),
+            Presence::Failed(m) => Err(Error::Unreadable(m)),
+        }
+    }
+
+    fn read(&self, service: &str) -> Result<Option<String>, Error> {
+        match self.find(service, true) {
+            Presence::Present(s) => Ok(Some(s)),
+            Presence::Absent => Ok(None),
+            Presence::Failed(m) => Err(Error::Unreadable(m)),
+        }
+    }
+
+    /// Update in place, secret on stdin.
+    ///
+    /// `-X` takes hex so the value survives any byte; `-i` keeps it out of argv, where `ps`
+    /// would expose it. Both names are quoted because `security -i` splits on whitespace
+    /// and every real service name contains a space.
+    fn write(&self, service: &str, contents: &str) -> Result<(), Error> {
+        if self.too_large(service, contents) {
+            return Err(Error::Write(format!(
+                "this credential is {} bytes, past the {MAX_COMMAND_BYTES}-byte command limit",
+                command_for(&slot::account_name(), service, contents).len()
+            )));
+        }
+        let account = slot::account_name();
+        if account.contains('"') || service.contains('"') {
+            return Err(Error::Write(
+                "account or service name contains a quote".into(),
+            ));
+        }
+
+        let mut child = Command::new(SECURITY)
+            .arg("-i")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .map_err(|e| Error::Write(format!("cannot exec {SECURITY}: {e}")))?;
+        child
+            .stdin
+            .take()
+            .ok_or_else(|| Error::Write("security has no stdin".into()))?
+            .write_all(command_for(&account, service, contents).as_bytes())
+            .map_err(|e| Error::Write(format!("cannot write to security: {e}")))?;
+        let out = child
+            .wait_with_output()
+            .map_err(|e| Error::Write(format!("security did not finish: {e}")))?;
+        if out.status.code() != Some(0) {
+            return Err(Error::Write(format!(
+                "security exited {}: {}",
+                out.status
+                    .code()
+                    .map_or_else(|| "on a signal".into(), |c| c.to_string()),
+                String::from_utf8_lossy(&out.stderr).trim()
+            )));
+        }
+
+        // Verified here rather than by the caller, so a write costs one resolve and one
+        // read-back instead of resolving the backend a second time to check itself.
+        match self.read(service)? {
+            Some(back) if back == contents => Ok(()),
+            Some(_) => Err(Error::NotDurable(format!(
+                "{service} holds different bytes"
+            ))),
+            None => Err(Error::NotDurable(format!("{service} reads back empty"))),
+        }
+    }
+
+    fn delete(&self, service: &str) -> Result<(), Error> {
+        let account = slot::account_name();
+        match run(
+            &["delete-generic-password", "-a", &account, "-s", service],
+            self.owner,
+        ) {
+            Presence::Present(_) | Presence::Absent => Ok(()),
+            Presence::Failed(m) => Err(Error::Write(m)),
+        }
+    }
+
+    fn too_large(&self, service: &str, contents: &str) -> bool {
+        command_for(&slot::account_name(), service, contents).len() > MAX_COMMAND_BYTES
     }
 }
 
@@ -185,8 +243,7 @@ mod tests {
 
     #[test]
     fn oversize_credentials_are_refused_before_anything_is_written() {
-        let big = "x".repeat(2100);
-        assert!(too_large("svc", &big));
-        assert!(!too_large("svc", &"x".repeat(1900)));
+        assert!(LIVE.too_large("svc", &"x".repeat(2100)));
+        assert!(!LIVE.too_large("svc", &"x".repeat(1900)));
     }
 }

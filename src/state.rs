@@ -5,6 +5,7 @@
 //! wrote it because a parked credential belongs to exactly one machine: presenting a
 //! refresh token that another machine has since rotated destroys the login for both.
 
+use crate::error::{Error, Result};
 use crate::{atomic, hex, home, time};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -131,41 +132,41 @@ fn file() -> PathBuf {
     home::dir().join("state.json")
 }
 
-pub fn load() -> Result<State, String> {
+pub fn load() -> Result<State> {
     let path = file();
     home::check_location(&home::dir())?;
     let raw = match std::fs::read_to_string(&path) {
         Ok(s) => s,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(State::default()),
-        Err(e) => return Err(format!("cannot read {}: {e}", path.display())),
+        Err(source) => return Err(Error::StateUnreadable { path, source }),
     };
-    let state: State =
-        serde_json::from_str(&raw).map_err(|e| format!("{} is corrupt: {e}", path.display()))?;
+    let state: State = serde_json::from_str(&raw).map_err(|source| Error::StateCorrupt {
+        path: path.clone(),
+        source,
+    })?;
     if state.schema != SCHEMA {
-        return Err(format!(
-            "{} was written by a different version of pitboard (schema {}, expected {SCHEMA})",
-            path.display(),
-            state.schema
-        ));
+        return Err(Error::StateVersionMismatch {
+            path,
+            found: state.schema,
+            expected: SCHEMA,
+        });
     }
-    let here = machine_id();
-    if state.machine != here {
-        return Err(format!(
-            "{} was written on another machine. Parked credentials cannot be moved between \
-             machines: sign in again on this one instead.",
-            path.display()
-        ));
+    if state.machine != machine_id() {
+        return Err(Error::StateWrongMachine { path });
     }
     Ok(state)
 }
 
-pub fn save(state: &State) -> Result<(), String> {
+pub fn save(state: &State) -> Result<()> {
     home::check_location(&home::dir())?;
-    home::ensure().map_err(|e| format!("cannot create {}: {e}", home::dir().display()))?;
-    let body = serde_json::to_string_pretty(state).map_err(|e| e.to_string())?;
     let path = file();
-    atomic::write(&path, body.as_bytes(), atomic::Perms::Secret)
-        .map_err(|e| format!("cannot save {}: {e}", path.display()))
+    let write = |source| Error::StateWriteFailed {
+        path: path.clone(),
+        source,
+    };
+    home::ensure().map_err(write)?;
+    let body = serde_json::to_string_pretty(state).expect("State is always serialisable");
+    atomic::write(&path, body.as_bytes(), atomic::Perms::Secret).map_err(write)
 }
 
 /// Generations worth keeping: the five newest, plus anything from the last 45 days.

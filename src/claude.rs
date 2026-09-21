@@ -2,6 +2,7 @@
 //!
 //! Read-only. Nothing in this module writes.
 
+use crate::error::{Error, Result};
 use crate::slot;
 use serde_json::Value;
 use std::path::PathBuf;
@@ -75,11 +76,19 @@ pub fn live_service() -> String {
     }
 }
 
-pub fn load_config() -> Result<Value, String> {
+pub fn load_config() -> Result<Value> {
     let path = config_file();
-    let raw = std::fs::read_to_string(&path)
-        .map_err(|e| format!("cannot read {}: {e}", path.display()))?;
-    serde_json::from_str(&raw).map_err(|e| format!("{} is not valid JSON: {e}", path.display()))
+    let raw = std::fs::read_to_string(&path).map_err(|source| {
+        if source.kind() == std::io::ErrorKind::NotFound {
+            Error::ClaudeConfigMissing { path: path.clone() }
+        } else {
+            Error::ClaudeConfigUnreadable {
+                path: path.clone(),
+                source,
+            }
+        }
+    })?;
+    serde_json::from_str(&raw).map_err(|source| Error::ClaudeConfigNotJson { path, source })
 }
 
 /// Who Claude Code currently believes is signed in. This is a cache it maintains,

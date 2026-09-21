@@ -11,6 +11,7 @@
 //! cannot lose anything, so it is saved first; installing a credential is irreversible, so
 //! it is last. A run that dies in between leaves a superfluous copy, never a missing one.
 
+use crate::error::{Error, Result};
 use crate::state::{Account, Generation, State};
 use crate::{claude, configfile, home, lock, park, state, store, time};
 use serde_json::Value;
@@ -21,14 +22,19 @@ use std::path::PathBuf;
 /// seconds all took effect at t+32.3, t+33.5 and t+32.95 from process start.
 pub const ADOPTION_CEILING_SECONDS: u32 = 33;
 
-pub struct Outcome {
-    pub from: String,
-    pub to: String,
-    pub parked: Generation,
-    /// Set when the credential moved but the config could not be updated. Claude Code
-    /// corrects this itself on its next call; the credential is what decides.
-    pub config_warning: Option<String>,
-    pub stuck_generations: Vec<String>,
+pub enum Outcome {
+    Switched {
+        from: String,
+        to: String,
+        parked: Generation,
+        /// The credential moved but the config did not. Claude Code repairs this on its
+        /// next call, so it is reported rather than treated as a failure.
+        config_warning: Option<Error>,
+        stuck_generations: Vec<String>,
+    },
+    /// Asking for the account that is already signed in is not a failure: the state the
+    /// caller wanted already holds.
+    AlreadyActive { label: String },
 }
 
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -45,10 +51,15 @@ fn journal_path() -> PathBuf {
     home::dir().join("journal.json")
 }
 
-fn write_journal(entry: &Journal) -> Result<(), String> {
-    home::ensure().map_err(|e| e.to_string())?;
-    let body = serde_json::to_string(entry).map_err(|e| e.to_string())?;
-    std::fs::write(journal_path(), body).map_err(|e| e.to_string())
+fn write_journal(entry: &Journal) -> Result<()> {
+    let path = journal_path();
+    let fail = |source| Error::RecoveryFailed {
+        path: path.clone(),
+        source,
+    };
+    home::ensure().map_err(fail)?;
+    let body = serde_json::to_string(entry).expect("a journal entry is always serialisable");
+    std::fs::write(&path, body).map_err(fail)
 }
 
 /// What an interrupted run left behind, expressed as facts rather than as files.
@@ -133,12 +144,12 @@ fn apply(state: &mut State, repair: Repair, at: i64) -> String {
 /// Called while holding pitboard's own lock, so no other run is in flight. A park item that
 /// exists but is referenced by nothing would otherwise be invisible to every command,
 /// leaving the account pointing at an older copy whose token has since been rotated.
-fn reconcile(state: &mut State) -> Result<Option<String>, String> {
+fn reconcile(state: &mut State) -> Result<Option<String>> {
     let path = journal_path();
     let raw = match std::fs::read_to_string(&path) {
         Ok(r) => r,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-        Err(e) => return Err(format!("cannot read {}: {e}", path.display())),
+        Err(source) => return Err(Error::RecoveryFailed { path, source }),
     };
     let Ok(journal) = serde_json::from_str::<Journal>(&raw) else {
         let _ = std::fs::remove_file(&path);
@@ -147,11 +158,11 @@ fn reconcile(state: &mut State) -> Result<Option<String>, String> {
         ));
     };
 
-    let parked = store::keychain_read(&journal.park_service)
+    let parked = store::vault_read(&journal.park_service)
         .ok()
         .flatten()
         .and_then(|raw| serde_json::from_str::<Value>(&raw).ok());
-    let live_fingerprint = store::read(&claude::live_service(), store::Owner::ClaudeCode)
+    let live_fingerprint = store::read(&claude::live_service())
         .ok()
         .flatten()
         .map(|live| park::fingerprint_of(&live["claudeAiOauth"]))
@@ -181,20 +192,25 @@ fn reconcile(state: &mut State) -> Result<Option<String>, String> {
     Ok(Some(note))
 }
 
-fn oauth_of(document: &Value) -> Result<Value, String> {
+fn oauth_of(document: &Value) -> Result<Value> {
     document
         .get("claudeAiOauth")
         .cloned()
-        .ok_or_else(|| "the credential has no claudeAiOauth".to_string())
+        .ok_or_else(|| Error::LiveCredentialShapeUnexpected {
+            detail: "it has no claudeAiOauth block".into(),
+        })
 }
 
 /// The lock that makes two pitboard runs exclusive of each other.
-fn exclusive() -> Result<lock::Guard, String> {
-    home::ensure().map_err(|e| e.to_string())?;
-    lock::acquire(&home::dir().join("state")).map_err(|e| e.to_string())
+fn exclusive() -> Result<lock::Guard> {
+    home::ensure().map_err(|source| Error::RecoveryFailed {
+        path: home::dir(),
+        source,
+    })?;
+    Ok(lock::acquire(&home::dir().join("state"))?)
 }
 
-pub fn switch(label: &str) -> Result<Outcome, String> {
+pub fn switch(label: &str) -> Result<Outcome> {
     let _exclusive = exclusive()?;
     let mut state = state::load()?;
     if let Some(note) = reconcile(&mut state)? {
@@ -204,40 +220,40 @@ pub fn switch(label: &str) -> Result<Outcome, String> {
     let target = state
         .get(label)
         .cloned()
-        .ok_or_else(|| format!("no account is enrolled as `{label}`"))?;
-    let generation = target.restorable().cloned().ok_or_else(|| {
-        format!(
-            "`{label}` has no restorable parked credential; its last copy was already used \
-             and Claude Code has rotated past it. Sign in as that account again."
-        )
-    })?;
-    let incoming = park::load(&generation)?;
+        .ok_or_else(|| Error::AccountUnknown {
+            label: label.to_string(),
+        })?;
+    let generation = target
+        .restorable()
+        .cloned()
+        .ok_or_else(|| Error::AccountNotRestorable {
+            label: label.to_string(),
+        })?;
+    let incoming = park::load(label, &generation)?;
 
     let service = claude::live_service();
     let storage = PathBuf::from(claude::storage_dir()).join(".storage-write");
-    let guard = lock::acquire(&storage).map_err(|e| e.to_string())?;
+    let guard = lock::acquire(&storage)?;
 
     let config = claude::load_config()?;
-    let outgoing = claude::identity(&config)
-        .ok_or("Claude Code has not recorded who is signed in; run `claude` once first")?;
+    let outgoing = claude::identity(&config).ok_or(Error::NotSignedIn)?;
     if outgoing.account_uuid == target.account_uuid {
-        return Err(format!("`{label}` is already signed in"));
+        return Ok(Outcome::AlreadyActive {
+            label: label.to_string(),
+        });
     }
     let outgoing_label = state
         .by_uuid(&outgoing.account_uuid)
         .map(|a| a.label.clone())
-        .ok_or_else(|| {
-            format!(
-                "{} is signed in but not enrolled; run `pitboard enroll <label>` first so it can be parked",
-                outgoing.email
-            )
+        .ok_or_else(|| Error::LiveAccountNotEnrolled {
+            email: outgoing.email.clone(),
         })?;
 
-    let before_raw = store::read_raw(&service, store::Owner::ClaudeCode)
-        .map_err(|e| e.to_string())?
-        .ok_or("nothing is signed in, so there is nothing to switch from")?;
+    let before_raw = store::read_raw(&service)?.ok_or(Error::LiveCredentialAbsent)?;
     let before: Value =
-        serde_json::from_str(&before_raw).map_err(|e| format!("credential is not JSON: {e}"))?;
+        serde_json::from_str(&before_raw).map_err(|e| Error::LiveCredentialShapeUnexpected {
+            detail: e.to_string(),
+        })?;
 
     let park_service = park::reserve(&outgoing.account_uuid)?;
     write_journal(&Journal {
@@ -253,14 +269,21 @@ pub fn switch(label: &str) -> Result<Outcome, String> {
     state.attach(&outgoing_label, parked.clone());
     state::save(&state)?;
 
-    install(&service, &before, &before_raw, &incoming)?;
+    install(
+        &service,
+        &before,
+        &before_raw,
+        &incoming,
+        &outgoing_label,
+        label,
+    )?;
     state.mark_installed(label, &generation.service, time::now());
     state.active = Some(label.to_string());
     state::save(&state)?;
     drop(guard);
 
     let config_warning =
-        update_config(&target, &outgoing.account_uuid, &outgoing.organization_uuid);
+        update_config(&target, &outgoing.account_uuid, &outgoing.organization_uuid).err();
 
     let mut stuck_generations = Vec::new();
     if let Some(account) = state
@@ -273,7 +296,7 @@ pub fn switch(label: &str) -> Result<Outcome, String> {
     state::save(&state)?;
     let _ = std::fs::remove_file(journal_path());
 
-    Ok(Outcome {
+    Ok(Outcome::Switched {
         from: outgoing_label,
         to: label.to_string(),
         parked,
@@ -284,88 +307,98 @@ pub fn switch(label: &str) -> Result<Outcome, String> {
 
 /// Replace `claudeAiOauth` in the live document, restoring the previous bytes if anything
 /// about the write does not hold. Every other key belongs to this machine and stays.
+/// Replace `claudeAiOauth` in the live document, putting the previous bytes back if
+/// anything about the write does not hold. Every other key belongs to this machine.
 fn install(
     service: &str,
     before: &Value,
     before_raw: &str,
     incoming: &Value,
-) -> Result<(), String> {
+    from: &str,
+    to: &str,
+) -> Result<()> {
     let mut next = before.clone();
     next.as_object_mut()
-        .ok_or("credential is not an object")?
+        .ok_or_else(|| Error::LiveCredentialShapeUnexpected {
+            detail: "it is not a JSON object".into(),
+        })?
         .insert("claudeAiOauth".into(), incoming.clone());
-    let body = serde_json::to_string(&next).map_err(|e| e.to_string())?;
+    let body = serde_json::to_string(&next).expect("a credential document stays serialisable");
 
-    match store::write_raw(service, store::Owner::ClaudeCode, &body) {
+    match store::write_raw(service, &body) {
         Ok(()) => Ok(()),
-        Err(e) => match store::write_raw(service, store::Owner::ClaudeCode, before_raw) {
-            Ok(()) => Err(format!("{e}; the previous account is still signed in")),
-            Err(rollback) => Err(format!(
-                "{e}; and restoring the previous credential also failed: {rollback}"
-            )),
+        Err(failure) => match store::write_raw(service, before_raw) {
+            Ok(()) => Err(Error::SwitchRolledBack {
+                from: from.to_string(),
+                to: to.to_string(),
+                detail: failure.to_string(),
+            }),
+            Err(rollback) => Err(Error::SwitchCorrupted {
+                from: from.to_string(),
+                to: to.to_string(),
+                detail: format!("{failure}; {rollback}"),
+            }),
         },
     }
 }
 
 /// Record the new identity. Runs after the credential is in place, so the config can never
 /// claim an account the live slot does not hold.
-fn update_config(target: &Account, outgoing_account: &str, outgoing_org: &str) -> Option<String> {
+/// Record the new identity. Runs after the credential is in place, so the config can
+/// never claim an account the live slot does not hold.
+fn update_config(target: &Account, outgoing_account: &str, outgoing_org: &str) -> Result<()> {
     let path = configfile::path();
-    if let Err(e) = configfile::backup(&path) {
-        return Some(format!("could not back up the config: {e}"));
-    }
-    let mut config = match claude::load_config() {
-        Ok(c) => c,
-        Err(e) => return Some(e),
-    };
+    configfile::backup(&path)?;
+    let mut config = claude::load_config()?;
     configfile::splice_identity(
         &mut config,
         &target.oauth_account,
         &[outgoing_account, outgoing_org],
     );
-    configfile::write(&path, &config).err()
+    configfile::write(&path, &config)
 }
 
 /// Record the account that is signed in now, and park a copy of its credential.
 ///
 /// Parking here rather than only at the next switch is what makes the account survive the
 /// user signing in as a different one, which overwrites the live credential.
-pub fn enroll_current(label: &str) -> Result<Account, String> {
+/// Record the account that is signed in now, and park a copy of its credential.
+///
+/// Parking here rather than only at the next switch is what makes the account survive the
+/// user signing in as a different one, which overwrites the live credential.
+pub fn enroll_current(label: &str) -> Result<Account> {
     let _exclusive = exclusive()?;
     let mut state = state::load()?;
     let config = claude::load_config()?;
-    let identity = claude::identity(&config)
-        .ok_or("Claude Code has not recorded who is signed in; run `claude` once first")?;
+    let identity = claude::identity(&config).ok_or(Error::NotSignedIn)?;
 
     if let Some(existing) = state.by_uuid(&identity.account_uuid)
         && existing.label != label
     {
-        return Err(format!(
-            "{} is already enrolled as `{}`",
-            identity.email, existing.label
-        ));
+        return Err(Error::AlreadyEnrolled {
+            email: identity.email.clone(),
+            label: existing.label.clone(),
+        });
     }
     if let Some(taken) = state.get(label)
         && taken.account_uuid != identity.account_uuid
     {
-        return Err(format!(
-            "`{label}` already refers to {}; choose another label",
-            taken.email
-        ));
+        return Err(Error::LabelTaken {
+            label: label.to_string(),
+            email: taken.email.clone(),
+        });
     }
 
     let mut oauth_account = config
         .get("oauthAccount")
         .cloned()
         .unwrap_or_else(|| Value::Object(Default::default()));
-    if let Some(o) = oauth_account.as_object_mut() {
-        o.remove("profileFetchedAt");
+    if let Some(object) = oauth_account.as_object_mut() {
+        object.remove("profileFetchedAt");
     }
 
     let service = claude::live_service();
-    let live = store::read(&service, store::Owner::ClaudeCode)
-        .map_err(|e| e.to_string())?
-        .ok_or("nothing is signed in to enroll")?;
+    let live = store::read(&service)?.ok_or(Error::LiveCredentialAbsent)?;
 
     let park_service = park::reserve(&identity.account_uuid)?;
     let generation = park::store_at(&park_service, &oauth_of(&live)?)?;
@@ -390,18 +423,20 @@ pub fn enroll_current(label: &str) -> Result<Account, String> {
     Ok(account)
 }
 
-pub fn forget(label: &str) -> Result<(String, Vec<String>), String> {
+pub fn forget(label: &str) -> Result<(String, Vec<String>)> {
     let _exclusive = exclusive()?;
     let mut state = state::load()?;
     let index = state
         .accounts
         .iter()
         .position(|a| a.label == label)
-        .ok_or_else(|| format!("no account is enrolled as `{label}`"))?;
+        .ok_or_else(|| Error::AccountUnknown {
+            label: label.to_string(),
+        })?;
     if state.active.as_deref() == Some(label) {
-        return Err(format!(
-            "`{label}` is signed in; switch to another account first"
-        ));
+        return Err(Error::CannotForgetActiveAccount {
+            label: label.to_string(),
+        });
     }
     let account = state.accounts.remove(index);
     state::save(&state)?;
@@ -409,7 +444,7 @@ pub fn forget(label: &str) -> Result<(String, Vec<String>), String> {
     let stuck = account
         .generations
         .iter()
-        .filter(|g| store::delete(&g.service).is_err())
+        .filter(|g| store::vault_delete(&g.service).is_err())
         .map(|g| g.service.clone())
         .collect();
     Ok((account.email, stuck))

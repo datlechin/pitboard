@@ -18,6 +18,10 @@ struct Env {
 
 /// Distinct per test, because park item names contain the account uuid and the tests
 /// share one keychain.
+fn state_accounts(env: &Env) -> Vec<serde_json::Value> {
+    env.state()["accounts"].as_array().unwrap().clone()
+}
+
 fn uuid_for(test: &str, who: char) -> String {
     let tag: String = test
         .chars()
@@ -87,7 +91,7 @@ impl Env {
             },
             "slackTag": {"machineBound": true}
         });
-        pitboard::store::keychain_write(&self.service, &credential.to_string()).unwrap();
+        pitboard::store::vault_write(&self.service, &credential.to_string()).unwrap();
 
         let config = serde_json::json!({
             "oauthAccount": {
@@ -105,9 +109,7 @@ impl Env {
     }
 
     fn live(&self) -> serde_json::Value {
-        let raw = pitboard::store::keychain_read(&self.service)
-            .unwrap()
-            .unwrap();
+        let raw = pitboard::store::vault_read(&self.service).unwrap().unwrap();
         serde_json::from_str(&raw).unwrap()
     }
 
@@ -206,15 +208,29 @@ fn a_full_switch_moves_the_identity_and_nothing_else() {
     );
 }
 
+/// Asking for the account that is already signed in is not a failure: the state the
+/// caller asked for already holds, so a menu bar clicking "switch to X" while X is active
+/// must not report an error.
 #[test]
-fn switching_to_the_account_already_signed_in_is_refused() {
+fn switching_to_the_account_already_signed_in_succeeds_and_changes_nothing() {
     let env = Env::new("switchingto");
     env.sign_in(&env.uuid('a'), "a@example.com", &env.uuid('o'), "refresh-a");
     env.run(&["enroll", "alpha"]);
+    let before = env.state();
 
-    let (_, err, code) = env.run(&["use", "alpha"]);
-    assert_eq!(code, 1);
-    assert!(err.contains("already signed in"), "{err}");
+    let (out, _, code) = env.run(&["use", "alpha"]);
+    assert_eq!(code, 0);
+    assert!(out.contains("already signed in"), "{out}");
+    assert_eq!(
+        env.live()["claudeAiOauth"]["refreshToken"],
+        "refresh-a",
+        "nothing should have moved"
+    );
+    assert_eq!(
+        env.state(),
+        before,
+        "no generation should have been created"
+    );
 }
 
 #[test]
@@ -337,7 +353,7 @@ fn an_account_whose_only_copy_was_already_used_is_refused_not_destroyed() {
 
     let (_, err, code) = env.run(&["use", "beta"]);
     assert_eq!(code, 1);
-    assert!(err.contains("no restorable parked credential"), "{err}");
+    assert!(err.contains("no restorable parked login"), "{err}");
     assert_eq!(
         env.live()["claudeAiOauth"]["refreshToken"],
         "refresh-a",
@@ -359,12 +375,22 @@ fn two_switches_at_once_do_not_interleave() {
     let a = first.wait().unwrap().code().unwrap_or(-1);
     let b = second.wait().unwrap().code().unwrap_or(-1);
 
-    assert_eq!(
-        [a, b].iter().filter(|c| **c == 0).count(),
-        1,
-        "exactly one of two simultaneous switches may succeed (got {a} and {b})"
-    );
+    // Both exit 0: one performs the switch, the other finds beta already signed in and
+    // says so. What must never happen is two switches interleaving.
+    assert_eq!(a, 0, "first run");
+    assert_eq!(b, 0, "second run");
     assert_eq!(env.live()["claudeAiOauth"]["refreshToken"], "refresh-b");
+
+    let accounts = state_accounts(&env);
+    let parked = accounts
+        .iter()
+        .filter(|a| a["label"] == "alpha")
+        .flat_map(|a| a["generations"].as_array().unwrap())
+        .count();
+    assert_eq!(
+        parked, 2,
+        "alpha should have its enrol copy plus exactly one park from the single switch"
+    );
 
     let state = env.state();
     let alpha = state["accounts"]
