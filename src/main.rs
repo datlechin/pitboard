@@ -109,20 +109,17 @@ fn failure(command: &'static str, error: Error) -> Report {
 }
 
 fn status() -> Report {
-    let report = status::gather();
-    let (accounts, active) = match state::load() {
-        Ok(s) => (s.accounts, s.active),
-        // Unreadable is not the same as empty: reporting it as empty would tell the user
-        // their enrolled logins are gone.
+    // Unreadable is not the same as empty: reporting it as empty would tell the user their
+    // enrolled logins are gone.
+    let state = match state::load() {
+        Ok(s) => s,
         Err(e) => return failure("status", e),
     };
+    let report = status::gather(&state);
     Report {
         command: "status",
-        human: format!(
-            "\n{}",
-            status::render_human(&report, &accounts, active.as_deref())
-        ),
-        result: Ok(status::render_json(&report, &accounts, active.as_deref())),
+        human: format!("\n{}", status::render_human(&report)),
+        result: Ok(status::render_json(&report)),
         warnings: Vec::new(),
         exit: 0,
     }

@@ -8,7 +8,7 @@
 use crate::time;
 use serde_json::Value;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Window {
     pub kind: String,
     pub scope: Option<String>,
@@ -17,11 +17,24 @@ pub struct Window {
     pub is_active: bool,
 }
 
-#[derive(Debug, Clone)]
+/// Where a measurement came from, so a stale number is never shown as a live one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Source {
+    /// Asked of Anthropic just now.
+    Live,
+    /// Copied from Claude Code's own cache, which it refreshes only when it asks.
+    ClaudeCodeCache,
+    /// The last live reading pitboard took itself.
+    Remembered,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Snapshot {
     pub windows: Vec<Window>,
     pub observed_at: Option<i64>,
     pub account_uuid: Option<String>,
+    pub source: Source,
 }
 
 impl Snapshot {
@@ -88,9 +101,9 @@ fn window_from_named(kind: &str, v: &Value) -> Option<Window> {
 ///
 /// The cache carries the `accountUuid` it was measured for, so a caller can tell
 /// whether it belongs to the account currently signed in without writing anything.
-pub fn from_config_cache(config: &Value) -> Option<Snapshot> {
-    let c = config.get("cachedUsageUtilization")?;
-    let u = c.get("utilization")?;
+/// The windows in a usage object. The API answer and Claude Code's cached copy of it share
+/// this shape, so one reader serves both.
+fn windows_of(u: &Value) -> Vec<Window> {
     let mut windows: Vec<Window> = u
         .get("limits")
         .and_then(Value::as_array)
@@ -103,8 +116,23 @@ pub fn from_config_cache(config: &Value) -> Option<Snapshot> {
             }
         }
     }
+    windows
+}
+
+/// A reading taken from Anthropic's usage endpoint just now.
+pub fn from_usage_object(u: &Value, observed_at: i64) -> Snapshot {
+    Snapshot {
+        windows: windows_of(u),
+        observed_at: Some(observed_at),
+        account_uuid: None,
+        source: Source::Live,
+    }
+}
+
+pub fn from_config_cache(config: &Value) -> Option<Snapshot> {
+    let c = config.get("cachedUsageUtilization")?;
     Some(Snapshot {
-        windows,
+        windows: windows_of(c.get("utilization")?),
         observed_at: c
             .get("fetchedAtMs")
             .and_then(Value::as_i64)
@@ -113,6 +141,7 @@ pub fn from_config_cache(config: &Value) -> Option<Snapshot> {
             .get("accountUuid")
             .and_then(Value::as_str)
             .map(str::to_owned),
+        source: Source::ClaudeCodeCache,
     })
 }
 

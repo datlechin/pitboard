@@ -15,7 +15,8 @@ yanked = "deny"
 
 [licenses]
 version = 2
-allow = ["MIT", "Apache-2.0", "Unicode-3.0", "Zlib", "Unlicense"]
+# ISC and BSD-3-Clause come with any real TLS stack in Rust (ring, rustls-webpki).
+allow = ["MIT", "Apache-2.0", "Unicode-3.0", "Zlib", "Unlicense", "ISC", "BSD-3-Clause"]
 confidence-threshold = 0.9
 
 [bans]

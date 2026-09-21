@@ -33,6 +33,10 @@ filetime = "0.2"
 clap = { version = "4", features = ["derive"] }
 clap_complete = "4"
 clap_mangen = "0.3"
+# TLS: rustls for the protocol, the operating system for deciding which certificates to
+# trust. No bundled root store, so a corporate or system trust setting is honoured.
+ureq = { version = "3", default-features = false, features = ["rustls-no-provider", "platform-verifier"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 
 [profile.release]
 opt-level = "z"
