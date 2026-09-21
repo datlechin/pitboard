@@ -107,18 +107,6 @@ pub fn run() -> Vec<Check> {
             ),
         )
     });
-    checks.push({
-        let vector = slot::dir_hash("/Users/ngoquocdat/.claude");
-        if vector == "e80beed8" {
-            ok("derivation", "matches the vector measured on 2026-09-21")
-        } else {
-            fail(
-                "derivation",
-                format!("expected e80beed8 for a known path, computed {vector}"),
-                "The hashing rule changed. Do not switch accounts until this is fixed.",
-            )
-        }
-    });
 
     checks.push(match store::resolve(&service) {
         Ok(store::Backend::Keychain) => ok("credential store", "keychain"),

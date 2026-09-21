@@ -5,21 +5,13 @@
 //! wrote it because a parked credential belongs to exactly one machine: presenting a
 //! refresh token that another machine has since rotated destroys the login for both.
 
-use crate::{hex, time};
+use crate::{atomic, hex, home, time};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 const SCHEMA: u32 = 2;
-const CLOUD_MARKERS: [&str; 5] = [
-    "Dropbox",
-    "Google Drive",
-    "OneDrive",
-    "com~apple~CloudDocs",
-    "Sync",
-];
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct Generation {
     pub service: String,
     pub parked_at: i64,
@@ -99,14 +91,13 @@ impl State {
     }
 
     pub fn mark_installed(&mut self, label: &str, service: &str, at: i64) {
-        if let Some(account) = self.accounts.iter_mut().find(|a| a.label == label) {
-            if let Some(g) = account
+        if let Some(account) = self.accounts.iter_mut().find(|a| a.label == label)
+            && let Some(g) = account
                 .generations
                 .iter_mut()
                 .find(|g| g.service == service)
-            {
-                g.installed_at = Some(at);
-            }
+        {
+            g.installed_at = Some(at);
         }
     }
 
@@ -123,48 +114,26 @@ impl State {
 }
 
 /// A stable identifier for this machine, from the platform rather than anything we invent.
+/// A stable identifier for this machine, hashed so the raw platform id never lands in a
+/// file pitboard writes.
+///
+/// `gethostuuid` is an Apple-only symbol, so reaching for it directly meant this module
+/// could not compile anywhere else.
 pub fn machine_id() -> String {
-    let mut uuid = [0u8; 16];
-    let wait = libc::timespec {
-        tv_sec: 0,
-        tv_nsec: 0,
-    };
-    if unsafe { libc::gethostuuid(uuid.as_mut_ptr(), &wait) } == 0 {
-        hex::encode(&uuid)
-    } else {
-        String::from("unknown")
+    use sha2::{Digest, Sha256};
+    match machine_uid::get() {
+        Ok(raw) => hex::encode(&Sha256::digest(raw.as_bytes())),
+        Err(_) => String::from("unknown"),
     }
-}
-
-pub fn dir() -> PathBuf {
-    std::env::var_os("PITBOARD_HOME")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| {
-            PathBuf::from(std::env::var_os("HOME").unwrap_or_default()).join(".pitboard")
-        })
 }
 
 fn file() -> PathBuf {
-    dir().join("state.json")
-}
-
-/// Refuse a state directory that a sync client would copy to another machine.
-fn check_location(path: &Path) -> Result<(), String> {
-    let resolved = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
-    let text = resolved.to_string_lossy();
-    if let Some(m) = CLOUD_MARKERS.iter().find(|m| text.contains(**m)) {
-        return Err(format!(
-            "{} looks like it is inside {m}. Parked credentials belong to one machine; \
-             set PITBOARD_HOME to a local path.",
-            resolved.display()
-        ));
-    }
-    Ok(())
+    home::dir().join("state.json")
 }
 
 pub fn load() -> Result<State, String> {
     let path = file();
-    check_location(&dir())?;
+    home::check_location(&home::dir())?;
     let raw = match std::fs::read_to_string(&path) {
         Ok(s) => s,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(State::default()),
@@ -191,16 +160,12 @@ pub fn load() -> Result<State, String> {
 }
 
 pub fn save(state: &State) -> Result<(), String> {
-    let d = dir();
-    check_location(&d)?;
-    std::fs::create_dir_all(&d).map_err(|e| format!("cannot create {}: {e}", d.display()))?;
-    let tmp = d.join(format!("state.{}.tmp", std::process::id()));
+    home::check_location(&home::dir())?;
+    home::ensure().map_err(|e| format!("cannot create {}: {e}", home::dir().display()))?;
     let body = serde_json::to_string_pretty(state).map_err(|e| e.to_string())?;
-    std::fs::write(&tmp, body).map_err(|e| e.to_string())?;
-    std::fs::rename(&tmp, file()).map_err(|e| {
-        let _ = std::fs::remove_file(&tmp);
-        e.to_string()
-    })
+    let path = file();
+    atomic::write(&path, body.as_bytes(), atomic::Perms::Secret)
+        .map_err(|e| format!("cannot save {}: {e}", path.display()))
 }
 
 /// Generations worth keeping: the five newest, plus anything from the last 45 days.
@@ -233,7 +198,15 @@ mod tests {
     fn machine_id_is_stable_and_real() {
         let a = machine_id();
         assert_eq!(a, machine_id());
-        assert_eq!(a.len(), 32, "expected a 16-byte host uuid, got {a:?}");
+        assert_eq!(
+            a.len(),
+            64,
+            "expected a sha256 of the platform id, got {a:?}"
+        );
+        assert_ne!(
+            a, "unknown",
+            "this platform should report a stable machine id"
+        );
     }
 
     #[test]
@@ -249,13 +222,6 @@ mod tests {
         let now = time::now();
         let recent: Vec<Generation> = (0..9).map(|i| generation(now - i * 86_400)).collect();
         assert_eq!(retained(&recent).len(), 9);
-    }
-
-    #[test]
-    fn a_cloud_synced_state_directory_is_refused() {
-        let p = Path::new("/Users/x/Library/Mobile Documents/com~apple~CloudDocs/pitboard");
-        assert!(check_location(p).is_err());
-        assert!(check_location(Path::new("/Users/x/.pitboard")).is_ok());
     }
 
     #[test]

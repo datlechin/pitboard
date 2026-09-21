@@ -63,9 +63,12 @@ fn failed(message: impl std::fmt::Display) -> std::process::ExitCode {
 
 fn cmd_status(json: bool) -> std::process::ExitCode {
     let report = status::gather();
-    let accounts = state::load()
-        .map(|s| (s.accounts, s.active))
-        .unwrap_or_default();
+    // A state file that cannot be read is not the same as having no accounts; reporting
+    // it as empty would tell the user their enrolled logins are gone.
+    let accounts = match state::load() {
+        Ok(s) => (s.accounts, s.active),
+        Err(e) => return failed(e),
+    };
     if json {
         println!(
             "{}",
@@ -131,32 +134,11 @@ fn cmd_use(label: &str) -> std::process::ExitCode {
 }
 
 fn cmd_forget(label: &str) -> std::process::ExitCode {
-    let mut state = match state::load() {
-        Ok(s) => s,
-        Err(e) => return failed(e),
-    };
-    let Some(index) = state.accounts.iter().position(|a| a.label == label) else {
-        return failed(format!("no account is enrolled as `{label}`"));
-    };
-    if state.active.as_deref() == Some(label) {
-        return failed(format!(
-            "`{label}` is signed in; switch to another account first"
-        ));
-    }
-    let account = state.accounts.remove(index);
-    let mut kept = 0;
-    for generation in &account.generations {
-        if pitboard::store::delete(&generation.service).is_err() {
-            kept += 1;
-        }
-    }
-    match state::save(&state) {
-        Ok(()) => {
-            println!("forgot `{label}` ({})", account.email);
-            if kept > 0 {
-                eprintln!(
-                    "note: {kept} parked credential(s) could not be removed from the keychain"
-                );
+    match switch::forget(label) {
+        Ok((email, stuck)) => {
+            println!("forgot `{label}` ({email})");
+            for service in stuck {
+                eprintln!("note: {service} could not be removed from the keychain");
             }
             std::process::ExitCode::SUCCESS
         }

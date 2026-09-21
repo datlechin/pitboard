@@ -11,8 +11,7 @@
 
 use std::io;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Condvar, Mutex};
 use std::thread;
 use std::time::{Duration, SystemTime};
 
@@ -22,36 +21,31 @@ const RETRIES: u32 = 10;
 const MIN_BACKOFF: Duration = Duration::from_millis(100);
 const MAX_BACKOFF: Duration = Duration::from_millis(1_000);
 
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum LockError {
+    #[error("another process is writing credentials right now; try again in a few seconds")]
     Busy(PathBuf),
-    Io(io::Error),
+    #[error("cannot take the credential write lock: {0}")]
+    Io(#[source] io::Error),
 }
 
-impl std::fmt::Display for LockError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            LockError::Busy(p) => write!(
-                f,
-                "another process is writing credentials ({} is held)",
-                p.display()
-            ),
-            LockError::Io(e) => write!(f, "cannot take the credential write lock: {e}"),
-        }
-    }
-}
+/// Set to true and signalled to stop the heartbeat; the condition variable is what makes
+/// release immediate instead of waiting out the current interval.
+type Stop = Arc<(Mutex<bool>, Condvar)>;
 
 pub struct Guard {
     path: PathBuf,
-    stop: Arc<AtomicBool>,
+    stop: Stop,
     beat: Option<thread::JoinHandle<()>>,
 }
 
 impl Drop for Guard {
     fn drop(&mut self) {
-        self.stop.store(true, Ordering::Relaxed);
-        if let Some(h) = self.beat.take() {
-            let _ = h.join();
+        let (flag, wake) = &*self.stop;
+        *flag.lock().unwrap_or_else(|e| e.into_inner()) = true;
+        wake.notify_all();
+        if let Some(handle) = self.beat.take() {
+            let _ = handle.join();
         }
         let _ = std::fs::remove_dir(&self.path);
     }
@@ -63,18 +57,7 @@ fn age(path: &Path) -> Option<Duration> {
 }
 
 fn touch(path: &Path) -> io::Result<()> {
-    let now = libc::timeval {
-        tv_sec: unsafe { libc::time(std::ptr::null_mut()) },
-        tv_usec: 0,
-    };
-    let times = [now, now];
-    let c = std::ffi::CString::new(path.as_os_str().as_encoded_bytes())
-        .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "path contains a NUL"))?;
-    if unsafe { libc::utimes(c.as_ptr(), times.as_ptr()) } == 0 {
-        Ok(())
-    } else {
-        Err(io::Error::last_os_error())
-    }
+    filetime::set_file_mtime(path, filetime::FileTime::now())
 }
 
 /// Take the lock guarding `target`, blocking for up to about six seconds.
@@ -105,19 +88,28 @@ pub fn acquire(target: &Path) -> Result<Guard, LockError> {
 }
 
 fn start(path: PathBuf) -> Guard {
-    let stop = Arc::new(AtomicBool::new(false));
+    let stop: Stop = Arc::new((Mutex::new(false), Condvar::new()));
     let beat = {
         let (path, stop) = (path.clone(), Arc::clone(&stop));
         thread::spawn(move || {
-            while !stop.load(Ordering::Relaxed) {
-                // Wake often so release is not delayed by a full heartbeat interval.
-                for _ in 0..75 {
-                    if stop.load(Ordering::Relaxed) {
-                        return;
-                    }
-                    thread::sleep(HEARTBEAT / 75);
+            let (flag, wake) = &*stop;
+            let mut stopped = flag.lock().unwrap_or_else(|e| e.into_inner());
+            loop {
+                // Checked before waiting: a guard dropped before this thread reaches the
+                // wait would otherwise signal into an empty room and be missed entirely.
+                if *stopped {
+                    return;
                 }
-                if touch(&path).is_err() {
+                let (next, timeout) = wake
+                    .wait_timeout(stopped, HEARTBEAT)
+                    .unwrap_or_else(|e| e.into_inner());
+                stopped = next;
+                if *stopped {
+                    return;
+                }
+                // Waiting on a deadline rather than sleeping in slices keeps the interval
+                // exact: seventy-five chained sleeps drifted the first beat to 7.9 seconds.
+                if timeout.timed_out() && touch(&path).is_err() {
                     return;
                 }
             }
@@ -133,6 +125,13 @@ fn start(path: PathBuf) -> Guard {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Backdate a lock so only a live heartbeat could rescue it.
+    fn age_past_staleness(lock: &Path) {
+        let stale =
+            filetime::FileTime::from_unix_time(filetime::FileTime::now().unix_seconds() - 3600, 0);
+        filetime::set_file_mtime(lock, stale).unwrap();
+    }
 
     fn scratch(name: &str) -> PathBuf {
         let p =
@@ -169,25 +168,43 @@ mod tests {
         let t = scratch("stale");
         let lock = PathBuf::from(format!("{}.lock", t.display()));
         std::fs::create_dir_all(&lock).unwrap();
-        let old = libc::timeval {
-            tv_sec: unsafe { libc::time(std::ptr::null_mut()) } - 3600,
-            tv_usec: 0,
-        };
-        let times = [old, old];
-        let c = std::ffi::CString::new(lock.as_os_str().as_encoded_bytes()).unwrap();
-        assert_eq!(unsafe { libc::utimes(c.as_ptr(), times.as_ptr()) }, 0);
+        age_past_staleness(&lock);
         let _g = acquire(&t).expect("a stale lock must be reclaimable");
     }
 
+    /// Dropping must not wait out the current heartbeat interval. The previous design
+    /// slept in slices and could hold the lock up to a slice longer than needed.
     #[test]
-    fn heartbeat_keeps_the_lock_fresh() {
+    fn releasing_is_immediate() {
+        let t = scratch("release");
+        let started = std::time::Instant::now();
+        drop(acquire(&t).unwrap());
+        assert!(
+            started.elapsed() < Duration::from_millis(250),
+            "release took {:?}",
+            started.elapsed()
+        );
+        assert!(!PathBuf::from(format!("{}.lock", t.display())).exists());
+    }
+
+    /// Ages the lock past staleness first. A test that merely checks the lock is fresh
+    /// passes identically when no heartbeat is running at all.
+    #[test]
+    fn the_heartbeat_rescues_a_lock_that_has_aged_out() {
         let t = scratch("beat");
         let _g = acquire(&t).unwrap();
         let lock = PathBuf::from(format!("{}.lock", t.display()));
-        thread::sleep(HEARTBEAT + Duration::from_millis(300));
+
+        age_past_staleness(&lock);
+        assert!(
+            age(&lock).unwrap() > STALE,
+            "the lock should start out stale"
+        );
+
+        thread::sleep(HEARTBEAT + Duration::from_millis(400));
         assert!(
             age(&lock).unwrap() < STALE,
-            "the lock should have been touched"
+            "the heartbeat never touched the lock"
         );
     }
 }

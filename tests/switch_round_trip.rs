@@ -124,15 +124,15 @@ impl Env {
 
 impl Drop for Env {
     fn drop(&mut self) {
-        if let Ok(state) = std::fs::read_to_string(self.root.join("pitboard/state.json")) {
-            if let Ok(v) = serde_json::from_str::<serde_json::Value>(&state) {
-                for a in v["accounts"].as_array().into_iter().flatten() {
-                    for g in a["generations"].as_array().into_iter().flatten() {
-                        if let Some(s) = g["service"].as_str() {
-                            let _ = Command::new(SECURITY)
-                                .args(["delete-generic-password", "-a", &account(), "-s", s])
-                                .output();
-                        }
+        if let Ok(state) = std::fs::read_to_string(self.root.join("pitboard/state.json"))
+            && let Ok(v) = serde_json::from_str::<serde_json::Value>(&state)
+        {
+            for a in v["accounts"].as_array().into_iter().flatten() {
+                for g in a["generations"].as_array().into_iter().flatten() {
+                    if let Some(s) = g["service"].as_str() {
+                        let _ = Command::new(SECURITY)
+                            .args(["delete-generic-password", "-a", &account(), "-s", s])
+                            .output();
                     }
                 }
             }

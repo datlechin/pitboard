@@ -7,18 +7,21 @@ use std::ffi::CStr;
 
 /// Seconds since the epoch, now.
 pub fn now() -> i64 {
-    unsafe { libc::time(std::ptr::null_mut()) }
+    since_epoch().as_secs() as i64
 }
 
 /// Milliseconds since the epoch. Park generations are named with this, because two
 /// parks of one account inside the same second must not resolve to the same name.
+/// Park generations are named with this: two parks of one account inside the same second
+/// must not resolve to the same name.
 pub fn now_millis() -> i64 {
-    let mut tv = libc::timeval {
-        tv_sec: 0,
-        tv_usec: 0,
-    };
-    unsafe { libc::gettimeofday(&mut tv, std::ptr::null_mut()) };
-    tv.tv_sec * 1_000 + tv.tv_usec as i64 / 1_000
+    since_epoch().as_millis() as i64
+}
+
+fn since_epoch() -> std::time::Duration {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
 }
 
 /// Parse `2026-09-20T22:20:00.095287+00:00` (and the `Z` spelling) to epoch seconds.
@@ -36,14 +39,19 @@ pub fn parse_rfc3339(s: &str) -> Option<i64> {
     {
         return None;
     }
-    let num = |r: std::ops::Range<usize>| s.get(r)?.parse::<i32>().ok();
+    // `timegm` normalises out-of-range fields rather than rejecting them, so each one is
+    // checked here: a confidently wrong timestamp is worse than no timestamp.
+    let field = |r: std::ops::Range<usize>, min: i32, max: i32| -> Option<i32> {
+        let v = s.get(r)?.parse::<i32>().ok()?;
+        (min..=max).contains(&v).then_some(v)
+    };
     let mut tm: libc::tm = unsafe { std::mem::zeroed() };
-    tm.tm_year = num(0..4)? - 1900;
-    tm.tm_mon = num(5..7)? - 1;
-    tm.tm_mday = num(8..10)?;
-    tm.tm_hour = num(11..13)?;
-    tm.tm_min = num(14..16)?;
-    tm.tm_sec = num(17..19)?;
+    tm.tm_year = field(0..4, 1970, 9999)? - 1900;
+    tm.tm_mon = field(5..7, 1, 12)? - 1;
+    tm.tm_mday = field(8..10, 1, 31)?;
+    tm.tm_hour = field(11..13, 0, 23)?;
+    tm.tm_min = field(14..16, 0, 59)?;
+    tm.tm_sec = field(17..19, 0, 60)?;
 
     // Offset: trailing `Z`, or `+HH:MM` / `-HH:MM` after any fractional seconds.
     let tail = &s[19..];
@@ -131,6 +139,28 @@ mod tests {
     fn honours_a_non_utc_offset() {
         // Same instant, written in Asia/Saigon.
         assert_eq!(parse_rfc3339("2026-09-21T05:20:00+07:00"), Some(1789942800));
+    }
+
+    /// `timegm` normalises out-of-range fields instead of rejecting them, so without an
+    /// explicit range check a nonsense timestamp silently becomes a confident wrong answer.
+    #[test]
+    fn out_of_range_fields_are_refused_not_normalised() {
+        for bad in [
+            "2026-13-01T00:00:00Z",
+            "2026-00-01T00:00:00Z",
+            "2026-01-32T00:00:00Z",
+            "2026-01-00T00:00:00Z",
+            "2026-01-01T24:00:00Z",
+            "2026-01-01T00:60:00Z",
+            "2026-01-01T00:00:61Z",
+            "2026-13-40T25:99:99Z",
+        ] {
+            assert_eq!(parse_rfc3339(bad), None, "{bad} should be refused");
+        }
+        assert!(
+            parse_rfc3339("2026-12-31T23:59:60Z").is_some(),
+            "a leap second is real"
+        );
     }
 
     #[test]

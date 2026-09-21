@@ -6,7 +6,7 @@
 //! caches are dropped by shape rather than by name, because the set of account-derived
 //! keys changes between releases and a copied list is wrong in both directions.
 
-use crate::{claude, time};
+use crate::{atomic, claude, home, time};
 use serde_json::{Map, Value};
 use std::path::{Path, PathBuf};
 
@@ -68,7 +68,7 @@ pub fn splice_identity(config: &mut Value, oauth_account: &Value, outgoing: &[&s
 }
 
 fn backups_dir() -> PathBuf {
-    crate::state::dir().join("backups")
+    home::dir().join("backups")
 }
 
 /// Copy the config aside before touching it, keeping our own history.
@@ -98,15 +98,11 @@ pub fn backup(path: &Path) -> Result<PathBuf, String> {
 }
 
 /// Write through a temp file in the same directory, so a reader never sees a partial config.
+/// Claude Code's file, not ours, so it keeps the permissions its owner gave it.
 pub fn write(path: &Path, config: &Value) -> Result<(), String> {
-    let dir = path.parent().ok_or("config path has no parent")?;
-    let tmp = dir.join(format!(".claude.json.{}.pitboard", std::process::id()));
     let body = serde_json::to_string(config).map_err(|e| e.to_string())?;
-    std::fs::write(&tmp, body).map_err(|e| format!("cannot write {}: {e}", tmp.display()))?;
-    std::fs::rename(&tmp, path).map_err(|e| {
-        let _ = std::fs::remove_file(&tmp);
-        format!("cannot replace {}: {e}", path.display())
-    })
+    atomic::write(path, body.as_bytes(), atomic::Perms::MatchExisting)
+        .map_err(|e| format!("cannot replace {}: {e}", path.display()))
 }
 
 pub fn path() -> PathBuf {

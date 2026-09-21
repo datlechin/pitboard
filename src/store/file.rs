@@ -1,7 +1,6 @@
 //! The plaintext backend Claude Code falls back to, and always uses off macOS.
 
-use std::io::Write;
-use std::os::unix::fs::OpenOptionsExt;
+use crate::atomic;
 use std::path::Path;
 
 pub fn read(path: &Path) -> Result<Option<String>, String> {
@@ -14,27 +13,8 @@ pub fn read(path: &Path) -> Result<Option<String>, String> {
 
 /// Write through a sibling temp file so a reader never sees a half-written credential.
 pub fn write(path: &Path, contents: &str) -> Result<(), String> {
-    let dir = path.parent().ok_or("credential path has no parent")?;
-    std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
-    let tmp = dir.join(format!(".credentials.{}.tmp", std::process::id()));
-
-    let result = (|| -> std::io::Result<()> {
-        let mut f = std::fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .mode(0o600)
-            .open(&tmp)?;
-        f.write_all(contents.as_bytes())?;
-        f.sync_all()
-    })();
-    if let Err(e) = result {
-        let _ = std::fs::remove_file(&tmp);
-        return Err(e.to_string());
-    }
-    std::fs::rename(&tmp, path).map_err(|e| {
-        let _ = std::fs::remove_file(&tmp);
-        e.to_string()
-    })
+    atomic::write(path, contents.as_bytes(), atomic::Perms::Secret)
+        .map_err(|e| format!("cannot write {}: {e}", path.display()))
 }
 
 #[cfg(test)]

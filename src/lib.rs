@@ -1,9 +1,11 @@
 //! pitboard's internals, exposed so integration tests exercise the real code paths.
 
+pub mod atomic;
 pub mod claude;
 pub mod configfile;
 pub mod doctor;
 pub mod hex;
+pub mod home;
 pub mod lock;
 pub mod park;
 pub mod slot;

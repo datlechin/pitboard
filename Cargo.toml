@@ -2,7 +2,7 @@
 name = "pitboard"
 version = "0.0.0"
 edition = "2024"
-rust-version = "1.85"
+rust-version = "1.98"
 license = "Apache-2.0"
 description = "Park and restore your own Claude Code logins on one machine, and see what each one has left."
 repository = "https://github.com/ngoquocdat/pitboard"
@@ -27,6 +27,9 @@ serde_json = { version = "1", features = ["preserve_order"] }
 sha2 = "0.10"
 unicode-normalization = "0.1"
 libc = "0.2"
+thiserror = "2"
+machine-uid = "0.6"
+filetime = "0.2"
 
 [profile.release]
 opt-level = "z"

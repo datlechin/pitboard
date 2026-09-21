@@ -29,25 +29,18 @@ pub enum Backend {
     Absent,
 }
 
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum Error {
     /// The store could not be interrogated. Never treat this as "no credential".
+    #[error("the credential store could not be read: {0}")]
     Unreadable(String),
+    #[error("the stored credential is not valid JSON: {0}")]
     Malformed(String),
+    #[error("writing the credential failed: {0}")]
     Write(String),
     /// A read-back after writing did not return what was written.
+    #[error("the credential did not survive the write: {0}")]
     NotDurable(String),
-}
-
-impl std::fmt::Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Error::Unreadable(m) => write!(f, "credential store unreadable: {m}"),
-            Error::Malformed(m) => write!(f, "credential is not valid JSON: {m}"),
-            Error::Write(m) => write!(f, "credential write failed: {m}"),
-            Error::NotDurable(m) => write!(f, "credential did not survive the write: {m}"),
-        }
-    }
 }
 
 pub fn credential_file() -> PathBuf {
