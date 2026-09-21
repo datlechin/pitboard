@@ -11,7 +11,7 @@ pub struct Report {
     pub snapshot: Option<usage::Snapshot>,
     /// The cache was measured for a different account than the one signed in now.
     pub snapshot_is_foreign: bool,
-    pub backend: Result<store::Backend, String>,
+    pub backend: std::result::Result<store::Backend, store::Error>,
     pub service: String,
     pub config_file: String,
 }
@@ -32,7 +32,7 @@ pub fn gather() -> Report {
         identity,
         snapshot,
         snapshot_is_foreign,
-        backend: store::resolve(&service).map_err(|e| e.to_string()),
+        backend: store::resolve(&service),
         service,
         config_file: claude::config_file().display().to_string(),
     }
@@ -171,7 +171,10 @@ pub fn render_json(r: &Report, accounts: &[crate::state::Account], active: Optio
                 Err(_) => "unreadable",
             },
             "service": r.service,
-            "error": r.backend.as_ref().err(),
+            "error": r.backend.as_ref().err().map(|e| json!({
+                "code": e.code(),
+                "message": e.to_string(),
+            })),
         },
         "config_file": r.config_file,
         "accounts": accounts.iter().map(|a| json!({
