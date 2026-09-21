@@ -3,8 +3,13 @@ import Testing
 
 @testable import Pitboard
 
-private func window(_ kind: String, _ percent: Double, resets: Int64 = 100) -> Limits {
-    Limits(kind: kind, scope: nil, percent: percent, resetsAt: resets)
+private func window(
+    _ kind: String, _ percent: Double, resets: Int64 = 100, scope: String? = nil,
+    active: Bool = true
+) -> Limits {
+    Limits(
+        kind: kind, scope: scope, percent: percent, resetsAt: resets, severity: nil,
+        isActive: active)
 }
 
 private func account(
@@ -90,4 +95,29 @@ private func status(_ accounts: [Account]) -> Status {
     let advice = Advice.about(read, unless: [:])
     #expect(advice?.window.kind == "weekly_all")
     #expect(advice?.use == "spare")
+}
+
+/// A limit scoped to one model is not the account's limit. Reading 98% in the menu bar
+/// while the binding limit is at 30% says the day is over when it is not.
+@Test func aScopedLimitDoesNotTakeTheMenuBar() {
+    let read = status([
+        account(
+            "work", signedIn: true,
+            [
+                window("session", 30),
+                window("weekly_scoped", 98, scope: "Fable"),
+            ])
+    ])
+    #expect(menuTitle(for: read) == "work 30%")
+}
+
+/// Among the account's own limits, the one it is working against wins, and failing that
+/// the fullest.
+@Test func theLimitInUseIsThePreferredHeadline() {
+    let windows = [
+        window("weekly_all", 80, active: false),
+        window("session", 40, active: true),
+    ]
+    #expect(headline(of: windows)?.kind == "session")
+    #expect(headline(of: [])?.kind == nil)
 }

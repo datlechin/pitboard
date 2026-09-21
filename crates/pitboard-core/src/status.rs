@@ -291,6 +291,7 @@ mod tests {
             windows: vec![Window {
                 kind: "session".into(),
                 scope: None,
+                severity: None,
                 percent,
                 resets_at: Some(NOW + 3_600),
                 is_active: true,

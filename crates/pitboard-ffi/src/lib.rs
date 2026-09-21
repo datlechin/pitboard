@@ -115,6 +115,10 @@ pub struct Window {
     /// Share already used; past 100 once exceeded.
     pub percent: f64,
     pub resets_at: Option<i64>,
+    /// How Anthropic grades this row, when it grades it.
+    pub severity: Option<String>,
+    /// Whether this limit is one the account is working against now.
+    pub is_active: bool,
 }
 
 #[derive(uniffi::Record)]
@@ -248,6 +252,8 @@ fn account(row: status::Row, now: i64) -> Account {
                     scope: w.scope,
                     percent: w.percent,
                     resets_at: w.resets_at,
+                    severity: w.severity,
+                    is_active: w.is_active,
                 })
                 .collect(),
         }),

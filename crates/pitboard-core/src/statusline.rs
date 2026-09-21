@@ -121,6 +121,7 @@ fn session_snapshot(input: &Value, uuid: &str, now: i64) -> Option<Snapshot> {
         Some(Window {
             kind: name.to_string(),
             scope: None,
+            severity: None,
             percent: w.get("used_percentage")?.as_f64()?,
             resets_at: w.get("resets_at").and_then(Value::as_i64),
             is_active: true,
@@ -197,6 +198,7 @@ mod tests {
             percent,
             resets_at: Some(resets_at),
             is_active: false,
+            severity: None,
         };
         Snapshot {
             windows: vec![window("session", five), window("weekly_all", week)],

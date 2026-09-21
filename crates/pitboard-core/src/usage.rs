@@ -12,6 +12,10 @@ pub struct Window {
     pub percent: f64,
     pub resets_at: Option<i64>,
     pub is_active: bool,
+    /// How Anthropic grades this row, when it grades it. Its word, not a threshold of
+    /// pitboard's own, and absent in a reading taken before pitboard read this field.
+    #[serde(default)]
+    pub severity: Option<String>,
 }
 
 /// Where a measurement came from, so a stale number is never shown as a live one.
@@ -41,14 +45,19 @@ fn percent(v: &Value) -> Option<f64> {
 }
 
 fn window_from_limit(l: &Value) -> Option<Window> {
-    Some(Window {
-        kind: l.get("kind")?.as_str()?.to_string(),
-        scope: l
-            .get("scope")
-            .and_then(|s| s.get("model"))
+    // A row is scoped to a model or to a surface; either way the scope is what makes it
+    // narrower than the account's own limit.
+    let named = |what: &str| {
+        l.get("scope")
+            .and_then(|s| s.get(what))
             .and_then(|m| m.get("display_name"))
             .and_then(Value::as_str)
-            .map(str::to_owned),
+            .map(str::to_owned)
+    };
+    Some(Window {
+        kind: l.get("kind")?.as_str()?.to_string(),
+        scope: named("model").or_else(|| named("surface")),
+        severity: l.get("severity").and_then(Value::as_str).map(str::to_owned),
         percent: percent(l.get("percent")?)?,
         resets_at: l
             .get("resets_at")
@@ -62,6 +71,7 @@ fn window_from_named(kind: &str, v: &Value) -> Option<Window> {
     Some(Window {
         kind: kind.to_string(),
         scope: None,
+        severity: None,
         percent: percent(v.get("utilization")?)?,
         resets_at: v
             .get("resets_at")

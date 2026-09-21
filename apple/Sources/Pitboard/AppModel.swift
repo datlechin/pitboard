@@ -110,6 +110,16 @@ final class AppModel {
     }
 }
 
+/// The limit worth putting in the menu bar: the account's own, not one scoped to a single
+/// model, and one the account is working against when the server says which. A scoped row
+/// at 98% would otherwise read as though everything had stopped.
+func headline(of windows: [Limits]) -> Limits? {
+    let ownLimits = windows.filter { $0.scope == nil }
+    let candidates = ownLimits.isEmpty ? windows : ownLimits
+    let active = candidates.filter(\.isActive)
+    return (active.isEmpty ? candidates : active).max { $0.percent < $1.percent }
+}
+
 /// What the menu bar says: the account in use and the limit closest to its end. Nothing is
 /// known until the first read, and an account signed in but not enrolled has no name here.
 func menuTitle(for status: Status?) -> String {
@@ -117,8 +127,8 @@ func menuTitle(for status: Status?) -> String {
     // Long labels are bounded, because this sits in a bar someone else also wants space in.
     let full = account.label ?? "unenrolled"
     let name = full.count > 12 ? full.prefix(11) + "…" : full[...]
-    guard let tightest = account.usage?.windows.map(\.percent).max() else {
+    guard let tightest = headline(of: account.usage?.windows ?? []) else {
         return String(name)
     }
-    return "\(name) \(Int(tightest.rounded()))%"
+    return "\(name) \(Int(tightest.percent.rounded()))%"
 }

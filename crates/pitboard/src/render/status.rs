@@ -205,6 +205,7 @@ mod tests {
                 percent,
                 resets_at: Some(NOW + 3_600),
                 is_active: true,
+                severity: None,
             }],
             observed_at: Some(NOW - 7_200),
             account_uuid: None,
@@ -326,6 +327,7 @@ mod tests {
             percent: 0.0,
             resets_at: Some(NOW + 86_400),
             is_active: false,
+            severity: None,
         });
         let text = plain(&human(&report(vec![work])));
         let fable = text
