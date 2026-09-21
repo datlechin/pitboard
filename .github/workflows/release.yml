@@ -120,8 +120,12 @@ jobs:
         run: |
           echo "$KEY" | base64 --decode > "$RUNNER_TEMP/key.p8"
           ditto -c -k --keepParent apple/build/Pitboard.app "$RUNNER_TEMP/notarise.zip"
+          # A team key is issued by someone; an individual key is not, and passing an
+          # issuer for one is refused.
+          issuer=${ISSUER:+--issuer $ISSUER}
+          # shellcheck disable=SC2086 # $issuer is a flag and its value, or nothing.
           xcrun notarytool submit "$RUNNER_TEMP/notarise.zip" \
-            --key "$RUNNER_TEMP/key.p8" --key-id "$KEY_ID" --issuer "$ISSUER" --wait
+            --key "$RUNNER_TEMP/key.p8" --key-id "$KEY_ID" $issuer --wait
           rm -f "$RUNNER_TEMP/key.p8"
           # Stapled, so the app opens on a machine that cannot reach Apple.
           xcrun stapler staple apple/build/Pitboard.app

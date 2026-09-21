@@ -67,7 +67,8 @@ release still happens and the app is signed ad-hoc, which Gatekeeper warns about
 | `APPLE_CERT_P12` | The Developer ID Application certificate, exported from Keychain Access, `base64` |
 | `APPLE_CERT_PASSWORD` | The password given to that export |
 | `APPLE_API_KEY_P8` | An App Store Connect API key with the Developer role, `base64` |
-| `APPLE_API_KEY_ID`, `APPLE_API_ISSUER` | Shown beside that key |
+| `APPLE_API_KEY_ID` | Shown beside that key |
+| `APPLE_API_ISSUER` | The issuer a team key belongs to; left unset for an individual key |
 | `SPARKLE_PUBLIC_KEY`, `SPARKLE_PRIVATE_KEY` | `apple/.build/artifacts/sparkle/Sparkle/bin/generate_keys` once, then `generate_keys -x -` to read the private one |
 
 The update key must never change once a release carries it: an app checks the feed's
