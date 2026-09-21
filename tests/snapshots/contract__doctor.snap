@@ -1,0 +1,24 @@
+---
+source: tests/contract.rs
+expression: "serde_json::json!({ \"exit\": code, \"envelope\": value })"
+---
+{
+  "exit": 0,
+  "envelope": {
+    "v": 1,
+    "command": "doctor",
+    "ok": true,
+    "data": {
+      "environment": {
+        "config_file": "[path]",
+        "storage_dir": "[path]",
+        "credential_service": "[slot]",
+        "credential_store": "[backend]",
+        "home": "[path]"
+      },
+      "checks": "[checks]"
+    },
+    "warnings": [],
+    "error": null
+  }
+}

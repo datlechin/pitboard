@@ -12,6 +12,7 @@ pub mod home;
 pub mod lock;
 pub mod park;
 pub mod readings;
+pub mod service;
 pub mod slot;
 pub mod state;
 pub mod status;

@@ -3,9 +3,10 @@ use anstyle::{AnsiColor, Style};
 use clap::{CommandFactory, Parser, Subcommand};
 use pitboard::context::Context;
 use pitboard::error::Error;
-use pitboard::switch::{Enrolled, Outcome, Renewal, Settled, SignIn};
+use pitboard::service::{Changing, Done, Failed, Pitboard, Warning};
+use pitboard::switch::{self, Enrolled, Outcome};
 use pitboard::ui::{BOLD, paint};
-use pitboard::{audit, doctor, state, status, statusline, switch};
+use pitboard::{doctor, status};
 use serde_json::{Value, json};
 use std::io::Read;
 use std::process::ExitCode;
@@ -112,20 +113,6 @@ impl Report {
     }
 }
 
-fn warning(code: &str, message: impl std::fmt::Display) -> Value {
-    json!({ "code": code, "message": message.to_string() })
-}
-
-fn parks_pending(count: usize) -> Value {
-    warning(
-        "parks_pending_removal",
-        format!(
-            "{count} parked login(s) no longer in use could not be removed yet; \
-             pitboard tries again on its next change"
-        ),
-    )
-}
-
 fn emit(report: Report, as_json: bool) -> ExitCode {
     if as_json {
         let (data, error) = match &report.result {
@@ -160,44 +147,58 @@ fn emit(report: Report, as_json: bool) -> ExitCode {
     ExitCode::from(report.exit)
 }
 
-fn status(ctx: &Context) -> Report {
-    // Parked logins whose access has lapsed are renewed first, so every account is asked live.
-    let renewals = switch::renew_parked(ctx);
-    for (label, outcome) in &renewals {
-        audit::record(ctx, "renew", label, outcome.code());
-    }
-    // Unreadable is not the same as empty: reporting it as empty would tell the user their
-    // enrolled logins are gone.
-    let state = match state::load(ctx) {
-        Ok(s) => s,
-        Err(e) => return Report::failed(Some("status"), e),
-    };
-    let report = status::gather(ctx, &state);
-    let mut done = Report::done(
-        "status",
-        status::render_json(&report),
-        status::render_human(&report),
-    );
-    done.warnings.extend(
-        renewals
-            .iter()
-            .filter_map(|(label, outcome)| match outcome {
-                Renewal::Refused => Some(warning(
-                    outcome.code(),
-                    format!(
-                        "Anthropic no longer accepts the parked login for `{label}`. Run \
-                     `pitboard enroll {label} --sign-in` to sign in to it again."
-                    ),
-                )),
-                Renewal::Failed(e) => Some(warning(e.code(), e)),
-                Renewal::Renewed | Renewal::Deferred => None,
-            }),
-    );
-    done
+fn warnings(list: &[Warning]) -> Vec<Value> {
+    list.iter()
+        .map(|w| json!({ "code": w.code(), "message": w.to_string() }))
+        .collect()
 }
 
-fn doctor(ctx: &Context) -> Report {
-    let diagnosis = doctor::run(ctx);
+/// A change as a report. Its warnings are kept whether or not it succeeded.
+fn changed<T>(
+    command: &'static str,
+    outcome: Changing<T>,
+    render: impl FnOnce(T) -> (Value, String),
+) -> Report {
+    match outcome {
+        Ok(Done {
+            value,
+            warnings: found,
+        }) => {
+            let (data, human) = render(value);
+            Report {
+                warnings: warnings(&found),
+                ..Report::done(command, data, human)
+            }
+        }
+        Err(Failed {
+            error,
+            warnings: found,
+        }) => Report {
+            warnings: warnings(&found),
+            ..Report::failed(Some(command), error)
+        },
+    }
+}
+
+fn status(pitboard: &Pitboard) -> Report {
+    match pitboard.status() {
+        Ok(Done {
+            value,
+            warnings: found,
+        }) => Report {
+            warnings: warnings(&found),
+            ..Report::done(
+                "status",
+                status::render_json(&value),
+                status::render_human(&value),
+            )
+        },
+        Err(e) => Report::failed(Some("status"), e),
+    }
+}
+
+fn doctor(pitboard: &Pitboard) -> Report {
+    let diagnosis = pitboard.doctor();
     let healthy = doctor::healthy(&diagnosis.checks);
     Report {
         // A failed check means an assumption pitboard relies on no longer holds.
@@ -212,10 +213,10 @@ fn doctor(ctx: &Context) -> Report {
 
 /// Claude Code reads the line through a pipe and draws its colours, so they are kept even
 /// though stdout is not a terminal, unless `NO_COLOR` asks otherwise. The JSON form is plain.
-fn statusline(ctx: &Context) -> Report {
+fn statusline(pitboard: &Pitboard) -> Report {
     let mut input = String::new();
     let _ = std::io::stdin().read_to_string(&mut input);
-    let line = statusline::run(ctx, &input);
+    let line = pitboard.statusline(&input);
     if std::env::var_os("NO_COLOR").is_none() {
         ColorChoice::Always.write_global();
     }
@@ -226,182 +227,92 @@ fn statusline(ctx: &Context) -> Report {
     )
 }
 
-/// Runs a command that changes state once any interrupted switch is settled. What settling
-/// found is reported whether or not the command then succeeds.
-fn changing(
-    ctx: &Context,
-    command: &'static str,
-    label: &str,
-    run: impl FnOnce(Settled) -> Report,
-) -> Report {
-    let (settled, recovered) = match switch::settle(ctx) {
-        Ok(settled) => settled,
-        Err(e) => {
-            audit::record(ctx, command, label, e.code());
-            return Report::failed(Some(command), e);
-        }
-    };
-    let recovered = recovered.map(|r| {
-        audit::record(ctx, "recover", &r.to, r.code());
-        warning(r.code(), &r)
-    });
-    let mut report = run(settled);
-    report.warnings.splice(0..0, recovered);
-    report
-}
-
-/// The browser sign-in runs before pitboard takes its lock, so a person taking their time in
-/// a browser never holds up a switch.
-fn enroll_signing_in(ctx: &Context, label: &str) -> Report {
-    let who = state::load(ctx)
-        .ok()
-        .and_then(|s| s.get(label).map(|a| a.email.clone()))
-        .unwrap_or_else(|| "the account to add".to_string());
+fn enroll_signing_in(pitboard: &Pitboard, label: &str) -> Report {
+    let who = pitboard
+        .account(label)
+        .map_or_else(|| "the account to add".to_string(), |a| a.email);
     eprintln!(
         "Opening Claude Code's sign-in. Sign in as {who}; the account in use now stays signed in."
     );
-    match switch::sign_in(ctx) {
-        Ok(login) => changing(ctx, "enroll", label, |s| enroll(ctx, s, label, Some(login))),
-        Err(e) => {
-            audit::record(ctx, "enroll", label, e.code());
-            Report::failed(Some("enroll"), e)
-        }
+    match pitboard.sign_in(label) {
+        Ok(login) => enrolled(label, pitboard.enroll_signed_in(label, login)),
+        Err(e) => Report::failed(Some("enroll"), e),
     }
 }
 
-fn enroll(ctx: &Context, settled: Settled, label: &str, signed_in: Option<SignIn>) -> Report {
-    let outcome = switch::enroll(settled, label, signed_in);
-    audit::record(
-        ctx,
-        "enroll",
-        label,
-        outcome.as_ref().map_or_else(|e| e.code(), |_| "ok"),
-    );
+fn enrolled(label: &str, outcome: Changing<Enrolled>) -> Report {
     let name = paint(BOLD, label);
-    let (kind, email, human) = match outcome {
-        Ok(Enrolled::Current { email }) => {
-            let human = format!(
-                "Enrolled {name} ({email}), the account signed in now.\n\
-                 Add another without signing out of it: pitboard enroll <label> --sign-in\n"
-            );
-            ("current", email, human)
-        }
-        Ok(Enrolled::SignedIn { email }) => {
-            let human =
-                format!("Enrolled {name} ({email}). Switch to it with: pitboard use {label}\n");
-            ("signed_in", email, human)
-        }
-        Ok(Enrolled::Renewed { email }) => {
-            let human = format!("Renewed {name} ({email}): its parked login is a fresh one.\n");
-            ("renewed", email, human)
-        }
-        Err(e) => return Report::failed(Some("enroll"), e),
-    };
-    Report::done(
-        "enroll",
-        json!({ "label": label, "email": email, "enrolled": kind }),
-        human,
-    )
+    changed("enroll", outcome, |enrolled| {
+        let (kind, email, human) = match enrolled {
+            Enrolled::Current { email } => {
+                let human = format!(
+                    "Enrolled {name} ({email}), the account signed in now.\n\
+                     Add another without signing out of it: pitboard enroll <label> --sign-in\n"
+                );
+                ("current", email, human)
+            }
+            Enrolled::SignedIn { email } => {
+                let human =
+                    format!("Enrolled {name} ({email}). Switch to it with: pitboard use {label}\n");
+                ("signed_in", email, human)
+            }
+            Enrolled::Renewed { email } => {
+                let human = format!("Renewed {name} ({email}): its parked login is a fresh one.\n");
+                ("renewed", email, human)
+            }
+        };
+        (
+            json!({ "label": label, "email": email, "enrolled": kind }),
+            human,
+        )
+    })
 }
 
-fn use_account(ctx: &Context, settled: Settled, label: &str) -> Report {
-    let outcome = switch::switch(settled, label);
-    audit::record(
-        ctx,
-        "use",
-        label,
-        match &outcome {
-            Ok(Outcome::Switched { .. }) => "ok",
-            Ok(Outcome::AlreadyActive { .. }) => "already_active",
-            Err(e) => e.code(),
-        },
-    );
-    match outcome {
-        Ok(Outcome::AlreadyActive { label }) => Report::done(
-            "use",
+fn use_account(pitboard: &Pitboard, label: &str) -> Report {
+    changed("use", pitboard.switch_to(label), |outcome| match outcome {
+        Outcome::AlreadyActive { label } => (
             json!({ "to": label, "changed": false }),
             format!("{} is already signed in.\n", paint(BOLD, &label)),
         ),
-        Ok(Outcome::Switched {
-            from,
-            to,
-            parked,
-            config_warning,
-            parks_pending: pending,
-        }) => {
-            let mut report = Report::done(
-                "use",
-                json!({
-                    "from": from,
-                    "to": to,
-                    "changed": true,
-                    "parked_at": parked.parked_at,
-                    "adoption_ceiling_seconds": switch::ADOPTION_CEILING_SECONDS,
-                }),
-                format!(
-                    "Switched to {}; {} is parked.\n\
-                     Claude Code sessions already running follow within {} seconds.\n",
-                    paint(BOLD, &to),
-                    paint(BOLD, &from),
-                    switch::ADOPTION_CEILING_SECONDS
-                ),
-            );
-            report.warnings.extend(
-                config_warning
-                    .iter()
-                    .map(|e| warning(e.code(), e))
-                    .chain((pending > 0).then(|| parks_pending(pending))),
-            );
-            report
-        }
-        Err(e) => Report::failed(Some("use"), e),
-    }
+        Outcome::Switched { from, to, parked } => (
+            json!({
+                "from": from,
+                "to": to,
+                "changed": true,
+                "parked_at": parked.parked_at,
+                "adoption_ceiling_seconds": switch::ADOPTION_CEILING_SECONDS,
+            }),
+            format!(
+                "Switched to {}; {} is parked.\n\
+                 Claude Code sessions already running follow within {} seconds.\n",
+                paint(BOLD, &to),
+                paint(BOLD, &from),
+                switch::ADOPTION_CEILING_SECONDS
+            ),
+        ),
+    })
 }
 
-fn forget(ctx: &Context, settled: Settled, label: &str) -> Report {
-    let outcome = switch::forget(settled, label);
-    audit::record(
-        ctx,
-        "forget",
-        label,
-        outcome.as_ref().map_or_else(|e| e.code(), |_| "ok"),
-    );
-    match outcome {
-        Ok((email, pending)) => {
-            let mut report = Report::done(
-                "forget",
-                json!({ "label": label, "email": email }),
-                format!("Forgot {} ({email}).\n", paint(BOLD, label)),
-            );
-            report
-                .warnings
-                .extend((pending > 0).then(|| parks_pending(pending)));
-            report
-        }
-        Err(e) => Report::failed(Some("forget"), e),
-    }
+fn forget(pitboard: &Pitboard, label: &str) -> Report {
+    changed("forget", pitboard.forget(label), |email| {
+        (
+            json!({ "label": label, "email": email }),
+            format!("Forgot {} ({email}).\n", paint(BOLD, label)),
+        )
+    })
 }
 
-fn rename(ctx: &Context, settled: Settled, from: &str, to: &str) -> Report {
-    let outcome = switch::rename(settled, from, to);
-    audit::record(
-        ctx,
-        "rename",
-        &format!("{from} -> {to}"),
-        outcome.as_ref().map_or_else(|e| e.code(), |_| "ok"),
-    );
-    match outcome {
-        Ok(email) => Report::done(
-            "rename",
+fn rename(pitboard: &Pitboard, from: &str, to: &str) -> Report {
+    changed("rename", pitboard.rename(from, to), |email| {
+        (
             json!({ "from": from, "to": to, "email": email }),
             format!(
                 "Renamed {} to {} ({email}).\n",
                 paint(BOLD, from),
                 paint(BOLD, to)
             ),
-        ),
-        Err(e) => Report::failed(Some("rename"), e),
-    }
+        )
+    })
 }
 
 /// A usage error keeps clap's own rendering, unless the caller asked for JSON, which is
@@ -424,23 +335,19 @@ fn main() -> ExitCode {
         Ok(cli) => cli,
         Err(exit) => return exit,
     };
-    let ctx = Context::from_env();
+    let pitboard = Pitboard::new(Context::from_env());
     let report = match cli.command.unwrap_or(Command::Status) {
-        Command::Status => status(&ctx),
-        Command::Doctor => doctor(&ctx),
-        Command::Statusline => statusline(&ctx),
+        Command::Status => status(&pitboard),
+        Command::Doctor => doctor(&pitboard),
+        Command::Statusline => statusline(&pitboard),
         Command::Enroll {
             label,
             sign_in: true,
-        } => enroll_signing_in(&ctx, &label),
-        Command::Enroll { label, .. } => {
-            changing(&ctx, "enroll", &label, |s| enroll(&ctx, s, &label, None))
-        }
-        Command::Use { label } => changing(&ctx, "use", &label, |s| use_account(&ctx, s, &label)),
-        Command::Forget { label } => changing(&ctx, "forget", &label, |s| forget(&ctx, s, &label)),
-        Command::Rename { from, to } => {
-            changing(&ctx, "rename", &from, |s| rename(&ctx, s, &from, &to))
-        }
+        } => enroll_signing_in(&pitboard, &label),
+        Command::Enroll { label, .. } => enrolled(&label, pitboard.enroll_current(&label)),
+        Command::Use { label } => use_account(&pitboard, &label),
+        Command::Forget { label } => forget(&pitboard, &label),
+        Command::Rename { from, to } => rename(&pitboard, &from, &to),
         Command::Completions { shell } => {
             clap_complete::generate(
                 shell,

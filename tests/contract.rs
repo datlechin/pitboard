@@ -104,19 +104,33 @@ fn usage_error() {
     contract!("usage_error", value, code);
 }
 
-/// Which checks run depends on the platform, and their details name this run's paths, so
-/// the snapshot is per platform and keeps codes, names and levels.
+/// Which checks run depends on the platform, so the snapshot pins the envelope and every
+/// check is held to the same five fields.
 #[test]
 fn doctor() {
     let env = two_accounts("contract-doctor");
     let (value, code) = json(&env, &["doctor"]);
-    insta::with_settings!({ snapshot_suffix => std::env::consts::OS }, {
-        insta::assert_json_snapshot!("doctor", serde_json::json!({ "exit": code, "envelope": value }), {
-            ".envelope.data.environment.config_file" => "[path]",
-            ".envelope.data.environment.storage_dir" => "[path]",
-            ".envelope.data.environment.home" => "[path]",
-            ".envelope.data.environment.credential_service" => "[slot]",
-            ".envelope.data.checks[].detail" => "[detail]",
-        });
+    for check in value["data"]["checks"].as_array().unwrap() {
+        let mut keys: Vec<&str> = check
+            .as_object()
+            .unwrap()
+            .keys()
+            .map(String::as_str)
+            .collect();
+        keys.sort_unstable();
+        assert_eq!(
+            keys,
+            ["advice", "code", "detail", "level", "name"],
+            "{check}"
+        );
+        assert!(["ok", "warn", "fail"].contains(&check["level"].as_str().unwrap()));
+    }
+    insta::assert_json_snapshot!("doctor", serde_json::json!({ "exit": code, "envelope": value }), {
+        ".envelope.data.environment.config_file" => "[path]",
+        ".envelope.data.environment.storage_dir" => "[path]",
+        ".envelope.data.environment.home" => "[path]",
+        ".envelope.data.environment.credential_service" => "[slot]",
+        ".envelope.data.environment.credential_store" => "[backend]",
+        ".envelope.data.checks" => "[checks]",
     });
 }

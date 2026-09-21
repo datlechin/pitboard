@@ -1,10 +1,11 @@
 //! Dropping an account and the credentials parked for it.
 
 use super::{Error, Result, Settled, purge};
+use crate::service::Warning;
 use crate::state;
 
-/// Returns the account's email and how many parked items could not be deleted yet.
-pub fn forget(settled: Settled, label: &str) -> Result<(String, usize)> {
+/// Returns the account's email.
+pub fn forget(settled: Settled, label: &str) -> Result<(String, Vec<Warning>)> {
     let Settled {
         _exclusive,
         mut state,
@@ -19,5 +20,12 @@ pub fn forget(settled: Settled, label: &str) -> Result<(String, usize)> {
         label: label.to_string(),
     })?;
     state::save(&ctx, &state)?;
-    Ok((account.email, purge(&ctx, &mut state)))
+    let pending = purge(&ctx, &mut state);
+    Ok((
+        account.email,
+        (pending > 0)
+            .then_some(Warning::ParksPendingRemoval(pending))
+            .into_iter()
+            .collect(),
+    ))
 }

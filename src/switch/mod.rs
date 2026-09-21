@@ -20,6 +20,7 @@ pub use renew::{Renewal, renew_parked};
 
 use crate::context::Context;
 use crate::error::{Error, Result};
+use crate::service::Warning;
 use crate::state::{Account, Park, State};
 use crate::{api, claude, configfile, home, lock, park, state, store, time};
 use journal::{Journal, clear_journal, reconcile, write_journal};
@@ -37,11 +38,6 @@ pub enum Outcome {
         from: String,
         to: String,
         parked: Park,
-        /// The login moved but the config still names the previous account. Claude Code
-        /// does not correct that on its own; the next switch rewrites it.
-        config_warning: Option<Error>,
-        /// Parked items no longer in use that could not be deleted yet.
-        parks_pending: usize,
     },
     /// Not a failure: the state the caller asked for already holds.
     AlreadyActive { label: String },
@@ -146,7 +142,7 @@ pub(super) fn access_token(document: &Value) -> Result<String> {
         })
 }
 
-pub fn switch(settled: Settled, label: &str) -> Result<Outcome> {
+pub fn switch(settled: Settled, label: &str) -> Result<(Outcome, Vec<Warning>)> {
     let Settled {
         _exclusive,
         mut state,
@@ -172,9 +168,12 @@ pub fn switch(settled: Settled, label: &str) -> Result<Outcome> {
             state.active = Some(label.to_string());
             state::save(ctx, &state)?;
         }
-        return Ok(Outcome::AlreadyActive {
-            label: label.to_string(),
-        });
+        return Ok((
+            Outcome::AlreadyActive {
+                label: label.to_string(),
+            },
+            Vec::new(),
+        ));
     }
     let outgoing_label = state
         .by_uuid(&outgoing.account_uuid)
@@ -250,23 +249,30 @@ pub fn switch(settled: Settled, label: &str) -> Result<Outcome> {
     state::save(ctx, &state)?;
     drop(guard);
 
+    // Claude Code does not correct a stale config on its own; the next switch rewrites it.
     let config_warning = update_config(
         ctx,
         &target,
         &outgoing.account_uuid,
         &outgoing.organization_uuid,
     )
-    .err();
+    .err()
+    .map(Warning::ConfigNotUpdated);
     let parks_pending = purge(ctx, &mut state);
     clear_journal(ctx);
 
-    Ok(Outcome::Switched {
-        from: outgoing_label,
-        to: label.to_string(),
-        parked,
-        config_warning,
-        parks_pending,
-    })
+    let warnings = config_warning
+        .into_iter()
+        .chain((parks_pending > 0).then_some(Warning::ParksPendingRemoval(parks_pending)))
+        .collect();
+    Ok((
+        Outcome::Switched {
+            from: outgoing_label,
+            to: label.to_string(),
+            parked,
+        },
+        warnings,
+    ))
 }
 
 /// After a failed install, whether the copy just parked is the outgoing account's only login.
