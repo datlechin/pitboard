@@ -9,7 +9,11 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     /// Called when the notification's button is pressed, with the label to switch to.
     var onSwitch: ((String) -> Void)?
 
-    private let centre = UNUserNotificationCenter.current()
+    /// Notification Center belongs to an app bundle. Asked for anywhere else, including a
+    /// test bundle, it stops the process, so everything here is a no-op outside one.
+    private static let inAnApp = Bundle.main.bundleURL.pathExtension == "app"
+    private let centre: UNUserNotificationCenter? =
+        Bundle.main.bundleURL.pathExtension == "app" ? .current() : nil
     fileprivate nonisolated static let category = "limit"
     private nonisolated static let action = "switch"
     /// The reset time of the window each kind was last reported for, so one exhausted
@@ -21,6 +25,7 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     /// right after an update relaunches the app, is delivered the moment there is someone
     /// to deliver it to.
     func start() {
+        guard let centre else { return }
         centre.delegate = self
         centre.setNotificationCategories([
             UNNotificationCategory(
@@ -37,6 +42,7 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     /// a prompt arrives before the app has shown what it is for.
     func tell(_ advice: Advice) {
         told[advice.window.kind] = advice.window.resetsAt ?? 0
+        guard let centre else { return }
         let request = UNNotificationRequest(
             identifier: "\(advice.window.kind)-\(advice.window.resetsAt ?? 0)",
             content: advice.notification, trigger: nil)

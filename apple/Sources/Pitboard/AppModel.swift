@@ -10,7 +10,7 @@ typealias Limits = PitboardBindings.Window
 @MainActor
 @Observable
 final class AppModel {
-    private let service: PitboardService
+    private let service: any Core
     private(set) var status: Status?
     private(set) var problem: String?
     /// The account a switch is running for, so its row can say so.
@@ -31,7 +31,7 @@ final class AppModel {
 
     private let notifier = Notifier()
 
-    init(service: PitboardService = PitboardService(settings: .forCurrentUser())) {
+    init(service: any Core = PitboardService(settings: .forCurrentUser())) {
         self.service = service
         notifier.start()
         notifier.onSwitch = { [weak self] label in

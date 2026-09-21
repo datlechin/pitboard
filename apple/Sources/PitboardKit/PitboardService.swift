@@ -1,9 +1,18 @@
 import Foundation
 @_exported import PitboardBindings
 
+/// What the app asks of pitboard. A protocol so a test can answer instead of the real
+/// core, which would read the real keychain of whoever is running the tests.
+public protocol Core: Sendable {
+    func status() async throws -> Status
+    func doctor() async -> Diagnosis
+    func switchTo(_ label: String) async throws -> Switched
+    func rename(_ from: String, to: String) async throws -> Changed
+}
+
 /// pitboard's core, called off the main thread. Any call may wait on the keychain, a lock or
 /// the network, so reads run on one queue and changes on another, one change at a time.
-public final class PitboardService: Sendable {
+public final class PitboardService: Core, Sendable {
     private let core: Pitboard
     private let reads = DispatchQueue(label: "com.usepitboard.reads")
     private let changes = DispatchQueue(label: "com.usepitboard.changes")
