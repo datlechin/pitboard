@@ -10,6 +10,7 @@ compile_error!(
 );
 
 pub mod api;
+pub mod audit;
 pub mod context;
 pub mod doctor;
 pub mod error;
@@ -22,7 +23,6 @@ pub mod time;
 pub mod usage;
 
 pub(crate) mod atomic;
-pub(crate) mod audit;
 pub(crate) mod claude;
 pub(crate) mod configfile;
 pub(crate) mod home;

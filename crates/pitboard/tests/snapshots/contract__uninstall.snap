@@ -1,0 +1,19 @@
+---
+source: crates/pitboard/tests/contract.rs
+expression: "serde_json :: json! ({ \"exit\" : code, \"envelope\" : value })"
+---
+{
+  "exit": 0,
+  "envelope": {
+    "v": 1,
+    "command": "uninstall",
+    "ok": true,
+    "data": {
+      "parks_removed": 1,
+      "parks_pending": 0,
+      "home_removed": true
+    },
+    "warnings": [],
+    "error": null
+  }
+}

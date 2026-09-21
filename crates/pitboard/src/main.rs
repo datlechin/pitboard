@@ -9,7 +9,7 @@ use pitboard_core::switch::{self, Enrolled, Outcome};
 use serde_json::{Value, json};
 use std::io::{IsTerminal, Read, Write};
 use std::process::ExitCode;
-use ui::{BOLD, paint};
+use ui::{BOLD, DIM, WARN, paint};
 
 mod render;
 mod ui;
@@ -60,6 +60,12 @@ enum Command {
         /// Do not ask first
         #[arg(short = 'y', long)]
         yes: bool,
+    },
+    /// What pitboard has changed, and when
+    Log {
+        /// How many changes to show
+        #[arg(short = 'n', long, default_value_t = 20)]
+        lines: usize,
     },
     /// Delete every parked login and pitboard's own files
     Uninstall {
@@ -337,6 +343,43 @@ fn forget(pitboard: &Pitboard, label: &str) -> Report {
     })
 }
 
+fn log(pitboard: &Pitboard, lines: usize) -> Report {
+    let entries = pitboard.log(lines);
+    let width = entries.iter().map(|e| e.verb.len()).max().unwrap_or(0);
+    let human = if entries.is_empty() {
+        "pitboard has not changed anything yet.\n".to_string()
+    } else {
+        entries
+            .iter()
+            .map(|e| {
+                format!(
+                    "{}  {}  {}  {}\n",
+                    paint(DIM, &e.at),
+                    ui::pad(&e.verb, width),
+                    e.subject,
+                    paint(if e.outcome == "ok" { DIM } else { WARN }, &e.outcome),
+                )
+            })
+            .collect()
+    };
+    Report::done(
+        "log",
+        json!({
+            "entries": entries
+                .iter()
+                .map(|e| json!({
+                    "at": e.at,
+                    "caller": e.caller,
+                    "verb": e.verb,
+                    "subject": e.subject,
+                    "outcome": e.outcome,
+                }))
+                .collect::<Vec<_>>(),
+        }),
+        human,
+    )
+}
+
 fn uninstall(pitboard: &Pitboard) -> Report {
     changed("uninstall", pitboard.uninstall(), |removed| {
         let mut human = format!(
@@ -433,6 +476,7 @@ fn main() -> ExitCode {
             }
             forget(&pitboard, &label)
         }
+        Command::Log { lines } => log(&pitboard, lines),
         Command::Uninstall { yes } => {
             if !yes
                 && !cli.json

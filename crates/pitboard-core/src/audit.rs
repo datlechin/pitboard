@@ -51,9 +51,84 @@ fn append(ctx: &Context, line: &str) -> std::io::Result<()> {
         .write_all(line.as_bytes())
 }
 
+/// One recorded change, as `read` hands it back.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Entry {
+    /// Local time, as it was written.
+    pub at: String,
+    /// Which front end asked. Lines written before this was recorded say `unknown`.
+    pub caller: String,
+    pub verb: String,
+    pub subject: String,
+    /// `ok`, or the stable code of whatever stopped it.
+    pub outcome: String,
+}
+
+/// The newest `limit` changes, oldest first. The rotated file is read too, so asking for
+/// more than the current file holds still answers.
+pub fn read(ctx: &Context, limit: usize) -> Vec<Entry> {
+    let read = |p: PathBuf| std::fs::read_to_string(p).unwrap_or_default();
+    let mut text = read(path(ctx).with_extension("log.1"));
+    text.push_str(&read(path(ctx)));
+    let lines: Vec<&str> = text.lines().filter(|l| !l.is_empty()).collect();
+    lines[lines.len().saturating_sub(limit)..]
+        .iter()
+        .map(|line| {
+            let mut fields = line.split('\t');
+            let mut next = || fields.next().unwrap_or_default().to_string();
+            let (at, second, third, fourth) = (next(), next(), next(), next());
+            match fields.next() {
+                // Written before the caller had a column of its own.
+                None => Entry {
+                    at,
+                    caller: "unknown".into(),
+                    verb: second,
+                    subject: third,
+                    outcome: fourth,
+                },
+                Some(outcome) => Entry {
+                    at,
+                    caller: second,
+                    verb: third,
+                    subject: fourth,
+                    outcome: outcome.to_string(),
+                },
+            }
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Lines written before the caller had a column of its own still read, because a log is
+    /// only useful if the version that wrote it does not matter.
+    #[test]
+    fn a_line_from_before_the_caller_column_still_reads() {
+        let four = "2026-09-22T01:00:00+07:00\tuse\twork\tok";
+        let five = "2026-09-22T01:01:00+07:00\tapp\tuse\tpersonal\tok";
+        let home = tempdir("audit-shapes");
+        let ctx = Context::new(home.clone()).with_pitboard_home(home.clone());
+        std::fs::create_dir_all(&home).unwrap();
+        std::fs::write(home.join("audit.log"), format!("{four}\n{five}\n")).unwrap();
+
+        let entries = read(&ctx, 10);
+        assert_eq!(entries.len(), 2);
+        assert_eq!(entries[0].caller, "unknown");
+        assert_eq!(entries[0].verb, "use");
+        assert_eq!(entries[0].subject, "work");
+        assert_eq!(entries[0].outcome, "ok");
+        assert_eq!(entries[1].caller, "app");
+        assert_eq!(entries[1].verb, "use");
+        assert_eq!(entries[1].outcome, "ok");
+    }
+
+    fn tempdir(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("pitboard-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        dir
+    }
 
     #[test]
     fn a_line_is_one_line_whatever_the_input() {

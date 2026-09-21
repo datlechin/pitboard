@@ -70,6 +70,15 @@ fn enroll() {
     );
 }
 
+/// The last thing a person runs, and the one whose shape matters to whatever wrapper runs
+/// it: how many parked logins went, how many did not, and whether the home is gone.
+#[test]
+fn uninstall() {
+    let env = two_accounts("contract-uninstall");
+    let (value, code) = json(&env, &["uninstall", "--yes"]);
+    contract!("uninstall", value, code);
+}
+
 #[test]
 fn forget_and_rename() {
     let env = two_accounts("contract-forget");

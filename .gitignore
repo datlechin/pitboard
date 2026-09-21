@@ -1,1 +1,4 @@
 /target
+
+# macOS leaves these everywhere
+.DS_Store

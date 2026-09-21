@@ -82,6 +82,7 @@ Other commands:
 - `pitboard rename wrong right` fixes a label without signing in again.
 - `pitboard forget work` drops an account.
 - `pitboard doctor` checks everything pitboard depends on, including every parked login.
+- `pitboard log` shows what pitboard has changed, and when.
 - `pitboard uninstall` deletes every parked login and pitboard's own files.
 
 ## Status line
@@ -157,6 +158,27 @@ None of these are pitboard's to fix, so they are listed plainly:
   hour, which a five-hour limit usually means has happened anyway.
 - Usage for a parked account is read with its parked login, so work done on other machines
   counts too.
+
+## Questions people ask first
+
+**Where do my tokens go?** Nowhere except Anthropic. pitboard asks `api.anthropic.com` which
+account a login belongs to and what it has left, and renews a login it parked itself through
+the same endpoint Claude Code uses. There is no telemetry and no server of its own. Parked
+logins stay on the machine that made them, in the keychain on macOS.
+
+**Is this allowed?** pitboard only moves logins you already hold between the place Claude
+Code reads. It does not share an account between people, pool requests, or touch an account
+you do not own. Whether several subscriptions suit what you are doing is between you and
+Anthropic's terms.
+
+**What if it dies halfway through a switch?** It writes down what it is about to do before
+it does it. The next command finishes that, and says so. When it cannot tell what happened,
+it changes nothing and keeps the record for a later run. `pitboard doctor` reports the
+state, and `pitboard log` is the record of every change it has made.
+
+**Why trust the download?** The macOS app is signed with a Developer ID and notarised by
+Apple, and its update feed is signed too. Every release carries `SHA256SUMS`, and CI builds
+it all in the open from the tag. Or build it yourself: `cargo install pitboard`.
 
 ## How it works
 

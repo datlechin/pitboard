@@ -174,6 +174,11 @@ impl Pitboard {
         self.changing("forget", label, |settled| switch::forget(settled, label))
     }
 
+    /// The changes pitboard has made, newest last.
+    pub fn log(&self, limit: usize) -> Vec<audit::Entry> {
+        audit::read(&self.ctx, limit)
+    }
+
     /// Deletes every parked login and pitboard's own directory. Claude Code's login is
     /// left alone: whoever is signed in stays signed in.
     pub fn uninstall(&self) -> Changing<switch::Removed> {
