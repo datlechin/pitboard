@@ -8,6 +8,9 @@
 //! Read latency is measured rather than the ACL dumped, because latency is the damage.
 //! Runs only against `pitboard-citest-*` items, never anything Claude Code owns.
 
+mod common;
+
+use common::guard_not_live;
 use std::process::Command;
 use std::time::{Duration, Instant};
 
@@ -24,6 +27,7 @@ fn service() -> String {
 }
 
 fn seed(service: &str, value: &str) {
+    guard_not_live(service);
     let ok = Command::new(SECURITY)
         .args([
             "add-generic-password",

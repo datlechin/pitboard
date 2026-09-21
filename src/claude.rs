@@ -16,16 +16,26 @@ fn home() -> PathBuf {
 /// `CLAUDE_CONFIG_DIR` as Claude Code reads it: with `||`, so an empty value is falsy
 /// and means unset.
 fn config_dir_env() -> Option<String> {
-    std::env::var("CLAUDE_CONFIG_DIR")
-        .ok()
-        .filter(|v| !v.is_empty())
+    falsy_string(std::env::var("CLAUDE_CONFIG_DIR").ok())
+}
+
+/// `||` semantics: an empty value is falsy and means unset.
+fn falsy_string(raw: Option<String>) -> Option<String> {
+    raw.filter(|v| !v.is_empty())
+}
+
+/// `!== undefined` semantics: an empty value is *set*, and pins the default credential
+/// slot while still selecting an empty storage directory. The two variables genuinely
+/// differ, and collapsing them sends pitboard at a slot that cannot exist.
+fn defined_string(raw: Option<String>) -> Option<String> {
+    raw
 }
 
 /// `CLAUDE_SECURESTORAGE_CONFIG_DIR` as Claude Code reads it: with `!== undefined`, so an
 /// empty value is *set*, and pins the default slot while still selecting an empty storage
 /// directory. The two variables genuinely differ here.
 fn secure_storage_env() -> Option<String> {
-    std::env::var("CLAUDE_SECURESTORAGE_CONFIG_DIR").ok()
+    defined_string(std::env::var("CLAUDE_SECURESTORAGE_CONFIG_DIR").ok())
 }
 
 pub fn config_dir() -> PathBuf {
@@ -119,6 +129,22 @@ pub fn identity(config: &Value) -> Option<Identity> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Claude Code reads its two directory variables with different rules. These are the
+    /// rules themselves, tested without a process or a keychain in sight.
+    #[test]
+    fn an_empty_config_dir_means_unset_but_an_empty_storage_dir_does_not() {
+        assert_eq!(falsy_string(None), None);
+        assert_eq!(falsy_string(Some(String::new())), None);
+        assert_eq!(falsy_string(Some("/x".into())), Some("/x".into()));
+
+        assert_eq!(defined_string(None), None);
+        assert_eq!(
+            defined_string(Some(String::new())),
+            Some(String::new()),
+            "an empty storage dir is set, and pins the default slot"
+        );
+    }
 
     #[test]
     fn identity_needs_an_email_and_an_account() {

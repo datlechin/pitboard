@@ -183,6 +183,10 @@ pub fn render_json(r: &Report, accounts: &[crate::state::Account], active: Optio
             "account_uuid": a.account_uuid,
             "active": Some(a.label.as_str()) == active,
             "parked_at": a.newest().map(|g| g.parked_at),
+            // What `use` actually checks. A timestamp alone reads as readiness even when
+            // the last copy has already been consumed and rotated past.
+            "restorable": a.restorable().is_some(),
+            "restorable_parked_at": a.restorable().map(|g| g.parked_at),
         })).collect::<Vec<_>>(),
     })
 }
@@ -190,6 +194,111 @@ pub fn render_json(r: &Report, accounts: &[crate::state::Account], active: Optio
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::state::{Account, Generation};
+
+    fn identity() -> claude::Identity {
+        claude::Identity {
+            email: "a@example.com".into(),
+            account_uuid: "acc-1".into(),
+            organization_uuid: "org-12345678".into(),
+            organization_name: Some("Org".into()),
+            subscription: Some("claude_max".into()),
+            rate_limit_tier: Some("default_claude_max_20x".into()),
+        }
+    }
+
+    fn snapshot(account: &str) -> usage::Snapshot {
+        usage::Snapshot {
+            windows: vec![usage::Window {
+                kind: "session".into(),
+                scope: None,
+                percent: 62.0,
+                resets_at: Some(1_789_942_800),
+                is_active: true,
+            }],
+            observed_at: Some(1_789_933_772),
+            account_uuid: Some(account.into()),
+        }
+    }
+
+    fn report(snapshot_account: &str) -> Report {
+        Report {
+            identity: Some(identity()),
+            snapshot: Some(snapshot(snapshot_account)),
+            snapshot_is_foreign: snapshot_account != "acc-1",
+            backend: Ok(store::Backend::Keychain),
+            service: "Claude Code-credentials".into(),
+            config_file: "/home/x/.claude.json".into(),
+        }
+    }
+
+    fn account(label: &str, installed: Option<i64>) -> Account {
+        Account {
+            label: label.into(),
+            account_uuid: format!("{label}-uuid"),
+            email: format!("{label}@example.com"),
+            organization_uuid: "org".into(),
+            oauth_account: serde_json::json!({}),
+            generations: vec![Generation {
+                service: format!("pitboard-park-{label}-1"),
+                parked_at: 1_789_900_000,
+                refresh_fingerprint: "f".into(),
+                installed_at: installed,
+            }],
+        }
+    }
+
+    #[test]
+    fn the_human_view_never_prints_a_keychain_item_name() {
+        let text = render_human(&report("acc-1"), &[account("work", None)], Some("work"));
+        assert!(
+            !text.contains("pitboard-park-"),
+            "an internal item name leaked into the user's view:\n{text}"
+        );
+    }
+
+    #[test]
+    fn usage_measured_for_another_account_is_not_shown_as_this_one() {
+        let text = render_human(&report("someone-else"), &[], None);
+        assert!(
+            !text.contains("62%"),
+            "a foreign measurement was rendered:\n{text}"
+        );
+        assert!(text.contains("different account"), "{text}");
+    }
+
+    #[test]
+    fn the_json_says_whether_an_account_can_actually_be_switched_to() {
+        let value = render_json(
+            &report("acc-1"),
+            &[
+                account("fresh", None),
+                account("spent", Some(1_789_940_000)),
+            ],
+            Some("fresh"),
+        );
+        let accounts = value["accounts"].as_array().unwrap();
+        let by = |label: &str| {
+            accounts
+                .iter()
+                .find(|a| a["label"] == label)
+                .unwrap()
+                .clone()
+        };
+        assert_eq!(by("fresh")["restorable"], true);
+        assert_eq!(
+            by("spent")["restorable"],
+            false,
+            "a consumed copy must not read as ready; `use` would refuse it"
+        );
+        assert_eq!(by("fresh")["active"], true);
+    }
+
+    #[test]
+    fn the_json_marks_a_foreign_usage_snapshot() {
+        let value = render_json(&report("someone-else"), &[], None);
+        assert_eq!(value["usage"]["belongs_to_active_account"], false);
+    }
 
     #[test]
     fn labels_collapse_claude_codes_vocabulary_to_two_words() {

@@ -5,6 +5,9 @@
 //! derived from a temporary path and asserted to differ from the default one before a
 //! single byte is written.
 
+mod common;
+
+use common::guard_not_live;
 use std::path::PathBuf;
 use std::process::Command;
 
@@ -43,11 +46,7 @@ impl Env {
         std::fs::create_dir_all(&root).unwrap();
 
         let service = pitboard::slot::service_for_dir(&root.to_string_lossy());
-        assert_ne!(
-            service,
-            pitboard::slot::LIVE_SERVICE,
-            "the test must never address the real credential slot"
-        );
+        guard_not_live(&service);
         Env {
             root,
             service,

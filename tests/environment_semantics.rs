@@ -1,8 +1,6 @@
-//! Claude Code reads its two directory variables with different rules, and pitboard has to
-//! match both. CLAUDE_CONFIG_DIR is read with `||`, so an empty value is falsy and means
-//! unset. CLAUDE_SECURESTORAGE_CONFIG_DIR is read with `!== undefined`, so an empty value
-//! is set: it pins the default credential slot while still selecting an empty storage
-//! directory. Collapsing the two into one rule sends pitboard at a slot that cannot exist.
+//! The rules themselves are unit-tested in `claude.rs`. What can only be proved by running
+//! the binary is that they are actually wired to the file it opens and the slot it reads —
+//! so exactly one test lives here, and the combinatorics stay in-process.
 
 use std::path::PathBuf;
 use std::process::Command;
@@ -43,24 +41,6 @@ fn an_empty_config_dir_means_unset() {
     assert_eq!(
         empty["store"]["service"], "Claude Code-credentials",
         "and must leave pitboard on the default credential slot"
-    );
-    let _ = std::fs::remove_dir_all(&home);
-}
-
-#[test]
-fn a_set_config_dir_selects_a_hashed_slot() {
-    let home = scratch("set");
-    let elsewhere = home.join("elsewhere");
-    std::fs::create_dir_all(&elsewhere).unwrap();
-
-    let report = status(&home, Some(elsewhere.to_str().unwrap()));
-    let expected = pitboard::slot::service_for_dir(elsewhere.to_str().unwrap());
-
-    assert_eq!(report["store"]["service"], expected);
-    assert_ne!(report["store"]["service"], "Claude Code-credentials");
-    assert_eq!(
-        report["config_file"],
-        elsewhere.join(".claude.json").to_string_lossy().to_string()
     );
     let _ = std::fs::remove_dir_all(&home);
 }
