@@ -89,15 +89,16 @@ mod tests {
 
     #[test]
     fn only_names_pitboard_generates_are_accepted() {
+        let vault = FileVault::new(&Context::from_env());
         for good in [
             "pitboard-park-9aeb9c89-316c-4344-84c5-603d71dc5c9a-1789935600123",
             "a.b_c-1",
         ] {
-            assert!(FILE.path(good).is_ok(), "{good}");
+            assert!(vault.path(good).is_ok(), "{good}");
         }
         for bad in ["", "../escape", "has space", "a/b", "sl\\ash"] {
             assert!(
-                FILE.path(bad).is_err(),
+                vault.path(bad).is_err(),
                 "{bad:?} must be refused, not escaped"
             );
         }
