@@ -358,9 +358,13 @@ impl Error {
     pub fn exit_code(&self) -> u8 {
         use Error::*;
         match self {
+            // A login or Claude Code's files in a state pitboard will not act on, which is
+            // what exit 3 means: not a failure of the attempt, a refusal to attempt.
             LiveCredentialShapeUnexpected { .. }
             | ClaudeConfigNotJson { .. }
             | SwitchCorrupted { .. }
+            | CredentialTooLarge { .. }
+            | CustomOauthEndpoint
             | RecoveryRecordCorrupt { .. } => 3,
             Usage(_) => 2,
             Store(e) => e.exit_code(),

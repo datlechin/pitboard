@@ -561,10 +561,16 @@ fn a_login_too_large_to_write_changes_nothing() {
 
     let (out, err, code) = env.run(&["use", "beta"]);
     assert_eq!(code, 3, "refused, not a half-done switch: {out}{err}");
-    assert!(err.contains("bytes"), "it says how big and how big it may be: {err}");
+    assert!(
+        err.contains("bytes"),
+        "it says how big and how big it may be: {err}"
+    );
 
     assert_eq!(env.live(), live_before, "the account in use did not move");
-    assert!(env.is_parked(&parked), "the copy it would have installed is still there");
+    assert!(
+        env.is_parked(&parked),
+        "the copy it would have installed is still there"
+    );
     assert_eq!(
         account(&env, "beta")["parked"]["service"],
         parked,

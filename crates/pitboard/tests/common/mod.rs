@@ -305,8 +305,34 @@ impl Env {
 
     /// Replaces the live credential document, for a test that needs it to be a particular
     /// shape rather than whatever a sign-in produced.
+    ///
+    /// Written the way Claude Code writes a large one, through `security`'s argument line,
+    /// because pitboard itself refuses to and that refusal is what some of these tests are
+    /// about. The item is this test's own, guarded like every other write here.
     pub fn replace_live(&self, credential: &serde_json::Value) {
-        self.write_live(&credential.to_string());
+        let body = credential.to_string();
+        if !cfg!(target_os = "macos") {
+            self.write_live(&body);
+            return;
+        }
+        guard_not_live(&self.service);
+        let done = Command::new(SECURITY)
+            .args([
+                "add-generic-password",
+                "-U",
+                "-a",
+                &account(),
+                "-s",
+                &self.service,
+                "-X",
+                &hex(body.as_bytes()),
+            ])
+            .status()
+            .expect("security ran");
+        assert!(
+            done.success(),
+            "security refused to write the test credential"
+        );
     }
 
     fn write_live(&self, credential: &str) {
@@ -392,6 +418,10 @@ impl Drop for Env {
 }
 
 /// A credential shaped like Claude Code's, keyed so the fake Anthropic can tell who owns it.
+fn hex(bytes: &[u8]) -> String {
+    bytes.iter().map(|b| format!("{b:02x}")).collect()
+}
+
 pub fn credential(refresh: &str) -> serde_json::Value {
     let now_ms = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
