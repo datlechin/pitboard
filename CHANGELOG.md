@@ -5,6 +5,12 @@ All notable changes are recorded here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+- `enroll --sign-in` no longer holds pitboard's lock while the browser sign-in waits, so
+  `use`, `forget` and `rename` go ahead meanwhile; a second sign-in is refused, not queued.
+- What Claude Code's sign-in prints goes to stderr, so `enroll --sign-in --json` prints
+  exactly one JSON line.
+
 ## [0.1.0] - 2026-09-21
 
 First release.

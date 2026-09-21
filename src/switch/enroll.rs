@@ -11,6 +11,9 @@ use crate::api::Owner;
 use crate::state::{Account, Park, State};
 use crate::{claude, home, park, state, store};
 use serde_json::{Value, json};
+use std::fs::{File, OpenOptions, TryLockError};
+use std::os::unix::fs::OpenOptionsExt;
+use std::path::PathBuf;
 use std::process::Command;
 
 pub enum Enrolled {
@@ -22,15 +25,96 @@ pub enum Enrolled {
     Renewed { email: String },
 }
 
-pub fn enroll(settled: Settled, label: &str, sign_in: bool) -> Result<Enrolled> {
+/// A login Claude Code stored for pitboard in a private directory, not yet enrolled. Dropping
+/// it deletes that directory and the credential Claude Code kept for it.
+pub struct SignIn {
+    dir: PathBuf,
+    document: Value,
+    _one_at_a_time: File,
+}
+
+impl Drop for SignIn {
+    fn drop(&mut self) {
+        let _ = store::discard_signin(&self.dir);
+        let _ = std::fs::remove_dir_all(&self.dir);
+    }
+}
+
+/// Run Claude Code's own sign-in in a private directory, where the live login is never
+/// touched. It waits on a person in a browser, so it takes no lock but its own: a switch
+/// meanwhile goes ahead, and a second sign-in is refused rather than queued.
+pub fn sign_in() -> Result<SignIn> {
+    let home = home::ensure().map_err(|source| Error::HomeUnwritable {
+        path: home::dir(),
+        source,
+    })?;
+    let lock_path = home.join("signin.lock");
+    let one_at_a_time = OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .write(true)
+        .mode(0o600)
+        .open(&lock_path)
+        .map_err(|source| Error::HomeUnwritable {
+            path: lock_path.clone(),
+            source,
+        })?;
+    match one_at_a_time.try_lock() {
+        Ok(()) => {}
+        Err(TryLockError::WouldBlock) => return Err(Error::SignInInProgress),
+        Err(TryLockError::Error(source)) => {
+            return Err(Error::HomeUnwritable {
+                path: lock_path,
+                source,
+            });
+        }
+    }
+
+    let dir = home.join("signin");
+    let _ = std::fs::remove_dir_all(&dir);
+    home::create_private(&dir).map_err(|source| Error::HomeUnwritable {
+        path: dir.clone(),
+        source,
+    })?;
+    let mut pending = SignIn {
+        dir,
+        document: Value::Null,
+        _one_at_a_time: one_at_a_time,
+    };
+
+    // pitboard never sees the sign-in; it reads the login Claude Code stores once it is done.
+    // What Claude Code prints goes to stderr, so `--json` output stays one JSON line.
+    let finished = Command::new("claude")
+        .args(["auth", "login"])
+        .env("CLAUDE_CONFIG_DIR", &pending.dir)
+        .env_remove("CLAUDE_SECURESTORAGE_CONFIG_DIR")
+        .stdout(std::io::stderr())
+        .status()
+        .map_err(|e| match e.kind() {
+            std::io::ErrorKind::NotFound => Error::ClaudeNotFound,
+            _ => Error::SignInIncomplete,
+        })?
+        .success();
+    if !finished {
+        return Err(Error::SignInIncomplete);
+    }
+    let raw = store::read_signin(&pending.dir)?.ok_or(Error::SignInIncomplete)?;
+    pending.document =
+        serde_json::from_str(&raw).map_err(|e| Error::LiveCredentialShapeUnexpected {
+            detail: e.to_string(),
+        })?;
+    Ok(pending)
+}
+
+/// Enroll the account signed in now, or with `signed_in`, the one a sign-in just produced.
+pub fn enroll(settled: Settled, label: &str, signed_in: Option<SignIn>) -> Result<Enrolled> {
     let Settled {
         _exclusive,
         mut state,
     } = settled;
-    if sign_in {
-        sign_in_new(label, &mut state)
-    } else {
-        record_current(label, &mut state)
+    match signed_in {
+        Some(login) => park_signed_in(label, &mut state, &login),
+        None => record_current(label, &mut state),
     }
 }
 
@@ -66,59 +150,25 @@ fn record_current(label: &str, state: &mut State) -> Result<Enrolled> {
     Ok(Enrolled::Current { email: owner.email })
 }
 
-fn sign_in_new(label: &str, state: &mut State) -> Result<Enrolled> {
-    let dir = home::dir().join("signin");
-    let _ = std::fs::remove_dir_all(&dir);
-    home::create_private(&dir).map_err(|source| Error::HomeUnwritable {
-        path: dir.clone(),
-        source,
+fn park_signed_in(label: &str, state: &mut State, login: &SignIn) -> Result<Enrolled> {
+    let owner = identify(&access_token(&login.document)?)?;
+    claim(state, label, &owner)?;
+    let service = park::reserve(&owner.account_uuid)?;
+    let fresh = park::store_at(&service, &oauth_of(&login.document)?)?;
+    let previous = state.get(label).and_then(|a| a.parked.clone());
+    let renewed = state.get(label).is_some();
+    state.upsert(account(label, &owner, previous));
+    state.park(label, fresh);
+    // Unrecorded, the new login would be an item nothing refers to, never deleted.
+    state::save(state).inspect_err(|_| {
+        let _ = store::vault_delete(&service);
     })?;
-
-    // Anthropic's own sign-in, run in a private directory. pitboard never sees the sign-in;
-    // it only reads the login Claude Code stores once it is done.
-    let finished = Command::new("claude")
-        .args(["auth", "login"])
-        .env("CLAUDE_CONFIG_DIR", &dir)
-        .env_remove("CLAUDE_SECURESTORAGE_CONFIG_DIR")
-        .status()
-        .map_err(|e| match e.kind() {
-            std::io::ErrorKind::NotFound => Error::ClaudeNotFound,
-            _ => Error::SignInIncomplete,
-        })?
-        .success();
-
-    let result = (|| {
-        if !finished {
-            return Err(Error::SignInIncomplete);
-        }
-        let raw = store::read_signin(&dir)?.ok_or(Error::SignInIncomplete)?;
-        let document: Value =
-            serde_json::from_str(&raw).map_err(|e| Error::LiveCredentialShapeUnexpected {
-                detail: e.to_string(),
-            })?;
-        let owner = identify(&access_token(&document)?)?;
-        claim(state, label, &owner)?;
-        let service = park::reserve(&owner.account_uuid)?;
-        let fresh = park::store_at(&service, &oauth_of(&document)?)?;
-        let previous = state.get(label).and_then(|a| a.parked.clone());
-        let renewed = state.get(label).is_some();
-        state.upsert(account(label, &owner, previous));
-        state.park(label, fresh);
-        // Unrecorded, the new login would be an item nothing refers to, never deleted.
-        state::save(state).inspect_err(|_| {
-            let _ = store::vault_delete(&service);
-        })?;
-        purge(state);
-        Ok(if renewed {
-            Enrolled::Renewed { email: owner.email }
-        } else {
-            Enrolled::SignedIn { email: owner.email }
-        })
-    })();
-
-    let _ = store::discard_signin(&dir);
-    let _ = std::fs::remove_dir_all(&dir);
-    result
+    purge(state);
+    Ok(if renewed {
+        Enrolled::Renewed { email: owner.email }
+    } else {
+        Enrolled::SignedIn { email: owner.email }
+    })
 }
 
 /// Only what Anthropic just confirmed. Leaving the rest out makes Claude Code fetch its own

@@ -11,7 +11,7 @@ mod forget;
 mod journal;
 mod rename;
 
-pub use enroll::{Enrolled, enroll};
+pub use enroll::{Enrolled, SignIn, enroll, sign_in};
 pub use forget::forget;
 pub use journal::{Recovered, pending as interrupted};
 pub use rename::rename;
@@ -58,12 +58,6 @@ pub(super) fn oauth_of(document: &Value) -> Result<Value> {
 pub struct Settled {
     _exclusive: std::fs::File,
     state: State,
-}
-
-impl Settled {
-    pub fn account(&self, label: &str) -> Option<&Account> {
-        self.state.get(label)
-    }
 }
 
 /// What recovery found is returned apart from the `Settled`, so it can be reported whether

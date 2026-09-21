@@ -226,6 +226,12 @@ pub enum Error {
     #[error("the sign-in did not finish, so nothing was enrolled.")]
     SignInIncomplete,
 
+    #[error(
+        "another `pitboard enroll --sign-in` is already waiting for its sign-in. Finish or \
+         cancel that one first."
+    )]
+    SignInInProgress,
+
     /// The command line itself was wrong; the message is clap's.
     #[error("{0}")]
     Usage(String),
@@ -276,6 +282,7 @@ impl Error {
             RecoveryUndetermined { .. } => "recovery_undetermined",
             ClaudeNotFound => "claude_not_found",
             SignInIncomplete => "sign_in_incomplete",
+            SignInInProgress => "sign_in_in_progress",
             Usage(_) => "usage",
             Store(e) => e.code(),
             Lock(e) => e.code(),

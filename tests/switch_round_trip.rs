@@ -232,6 +232,65 @@ fn renaming_keeps_the_login_and_the_new_label_switches() {
     assert!(err.contains("already refers to"), "{err}");
 }
 
+/// A program reading `--json` gets exactly one JSON line, whatever Claude Code's sign-in
+/// prints along the way.
+#[test]
+fn signing_in_keeps_the_json_output_pure() {
+    let mut env = two_accounts("pure");
+    let (c, q) = (env.uuid('c'), env.uuid('q'));
+    let credential = common::credential("refresh-c").to_string();
+    env.install_fake_claude(&credential);
+    env.owns("access-refresh-c", &c, "c@example.com", &q);
+
+    let (out, err, code) = env.run(&["enroll", "side", "--sign-in", "--json"]);
+
+    assert_eq!(code, 0, "{err}");
+    assert_eq!(envelope(&out)["data"]["enrolled"], "signed_in");
+    assert!(
+        err.contains("Opening browser"),
+        "Claude Code's words go to stderr: {err}"
+    );
+}
+
+/// A sign-in waits on a person in a browser. Nothing else may wait on it.
+#[test]
+fn a_sign_in_in_progress_does_not_hold_up_a_switch() {
+    let mut env = two_accounts("waiting");
+    let (c, q) = (env.uuid('c'), env.uuid('q'));
+    let credential = common::credential("refresh-c").to_string();
+    env.install_fake_claude(&credential);
+    env.owns("access-refresh-c", &c, "c@example.com", &q);
+    let signing_in = env
+        .command(&["enroll", "side", "--sign-in"])
+        .env("FAKE_SIGN_IN_SECONDS", "4")
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(500));
+
+    let started = std::time::Instant::now();
+    let (_, err, code) = env.run(&["use", "beta"]);
+    assert_eq!(code, 0, "{err}");
+    assert!(
+        started.elapsed() < std::time::Duration::from_secs(3),
+        "the switch waited {:?} on a browser",
+        started.elapsed()
+    );
+
+    let (_, err, code) = env.run(&["enroll", "other", "--sign-in"]);
+    assert_eq!(code, 1);
+    assert!(err.contains("already waiting"), "{err}");
+
+    let finished = signing_in.wait_with_output().unwrap();
+    assert!(
+        finished.status.success(),
+        "{}",
+        String::from_utf8_lossy(&finished.stderr)
+    );
+    assert!(env.parked_service("side").is_some());
+}
+
 #[test]
 fn forgetting_the_signed_in_account_is_refused() {
     let env = two_accounts("forget");

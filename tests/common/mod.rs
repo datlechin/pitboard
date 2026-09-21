@@ -140,7 +140,7 @@ impl Env {
         self.run(&["enroll", label, "--sign-in"])
     }
 
-    fn install_fake_claude(&self, credential: &str) {
+    pub fn install_fake_claude(&self, credential: &str) {
         let bin = self.root.join("bin");
         std::fs::create_dir_all(&bin).unwrap();
         let store = if cfg!(target_os = "macos") {
@@ -155,7 +155,11 @@ impl Env {
         let script = bin.join("claude");
         std::fs::write(
             &script,
-            format!("#!/bin/sh\n[ \"$1 $2\" = \"auth login\" ] || exit 64\n{store}\n"),
+            // Talks on stdout like the real one, and can be made to wait like a person does.
+            format!(
+                "#!/bin/sh\n[ \"$1 $2\" = \"auth login\" ] || exit 64\n\
+                 echo 'Opening browser to sign in'\nsleep \"${{FAKE_SIGN_IN_SECONDS:-0}}\"\n{store}\n"
+            ),
         )
         .unwrap();
         use std::os::unix::fs::PermissionsExt;

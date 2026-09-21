@@ -2,7 +2,7 @@ use anstream::{eprintln, print, println};
 use anstyle::{AnsiColor, Style};
 use clap::{CommandFactory, Parser, Subcommand};
 use pitboard::error::Error;
-use pitboard::switch::{Enrolled, Outcome, Settled};
+use pitboard::switch::{Enrolled, Outcome, Settled, SignIn};
 use pitboard::ui::{BOLD, paint};
 use pitboard::{audit, doctor, state, status, statusline, switch};
 use serde_json::{Value, json};
@@ -214,17 +214,27 @@ fn changing(command: &'static str, label: &str, run: impl FnOnce(Settled) -> Rep
     report
 }
 
-fn enroll(settled: Settled, label: &str, sign_in: bool) -> Report {
-    if sign_in {
-        let who = settled
-            .account(label)
-            .map_or_else(|| "the account to add".to_string(), |a| a.email.clone());
-        eprintln!(
-            "Opening Claude Code's sign-in. Sign in as {who}; the account in use now stays \
-             signed in."
-        );
+/// The browser sign-in runs before pitboard takes its lock, so a person taking their time in
+/// a browser never holds up a switch.
+fn enroll_signing_in(label: &str) -> Report {
+    let who = state::load()
+        .ok()
+        .and_then(|s| s.get(label).map(|a| a.email.clone()))
+        .unwrap_or_else(|| "the account to add".to_string());
+    eprintln!(
+        "Opening Claude Code's sign-in. Sign in as {who}; the account in use now stays signed in."
+    );
+    match switch::sign_in() {
+        Ok(login) => changing("enroll", label, |s| enroll(s, label, Some(login))),
+        Err(e) => {
+            audit::record("enroll", label, e.code());
+            Report::failed(Some("enroll"), e)
+        }
     }
-    let outcome = switch::enroll(settled, label, sign_in);
+}
+
+fn enroll(settled: Settled, label: &str, signed_in: Option<SignIn>) -> Report {
+    let outcome = switch::enroll(settled, label, signed_in);
     audit::record(
         "enroll",
         label,
@@ -378,9 +388,11 @@ fn main() -> ExitCode {
         Command::Status => status(),
         Command::Doctor => doctor(),
         Command::Statusline => statusline(),
-        Command::Enroll { label, sign_in } => {
-            changing("enroll", &label, |s| enroll(s, &label, sign_in))
-        }
+        Command::Enroll {
+            label,
+            sign_in: true,
+        } => enroll_signing_in(&label),
+        Command::Enroll { label, .. } => changing("enroll", &label, |s| enroll(s, &label, None)),
         Command::Use { label } => changing("use", &label, |s| use_account(s, &label)),
         Command::Forget { label } => changing("forget", &label, |s| forget(s, &label)),
         Command::Rename { from, to } => changing("rename", &from, |s| rename(s, &from, &to)),
