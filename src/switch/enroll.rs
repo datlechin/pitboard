@@ -6,7 +6,7 @@
 //! and any other account is signed in inside a private directory, where the live slot is
 //! never touched and the vault is the new login's only holder.
 
-use super::{Error, Result, access_token, exclusive, identify, oauth_of};
+use super::{Error, Result, Settled, access_token, identify, oauth_of};
 use crate::api::Owner;
 use crate::state::{Account, Generation};
 use crate::{claude, home, park, state, store};
@@ -18,9 +18,11 @@ pub enum Enrolled {
     SignedIn { email: String },
 }
 
-pub fn enroll(label: &str, sign_in: bool) -> Result<Enrolled> {
-    let _exclusive = exclusive()?;
-    let mut state = state::load()?;
+pub fn enroll(settled: Settled, label: &str, sign_in: bool) -> Result<Enrolled> {
+    let Settled {
+        _exclusive,
+        mut state,
+    } = settled;
     if let Some(taken) = state.get(label) {
         return Err(Error::LabelTaken {
             label: label.to_string(),
@@ -52,7 +54,7 @@ fn record_current(label: &str, state: &mut state::State) -> Result<Enrolled> {
 fn sign_in_new(label: &str, state: &mut state::State) -> Result<Enrolled> {
     let dir = home::dir().join("signin");
     let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).map_err(|source| Error::RecoveryFailed {
+    home::create_private(&dir).map_err(|source| Error::RecoveryFailed {
         path: dir.clone(),
         source,
     })?;

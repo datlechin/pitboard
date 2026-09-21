@@ -1,6 +1,7 @@
 //! The one durable write, for every file that must survive an interrupted run. The directory
 //! is synced after the rename because ext4 and xfs can lose a rename across a crash even
-//! when the contents were synced.
+//! when the contents were synced. The directory must already exist: its mode is the
+//! caller's to choose.
 
 use std::fs::{File, OpenOptions};
 use std::io::{self, Write};
@@ -19,11 +20,10 @@ pub fn write(path: &Path, contents: &[u8], perms: Perms) -> io::Result<()> {
     let dir = path
         .parent()
         .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "path has no parent"))?;
-    std::fs::create_dir_all(dir)?;
-
     let name = path
         .file_name()
         .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "path has no file name"))?;
+    sweep(dir);
     let temp = dir.join(format!(
         ".{}.{}.pitboard",
         name.to_string_lossy(),
@@ -58,6 +58,49 @@ pub fn write(path: &Path, contents: &[u8], perms: Perms) -> io::Result<()> {
     // Best effort: the data is already durable, this makes the rename durable too.
     let _ = File::open(dir).and_then(|d| d.sync_all());
     Ok(())
+}
+
+/// The pid in a temporary name `write` creates, or `None` for any other name.
+fn temp_owner(file_name: &str) -> Option<u32> {
+    let (target, pid) = file_name
+        .strip_prefix('.')?
+        .strip_suffix(".pitboard")?
+        .rsplit_once('.')?;
+    if target.is_empty() || pid.is_empty() || !pid.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    pid.parse().ok()
+}
+
+/// Remove temporaries a killed run left in `dir`. Each can hold a whole credential, and one
+/// named for this process's pid would make the next open fail. A temporary is left alone
+/// while its pid may still be writing it.
+fn sweep(dir: &Path) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    let me = std::process::id();
+    for entry in entries.flatten() {
+        let Some(pid) = entry.file_name().to_str().and_then(temp_owner) else {
+            continue;
+        };
+        // `DirEntry::file_type` does not follow a symlink, so a planted link is never removed
+        // in place of a file.
+        let is_file = entry.file_type().is_ok_and(|t| t.is_file());
+        if is_file && (pid == me || !may_be_running(pid)) {
+            let _ = std::fs::remove_file(entry.path());
+        }
+    }
+}
+
+fn may_be_running(pid: u32) -> bool {
+    let Ok(pid) = libc::pid_t::try_from(pid) else {
+        return true;
+    };
+    // SAFETY: signal 0 is never delivered; `kill` only reports whether `pid` exists and may
+    // be signalled, and touches no memory of this process.
+    let probed = unsafe { libc::kill(pid, 0) };
+    probed == 0 || io::Error::last_os_error().raw_os_error() == Some(libc::EPERM)
 }
 
 #[cfg(test)]
@@ -132,6 +175,55 @@ mod tests {
         let path = dir.join("new.json");
         write(&path, b"{}", Perms::MatchExisting).unwrap();
         assert_eq!(mode_of(&path), 0o600);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn only_the_exact_temporary_shape_is_recognised() {
+        assert_eq!(temp_owner(".state.json.4242.pitboard"), Some(4242));
+        assert_eq!(temp_owner("..claude.json.7.pitboard"), Some(7));
+        for other in [
+            ".pitboard",
+            "..pitboard",
+            ".state.json.pitboard",
+            ".state.json.12x.pitboard",
+            ".4242.pitboard",
+            "state.json.4242.pitboard",
+            ".state.json.4242.pitboard.bak",
+        ] {
+            assert_eq!(temp_owner(other), None, "{other}");
+        }
+    }
+
+    #[test]
+    fn temporaries_left_by_runs_that_are_gone_are_removed() {
+        let dir = scratch("orphans");
+        let exited = {
+            let mut child = std::process::Command::new("true").spawn().unwrap();
+            let pid = child.id();
+            child.wait().unwrap();
+            pid
+        };
+        let orphan = dir.join(format!(".state.json.{exited}.pitboard"));
+        let own_pid = dir.join(format!(".state.json.{}.pitboard", std::process::id()));
+        let running = dir.join(".state.json.1.pitboard");
+        let unrelated = dir.join(".state.json.bak");
+        for leftover in [&orphan, &own_pid, &running, &unrelated] {
+            std::fs::write(leftover, b"token").unwrap();
+        }
+
+        write(&dir.join("state.json"), b"{}", Perms::Secret).unwrap();
+
+        assert!(!orphan.exists(), "a dead run's copy must not linger");
+        assert!(!own_pid.exists(), "a reused pid must not block the write");
+        assert!(
+            running.exists(),
+            "a pid that is running may still be writing"
+        );
+        assert!(
+            unrelated.exists(),
+            "only pitboard's own temporaries are touched"
+        );
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

@@ -16,57 +16,46 @@ jobs:
   fmt:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          components: rustfmt
+          persist-credentials: false
+      - run: rustup toolchain install
       - run: cargo fmt --check
 
   clippy:
     strategy:
       matrix:
-        os: [macos-14, ubuntu-latest]
+        os: [macos-latest, ubuntu-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          components: clippy
-      - uses: Swatinem/rust-cache@v2
+          persist-credentials: false
+      - run: rustup toolchain install
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       - run: cargo clippy --all-targets --locked
 
-  test-macos:
-    runs-on: macos-14
+  test:
+    strategy:
+      matrix:
+        os: [macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-      # The keychain latency test asserts a threshold that contention from other
-      # concurrent `security` calls can breach, so it runs on its own.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: rustup toolchain install
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       - run: cargo test --locked -- --skip writing_preserves_attributes
-      - run: cargo test --locked --test keychain_write_is_harmless -- --test-threads=1
-
-  test-linux:
-    runs-on: ubuntu-latest
-    # Linux behaviour is inferred from a macOS build of Claude Code and has not yet been
-    # confirmed on a real Linux install. This stays advisory until it has.
-    continue-on-error: true
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-      - run: cargo test --locked
-
-  msrv:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@1.98
-      - uses: Swatinem/rust-cache@v2
-      - run: cargo check --all-targets --locked
+      # Asserts a read-latency threshold that concurrent `security` calls can breach, so it
+      # runs alone. It exists only on macOS.
+      - if: runner.os == 'macOS'
+        run: cargo test --locked --test keychain_write_is_harmless writing_preserves_attributes
 
   deny:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: EmbarkStudios/cargo-deny-action@v2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1

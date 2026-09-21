@@ -83,7 +83,7 @@ pub fn backup(path: &Path) -> Result<PathBuf> {
         source,
     };
     let dir = backups_dir();
-    std::fs::create_dir_all(&dir).map_err(fail)?;
+    home::create_private(&dir).map_err(fail)?;
     let target = dir.join(format!("claude.json.{}", time::now()));
     std::fs::copy(path, &target).map_err(fail)?;
 

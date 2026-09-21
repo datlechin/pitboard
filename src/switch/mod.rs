@@ -12,11 +12,12 @@ mod journal;
 
 pub use enroll::{Enrolled, enroll};
 pub use forget::forget;
+pub use journal::Recovered;
 
 use crate::error::{Error, Result};
-use crate::state::{Account, Generation};
+use crate::state::{Account, Generation, State};
 use crate::{api, claude, configfile, home, lock, park, state, store, time};
-use journal::{Journal, journal_path, reconcile, write_journal};
+use journal::{Journal, clear_journal, reconcile, write_journal};
 use serde_json::Value;
 use std::path::PathBuf;
 
@@ -33,7 +34,8 @@ pub enum Outcome {
         /// The login moved but the config still names the previous account. Claude Code
         /// does not correct that on its own; the next switch rewrites it.
         config_warning: Option<Error>,
-        stuck_generations: Vec<String>,
+        /// Parked items no longer in use that could not be deleted yet.
+        parks_pending: usize,
     },
     /// Not a failure: the state the caller asked for already holds.
     AlreadyActive { label: String },
@@ -48,10 +50,44 @@ pub(super) fn oauth_of(document: &Value) -> Result<Value> {
         })
 }
 
+/// pitboard's state, held exclusively, with any interrupted switch already finished. Every
+/// command that changes state starts from one, so none acts on what a crash left behind.
+pub struct Settled {
+    _exclusive: std::fs::File,
+    state: State,
+}
+
+/// What recovery found is returned apart from the `Settled`, so it can be reported whether
+/// or not the command that follows succeeds.
+pub fn settle() -> Result<(Settled, Option<Recovered>)> {
+    let exclusive = exclusive()?;
+    let mut state = state::load()?;
+    let recovered = reconcile(&mut state)?;
+    purge(&mut state);
+    Ok((
+        Settled {
+            _exclusive: exclusive,
+            state,
+        },
+        recovered,
+    ))
+}
+
+/// Delete what no account refers to any more. A failed save only leaves deleted names
+/// listed, and deleting a missing item succeeds, so a later run clears them.
+fn purge(state: &mut State) -> usize {
+    let listed = state.discarded.len();
+    let remaining = park::purge(state);
+    if remaining != listed {
+        let _ = state::save(state);
+    }
+    remaining
+}
+
 /// Makes pitboard runs exclusive of each other. A kernel lock, unlike the directory lock
 /// Claude Code's protocol requires around its own writes: the operating system releases it
 /// when a process ends, so there is no staleness rule for two runs to both satisfy.
-pub(super) fn exclusive() -> Result<std::fs::File> {
+fn exclusive() -> Result<std::fs::File> {
     let path = home::dir().join("state.lock");
     let fail = |source| Error::RecoveryFailed {
         path: path.clone(),
@@ -88,12 +124,11 @@ pub(super) fn access_token(document: &Value) -> Result<String> {
         })
 }
 
-pub fn switch(label: &str) -> Result<Outcome> {
-    let _exclusive = exclusive()?;
-    let mut state = state::load()?;
-    if let Some(note) = reconcile(&mut state)? {
-        eprintln!("note: {note}");
-    }
+pub fn switch(settled: Settled, label: &str) -> Result<Outcome> {
+    let Settled {
+        _exclusive,
+        mut state,
+    } = settled;
 
     let target = state
         .get(label)
@@ -172,7 +207,7 @@ pub fn switch(label: &str) -> Result<Outcome> {
         // this copy holds. Restoring it once stale would zero the login, so it is retired.
         state.mark_installed(&outgoing_label, &parked.service, time::now());
         state::save(&state)?;
-        let _ = std::fs::remove_file(journal_path());
+        clear_journal();
         return Err(e);
     }
     state.mark_installed(label, &generation.service, time::now());
@@ -189,16 +224,17 @@ pub fn switch(label: &str) -> Result<Outcome> {
         .find(|a| a.label == outgoing_label)
         .map(park::retire)
         .unwrap_or_default();
+    state.discarded.extend(retired);
     state::save(&state)?;
-    let stuck_generations = park::delete(&retired);
-    let _ = std::fs::remove_file(journal_path());
+    let parks_pending = purge(&mut state);
+    clear_journal();
 
     Ok(Outcome::Switched {
         from: outgoing_label,
         to: label.to_string(),
         parked,
         config_warning,
-        stuck_generations,
+        parks_pending,
     })
 }
 

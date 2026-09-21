@@ -18,15 +18,38 @@ Any process running as your user can read them — the same exposure Claude Code
 already has.
 
 **Never written anywhere else.** pitboard's account list, `~/.pitboard/state.json`, holds
-email addresses and the identity Claude Code recorded, but no token. The audit log holds
-labels, codes and times only.
+each account's email address and Anthropic account and organization identifiers, but no
+token. `~/.pitboard/usage.json` holds the last usage reading per account. The audit log
+holds labels, codes and times only.
+
+## What leaves your machine
+
+pitboard makes two read-only requests to `https://api.anthropic.com`, each carrying an
+access token: `/api/oauth/profile`, to learn which account a login belongs to, and
+`/api/oauth/usage`, for the numbers `pitboard status` shows. TLS is verified against your
+operating system's trust store.
+
+A refresh token is never sent anywhere. pitboard never calls a token endpoint and never
+refreshes a login; that is Claude Code's job, and a second refresher would break the
+login for both. There is no telemetry.
+
+`PITBOARD_API_BASE` redirects these requests for tests, and is honoured only for a loopback
+IP address.
 
 ## What pitboard defends against
 
-- Mixing up accounts: every parked copy is bound to its account by a fingerprint of its
-  refresh token, and a copy that does not match is refused.
-- Corruption from a crash mid-switch: a switch records its intent before acting, and the
-  next run finishes or safely abandons what the interrupted one started.
+- Mixing up accounts: which account a login belongs to is asked of Anthropic, not taken
+  from Claude Code's config, which can be a day out of date. Every parked copy is also
+  bound to a fingerprint of its refresh token, and a copy that does not match is refused.
+- Corruption from a crash mid-switch: a switch durably records its intent before acting,
+  and the next `use`, `enroll` or `forget` finishes what the interrupted one started before
+  doing anything else. When it cannot tell what happened, it changes nothing and keeps the
+  record for a later run.
+- Leftover copies: a parked login that is no longer needed stays listed until it is
+  deleted, so a failed or interrupted delete is retried. Temporary files a killed run left
+  behind are removed on the next write to the same directory.
+- A locked or unreadable keychain: reported as unreadable, never taken to mean that no
+  login is there.
 - Restoring a login Claude Code has already moved past: a copy that has been installed is
   never offered again, because presenting a superseded refresh token makes Claude Code
   discard the login.
@@ -44,7 +67,8 @@ labels, codes and times only.
 
 ## If something goes wrong
 
-If a switch is interrupted, run `pitboard doctor` before the next `pitboard use`.
+If a switch is interrupted, the next `pitboard use`, `enroll` or `forget` finishes it first
+and says what it found. Run `pitboard doctor` if anything still looks wrong.
 
 Never copy `~/.pitboard` to another machine. pitboard refuses to read a state file written
 elsewhere, and a parked login presented from a second machine can end the login on both.

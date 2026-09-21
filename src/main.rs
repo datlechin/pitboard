@@ -68,6 +68,16 @@ fn warning(error: &Error) -> Value {
     json!({ "code": error.code(), "message": error.to_string() })
 }
 
+fn parks_pending(count: usize) -> Value {
+    json!({
+        "code": "parks_pending_removal",
+        "message": format!(
+            "{count} parked login(s) no longer in use could not be removed yet; \
+             pitboard tries again on its next change"
+        ),
+    })
+}
+
 fn emit(report: Report, as_json: bool) -> ExitCode {
     let name = env!("CARGO_BIN_NAME");
     if as_json {
@@ -142,8 +152,31 @@ fn doctor() -> Report {
     }
 }
 
-fn enroll(label: &str, sign_in: bool) -> Report {
-    let outcome = switch::enroll(label, sign_in);
+/// Runs a command that changes state once any interrupted switch is settled. What settling
+/// found is reported whether or not the command then succeeds.
+fn changing(
+    command: &'static str,
+    label: &str,
+    run: impl FnOnce(switch::Settled) -> Report,
+) -> Report {
+    let (settled, recovered) = match switch::settle() {
+        Ok(settled) => settled,
+        Err(e) => {
+            audit::record(command, label, e.code());
+            return failure(command, e);
+        }
+    };
+    let recovered = recovered.map(|r| {
+        audit::record("recover", &r.to, r.code());
+        json!({ "code": r.code(), "message": r.to_string() })
+    });
+    let mut report = run(settled);
+    report.warnings.splice(0..0, recovered);
+    report
+}
+
+fn enroll(settled: switch::Settled, label: &str, sign_in: bool) -> Report {
+    let outcome = switch::enroll(settled, label, sign_in);
     audit::record(
         "enroll",
         label,
@@ -174,8 +207,8 @@ fn enroll(label: &str, sign_in: bool) -> Report {
     }
 }
 
-fn use_account(label: &str) -> Report {
-    let outcome = switch::switch(label);
+fn use_account(settled: switch::Settled, label: &str) -> Report {
+    let outcome = switch::switch(settled, label);
     audit::record(
         "use",
         label,
@@ -198,18 +231,11 @@ fn use_account(label: &str) -> Report {
             to,
             parked,
             config_warning,
-            stuck_generations,
+            parks_pending: pending,
         }) => {
             let mut warnings: Vec<Value> = config_warning.iter().map(warning).collect();
-            if !stuck_generations.is_empty() {
-                warnings.push(json!({
-                    "code": "stale_parks_remain",
-                    "message": format!(
-                        "{} old parked login(s) for `{from}` could not be removed; \
-                         harmless, run `pitboard doctor` to check",
-                        stuck_generations.len()
-                    ),
-                }));
+            if pending > 0 {
+                warnings.push(parks_pending(pending));
             }
             Report {
                 command: "use",
@@ -233,29 +259,22 @@ fn use_account(label: &str) -> Report {
     }
 }
 
-fn forget(label: &str) -> Report {
-    let outcome = switch::forget(label);
+fn forget(settled: switch::Settled, label: &str) -> Report {
+    let outcome = switch::forget(settled, label);
     audit::record(
         "forget",
         label,
         outcome.as_ref().map_or_else(|e| e.code(), |_| "ok"),
     );
     match outcome {
-        Ok((email, stuck)) => Report {
+        Ok((email, pending)) => Report {
             command: "forget",
             human: format!("forgot `{label}` ({email})\n"),
             result: Ok(json!({ "label": label, "email": email })),
-            warnings: if stuck.is_empty() {
-                Vec::new()
+            warnings: if pending > 0 {
+                vec![parks_pending(pending)]
             } else {
-                vec![json!({
-                    "code": "stale_parks_remain",
-                    "message": format!(
-                        "{} parked login(s) for `{label}` are still in the keychain; \
-                         harmless, run `pitboard doctor` to check",
-                        stuck.len()
-                    ),
-                })]
+                Vec::new()
             },
             exit: 0,
         },
@@ -268,9 +287,11 @@ fn main() -> ExitCode {
     let report = match cli.command.unwrap_or(Command::Status) {
         Command::Status => status(),
         Command::Doctor => doctor(),
-        Command::Enroll { label, sign_in } => enroll(&label, sign_in),
-        Command::Use { label } => use_account(&label),
-        Command::Forget { label } => forget(&label),
+        Command::Enroll { label, sign_in } => {
+            changing("enroll", &label, |s| enroll(s, &label, sign_in))
+        }
+        Command::Use { label } => changing("use", &label, |s| use_account(s, &label)),
+        Command::Forget { label } => changing("forget", &label, |s| forget(s, &label)),
         Command::Completions { shell } => {
             clap_complete::generate(
                 shell,

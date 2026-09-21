@@ -37,7 +37,7 @@ impl RawStore for FileVault {
     }
 
     fn contains(&self, service: &str) -> Result<bool, Error> {
-        Ok(self.path(service)?.is_file())
+        super::exists(&self.path(service)?)
     }
 
     fn read(&self, service: &str) -> Result<Option<String>, Error> {
@@ -54,9 +54,7 @@ impl RawStore for FileVault {
 
     fn write(&self, service: &str, contents: &str) -> Result<(), Error> {
         let path = self.path(service)?;
-        home::ensure().map_err(|e| Error::Write(e.to_string()))?;
-        std::fs::create_dir_all(self.dir()).map_err(|e| Error::Write(e.to_string()))?;
-        home::restrict(&self.dir()).map_err(|e| Error::Write(e.to_string()))?;
+        home::create_private(&self.dir()).map_err(|e| Error::Write(e.to_string()))?;
         atomic::write(&path, contents.as_bytes(), atomic::Perms::Secret)
             .map_err(|e| Error::Write(format!("cannot write {}: {e}", path.display())))?;
         match self.read(service)? {

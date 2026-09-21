@@ -194,6 +194,29 @@ fn forgetting_the_signed_in_account_is_refused() {
 }
 
 #[test]
+fn forgetting_an_account_deletes_its_parked_logins() {
+    let env = two_accounts("forget-parked");
+    let parked: Vec<String> = account(&env, "beta")["generations"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|g| g["service"].as_str().unwrap().to_string())
+        .collect();
+    assert!(parked.iter().all(|s| env.is_parked(s)));
+
+    let (_, err, code) = env.run(&["forget", "beta"]);
+
+    assert_eq!(code, 0, "{err}");
+    assert!(accounts(&env).iter().all(|a| a["label"] != "beta"));
+    assert!(parked.iter().all(|s| !env.is_parked(s)));
+    assert_eq!(
+        env.state()["discarded"],
+        serde_json::json!([]),
+        "a deleted item must not stay listed for another attempt"
+    );
+}
+
+#[test]
 fn an_account_whose_only_copy_was_already_used_is_refused_not_destroyed() {
     let env = two_accounts("exhausted");
     let path = env.root.join("pitboard/state.json");

@@ -60,6 +60,10 @@ pub struct State {
     pub machine: String,
     pub accounts: Vec<Account>,
     pub active: Option<String>,
+    /// Parked items no account refers to any more. Listed in the same save that drops them
+    /// and removed once deleted, so a delete that fails or is interrupted is retried.
+    #[serde(default)]
+    pub discarded: Vec<String>,
 }
 
 impl Default for State {
@@ -69,6 +73,7 @@ impl Default for State {
             machine: machine_id(),
             accounts: Vec::new(),
             active: None,
+            discarded: Vec::new(),
         }
     }
 }

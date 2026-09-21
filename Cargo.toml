@@ -10,7 +10,7 @@ homepage = "https://github.com/ngoquocdat/pitboard"
 keywords = ["cli", "keychain", "credentials", "macos", "linux"]
 categories = ["command-line-utilities"]
 readme = "README.md"
-exclude = ["/.github", "/packaging", "/deny.toml", "/clippy.toml", "/rustfmt.toml"]
+exclude = ["/.github", "/packaging", "/deny.toml", "/rustfmt.toml"]
 
 [lib]
 name = "pitboard"

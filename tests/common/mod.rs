@@ -175,6 +175,16 @@ impl Env {
         }
     }
 
+    pub fn is_parked(&self, service: &str) -> bool {
+        if cfg!(target_os = "macos") {
+            pitboard::store::vault_read(service).unwrap().is_some()
+        } else {
+            self.root
+                .join(format!("pitboard/vault/{service}.json"))
+                .exists()
+        }
+    }
+
     pub fn delete_park(&self, service: &str) {
         if cfg!(target_os = "macos") {
             let _ = pitboard::store::vault_delete(service);
@@ -273,14 +283,17 @@ impl Drop for Env {
             && let Ok(state) = std::fs::read_to_string(self.root.join("pitboard/state.json"))
             && let Ok(v) = serde_json::from_str::<serde_json::Value>(&state)
         {
-            for a in v["accounts"].as_array().into_iter().flatten() {
-                for g in a["generations"].as_array().into_iter().flatten() {
-                    if let Some(s) = g["service"].as_str() {
-                        let _ = Command::new(SECURITY)
-                            .args(["delete-generic-password", "-a", &account(), "-s", s])
-                            .output();
-                    }
-                }
+            let parked = v["accounts"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .flat_map(|a| a["generations"].as_array().into_iter().flatten())
+                .map(|g| &g["service"])
+                .chain(v["discarded"].as_array().into_iter().flatten());
+            for s in parked.filter_map(serde_json::Value::as_str) {
+                let _ = Command::new(SECURITY)
+                    .args(["delete-generic-password", "-a", &account(), "-s", s])
+                    .output();
             }
         }
         if cfg!(target_os = "macos") {

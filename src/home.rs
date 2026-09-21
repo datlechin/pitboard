@@ -1,5 +1,5 @@
-//! pitboard's own directory, held at 0700 rather than left to the umask: park file names
-//! contain account identifiers, so on a shared machine listing it would be a leak.
+//! pitboard's own directory. Every directory pitboard creates is 0700, whatever the umask:
+//! park file names contain account identifiers, so on a shared machine a listing would leak.
 
 use crate::error::{Error, Result};
 use std::io;
@@ -25,14 +25,18 @@ pub fn dir() -> PathBuf {
 
 pub fn ensure() -> io::Result<PathBuf> {
     let path = dir();
-    std::fs::create_dir_all(&path)?;
-    restrict(&path)?;
+    create_private(&path)?;
     Ok(path)
 }
 
-pub fn restrict(path: &Path) -> io::Result<()> {
-    use std::os::unix::fs::PermissionsExt;
-    std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700))
+/// Create `path` and any missing parent as 0700. A directory that already exists keeps its
+/// mode: it may be one the user named, and `pitboard doctor` reports it if others can read it.
+pub fn create_private(path: &Path) -> io::Result<()> {
+    use std::os::unix::fs::DirBuilderExt;
+    std::fs::DirBuilder::new()
+        .recursive(true)
+        .mode(0o700)
+        .create(path)
 }
 
 pub fn check_location(path: &Path) -> Result<()> {
@@ -65,16 +69,26 @@ mod tests {
     }
 
     #[test]
-    fn ensure_creates_the_directory_private_to_its_owner() {
+    fn created_directories_are_private_and_existing_ones_keep_their_mode() {
         use std::os::unix::fs::PermissionsExt;
+        let mode = |p: &Path| std::fs::metadata(p).unwrap().permissions().mode() & 0o777;
         let scratch = std::env::temp_dir().join(format!("pitboard-home-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&scratch);
-        std::fs::create_dir_all(scratch.join("nested")).unwrap();
-        restrict(&scratch).unwrap();
-        let mode = std::fs::metadata(&scratch).unwrap().permissions().mode() & 0o777;
+
+        create_private(&scratch.join("nested")).unwrap();
         assert_eq!(
-            mode, 0o700,
-            "the home directory must not be listable by others"
+            mode(&scratch),
+            0o700,
+            "a created parent must be private too"
+        );
+        assert_eq!(mode(&scratch.join("nested")), 0o700);
+
+        std::fs::set_permissions(&scratch, std::fs::Permissions::from_mode(0o755)).unwrap();
+        create_private(&scratch).unwrap();
+        assert_eq!(
+            mode(&scratch),
+            0o755,
+            "a directory the user named is theirs to set"
         );
         std::fs::remove_dir_all(&scratch).unwrap();
     }

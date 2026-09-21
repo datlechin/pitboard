@@ -21,9 +21,9 @@ const ITEM_NOT_FOUND: i32 = 44;
 /// `errSecInteractionNotAllowed`: the keychain is locked and may not prompt.
 const INTERACTION_NOT_ALLOWED: i32 = 36;
 
-/// Claude Code reads an empty answer and a locked keychain as "absent", and its slot is read
-/// the same way so both agree on which backend is live. For pitboard's own items only
-/// `ITEM_NOT_FOUND` means absent: reading could-not-tell as nothing-there loses a login.
+/// Claude Code reads an empty answer from its own slot as "absent". Nothing else is: a
+/// locked keychain says nothing about what it holds, and reading it as empty would fall
+/// through to a stale plaintext file and park or overwrite the wrong login.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Owner {
     ClaudeCode,
@@ -54,7 +54,11 @@ fn classify(owner: Owner, code: Option<i32>, stdout: String, stderr: String) -> 
         Some(0) if !stdout.trim().is_empty() => Presence::Present(stdout.trim_end().to_string()),
         Some(0) if owner == Owner::ClaudeCode => Presence::Absent,
         Some(ITEM_NOT_FOUND) => Presence::Absent,
-        Some(INTERACTION_NOT_ALLOWED) if owner == Owner::ClaudeCode => Presence::Absent,
+        Some(INTERACTION_NOT_ALLOWED) => Presence::Failed(
+            "the keychain is locked and cannot ask to be unlocked from here; unlock it with \
+             `security unlock-keychain`, or run pitboard from a desktop session"
+                .into(),
+        ),
         other => Presence::Failed(format!(
             "security exited {}: {}",
             other.map_or_else(|| "on a signal".into(), |c| c.to_string()),
@@ -191,13 +195,13 @@ mod tests {
 
     #[test]
     fn claude_codes_absent_codes_are_absent_and_the_rest_abort() {
-        for code in [0, ITEM_NOT_FOUND, INTERACTION_NOT_ALLOWED] {
+        for code in [0, ITEM_NOT_FOUND] {
             assert!(matches!(
                 classify(Owner::ClaudeCode, Some(code), String::new(), String::new()),
                 Presence::Absent
             ));
         }
-        for code in [1, 37, 50, 128] {
+        for code in [1, INTERACTION_NOT_ALLOWED, 37, 50, 128] {
             assert!(matches!(
                 classify(Owner::ClaudeCode, Some(code), String::new(), String::new()),
                 Presence::Failed(_)

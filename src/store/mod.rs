@@ -89,6 +89,13 @@ fn vault() -> &'static dyn RawStore {
     &vault::FILE
 }
 
+/// Only "not found" means absent. A permission error or a loop in the path says nothing about
+/// what is there, and reading it as empty would tell the user to sign in again.
+fn exists(path: &std::path::Path) -> Result<bool, Error> {
+    path.try_exists()
+        .map_err(|e| Error::Unreadable(format!("cannot look for {}: {e}", path.display())))
+}
+
 pub fn credential_file() -> PathBuf {
     PathBuf::from(claude::storage_dir()).join(slot::CRED_FILE)
 }

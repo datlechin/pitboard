@@ -23,7 +23,7 @@ impl RawStore for PlainFile {
     }
 
     fn contains(&self, _service: &str) -> Result<bool, Error> {
-        Ok(self.path().is_file())
+        super::exists(&self.path())
     }
 
     fn read(&self, _service: &str) -> Result<Option<String>, Error> {

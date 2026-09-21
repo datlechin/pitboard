@@ -24,10 +24,19 @@ fn base() -> String {
         .unwrap_or_else(|| BASE.to_string())
 }
 
+/// Judged on the parsed host, never on a prefix: `http://127.0.0.1:@elsewhere/` begins like
+/// loopback and is not. A name is refused too, since the hosts file decides where it points.
 fn is_loopback(url: &str) -> bool {
-    ["http://127.0.0.1:", "http://localhost:", "http://[::1]:"]
-        .iter()
-        .any(|prefix| url.starts_with(prefix))
+    let Ok(uri) = url.parse::<ureq::http::Uri>() else {
+        return false;
+    };
+    uri.scheme_str() == Some("http")
+        && uri.host().is_some_and(|host| {
+            host.trim_start_matches('[')
+                .trim_end_matches(']')
+                .parse::<std::net::IpAddr>()
+                .is_ok_and(|ip| ip.is_loopback())
+        })
 }
 const TIMEOUT: Duration = Duration::from_secs(5);
 
@@ -154,17 +163,16 @@ mod tests {
 
     #[test]
     fn only_a_loopback_address_can_redirect_requests() {
-        for allowed in [
-            "http://127.0.0.1:8080",
-            "http://localhost:1",
-            "http://[::1]:9",
-        ] {
+        for allowed in ["http://127.0.0.1:8080", "http://[::1]:9"] {
             assert!(is_loopback(allowed), "{allowed}");
         }
         for refused in [
             "https://evil.example.com",
             "http://127.0.0.1.evil.example.com:80",
             "http://localhost.evil.example.com:80",
+            "http://127.0.0.1:@evil.example.com/",
+            "http://127.0.0.1:8080@evil.example.com/",
+            "http://localhost:1",
             "https://127.0.0.1:443",
             "http://10.0.0.1:80",
             "",

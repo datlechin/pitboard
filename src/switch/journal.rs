@@ -7,7 +7,7 @@
 
 use super::{Error, Result, identify};
 use crate::state::{Generation, State};
-use crate::{claude, home, park, state, store, time};
+use crate::{atomic, claude, home, park, state, store, time};
 use serde_json::Value;
 use std::path::PathBuf;
 
@@ -23,10 +23,46 @@ pub(super) struct Journal {
     pub(super) incoming_service: String,
 }
 
-pub(super) fn journal_path() -> PathBuf {
+/// What a later run found an interrupted switch had done, now recorded in the state.
+#[derive(Debug)]
+pub struct Recovered {
+    pub from: String,
+    pub to: String,
+    pub finished: bool,
+}
+
+impl Recovered {
+    pub fn code(&self) -> &'static str {
+        if self.finished {
+            "interrupted_switch_finished"
+        } else {
+            "interrupted_switch_undone"
+        }
+    }
+}
+
+impl std::fmt::Display for Recovered {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "an earlier switch from `{}` to `{}` was interrupted; {}",
+            self.from,
+            self.to,
+            if self.finished {
+                "it had in fact finished, and pitboard has recorded that"
+            } else {
+                "it had not finished, and nothing was lost"
+            }
+        )
+    }
+}
+
+fn journal_path() -> PathBuf {
     home::dir().join("journal.json")
 }
 
+/// Durable before the park it names is created: a record lost to a crash would leave a
+/// consumed login looking restorable.
 pub(super) fn write_journal(entry: &Journal) -> Result<()> {
     let path = journal_path();
     let fail = |source| Error::RecoveryFailed {
@@ -35,7 +71,12 @@ pub(super) fn write_journal(entry: &Journal) -> Result<()> {
     };
     home::ensure().map_err(fail)?;
     let body = serde_json::to_string(entry).expect("a journal entry is always serialisable");
-    std::fs::write(&path, body).map_err(fail)
+    atomic::write(&path, body.as_bytes(), atomic::Perms::Secret).map_err(fail)
+}
+
+/// The switch reached a state the account index fully describes.
+pub(super) fn clear_journal() {
+    let _ = std::fs::remove_file(journal_path());
 }
 
 struct Found {
@@ -118,22 +159,17 @@ fn landed_on(to_uuid: &str) -> std::result::Result<bool, String> {
         .map_err(|e| e.to_string())
 }
 
-pub(super) fn reconcile(state: &mut State) -> Result<Option<String>> {
+pub(super) fn reconcile(state: &mut State) -> Result<Option<Recovered>> {
     let path = journal_path();
     let raw = match std::fs::read_to_string(&path) {
         Ok(r) => r,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
         Err(source) => return Err(Error::RecoveryFailed { path, source }),
     };
-    // The record is written before anything else a switch does, so a torn one means the run
-    // died before it changed anything.
-    let Ok(journal) = serde_json::from_str::<Journal>(&raw) else {
-        let _ = std::fs::remove_file(&path);
-        return Ok(Some(
-            "an interrupted switch left an unreadable record from before it changed anything"
-                .into(),
-        ));
-    };
+    // Written atomically, so a record that does not parse was damaged afterwards and says
+    // nothing about how far its switch got.
+    let journal = serde_json::from_str::<Journal>(&raw)
+        .map_err(|source| Error::RecoveryRecordCorrupt { path, source })?;
 
     let landed = landed_on(&journal.to_uuid);
     let found = Found {
@@ -152,18 +188,13 @@ pub(super) fn reconcile(state: &mut State) -> Result<Option<String>> {
     let finished = repair.set_active.is_some();
     apply(state, repair, time::now());
     state::save(state)?;
-    let _ = std::fs::remove_file(&path);
+    clear_journal();
 
-    Ok(Some(format!(
-        "an earlier switch from `{}` to `{}` was interrupted; {}",
-        journal.from_label,
-        journal.to_label,
-        if finished {
-            "it had in fact finished, and pitboard has recorded that"
-        } else {
-            "it had not finished, and nothing was lost"
-        }
-    )))
+    Ok(Some(Recovered {
+        from: journal.from_label,
+        to: journal.to_label,
+        finished,
+    }))
 }
 
 #[cfg(test)]

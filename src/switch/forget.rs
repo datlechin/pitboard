@@ -1,11 +1,14 @@
 //! Dropping an account and the credentials parked for it.
 
-use super::{Error, Result, exclusive};
-use crate::{state, store};
+use super::{Error, Result, Settled, purge};
+use crate::state;
 
-pub fn forget(label: &str) -> Result<(String, Vec<String>)> {
-    let _exclusive = exclusive()?;
-    let mut state = state::load()?;
+/// Returns the account's email and how many parked items could not be deleted yet.
+pub fn forget(settled: Settled, label: &str) -> Result<(String, usize)> {
+    let Settled {
+        _exclusive,
+        mut state,
+    } = settled;
     let index = state
         .accounts
         .iter()
@@ -19,13 +22,9 @@ pub fn forget(label: &str) -> Result<(String, Vec<String>)> {
         });
     }
     let account = state.accounts.remove(index);
+    state
+        .discarded
+        .extend(account.generations.into_iter().map(|g| g.service));
     state::save(&state)?;
-
-    let stuck = account
-        .generations
-        .iter()
-        .filter(|g| store::vault_delete(&g.service).is_err())
-        .map(|g| g.service.clone())
-        .collect();
-    Ok((account.email, stuck))
+    Ok((account.email, purge(&mut state)))
 }

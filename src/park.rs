@@ -2,7 +2,7 @@
 //! and no failure path deletes one.
 
 use crate::error::{Error, Result};
-use crate::state::{Account, Generation, retained};
+use crate::state::{Account, Generation, State, retained};
 use crate::{store, time};
 use serde_json::Value;
 
@@ -72,8 +72,7 @@ pub fn load(label: &str, generation: &Generation) -> Result<Value> {
 }
 
 /// Drop generations past retention from the account and return their items, deleting
-/// nothing. The caller saves state first, so no durable state ever refers to a deleted
-/// item; a crash in between leaves only an item nothing refers to.
+/// nothing: the caller lists them in `State::discarded` in the same save.
 pub fn retire(account: &mut Account) -> Vec<String> {
     let keep: Vec<String> = retained(&account.generations)
         .iter()
@@ -87,13 +86,13 @@ pub fn retire(account: &mut Account) -> Vec<String> {
     retired.into_iter().map(|g| g.service).collect()
 }
 
-/// Delete retired items, returning the ones that resisted.
-pub fn delete(services: &[String]) -> Vec<String> {
-    services
-        .iter()
-        .filter(|s| store::vault_delete(s).is_err())
-        .cloned()
-        .collect()
+/// Delete every discarded item, keeping listed only those that resisted. Returns how many
+/// remain.
+pub fn purge(state: &mut State) -> usize {
+    state
+        .discarded
+        .retain(|service| store::vault_delete(service).is_err());
+    state.discarded.len()
 }
 
 #[cfg(test)]

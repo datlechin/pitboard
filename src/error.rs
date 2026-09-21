@@ -194,6 +194,17 @@ pub enum Error {
         detail: String,
     },
 
+    #[error(
+        "the record of an interrupted switch at {path} is damaged ({source}), so pitboard \
+         cannot tell what that switch did. Nothing was changed. Check that `pitboard status` \
+         shows the account you expect, then delete the file to continue."
+    )]
+    RecoveryRecordCorrupt {
+        path: PathBuf,
+        #[source]
+        source: serde_json::Error,
+    },
+
     #[error("could not read or write pitboard's recovery record at {path}: {source}")]
     RecoveryFailed {
         path: PathBuf,
@@ -245,6 +256,7 @@ impl Error {
             SwitchRolledBack { .. } => "switch_rolled_back",
             SwitchCorrupted { .. } => "switch_corrupted",
             RecoveryFailed { .. } => "recovery_failed",
+            RecoveryRecordCorrupt { .. } => "recovery_record_corrupt",
             SessionExpired => "session_expired",
             IdentityUnverifiable { .. } => "identity_unverifiable",
             SignedInAccountChanged => "signed_in_account_changed",
@@ -264,9 +276,9 @@ impl Error {
         match self {
             LiveCredentialShapeUnexpected { .. }
             | ClaudeConfigNotJson { .. }
-            | SwitchCorrupted { .. } => 3,
+            | SwitchCorrupted { .. }
+            | RecoveryRecordCorrupt { .. } => 3,
             Store(e) => e.exit_code(),
-            Lock(_) => 1,
             _ => 1,
         }
     }

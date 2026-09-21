@@ -103,3 +103,45 @@ fn an_undeterminable_outcome_keeps_the_record_and_changes_nothing() {
     assert_eq!(env.state(), before, "nothing may change on a guess");
     env.delete_park(&orphan);
 }
+
+/// `use beta` killed after installing beta's login and before recording it: the state still
+/// says alpha. Forgetting beta must first learn that beta is the one signed in.
+#[test]
+fn forgetting_waits_for_an_interrupted_switch_to_be_settled() {
+    let mut env = two_accounts("forget-pending");
+    let orphan = interrupted_switch(&env);
+    let (b, p) = (env.uuid('b'), env.uuid('p'));
+    env.sign_in(&b, "b@example.com", &p, "refresh-b");
+
+    let (out, err, code) = env.run(&["forget", "beta", "--json"]);
+    let envelope: serde_json::Value = serde_json::from_str(&out).expect(&err);
+
+    assert_eq!(code, 1, "{out}");
+    assert_eq!(envelope["error"]["code"], "cannot_forget_active_account");
+    assert_eq!(
+        envelope["warnings"][0]["code"], "interrupted_switch_finished",
+        "what recovery found belongs in the envelope, even when the command then fails"
+    );
+    assert_eq!(env.state()["active"], "beta");
+    assert!(!env.root.join("pitboard/journal.json").exists());
+    env.delete_park(&orphan);
+}
+
+#[test]
+fn a_damaged_record_is_refused_rather_than_guessed_at() {
+    let env = two_accounts("damaged");
+    std::fs::write(
+        env.root.join("pitboard/journal.json"),
+        "{\"started_at\": 17",
+    )
+    .unwrap();
+    let before = env.state();
+
+    let (out, _, code) = env.run(&["use", "beta", "--json"]);
+    let envelope: serde_json::Value = serde_json::from_str(&out).unwrap();
+
+    assert_eq!(code, 3);
+    assert_eq!(envelope["error"]["code"], "recovery_record_corrupt");
+    assert!(env.root.join("pitboard/journal.json").exists());
+    assert_eq!(env.state(), before, "nothing may change on a guess");
+}
