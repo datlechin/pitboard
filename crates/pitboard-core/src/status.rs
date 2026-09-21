@@ -26,6 +26,8 @@ pub enum Stale {
     RateLimited,
     Unreachable,
     Unexpected,
+    /// Nobody was asked: this reading was taken without touching the network.
+    NotAsked,
 }
 
 impl Stale {
@@ -52,6 +54,7 @@ impl Stale {
             Stale::RateLimited => "rate_limited",
             Stale::Unreachable => "unreachable",
             Stale::Unexpected => "unexpected",
+            Stale::NotAsked => "not_asked",
         }
     }
 
@@ -65,6 +68,7 @@ impl Stale {
             Stale::RateLimited => Some("Anthropic is rate limiting usage checks"),
             Stale::Unreachable => Some("Anthropic could not be reached"),
             Stale::Unexpected => Some("Anthropic's answer was not understood"),
+            Stale::NotAsked => Some("read without asking Anthropic"),
         }
     }
 }
@@ -97,7 +101,10 @@ pub struct Report {
 
 /// Everything gathered from the machine and the network, so assembling it touches neither.
 struct Facts {
+    /// `None` means nobody is signed in, but only when `asked` is true: unasked and absent
+    /// are different things, and reading one as the other says the account in use is gone.
     signed_in: Option<Result<Owner, ApiError>>,
+    asked: bool,
     /// The account Claude Code's own config names. It can be a day behind the login it
     /// describes, so it never decides a switch; it only keeps the row that is signed in
     /// from reading as though nobody is, when Anthropic cannot be asked.
@@ -129,6 +136,43 @@ fn parked_token(
             .ok()
             .and_then(|oauth| access_token(&oauth))
             .ok_or(Stale::ParkUnreadable),
+    }
+}
+
+/// What is known without asking anyone: who Claude Code's config says is signed in, and
+/// the last numbers pitboard measured. Touches no network and no login, so it answers at
+/// once and works on a train.
+pub fn gather_offline(ctx: &Context, state: &State) -> Report {
+    let config = claude::load_config(ctx).ok();
+    let identity = config.as_ref().and_then(claude::identity);
+    let facts = Facts {
+        signed_in: None,
+        asked: false,
+        config_uuid: identity.as_ref().map(|id| id.account_uuid.clone()),
+        live_usage: Err(Stale::NotAsked),
+        parked_usage: state
+            .accounts
+            .iter()
+            .map(|_| Err(Stale::NotAsked))
+            .collect(),
+        claude_code_cache: config.as_ref().and_then(crate::usage::from_config_cache),
+    };
+    let remembered = readings::load(ctx);
+    Report {
+        now: time::now(),
+        rows: assemble(state, &facts, |uuid| remembered.get(uuid).cloned()),
+        // Claude Code's config, which can be a day behind the login it describes. Good
+        // enough to say who is in use; never good enough to move a login.
+        signed_in: identity.map_or_else(
+            || Err("not asked".into()),
+            |id| {
+                Ok(Owner {
+                    account_uuid: id.account_uuid,
+                    email: id.email,
+                    organization_uuid: id.organization_uuid,
+                })
+            },
+        ),
     }
 }
 
@@ -172,6 +216,7 @@ pub fn gather(ctx: &Context, state: &State) -> Report {
     let config = claude::load_config(ctx).ok();
     let facts = Facts {
         signed_in,
+        asked: true,
         live_usage,
         parked_usage,
         claude_code_cache: config.as_ref().and_then(crate::usage::from_config_cache),
@@ -207,12 +252,12 @@ pub fn gather(ctx: &Context, state: &State) -> Report {
 }
 
 fn assemble(state: &State, facts: &Facts, recall: impl Fn(&str) -> Option<Snapshot>) -> Vec<Row> {
-    let live_uuid = match &facts.signed_in {
-        Some(Ok(owner)) => Some(owner.account_uuid.as_str()),
-        // Unreachable is not the same as absent. Anthropic decides who is signed in; when
-        // it cannot be reached, Claude Code's own config is the only answer there is.
-        Some(Err(_)) => facts.config_uuid.as_deref(),
-        None => None,
+    let live_uuid = match (&facts.signed_in, facts.asked) {
+        (Some(Ok(owner)), _) => Some(owner.account_uuid.as_str()),
+        // Unreachable, or never asked. Anthropic decides who is signed in; without its
+        // answer, Claude Code's own config is the only one there is.
+        (Some(Err(_)), _) | (None, false) => facts.config_uuid.as_deref(),
+        (None, true) => None,
     };
     // Claude Code's cache counts only when it was measured for the account in question.
     let cached_for = |uuid: &str| {
@@ -337,6 +382,7 @@ mod tests {
     ) -> Facts {
         Facts {
             signed_in: Some(Ok(owner(signed_in))),
+            asked: true,
             config_uuid: None,
             live_usage: live,
             parked_usage: parked,
@@ -352,6 +398,7 @@ mod tests {
         let state = state(&["alpha", "beta"]);
         let facts = Facts {
             signed_in: Some(Err(ApiError::Network("offline".into()))),
+            asked: true,
             config_uuid: Some("alpha-uuid".into()),
             live_usage: Err(Stale::Unreachable),
             parked_usage: vec![Err(Stale::Unreachable), Err(Stale::Unreachable)],

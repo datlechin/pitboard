@@ -49,8 +49,9 @@ and pitboard cannot keep a copy of a login it did not see leave.
 ## Daily use
 
 ```sh
-pitboard            # who is signed in, and what each account has left
-pitboard use work   # switch
+pitboard                  # who is signed in, and what each account has left
+pitboard use work         # switch
+pitboard status --offline # the last numbers measured, without asking Anthropic
 ```
 
 ```text

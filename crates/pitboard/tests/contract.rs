@@ -72,6 +72,16 @@ fn enroll() {
 
 /// The last thing a person runs, and the one whose shape matters to whatever wrapper runs
 /// it: how many parked logins went, how many did not, and whether the home is gone.
+/// The reading that asks nobody anything: what was last measured, and who Claude Code's
+/// config says is signed in. Its envelope is a contract like any other.
+#[test]
+fn status_offline() {
+    let env = two_accounts("contract-offline");
+    env.run(&["status"]); // one live read, so there is something remembered to show
+    let (value, code) = json(&env, &["status", "--offline"]);
+    contract!("status_offline", value, code);
+}
+
 #[test]
 fn uninstall() {
     let env = two_accounts("contract-uninstall");

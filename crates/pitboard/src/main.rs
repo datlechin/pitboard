@@ -37,7 +37,11 @@ struct Cli {
 #[derive(Subcommand)]
 enum Command {
     /// What is signed in, and how much each account has left (the default)
-    Status,
+    Status {
+        /// Answer from what was last measured, without asking Anthropic
+        #[arg(long)]
+        offline: bool,
+    },
     /// Add an account: the one signed in now, or with --sign-in, another one
     Enroll {
         /// A short name for this account, such as `personal` or `work`
@@ -208,8 +212,13 @@ fn changed<T>(
     }
 }
 
-fn status(pitboard: &Pitboard) -> Report {
-    match pitboard.status() {
+fn status(pitboard: &Pitboard, offline: bool) -> Report {
+    let read = if offline {
+        pitboard.status_offline()
+    } else {
+        pitboard.status()
+    };
+    match read {
         Ok(Done {
             value,
             warnings: found,
@@ -472,8 +481,8 @@ fn main() -> ExitCode {
         Err(exit) => return exit,
     };
     let pitboard = Pitboard::new(Context::from_env());
-    let report = match cli.command.unwrap_or(Command::Status) {
-        Command::Status => status(&pitboard),
+    let report = match cli.command.unwrap_or(Command::Status { offline: false }) {
+        Command::Status { offline } => status(&pitboard, offline),
         Command::Doctor => doctor(&pitboard),
         Command::Statusline => statusline(&pitboard),
         Command::Enroll {
