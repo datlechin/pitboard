@@ -11,6 +11,7 @@ pub mod error;
 pub mod home;
 pub mod lock;
 pub mod park;
+pub mod process;
 pub mod readings;
 pub mod service;
 pub mod slot;

@@ -8,9 +8,9 @@
 
 use super::{Backend, Error, RawStore};
 use crate::context::Context;
-use crate::slot;
-use std::io::Write;
-use std::process::{Command, Stdio};
+use crate::{process, slot};
+use std::process::{Command, Output};
+use std::time::Duration;
 
 const SECURITY: &str = "/usr/bin/security";
 
@@ -79,9 +79,19 @@ fn classify(owner: Owner, code: Option<i32>, stdout: String, stderr: String) -> 
     }
 }
 
+/// `security` answers in milliseconds, unless the keychain is locked and it waits on an
+/// unlock prompt. This leaves a person time to answer one and stops a wait no one sees.
+const SECURITY_TIMEOUT: Duration = Duration::from_secs(60);
+
+fn security(args: &[&str], input: &str) -> std::io::Result<Output> {
+    let mut command = Command::new(SECURITY);
+    command.args(args);
+    process::output_within(command, input.as_bytes(), SECURITY_TIMEOUT)
+}
+
 fn run(args: &[&str], owner: Owner) -> Presence {
-    match Command::new(SECURITY).args(args).output() {
-        Err(e) => Presence::Failed(format!("cannot exec {SECURITY}: {e}")),
+    match security(args, "") {
+        Err(e) => Presence::Failed(format!("{SECURITY} did not answer: {e}")),
         Ok(out) => classify(
             owner,
             out.status.code(),
@@ -150,22 +160,8 @@ impl RawStore for Keychain {
             ));
         }
 
-        let mut child = Command::new(SECURITY)
-            .arg("-i")
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .map_err(|e| Error::Write(format!("cannot exec {SECURITY}: {e}")))?;
-        child
-            .stdin
-            .take()
-            .ok_or_else(|| Error::Write("security has no stdin".into()))?
-            .write_all(command_for(account, service, contents).as_bytes())
-            .map_err(|e| Error::Write(format!("cannot write to security: {e}")))?;
-        let out = child
-            .wait_with_output()
-            .map_err(|e| Error::Write(format!("security did not finish: {e}")))?;
+        let out = security(&["-i"], &command_for(account, service, contents))
+            .map_err(|e| Error::Write(format!("{SECURITY} did not answer: {e}")))?;
         if out.status.code() != Some(0) {
             return Err(Error::Write(format!(
                 "security exited {}: {}",
