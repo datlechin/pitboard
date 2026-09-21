@@ -158,6 +158,13 @@ impl Pitboard {
             .inspect_err(|e| audit::record(&self.ctx, "enroll", label, e.code()))
     }
 
+    /// The same sign-in with its output piped, for a front end that has no terminal to
+    /// hand over. The caller shows what Claude Code says and can type a code back.
+    pub fn sign_in_watched(&self) -> Result<switch::WatchedSignIn> {
+        self.before_signing_in()?;
+        switch::sign_in_watched(&self.ctx)
+    }
+
     /// Everything that can refuse an enrolment and is knowable before the new login exists.
     /// Checked first, so a person does not sign in through a browser only to be told the
     /// state file belongs to another machine or that `claude` is not installed.

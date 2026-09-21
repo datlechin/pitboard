@@ -43,6 +43,11 @@ private final class Stub: Core, @unchecked Sendable {
     func rename(_ from: String, to: String) async throws -> Changed {
         Changed(email: "a@b.c", warnings: [])
     }
+    func signIn(_ label: String) async throws -> SignIn {
+        throw PitboardError.Failed(
+            code: "claude_program_missing", message: "`claude` is not on this machine",
+            warnings: [])
+    }
 }
 
 private func account(_ label: String, signedIn: Bool, percent: Double) -> Account {
@@ -143,7 +148,7 @@ private func account(_ label: String, signedIn: Bool, percent: Double) -> Accoun
     await model.refresh()
     #expect(model.unenrolled)
 
-    model.naming = "work"
+    model.naming = .theOneInUse
     await model.enrol(as: "work")
     #expect(stub.enrolled == ["work"])
     #expect(model.naming == nil, "the form closes once it has been used")
@@ -157,4 +162,15 @@ private func account(_ label: String, signedIn: Bool, percent: Double) -> Accoun
     await model.forget("alpha")
     #expect(stub.forgot == ["alpha"])
     #expect(model.problem == nil)
+}
+
+/// A sign-in that cannot start says why, and leaves nothing half-shown in the panel.
+@MainActor
+@Test func aSignInThatCannotStartIsReported() async {
+    let model = AppModel(service: Stub(.success(Status(now: 0, accounts: [], warnings: []))))
+    model.naming = .another
+    await model.signIn(as: "work")
+    #expect(model.signingIn == nil)
+    #expect(model.naming == nil)
+    #expect(model.problem == "`claude` is not on this machine")
 }

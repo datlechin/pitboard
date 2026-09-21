@@ -59,8 +59,11 @@ struct MenuView: View {
                             }
                         }
                 }
-                if let naming = model.naming {
-                    NameIt(model: model, typed: naming)
+                if let asking = model.naming {
+                    NameIt(model: model, asking: asking)
+                }
+                if let signingIn = model.signingIn {
+                    SigningInView(model: model, signingIn: signingIn)
                 }
             } else if model.problem == nil {
                 ProgressView().controlSize(.small)
@@ -218,26 +221,80 @@ private struct Limit: View {
 /// account needs a browser, which the command line drives.
 private struct NameIt: View {
     let model: AppModel
-    @State var typed: String
+    let asking: AppModel.Naming
+    @State private var typed = ""
     @FocusState private var focused: Bool
 
     var body: some View {
-        HStack(spacing: 6) {
-            TextField("a name for this account", text: $typed)
-                .textFieldStyle(.roundedBorder)
-                .focused($focused)
-                .onSubmit { enrol() }
-            Button("Enrol", action: enrol)
-                .disabled(typed.trimmingCharacters(in: .whitespaces).isEmpty)
-            Button("Cancel") { model.naming = nil }
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 6) {
+                TextField("a name for this account", text: $typed)
+                    .textFieldStyle(.roundedBorder)
+                    .focused($focused)
+                    .onSubmit { go() }
+                Button(asking == .theOneInUse ? "Enrol" : "Sign in", action: go)
+                    .disabled(typed.trimmingCharacters(in: .whitespaces).isEmpty)
+                Button("Cancel") { model.naming = nil }
+            }
+            if asking == .another {
+                Text(
+                    "Opens a terminal running the sign-in, which uses a browser. "
+                        + "Sign in as the account you want to add, not the one in use."
+                )
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            }
         }
         .onAppear { focused = true }
     }
 
-    private func enrol() {
+    private func go() {
         let label = typed.trimmingCharacters(in: .whitespaces)
         guard !label.isEmpty else { return }
-        Task { await model.enrol(as: label) }
+        switch asking {
+        case .theOneInUse: Task { await model.enrol(as: label) }
+        case .another: Task { await model.signIn(as: label) }
+        }
+    }
+}
+
+/// A sign-in in progress. Claude Code opens the browser itself and finishes through its own
+/// callback, so this shows what it is doing and offers the address if the browser did not
+/// open. The code field appears only when Claude Code asks for one.
+private struct SigningInView: View {
+    let model: AppModel
+    let signingIn: SigningIn
+    @State private var code = ""
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                ProgressView().controlSize(.small)
+                Text("Signing in as \(signingIn.label)…").font(.callout)
+                Spacer()
+                Button("Cancel") { model.cancelSignIn() }
+            }
+            if let url = signingIn.url {
+                Link("Open the sign-in page", destination: url).font(.caption)
+            }
+            if signingIn.wantsCode {
+                HStack(spacing: 6) {
+                    TextField("paste the code from the browser", text: $code)
+                        .textFieldStyle(.roundedBorder)
+                        .onSubmit { send() }
+                    Button("Send", action: send).disabled(code.isEmpty)
+                }
+                Text("Claude Code asks for this only when the browser could not reach it.")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private func send() {
+        model.paste(code.trimmingCharacters(in: .whitespaces))
+        code = ""
     }
 }
 
@@ -294,19 +351,6 @@ private struct Footer: View {
     let updater: Updater
     @State private var openAtLogin = SMAppService.mainApp.status == .enabled
 
-    /// Adding an account signs in through a browser and prints what Claude Code says, which
-    /// needs a terminal. The command line has one, so this opens it there rather than
-    /// pretending a menu bar panel can show a sign-in.
-    private func addAnother() {
-        let script = """
-            tell application "Terminal"
-                activate
-                do script "pitboard enroll <name> --sign-in"
-            end tell
-            """
-        NSAppleScript(source: script)?.executeAndReturnError(nil)
-    }
-
     var body: some View {
         HStack {
             Text(model.updated).font(.caption).foregroundStyle(.secondary)
@@ -317,9 +361,9 @@ private struct Footer: View {
                     Button("Check for Updates…") { updater.check() }
                 }
                 if model.unenrolled {
-                    Button("Enrol the account in use…") { model.naming = "" }
+                    Button("Enrol the account in use…") { model.naming = .theOneInUse }
                 }
-                Button("Add another account…") { addAnother() }
+                Button("Add another account…") { model.naming = .another }
                 Divider()
                 Button(model.checks.isEmpty ? "Check this machine…" : "Hide checks") {
                     if model.checks.isEmpty {

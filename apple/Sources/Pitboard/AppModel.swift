@@ -23,8 +23,17 @@ final class AppModel {
     private(set) var adopted: Date?
     /// Every check pitboard makes about this machine, once someone asks for them.
     private(set) var checks: [Check] = []
-    /// A label being typed, when the panel is asking for one.
-    var naming: String?
+    /// A label being typed, when the panel is asking for one, and what it is for.
+    var naming: Naming?
+    /// A sign-in in progress, and everything Claude Code has said about it.
+    private(set) var signingIn: SigningIn?
+
+    enum Naming: Equatable {
+        /// Record the account signed in now: no browser, so the app does it itself.
+        case theOneInUse
+        /// A different account, which means Claude Code's own sign-in in a browser.
+        case another
+    }
 
     /// Usage is asked of Anthropic for every account, so it is asked sparingly: on opening the
     /// menu when the numbers are a minute old, and in the background every five minutes.
@@ -113,6 +122,55 @@ final class AppModel {
         }
     }
 
+    /// Runs Claude Code's own sign-in and shows what it says. It opens the browser itself
+    /// and finishes through a loopback callback, so there is nothing to hand a terminal;
+    /// stdin is only its fallback, which is what the code field is for.
+    func signIn(as label: String) async {
+        naming = nil
+        signingIn = SigningIn(label: label)
+        do {
+            let session = try await service.signIn(label)
+            signingIn?.session = session
+            await watch(session)
+        } catch {
+            signingIn = nil
+            problem = Self.saying(error)
+        }
+    }
+
+    /// Reads what Claude Code says until it stops, then records what it signed in to.
+    private func watch(_ session: SignIn) async {
+        while let said = await Task.detached(
+            priority: .utility,
+            operation: {
+                session.nextLine()
+            }
+        ).value {
+            signingIn?.add(said)
+        }
+        do {
+            _ = try await Task.detached(priority: .utility) { try session.finish() }.value
+            signingIn = nil
+            updatedAt = nil
+            await refresh()
+        } catch {
+            signingIn = nil
+            problem = Self.saying(error)
+        }
+    }
+
+    /// Types the fallback code back, for a browser that could not reach the callback.
+    func paste(_ code: String) {
+        guard let session = signingIn?.session else { return }
+        try? session.paste(line: code)
+        signingIn?.pasted = true
+    }
+
+    func cancelSignIn() {
+        signingIn?.session?.cancel()
+        signingIn = nil
+    }
+
     /// Drops an account and the login parked for it.
     func forget(_ label: String) async {
         do {
@@ -141,6 +199,37 @@ final class AppModel {
         }
         return error.localizedDescription
     }
+}
+
+/// A sign-in as the panel sees it: the name it will be enrolled under, what Claude Code
+/// has said so far, and the session to type back to.
+@MainActor
+@Observable
+final class SigningIn {
+    let label: String
+    private(set) var said = ""
+    var pasted = false
+    @ObservationIgnored var session: SignIn?
+
+    init(label: String) {
+        self.label = label
+    }
+
+    func add(_ text: String) {
+        said += text
+    }
+
+    /// The address Claude Code printed, for a browser that did not open by itself.
+    var url: URL? {
+        guard let found = said.range(of: "https://[^ \n\"]+", options: .regularExpression)
+        else {
+            return nil
+        }
+        return URL(string: String(said[found]))
+    }
+
+    /// Claude Code asks for a code only when its callback could not be reached.
+    var wantsCode: Bool { said.contains("Paste code") && !pasted }
 }
 
 /// The limit worth putting in the menu bar: the account's own, not one scoped to a single

@@ -10,6 +10,9 @@ public protocol Core: Sendable {
     func enrollCurrent(_ label: String) async throws -> Enrolled
     func forget(_ label: String) async throws -> Changed
     func rename(_ from: String, to: String) async throws -> Changed
+    /// Starts Claude Code's own sign-in for a new account, watched rather than handed to a
+    /// terminal. Returns nil where a front end cannot run one.
+    func signIn(_ label: String) async throws -> SignIn
 }
 
 /// pitboard's core, called off the main thread. Any call may wait on the keychain, a lock or
@@ -48,6 +51,17 @@ public final class PitboardService: Core, Sendable {
 
     public func rename(_ from: String, to: String) async throws -> Changed {
         try await run(on: changes) { try $0.rename(from: from, to: to) }
+    }
+
+    public func signIn(_ label: String) async throws -> SignIn {
+        // Its own queue: this waits on a person in a browser, and a read or a change must
+        // not queue behind that.
+        try await withCheckedThrowingContinuation { continuation in
+            let core = self.core
+            DispatchQueue(label: "com.usepitboard.signin").async {
+                continuation.resume(with: Result { try core.signIn(label: label) })
+            }
+        }
     }
 
     private func run<T: Sendable>(

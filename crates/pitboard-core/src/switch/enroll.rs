@@ -45,7 +45,9 @@ impl Drop for SignIn {
 /// Run Claude Code's own sign-in in a private directory, where the live login is never
 /// touched. It waits on a person in a browser, so it takes no lock but its own: a switch
 /// meanwhile goes ahead, and a second sign-in is refused rather than queued.
-pub fn sign_in(ctx: &Context) -> Result<SignIn> {
+/// Takes the one-sign-in-at-a-time lock and prepares the private directory Claude Code will
+/// sign in to. Both the inherited and the watched sign-in start here.
+fn reserve_signin(ctx: &Context) -> Result<SignIn> {
     let home = home::ensure(ctx).map_err(|source| Error::HomeUnwritable {
         path: home::dir(ctx),
         source,
@@ -73,40 +75,161 @@ pub fn sign_in(ctx: &Context) -> Result<SignIn> {
     }
 
     let dir = home.join("signin");
+    // A sign-in that was killed rather than finished never ran its cleanup, so a login can
+    // be sitting in the scratch slot with nothing naming it. The directory is always the
+    // same one, so the slot is too, and this is the moment it can be cleared safely: the
+    // lock above means no other sign-in is using it.
+    let _ = store::discard_signin(ctx, &dir);
     let _ = std::fs::remove_dir_all(&dir);
     home::create_private(&dir).map_err(|source| Error::HomeUnwritable {
         path: dir.clone(),
         source,
     })?;
-    let mut pending = SignIn {
+    Ok(SignIn {
         dir,
         document: Value::Null,
         ctx: ctx.clone(),
         _one_at_a_time: one_at_a_time,
-    };
+    })
+}
 
+pub fn sign_in(ctx: &Context) -> Result<SignIn> {
+    let mut pending = reserve_signin(ctx)?;
     // pitboard never sees the sign-in; it reads the login Claude Code stores once it is done.
     // What Claude Code prints goes to stderr, so `--json` output stays one JSON line.
-    let finished = Command::new(&ctx.claude_program)
-        .args(["auth", "login"])
-        .env("CLAUDE_CONFIG_DIR", &pending.dir)
-        .env_remove("CLAUDE_SECURESTORAGE_CONFIG_DIR")
+    let finished = login(ctx, &pending.dir)
         .stdout(std::io::stderr())
         .status()
-        .map_err(|e| match e.kind() {
-            std::io::ErrorKind::NotFound => Error::ClaudeNotFound,
-            _ => Error::SignInIncomplete,
-        })?
+        .map_err(started)?
         .success();
     if !finished {
         return Err(Error::SignInIncomplete);
     }
-    let raw = store::read_signin(ctx, &pending.dir)?.ok_or(Error::SignInIncomplete)?;
-    pending.document =
-        serde_json::from_str(&raw).map_err(|e| Error::LiveCredentialShapeUnexpected {
-            detail: e.to_string(),
-        })?;
+    pending.document = signed_in_document(ctx, &pending.dir)?;
     Ok(pending)
+}
+
+/// Claude Code's own sign-in, pointed at a private directory so the live login is never
+/// touched. Measured in 2.1.278: it opens the browser itself and finishes through a
+/// loopback callback, printing progress with `stdout.write` and reading stdin only as the
+/// fallback for a pasted code. So it needs no terminal: pipes are enough.
+fn login(ctx: &Context, dir: &std::path::Path) -> Command {
+    let mut command = Command::new(&ctx.claude_program);
+    command
+        .args(["auth", "login"])
+        .env("CLAUDE_CONFIG_DIR", dir)
+        .env_remove("CLAUDE_SECURESTORAGE_CONFIG_DIR");
+    command
+}
+
+fn started(e: std::io::Error) -> Error {
+    match e.kind() {
+        std::io::ErrorKind::NotFound => Error::ClaudeNotFound,
+        _ => Error::SignInIncomplete,
+    }
+}
+
+fn signed_in_document(ctx: &Context, dir: &std::path::Path) -> Result<Value> {
+    let raw = store::read_signin(ctx, dir)?.ok_or(Error::SignInIncomplete)?;
+    serde_json::from_str(&raw).map_err(|e| Error::LiveCredentialShapeUnexpected {
+        detail: e.to_string(),
+    })
+}
+
+/// The same sign-in, watched rather than inherited: an app has no terminal to hand over, so
+/// it reads what Claude Code prints and can type the fallback code back.
+pub struct WatchedSignIn {
+    child: std::process::Child,
+    said: std::sync::mpsc::Receiver<String>,
+    pending: SignIn,
+}
+
+impl WatchedSignIn {
+    /// The next thing Claude Code said, or `None` once it has finished saying anything.
+    /// Blocks, so a caller reads it on a thread of its own.
+    pub fn next_line(&self) -> Option<String> {
+        self.said.recv().ok()
+    }
+
+    /// Types a line back, for the code Claude Code asks to be pasted when the browser
+    /// cannot reach its callback.
+    pub fn paste(&mut self, line: &str) -> Result<()> {
+        use std::io::Write;
+        let stdin = self.child.stdin.as_mut().ok_or(Error::SignInIncomplete)?;
+        writeln!(stdin, "{line}").map_err(|_| Error::SignInIncomplete)?;
+        stdin.flush().map_err(|_| Error::SignInIncomplete)
+    }
+
+    /// Waits for it to finish and hands back the login it stored.
+    pub fn finish(mut self) -> Result<SignIn> {
+        let finished = self
+            .child
+            .wait()
+            .map_err(|_| Error::SignInIncomplete)?
+            .success();
+        if !finished {
+            return Err(Error::SignInIncomplete);
+        }
+        let mut pending = self.pending;
+        pending.document = signed_in_document(&pending.ctx.clone(), &pending.dir.clone())?;
+        Ok(pending)
+    }
+
+    /// Stops it. What it may have written is discarded by `SignIn`'s own cleanup.
+    pub fn cancel(mut self) {
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+    }
+}
+
+/// Starts the sign-in with its output piped, for a caller that will show it.
+pub fn sign_in_watched(ctx: &Context) -> Result<WatchedSignIn> {
+    let pending = reserve_signin(ctx)?;
+    let mut child = login(ctx, &pending.dir)
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .map_err(started)?;
+    let (say, said) = std::sync::mpsc::channel();
+    // Claude Code writes the browser URL and the paste prompt without a newline after them,
+    // so this reads by chunk rather than by line and lets the caller decide what to show.
+    for stream in [
+        child.stdout.take().map(Readable::Out),
+        child.stderr.take().map(Readable::Err),
+    ]
+    .into_iter()
+    .flatten()
+    {
+        let say = say.clone();
+        std::thread::spawn(move || {
+            use std::io::Read;
+            let mut reader: Box<dyn Read + Send> = match stream {
+                Readable::Out(o) => Box::new(o),
+                Readable::Err(e) => Box::new(e),
+            };
+            let mut buffer = [0_u8; 1024];
+            while let Ok(read) = reader.read(&mut buffer) {
+                if read == 0 {
+                    break;
+                }
+                let text = String::from_utf8_lossy(&buffer[..read]).into_owned();
+                if say.send(text).is_err() {
+                    break;
+                }
+            }
+        });
+    }
+    Ok(WatchedSignIn {
+        child,
+        said,
+        pending,
+    })
+}
+
+enum Readable {
+    Out(std::process::ChildStdout),
+    Err(std::process::ChildStderr),
 }
 
 /// Enroll the account signed in now, or with `signed_in`, the one a sign-in just produced.

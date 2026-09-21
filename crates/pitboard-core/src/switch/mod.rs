@@ -13,7 +13,7 @@ mod rename;
 mod renew;
 mod uninstall;
 
-pub use enroll::{Enrolled, SignIn, enroll, sign_in};
+pub use enroll::{Enrolled, SignIn, WatchedSignIn, enroll, sign_in, sign_in_watched};
 pub use forget::forget;
 pub use journal::{Abandoned, Recovered, pending as interrupted};
 pub use rename::rename;

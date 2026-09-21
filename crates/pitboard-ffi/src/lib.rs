@@ -7,7 +7,7 @@ use pitboard_core::context::Context;
 use pitboard_core::service::{self, Changing};
 use pitboard_core::{doctor, status, switch, usage};
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 uniffi::setup_scaffolding!();
 
@@ -272,6 +272,78 @@ fn changed<T, R>(
     Ok(make(done.value, warnings(&done.warnings)))
 }
 
+/// A sign-in in progress: Claude Code's own, running with its output piped here because an
+/// app has no terminal to hand it. Measured in 2.1.278: it opens the browser itself and
+/// finishes through a loopback callback, reading stdin only for the fallback code.
+#[derive(uniffi::Object)]
+pub struct SignIn {
+    watched: Mutex<Option<switch::WatchedSignIn>>,
+    label: String,
+    core: Arc<Pitboard>,
+}
+
+#[uniffi::export]
+impl SignIn {
+    /// The next thing Claude Code said, or nothing once it has stopped saying anything.
+    /// Blocks, so call it off the main thread.
+    pub fn next_line(&self) -> Option<String> {
+        let held = self.watched.lock().ok()?;
+        held.as_ref()?.next_line()
+    }
+
+    /// Types the code back, for when the browser could not reach the callback.
+    pub fn paste(&self, line: String) -> Result<(), PitboardError> {
+        let mut held = self.watched.lock().map_err(|_| PitboardError::Failed {
+            code: "sign_in_gone".into(),
+            message: "this sign-in is no longer running".into(),
+            warnings: Vec::new(),
+        })?;
+        match held.as_mut() {
+            Some(watched) => watched.paste(&line).map_err(PitboardError::from),
+            None => Ok(()),
+        }
+    }
+
+    /// Waits for it to finish, then enrols what it signed in to.
+    pub fn finish(&self) -> Result<Enrolled, PitboardError> {
+        let watched = self
+            .watched
+            .lock()
+            .ok()
+            .and_then(|mut held| held.take())
+            .ok_or_else(|| PitboardError::Failed {
+                code: "sign_in_gone".into(),
+                message: "this sign-in is no longer running".into(),
+                warnings: Vec::new(),
+            })?;
+        let login = watched.finish()?;
+        changed(
+            self.core.core.enroll_signed_in(&self.label, login),
+            |enrolled, warnings| {
+                let (email, enrolled) = match enrolled {
+                    switch::Enrolled::Current { email } => (email, EnrolledAs::Current),
+                    switch::Enrolled::SignedIn { email } => (email, EnrolledAs::SignedIn),
+                    switch::Enrolled::Renewed { email } => (email, EnrolledAs::Renewed),
+                };
+                Enrolled {
+                    email,
+                    enrolled,
+                    warnings,
+                }
+            },
+        )
+    }
+
+    /// Stops it. Whatever it wrote is discarded.
+    pub fn cancel(&self) {
+        if let Ok(mut held) = self.watched.lock()
+            && let Some(watched) = held.take()
+        {
+            watched.cancel();
+        }
+    }
+}
+
 #[derive(uniffi::Object)]
 pub struct Pitboard {
     core: service::Pitboard,
@@ -331,6 +403,17 @@ impl Pitboard {
                 warnings,
             }
         })
+    }
+
+    /// Starts Claude Code's own sign-in for a new account, watched rather than inherited.
+    /// The caller shows what it says, can paste the fallback code, and finishes it.
+    pub fn sign_in(self: Arc<Self>, label: String) -> Result<Arc<SignIn>, PitboardError> {
+        let watched = self.core.sign_in_watched()?;
+        Ok(Arc::new(SignIn {
+            watched: Mutex::new(Some(watched)),
+            label,
+            core: self,
+        }))
     }
 
     pub fn forget(&self, label: String) -> Result<Changed, PitboardError> {
