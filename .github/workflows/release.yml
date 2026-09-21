@@ -201,7 +201,12 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - run: swift package --package-path apple resolve
+      # Sparkle's own distribution, at the version the package resolved to. Resolving the
+      # package here instead would mean building the core first, for one small tool.
+      - run: |
+          version=$(python3 -c "import json;print([p for p in json.load(open('apple/Package.resolved'))['pins'] if p['identity']=='sparkle'][0]['state']['version'])")
+          curl -fsSL "https://github.com/sparkle-project/Sparkle/releases/download/$version/Sparkle-$version.tar.xz" \
+            | tar -xJ -C "$RUNNER_TEMP" bin/sign_update
       - env:
           SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
         run: |
@@ -219,7 +224,7 @@ jobs:
           signature=$(sed -n 's/.*sparkle:edSignature="\([^"]*\)".*/\1/p' "$feed" | head -1)
           curl -fsSL --retry 5 --retry-delay 10 --retry-all-errors -o "$RUNNER_TEMP/update.zip" "$url"
           printf '%s' "$SPARKLE_PRIVATE_KEY" | \
-            apple/.build/artifacts/sparkle/Sparkle/bin/sign_update \
+            "$RUNNER_TEMP/bin/sign_update" \
               --verify "$RUNNER_TEMP/update.zip" "$signature" --ed-key-file -
           ditto -x -k "$RUNNER_TEMP/update.zip" "$RUNNER_TEMP/unpacked"
           spctl --assess --type execute -v "$RUNNER_TEMP/unpacked/Pitboard.app"
