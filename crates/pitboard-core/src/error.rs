@@ -11,6 +11,12 @@ pub enum Error {
     )]
     StateOnSyncedDrive { path: PathBuf, marker: String },
 
+    #[error(
+        "CLAUDE_CODE_CUSTOM_OAUTH_URL is set, so Claude Code keeps its login under a \
+         different name than the one pitboard reads. Unset it to use pitboard."
+    )]
+    CustomOauthEndpoint,
+
     #[error("could not read pitboard's account list at {path}: {source}")]
     StateUnreadable {
         path: PathBuf,
@@ -255,6 +261,7 @@ impl Error {
         use Error::*;
         match self {
             StateOnSyncedDrive { .. } => "state_on_synced_drive",
+            CustomOauthEndpoint => "custom_oauth_endpoint",
             StateUnreadable { .. } => "state_unreadable",
             StateCorrupt { .. } => "state_corrupt",
             StateVersionMismatch { .. } => "state_version_mismatch",

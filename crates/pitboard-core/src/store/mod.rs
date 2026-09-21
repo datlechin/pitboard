@@ -146,6 +146,13 @@ fn with_live<T>(ctx: &Context, run: impl FnOnce(&[&dyn RawStore]) -> T) -> T {
     run(&chain)
 }
 
+/// Which backend holds a credential, or `Absent`.
+///
+/// Open question, 2.1.278: the bundle also contains a file backend ("storageV5") behind a
+/// predicate that could not be resolved without running Claude Code. If that predicate is
+/// ever true on an ordinary local install, the session reads that file and not the keychain,
+/// and a switch would write where nobody reads. `doctor` reports what pitboard found, which
+/// is the one place such a mismatch would show.
 pub fn resolve(ctx: &Context, service: &str) -> Result<Backend, Error> {
     with_live(ctx, |chain| {
         Ok(resolve_in(chain, service)?.map_or(Backend::Absent, |b| b.kind()))

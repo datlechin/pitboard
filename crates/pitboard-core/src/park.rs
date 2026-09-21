@@ -52,7 +52,9 @@ pub fn describe(service: &str, parked_at: i64, oauth: &Value) -> Park {
 
 /// The parked login with fresh tokens, stored as Claude Code stores its own after renewing,
 /// so it reads the same to Claude Code once restored. With no refresh-token lifetime in the
-/// answer, Claude Code drops the old one rather than keep a date that may no longer hold.
+/// answer Claude Code keeps the date it already had (`refreshTokenExpiresAt ?? previous`,
+/// measured in 2.1.278); dropping it instead would make a lapsed park look immortal, and
+/// pitboard would keep offering and renewing it forever.
 pub fn renewed(oauth: &Value, fresh: &api::Renewed, now_millis: i64) -> Value {
     let mut next = oauth.clone();
     let Some(fields) = next.as_object_mut() else {
@@ -66,16 +68,11 @@ pub fn renewed(oauth: &Value, fresh: &api::Renewed, now_millis: i64) -> Value {
         "expiresAt".into(),
         json!(now_millis + fresh.expires_in * 1000),
     );
-    match fresh.refresh_token_expires_in {
-        Some(seconds) => {
-            fields.insert(
-                "refreshTokenExpiresAt".into(),
-                json!(now_millis + seconds * 1000),
-            );
-        }
-        None => {
-            fields.remove("refreshTokenExpiresAt");
-        }
+    if let Some(seconds) = fresh.refresh_token_expires_in {
+        fields.insert(
+            "refreshTokenExpiresAt".into(),
+            json!(now_millis + seconds * 1000),
+        );
     }
     if let Some(scopes) = &fresh.scopes {
         fields.insert("scopes".into(), json!(scopes));
@@ -181,7 +178,9 @@ mod tests {
             next["refreshToken"], "r1",
             "the server kept the refresh token"
         );
-        assert!(next.get("refreshTokenExpiresAt").is_none());
+        // Claude Code keeps the date it had. Dropping it would make a park that is about to
+        // lapse look as though it never expires.
+        assert_eq!(next["refreshTokenExpiresAt"], 2);
     }
 
     #[test]

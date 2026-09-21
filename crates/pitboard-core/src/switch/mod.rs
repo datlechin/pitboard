@@ -64,6 +64,12 @@ pub struct Settled {
 /// What recovery found is returned apart from the `Settled`, so it can be reported whether
 /// or not the command that follows succeeds.
 pub fn settle(ctx: &Context) -> Result<(Settled, Option<Recovered>)> {
+    // Under a custom OAuth endpoint the live login is in "Claude Code-custom-oauth-
+    // credentials", not the item pitboard reads. Acting would park nothing and restore
+    // into an item nobody reads, so pitboard does not act at all.
+    if ctx.custom_oauth {
+        return Err(Error::CustomOauthEndpoint);
+    }
     let exclusive = exclusive(ctx)?;
     let mut state = state::load(ctx)?;
     let recovered = reconcile(ctx, &mut state)?;
@@ -283,14 +289,32 @@ fn only_copy_left(failure: &Error) -> bool {
     matches!(failure, Error::SwitchCorrupted { .. })
 }
 
-/// The live document with `claudeAiOauth` replaced. Every other key belongs to this machine.
+/// Keys that belong to the account rather than to the machine. Claude Code deletes all of
+/// them along with the login on logout, so leaving one behind would hand the incoming
+/// account the outgoing account's device token or its second OAuth block. Measured in
+/// 2.1.278: `delete i.claudeAiOauth, delete i.organizationUuid, delete i.trustedDeviceToken,
+/// delete i.enterpriseGateway, delete i.designOauth`.
+const ACCOUNT_SCOPED: [&str; 4] = [
+    "organizationUuid",
+    "trustedDeviceToken",
+    "enterpriseGateway",
+    "designOauth",
+];
+
+/// The live document with the incoming login in place of the outgoing one, and nothing of
+/// the outgoing account left behind. Claude Code makes these keys again as it needs them,
+/// which is the state a logout and a fresh login would leave.
 fn splice(before: &Value, incoming: &Value) -> Result<String> {
     let mut next = before.clone();
-    next.as_object_mut()
+    let document = next
+        .as_object_mut()
         .ok_or_else(|| Error::LiveCredentialShapeUnexpected {
             detail: "it is not a JSON object".into(),
-        })?
-        .insert("claudeAiOauth".into(), incoming.clone());
+        })?;
+    document.insert("claudeAiOauth".into(), incoming.clone());
+    for key in ACCOUNT_SCOPED {
+        document.remove(key);
+    }
     Ok(serde_json::to_string(&next).expect("a credential document stays serialisable"))
 }
 
@@ -366,6 +390,30 @@ fn update_config(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Claude Code deletes these along with the login on logout, so they belong to the
+    /// account. Left behind, the incoming account would present the outgoing account's
+    /// device token, and hold its second OAuth block.
+    #[test]
+    fn a_switch_leaves_nothing_of_the_outgoing_account() {
+        let before = serde_json::json!({
+            "claudeAiOauth": {"refreshToken": "old"},
+            "organizationUuid": "org-a",
+            "trustedDeviceToken": "device-of-a",
+            "enterpriseGateway": {"url": "https://gateway.example"},
+            "designOauth": {"refreshToken": "design-of-a"},
+            "somethingOfThisMachine": true,
+        });
+        let after: Value = serde_json::from_str(
+            &splice(&before, &serde_json::json!({"refreshToken": "new"})).expect("spliced"),
+        )
+        .expect("valid JSON");
+        assert_eq!(after["claudeAiOauth"]["refreshToken"], "new");
+        assert_eq!(after["somethingOfThisMachine"], true);
+        for key in ACCOUNT_SCOPED {
+            assert!(after.get(key).is_none(), "{key} was left behind");
+        }
+    }
 
     use std::cell::RefCell;
 

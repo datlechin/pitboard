@@ -15,6 +15,9 @@ pub struct Context {
     pub(crate) secure_storage_dir: Option<String>,
     /// `$USER`, which names Claude Code's keychain account once screened by `slot`.
     pub(crate) user: Option<String>,
+    /// `CLAUDE_CODE_CUSTOM_OAUTH_URL`. Set, it renames both the keychain item and the config
+    /// file Claude Code uses, so pitboard would be reading and writing the wrong ones.
+    pub(crate) custom_oauth: bool,
     /// The `claude` that runs a sign-in; a bare name is looked up on `PATH`.
     pub(crate) claude_program: PathBuf,
     /// Where Anthropic's endpoints are reached instead, for tests; `api` honours loopback only.
@@ -34,6 +37,7 @@ impl Context {
             claude_config_dir: None,
             secure_storage_dir: None,
             user: None,
+            custom_oauth: false,
             claude_program: PathBuf::from("claude"),
             api_base: None,
             hover_rest: false,
@@ -83,6 +87,7 @@ impl Context {
             claude_config_dir: var("CLAUDE_CONFIG_DIR").filter(|v| !v.is_empty()),
             secure_storage_dir: var("CLAUDE_SECURESTORAGE_CONFIG_DIR"),
             user: var("USER"),
+            custom_oauth: var("CLAUDE_CODE_CUSTOM_OAUTH_URL").is_some_and(|v| !v.is_empty()),
             claude_program: PathBuf::from("claude"),
             api_base: var("PITBOARD_API_BASE"),
             hover_rest: var("CLAUDE_CODE_HOVER_REST").is_some_and(|v| v == "1" || v == "true"),

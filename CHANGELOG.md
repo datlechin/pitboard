@@ -5,6 +5,18 @@ All notable changes are recorded here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+- A switch no longer leaves the outgoing account's `trustedDeviceToken`, `organizationUuid`,
+  `enterpriseGateway` or `designOauth` behind for the incoming account to present as its
+  own. Claude Code deletes all of them with the login on logout; pitboard now does the same,
+  which is the state a logout and a fresh sign-in leave.
+- Renewing a parked login whose answer carries no refresh-token lifetime keeps the deadline
+  it had, as Claude Code does. Dropping it made a park that was about to lapse look as
+  though it never expires, so pitboard went on offering and renewing it.
+- pitboard refuses to act when `CLAUDE_CODE_CUSTOM_OAUTH_URL` is set. Claude Code then keeps
+  its login under a different name, so pitboard would park nothing and restore into an item
+  nobody reads.
+
 ## [0.1.3] - 2026-09-22
 
 ### Added
