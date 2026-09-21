@@ -146,7 +146,6 @@ pub fn render_human(
 
 pub fn render_json(r: &Report, accounts: &[crate::state::Account], active: Option<&str>) -> Value {
     json!({
-        "schema": 1,
         "account": r.identity.as_ref().map(|id| json!({
             "email": id.email,
             "account_uuid": id.account_uuid,

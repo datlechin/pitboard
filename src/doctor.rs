@@ -348,6 +348,11 @@ pub fn run() -> Vec<Check> {
     evaluate(&gather())
 }
 
+/// No check failed. Warnings are advice; a failure means an assumption broke.
+pub fn healthy(checks: &[Check]) -> bool {
+    checks.iter().all(|c| c.level != Level::Fail)
+}
+
 pub fn render_human(checks: &[Check]) -> String {
     let mut out = String::new();
     for c in checks {
@@ -366,8 +371,6 @@ pub fn render_human(checks: &[Check]) -> String {
 
 pub fn render_json(checks: &[Check]) -> Value {
     json!({
-        "schema": 1,
-        "ok": checks.iter().all(|c| c.level != Level::Fail),
         "checks": checks.iter().map(|c| json!({
             "code": c.code,
             "level": match c.level { Level::Ok => "ok", Level::Warn => "warn", Level::Fail => "fail" },
@@ -418,7 +421,7 @@ mod tests {
     fn a_healthy_machine_reports_no_failures() {
         let checks = evaluate(&facts());
         assert!(checks.iter().all(|c| c.level != Level::Fail));
-        assert!(render_json(&checks)["ok"].as_bool().unwrap());
+        assert!(healthy(&checks));
     }
 
     #[test]
@@ -427,7 +430,7 @@ mod tests {
         f.credential = Ok(Some(json!({"slackTag": {}})));
         let checks = evaluate(&f);
         assert_eq!(check(&checks, "credential").level, Level::Fail);
-        assert!(!render_json(&checks)["ok"].as_bool().unwrap());
+        assert!(!healthy(&checks));
     }
 
     #[test]

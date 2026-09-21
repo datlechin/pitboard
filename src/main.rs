@@ -1,163 +1,313 @@
+use clap::{CommandFactory, Parser, Subcommand};
 use pitboard::error::Error;
 use pitboard::switch::Outcome;
-use pitboard::{doctor, state, status, switch};
+use pitboard::{audit, doctor, state, status, switch};
+use serde_json::{Value, json};
+use std::process::ExitCode;
 
-const USAGE: &str = "\
-pitboard — park and restore your own Claude Code logins
+/// Bumped only when a field changes shape. Adding a field or an error code is not a
+/// breaking change for a consumer; renaming or removing one is.
+const CONTRACT: u32 = 1;
 
-  pitboard status          what is signed in, and how much of it is left  (default)
-  pitboard enroll <label>  remember the account signed in now, so it can be parked
-  pitboard use <label>     sign in as an enrolled account
-  pitboard forget <label>  drop an account and its parked credentials
-  pitboard doctor          check that pitboard's model of Claude Code still holds
+/// Park and restore your own Claude Code logins, and see what each one has left.
+#[derive(Parser)]
+#[command(name = "pitboard", version)]
+struct Cli {
+    /// Machine-readable output: the same versioned JSON envelope for every command,
+    /// whether it succeeds or fails
+    #[arg(long, global = true)]
+    json: bool,
 
-Options
-  --json                   machine-readable output
-";
+    #[command(subcommand)]
+    command: Option<Command>,
+}
 
-/// 0 success · 1 failure · 2 wrong usage · 3 an assumption about Claude Code broke.
-fn main() -> std::process::ExitCode {
-    let args: Vec<String> = std::env::args().skip(1).collect();
-    let json = args.iter().any(|a| a == "--json");
-    let positional: Vec<&str> = args
-        .iter()
-        .filter(|a| !a.starts_with('-'))
-        .map(String::as_str)
-        .collect();
+#[derive(Subcommand)]
+enum Command {
+    /// What is signed in, and how much of it is left (the default)
+    Status,
+    /// Remember the account signed in now, so it can be parked
+    Enroll {
+        /// A short name for this account, such as `personal` or `work`
+        label: String,
+    },
+    /// Sign in as an enrolled account
+    Use {
+        /// The label the account was enrolled under
+        label: String,
+    },
+    /// Drop an account and the logins parked for it
+    Forget {
+        /// The label to drop
+        label: String,
+    },
+    /// Check that pitboard's model of Claude Code still holds on this machine
+    Doctor,
+    /// Print shell completions
+    #[command(hide = true)]
+    Completions { shell: clap_complete::Shell },
+    /// Print the man page
+    #[command(hide = true)]
+    Manpage,
+}
 
-    match positional.split_first() {
-        None | Some((&"status", _)) => cmd_status(json),
-        Some((&"doctor", _)) => cmd_doctor(json),
-        Some((&"enroll", rest)) => match rest.first() {
-            Some(label) => cmd_enroll(label),
-            None => misuse("enroll needs a label, for example `pitboard enroll personal`"),
-        },
-        Some((&"use", rest)) => match rest.first() {
-            Some(label) => cmd_use(label),
-            None => misuse("use needs a label, for example `pitboard use work`"),
-        },
-        Some((&"forget", rest)) => match rest.first() {
-            Some(label) => cmd_forget(label),
-            None => misuse("forget needs a label, for example `pitboard forget personal`"),
-        },
-        Some((&"version", _)) => {
-            println!("{} {}", env!("CARGO_BIN_NAME"), env!("CARGO_PKG_VERSION"));
-            std::process::ExitCode::SUCCESS
+/// What a command produced, before it is rendered for a person or a program.
+struct Report {
+    command: &'static str,
+    result: Result<Value, Error>,
+    warnings: Vec<Value>,
+    human: String,
+    exit: u8,
+}
+
+fn warning(error: &Error) -> Value {
+    json!({ "code": error.code(), "message": error.to_string() })
+}
+
+fn emit(report: Report, as_json: bool) -> ExitCode {
+    let name = env!("CARGO_BIN_NAME");
+    if as_json {
+        let envelope = match &report.result {
+            Ok(data) => json!({
+                "v": CONTRACT,
+                "command": report.command,
+                "ok": report.exit == 0,
+                "data": data,
+                "warnings": report.warnings,
+                "error": null,
+            }),
+            Err(e) => json!({
+                "v": CONTRACT,
+                "command": report.command,
+                "ok": false,
+                "data": null,
+                "warnings": report.warnings,
+                "error": { "code": e.code(), "message": e.to_string() },
+            }),
+        };
+        println!("{envelope}");
+    } else {
+        match &report.result {
+            Ok(_) => print!("{}", report.human),
+            Err(e) => eprintln!("{name}: {e}"),
         }
-        Some((&"help", _)) => {
-            print!("{USAGE}");
-            std::process::ExitCode::SUCCESS
+        for w in &report.warnings {
+            eprintln!("note: {}", w["message"].as_str().unwrap_or_default());
         }
-        Some((other, _)) => misuse(&format!("unknown command `{other}`")),
+    }
+    ExitCode::from(report.exit)
+}
+
+fn failure(command: &'static str, error: Error) -> Report {
+    Report {
+        command,
+        exit: error.exit_code(),
+        result: Err(error),
+        warnings: Vec::new(),
+        human: String::new(),
     }
 }
 
-fn misuse(message: &str) -> std::process::ExitCode {
-    eprintln!("{}: {message}\n", env!("CARGO_BIN_NAME"));
-    eprint!("{USAGE}");
-    std::process::ExitCode::from(2)
-}
-
-/// The exit code comes from the error itself: 3 says an assumption about Claude Code
-/// stopped holding, which is a different answer from a request that could not be met.
-fn failed(error: Error) -> std::process::ExitCode {
-    eprintln!("{}: {error}", env!("CARGO_BIN_NAME"));
-    std::process::ExitCode::from(error.exit_code())
-}
-
-fn cmd_status(json: bool) -> std::process::ExitCode {
+fn status() -> Report {
     let report = status::gather();
-    // A state file that cannot be read is not the same as having no accounts; reporting
-    // it as empty would tell the user their enrolled logins are gone.
-    let accounts = match state::load() {
+    let (accounts, active) = match state::load() {
         Ok(s) => (s.accounts, s.active),
-        Err(e) => return failed(e),
+        // Unreadable is not the same as empty: reporting it as empty would tell the user
+        // their enrolled logins are gone.
+        Err(e) => return failure("status", e),
     };
-    if json {
-        println!(
-            "{}",
-            status::render_json(&report, &accounts.0, accounts.1.as_deref())
-        );
-    } else {
-        print!(
+    Report {
+        command: "status",
+        human: format!(
             "\n{}",
-            status::render_human(&report, &accounts.0, accounts.1.as_deref())
-        );
+            status::render_human(&report, &accounts, active.as_deref())
+        ),
+        result: Ok(status::render_json(&report, &accounts, active.as_deref())),
+        warnings: Vec::new(),
+        exit: 0,
     }
-    std::process::ExitCode::SUCCESS
 }
 
-fn cmd_doctor(json: bool) -> std::process::ExitCode {
+fn doctor() -> Report {
     let checks = doctor::run();
-    if json {
-        println!("{}", doctor::render_json(&checks));
-    } else {
-        print!("\n{}", doctor::render_human(&checks));
-    }
-    if checks.iter().any(|c| c.level == doctor::Level::Fail) {
-        std::process::ExitCode::from(3)
-    } else {
-        std::process::ExitCode::SUCCESS
-    }
-}
-
-fn cmd_enroll(label: &str) -> std::process::ExitCode {
-    match switch::enroll_current(label) {
-        Ok(account) => {
-            println!("enrolled {} as `{label}`", account.email);
-            std::process::ExitCode::SUCCESS
-        }
-        Err(e) => failed(e),
+    let healthy = doctor::healthy(&checks);
+    Report {
+        command: "doctor",
+        human: format!("\n{}", doctor::render_human(&checks)),
+        result: Ok(doctor::render_json(&checks)),
+        warnings: Vec::new(),
+        // A failed check means an assumption about Claude Code no longer holds.
+        exit: if healthy { 0 } else { 3 },
     }
 }
 
-fn cmd_use(label: &str) -> std::process::ExitCode {
-    match switch::switch(label) {
-        Ok(Outcome::AlreadyActive { label }) => {
-            println!("`{label}` is already signed in");
-            std::process::ExitCode::SUCCESS
-        }
+fn enroll(label: &str) -> Report {
+    let outcome = switch::enroll_current(label);
+    audit::record(
+        "enroll",
+        label,
+        outcome.as_ref().map_or_else(|e| e.code(), |_| "ok"),
+    );
+    match outcome {
+        Ok(account) => Report {
+            command: "enroll",
+            human: format!("enrolled {} as `{label}`\n", account.email),
+            result: Ok(json!({ "label": label, "email": account.email })),
+            warnings: Vec::new(),
+            exit: 0,
+        },
+        Err(e) => failure("enroll", e),
+    }
+}
+
+fn use_account(label: &str) -> Report {
+    let outcome = switch::switch(label);
+    audit::record(
+        "use",
+        label,
+        match &outcome {
+            Ok(Outcome::Switched { .. }) => "ok",
+            Ok(Outcome::AlreadyActive { .. }) => "already_active",
+            Err(e) => e.code(),
+        },
+    );
+    match outcome {
+        Ok(Outcome::AlreadyActive { label }) => Report {
+            command: "use",
+            human: format!("`{label}` is already signed in\n"),
+            result: Ok(json!({ "to": label, "changed": false })),
+            warnings: Vec::new(),
+            exit: 0,
+        },
         Ok(Outcome::Switched {
             from,
             to,
+            parked,
             config_warning,
             stuck_generations,
-            ..
         }) => {
-            println!("signed in as `{to}`, parked `{from}`'s previous login");
-            println!(
-                "a Claude Code session already running picks this up within {} seconds",
-                switch::ADOPTION_CEILING_SECONDS
-            );
-            if let Some(warning) = config_warning {
-                eprintln!("note: {warning}");
-            }
+            let mut warnings: Vec<Value> = config_warning.iter().map(warning).collect();
             if !stuck_generations.is_empty() {
-                eprintln!(
-                    "note: {} old parked login(s) for `{from}` could not be removed; \
-                     harmless, run `pitboard doctor` to check",
-                    stuck_generations.len()
-                );
+                warnings.push(json!({
+                    "code": "stale_parks_remain",
+                    "message": format!(
+                        "{} old parked login(s) for `{from}` could not be removed; \
+                         harmless, run `pitboard doctor` to check",
+                        stuck_generations.len()
+                    ),
+                }));
             }
-            std::process::ExitCode::SUCCESS
+            Report {
+                command: "use",
+                human: format!(
+                    "signed in as `{to}`, parked `{from}`'s previous login\n\
+                     a Claude Code session already running picks this up within {} seconds\n",
+                    switch::ADOPTION_CEILING_SECONDS
+                ),
+                result: Ok(json!({
+                    "from": from,
+                    "to": to,
+                    "changed": true,
+                    "parked_at": parked.parked_at,
+                    "adoption_ceiling_seconds": switch::ADOPTION_CEILING_SECONDS,
+                })),
+                warnings,
+                exit: 0,
+            }
         }
-        Err(e) => failed(e),
+        Err(e) => failure("use", e),
     }
 }
 
-fn cmd_forget(label: &str) -> std::process::ExitCode {
-    match switch::forget(label) {
-        Ok((email, stuck)) => {
-            println!("forgot `{label}` ({email})");
-            if !stuck.is_empty() {
-                eprintln!(
-                    "note: {} parked login(s) for `{label}` are still in the keychain; \
-                     harmless, run `pitboard doctor` to check",
-                    stuck.len()
-                );
-            }
-            std::process::ExitCode::SUCCESS
+fn forget(label: &str) -> Report {
+    let outcome = switch::forget(label);
+    audit::record(
+        "forget",
+        label,
+        outcome.as_ref().map_or_else(|e| e.code(), |_| "ok"),
+    );
+    match outcome {
+        Ok((email, stuck)) => Report {
+            command: "forget",
+            human: format!("forgot `{label}` ({email})\n"),
+            result: Ok(json!({ "label": label, "email": email })),
+            warnings: if stuck.is_empty() {
+                Vec::new()
+            } else {
+                vec![json!({
+                    "code": "stale_parks_remain",
+                    "message": format!(
+                        "{} parked login(s) for `{label}` are still in the keychain; \
+                         harmless, run `pitboard doctor` to check",
+                        stuck.len()
+                    ),
+                })]
+            },
+            exit: 0,
+        },
+        Err(e) => failure("forget", e),
+    }
+}
+
+fn main() -> ExitCode {
+    let cli = Cli::parse();
+    let report = match cli.command.unwrap_or(Command::Status) {
+        Command::Status => status(),
+        Command::Doctor => doctor(),
+        Command::Enroll { label } => enroll(&label),
+        Command::Use { label } => use_account(&label),
+        Command::Forget { label } => forget(&label),
+        Command::Completions { shell } => {
+            clap_complete::generate(
+                shell,
+                &mut Cli::command(),
+                env!("CARGO_BIN_NAME"),
+                &mut std::io::stdout(),
+            );
+            return ExitCode::SUCCESS;
         }
-        Err(e) => failed(e),
+        Command::Manpage => {
+            return match clap_mangen::Man::new(Cli::command()).render(&mut std::io::stdout()) {
+                Ok(()) => ExitCode::SUCCESS,
+                Err(_) => ExitCode::FAILURE,
+            };
+        }
+    };
+    emit(report, cli.json)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_command_line_definition_is_internally_consistent() {
+        Cli::command().debug_assert();
+    }
+
+    #[test]
+    fn a_mistyped_flag_is_rejected_rather_than_ignored() {
+        assert!(Cli::try_parse_from(["pitboard", "--jsno", "status"]).is_err());
+        assert!(Cli::try_parse_from(["pitboard", "status", "--verbose"]).is_err());
+        assert!(Cli::try_parse_from(["pitboard", "status", "extra", "words"]).is_err());
+    }
+
+    #[test]
+    fn json_is_accepted_before_or_after_the_subcommand() {
+        assert!(
+            Cli::try_parse_from(["pitboard", "--json", "use", "work"])
+                .unwrap()
+                .json
+        );
+        assert!(
+            Cli::try_parse_from(["pitboard", "use", "work", "--json"])
+                .unwrap()
+                .json
+        );
+    }
+
+    #[test]
+    fn no_arguments_means_status() {
+        assert!(Cli::try_parse_from(["pitboard"]).unwrap().command.is_none());
     }
 }

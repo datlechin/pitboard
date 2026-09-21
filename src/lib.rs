@@ -1,6 +1,7 @@
 //! pitboard's internals, exposed so integration tests exercise the real code paths.
 
 pub mod atomic;
+pub mod audit;
 pub mod claude;
 pub mod configfile;
 pub mod doctor;

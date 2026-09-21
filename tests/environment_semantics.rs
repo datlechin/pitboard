@@ -17,7 +17,11 @@ fn status(home: &PathBuf, config_dir: Option<&str>) -> serde_json::Value {
         None => command.env_remove("CLAUDE_CONFIG_DIR"),
     };
     let out = command.output().expect("run pitboard");
-    serde_json::from_slice(&out.stdout).expect("status --json should be valid JSON")
+    let envelope: serde_json::Value =
+        serde_json::from_slice(&out.stdout).expect("status --json should be valid JSON");
+    assert_eq!(envelope["v"], 1, "the contract version must be present");
+    assert_eq!(envelope["command"], "status");
+    envelope["data"].clone()
 }
 
 fn scratch(name: &str) -> PathBuf {
