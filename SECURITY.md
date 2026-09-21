@@ -91,6 +91,11 @@ IP address.
 If a switch is interrupted, the next `pitboard use`, `enroll` or `forget` finishes it first
 and says what it found. Run `pitboard doctor` if anything still looks wrong.
 
+Finishing needs Anthropic to say who owns the login that is in place. When it cannot be
+reached, recovery changes nothing and every command that would change something stops.
+`pitboard abandon` is the way out: it throws the record away and keeps every copy it names,
+so nothing is lost and `pitboard status` can say who is signed in.
+
 To remove pitboard, run `pitboard uninstall`: it deletes every parked login before
 deleting its own directory, in that order, because the account list is the only index of
 those keychain items. Deleting the directory first leaves live refresh tokens on the

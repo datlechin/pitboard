@@ -83,6 +83,8 @@ Other commands:
 - `pitboard forget work` drops an account.
 - `pitboard doctor` checks everything pitboard depends on, including every parked login.
 - `pitboard log` shows what pitboard has changed, and when.
+- `pitboard abandon` gives up on an interrupted switch that cannot be finished, keeping
+  every login. Only needed when recovery cannot reach Anthropic.
 - `pitboard uninstall` deletes every parked login and pitboard's own files.
 
 ## Status line

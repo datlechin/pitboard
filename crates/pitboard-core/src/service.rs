@@ -174,6 +174,22 @@ impl Pitboard {
         self.changing("forget", label, |settled| switch::forget(settled, label))
     }
 
+    /// Throws away a record of an interrupted switch that cannot be finished, keeping
+    /// every login it names. The way out when recovery cannot reach Anthropic.
+    pub fn abandon_recovery(&self) -> Result<Option<switch::Abandoned>> {
+        let outcome = switch::abandon(&self.ctx);
+        audit::record(
+            &self.ctx,
+            "abandon",
+            "",
+            match &outcome {
+                Ok(_) => "ok",
+                Err(e) => e.code(),
+            },
+        );
+        outcome
+    }
+
     /// The changes pitboard has made, newest last.
     pub fn log(&self, limit: usize) -> Vec<audit::Entry> {
         audit::read(&self.ctx, limit)

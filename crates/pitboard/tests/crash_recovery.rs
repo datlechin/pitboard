@@ -142,3 +142,30 @@ fn a_damaged_record_is_refused_rather_than_guessed_at() {
     assert!(env.root.join("pitboard/journal.json").exists());
     assert_eq!(env.state(), before, "nothing may change on a guess");
 }
+
+/// Recovery has to ask Anthropic who owns the live login, so offline it cannot finish, and
+/// every command that changes anything stops at that. Giving up is the way out, and it must
+/// delete nothing: which copy is live is exactly what is unknown.
+#[test]
+fn giving_up_on_an_unfinishable_switch_keeps_every_login() {
+    let mut env = two_accounts("abandon");
+    let orphan = interrupted_switch(&env);
+    assert!(env.is_parked(&orphan), "the interrupted run parked a copy");
+
+    // Anthropic no longer recognises the session, so the live owner cannot be learned.
+    env.expire("access-refresh-a");
+    let (_, err, code) = env.run(&["use", "beta"]);
+    assert_ne!(code, 0, "a switch cannot proceed over an unfinished one: {err}");
+
+    let (out, err, code) = env.run(&["abandon"]);
+    assert_eq!(code, 0, "{err}");
+    assert!(out.contains("Gave up on the interrupted switch"), "{out}");
+    assert!(env.is_parked(&orphan), "nothing was deleted");
+    assert!(
+        !env.root.join("pitboard").join("journal.json").exists(),
+        "the record is gone, so the next command is not blocked by it"
+    );
+
+    let (_, err, code) = env.run(&["doctor"]);
+    assert!(!err.contains("interrupted"), "doctor is no longer blocked: {err}");
+}

@@ -8,7 +8,7 @@
 use super::{Error, Result, identify};
 use crate::context::Context;
 use crate::state::{Park, State};
-use crate::{atomic, claude, home, park, state, store};
+use crate::{atomic, claude, home, park, state, store, time};
 use serde_json::Value;
 use std::path::PathBuf;
 
@@ -160,6 +160,59 @@ fn live_owner(ctx: &Context) -> std::result::Result<String, String> {
     identify(ctx, token)
         .map(|owner| owner.account_uuid)
         .map_err(|e| e.to_string())
+}
+
+/// What abandoning an unfinishable record decided to keep.
+#[derive(Debug)]
+pub struct Abandoned {
+    pub from: String,
+    pub to: String,
+    /// Copies kept rather than deleted, because which one is live is now unknown.
+    pub kept: usize,
+}
+
+/// Throws away a record that cannot be finished, keeping every copy it names.
+///
+/// Recovery needs Anthropic to say who owns the live login. Offline, or with a session
+/// Anthropic no longer accepts, it cannot, and every command that changes anything stops
+/// at that. This is the way out: nothing is deleted and nothing is installed, so the worst
+/// case is a copy that outlives its use, which `status` shows and `doctor` reports.
+pub(super) fn abandon(ctx: &Context, state: &mut State) -> Result<Option<Abandoned>> {
+    let path = journal_path(ctx);
+    let raw = match std::fs::read_to_string(&path) {
+        Ok(r) => r,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(source) => return Err(Error::RecoveryFailed { path, source }),
+    };
+    let journal = serde_json::from_str::<Journal>(&raw)
+        .map_err(|source| Error::RecoveryRecordCorrupt { path, source })?;
+
+    // The copy the interrupted run parked is recorded against the account it came from, so
+    // nothing holds a keychain item that no file names.
+    let mut kept = 0;
+    if let Some(Some(document)) = read_park(ctx, &journal.park_service)
+        && let Some(label) = state.by_uuid(&journal.from_uuid).map(|a| a.label.clone())
+    {
+        state.park(
+            &label,
+            park::describe(&journal.park_service, time::now(), &document),
+        );
+        kept += 1;
+    }
+    if state
+        .by_uuid(&journal.to_uuid)
+        .and_then(|a| a.parked.as_ref())
+        .is_some()
+    {
+        kept += 1;
+    }
+    state::save(ctx, state)?;
+    clear_journal(ctx);
+    Ok(Some(Abandoned {
+        from: journal.from_label,
+        to: journal.to_label,
+        kept,
+    }))
 }
 
 pub(super) fn reconcile(ctx: &Context, state: &mut State) -> Result<Option<Recovered>> {

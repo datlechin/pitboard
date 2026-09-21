@@ -15,7 +15,7 @@ mod uninstall;
 
 pub use enroll::{Enrolled, SignIn, enroll, sign_in};
 pub use forget::forget;
-pub use journal::{Recovered, pending as interrupted};
+pub use journal::{Abandoned, Recovered, pending as interrupted};
 pub use rename::rename;
 pub use renew::{Renewal, renew_parked};
 pub use uninstall::{Removed, uninstall};
@@ -61,6 +61,17 @@ pub struct Settled {
     _exclusive: std::fs::File,
     state: State,
     ctx: Context,
+}
+
+/// Throws away a record of an interrupted switch that cannot be finished, keeping every
+/// copy it names. Takes pitboard's own lock but never Claude Code's: it installs nothing.
+pub fn abandon(ctx: &Context) -> Result<Option<Abandoned>> {
+    if ctx.custom_oauth {
+        return Err(Error::CustomOauthEndpoint);
+    }
+    let _exclusive = exclusive(ctx)?;
+    let mut state = state::load(ctx)?;
+    journal::abandon(ctx, &mut state)
 }
 
 /// What recovery found is returned apart from the `Settled`, so it can be reported whether

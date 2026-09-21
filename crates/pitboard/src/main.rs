@@ -61,6 +61,8 @@ enum Command {
         #[arg(short = 'y', long)]
         yes: bool,
     },
+    /// Give up on an interrupted switch that cannot be finished, keeping every login
+    Abandon,
     /// What pitboard has changed, and when
     Log {
         /// How many changes to show
@@ -343,6 +345,33 @@ fn forget(pitboard: &Pitboard, label: &str) -> Report {
     })
 }
 
+fn abandon(pitboard: &Pitboard) -> Report {
+    match pitboard.abandon_recovery() {
+        Err(error) => Report::failed(Some("abandon"), error),
+        Ok(None) => Report::done(
+            "abandon",
+            json!({ "abandoned": false }),
+            "There is no interrupted switch to give up on.\n".into(),
+        ),
+        Ok(Some(a)) => Report::done(
+            "abandon",
+            json!({
+                "abandoned": true,
+                "from": a.from,
+                "to": a.to,
+                "logins_kept": a.kept,
+            }),
+            format!(
+                "Gave up on the interrupted switch from {} to {}. {} login(s) kept; \
+                 nothing was deleted. Run `pitboard` to see who is signed in.\n",
+                paint(BOLD, &a.from),
+                paint(BOLD, &a.to),
+                a.kept
+            ),
+        ),
+    }
+}
+
 fn log(pitboard: &Pitboard, lines: usize) -> Report {
     let entries = pitboard.log(lines);
     let width = entries.iter().map(|e| e.verb.len()).max().unwrap_or(0);
@@ -476,6 +505,7 @@ fn main() -> ExitCode {
             }
             forget(&pitboard, &label)
         }
+        Command::Abandon => abandon(&pitboard),
         Command::Log { lines } => log(&pitboard, lines),
         Command::Uninstall { yes } => {
             if !yes
