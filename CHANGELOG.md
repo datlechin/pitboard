@@ -5,6 +5,8 @@ All notable changes are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-09-22
+
 ### Added
 - A macOS menu bar app: the account in use and its tightest limit in the menu bar, every
   account's limits in the panel, one click to switch, a notification when an account runs
@@ -45,6 +47,7 @@ First release.
 - Schema 3: one parked login per account, with when it expires. Earlier files are refused
   rather than migrated; nothing was ever released that wrote them.
 
-[Unreleased]: https://github.com/datlechin/pitboard/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/datlechin/pitboard/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/datlechin/pitboard/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/datlechin/pitboard/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/datlechin/pitboard/releases/tag/v0.1.0

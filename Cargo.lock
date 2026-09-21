@@ -990,7 +990,7 @@ checksum = "a89322df9ebe1c1578d689c92318e070967d1042b512afbe49518723f4e6d5cd"
 
 [[package]]
 name = "pitboard"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "anstream",
  "anstyle",
@@ -1005,7 +1005,7 @@ dependencies = [
 
 [[package]]
 name = "pitboard-core"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "hex",
  "jiff",
@@ -1022,7 +1022,7 @@ dependencies = [
 
 [[package]]
 name = "pitboard-ffi"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "pitboard-core",
  "thiserror",
@@ -1720,7 +1720,7 @@ dependencies = [
 
 [[package]]
 name = "uniffi-bindgen-swift"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "uniffi",
 ]
