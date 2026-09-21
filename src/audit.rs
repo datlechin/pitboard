@@ -23,7 +23,7 @@ fn line(at: i64, verb: &str, subject: &str, outcome: &str) -> String {
     let clean = |s: &str| s.replace(['\n', '\r', '\t'], " ");
     format!(
         "{}\t{}\t{}\t{}\n",
-        time::format_local(at, "%Y-%m-%dT%H:%M:%S%z"),
+        time::local(at, "%Y-%m-%dT%H:%M:%S%:z"),
         clean(verb),
         clean(subject),
         clean(outcome)

@@ -19,6 +19,7 @@ use crate::state::{Account, Generation, State};
 use crate::{api, claude, configfile, home, lock, park, state, store, time};
 use journal::{Journal, clear_journal, reconcile, write_journal};
 use serde_json::Value;
+use std::os::unix::fs::OpenOptionsExt;
 use std::path::PathBuf;
 
 /// Claude Code re-reads the credential store behind a cache anchored at each process's
@@ -98,6 +99,7 @@ fn exclusive() -> Result<std::fs::File> {
         .create(true)
         .truncate(false)
         .write(true)
+        .mode(0o600)
         .open(&path)
         .map_err(fail)?;
     file.lock().map_err(fail)?;

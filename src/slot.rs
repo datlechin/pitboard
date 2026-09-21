@@ -2,7 +2,6 @@
 //! process sees by hashing a directory path. If Claude Code changes that, only this file
 //! changes.
 
-use crate::hex;
 use sha2::{Digest, Sha256};
 use unicode_normalization::UnicodeNormalization;
 

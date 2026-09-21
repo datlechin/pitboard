@@ -7,7 +7,7 @@
 //! every credential re-read. A write through `security -U` changes only the item's mtime.
 
 use super::{Backend, Error, RawStore};
-use crate::{hex, slot};
+use crate::slot;
 use std::io::Write;
 use std::process::{Command, Stdio};
 

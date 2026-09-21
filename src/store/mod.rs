@@ -6,7 +6,7 @@ mod keychain;
 #[cfg(not(target_os = "macos"))]
 mod vault;
 
-use crate::{claude, hex, slot};
+use crate::{claude, slot};
 use serde_json::Value;
 use std::path::PathBuf;
 

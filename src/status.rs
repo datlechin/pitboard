@@ -224,7 +224,7 @@ fn label_of(kind: &str, scope: Option<&str>) -> String {
 fn provenance(usage: &Snapshot, now: i64) -> String {
     let at = usage
         .observed_at
-        .map(|t| time::format_local(t, "%H:%M"))
+        .map(|t| time::local(t, "%H:%M"))
         .unwrap_or_else(|| "an unknown time".into());
     match usage.source {
         Source::Live => "live".into(),
@@ -232,7 +232,7 @@ fn provenance(usage: &Snapshot, now: i64) -> String {
         Source::Remembered => {
             let age = usage
                 .observed_at
-                .map(|t| time::humanise_until(now, t).replacen("in ", "", 1))
+                .map(|t| time::span(now - t))
                 .unwrap_or_default();
             format!("measured {at} ({age} ago)")
         }
@@ -259,7 +259,7 @@ pub fn render_human(report: &Report) -> String {
                     }
                     let resets = w
                         .resets_at
-                        .map(|t| format!("resets {}", time::humanise_until(t, now)))
+                        .map(|t| format!("resets in {}", time::span(t - now)))
                         .unwrap_or_default();
                     out.push_str(&format!(
                         "    {:<14} {}  {:>3.0}%   {resets}\n",

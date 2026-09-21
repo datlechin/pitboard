@@ -74,12 +74,6 @@ pub enum Error {
         source: serde_json::Error,
     },
 
-    #[error(
-        "Claude Code has no signed-in account recorded. Run `claude` once, sign in, \
-         then try again."
-    )]
-    NotSignedIn,
-
     #[error("nothing is signed in right now. Run `claude`, sign in, then try again.")]
     LiveCredentialAbsent,
 
@@ -239,7 +233,6 @@ impl Error {
             ClaudeConfigMissing { .. } => "claude_config_missing",
             ClaudeConfigUnreadable { .. } => "claude_config_unreadable",
             ClaudeConfigNotJson { .. } => "claude_config_not_json",
-            NotSignedIn => "not_signed_in",
             LiveCredentialAbsent => "live_credential_absent",
             LiveCredentialShapeUnexpected { .. } => "live_credential_shape_unexpected",
             AccountUnknown { .. } => "account_unknown",
@@ -293,7 +286,6 @@ mod tests {
     #[test]
     fn codes_are_unique_so_a_caller_can_branch_on_them() {
         let samples = [
-            Error::NotSignedIn,
             Error::LiveCredentialAbsent,
             Error::ParkSlotExhausted,
             Error::AccountUnknown { label: "x".into() },
@@ -323,7 +315,7 @@ mod tests {
     fn every_message_tells_the_user_something_to_do() {
         // A message that only states a fact leaves the user stuck.
         let actionable = [
-            Error::NotSignedIn.to_string(),
+            Error::LiveCredentialAbsent.to_string(),
             Error::AccountUnknown {
                 label: "work".into(),
             }

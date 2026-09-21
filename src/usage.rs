@@ -52,7 +52,7 @@ fn window_from_limit(l: &Value) -> Option<Window> {
         resets_at: l
             .get("resets_at")
             .and_then(Value::as_str)
-            .and_then(time::parse_rfc3339),
+            .and_then(time::parse),
         is_active: l.get("is_active").and_then(Value::as_bool).unwrap_or(false),
     })
 }
@@ -65,7 +65,7 @@ fn window_from_named(kind: &str, v: &Value) -> Option<Window> {
         resets_at: v
             .get("resets_at")
             .and_then(Value::as_str)
-            .and_then(time::parse_rfc3339),
+            .and_then(time::parse),
         is_active: false,
     })
 }

@@ -58,8 +58,9 @@ fn age(path: &Path) -> Option<Duration> {
     SystemTime::now().duration_since(mtime).ok()
 }
 
-fn touch(path: &Path) -> io::Result<()> {
-    filetime::set_file_mtime(path, filetime::FileTime::now())
+/// proper-lockfile renews the lock by setting the directory's mtime.
+fn touch(path: &Path, at: SystemTime) -> io::Result<()> {
+    std::fs::File::open(path)?.set_modified(at)
 }
 
 /// Take the lock guarding `target`, waiting up to about seven and a half seconds.
@@ -102,7 +103,7 @@ fn start(path: PathBuf) -> Guard {
                     .wait_timeout_while(stopped, HEARTBEAT, |stop| !*stop)
                     .unwrap_or_else(|e| e.into_inner());
                 stopped = next;
-                if *stopped || touch(&path).is_err() {
+                if *stopped || touch(&path, SystemTime::now()).is_err() {
                     return;
                 }
             }
@@ -121,9 +122,7 @@ mod tests {
 
     /// Backdate a lock so only a live heartbeat could rescue it.
     fn age_past_staleness(lock: &Path) {
-        let stale =
-            filetime::FileTime::from_unix_time(filetime::FileTime::now().unix_seconds() - 3600, 0);
-        filetime::set_file_mtime(lock, stale).unwrap();
+        touch(lock, SystemTime::now() - Duration::from_secs(3600)).unwrap();
     }
 
     fn scratch(name: &str) -> PathBuf {

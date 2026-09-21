@@ -7,7 +7,6 @@ pub mod claude;
 pub mod configfile;
 pub mod doctor;
 pub mod error;
-pub mod hex;
 pub mod home;
 pub mod lock;
 pub mod park;

@@ -22,17 +22,18 @@ path = "src/main.rs"
 
 [dependencies]
 # Deliberately small. Every addition needs a reason in the PR description.
-serde = { version = "1", features = ["derive"] }
-serde_json = { version = "1", features = ["preserve_order"] }
-sha2 = "0.10"
-unicode-normalization = "0.1"
-libc = "0.2"
-thiserror = "2"
-machine-uid = "0.6"
-filetime = "0.2"
 clap = { version = "4", features = ["derive"] }
 clap_complete = "4"
 clap_mangen = "0.3"
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+thiserror = "2"
+jiff = "0.2"
+sha2 = "0.11"
+hex = "0.4"
+unicode-normalization = "0.1"
+machine-uid = "0.6"
+libc = "0.2"
 # TLS: rustls for the protocol, the operating system for deciding which certificates to
 # trust. No bundled root store, so a corporate or system trust setting is honoured.
 ureq = { version = "3", default-features = false, features = ["rustls-no-provider", "platform-verifier"] }

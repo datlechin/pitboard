@@ -1,118 +1,40 @@
-//! RFC 3339 parsing for the one shape the usage API emits, and local formatting through the
-//! platform's `strftime`, rather than a date library for three calls.
+//! Time through jiff: epoch seconds in everything pitboard stores, the local time zone only
+//! in what it shows a person.
 
-use std::ffi::CStr;
+use jiff::Timestamp;
+use jiff::tz::TimeZone;
 
 pub fn now() -> i64 {
-    since_epoch().as_secs() as i64
+    Timestamp::now().as_second()
 }
 
-/// Park generations are named with this: two parks of one account in the same second must
-/// not collide.
+/// Park names carry this, so two parks of one account in the same second do not collide.
 pub fn now_millis() -> i64 {
-    since_epoch().as_millis() as i64
+    Timestamp::now().as_millisecond()
 }
 
-fn since_epoch() -> std::time::Duration {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
+/// An RFC 3339 instant such as `2026-09-20T22:20:00.095287+00:00`, as epoch seconds. `None`
+/// for anything else, including a time without an offset, which names no instant.
+pub fn parse(text: &str) -> Option<i64> {
+    text.parse::<Timestamp>().ok().map(Timestamp::as_second)
+}
+
+/// `epoch` in this machine's time zone, formatted with `strftime` directives.
+pub fn local(epoch: i64, pattern: &str) -> String {
+    Timestamp::from_second(epoch)
+        .map(|t| t.to_zoned(TimeZone::system()).strftime(pattern).to_string())
         .unwrap_or_default()
 }
 
-/// Parse `2026-09-20T22:20:00.095287+00:00` (and the `Z` spelling) to epoch seconds.
-///
-/// `None` rather than a guess when the shape is unexpected.
-pub fn parse_rfc3339(s: &str) -> Option<i64> {
-    let b = s.as_bytes();
-    if b.len() < 19
-        || b[4] != b'-'
-        || b[7] != b'-'
-        || b[10] != b'T'
-        || b[13] != b':'
-        || b[16] != b':'
-    {
-        return None;
-    }
-    // `timegm` normalises out-of-range fields instead of rejecting them, so each is checked.
-    let field = |r: std::ops::Range<usize>, min: i32, max: i32| -> Option<i32> {
-        let v = s.get(r)?.parse::<i32>().ok()?;
-        (min..=max).contains(&v).then_some(v)
-    };
-    // SAFETY: `tm` is a plain C struct of integers plus, on some platforms, a nullable
-    // `const char *` zone pointer. All-zero is a valid value for every field.
-    let mut tm: libc::tm = unsafe { std::mem::zeroed() };
-    tm.tm_year = field(0..4, 1970, 9999)? - 1900;
-    tm.tm_mon = field(5..7, 1, 12)? - 1;
-    tm.tm_mday = field(8..10, 1, 31)?;
-    tm.tm_hour = field(11..13, 0, 23)?;
-    tm.tm_min = field(14..16, 0, 59)?;
-    tm.tm_sec = field(17..19, 0, 60)?;
-
-    // Offset: trailing `Z`, or `+HH:MM` / `-HH:MM` after any fractional seconds.
-    let tail = &s[19..];
-    let offset = if tail.ends_with('Z') || tail.is_empty() {
-        0
-    } else {
-        let sign_at = tail.rfind(['+', '-'])?;
-        let (sign, hm) = tail.split_at(sign_at);
-        let _ = sign;
-        let bytes = hm.as_bytes();
-        if bytes.len() < 6 || bytes[3] != b':' {
-            return None;
-        }
-        let h: i64 = hm.get(1..3)?.parse().ok()?;
-        let m: i64 = hm.get(4..6)?.parse().ok()?;
-        let magnitude = h * 3600 + m * 60;
-        if bytes[0] == b'-' {
-            -magnitude
-        } else {
-            magnitude
-        }
-    };
-    // SAFETY: `tm` is a valid, initialised struct owned by this frame, and every field has
-    // been range-checked above, so `timegm` reads only what it was given.
-    let utc = unsafe { libc::timegm(&mut tm) };
-    Some(utc as i64 - offset)
-}
-
-pub fn format_local(epoch: i64, pattern: &str) -> String {
-    let t = epoch as libc::time_t;
-    // SAFETY: as above, all-zero is a valid `tm`.
-    let mut tm: libc::tm = unsafe { std::mem::zeroed() };
-    let mut buf = [0u8; 128];
-    let pat = format!("{pattern}\0");
-    // SAFETY: `t` and `tm` are live locals, `pat` ends in `\0`, and `strftime` is given the
-    // buffer's true length, writes at most that many bytes, and NUL-terminates on success.
-    unsafe {
-        if libc::localtime_r(&t, &mut tm).is_null() {
-            return String::new();
-        }
-        let n = libc::strftime(
-            buf.as_mut_ptr() as *mut libc::c_char,
-            buf.len(),
-            pat.as_ptr() as *const libc::c_char,
-            &tm,
-        );
-        if n == 0 {
-            return String::new();
-        }
-        CStr::from_ptr(buf.as_ptr() as *const libc::c_char)
-            .to_string_lossy()
-            .into_owned()
-    }
-}
-
-/// "in 6d 4h", "in 2h 14m", "in 47m" or "now".
-pub fn humanise_until(target: i64, from: i64) -> String {
-    let d = target - from;
-    if d <= 0 {
-        return "now".into();
-    }
-    let (days, hours, mins) = (d / 86_400, (d % 86_400) / 3600, (d % 3600) / 60);
+/// A length of time to the precision a person reads: "6d 4h", "2h 05m", "47m", "<1m".
+pub fn span(seconds: i64) -> String {
+    let s = seconds.max(0);
+    let (days, hours, minutes) = (s / 86_400, s % 86_400 / 3_600, s % 3_600 / 60);
     match (days, hours) {
-        (0, 0) => format!("in {mins}m"),
-        (0, h) => format!("in {h}h {mins:02}m"),
-        (dd, h) => format!("in {dd}d {h}h"),
+        (0, 0) if minutes == 0 => "<1m".into(),
+        (0, 0) => format!("{minutes}m"),
+        (0, h) => format!("{h}h {minutes:02}m"),
+        (d, h) => format!("{d}d {h}h"),
     }
 }
 
@@ -123,41 +45,10 @@ mod tests {
     #[test]
     fn parses_the_shapes_the_usage_api_actually_emits() {
         // Captured verbatim from a live /api/oauth/usage response.
-        assert_eq!(
-            parse_rfc3339("2026-09-20T22:20:00.095287+00:00"),
-            Some(1789942800)
-        );
-        assert_eq!(
-            parse_rfc3339("2026-09-27T02:00:00.095306+00:00"),
-            Some(1790474400)
-        );
-        assert_eq!(parse_rfc3339("2026-09-20T22:20:00Z"), Some(1789942800));
-    }
-
-    #[test]
-    fn honours_a_non_utc_offset() {
-        // Same instant, written in Asia/Saigon.
-        assert_eq!(parse_rfc3339("2026-09-21T05:20:00+07:00"), Some(1789942800));
-    }
-
-    #[test]
-    fn out_of_range_fields_are_refused_not_normalised() {
-        for bad in [
-            "2026-13-01T00:00:00Z",
-            "2026-00-01T00:00:00Z",
-            "2026-01-32T00:00:00Z",
-            "2026-01-00T00:00:00Z",
-            "2026-01-01T24:00:00Z",
-            "2026-01-01T00:60:00Z",
-            "2026-01-01T00:00:61Z",
-            "2026-13-40T25:99:99Z",
-        ] {
-            assert_eq!(parse_rfc3339(bad), None, "{bad} should be refused");
-        }
-        assert!(
-            parse_rfc3339("2026-12-31T23:59:60Z").is_some(),
-            "a leap second is real"
-        );
+        assert_eq!(parse("2026-09-20T22:20:00.095287+00:00"), Some(1789942800));
+        assert_eq!(parse("2026-09-27T02:00:00.095306+00:00"), Some(1790474400));
+        assert_eq!(parse("2026-09-20T22:20:00Z"), Some(1789942800));
+        assert_eq!(parse("2026-09-21T05:20:00+07:00"), Some(1789942800));
     }
 
     #[test]
@@ -166,19 +57,28 @@ mod tests {
             "",
             "not a date",
             "2026-09-20",
+            "2026-09-20T22:20:00",
             "2026/09/20T22:20:00Z",
-            "2026-09-20T22:20",
+            "2026-13-01T00:00:00Z",
+            "2026-01-32T00:00:00Z",
+            "2026-01-01T24:00:00Z",
         ] {
-            assert_eq!(parse_rfc3339(bad), None, "should refuse {bad:?}");
+            assert_eq!(parse(bad), None, "should refuse {bad:?}");
         }
     }
 
     #[test]
-    fn humanises_durations() {
-        assert_eq!(humanise_until(100, 100), "now");
-        assert_eq!(humanise_until(100, 200), "now");
-        assert_eq!(humanise_until(60 * 47, 0), "in 47m");
-        assert_eq!(humanise_until(3600 * 2 + 60 * 14, 0), "in 2h 14m");
-        assert_eq!(humanise_until(86_400 * 6 + 3600 * 4, 0), "in 6d 4h");
+    fn spans_read_at_a_glance() {
+        assert_eq!(span(-5), "<1m");
+        assert_eq!(span(59), "<1m");
+        assert_eq!(span(60 * 47), "47m");
+        assert_eq!(span(3600 * 2 + 60 * 5), "2h 05m");
+        assert_eq!(span(86_400 * 6 + 3600 * 4 + 59), "6d 4h");
+    }
+
+    #[test]
+    fn formats_in_the_local_zone() {
+        assert_eq!(local(0, "%Y").len(), 4);
+        assert_eq!(local(i64::MAX, "%Y"), "", "out of range is empty, not a panic");
     }
 }

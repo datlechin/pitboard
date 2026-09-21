@@ -6,7 +6,7 @@
 //! both.
 
 use crate::error::{Error, Result};
-use crate::{atomic, hex, home, time};
+use crate::{atomic, home, time};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::path::PathBuf;
@@ -120,7 +120,7 @@ impl State {
 pub fn machine_id() -> String {
     use sha2::{Digest, Sha256};
     match machine_uid::get() {
-        Ok(raw) => hex::encode(&Sha256::digest(raw.as_bytes())),
+        Ok(raw) => hex::encode(Sha256::digest(raw.as_bytes())),
         Err(_) => String::from("unknown"),
     }
 }
