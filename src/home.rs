@@ -1,16 +1,12 @@
-//! pitboard's own directory: the account index, the journal, the lock, and on Linux the
-//! parked credentials themselves.
-//!
-//! It is forced to 0700 rather than left to the umask. On a shared Linux machine the park
-//! filenames contain account identifiers, so listing the directory is itself a leak.
+//! pitboard's own directory, held at 0700 rather than left to the umask: park file names
+//! contain account identifiers, so on a shared machine listing it would be a leak.
 
 use crate::error::{Error, Result};
 use std::io;
 use std::path::{Path, PathBuf};
 
-/// Directory names that mean a sync client will copy this to another machine. A parked
-/// credential belongs to exactly one machine: presenting a refresh token another machine
-/// has since rotated destroys the login for both.
+/// Directory names that mean a sync client would copy this to another machine, where a
+/// parked login must never go.
 const SYNCED: [&str; 5] = [
     "Dropbox",
     "Google Drive",
@@ -34,7 +30,6 @@ pub fn ensure() -> io::Result<PathBuf> {
     Ok(path)
 }
 
-/// 0700, explicitly, on the directory itself.
 pub fn restrict(path: &Path) -> io::Result<()> {
     use std::os::unix::fs::PermissionsExt;
     std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700))

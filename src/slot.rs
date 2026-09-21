@@ -1,9 +1,6 @@
-//! Credential slot naming, transcribed from Claude Code's own derivation.
-//!
-//! Claude Code selects which credential a process sees by hashing a directory path
-//! into the keychain service name. Everything in this module is a transcription of
-//! that behaviour; nothing here is our own invention. If Claude Code changes it,
-//! this is the only file that has to change.
+//! Credential slot naming, transcribed from Claude Code: it chooses the keychain service a
+//! process sees by hashing a directory path. If Claude Code changes that, only this file
+//! changes.
 
 use crate::hex;
 use sha2::{Digest, Sha256};

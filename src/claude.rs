@@ -1,6 +1,4 @@
-//! Where Claude Code keeps things, and who it currently thinks you are.
-//!
-//! Read-only. Nothing in this module writes.
+//! Where Claude Code keeps things, and who it currently thinks is signed in. Read-only.
 
 use crate::error::{Error, Result};
 use crate::slot;
@@ -13,29 +11,16 @@ fn home() -> PathBuf {
         .unwrap_or_default()
 }
 
-/// `CLAUDE_CONFIG_DIR` as Claude Code reads it: with `||`, so an empty value is falsy
-/// and means unset.
+/// Read with `||`: an empty value means unset.
 fn config_dir_env() -> Option<String> {
-    falsy_string(std::env::var("CLAUDE_CONFIG_DIR").ok())
+    std::env::var("CLAUDE_CONFIG_DIR")
+        .ok()
+        .filter(|v| !v.is_empty())
 }
 
-/// `||` semantics: an empty value is falsy and means unset.
-fn falsy_string(raw: Option<String>) -> Option<String> {
-    raw.filter(|v| !v.is_empty())
-}
-
-/// `!== undefined` semantics: an empty value is *set*, and pins the default credential
-/// slot while still selecting an empty storage directory. The two variables genuinely
-/// differ, and collapsing them sends pitboard at a slot that cannot exist.
-fn defined_string(raw: Option<String>) -> Option<String> {
-    raw
-}
-
-/// `CLAUDE_SECURESTORAGE_CONFIG_DIR` as Claude Code reads it: with `!== undefined`, so an
-/// empty value is *set*, and pins the default slot while still selecting an empty storage
-/// directory. The two variables genuinely differ here.
+/// Read with `!== undefined`: an empty value is set.
 fn secure_storage_env() -> Option<String> {
-    defined_string(std::env::var("CLAUDE_SECURESTORAGE_CONFIG_DIR").ok())
+    std::env::var("CLAUDE_SECURESTORAGE_CONFIG_DIR").ok()
 }
 
 pub fn config_dir() -> PathBuf {
@@ -44,9 +29,8 @@ pub fn config_dir() -> PathBuf {
         .unwrap_or_else(|| home().join(".claude"))
 }
 
-/// Claude Code prefers a legacy `<config dir>/.config.json` when one exists, and
-/// otherwise uses `<$CLAUDE_CONFIG_DIR or $HOME>/.claude.json`. Note the base differs
-/// between the two branches — that asymmetry is Claude Code's, not a typo here.
+/// A legacy `<config dir>/.config.json` wins when present; otherwise
+/// `<$CLAUDE_CONFIG_DIR or $HOME>/.claude.json`. The differing base is Claude Code's.
 pub fn config_file() -> PathBuf {
     let legacy = config_dir().join(".config.json");
     if legacy.is_file() {
@@ -76,14 +60,16 @@ fn storage_dir_from(secure: Option<String>, home: &std::path::Path, config_dir: 
     }
 }
 
-/// Whether this process reads the default, unsuffixed credential slot.
-///
-/// An explicitly empty `CLAUDE_SECURESTORAGE_CONFIG_DIR` pins the default slot even
-/// when `CLAUDE_CONFIG_DIR` is set; that asymmetry is deliberate in Claude Code.
+/// Whether this process reads the unsuffixed slot. An empty
+/// `CLAUDE_SECURESTORAGE_CONFIG_DIR` pins it even when `CLAUDE_CONFIG_DIR` is set.
 pub fn is_default_slot() -> bool {
-    match secure_storage_env() {
+    is_default_slot_from(secure_storage_env().as_deref(), config_dir_env().as_deref())
+}
+
+fn is_default_slot_from(secure: Option<&str>, config_dir: Option<&str>) -> bool {
+    match secure {
         Some(v) => v.is_empty(),
-        None => config_dir_env().is_none(),
+        None => config_dir.is_none(),
     }
 }
 
@@ -111,8 +97,8 @@ pub fn load_config() -> Result<Value> {
     serde_json::from_str(&raw).map_err(|source| Error::ClaudeConfigNotJson { path, source })
 }
 
-/// Who Claude Code currently believes is signed in. This is a cache it maintains,
-/// not the credential itself, so it can legitimately disagree with the store.
+/// Who Claude Code's config says is signed in. A cache, refreshed about once a day, so it
+/// can disagree with the credential; ask `api::owner` when it matters.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Identity {
     pub email: String,
@@ -140,27 +126,17 @@ pub fn identity(config: &Value) -> Option<Identity> {
 mod tests {
     use super::*;
 
-    /// Claude Code reads its two directory variables with different rules. These are the
-    /// rules themselves, tested without a process or a keychain in sight.
     #[test]
-    fn an_empty_config_dir_means_unset_but_an_empty_storage_dir_does_not() {
-        assert_eq!(falsy_string(None), None);
-        assert_eq!(falsy_string(Some(String::new())), None);
-        assert_eq!(falsy_string(Some("/x".into())), Some("/x".into()));
-
-        assert_eq!(defined_string(None), None);
-        assert_eq!(
-            defined_string(Some(String::new())),
-            Some(String::new()),
-            "an empty storage dir is set, and pins the default slot"
-        );
+    fn an_empty_storage_dir_pins_the_default_slot_even_with_a_config_dir() {
+        assert!(is_default_slot_from(None, None));
+        assert!(!is_default_slot_from(None, Some("/cfg")));
+        assert!(is_default_slot_from(Some(""), Some("/cfg")));
+        assert!(!is_default_slot_from(Some("/elsewhere"), None));
     }
 
-    /// Transcribed from Claude Code's own function:
-    /// `if (n !== undefined) return (n || join(homedir(), ".claude")).normalize("NFC")`.
-    /// An empty value is defined, so it wins over CLAUDE_CONFIG_DIR, but it is also falsy,
-    /// so it means `~/.claude` — never the empty string, which would make every credential
-    /// and lock path relative to wherever pitboard happened to be run from.
+    /// Claude Code: `if (n !== undefined) return (n || join(homedir(), ".claude"))`. The
+    /// empty string would make every credential and lock path relative to the working
+    /// directory.
     #[test]
     fn an_empty_storage_dir_means_the_default_directory_not_the_current_one() {
         let home = std::path::Path::new("/home/x");

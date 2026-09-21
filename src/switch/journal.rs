@@ -1,10 +1,9 @@
 //! Finishing what an interrupted run started.
 //!
-//! A switch writes this record before it creates the park item the record names, so a run
-//! that dies leaves a trail. Whether the install landed is decided by asking Anthropic who
-//! the live credential belongs to: that answer survives Claude Code rotating the token,
-//! where comparing token fingerprints does not. When any fact cannot be read, recovery
-//! changes nothing and keeps the record — could-not-tell is never treated as nothing-there.
+//! A switch writes this record before creating the park item it names. Whether an install
+//! landed is decided by asking Anthropic who owns the live credential, an answer that
+//! survives Claude Code rotating the token. When any fact cannot be read, recovery changes
+//! nothing and keeps the record.
 
 use super::{Error, Result, identify};
 use crate::state::{Generation, State};
@@ -271,8 +270,7 @@ mod tests {
     }
 
     /// Killed after the install, before state recorded it. Claude Code may already have
-    /// rotated the installed token, which is why landing is decided by who owns the live
-    /// credential rather than by comparing fingerprints.
+    /// rotated the token.
     #[test]
     fn a_landed_install_marks_exactly_the_copy_it_consumed() {
         let s = state(vec![account("from", &[PARK]), account("to", &[INCOMING])]);

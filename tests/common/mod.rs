@@ -1,8 +1,8 @@
-//! Shared guards for tests that touch the real keychain.
+//! The harness shared by the integration tests: a synthetic Claude Code installation, a
+//! stand-in for Anthropic, and the guard that keeps every test away from a real login.
 //!
-//! Getting this wrong costs the user a login, so the rule is mandatory rather than
-//! remembered: every service name a test writes must be derived from that test's own
-//! identity, which Rust already forbids two tests in a module from sharing.
+//! Every service name a test writes is derived from that test's own name, which Rust
+//! already forbids two tests in a module from sharing.
 
 // Compiled separately into every test binary that declares `mod common`, so a binary that
 // does not use one of these helpers would otherwise warn about it.
@@ -52,8 +52,6 @@ pub struct Env {
     mocks: std::cell::RefCell<Vec<mockito::Mock>>,
 }
 
-/// Distinct per test, because park item names contain the account uuid and the tests
-/// share one keychain.
 pub fn state_accounts(env: &Env) -> Vec<serde_json::Value> {
     env.state()["accounts"].as_array().unwrap().clone()
 }

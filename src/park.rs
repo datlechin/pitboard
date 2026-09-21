@@ -1,8 +1,5 @@
-//! Where an account's credential waits while another one is signed in.
-//!
-//! Generations are append-only. No failure path deletes one: if a write goes wrong the
-//! previous generation is still there. Pruning runs only after the state that stopped
-//! referencing a generation is durable.
+//! Where an account's login waits while another is signed in. Generations are append-only
+//! and no failure path deletes one.
 
 use crate::error::{Error, Result};
 use crate::state::{Account, Generation, retained};
@@ -13,12 +10,9 @@ pub fn service_name(account_uuid: &str, at_millis: i64) -> String {
     format!("pitboard-park-{account_uuid}-{at_millis}")
 }
 
-/// Claim a name no generation occupies, before anything is written to it.
-///
-/// Reserving separately from writing lets the caller record its intent first, so a run
-/// that dies mid-park leaves a name that recovery can go looking for. Two parks of one
-/// account can land in the same millisecond, and reusing a name would destroy the
-/// generation already there.
+/// Claim a free name before writing to it, so the caller can record it first and recovery
+/// can find a park left by a run that died. Reusing a name would destroy the generation
+/// already there.
 pub fn reserve(account_uuid: &str) -> Result<String> {
     let start = time::now_millis();
     for offset in 0..1_000 {
@@ -56,8 +50,7 @@ pub fn fingerprint_of(oauth: &Value) -> String {
         .unwrap_or_default()
 }
 
-/// The label is carried in so a failure names the account the user knows, rather than the
-/// keychain item they have never seen.
+/// Takes the label so a failure names the account, not an item the user has never seen.
 pub fn load(label: &str, generation: &Generation) -> Result<Value> {
     let raw =
         store::vault_read(&generation.service)?.ok_or_else(|| Error::ParkedCredentialMissing {
@@ -78,11 +71,9 @@ pub fn load(label: &str, generation: &Generation) -> Result<Value> {
     Ok(value)
 }
 
-/// Remove generations past the retention window from an account, and return their items.
-///
-/// Nothing is deleted here. The caller saves state first and deletes these afterwards, so
-/// durable state never refers to an item that no longer exists; the worst a crash between
-/// the two can leave is an item nothing refers to.
+/// Drop generations past retention from the account and return their items, deleting
+/// nothing. The caller saves state first, so no durable state ever refers to a deleted
+/// item; a crash in between leaves only an item nothing refers to.
 pub fn retire(account: &mut Account) -> Vec<String> {
     let keep: Vec<String> = retained(&account.generations)
         .iter()
@@ -147,8 +138,7 @@ mod tests {
         );
     }
 
-    /// A login with no refresh token can never be restored, and its fingerprint is the empty
-    /// string, which would make every later "is this the copy I parked" check pass vacuously.
+    /// Its fingerprint would be the empty string, which every later check would match.
     #[test]
     fn a_credential_with_no_refresh_token_is_refused_rather_than_parked() {
         let refused = store_at(

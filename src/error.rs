@@ -1,15 +1,5 @@
-//! Every way pitboard can fail, as something a caller can act on.
-//!
-//! One enum for the whole crate. The two mechanism enums it wraps, `store::Error` and
-//! `lock::LockError`, model reusable machinery and keep their own identity; everything
-//! else is a one-off rule reached from one or two places, where a per-module enum would
-//! be indirection with no payoff.
-//!
-//! Every variant carries three things a user interface needs: a message that names the
-//! cause and an action, a stable code a program can branch on, and an exit code. Exit 3
-//! means an assumption about Claude Code no longer holds — that is a different kind of
-//! answer from "you asked for a label that does not exist", and collapsing the two was
-//! what made the documented exit contract meaningless.
+//! Every way pitboard can fail. Each variant has a message naming the cause and an action,
+//! a stable code for programs to branch on, and an exit code.
 
 use std::path::PathBuf;
 
@@ -152,13 +142,10 @@ pub enum Error {
         source: std::io::Error,
     },
 
-    /// The login moved but the config still names the previous account. Claude Code only
-    /// refetches its profile once a day, so this is not self-correcting; pitboard repairs it
-    /// on the next command it runs.
+    /// Claude Code refetches its profile only once a day, so this does not correct itself.
     #[error(
         "the login moved, but Claude Code's config at {path} could not be updated ({detail}). \
-         Claude Code may show the previous account's name until pitboard repairs it on its \
-         next run."
+         Claude Code may show the previous account's name until the next switch."
     )]
     ConfigWriteFailed { path: PathBuf, detail: String },
 
@@ -269,8 +256,9 @@ impl Error {
         }
     }
 
-    /// 1 for an ordinary failure, 3 when something pitboard believes about Claude Code
-    /// has stopped being true.
+    /// 1 when a request could not be met; 3 when a login or Claude Code's files are in a
+    /// state pitboard cannot safely act on — an unexpected format, or a login that could not
+    /// be put back.
     pub fn exit_code(&self) -> u8 {
         use Error::*;
         match self {

@@ -1,9 +1,6 @@
-//! One durable write, used everywhere a file has to survive being interrupted.
-//!
-//! Three hand-rolled copies of this existed and disagreed: only one set a mode, only one
-//! fsynced, so the account index ended up more readable than the credential file for no
-//! reason. Syncing the directory after the rename matters on ext4 and xfs, which can lose
-//! the rename across a crash even when the contents were already synced.
+//! The one durable write, for every file that must survive an interrupted run. The directory
+//! is synced after the rename because ext4 and xfs can lose a rename across a crash even
+//! when the contents were synced.
 
 use std::fs::{File, OpenOptions};
 use std::io::{self, Write};
@@ -34,10 +31,9 @@ pub fn write(path: &Path, contents: &[u8], perms: Perms) -> io::Result<()> {
     ));
 
     let result = (|| -> io::Result<()> {
-        // Created private, then given the existing file's mode if asked: a moment spent too
-        // closed is safe, a moment spent too open is not. A symlink's own mode says nothing
-        // about the file it names, and the rename replaces the link rather than following
-        // it, as Claude Code's own writes do.
+        // Created private and given the existing mode afterwards: too closed for a moment is
+        // safe, too open is not. A symlink's own mode says nothing about its target, and the
+        // rename replaces the link rather than following it, as Claude Code's writes do.
         let mut file = OpenOptions::new()
             .write(true)
             .create_new(true)

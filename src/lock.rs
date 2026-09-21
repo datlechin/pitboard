@@ -1,13 +1,7 @@
-//! The lock Claude Code takes around every credential write.
-//!
-//! Claude Code guards `<storage dir>/.storage-write` with proper-lockfile, whose lock is
-//! a directory created by `mkdir`, kept alive by touching its mtime, and released by
-//! `rmdir`. A lock older than `STALE` is treated as abandoned. Taking the same lock the
-//! same way is the only thing that makes our writes mutually exclusive with Claude Code's.
-//!
-//! A process killed with SIGKILL leaves the directory behind; the staleness rule reclaims
-//! it. Our critical section is a few milliseconds, so that window is not worth a signal
-//! handler.
+//! The lock Claude Code takes around every credential write: proper-lockfile's, a directory
+//! created by `mkdir`, kept alive by touching its mtime, released by `rmdir`, and treated as
+//! abandoned once older than `STALE`. Only the same lock taken the same way excludes Claude
+//! Code. A process killed outright leaves the directory behind for staleness to reclaim.
 
 use std::io;
 use std::path::{Path, PathBuf};
@@ -29,8 +23,7 @@ pub enum LockError {
     Io(#[source] io::Error),
 }
 
-/// Set to true and signalled to stop the heartbeat; the condition variable is what makes
-/// release immediate instead of waiting out the current interval.
+/// Signalled to stop the heartbeat, so release does not wait out the current interval.
 type Stop = Arc<(Mutex<bool>, Condvar)>;
 
 impl LockError {
@@ -69,7 +62,7 @@ fn touch(path: &Path) -> io::Result<()> {
     filetime::set_file_mtime(path, filetime::FileTime::now())
 }
 
-/// Take the lock guarding `target`, blocking for up to about six seconds.
+/// Take the lock guarding `target`, waiting up to about seven and a half seconds.
 pub fn acquire(target: &Path) -> Result<Guard, LockError> {
     let path = PathBuf::from(format!("{}.lock", target.display()));
     if let Some(parent) = path.parent() {
@@ -172,8 +165,6 @@ mod tests {
         let _g = acquire(&t).expect("a stale lock must be reclaimable");
     }
 
-    /// Dropping must not wait out the current heartbeat interval. The previous design
-    /// slept in slices and could hold the lock up to a slice longer than needed.
     #[test]
     fn releasing_is_immediate() {
         let t = scratch("release");
@@ -187,8 +178,7 @@ mod tests {
         assert!(!PathBuf::from(format!("{}.lock", t.display())).exists());
     }
 
-    /// Ages the lock past staleness first. A test that merely checks the lock is fresh
-    /// passes identically when no heartbeat is running at all.
+    /// Aged past staleness first, so only a live heartbeat can bring it back.
     #[test]
     fn the_heartbeat_rescues_a_lock_that_has_aged_out() {
         let t = scratch("beat");

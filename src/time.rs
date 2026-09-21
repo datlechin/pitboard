@@ -1,19 +1,14 @@
-//! The narrow slice of time handling this tool needs.
-//!
-//! We parse one fixed shape (RFC 3339 as the usage API emits it) and format through
-//! the platform's own `strftime`, rather than pulling in a date library for two calls.
+//! RFC 3339 parsing for the one shape the usage API emits, and local formatting through the
+//! platform's `strftime`, rather than a date library for three calls.
 
 use std::ffi::CStr;
 
-/// Seconds since the epoch, now.
 pub fn now() -> i64 {
     since_epoch().as_secs() as i64
 }
 
-/// Milliseconds since the epoch. Park generations are named with this, because two
-/// parks of one account inside the same second must not resolve to the same name.
-/// Park generations are named with this: two parks of one account inside the same second
-/// must not resolve to the same name.
+/// Park generations are named with this: two parks of one account in the same second must
+/// not collide.
 pub fn now_millis() -> i64 {
     since_epoch().as_millis() as i64
 }
@@ -26,8 +21,7 @@ fn since_epoch() -> std::time::Duration {
 
 /// Parse `2026-09-20T22:20:00.095287+00:00` (and the `Z` spelling) to epoch seconds.
 ///
-/// Returns `None` rather than guessing when the shape is not what we expect: a wrong
-/// number rendered confidently is worse than no number.
+/// `None` rather than a guess when the shape is unexpected.
 pub fn parse_rfc3339(s: &str) -> Option<i64> {
     let b = s.as_bytes();
     if b.len() < 19
@@ -39,8 +33,7 @@ pub fn parse_rfc3339(s: &str) -> Option<i64> {
     {
         return None;
     }
-    // `timegm` normalises out-of-range fields rather than rejecting them, so each one is
-    // checked here: a confidently wrong timestamp is worse than no timestamp.
+    // `timegm` normalises out-of-range fields instead of rejecting them, so each is checked.
     let field = |r: std::ops::Range<usize>, min: i32, max: i32| -> Option<i32> {
         let v = s.get(r)?.parse::<i32>().ok()?;
         (min..=max).contains(&v).then_some(v)
@@ -82,17 +75,14 @@ pub fn parse_rfc3339(s: &str) -> Option<i64> {
     Some(utc as i64 - offset)
 }
 
-/// Format an epoch as local time with the given `strftime` pattern.
 pub fn format_local(epoch: i64, pattern: &str) -> String {
     let t = epoch as libc::time_t;
     // SAFETY: as above, all-zero is a valid `tm`.
     let mut tm: libc::tm = unsafe { std::mem::zeroed() };
     let mut buf = [0u8; 128];
     let pat = format!("{pattern}\0");
-    // SAFETY: `t` and `tm` are live locals; `pat` is NUL-terminated because it was built
-    // with a trailing `\0`; `strftime` is told the buffer's true length and writes at most
-    // that many bytes, returning 0 rather than overrunning when the result would not fit,
-    // and on success the buffer is NUL-terminated within those bytes.
+    // SAFETY: `t` and `tm` are live locals, `pat` ends in `\0`, and `strftime` is given the
+    // buffer's true length, writes at most that many bytes, and NUL-terminates on success.
     unsafe {
         if libc::localtime_r(&t, &mut tm).is_null() {
             return String::new();
@@ -112,7 +102,7 @@ pub fn format_local(epoch: i64, pattern: &str) -> String {
     }
 }
 
-/// "in 6d 4h", "in 2h 14m", "in 47m", "now" — the only phrasing the UI needs.
+/// "in 6d 4h", "in 2h 14m", "in 47m" or "now".
 pub fn humanise_until(target: i64, from: i64) -> String {
     let d = target - from;
     if d <= 0 {
@@ -150,8 +140,6 @@ mod tests {
         assert_eq!(parse_rfc3339("2026-09-21T05:20:00+07:00"), Some(1789942800));
     }
 
-    /// `timegm` normalises out-of-range fields instead of rejecting them, so without an
-    /// explicit range check a nonsense timestamp silently becomes a confident wrong answer.
     #[test]
     fn out_of_range_fields_are_refused_not_normalised() {
         for bad in [

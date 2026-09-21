@@ -1,8 +1,5 @@
-//! Where pitboard parks credentials on platforms with no keychain.
-//!
-//! One file per parked generation, inside pitboard's own directory, which `home::ensure`
-//! holds at 0700: the file names contain account identifiers, so on a shared machine
-//! listing the directory would itself be a leak.
+//! Where pitboard parks credentials on platforms with no keychain: one 0600 file per parked
+//! generation, inside pitboard's own 0700 directory.
 
 use super::{Backend, Error, RawStore};
 use crate::{atomic, home};

@@ -1,9 +1,6 @@
-//! One normalised view of "how much is left", whatever source it came from.
-//!
-//! Claude Code exposes usage in three shapes: a `limits[]` array, a pair of named
-//! `five_hour`/`seven_day` objects, and the `rate_limits` block on the status line's
-//! stdin payload. They disagree in detail, so everything is normalised at its boundary
-//! and a value that fails to normalise is dropped rather than drawn.
+//! One view of "how much is left", whatever shape it arrived in. Usage comes as a
+//! `limits[]` array or as named `five_hour`/`seven_day` objects; both are normalised at the
+//! boundary, and a value that fails to normalise is dropped rather than drawn.
 
 use crate::time;
 use serde_json::Value;
@@ -35,30 +32,6 @@ pub struct Snapshot {
     pub observed_at: Option<i64>,
     pub account_uuid: Option<String>,
     pub source: Source,
-}
-
-impl Snapshot {
-    /// The window a user is actually about to hit.
-    ///
-    /// Not yet called outside tests: the status line in M4 is its consumer. The test
-    /// below pins the behaviour now so the measured insight is not lost in the meantime.
-    #[allow(dead_code)]
-    ///
-    /// Deliberately the highest percentage rather than whichever window carries
-    /// `is_active`: on a real machine `session` was is_active at 46% while `weekly_all`
-    /// sat at 44% and is_active false, so trusting the flag reports the wrong number.
-    pub fn binding(&self) -> Option<&Window> {
-        self.windows
-            .iter()
-            .max_by(|a, b| a.percent.total_cmp(&b.percent))
-    }
-
-    #[allow(dead_code)]
-    pub fn window(&self, kind: &str) -> Option<&Window> {
-        self.windows
-            .iter()
-            .find(|w| w.kind == kind && w.scope.is_none())
-    }
 }
 
 fn percent(v: &Value) -> Option<f64> {
@@ -97,12 +70,7 @@ fn window_from_named(kind: &str, v: &Value) -> Option<Window> {
     })
 }
 
-/// Read `cachedUsageUtilization` out of Claude Code's config.
-///
-/// The cache carries the `accountUuid` it was measured for, so a caller can tell
-/// whether it belongs to the account currently signed in without writing anything.
-/// The windows in a usage object. The API answer and Claude Code's cached copy of it share
-/// this shape, so one reader serves both.
+/// The API answer and Claude Code's cached copy of it share this shape.
 fn windows_of(u: &Value) -> Vec<Window> {
     let mut windows: Vec<Window> = u
         .get("limits")
@@ -129,6 +97,8 @@ pub fn from_usage_object(u: &Value, observed_at: i64) -> Snapshot {
     }
 }
 
+/// Claude Code's own cache. It records the account it was measured for, so a reading for
+/// another account can be told apart and ignored.
 pub fn from_config_cache(config: &Value) -> Option<Snapshot> {
     let c = config.get("cachedUsageUtilization")?;
     Some(Snapshot {
@@ -145,7 +115,6 @@ pub fn from_config_cache(config: &Value) -> Option<Snapshot> {
     })
 }
 
-/// A ten-cell bar. Deliberately plain: it has to survive any terminal.
 pub fn bar(percent: f64, width: usize) -> String {
     let filled = ((percent / 100.0) * width as f64)
         .round()
@@ -198,15 +167,6 @@ mod tests {
     }
 
     #[test]
-    fn binding_window_is_the_highest_not_the_flagged_one() {
-        // `session` is the flagged one here but `weekly_all` is what matters at 91%.
-        let mut c = real_config();
-        c["cachedUsageUtilization"]["utilization"]["limits"][1]["percent"] = serde_json::json!(91);
-        let s = from_config_cache(&c).unwrap();
-        assert_eq!(s.binding().unwrap().kind, "weekly_all");
-    }
-
-    #[test]
     fn falls_back_to_the_named_windows_when_limits_is_missing() {
         let mut c = real_config();
         c["cachedUsageUtilization"]["utilization"]
@@ -215,7 +175,8 @@ mod tests {
             .remove("limits");
         let s = from_config_cache(&c).unwrap();
         assert_eq!(s.windows.len(), 2);
-        assert_eq!(s.window("five_hour").unwrap().percent, 62.0);
+        assert_eq!(s.windows[0].kind, "five_hour");
+        assert_eq!(s.windows[0].percent, 62.0);
     }
 
     #[test]

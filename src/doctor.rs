@@ -1,13 +1,6 @@
-//! `pitboard doctor` — prove, on this machine right now, that what this tool believes
-//! about Claude Code is still true.
-//!
-//! This exists because the tool depends on behaviour Anthropic never documented. The
-//! honest response to that is not to hope, but to check every assumption on every run and
-//! say plainly which one broke.
-//!
-//! Gathering is separated from judging so the judging can be tested. A check that is a
-//! pure function of constants proves nothing about the machine it runs on; there used to
-//! be one here, and it could never fail.
+//! `pitboard doctor`: check, on this machine, that what pitboard relies on about Claude Code
+//! still holds, and say which assumption broke when one has. Gathering is kept apart from
+//! judging so every judgement can be tested.
 
 use crate::error::Error;
 use crate::{claude, home, slot, store, usage};
@@ -31,7 +24,7 @@ pub struct Check {
     pub advice: String,
 }
 
-/// Everything read from the machine, so that judging it touches nothing.
+/// Everything read from the machine, so judging it touches nothing.
 pub struct Facts {
     pub security_tool: Option<String>,
     pub config_path: PathBuf,
@@ -47,6 +40,8 @@ pub struct Facts {
     pub home: PathBuf,
     pub home_mode: Option<u32>,
     pub machine_id_known: bool,
+    /// `CLAUDE_CODE_HOVER_REST`, which switches on the successor credential backend.
+    pub hover_rest_env: bool,
     pub now: i64,
 }
 
@@ -69,6 +64,8 @@ pub fn gather() -> Facts {
         home: home::dir(),
         home_mode: mode_of(&home::dir()),
         machine_id_known: crate::state::machine_id() != "unknown",
+        hover_rest_env: std::env::var("CLAUDE_CODE_HOVER_REST")
+            .is_ok_and(|v| v == "1" || v == "true"),
         service,
         now: crate::time::now(),
     }
@@ -332,10 +329,9 @@ fn judge_credential(facts: &Facts) -> Check {
     }
 }
 
-/// The successor credential backend. A stub in every shipped build so far, but compiled in
-/// and switched on from the server, so it is worth watching for.
+/// Claude Code's successor credential backend: a stub in every build so far, but compiled
+/// in and switched on from the server.
 fn judge_storage_v5(facts: &Facts) -> Check {
-    let env_on = std::env::var("CLAUDE_CODE_HOVER_REST").is_ok_and(|v| v == "1" || v == "true");
     let flag_on = facts
         .config
         .as_ref()
@@ -344,7 +340,7 @@ fn judge_storage_v5(facts: &Facts) -> Check {
         .and_then(|f| f.get("tengu_hover_rest"))
         .and_then(Value::as_bool)
         .unwrap_or(false);
-    if env_on || flag_on {
+    if facts.hover_rest_env || flag_on {
         warn(
             "storage_v5",
             "storage v5",
@@ -422,6 +418,7 @@ mod tests {
             home: PathBuf::from("/home/x/.pitboard"),
             home_mode: Some(0o700),
             machine_id_known: true,
+            hover_rest_env: false,
             now: 1_789_935_600,
         }
     }
@@ -480,6 +477,14 @@ mod tests {
     fn the_successor_backend_is_flagged_when_the_server_turns_it_on() {
         let mut f = facts();
         f.config = Ok(json!({"cachedGrowthBookFeatures": {"tengu_hover_rest": true}}));
+        assert_eq!(check(&evaluate(&f), "storage_v5").level, Level::Warn);
+    }
+
+    #[test]
+    fn the_successor_backend_is_flagged_when_the_environment_turns_it_on() {
+        let mut f = facts();
+        assert_eq!(check(&evaluate(&f), "storage_v5").level, Level::Ok);
+        f.hover_rest_env = true;
         assert_eq!(check(&evaluate(&f), "storage_v5").level, Level::Warn);
     }
 

@@ -1,4 +1,4 @@
-//! The plaintext backend Claude Code falls back to on macOS, and uses exclusively on Linux.
+//! The plaintext backend Claude Code falls back to on macOS and always uses elsewhere.
 
 use super::{Backend, Error, RawStore};
 use crate::atomic;

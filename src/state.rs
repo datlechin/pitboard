@@ -1,9 +1,9 @@
-//! pitboard's own on-disk state: which accounts are known and where each one is parked.
+//! Which accounts pitboard knows and where each one is parked. No secrets: the logins stay
+//! in the keychain or vault.
 //!
-//! Secrets are never here. This file holds an index and the identity Claude Code itself
-//! recorded; the credentials stay in the keychain. It is stamped with the machine that
-//! wrote it because a parked credential belongs to exactly one machine: presenting a
-//! refresh token that another machine has since rotated destroys the login for both.
+//! Stamped with the machine that wrote it, because a parked login belongs to exactly one
+//! machine: presenting a refresh token another machine has since rotated ends the login on
+//! both.
 
 use crate::error::{Error, Result};
 use crate::{atomic, hex, home, time};
@@ -17,12 +17,9 @@ pub struct Generation {
     pub service: String,
     pub parked_at: i64,
     pub refresh_fingerprint: String,
-    /// When these bytes were last installed into the live slot.
-    ///
-    /// Claude Code rotates the refresh token in place from that moment on, so the parked
-    /// copy is superseded. Presenting a superseded token returns invalid_grant, and Claude
-    /// Code answers that by zeroing the live credential. A consumed generation is therefore
-    /// never restored again.
+    /// When this copy stopped being restorable: it was installed, or retired. Claude Code
+    /// rotates the token from then on, and presenting a superseded one makes it zero the
+    /// live credential.
     #[serde(default)]
     pub installed_at: Option<i64>,
 }
@@ -33,8 +30,8 @@ pub struct Account {
     pub account_uuid: String,
     pub email: String,
     pub organization_uuid: String,
-    /// Claude Code's own `oauthAccount` object, minus `profileFetchedAt` so that
-    /// restoring it makes Claude Code refetch the profile rather than trust our copy.
+    /// Written into Claude Code's config on switching here. Only what Anthropic confirmed,
+    /// so Claude Code fetches the rest of its profile itself.
     pub oauth_account: Value,
     pub generations: Vec<Generation>,
 }
@@ -114,12 +111,7 @@ impl State {
     }
 }
 
-/// A stable identifier for this machine, from the platform rather than anything we invent.
-/// A stable identifier for this machine, hashed so the raw platform id never lands in a
-/// file pitboard writes.
-///
-/// `gethostuuid` is an Apple-only symbol, so reaching for it directly meant this module
-/// could not compile anywhere else.
+/// Hashed, so the raw platform identifier never lands in a file pitboard writes.
 pub fn machine_id() -> String {
     use sha2::{Digest, Sha256};
     match machine_uid::get() {

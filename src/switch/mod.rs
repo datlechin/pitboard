@@ -1,15 +1,10 @@
 //! Moving the signed-in identity from one enrolled account to another.
 //!
-//! The ordering here is the whole design. Two rules produce it.
-//!
-//! Everything that decides *which account the outgoing credential is filed under* is read
-//! under Claude Code's write lock, before the config is touched. Reading the identity
-//! earlier means filing a credential against a config that has since moved, which files
-//! one account's token as another's and destroys both.
-//!
-//! Additive writes are made durable before destructive ones. Attaching a parked generation
-//! cannot lose anything, so it is saved first; installing a credential is irreversible, so
-//! it is last. A run that dies in between leaves a superfluous copy, never a missing one.
+//! Two rules set the order of every step. Which account the outgoing login belongs to is
+//! asked of Anthropic, never read from Claude Code's config, which can lag the login by a
+//! day: a login filed under the wrong account takes both accounts with it. And additive
+//! writes become durable before destructive ones, so a run that dies midway leaves a spare
+//! copy, never a missing one.
 
 mod enroll;
 mod forget;
@@ -35,13 +30,12 @@ pub enum Outcome {
         from: String,
         to: String,
         parked: Generation,
-        /// The credential moved but the config did not. Claude Code repairs this on its
-        /// next call, so it is reported rather than treated as a failure.
+        /// The login moved but the config still names the previous account. Claude Code
+        /// does not correct that on its own; the next switch rewrites it.
         config_warning: Option<Error>,
         stuck_generations: Vec<String>,
     },
-    /// Asking for the account that is already signed in is not a failure: the state the
-    /// caller wanted already holds.
+    /// Not a failure: the state the caller asked for already holds.
     AlreadyActive { label: String },
 }
 
@@ -54,12 +48,9 @@ pub(super) fn oauth_of(document: &Value) -> Result<Value> {
         })
 }
 
-/// Makes two pitboard runs exclusive of each other.
-///
-/// This one is a kernel file lock, not the directory lock used around Claude Code's
-/// credential writes: that one must match Claude Code's own protocol, but between pitboard
-/// runs the operating system can hold the lock itself and release it when the process
-/// ends, so there is no staleness rule for two runs to both satisfy.
+/// Makes pitboard runs exclusive of each other. A kernel lock, unlike the directory lock
+/// Claude Code's protocol requires around its own writes: the operating system releases it
+/// when a process ends, so there is no staleness rule for two runs to both satisfy.
 pub(super) fn exclusive() -> Result<std::fs::File> {
     let path = home::dir().join("state.lock");
     let fail = |source| Error::RecoveryFailed {
@@ -77,8 +68,8 @@ pub(super) fn exclusive() -> Result<std::fs::File> {
     Ok(file)
 }
 
-/// Who a live access token belongs to. Refusing when this cannot be answered is the point:
-/// filing a credential under a guessed account is how two accounts are destroyed at once.
+/// Who a live access token belongs to. When this cannot be answered, nothing moves: a login
+/// filed under a guessed account takes two accounts with it.
 pub(super) fn identify(access_token: &str) -> Result<api::Owner> {
     api::owner(access_token).map_err(|e| match e {
         api::ApiError::Unauthorized => Error::SessionExpired,
@@ -111,8 +102,8 @@ pub fn switch(label: &str) -> Result<Outcome> {
             label: label.to_string(),
         })?;
 
-    // Identified before taking Claude Code's lock, so the round trip does not hold up its
-    // writes; confirmed again under the lock below.
+    // Asked before taking Claude Code's lock so the round trip does not hold up its writes,
+    // then confirmed under the lock.
     let service = claude::live_service();
     let live = store::read(&service)?.ok_or(Error::LiveCredentialAbsent)?;
     let identified_with = access_token(&live)?;
@@ -152,8 +143,8 @@ pub fn switch(label: &str) -> Result<Outcome> {
         return Err(Error::SignedInAccountChanged);
     }
 
-    // Settled before anything is parked, so a switch that could never be written changes
-    // nothing at all.
+    // Checked before anything is parked, so a switch that could never be written changes
+    // nothing.
     let next = splice(&before, &incoming)?;
     if store::too_large(&service, &next) {
         return Err(Error::LiveCredentialShapeUnexpected {
@@ -177,9 +168,8 @@ pub fn switch(label: &str) -> Result<Outcome> {
     state::save(&state)?;
 
     if let Err(e) = install(&service, &next, &before_raw, &outgoing_label, label) {
-        // The outgoing account is still signed in, so Claude Code keeps rotating the token
-        // this copy was taken from. It would go stale, and restoring a stale copy zeroes the
-        // login, so it is retired now rather than left to be picked later.
+        // The outgoing account is still signed in and Claude Code keeps rotating the token
+        // this copy holds. Restoring it once stale would zero the login, so it is retired.
         state.mark_installed(&outgoing_label, &parked.service, time::now());
         state::save(&state)?;
         let _ = std::fs::remove_file(journal_path());
@@ -234,11 +224,9 @@ fn install(service: &str, next: &str, before_raw: &str, from: &str, to: &str) ->
     )
 }
 
-/// Write the new login, and if that fails, leave the old one in place.
-///
-/// A failed write often changes nothing. Only when the slot no longer holds the previous
-/// login is a rollback needed, and only a rollback that also fails means the user has lost
-/// something — reporting that when nothing moved would send them to sign in for no reason.
+/// Write the new login, and if that fails, leave the old one in place. A failed write
+/// often changes nothing, so the slot is read back before deciding a rollback is needed,
+/// and only a rollback that also fails is reported as a lost login.
 fn install_with(
     write: impl Fn(&str) -> std::result::Result<(), store::Error>,
     read: impl Fn() -> std::result::Result<Option<String>, store::Error>,
@@ -268,10 +256,8 @@ fn install_with(
     }
 }
 
-/// Record the new identity. Runs after the credential is in place, so the config can never
-/// claim an account the live slot does not hold.
-/// Record the new identity. Runs after the credential is in place, so the config can
-/// never claim an account the live slot does not hold.
+/// Record the new identity in Claude Code's config. Runs after the login is in place, so
+/// the config never names an account before its login is live.
 fn update_config(target: &Account, outgoing_account: &str, outgoing_org: &str) -> Result<()> {
     let path = configfile::path();
     configfile::backup(&path)?;

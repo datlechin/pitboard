@@ -1,8 +1,5 @@
-//! One line per change pitboard makes, so an unexpected state can be traced afterwards.
-//!
-//! Only labels, codes and times are written. Email addresses and account identifiers stay
-//! out: this file is meant to be safe to paste into a bug report, and the account index
-//! already holds everything needed to map a label back to an account.
+//! One line per change pitboard makes. Labels, codes and times only — no email addresses or
+//! account identifiers — so it is safe to paste into a bug report.
 
 use crate::{home, time};
 use std::fs::OpenOptions;
@@ -17,8 +14,7 @@ fn path() -> PathBuf {
     home::dir().join("audit.log")
 }
 
-/// Append a line. A failure to audit never fails the operation it describes: losing a log
-/// line is better than refusing a switch the user asked for.
+/// A failure to audit never fails the operation it describes.
 pub fn record(verb: &str, subject: &str, outcome: &str) {
     let _ = append(&line(time::now(), verb, subject, outcome));
 }

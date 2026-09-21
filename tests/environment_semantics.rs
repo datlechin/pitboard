@@ -1,6 +1,6 @@
-//! The rules themselves are unit-tested in `claude.rs`. What can only be proved by running
-//! the binary is that they are actually wired to the file it opens and the slot it reads —
-//! so exactly one test lives here, and the combinatorics stay in-process.
+//! Proves the environment is read the way Claude Code reads it, by the binary itself: the
+//! combinations are unit-tested in `claude.rs`, and this checks that an empty
+//! `CLAUDE_CONFIG_DIR` reaches the file opened and the slot read as unset.
 
 use std::path::PathBuf;
 use std::process::Command;

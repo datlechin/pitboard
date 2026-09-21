@@ -128,8 +128,7 @@ mod tests {
     use super::*;
     use serde_json::json;
 
-    /// The field names are copied from a live response on 2026-09-21. An earlier version of
-    /// this test used a name I had guessed, and passed while the real endpoint disagreed.
+    /// Field names copied from a live response on 2026-09-21.
     #[test]
     fn reads_the_owner_from_the_shape_the_profile_endpoint_returns() {
         let body = json!({

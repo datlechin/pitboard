@@ -10,8 +10,8 @@ use crate::{claude, hex, slot};
 use serde_json::Value;
 use std::path::PathBuf;
 
-/// Where a credential actually lives. Reported for display; which values can occur is
-/// decided by the platform's backend list, not by a runtime check in the caller.
+/// Where a credential lives. `Keychain` never occurs off macOS: the platform's backend list
+/// rules it out, so callers need no platform checks of their own.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Backend {
     Keychain,
@@ -28,7 +28,6 @@ pub enum Error {
     Malformed(String),
     #[error("writing the credential failed: {0}")]
     Write(String),
-    /// A read-back after writing did not return what was written.
     #[error("the credential did not survive the write: {0}")]
     NotDurable(String),
 }
@@ -53,11 +52,8 @@ impl Error {
     }
 }
 
-/// One credential store.
-///
-/// `write` must verify its own result: doing it here rather than in the caller is what
-/// keeps a write to one resolve plus one read-back, instead of resolving the backend a
-/// second time just to check itself.
+/// One credential store. `write` must read its result back and return `Ok` only if it
+/// holds exactly what was written.
 pub(crate) trait RawStore: Send + Sync {
     fn kind(&self) -> Backend;
     fn contains(&self, service: &str) -> Result<bool, Error>;
@@ -97,14 +93,8 @@ pub fn credential_file() -> PathBuf {
     PathBuf::from(claude::storage_dir()).join(slot::CRED_FILE)
 }
 
-/// Which backend holds the live credential right now.
-///
-/// Resolved on every call, never cached: Claude Code migrates between backends when a
-/// keychain write fails, so a remembered answer goes wrong without warning.
-/// Which backend in `chain` holds `service`.
-///
-/// Taking the chain as an argument is the whole test seam: the shipped code passes the
-/// platform's list, and a test passes fakes. Nothing else changes.
+/// Which backend in `chain` holds `service`. The chain is a parameter so tests can pass
+/// backends that fail on demand.
 fn resolve_in<'a>(
     chain: &[&'a dyn RawStore],
     service: &str,
@@ -122,6 +112,8 @@ fn write_in(chain: &[&dyn RawStore], service: &str, contents: &str) -> Result<()
     backend.write(service, contents)
 }
 
+/// Resolved on every call, never cached: Claude Code moves the credential between backends
+/// when a keychain write fails, so a remembered answer goes wrong without warning.
 fn resolve_backend(service: &str) -> Result<Option<&'static dyn RawStore>, Error> {
     resolve_in(&live_chain(), service)
 }
@@ -146,23 +138,15 @@ pub fn read(service: &str) -> Result<Option<Value>, Error> {
     }
 }
 
-/// Write the live credential where it already lives.
-///
-/// A failed keychain write is never answered by writing the plaintext file: that demotion
-/// is Claude Code's to perform, and doing it here would quietly downgrade where the user's
-/// token is kept.
-/// Write the live credential where it already lives.
-///
-/// A failed keychain write is never answered by writing the plaintext file: that demotion
-/// is Claude Code's to perform, and doing it here would quietly downgrade where the user's
-/// token is kept.
+/// Write the live credential where it already lives. A failed keychain write is never
+/// answered by writing the plaintext file: that demotion is Claude Code's to make, and
+/// making it here would move the user's token somewhere weaker without saying so.
 pub fn write_raw(service: &str, contents: &str) -> Result<(), Error> {
     write_in(&live_chain(), service, contents)
 }
 
-/// The credential Claude Code would keep for a given config directory: the hashed keychain
-/// slot on macOS, `.credentials.json` inside it everywhere else. Used to collect a login made
-/// in a private directory, so signing in never touches the live slot.
+/// The credential Claude Code keeps for a config directory: the hashed keychain slot on
+/// macOS, `.credentials.json` inside it elsewhere.
 pub fn read_signin(dir: &std::path::Path) -> Result<Option<String>, Error> {
     #[cfg(target_os = "macos")]
     {
@@ -178,10 +162,8 @@ pub fn read_signin(dir: &std::path::Path) -> Result<Option<String>, Error> {
     }
 }
 
-/// Remove a login collected from a private directory, once it has been parked.
-///
-/// This deletes an item Claude Code created, so it refuses any name that could be a real
-/// login: only the slot derived from a directory pitboard itself made may go.
+/// This deletes an item Claude Code created, so it refuses any name that could hold a real
+/// login.
 pub fn discard_signin(dir: &std::path::Path) -> Result<(), Error> {
     #[cfg(target_os = "macos")]
     {
@@ -217,8 +199,7 @@ pub fn too_large(service: &str, contents: &str) -> bool {
     vault().too_large(service, contents)
 }
 
-/// A stable handle for a token, so credentials can be compared and logged without the
-/// secret leaving this process.
+/// A handle for comparing and logging tokens without the secret leaving this process.
 pub fn fingerprint(secret: &str) -> String {
     use sha2::{Digest, Sha256};
     hex::encode(&Sha256::digest(secret.as_bytes())[..8])
@@ -230,13 +211,11 @@ mod tests {
     use std::collections::HashMap;
     use std::sync::Mutex;
 
-    /// A backend that can be told to fail, so the policies around a write can be tested
-    /// without breaking a real keychain — which is neither safe nor deterministic.
+    /// Breaking a real keychain on demand is neither safe nor deterministic.
     struct Fake {
         kind: Backend,
         stored: Mutex<HashMap<String, String>>,
         fail_write: bool,
-        /// What a read returns after a write, when it should differ from what was written.
         corrupt_readback: Option<String>,
     }
 

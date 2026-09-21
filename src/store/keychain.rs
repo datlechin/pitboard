@@ -1,11 +1,10 @@
-//! The macOS backend. Every call execs `/usr/bin/security`.
+//! The macOS backend. Every call execs `/usr/bin/security`, the only application the
+//! item's access list trusts.
 //!
-//! The item's Decrypt ACL trusts only `/usr/bin/security`. A foreign in-process read
-//! through the Security framework permanently appends the caller to that ACL and its code
-//! hash to the partition list, and a poisoned partition list costs `/usr/bin/security`
-//! 1-3 seconds per read instead of 0.02 — which Claude Code then pays on every credential
-//! re-read, silently. Writing through `security -U` leaves cdat, the ACL and the partition
-//! list byte-identical; only mtime moves.
+//! Measured on throwaway items: a foreign in-process read adds the caller to that list, and
+//! a foreign in-process write replaces the item's partition list, after which every read by
+//! `/usr/bin/security` takes 1-3 seconds instead of 0.02 — a cost Claude Code then pays on
+//! every credential re-read. A write through `security -U` changes only the item's mtime.
 
 use super::{Backend, Error, RawStore};
 use crate::{hex, slot};
@@ -17,12 +16,14 @@ const SECURITY: &str = "/usr/bin/security";
 /// Claude Code's own ceiling on an interactive `security` command line.
 const MAX_COMMAND_BYTES: usize = 4032;
 
-/// Whose item is being read.
-///
-/// Claude Code treats several `security` exit codes as "absent". For an item pitboard is
-/// about to overwrite, only 44 may mean that: mistaking "could not tell" for "nothing
-/// there" destroys a credential. This distinction is about how `security` reports itself,
-/// so it lives here rather than in any signature a caller sees.
+/// `security` exits with the low byte of the `OSStatus`: `errSecItemNotFound`.
+const ITEM_NOT_FOUND: i32 = 44;
+/// `errSecInteractionNotAllowed`: the keychain is locked and may not prompt.
+const INTERACTION_NOT_ALLOWED: i32 = 36;
+
+/// Claude Code reads an empty answer and a locked keychain as "absent", and its slot is read
+/// the same way so both agree on which backend is live. For pitboard's own items only
+/// `ITEM_NOT_FOUND` means absent: reading could-not-tell as nothing-there loses a login.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Owner {
     ClaudeCode,
@@ -52,8 +53,8 @@ fn classify(owner: Owner, code: Option<i32>, stdout: String, stderr: String) -> 
     match code {
         Some(0) if !stdout.trim().is_empty() => Presence::Present(stdout.trim_end().to_string()),
         Some(0) if owner == Owner::ClaudeCode => Presence::Absent,
-        Some(44) => Presence::Absent,
-        Some(36) if owner == Owner::ClaudeCode => Presence::Absent,
+        Some(ITEM_NOT_FOUND) => Presence::Absent,
+        Some(INTERACTION_NOT_ALLOWED) if owner == Owner::ClaudeCode => Presence::Absent,
         other => Presence::Failed(format!(
             "security exited {}: {}",
             other.map_or_else(|| "on a signal".into(), |c| c.to_string()),
@@ -159,8 +160,6 @@ impl RawStore for Keychain {
             )));
         }
 
-        // Verified here rather than by the caller, so a write costs one resolve and one
-        // read-back instead of resolving the backend a second time to check itself.
         match self.read(service)? {
             Some(back) if back == contents => Ok(()),
             Some(_) => Err(Error::NotDurable(format!(
@@ -192,7 +191,7 @@ mod tests {
 
     #[test]
     fn claude_codes_absent_codes_are_absent_and_the_rest_abort() {
-        for code in [0, 44, 36] {
+        for code in [0, ITEM_NOT_FOUND, INTERACTION_NOT_ALLOWED] {
             assert!(matches!(
                 classify(Owner::ClaudeCode, Some(code), String::new(), String::new()),
                 Presence::Absent
@@ -207,12 +206,17 @@ mod tests {
     }
 
     #[test]
-    fn our_own_items_only_accept_44_as_absent() {
+    fn our_own_items_only_accept_item_not_found_as_absent() {
         assert!(matches!(
-            classify(Owner::Pitboard, Some(44), String::new(), String::new()),
+            classify(
+                Owner::Pitboard,
+                Some(ITEM_NOT_FOUND),
+                String::new(),
+                String::new()
+            ),
             Presence::Absent
         ));
-        for code in [0, 36, 37, 50] {
+        for code in [0, INTERACTION_NOT_ALLOWED, 37, 50] {
             assert!(matches!(
                 classify(Owner::Pitboard, Some(code), String::new(), String::new()),
                 Presence::Failed(_)

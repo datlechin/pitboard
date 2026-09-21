@@ -1,10 +1,9 @@
 //! Changing the identity recorded in Claude Code's config file.
 //!
-//! Two rules here are not negotiable. `oauthAccount` is replaced, never removed: Claude
-//! Code refuses to write its config at all when the key is missing on disk while a
-//! running process still has one cached, which wedges that session's config writes. And
-//! caches are dropped by shape rather than by name, because the set of account-derived
-//! keys changes between releases and a copied list is wrong in both directions.
+//! `oauthAccount` is replaced, never removed: Claude Code refuses to write its config when
+//! the key is missing on disk while a running process still has one cached. Caches are
+//! dropped by shape rather than by name, because the account-derived keys change between
+//! releases.
 
 use crate::error::{Error, Result};
 use crate::{atomic, claude, home, time};
@@ -33,12 +32,9 @@ fn is_identifier(key: &str) -> bool {
         && k.bytes().all(|b| b.is_ascii_hexdigit() || b == b'-')
 }
 
-/// Whether an entry is tagged with one of these ids: the value itself, or one of its direct
-/// fields, equal to it exactly.
-///
-/// Both caches Claude Code keeps per account carry the id as a direct field. Looking deeper,
-/// or matching a substring, would treat a container such as `projects` as belonging to one
-/// account because some project inside it mentions one, and drop every project's settings.
+/// The value itself, or one of its direct fields, equals one of these ids exactly. Claude
+/// Code's per-account caches carry the id at that depth; looking deeper would claim
+/// `projects` for whichever account one project happens to mention.
 fn mentions(value: &Value, identifiers: &[&str]) -> bool {
     let is_one = |v: &Value| {
         v.as_str()
@@ -50,15 +46,12 @@ fn mentions(value: &Value, identifiers: &[&str]) -> bool {
     }
 }
 
-/// Whether a top-level config entry belongs to the account being switched away from.
 fn belongs_to(value: &Value, outgoing: &[&str]) -> bool {
     !is_partitioned(value) && mentions(value, outgoing)
 }
 
-/// Replace the recorded identity and drop what was derived from the previous one.
-///
-/// `profileFetchedAt` is deliberately left out so Claude Code refetches the profile
-/// instead of trusting a copy we wrote.
+/// Replace the recorded identity and drop what was derived from the previous one. Leaving
+/// out `profileFetchedAt` makes Claude Code refetch its profile rather than trust ours.
 pub fn splice_identity(config: &mut Value, oauth_account: &Value, outgoing: &[&str]) {
     let Some(root) = config.as_object_mut() else {
         return;
@@ -82,10 +75,8 @@ fn backups_dir() -> PathBuf {
     home::dir().join("backups")
 }
 
-/// Copy the config aside before touching it, keeping our own history.
-///
-/// Claude Code maintains a backup ring of its own, but it churns through it in minutes
-/// under normal use, so it cannot be relied on to still hold a pre-switch copy.
+/// Claude Code keeps a backup ring of its own, but churns through it in minutes, so it
+/// cannot be relied on to still hold a pre-switch copy.
 pub fn backup(path: &Path) -> Result<PathBuf> {
     let fail = |source| Error::ConfigBackupFailed {
         path: path.to_path_buf(),
@@ -112,8 +103,6 @@ pub fn backup(path: &Path) -> Result<PathBuf> {
     Ok(target)
 }
 
-/// Write through a temp file in the same directory, so a reader never sees a partial config.
-/// Claude Code's file, not ours, so it keeps the permissions its owner gave it.
 /// Claude Code's file, not ours, so it keeps the permissions its owner gave it.
 pub fn write(path: &Path, config: &Value) -> Result<()> {
     let body = serde_json::to_string(config).expect("a loaded config is always serialisable");
@@ -235,9 +224,6 @@ mod tests {
         assert!(!is_partitioned(&serde_json::json!({})));
     }
 
-    /// Only a direct field is evidence that a whole entry belongs to one account. `projects`
-    /// maps paths to per-project settings; a uuid somewhere deep inside one project must not
-    /// take every project's settings with it.
     #[test]
     fn a_container_with_the_outgoing_id_buried_deep_inside_is_kept() {
         let mut c = config();

@@ -1,8 +1,8 @@
 //! `pitboard status` — who is signed in, and how much each account has left.
 //!
-//! Numbers are asked of Anthropic each time, not copied from Claude Code's cache: that cache
-//! only moves when Claude Code itself asks, so reading it showed whatever `/usage` last saw.
-//! Every account is asked at once, so the command costs one round trip, not one per account.
+//! Numbers are asked of Anthropic each time rather than read from Claude Code's cache, which
+//! only moves when Claude Code itself asks. Every account is asked at once, so the command
+//! costs one round trip, not one per account.
 
 use crate::api::{self, ApiError, Owner};
 use crate::state::State;
