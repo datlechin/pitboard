@@ -6,6 +6,7 @@
 //! nothing and keeps the record.
 
 use super::{Error, Result, identify};
+use crate::context::Context;
 use crate::state::{Park, State};
 use crate::{atomic, claude, home, park, state, store};
 use serde_json::Value;
@@ -57,31 +58,31 @@ impl std::fmt::Display for Recovered {
     }
 }
 
-fn journal_path() -> PathBuf {
-    home::dir().join("journal.json")
+fn journal_path(ctx: &Context) -> PathBuf {
+    home::dir(ctx).join("journal.json")
 }
 
 /// Durable before the park it names is created: a record lost to a crash would leave a
 /// consumed login looking restorable.
-pub(super) fn write_journal(entry: &Journal) -> Result<()> {
-    let path = journal_path();
+pub(super) fn write_journal(ctx: &Context, entry: &Journal) -> Result<()> {
+    let path = journal_path(ctx);
     let fail = |source| Error::RecoveryFailed {
         path: path.clone(),
         source,
     };
-    home::ensure().map_err(fail)?;
+    home::ensure(ctx).map_err(fail)?;
     let body = serde_json::to_string(entry).expect("a journal entry is always serialisable");
     atomic::write(&path, body.as_bytes(), atomic::Perms::Secret).map_err(fail)
 }
 
 /// A switch was interrupted, and the next command that changes state will finish it.
-pub fn pending() -> bool {
-    journal_path().exists()
+pub fn pending(ctx: &Context) -> bool {
+    journal_path(ctx).exists()
 }
 
 /// The switch reached a state the account index fully describes.
-pub(super) fn clear_journal() {
-    let _ = std::fs::remove_file(journal_path());
+pub(super) fn clear_journal(ctx: &Context) {
+    let _ = std::fs::remove_file(journal_path(ctx));
 }
 
 struct Found {
@@ -139,27 +140,27 @@ fn apply(state: &mut State, journal: &Journal, repair: Repair) {
     }
 }
 
-fn read_park(service: &str) -> Option<Option<Value>> {
-    match store::vault_read(service) {
+fn read_park(ctx: &Context, service: &str) -> Option<Option<Value>> {
+    match store::vault_read(ctx, service) {
         Ok(raw) => Some(raw.and_then(|r| serde_json::from_str(&r).ok())),
         Err(_) => None,
     }
 }
 
-fn live_owner() -> std::result::Result<String, String> {
-    let live = store::read(&claude::live_service())
+fn live_owner(ctx: &Context) -> std::result::Result<String, String> {
+    let live = store::read(ctx, &claude::live_service(ctx))
         .map_err(|e| e.to_string())?
         .ok_or("nothing is signed in")?;
     let token = live["claudeAiOauth"]["accessToken"]
         .as_str()
         .ok_or("the signed-in credential has no access token")?;
-    identify(token)
+    identify(ctx, token)
         .map(|owner| owner.account_uuid)
         .map_err(|e| e.to_string())
 }
 
-pub(super) fn reconcile(state: &mut State) -> Result<Option<Recovered>> {
-    let path = journal_path();
+pub(super) fn reconcile(ctx: &Context, state: &mut State) -> Result<Option<Recovered>> {
+    let path = journal_path(ctx);
     let raw = match std::fs::read_to_string(&path) {
         Ok(r) => r,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
@@ -170,9 +171,9 @@ pub(super) fn reconcile(state: &mut State) -> Result<Option<Recovered>> {
     let journal = serde_json::from_str::<Journal>(&raw)
         .map_err(|source| Error::RecoveryRecordCorrupt { path, source })?;
 
-    let owner = live_owner();
+    let owner = live_owner(ctx);
     let found = Found {
-        parked: read_park(&journal.park_service),
+        parked: read_park(ctx, &journal.park_service),
         live_owner: owner.as_ref().ok().cloned(),
     };
     let Some(repair) = repair_for(state, &journal, &found) else {
@@ -186,8 +187,8 @@ pub(super) fn reconcile(state: &mut State) -> Result<Option<Recovered>> {
     };
     let finished = repair.landed;
     apply(state, &journal, repair);
-    state::save(state)?;
-    clear_journal();
+    state::save(ctx, state)?;
+    clear_journal(ctx);
 
     Ok(Some(Recovered {
         from: journal.from_label,

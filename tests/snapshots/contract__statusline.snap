@@ -1,0 +1,17 @@
+---
+source: tests/contract.rs
+expression: "serde_json :: json! ({ \"exit\" : code, \"envelope\" : value })"
+---
+{
+  "exit": 0,
+  "envelope": {
+    "v": 1,
+    "command": "statusline",
+    "ok": true,
+    "data": {
+      "line": "alpha ?·?  beta ?·?"
+    },
+    "warnings": [],
+    "error": null
+  }
+}

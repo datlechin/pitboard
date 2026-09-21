@@ -1,0 +1,18 @@
+---
+source: tests/contract.rs
+expression: "serde_json :: json! ({ \"exit\" : code, \"envelope\" : value })"
+---
+{
+  "exit": 2,
+  "envelope": {
+    "v": 1,
+    "command": null,
+    "ok": false,
+    "data": null,
+    "warnings": [],
+    "error": {
+      "code": "usage",
+      "message": "error: the following required arguments were not provided:\n  <LABEL>\n\nUsage: pitboard use --json <LABEL>\n\nFor more information, try '--help'."
+    }
+  }
+}

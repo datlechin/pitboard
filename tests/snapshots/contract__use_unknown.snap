@@ -1,0 +1,18 @@
+---
+source: tests/contract.rs
+expression: "serde_json :: json! ({ \"exit\" : code, \"envelope\" : value })"
+---
+{
+  "exit": 1,
+  "envelope": {
+    "v": 1,
+    "command": "use",
+    "ok": false,
+    "data": null,
+    "warnings": [],
+    "error": {
+      "code": "account_unknown",
+      "message": "no account is enrolled as `nobody`. Run `pitboard status` to see the ones that are, or `pitboard enroll nobody --sign-in` to add it."
+    }
+  }
+}

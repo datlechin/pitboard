@@ -8,6 +8,7 @@ pub fn forget(settled: Settled, label: &str) -> Result<(String, usize)> {
     let Settled {
         _exclusive,
         mut state,
+        ctx,
     } = settled;
     if state.active.as_deref() == Some(label) {
         return Err(Error::CannotForgetActiveAccount {
@@ -17,6 +18,6 @@ pub fn forget(settled: Settled, label: &str) -> Result<(String, usize)> {
     let account = state.remove(label).ok_or_else(|| Error::AccountUnknown {
         label: label.to_string(),
     })?;
-    state::save(&state)?;
-    Ok((account.email, purge(&mut state)))
+    state::save(&ctx, &state)?;
+    Ok((account.email, purge(&ctx, &mut state)))
 }

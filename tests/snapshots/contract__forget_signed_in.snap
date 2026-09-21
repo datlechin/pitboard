@@ -1,0 +1,18 @@
+---
+source: tests/contract.rs
+expression: "serde_json :: json! ({ \"exit\" : code, \"envelope\" : value })"
+---
+{
+  "exit": 1,
+  "envelope": {
+    "v": 1,
+    "command": "forget",
+    "ok": false,
+    "data": null,
+    "warnings": [],
+    "error": {
+      "code": "cannot_forget_active_account",
+      "message": "`alpha` is signed in; switch to another account before forgetting it."
+    }
+  }
+}

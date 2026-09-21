@@ -1,53 +1,38 @@
 //! Where Claude Code keeps things, and who it currently thinks is signed in. Read-only.
 
+use crate::context::Context;
 use crate::error::{Error, Result};
 use crate::slot;
 use serde_json::Value;
 use std::path::PathBuf;
 
-fn home() -> PathBuf {
-    std::env::var_os("HOME")
+pub fn config_dir(ctx: &Context) -> PathBuf {
+    ctx.claude_config_dir
+        .as_ref()
         .map(PathBuf::from)
-        .unwrap_or_default()
-}
-
-/// Read with `||`: an empty value means unset.
-fn config_dir_env() -> Option<String> {
-    std::env::var("CLAUDE_CONFIG_DIR")
-        .ok()
-        .filter(|v| !v.is_empty())
-}
-
-/// Read with `!== undefined`: an empty value is set.
-fn secure_storage_env() -> Option<String> {
-    std::env::var("CLAUDE_SECURESTORAGE_CONFIG_DIR").ok()
-}
-
-pub fn config_dir() -> PathBuf {
-    config_dir_env()
-        .map(PathBuf::from)
-        .unwrap_or_else(|| home().join(".claude"))
+        .unwrap_or_else(|| ctx.home.join(".claude"))
 }
 
 /// A legacy `<config dir>/.config.json` wins when present; otherwise
 /// `<$CLAUDE_CONFIG_DIR or $HOME>/.claude.json`. The differing base is Claude Code's.
-pub fn config_file() -> PathBuf {
-    let legacy = config_dir().join(".config.json");
+pub fn config_file(ctx: &Context) -> PathBuf {
+    let legacy = config_dir(ctx).join(".config.json");
     if legacy.is_file() {
         return legacy;
     }
-    config_dir_env()
+    ctx.claude_config_dir
+        .as_ref()
         .map(PathBuf::from)
-        .unwrap_or_else(home)
+        .unwrap_or_else(|| ctx.home.clone())
         .join(".claude.json")
 }
 
 /// The directory whose path string selects the credential slot.
-pub fn storage_dir() -> String {
+pub fn storage_dir(ctx: &Context) -> String {
     storage_dir_from(
-        secure_storage_env(),
-        &home(),
-        &config_dir().to_string_lossy(),
+        ctx.secure_storage_dir.clone(),
+        &ctx.home,
+        &config_dir(ctx).to_string_lossy(),
     )
 }
 
@@ -62,8 +47,11 @@ fn storage_dir_from(secure: Option<String>, home: &std::path::Path, config_dir: 
 
 /// Whether this process reads the unsuffixed slot. An empty
 /// `CLAUDE_SECURESTORAGE_CONFIG_DIR` pins it even when `CLAUDE_CONFIG_DIR` is set.
-pub fn is_default_slot() -> bool {
-    is_default_slot_from(secure_storage_env().as_deref(), config_dir_env().as_deref())
+pub fn is_default_slot(ctx: &Context) -> bool {
+    is_default_slot_from(
+        ctx.secure_storage_dir.as_deref(),
+        ctx.claude_config_dir.as_deref(),
+    )
 }
 
 fn is_default_slot_from(secure: Option<&str>, config_dir: Option<&str>) -> bool {
@@ -74,16 +62,16 @@ fn is_default_slot_from(secure: Option<&str>, config_dir: Option<&str>) -> bool 
 }
 
 /// The keychain service this process would read.
-pub fn live_service() -> String {
-    if is_default_slot() {
+pub fn live_service(ctx: &Context) -> String {
+    if is_default_slot(ctx) {
         slot::LIVE_SERVICE.to_string()
     } else {
-        slot::service_for_dir(&storage_dir())
+        slot::service_for_dir(&storage_dir(ctx))
     }
 }
 
-pub fn load_config() -> Result<Value> {
-    let path = config_file();
+pub fn load_config(ctx: &Context) -> Result<Value> {
+    let path = config_file(ctx);
     let raw = std::fs::read_to_string(&path).map_err(|source| {
         if source.kind() == std::io::ErrorKind::NotFound {
             Error::ClaudeConfigMissing { path: path.clone() }

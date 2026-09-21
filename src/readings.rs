@@ -5,17 +5,18 @@
 //! and when. Nothing here is secret; it is a disposable cache, written last-writer-wins
 //! without a lock.
 
+use crate::context::Context;
 use crate::usage::{Snapshot, Source};
 use crate::{atomic, home};
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-fn path() -> PathBuf {
-    home::dir().join("usage.json")
+fn path(ctx: &Context) -> PathBuf {
+    home::dir(ctx).join("usage.json")
 }
 
-pub fn load() -> HashMap<String, Snapshot> {
-    std::fs::read_to_string(path())
+pub fn load(ctx: &Context) -> HashMap<String, Snapshot> {
+    std::fs::read_to_string(path(ctx))
         .ok()
         .and_then(|raw| serde_json::from_str::<HashMap<String, Snapshot>>(&raw).ok())
         .unwrap_or_default()
@@ -28,19 +29,19 @@ pub fn load() -> HashMap<String, Snapshot> {
 }
 
 /// Keep live readings for when their account can no longer be asked.
-pub fn remember(readings: &[(String, Snapshot)]) {
+pub fn remember(ctx: &Context, readings: &[(String, Snapshot)]) {
     if readings.is_empty() {
         return;
     }
-    let mut all = load();
+    let mut all = load(ctx);
     for (uuid, snapshot) in readings {
         let mut stored = snapshot.clone();
         stored.account_uuid = Some(uuid.clone());
         all.insert(uuid.clone(), stored);
     }
-    if home::ensure().is_ok()
+    if home::ensure(ctx).is_ok()
         && let Ok(body) = serde_json::to_string(&all)
     {
-        let _ = atomic::write(&path(), body.as_bytes(), atomic::Perms::Secret);
+        let _ = atomic::write(&path(ctx), body.as_bytes(), atomic::Perms::Secret);
     }
 }

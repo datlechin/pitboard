@@ -1,6 +1,7 @@
 //! One line per change pitboard makes. Labels, codes and times only — no email addresses or
 //! account identifiers — so it is safe to paste into a bug report.
 
+use crate::context::Context;
 use crate::{home, time};
 use std::fs::OpenOptions;
 use std::io::Write;
@@ -10,13 +11,13 @@ use std::path::PathBuf;
 /// Rotated once past this size, keeping one previous file.
 const LIMIT_BYTES: u64 = 256 * 1024;
 
-fn path() -> PathBuf {
-    home::dir().join("audit.log")
+fn path(ctx: &Context) -> PathBuf {
+    home::dir(ctx).join("audit.log")
 }
 
 /// A failure to audit never fails the operation it describes.
-pub fn record(verb: &str, subject: &str, outcome: &str) {
-    let _ = append(&line(time::now(), verb, subject, outcome));
+pub fn record(ctx: &Context, verb: &str, subject: &str, outcome: &str) {
+    let _ = append(ctx, &line(time::now(), verb, subject, outcome));
 }
 
 fn line(at: i64, verb: &str, subject: &str, outcome: &str) -> String {
@@ -30,9 +31,9 @@ fn line(at: i64, verb: &str, subject: &str, outcome: &str) -> String {
     )
 }
 
-fn append(line: &str) -> std::io::Result<()> {
-    home::ensure()?;
-    let path = path();
+fn append(ctx: &Context, line: &str) -> std::io::Result<()> {
+    home::ensure(ctx)?;
+    let path = path(ctx);
     if std::fs::metadata(&path).is_ok_and(|m| m.len() > LIMIT_BYTES) {
         std::fs::rename(&path, path.with_extension("log.1"))?;
     }

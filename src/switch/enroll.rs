@@ -8,6 +8,7 @@
 
 use super::{Error, Result, Settled, access_token, identify, oauth_of, purge};
 use crate::api::Owner;
+use crate::context::Context;
 use crate::state::{Account, Park, State};
 use crate::{claude, home, park, state, store};
 use serde_json::{Value, json};
@@ -30,12 +31,13 @@ pub enum Enrolled {
 pub struct SignIn {
     dir: PathBuf,
     document: Value,
+    ctx: Context,
     _one_at_a_time: File,
 }
 
 impl Drop for SignIn {
     fn drop(&mut self) {
-        let _ = store::discard_signin(&self.dir);
+        let _ = store::discard_signin(&self.ctx, &self.dir);
         let _ = std::fs::remove_dir_all(&self.dir);
     }
 }
@@ -43,9 +45,9 @@ impl Drop for SignIn {
 /// Run Claude Code's own sign-in in a private directory, where the live login is never
 /// touched. It waits on a person in a browser, so it takes no lock but its own: a switch
 /// meanwhile goes ahead, and a second sign-in is refused rather than queued.
-pub fn sign_in() -> Result<SignIn> {
-    let home = home::ensure().map_err(|source| Error::HomeUnwritable {
-        path: home::dir(),
+pub fn sign_in(ctx: &Context) -> Result<SignIn> {
+    let home = home::ensure(ctx).map_err(|source| Error::HomeUnwritable {
+        path: home::dir(ctx),
         source,
     })?;
     let lock_path = home.join("signin.lock");
@@ -79,12 +81,13 @@ pub fn sign_in() -> Result<SignIn> {
     let mut pending = SignIn {
         dir,
         document: Value::Null,
+        ctx: ctx.clone(),
         _one_at_a_time: one_at_a_time,
     };
 
     // pitboard never sees the sign-in; it reads the login Claude Code stores once it is done.
     // What Claude Code prints goes to stderr, so `--json` output stays one JSON line.
-    let finished = Command::new("claude")
+    let finished = Command::new(&ctx.claude_program)
         .args(["auth", "login"])
         .env("CLAUDE_CONFIG_DIR", &pending.dir)
         .env_remove("CLAUDE_SECURESTORAGE_CONFIG_DIR")
@@ -98,7 +101,7 @@ pub fn sign_in() -> Result<SignIn> {
     if !finished {
         return Err(Error::SignInIncomplete);
     }
-    let raw = store::read_signin(&pending.dir)?.ok_or(Error::SignInIncomplete)?;
+    let raw = store::read_signin(ctx, &pending.dir)?.ok_or(Error::SignInIncomplete)?;
     pending.document =
         serde_json::from_str(&raw).map_err(|e| Error::LiveCredentialShapeUnexpected {
             detail: e.to_string(),
@@ -111,10 +114,11 @@ pub fn enroll(settled: Settled, label: &str, signed_in: Option<SignIn>) -> Resul
     let Settled {
         _exclusive,
         mut state,
+        ctx,
     } = settled;
     match signed_in {
-        Some(login) => park_signed_in(label, &mut state, &login),
-        None => record_current(label, &mut state),
+        Some(login) => park_signed_in(&ctx, label, &mut state, &login),
+        None => record_current(&ctx, label, &mut state),
     }
 }
 
@@ -139,31 +143,36 @@ fn claim(state: &State, label: &str, owner: &Owner) -> Result<()> {
     Ok(())
 }
 
-fn record_current(label: &str, state: &mut State) -> Result<Enrolled> {
-    let live = store::read(&claude::live_service())?.ok_or(Error::LiveCredentialAbsent)?;
-    let owner = identify(&access_token(&live)?)?;
+fn record_current(ctx: &Context, label: &str, state: &mut State) -> Result<Enrolled> {
+    let live = store::read(ctx, &claude::live_service(ctx))?.ok_or(Error::LiveCredentialAbsent)?;
+    let owner = identify(ctx, &access_token(&live)?)?;
     claim(state, label, &owner)?;
     let parked = state.get(label).and_then(|a| a.parked.clone());
     state.upsert(account(label, &owner, parked));
     state.active = Some(label.to_string());
-    state::save(state)?;
+    state::save(ctx, state)?;
     Ok(Enrolled::Current { email: owner.email })
 }
 
-fn park_signed_in(label: &str, state: &mut State, login: &SignIn) -> Result<Enrolled> {
-    let owner = identify(&access_token(&login.document)?)?;
+fn park_signed_in(
+    ctx: &Context,
+    label: &str,
+    state: &mut State,
+    login: &SignIn,
+) -> Result<Enrolled> {
+    let owner = identify(ctx, &access_token(&login.document)?)?;
     claim(state, label, &owner)?;
-    let service = park::reserve(&owner.account_uuid)?;
-    let fresh = park::store_at(&service, &oauth_of(&login.document)?)?;
+    let service = park::reserve(ctx, &owner.account_uuid)?;
+    let fresh = park::store_at(ctx, &service, &oauth_of(&login.document)?)?;
     let previous = state.get(label).and_then(|a| a.parked.clone());
     let renewed = state.get(label).is_some();
     state.upsert(account(label, &owner, previous));
     state.park(label, fresh);
     // Unrecorded, the new login would be an item nothing refers to, never deleted.
-    state::save(state).inspect_err(|_| {
-        let _ = store::vault_delete(&service);
+    state::save(ctx, state).inspect_err(|_| {
+        let _ = store::vault_delete(ctx, &service);
     })?;
-    purge(state);
+    purge(ctx, state);
     Ok(if renewed {
         Enrolled::Renewed { email: owner.email }
     } else {

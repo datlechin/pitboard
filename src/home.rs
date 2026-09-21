@@ -1,6 +1,7 @@
 //! pitboard's own directory. Every directory pitboard creates is 0700, whatever the umask:
 //! park file names contain account identifiers, so on a shared machine a listing would leak.
 
+use crate::context::Context;
 use crate::error::{Error, Result};
 use std::io;
 use std::path::{Path, PathBuf};
@@ -15,16 +16,12 @@ const SYNCED: [&str; 5] = [
     "Sync",
 ];
 
-pub fn dir() -> PathBuf {
-    std::env::var_os("PITBOARD_HOME")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| {
-            PathBuf::from(std::env::var_os("HOME").unwrap_or_default()).join(".pitboard")
-        })
+pub fn dir(ctx: &Context) -> PathBuf {
+    ctx.pitboard_home.clone()
 }
 
-pub fn ensure() -> io::Result<PathBuf> {
-    let path = dir();
+pub fn ensure(ctx: &Context) -> io::Result<PathBuf> {
+    let path = dir(ctx);
     create_private(&path)?;
     Ok(path)
 }

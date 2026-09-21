@@ -7,6 +7,7 @@
 //! every credential re-read. A write through `security -U` changes only the item's mtime.
 
 use super::{Backend, Error, RawStore};
+use crate::context::Context;
 use crate::slot;
 use std::io::Write;
 use std::process::{Command, Stdio};
@@ -32,16 +33,27 @@ enum Owner {
 
 pub(super) struct Keychain {
     owner: Owner,
+    /// The keychain account every item is stored under, as Claude Code names it.
+    account: String,
 }
 
-/// The slot Claude Code reads.
-pub(super) const LIVE: Keychain = Keychain {
-    owner: Owner::ClaudeCode,
-};
-/// Where pitboard parks credentials of its own.
-pub(super) const VAULT: Keychain = Keychain {
-    owner: Owner::Pitboard,
-};
+impl Keychain {
+    /// The slots Claude Code reads.
+    pub(super) fn live(ctx: &Context) -> Keychain {
+        Keychain {
+            owner: Owner::ClaudeCode,
+            account: slot::account_name(ctx),
+        }
+    }
+
+    /// Where pitboard parks credentials of its own.
+    pub(super) fn vault(ctx: &Context) -> Keychain {
+        Keychain {
+            owner: Owner::Pitboard,
+            account: slot::account_name(ctx),
+        }
+    }
+}
 
 enum Presence {
     Present(String),
@@ -89,8 +101,8 @@ fn command_for(account: &str, service: &str, secret: &str) -> String {
 
 impl Keychain {
     fn find(&self, service: &str, with_data: bool) -> Presence {
-        let account = slot::account_name();
-        let mut args = vec!["find-generic-password", "-a", &account, "-s", service];
+        let account = self.account.as_str();
+        let mut args = vec!["find-generic-password", "-a", account, "-s", service];
         if with_data {
             args.push("-w");
         }
@@ -128,10 +140,10 @@ impl RawStore for Keychain {
         if self.too_large(service, contents) {
             return Err(Error::Write(format!(
                 "this credential is {} bytes, past the {MAX_COMMAND_BYTES}-byte command limit",
-                command_for(&slot::account_name(), service, contents).len()
+                command_for(&self.account, service, contents).len()
             )));
         }
-        let account = slot::account_name();
+        let account = self.account.as_str();
         if account.contains('"') || service.contains('"') {
             return Err(Error::Write(
                 "account or service name contains a quote".into(),
@@ -149,7 +161,7 @@ impl RawStore for Keychain {
             .stdin
             .take()
             .ok_or_else(|| Error::Write("security has no stdin".into()))?
-            .write_all(command_for(&account, service, contents).as_bytes())
+            .write_all(command_for(account, service, contents).as_bytes())
             .map_err(|e| Error::Write(format!("cannot write to security: {e}")))?;
         let out = child
             .wait_with_output()
@@ -174,9 +186,9 @@ impl RawStore for Keychain {
     }
 
     fn delete(&self, service: &str) -> Result<(), Error> {
-        let account = slot::account_name();
+        let account = self.account.as_str();
         match run(
-            &["delete-generic-password", "-a", &account, "-s", service],
+            &["delete-generic-password", "-a", account, "-s", service],
             self.owner,
         ) {
             Presence::Present(_) | Presence::Absent => Ok(()),
@@ -185,7 +197,7 @@ impl RawStore for Keychain {
     }
 
     fn too_large(&self, service: &str, contents: &str) -> bool {
-        command_for(&slot::account_name(), service, contents).len() > MAX_COMMAND_BYTES
+        command_for(&self.account, service, contents).len() > MAX_COMMAND_BYTES
     }
 }
 
@@ -251,7 +263,8 @@ mod tests {
 
     #[test]
     fn oversize_credentials_are_refused_before_anything_is_written() {
-        assert!(LIVE.too_large("svc", &"x".repeat(2100)));
-        assert!(!LIVE.too_large("svc", &"x".repeat(1900)));
+        let live = Keychain::live(&Context::from_env());
+        assert!(live.too_large("svc", &"x".repeat(2100)));
+        assert!(!live.too_large("svc", &"x".repeat(1900)));
     }
 }

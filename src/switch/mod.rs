@@ -18,6 +18,7 @@ pub use journal::{Recovered, pending as interrupted};
 pub use rename::rename;
 pub use renew::{Renewal, renew_parked};
 
+use crate::context::Context;
 use crate::error::{Error, Result};
 use crate::state::{Account, Park, State};
 use crate::{api, claude, configfile, home, lock, park, state, store, time};
@@ -60,19 +61,21 @@ pub(super) fn oauth_of(document: &Value) -> Result<Value> {
 pub struct Settled {
     _exclusive: std::fs::File,
     state: State,
+    ctx: Context,
 }
 
 /// What recovery found is returned apart from the `Settled`, so it can be reported whether
 /// or not the command that follows succeeds.
-pub fn settle() -> Result<(Settled, Option<Recovered>)> {
-    let exclusive = exclusive()?;
-    let mut state = state::load()?;
-    let recovered = reconcile(&mut state)?;
-    purge(&mut state);
+pub fn settle(ctx: &Context) -> Result<(Settled, Option<Recovered>)> {
+    let exclusive = exclusive(ctx)?;
+    let mut state = state::load(ctx)?;
+    let recovered = reconcile(ctx, &mut state)?;
+    purge(ctx, &mut state);
     Ok((
         Settled {
             _exclusive: exclusive,
             state,
+            ctx: ctx.clone(),
         },
         recovered,
     ))
@@ -80,11 +83,11 @@ pub fn settle() -> Result<(Settled, Option<Recovered>)> {
 
 /// Delete what no account refers to any more. A failed save only leaves deleted names
 /// listed, and deleting a missing item succeeds, so a later run clears them.
-fn purge(state: &mut State) -> usize {
+fn purge(ctx: &Context, state: &mut State) -> usize {
     let listed = state.discarded.len();
-    let remaining = park::purge(state);
+    let remaining = park::purge(ctx, state);
     if remaining != listed {
-        let _ = state::save(state);
+        let _ = state::save(ctx, state);
     }
     remaining
 }
@@ -92,27 +95,27 @@ fn purge(state: &mut State) -> usize {
 /// Makes pitboard runs exclusive of each other. A kernel lock, unlike the directory lock
 /// Claude Code's protocol requires around its own writes: the operating system releases it
 /// when a process ends, so there is no staleness rule for two runs to both satisfy.
-fn exclusive() -> Result<std::fs::File> {
-    let (file, path) = lock_file()?;
+fn exclusive(ctx: &Context) -> Result<std::fs::File> {
+    let (file, path) = lock_file(ctx)?;
     file.lock()
         .map_err(|source| Error::HomeUnwritable { path, source })?;
     Ok(file)
 }
 
 /// `exclusive` without waiting: `None` while another pitboard run holds it.
-fn try_exclusive() -> Option<std::fs::File> {
-    let (file, _) = lock_file().ok()?;
+fn try_exclusive(ctx: &Context) -> Option<std::fs::File> {
+    let (file, _) = lock_file(ctx).ok()?;
     file.try_lock().ok()?;
     Some(file)
 }
 
-fn lock_file() -> Result<(std::fs::File, PathBuf)> {
-    let path = home::dir().join("state.lock");
+fn lock_file(ctx: &Context) -> Result<(std::fs::File, PathBuf)> {
+    let path = home::dir(ctx).join("state.lock");
     let fail = |source| Error::HomeUnwritable {
         path: path.clone(),
         source,
     };
-    home::ensure().map_err(fail)?;
+    home::ensure(ctx).map_err(fail)?;
     let file = std::fs::OpenOptions::new()
         .create(true)
         .truncate(false)
@@ -125,8 +128,8 @@ fn lock_file() -> Result<(std::fs::File, PathBuf)> {
 
 /// Who a live access token belongs to. When this cannot be answered, nothing moves: a login
 /// filed under a guessed account takes two accounts with it.
-pub(super) fn identify(access_token: &str) -> Result<api::Owner> {
-    api::owner(access_token).map_err(|e| match e {
+pub(super) fn identify(ctx: &Context, access_token: &str) -> Result<api::Owner> {
+    api::owner(ctx, access_token).map_err(|e| match e {
         api::ApiError::Unauthorized => Error::SessionExpired,
         other => Error::IdentityUnverifiable {
             detail: other.to_string(),
@@ -147,8 +150,9 @@ pub fn switch(settled: Settled, label: &str) -> Result<Outcome> {
     let Settled {
         _exclusive,
         mut state,
+        ctx,
     } = settled;
-
+    let ctx = &ctx;
     let target = state
         .get(label)
         .cloned()
@@ -158,15 +162,15 @@ pub fn switch(settled: Settled, label: &str) -> Result<Outcome> {
 
     // Asked before taking Claude Code's lock so the round trip does not hold up its writes,
     // then confirmed under the lock.
-    let service = claude::live_service();
-    let live = store::read(&service)?.ok_or(Error::LiveCredentialAbsent)?;
+    let service = claude::live_service(ctx);
+    let live = store::read(ctx, &service)?.ok_or(Error::LiveCredentialAbsent)?;
     let identified_with = access_token(&live)?;
-    let outgoing = identify(&identified_with)?;
+    let outgoing = identify(ctx, &identified_with)?;
 
     if outgoing.account_uuid == target.account_uuid {
         if state.active.as_deref() != Some(label) {
             state.active = Some(label.to_string());
-            state::save(&state)?;
+            state::save(ctx, &state)?;
         }
         return Ok(Outcome::AlreadyActive {
             label: label.to_string(),
@@ -186,12 +190,12 @@ pub fn switch(settled: Settled, label: &str) -> Result<Outcome> {
             label: label.to_string(),
         });
     }
-    let incoming = park::load(label, &held)?;
+    let incoming = park::load(ctx, label, &held)?;
 
-    let storage = PathBuf::from(claude::storage_dir()).join(".storage-write");
+    let storage = PathBuf::from(claude::storage_dir(ctx)).join(".storage-write");
     let guard = lock::acquire(&storage)?;
 
-    let before_raw = store::read_raw(&service)?.ok_or(Error::LiveCredentialAbsent)?;
+    let before_raw = store::read_raw(ctx, &service)?.ok_or(Error::LiveCredentialAbsent)?;
     let before: Value =
         serde_json::from_str(&before_raw).map_err(|e| Error::LiveCredentialShapeUnexpected {
             detail: e.to_string(),
@@ -199,52 +203,62 @@ pub fn switch(settled: Settled, label: &str) -> Result<Outcome> {
     // A refresh keeps the account, so an unchanged access token needs no second round trip.
     // A sign-in between the two reads would not keep it.
     let now_token = access_token(&before)?;
-    if now_token != identified_with && identify(&now_token)?.account_uuid != outgoing.account_uuid {
+    if now_token != identified_with
+        && identify(ctx, &now_token)?.account_uuid != outgoing.account_uuid
+    {
         return Err(Error::SignedInAccountChanged);
     }
 
     // Checked before anything is parked, so a switch that could never be written changes
     // nothing.
     let next = splice(&before, &incoming)?;
-    if store::too_large(&service, &next) {
+    if store::too_large(ctx, &service, &next) {
         return Err(Error::LiveCredentialShapeUnexpected {
             detail: "the login to install is past the keychain's size limit".into(),
         });
     }
 
-    let park_service = park::reserve(&outgoing.account_uuid)?;
-    write_journal(&Journal {
-        started_at: time::now(),
-        from_label: outgoing_label.clone(),
-        from_uuid: outgoing.account_uuid.clone(),
-        to_label: label.to_string(),
-        to_uuid: target.account_uuid.clone(),
-        park_service: park_service.clone(),
-        incoming_service: held.service.clone(),
-    })?;
+    let park_service = park::reserve(ctx, &outgoing.account_uuid)?;
+    write_journal(
+        ctx,
+        &Journal {
+            started_at: time::now(),
+            from_label: outgoing_label.clone(),
+            from_uuid: outgoing.account_uuid.clone(),
+            to_label: label.to_string(),
+            to_uuid: target.account_uuid.clone(),
+            park_service: park_service.clone(),
+            incoming_service: held.service.clone(),
+        },
+    )?;
 
-    let parked = park::store_at(&park_service, &oauth_of(&before)?)?;
+    let parked = park::store_at(ctx, &park_service, &oauth_of(&before)?)?;
     state.park(&outgoing_label, parked.clone());
-    state::save(&state)?;
+    state::save(ctx, &state)?;
 
-    if let Err(e) = install(&service, &next, &before_raw, &outgoing_label, label) {
+    if let Err(e) = install(ctx, &service, &next, &before_raw, &outgoing_label, label) {
         if !only_copy_left(&e) {
             state.discard(&parked.service);
         }
-        state::save(&state)?;
-        clear_journal();
-        purge(&mut state);
+        state::save(ctx, &state)?;
+        clear_journal(ctx);
+        purge(ctx, &mut state);
         return Err(e);
     }
     state.discard(&held.service);
     state.active = Some(label.to_string());
-    state::save(&state)?;
+    state::save(ctx, &state)?;
     drop(guard);
 
-    let config_warning =
-        update_config(&target, &outgoing.account_uuid, &outgoing.organization_uuid).err();
-    let parks_pending = purge(&mut state);
-    clear_journal();
+    let config_warning = update_config(
+        ctx,
+        &target,
+        &outgoing.account_uuid,
+        &outgoing.organization_uuid,
+    )
+    .err();
+    let parks_pending = purge(ctx, &mut state);
+    clear_journal(ctx);
 
     Ok(Outcome::Switched {
         from: outgoing_label,
@@ -273,10 +287,17 @@ fn splice(before: &Value, incoming: &Value) -> Result<String> {
     Ok(serde_json::to_string(&next).expect("a credential document stays serialisable"))
 }
 
-fn install(service: &str, next: &str, before_raw: &str, from: &str, to: &str) -> Result<()> {
+fn install(
+    ctx: &Context,
+    service: &str,
+    next: &str,
+    before_raw: &str,
+    from: &str,
+    to: &str,
+) -> Result<()> {
     install_with(
-        |body| store::write_raw(service, body),
-        || store::read_raw(service),
+        |body| store::write_raw(ctx, service, body),
+        || store::read_raw(ctx, service),
         next,
         before_raw,
         from,
@@ -318,10 +339,15 @@ fn install_with(
 
 /// Record the new identity in Claude Code's config. Runs after the login is in place, so
 /// the config never names an account before its login is live.
-fn update_config(target: &Account, outgoing_account: &str, outgoing_org: &str) -> Result<()> {
-    let path = configfile::path();
-    configfile::backup(&path)?;
-    let mut config = claude::load_config()?;
+fn update_config(
+    ctx: &Context,
+    target: &Account,
+    outgoing_account: &str,
+    outgoing_org: &str,
+) -> Result<()> {
+    let path = configfile::path(ctx);
+    configfile::backup(ctx, &path)?;
+    let mut config = claude::load_config(ctx)?;
     configfile::splice_identity(
         &mut config,
         &target.oauth_account,

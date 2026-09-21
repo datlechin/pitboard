@@ -520,9 +520,13 @@ fn the_status_line_names_the_account_in_use_and_the_others() {
     let out = child.wait_with_output().unwrap();
 
     assert!(out.status.success());
+    let line = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        line.contains("\u{1b}["),
+        "Claude Code draws colours from a pipe: {line:?}"
+    );
     assert_eq!(
-        String::from_utf8_lossy(&out.stdout),
-        "alpha 46%·70%  beta ?·?\n",
-        "no terminal, so no styling"
+        anstream::adapter::strip_str(&line).to_string(),
+        "alpha 46%·70%  beta ?·?\n"
     );
 }

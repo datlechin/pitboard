@@ -2,18 +2,25 @@
 
 use super::{Backend, Error, RawStore};
 use crate::atomic;
+use crate::context::Context;
 use std::path::PathBuf;
 
-pub(super) struct PlainFile;
-
-/// The slot Claude Code reads.
-pub(super) const LIVE: PlainFile = PlainFile;
+/// Claude Code keeps exactly one plaintext credential per storage directory, so the service
+/// name selects nothing here.
+pub(super) struct PlainFile {
+    path: PathBuf,
+}
 
 impl PlainFile {
-    /// Claude Code keeps exactly one plaintext credential per storage directory, so the
-    /// service name selects nothing here.
+    /// The file Claude Code reads.
+    pub(super) fn live(ctx: &Context) -> PlainFile {
+        PlainFile {
+            path: super::credential_file(ctx),
+        }
+    }
+
     fn path(&self) -> PathBuf {
-        super::credential_file()
+        self.path.clone()
     }
 }
 

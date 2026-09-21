@@ -5,6 +5,7 @@ pub mod atomic;
 pub mod audit;
 pub mod claude;
 pub mod configfile;
+pub mod context;
 pub mod doctor;
 pub mod error;
 pub mod home;

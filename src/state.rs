@@ -5,6 +5,7 @@
 //! machine: presenting a refresh token another machine has since rotated ends the login on
 //! both.
 
+use crate::context::Context;
 use crate::error::{Error, Result};
 use crate::{atomic, home};
 use serde::{Deserialize, Serialize};
@@ -169,13 +170,13 @@ pub fn machine_id() -> String {
     }
 }
 
-fn file() -> PathBuf {
-    home::dir().join("state.json")
+fn file(ctx: &Context) -> PathBuf {
+    home::dir(ctx).join("state.json")
 }
 
-pub fn load() -> Result<State> {
-    let path = file();
-    home::check_location(&home::dir())?;
+pub fn load(ctx: &Context) -> Result<State> {
+    let path = file(ctx);
+    home::check_location(&home::dir(ctx))?;
     let raw = match std::fs::read_to_string(&path) {
         Ok(s) => s,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(State::default()),
@@ -198,14 +199,14 @@ pub fn load() -> Result<State> {
     Ok(state)
 }
 
-pub fn save(state: &State) -> Result<()> {
-    home::check_location(&home::dir())?;
-    let path = file();
+pub fn save(ctx: &Context, state: &State) -> Result<()> {
+    home::check_location(&home::dir(ctx))?;
+    let path = file(ctx);
     let write = |source| Error::StateWriteFailed {
         path: path.clone(),
         source,
     };
-    home::ensure().map_err(write)?;
+    home::ensure(ctx).map_err(write)?;
     let body = serde_json::to_string_pretty(state).expect("State is always serialisable");
     atomic::write(&path, body.as_bytes(), atomic::Perms::Secret).map_err(write)
 }

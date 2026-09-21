@@ -2,6 +2,7 @@
 //! still holds, and say which assumption broke when one has. Gathering is kept apart from
 //! judging so every judgement can be tested.
 
+use crate::context::Context;
 use crate::error::Error;
 use crate::state::{Park, State};
 use crate::ui::{self, BAD, DIM, GOOD, WARN, pad, paint};
@@ -59,7 +60,7 @@ pub struct ParkFact {
     pub unreadable: Option<String>,
 }
 
-fn park_facts(state: &State) -> Vec<ParkFact> {
+fn park_facts(ctx: &Context, state: &State) -> Vec<ParkFact> {
     state
         .accounts
         .iter()
@@ -68,7 +69,7 @@ fn park_facts(state: &State) -> Vec<ParkFact> {
             active: state.active.as_deref() == Some(a.label.as_str()),
             park: a.parked.clone(),
             unreadable: a.parked.as_ref().and_then(|p| {
-                park::load(&a.label, p).err().map(|e| match e {
+                park::load(ctx, &a.label, p).err().map(|e| match e {
                     Error::ParkedCredentialMissing { .. } => "missing from the vault".into(),
                     Error::ParkedCredentialCorrupt { detail, .. } => detail,
                     other => other.to_string(),
@@ -78,31 +79,33 @@ fn park_facts(state: &State) -> Vec<ParkFact> {
         .collect()
 }
 
-pub fn gather() -> Facts {
-    let config = claude::load_config();
-    let state = crate::state::load();
-    let service = claude::live_service();
+pub fn gather(ctx: &Context) -> Facts {
+    let config = claude::load_config(ctx);
+    let state = crate::state::load(ctx);
+    let service = claude::live_service(ctx);
     Facts {
         security_tool: cfg!(target_os = "macos")
             .then(|| "/usr/bin/security".to_string())
             .filter(|p| std::fs::metadata(p).is_ok()),
-        config_path: claude::config_file(),
+        config_path: claude::config_file(ctx),
         identity: config.as_ref().ok().and_then(claude::identity),
         config,
-        account: slot::account_name(),
-        default_slot: claude::is_default_slot(),
-        storage_dir: claude::storage_dir(),
-        backend: store::resolve(&service),
-        credential_file: store::credential_file(),
-        credential: store::read(&service),
-        home: home::dir(),
-        home_mode: mode_of(&home::dir()),
+        account: slot::account_name(ctx),
+        default_slot: claude::is_default_slot(ctx),
+        storage_dir: claude::storage_dir(ctx),
+        backend: store::resolve(ctx, &service),
+        credential_file: store::credential_file(ctx),
+        credential: store::read(ctx, &service),
+        home: home::dir(ctx),
+        home_mode: mode_of(&home::dir(ctx)),
         machine_id_known: crate::state::machine_id() != "unknown",
-        hover_rest_env: std::env::var("CLAUDE_CODE_HOVER_REST")
-            .is_ok_and(|v| v == "1" || v == "true"),
-        parks: state.as_ref().map(park_facts).unwrap_or_default(),
+        hover_rest_env: ctx.hover_rest,
+        parks: state
+            .as_ref()
+            .map(|s| park_facts(ctx, s))
+            .unwrap_or_default(),
         state,
-        interrupted: switch::interrupted(),
+        interrupted: switch::interrupted(ctx),
         service,
         now: crate::time::now(),
     }
@@ -482,8 +485,8 @@ pub struct Diagnosis {
     pub environment: Value,
 }
 
-pub fn run() -> Diagnosis {
-    let facts = gather();
+pub fn run(ctx: &Context) -> Diagnosis {
+    let facts = gather(ctx);
     Diagnosis {
         checks: evaluate(&facts),
         environment: json!({

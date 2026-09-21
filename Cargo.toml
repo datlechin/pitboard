@@ -54,4 +54,5 @@ unsafe_op_in_unsafe_fn = "deny"
 undocumented_unsafe_blocks = "warn"
 
 [dev-dependencies]
+insta = { version = "1.48", features = ["json", "redactions"] }
 mockito = "1.7.2"

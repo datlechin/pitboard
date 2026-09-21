@@ -5,6 +5,7 @@
 //! dropped by shape rather than by name, because the account-derived keys change between
 //! releases.
 
+use crate::context::Context;
 use crate::error::{Error, Result};
 use crate::{atomic, claude, home, time};
 use serde_json::{Map, Value};
@@ -71,18 +72,18 @@ pub fn splice_identity(config: &mut Value, oauth_account: &Value, outgoing: &[&s
     root.insert("oauthAccount".into(), Value::Object(incoming));
 }
 
-fn backups_dir() -> PathBuf {
-    home::dir().join("backups")
+fn backups_dir(ctx: &Context) -> PathBuf {
+    home::dir(ctx).join("backups")
 }
 
 /// Claude Code keeps a backup ring of its own, but churns through it in minutes, so it
 /// cannot be relied on to still hold a pre-switch copy.
-pub fn backup(path: &Path) -> Result<PathBuf> {
+pub fn backup(ctx: &Context, path: &Path) -> Result<PathBuf> {
     let fail = |source| Error::ConfigBackupFailed {
         path: path.to_path_buf(),
         source,
     };
-    let dir = backups_dir();
+    let dir = backups_dir(ctx);
     home::create_private(&dir).map_err(fail)?;
     let target = dir.join(format!("claude.json.{}", time::now()));
     std::fs::copy(path, &target).map_err(fail)?;
@@ -114,8 +115,8 @@ pub fn write(path: &Path, config: &Value) -> Result<()> {
     })
 }
 
-pub fn path() -> PathBuf {
-    claude::config_file()
+pub fn path(ctx: &Context) -> PathBuf {
+    claude::config_file(ctx)
 }
 
 #[cfg(test)]

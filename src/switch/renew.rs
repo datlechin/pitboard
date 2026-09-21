@@ -4,6 +4,7 @@
 
 use super::{journal, purge, try_exclusive};
 use crate::api::{self, ApiError};
+use crate::context::Context;
 use crate::error::{Error, Result};
 use crate::state::{Park, State};
 use crate::{park, state, time};
@@ -46,14 +47,14 @@ impl Renewal {
 /// Renew every parked login whose access token has expired or is about to. Nothing is done
 /// while another pitboard run holds the lock or a switch waits to be finished: a renewal
 /// replaces the refresh token, and nothing may install the old copy meanwhile.
-pub fn renew_parked() -> Vec<(String, Renewal)> {
-    let Some(_exclusive) = try_exclusive() else {
+pub fn renew_parked(ctx: &Context) -> Vec<(String, Renewal)> {
+    let Some(_exclusive) = try_exclusive(ctx) else {
         return Vec::new();
     };
-    if journal::pending() {
+    if journal::pending(ctx) {
         return Vec::new();
     }
-    let Ok(mut state) = state::load() else {
+    let Ok(mut state) = state::load(ctx) else {
         return Vec::new();
     };
     let now = time::now();
@@ -69,16 +70,16 @@ pub fn renew_parked() -> Vec<(String, Renewal)> {
     let outcomes = due
         .into_iter()
         .map(|(label, held)| {
-            let outcome = renew(&mut state, &label, &held).unwrap_or_else(Renewal::Failed);
+            let outcome = renew(ctx, &mut state, &label, &held).unwrap_or_else(Renewal::Failed);
             (label, outcome)
         })
         .collect();
-    purge(&mut state);
+    purge(ctx, &mut state);
     outcomes
 }
 
-fn renew(state: &mut State, label: &str, held: &Park) -> Result<Renewal> {
-    let oauth = park::load(label, held)?;
+fn renew(ctx: &Context, state: &mut State, label: &str, held: &Park) -> Result<Renewal> {
+    let oauth = park::load(ctx, label, held)?;
     let refresh = oauth["refreshToken"].as_str().unwrap_or_default();
     let mut scopes: Vec<String> = oauth["scopes"]
         .as_array()
@@ -93,11 +94,11 @@ fn renew(state: &mut State, label: &str, held: &Park) -> Result<Renewal> {
         scopes = DEFAULT_SCOPES.map(str::to_owned).to_vec();
     }
 
-    let fresh = match api::renew(refresh, &scopes) {
+    let fresh = match api::renew(ctx, refresh, &scopes) {
         Ok(fresh) => fresh,
         Err(ApiError::InvalidGrant) => {
             state.discard(&held.service);
-            state::save(state)?;
+            state::save(ctx, state)?;
             return Ok(Renewal::Refused);
         }
         Err(ApiError::Network(_) | ApiError::RateLimited) => return Ok(Renewal::Deferred),
@@ -116,9 +117,10 @@ fn renew(state: &mut State, label: &str, held: &Park) -> Result<Renewal> {
         .get(label)
         .map(|a| a.account_uuid.clone())
         .unwrap_or_default();
-    let store = || park::reserve(&uuid).and_then(|service| park::store_at(&service, &next));
+    let store =
+        || park::reserve(ctx, &uuid).and_then(|service| park::store_at(ctx, &service, &next));
     let parked = store().or_else(|_| store())?;
     state.park(label, parked);
-    state::save(state)?;
+    state::save(ctx, state)?;
     Ok(Renewal::Renewed)
 }

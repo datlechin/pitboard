@@ -5,6 +5,7 @@
 //! signed in is Claude Code's to renew: two holders renewing one refresh chain would break
 //! it for both.
 
+use crate::context::Context;
 use crate::usage::{self, Snapshot};
 use serde_json::Value;
 use std::sync::OnceLock;
@@ -21,18 +22,16 @@ const CLIENT_ID: &str = "9d1c250a-e61b-44d9-88ed-5944d1962f5e";
 /// Where requests go instead, for tests. Nothing else may redirect them, because an address
 /// that answers "this token belongs to account X" decides which account a credential is filed
 /// under. Only loopback is accepted, so a token or an answer never leaves this machine.
-fn test_base() -> Option<String> {
-    std::env::var("PITBOARD_API_BASE")
-        .ok()
-        .filter(|url| is_loopback(url))
+fn test_base(ctx: &Context) -> Option<String> {
+    ctx.api_base.clone().filter(|url| is_loopback(url))
 }
 
-fn base() -> String {
-    test_base().unwrap_or_else(|| BASE.to_string())
+fn base(ctx: &Context) -> String {
+    test_base(ctx).unwrap_or_else(|| BASE.to_string())
 }
 
-fn auth_base() -> String {
-    test_base().unwrap_or_else(|| AUTH_BASE.to_string())
+fn auth_base(ctx: &Context) -> String {
+    test_base(ctx).unwrap_or_else(|| AUTH_BASE.to_string())
 }
 
 /// Judged on the parsed host, never on a prefix: `http://127.0.0.1:@elsewhere/` begins like
@@ -111,9 +110,9 @@ fn agent() -> &'static Agent {
     })
 }
 
-fn get(path: &str, access_token: &str) -> Result<Value, ApiError> {
+fn get(ctx: &Context, path: &str, access_token: &str) -> Result<Value, ApiError> {
     let mut response = agent()
-        .get(format!("{}{path}", base()))
+        .get(format!("{}{path}", base(ctx)))
         .header("Authorization", format!("Bearer {access_token}"))
         .header("anthropic-beta", "oauth-2025-04-20")
         .call()
@@ -134,7 +133,7 @@ fn get(path: &str, access_token: &str) -> Result<Value, ApiError> {
 
 /// The request Claude Code makes to renew its own login, for a parked one. The scopes asked
 /// for are the ones the login already has, so the answer can never be `invalid_scope`.
-pub fn renew(refresh_token: &str, scopes: &[String]) -> Result<Renewed, ApiError> {
+pub fn renew(ctx: &Context, refresh_token: &str, scopes: &[String]) -> Result<Renewed, ApiError> {
     let body = serde_json::json!({
         "grant_type": "refresh_token",
         "refresh_token": refresh_token,
@@ -142,7 +141,7 @@ pub fn renew(refresh_token: &str, scopes: &[String]) -> Result<Renewed, ApiError
         "scope": scopes.join(" "),
     });
     let mut response = agent()
-        .post(format!("{}/v1/oauth/token", auth_base()))
+        .post(format!("{}/v1/oauth/token", auth_base(ctx)))
         .header("Content-Type", "application/json")
         .send(body.to_string())
         .map_err(|e| ApiError::Network(e.to_string()))?;
@@ -178,13 +177,13 @@ fn parse_renewed(body: &Value) -> Result<Renewed, ApiError> {
     })
 }
 
-pub fn owner(access_token: &str) -> Result<Owner, ApiError> {
-    let body = get("/api/oauth/profile", access_token)?;
+pub fn owner(ctx: &Context, access_token: &str) -> Result<Owner, ApiError> {
+    let body = get(ctx, "/api/oauth/profile", access_token)?;
     parse_owner(&body)
 }
 
-pub fn usage(access_token: &str) -> Result<Snapshot, ApiError> {
-    let body = get("/api/oauth/usage", access_token)?;
+pub fn usage(ctx: &Context, access_token: &str) -> Result<Snapshot, ApiError> {
+    let body = get(ctx, "/api/oauth/usage", access_token)?;
     Ok(usage::from_usage_object(&body, crate::time::now()))
 }
 

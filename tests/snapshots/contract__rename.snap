@@ -1,0 +1,19 @@
+---
+source: tests/contract.rs
+expression: "serde_json :: json! ({ \"exit\" : code, \"envelope\" : value })"
+---
+{
+  "exit": 0,
+  "envelope": {
+    "v": 1,
+    "command": "rename",
+    "ok": true,
+    "data": {
+      "from": "beta",
+      "to": "work",
+      "email": "b@example.com"
+    },
+    "warnings": [],
+    "error": null
+  }
+}

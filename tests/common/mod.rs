@@ -8,6 +8,11 @@
 // does not use one of these helpers would otherwise warn about it.
 #![allow(dead_code)]
 
+/// This test process's own environment: the machine's real keychain account and slot.
+pub fn ctx() -> pitboard::context::Context {
+    pitboard::context::Context::from_env()
+}
+
 /// Refuse a service name that this machine's Claude Code would actually read.
 ///
 /// A slot hashed from a scratch directory is safe by construction and is exactly what the
@@ -21,7 +26,7 @@ pub fn guard_not_live(service: &str) {
     );
     assert_ne!(
         service,
-        pitboard::claude::live_service(),
+        pitboard::claude::live_service(&ctx()),
         "a test must never address the slot this machine's Claude Code reads"
     );
 }
@@ -33,7 +38,8 @@ fn the_guard_refuses_the_slots_that_hold_a_real_login() {
 
     let caught = std::panic::catch_unwind(|| guard_not_live(pitboard::slot::LIVE_SERVICE));
     assert!(caught.is_err(), "the default slot must be refused");
-    let caught = std::panic::catch_unwind(|| guard_not_live(&pitboard::claude::live_service()));
+    let caught =
+        std::panic::catch_unwind(|| guard_not_live(&pitboard::claude::live_service(&ctx())));
     assert!(caught.is_err(), "this machine's live slot must be refused");
 }
 
@@ -140,6 +146,21 @@ impl Env {
         self.run(&["enroll", label, "--sign-in"])
     }
 
+    /// `enroll_by_signing_in`, asking for the JSON envelope.
+    pub fn enroll_by_signing_in_json(
+        &mut self,
+        label: &str,
+        uuid: &str,
+        email: &str,
+        org: &str,
+        refresh: &str,
+    ) -> (String, String, i32) {
+        let credential = credential(refresh).to_string();
+        self.install_fake_claude(&credential);
+        self.owns(&format!("access-{refresh}"), uuid, email, org);
+        self.run(&["enroll", label, "--sign-in", "--json"])
+    }
+
     pub fn install_fake_claude(&self, credential: &str) {
         let bin = self.root.join("bin");
         std::fs::create_dir_all(&bin).unwrap();
@@ -171,7 +192,7 @@ impl Env {
     pub fn write_park(&self, service: &str, contents: &str) {
         guard_not_live(service);
         if cfg!(target_os = "macos") {
-            pitboard::store::vault_write(service, contents).unwrap();
+            pitboard::store::vault_write(&ctx(), service, contents).unwrap();
         } else {
             let vault = self.root.join("pitboard/vault");
             std::fs::create_dir_all(&vault).unwrap();
@@ -181,7 +202,9 @@ impl Env {
 
     pub fn is_parked(&self, service: &str) -> bool {
         if cfg!(target_os = "macos") {
-            pitboard::store::vault_read(service).unwrap().is_some()
+            pitboard::store::vault_read(&ctx(), service)
+                .unwrap()
+                .is_some()
         } else {
             self.root
                 .join(format!("pitboard/vault/{service}.json"))
@@ -191,7 +214,7 @@ impl Env {
 
     pub fn delete_park(&self, service: &str) {
         if cfg!(target_os = "macos") {
-            let _ = pitboard::store::vault_delete(service);
+            let _ = pitboard::store::vault_delete(&ctx(), service);
         }
     }
 
@@ -274,7 +297,7 @@ impl Env {
 
     fn write_live(&self, credential: &str) {
         if cfg!(target_os = "macos") {
-            pitboard::store::vault_write(&self.service, credential).unwrap();
+            pitboard::store::vault_write(&ctx(), &self.service, credential).unwrap();
         } else {
             std::fs::write(self.live_path(), credential).unwrap();
         }
@@ -282,7 +305,9 @@ impl Env {
 
     pub fn live(&self) -> serde_json::Value {
         let raw = if cfg!(target_os = "macos") {
-            pitboard::store::vault_read(&self.service).unwrap().unwrap()
+            pitboard::store::vault_read(&ctx(), &self.service)
+                .unwrap()
+                .unwrap()
         } else {
             std::fs::read_to_string(self.live_path()).unwrap()
         };

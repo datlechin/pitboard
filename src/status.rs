@@ -6,6 +6,7 @@
 //! round trip, not one per account.
 
 use crate::api::{self, ApiError, Owner};
+use crate::context::Context;
 use crate::state::{Park, State};
 use crate::ui::{self, BAD, BOLD, DIM, GOOD, WARN, pad, paint};
 use crate::usage::{Snapshot, Source, Window};
@@ -101,33 +102,38 @@ fn access_token(oauth: &Value) -> Option<String> {
 }
 
 /// The token to ask about a parked account with, or why there is none.
-fn parked_token(label: &str, parked: Option<&Park>, now: i64) -> Result<String, Stale> {
+fn parked_token(
+    ctx: &Context,
+    label: &str,
+    parked: Option<&Park>,
+    now: i64,
+) -> Result<String, Stale> {
     match parked {
         None => Err(Stale::NothingParked),
         Some(p) if !p.askable_at(now) => Err(Stale::ParkedAccessExpired),
-        Some(p) => park::load(label, p)
+        Some(p) => park::load(ctx, label, p)
             .ok()
             .and_then(|oauth| access_token(&oauth))
             .ok_or(Stale::ParkUnreadable),
     }
 }
 
-pub fn gather(state: &State) -> Report {
+pub fn gather(ctx: &Context, state: &State) -> Report {
     let now = time::now();
-    let live_token = store::read(&claude::live_service())
+    let live_token = store::read(ctx, &claude::live_service(ctx))
         .ok()
         .flatten()
         .and_then(|doc| access_token(&doc["claudeAiOauth"]));
     let parked_tokens: Vec<Result<String, Stale>> = state
         .accounts
         .iter()
-        .map(|a| parked_token(&a.label, a.parked.as_ref(), now))
+        .map(|a| parked_token(ctx, &a.label, a.parked.as_ref(), now))
         .collect();
 
     let (signed_in, live_usage, parked_usage) = std::thread::scope(|scope| {
-        let owner = scope.spawn(|| live_token.as_deref().map(api::owner));
+        let owner = scope.spawn(|| live_token.as_deref().map(|t| api::owner(ctx, t)));
         let live = scope.spawn(|| match live_token.as_deref() {
-            Some(token) => api::usage(token).map_err(|e| Stale::of(&e, true)),
+            Some(token) => api::usage(ctx, token).map_err(|e| Stale::of(&e, true)),
             None => Err(Stale::NothingSignedIn),
         });
         let parked: Vec<_> = parked_tokens
@@ -135,7 +141,7 @@ pub fn gather(state: &State) -> Report {
             .map(|token| {
                 scope.spawn(move || {
                     let token = token.as_deref().map_err(|stale| *stale)?;
-                    api::usage(token).map_err(|e| Stale::of(&e, false))
+                    api::usage(ctx, token).map_err(|e| Stale::of(&e, false))
                 })
             })
             .collect();
@@ -153,14 +159,15 @@ pub fn gather(state: &State) -> Report {
         signed_in,
         live_usage,
         parked_usage,
-        claude_code_cache: claude::load_config()
+        claude_code_cache: claude::load_config(ctx)
             .ok()
             .as_ref()
             .and_then(crate::usage::from_config_cache),
     };
-    let remembered = readings::load();
+    let remembered = readings::load(ctx);
     let rows = assemble(state, &facts, |uuid| remembered.get(uuid).cloned());
     readings::remember(
+        ctx,
         &rows
             .iter()
             .filter_map(|r| {
@@ -581,10 +588,11 @@ mod tests {
 
     #[test]
     fn a_parked_login_past_its_access_expiry_is_not_asked() {
-        let token = parked_token("personal", Some(&parked(NOW + 86_400)), NOW);
+        let ctx = Context::from_env();
+        let token = parked_token(&ctx, "personal", Some(&parked(NOW + 86_400)), NOW);
         assert_eq!(token, Err(Stale::ParkedAccessExpired));
         assert_eq!(
-            parked_token("personal", None, NOW),
+            parked_token(&ctx, "personal", None, NOW),
             Err(Stale::NothingParked)
         );
     }

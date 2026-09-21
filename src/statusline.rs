@@ -6,6 +6,7 @@
 //! network, and nothing written. The other accounts show pitboard's last reading of them,
 //! with its age once that is worth knowing.
 
+use crate::context::Context;
 use crate::state::State;
 use crate::ui::{self, BOLD, DIM, paint};
 use crate::usage::Snapshot;
@@ -97,10 +98,10 @@ pub fn render(
 
 /// Reads Claude Code's JSON from `input`. Never fails: a status bar has nowhere to show an
 /// error, so whatever cannot be read is left out.
-pub fn run(input: &str) -> String {
+pub fn run(ctx: &Context, input: &str) -> String {
     let input: Value = serde_json::from_str(input).unwrap_or(Value::Null);
-    let state = crate::state::load().unwrap_or_default();
-    let signed_in = crate::claude::load_config()
+    let state = crate::state::load(ctx).unwrap_or_default();
+    let signed_in = crate::claude::load_config(ctx)
         .ok()
         .as_ref()
         .and_then(crate::claude::identity)
@@ -109,7 +110,7 @@ pub fn run(input: &str) -> String {
         &input,
         &state,
         signed_in.as_deref(),
-        &crate::readings::load(),
+        &crate::readings::load(ctx),
         crate::time::now(),
     )
 }

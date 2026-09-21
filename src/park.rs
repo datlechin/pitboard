@@ -1,6 +1,7 @@
 //! Where an account's login waits while another is signed in. Nothing here decides what to
 //! delete: a park no account refers to is listed in `State::discarded` and purged from there.
 
+use crate::context::Context;
 use crate::error::{Error, Result};
 use crate::state::{Park, State};
 use crate::{api, store, time};
@@ -12,11 +13,11 @@ pub fn service_name(account_uuid: &str, at_millis: i64) -> String {
 
 /// Claim a free name before writing to it, so the caller can record it first and recovery
 /// can find a park left by a run that died. Reusing a name would destroy the park there.
-pub fn reserve(account_uuid: &str) -> Result<String> {
+pub fn reserve(ctx: &Context, account_uuid: &str) -> Result<String> {
     let start = time::now_millis();
     for offset in 0..1_000 {
         let candidate = service_name(account_uuid, start + offset);
-        if store::vault_read(&candidate)?.is_none() {
+        if store::vault_read(ctx, &candidate)?.is_none() {
             return Ok(candidate);
         }
     }
@@ -24,7 +25,7 @@ pub fn reserve(account_uuid: &str) -> Result<String> {
 }
 
 /// Write a login into a reserved name and prove it reads back.
-pub fn store_at(service: &str, oauth: &Value) -> Result<Park> {
+pub fn store_at(ctx: &Context, service: &str, oauth: &Value) -> Result<Park> {
     let park = describe(service, time::now(), oauth);
     if park.refresh_fingerprint.is_empty() {
         return Err(Error::LiveCredentialShapeUnexpected {
@@ -32,7 +33,7 @@ pub fn store_at(service: &str, oauth: &Value) -> Result<Park> {
         });
     }
     let body = serde_json::to_string(oauth).expect("an oauth block is always serialisable");
-    store::vault_write(service, &body)?;
+    store::vault_write(ctx, service, &body)?;
     Ok(park)
 }
 
@@ -91,10 +92,11 @@ pub fn fingerprint_of(oauth: &Value) -> String {
 }
 
 /// Takes the label so a failure names the account, not an item the user has never seen.
-pub fn load(label: &str, park: &Park) -> Result<Value> {
-    let raw = store::vault_read(&park.service)?.ok_or_else(|| Error::ParkedCredentialMissing {
-        label: label.to_string(),
-    })?;
+pub fn load(ctx: &Context, label: &str, park: &Park) -> Result<Value> {
+    let raw =
+        store::vault_read(ctx, &park.service)?.ok_or_else(|| Error::ParkedCredentialMissing {
+            label: label.to_string(),
+        })?;
     let value: Value = serde_json::from_str(&raw).map_err(|e| Error::ParkedCredentialCorrupt {
         label: label.to_string(),
         detail: e.to_string(),
@@ -110,10 +112,10 @@ pub fn load(label: &str, park: &Park) -> Result<Value> {
 
 /// Delete every discarded item, keeping listed only those that resisted. Returns how many
 /// remain.
-pub fn purge(state: &mut State) -> usize {
+pub fn purge(ctx: &Context, state: &mut State) -> usize {
     state
         .discarded
-        .retain(|service| store::vault_delete(service).is_err());
+        .retain(|service| store::vault_delete(ctx, service).is_err());
     state.discarded.len()
 }
 
@@ -199,6 +201,7 @@ mod tests {
     #[test]
     fn a_credential_with_no_refresh_token_is_refused_rather_than_parked() {
         let refused = store_at(
+            &Context::from_env(),
             "pitboard-park-test-no-refresh",
             &serde_json::json!({"accessToken": "a"}),
         );

@@ -2,6 +2,7 @@
 //! process sees by hashing a directory path. If Claude Code changes that, only this file
 //! changes.
 
+use crate::context::Context;
 use sha2::{Digest, Sha256};
 use unicode_normalization::UnicodeNormalization;
 
@@ -15,9 +16,9 @@ pub const CRED_FILE: &str = ".credentials.json";
 const FALLBACK_ACCOUNT: &str = "claude-code-user";
 
 /// The keychain account name Claude Code stores under.
-pub fn account_name() -> String {
-    match std::env::var("USER") {
-        Ok(u) if is_accepted_account(&u) => u,
+pub fn account_name(ctx: &Context) -> String {
+    match &ctx.user {
+        Some(u) if is_accepted_account(u) => u.clone(),
         _ => FALLBACK_ACCOUNT.to_string(),
     }
 }

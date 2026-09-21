@@ -1,6 +1,7 @@
-use anstream::{eprintln, print, println};
+use anstream::{ColorChoice, eprintln, print, println};
 use anstyle::{AnsiColor, Style};
 use clap::{CommandFactory, Parser, Subcommand};
+use pitboard::context::Context;
 use pitboard::error::Error;
 use pitboard::switch::{Enrolled, Outcome, Renewal, Settled, SignIn};
 use pitboard::ui::{BOLD, paint};
@@ -159,19 +160,19 @@ fn emit(report: Report, as_json: bool) -> ExitCode {
     ExitCode::from(report.exit)
 }
 
-fn status() -> Report {
+fn status(ctx: &Context) -> Report {
     // Parked logins whose access has lapsed are renewed first, so every account is asked live.
-    let renewals = switch::renew_parked();
+    let renewals = switch::renew_parked(ctx);
     for (label, outcome) in &renewals {
-        audit::record("renew", label, outcome.code());
+        audit::record(ctx, "renew", label, outcome.code());
     }
     // Unreadable is not the same as empty: reporting it as empty would tell the user their
     // enrolled logins are gone.
-    let state = match state::load() {
+    let state = match state::load(ctx) {
         Ok(s) => s,
         Err(e) => return Report::failed(Some("status"), e),
     };
-    let report = status::gather(&state);
+    let report = status::gather(ctx, &state);
     let mut done = Report::done(
         "status",
         status::render_json(&report),
@@ -195,8 +196,8 @@ fn status() -> Report {
     done
 }
 
-fn doctor() -> Report {
-    let diagnosis = doctor::run();
+fn doctor(ctx: &Context) -> Report {
+    let diagnosis = doctor::run(ctx);
     let healthy = doctor::healthy(&diagnosis.checks);
     Report {
         // A failed check means an assumption pitboard relies on no longer holds.
@@ -209,25 +210,39 @@ fn doctor() -> Report {
     }
 }
 
-fn statusline() -> Report {
+/// Claude Code reads the line through a pipe and draws its colours, so they are kept even
+/// though stdout is not a terminal, unless `NO_COLOR` asks otherwise. The JSON form is plain.
+fn statusline(ctx: &Context) -> Report {
     let mut input = String::new();
     let _ = std::io::stdin().read_to_string(&mut input);
-    let line = statusline::run(&input);
-    Report::done("statusline", json!({ "line": line }), format!("{line}\n"))
+    let line = statusline::run(ctx, &input);
+    if std::env::var_os("NO_COLOR").is_none() {
+        ColorChoice::Always.write_global();
+    }
+    Report::done(
+        "statusline",
+        json!({ "line": anstream::adapter::strip_str(&line).to_string() }),
+        format!("{line}\n"),
+    )
 }
 
 /// Runs a command that changes state once any interrupted switch is settled. What settling
 /// found is reported whether or not the command then succeeds.
-fn changing(command: &'static str, label: &str, run: impl FnOnce(Settled) -> Report) -> Report {
-    let (settled, recovered) = match switch::settle() {
+fn changing(
+    ctx: &Context,
+    command: &'static str,
+    label: &str,
+    run: impl FnOnce(Settled) -> Report,
+) -> Report {
+    let (settled, recovered) = match switch::settle(ctx) {
         Ok(settled) => settled,
         Err(e) => {
-            audit::record(command, label, e.code());
+            audit::record(ctx, command, label, e.code());
             return Report::failed(Some(command), e);
         }
     };
     let recovered = recovered.map(|r| {
-        audit::record("recover", &r.to, r.code());
+        audit::record(ctx, "recover", &r.to, r.code());
         warning(r.code(), &r)
     });
     let mut report = run(settled);
@@ -237,26 +252,27 @@ fn changing(command: &'static str, label: &str, run: impl FnOnce(Settled) -> Rep
 
 /// The browser sign-in runs before pitboard takes its lock, so a person taking their time in
 /// a browser never holds up a switch.
-fn enroll_signing_in(label: &str) -> Report {
-    let who = state::load()
+fn enroll_signing_in(ctx: &Context, label: &str) -> Report {
+    let who = state::load(ctx)
         .ok()
         .and_then(|s| s.get(label).map(|a| a.email.clone()))
         .unwrap_or_else(|| "the account to add".to_string());
     eprintln!(
         "Opening Claude Code's sign-in. Sign in as {who}; the account in use now stays signed in."
     );
-    match switch::sign_in() {
-        Ok(login) => changing("enroll", label, |s| enroll(s, label, Some(login))),
+    match switch::sign_in(ctx) {
+        Ok(login) => changing(ctx, "enroll", label, |s| enroll(ctx, s, label, Some(login))),
         Err(e) => {
-            audit::record("enroll", label, e.code());
+            audit::record(ctx, "enroll", label, e.code());
             Report::failed(Some("enroll"), e)
         }
     }
 }
 
-fn enroll(settled: Settled, label: &str, signed_in: Option<SignIn>) -> Report {
+fn enroll(ctx: &Context, settled: Settled, label: &str, signed_in: Option<SignIn>) -> Report {
     let outcome = switch::enroll(settled, label, signed_in);
     audit::record(
+        ctx,
         "enroll",
         label,
         outcome.as_ref().map_or_else(|e| e.code(), |_| "ok"),
@@ -288,9 +304,10 @@ fn enroll(settled: Settled, label: &str, signed_in: Option<SignIn>) -> Report {
     )
 }
 
-fn use_account(settled: Settled, label: &str) -> Report {
+fn use_account(ctx: &Context, settled: Settled, label: &str) -> Report {
     let outcome = switch::switch(settled, label);
     audit::record(
+        ctx,
         "use",
         label,
         match &outcome {
@@ -341,9 +358,10 @@ fn use_account(settled: Settled, label: &str) -> Report {
     }
 }
 
-fn forget(settled: Settled, label: &str) -> Report {
+fn forget(ctx: &Context, settled: Settled, label: &str) -> Report {
     let outcome = switch::forget(settled, label);
     audit::record(
+        ctx,
         "forget",
         label,
         outcome.as_ref().map_or_else(|e| e.code(), |_| "ok"),
@@ -364,9 +382,10 @@ fn forget(settled: Settled, label: &str) -> Report {
     }
 }
 
-fn rename(settled: Settled, from: &str, to: &str) -> Report {
+fn rename(ctx: &Context, settled: Settled, from: &str, to: &str) -> Report {
     let outcome = switch::rename(settled, from, to);
     audit::record(
+        ctx,
         "rename",
         &format!("{from} -> {to}"),
         outcome.as_ref().map_or_else(|e| e.code(), |_| "ok"),
@@ -405,18 +424,23 @@ fn main() -> ExitCode {
         Ok(cli) => cli,
         Err(exit) => return exit,
     };
+    let ctx = Context::from_env();
     let report = match cli.command.unwrap_or(Command::Status) {
-        Command::Status => status(),
-        Command::Doctor => doctor(),
-        Command::Statusline => statusline(),
+        Command::Status => status(&ctx),
+        Command::Doctor => doctor(&ctx),
+        Command::Statusline => statusline(&ctx),
         Command::Enroll {
             label,
             sign_in: true,
-        } => enroll_signing_in(&label),
-        Command::Enroll { label, .. } => changing("enroll", &label, |s| enroll(s, &label, None)),
-        Command::Use { label } => changing("use", &label, |s| use_account(s, &label)),
-        Command::Forget { label } => changing("forget", &label, |s| forget(s, &label)),
-        Command::Rename { from, to } => changing("rename", &from, |s| rename(s, &from, &to)),
+        } => enroll_signing_in(&ctx, &label),
+        Command::Enroll { label, .. } => {
+            changing(&ctx, "enroll", &label, |s| enroll(&ctx, s, &label, None))
+        }
+        Command::Use { label } => changing(&ctx, "use", &label, |s| use_account(&ctx, s, &label)),
+        Command::Forget { label } => changing(&ctx, "forget", &label, |s| forget(&ctx, s, &label)),
+        Command::Rename { from, to } => {
+            changing(&ctx, "rename", &from, |s| rename(&ctx, s, &from, &to))
+        }
         Command::Completions { shell } => {
             clap_complete::generate(
                 shell,

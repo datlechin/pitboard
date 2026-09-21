@@ -6,6 +6,7 @@ mod keychain;
 #[cfg(not(target_os = "macos"))]
 mod vault;
 
+use crate::context::Context;
 use crate::{claude, slot};
 use serde_json::Value;
 use std::path::PathBuf;
@@ -81,22 +82,25 @@ pub(crate) trait RawStore: Send + Sync {
 /// On macOS it writes the plaintext file and deletes the keychain item when a keychain
 /// write fails outright, so both can be the live one at different times.
 #[cfg(target_os = "macos")]
-fn live_chain() -> [&'static dyn RawStore; 2] {
-    [&keychain::LIVE, &file::LIVE]
+fn live_chain(ctx: &Context) -> Vec<Box<dyn RawStore>> {
+    vec![
+        Box::new(keychain::Keychain::live(ctx)),
+        Box::new(file::PlainFile::live(ctx)),
+    ]
 }
 #[cfg(not(target_os = "macos"))]
-fn live_chain() -> [&'static dyn RawStore; 1] {
-    [&file::LIVE]
+fn live_chain(ctx: &Context) -> Vec<Box<dyn RawStore>> {
+    vec![Box::new(file::PlainFile::live(ctx))]
 }
 
 /// Where pitboard's own parked credentials go. Never Claude Code's fallback file.
 #[cfg(target_os = "macos")]
-fn vault() -> &'static dyn RawStore {
-    &keychain::VAULT
+fn vault(ctx: &Context) -> Box<dyn RawStore> {
+    Box::new(keychain::Keychain::vault(ctx))
 }
 #[cfg(not(target_os = "macos"))]
-fn vault() -> &'static dyn RawStore {
-    &vault::FILE
+fn vault(ctx: &Context) -> Box<dyn RawStore> {
+    Box::new(vault::FileVault::new(ctx))
 }
 
 /// Only "not found" means absent. A permission error or a loop in the path says nothing about
@@ -106,8 +110,8 @@ fn exists(path: &std::path::Path) -> Result<bool, Error> {
         .map_err(|e| Error::Unreadable(format!("cannot look for {}: {e}", path.display())))
 }
 
-pub fn credential_file() -> PathBuf {
-    PathBuf::from(claude::storage_dir()).join(slot::CRED_FILE)
+pub fn credential_file(ctx: &Context) -> PathBuf {
+    PathBuf::from(claude::storage_dir(ctx)).join(slot::CRED_FILE)
 }
 
 /// Which backend in `chain` holds `service`. The chain is a parameter so tests can pass
@@ -131,23 +135,27 @@ fn write_in(chain: &[&dyn RawStore], service: &str, contents: &str) -> Result<()
 
 /// Resolved on every call, never cached: Claude Code moves the credential between backends
 /// when a keychain write fails, so a remembered answer goes wrong without warning.
-fn resolve_backend(service: &str) -> Result<Option<&'static dyn RawStore>, Error> {
-    resolve_in(&live_chain(), service)
+fn with_live<T>(ctx: &Context, run: impl FnOnce(&[&dyn RawStore]) -> T) -> T {
+    let owned = live_chain(ctx);
+    let chain: Vec<&dyn RawStore> = owned.iter().map(Box::as_ref).collect();
+    run(&chain)
 }
 
-pub fn resolve(service: &str) -> Result<Backend, Error> {
-    Ok(resolve_backend(service)?.map_or(Backend::Absent, |b| b.kind()))
+pub fn resolve(ctx: &Context, service: &str) -> Result<Backend, Error> {
+    with_live(ctx, |chain| {
+        Ok(resolve_in(chain, service)?.map_or(Backend::Absent, |b| b.kind()))
+    })
 }
 
-pub fn read_raw(service: &str) -> Result<Option<String>, Error> {
-    match resolve_backend(service)? {
+pub fn read_raw(ctx: &Context, service: &str) -> Result<Option<String>, Error> {
+    with_live(ctx, |chain| match resolve_in(chain, service)? {
         Some(backend) => backend.read(service),
         None => Ok(None),
-    }
+    })
 }
 
-pub fn read(service: &str) -> Result<Option<Value>, Error> {
-    match read_raw(service)? {
+pub fn read(ctx: &Context, service: &str) -> Result<Option<Value>, Error> {
+    match read_raw(ctx, service)? {
         None => Ok(None),
         Some(raw) => serde_json::from_str(&raw)
             .map(Some)
@@ -158,19 +166,20 @@ pub fn read(service: &str) -> Result<Option<Value>, Error> {
 /// Write the live credential where it already lives. A failed keychain write is never
 /// answered by writing the plaintext file: that demotion is Claude Code's to make, and
 /// making it here would move the user's token somewhere weaker without saying so.
-pub fn write_raw(service: &str, contents: &str) -> Result<(), Error> {
-    write_in(&live_chain(), service, contents)
+pub fn write_raw(ctx: &Context, service: &str, contents: &str) -> Result<(), Error> {
+    with_live(ctx, |chain| write_in(chain, service, contents))
 }
 
 /// The credential Claude Code keeps for a config directory: the hashed keychain slot on
 /// macOS, `.credentials.json` inside it elsewhere.
-pub fn read_signin(dir: &std::path::Path) -> Result<Option<String>, Error> {
+pub fn read_signin(ctx: &Context, dir: &std::path::Path) -> Result<Option<String>, Error> {
     #[cfg(target_os = "macos")]
     {
-        keychain::LIVE.read(&slot::service_for_dir(&dir.to_string_lossy()))
+        keychain::Keychain::live(ctx).read(&slot::service_for_dir(&dir.to_string_lossy()))
     }
     #[cfg(not(target_os = "macos"))]
     {
+        let _ = ctx;
         match std::fs::read_to_string(dir.join(slot::CRED_FILE)) {
             Ok(s) => Ok(Some(s)),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
@@ -181,17 +190,18 @@ pub fn read_signin(dir: &std::path::Path) -> Result<Option<String>, Error> {
 
 /// This deletes an item Claude Code created, so it refuses any name that could hold a real
 /// login.
-pub fn discard_signin(dir: &std::path::Path) -> Result<(), Error> {
+pub fn discard_signin(ctx: &Context, dir: &std::path::Path) -> Result<(), Error> {
     #[cfg(target_os = "macos")]
     {
         let service = slot::service_for_dir(&dir.to_string_lossy());
-        if service == slot::LIVE_SERVICE || service == claude::live_service() {
+        if service == slot::LIVE_SERVICE || service == claude::live_service(ctx) {
             return Err(Error::Write(format!("refusing to delete {service}")));
         }
-        keychain::LIVE.delete(&service)
+        keychain::Keychain::live(ctx).delete(&service)
     }
     #[cfg(not(target_os = "macos"))]
     {
+        let _ = ctx;
         match std::fs::remove_file(dir.join(slot::CRED_FILE)) {
             Ok(()) => Ok(()),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
@@ -200,20 +210,20 @@ pub fn discard_signin(dir: &std::path::Path) -> Result<(), Error> {
     }
 }
 
-pub fn vault_read(service: &str) -> Result<Option<String>, Error> {
-    vault().read(service)
+pub fn vault_read(ctx: &Context, service: &str) -> Result<Option<String>, Error> {
+    vault(ctx).read(service)
 }
 
-pub fn vault_write(service: &str, contents: &str) -> Result<(), Error> {
-    vault().write(service, contents)
+pub fn vault_write(ctx: &Context, service: &str, contents: &str) -> Result<(), Error> {
+    vault(ctx).write(service, contents)
 }
 
-pub fn vault_delete(service: &str) -> Result<(), Error> {
-    vault().delete(service)
+pub fn vault_delete(ctx: &Context, service: &str) -> Result<(), Error> {
+    vault(ctx).delete(service)
 }
 
-pub fn too_large(service: &str, contents: &str) -> bool {
-    vault().too_large(service, contents)
+pub fn too_large(ctx: &Context, service: &str, contents: &str) -> bool {
+    vault(ctx).too_large(service, contents)
 }
 
 /// A handle for comparing and logging tokens without the secret leaving this process.
@@ -393,7 +403,10 @@ mod tests {
 
     #[test]
     fn the_live_chain_never_offers_a_keychain_off_macos() {
-        let kinds: Vec<Backend> = live_chain().iter().map(|b| b.kind()).collect();
+        let kinds: Vec<Backend> = live_chain(&Context::from_env())
+            .iter()
+            .map(|b| b.kind())
+            .collect();
         if cfg!(target_os = "macos") {
             assert_eq!(kinds, vec![Backend::Keychain, Backend::File]);
         } else {
