@@ -5,6 +5,11 @@ All notable changes are recorded here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+- The app's build number now counts up with its version. 0.1.2 shipped with the build
+  number the template carried, which Sparkle would have read as newer than the release
+  after it.
+
 ## [0.1.2] - 2026-09-22
 
 ### Added

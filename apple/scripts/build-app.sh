@@ -41,6 +41,11 @@ cp "$binary" "$app/Contents/MacOS/Pitboard"
 # The plist carries a placeholder version; the crate's is the one that ships.
 sed "s/>0\.0\.0</>$version</" apple/Resources/Info.plist > "$app/Contents/Info.plist"
 printf 'APPL????' > "$app/Contents/PkgInfo"
+# Sparkle decides what is newer by CFBundleVersion, so it counts up with the version
+# rather than staying at whatever the template says.
+rest=${version#*.}
+build=$((${version%%.*} * 10000 + ${rest%%.*} * 100 + ${rest#*.}))
+/usr/libexec/PlistBuddy -c "Set :CFBundleVersion $build" "$app/Contents/Info.plist"
 
 swift apple/scripts/make-icon.swift apple/build
 iconutil --convert icns --output "$app/Contents/Resources/AppIcon.icns" \
