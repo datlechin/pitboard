@@ -238,9 +238,10 @@ pub fn evaluate(facts: &Facts) -> Vec<Check> {
                 "credential_size",
                 "login size",
                 detail,
-                "pitboard writes a login through the keychain's stdin, which is bounded. \
-                 Past the limit a switch is refused rather than putting a token on a \
-                 command line where any process could read it.",
+                "`security` reads at most this much of a command from stdin, and pitboard \
+                 will not put a token on the argument line unless asked. Past the limit a \
+                 switch is refused, unless PITBOARD_ARGV_FALLBACK=1 says to write it the \
+                 way Claude Code writes it.",
             )
         } else {
             ok("credential_size", "login size", detail)

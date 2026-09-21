@@ -29,8 +29,19 @@ private func status(_ accounts: [Account]) -> Status {
     #expect(menuTitle(for: read) == "work 64%")
 }
 
-@Test func theMenuBarSaysOnlyItsOwnNameBeforeTheFirstRead() {
-    #expect(menuTitle(for: nil) == "pitboard")
+/// Before the first read there is nothing true to say, and the icon is already there, so
+/// the item shows the mark alone rather than a name it has not checked.
+@Test func theMenuBarSaysNothingBeforeTheFirstRead() {
+    #expect(menuTitle(for: nil).isEmpty)
+}
+
+/// The bar belongs to everything else running too.
+@Test func aLongLabelIsBounded() {
+    let read = status([
+        account("a-very-long-account-label", signedIn: true, [window("session", 5)])
+    ])
+    #expect(menuTitle(for: read).count <= 17)
+    #expect(menuTitle(for: read).hasSuffix("5%"))
 }
 
 @Test func theAccountWithTheMostLeftIsOffered() {

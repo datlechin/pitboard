@@ -37,6 +37,8 @@ pub(super) struct Keychain {
     owner: Owner,
     /// The keychain account every item is stored under, as Claude Code names it.
     account: String,
+    /// Whether a login past the stdin limit may go on the argument line instead.
+    argv_fallback: bool,
 }
 
 impl Keychain {
@@ -45,6 +47,7 @@ impl Keychain {
         Keychain {
             owner: Owner::ClaudeCode,
             account: slot::account_name(ctx),
+            argv_fallback: ctx.argv_fallback(),
         }
     }
 
@@ -53,6 +56,7 @@ impl Keychain {
         Keychain {
             owner: Owner::Pitboard,
             account: slot::account_name(ctx),
+            argv_fallback: ctx.argv_fallback(),
         }
     }
 }
@@ -112,6 +116,11 @@ fn command_for(account: &str, service: &str, secret: &str) -> String {
 }
 
 impl Keychain {
+    /// Whether the command that writes this would be longer than `security -i` reads.
+    fn over_stdin_limit(&self, service: &str, contents: &str) -> bool {
+        command_for(&self.account, service, contents).len() > MAX_COMMAND_BYTES
+    }
+
     fn find(&self, service: &str, with_data: bool) -> Presence {
         let account = self.account.as_str();
         let mut args = vec!["find-generic-password", "-a", account, "-s", service];
@@ -149,21 +158,41 @@ impl RawStore for Keychain {
     /// would expose it. Both names are quoted because `security -i` splits on whitespace
     /// and every real service name contains a space.
     fn write(&self, service: &str, contents: &str) -> Result<(), Error> {
-        if self.too_large(service, contents) {
-            return Err(Error::Write(format!(
-                "this credential is {} bytes, past the {MAX_COMMAND_BYTES}-byte command limit",
-                command_for(&self.account, service, contents).len()
-            )));
-        }
         let account = self.account.as_str();
         if account.contains('"') || service.contains('"') {
             return Err(Error::Write(
                 "account or service name contains a quote".into(),
             ));
         }
+        let oversized = self.over_stdin_limit(service, contents);
+        if oversized && !self.argv_fallback {
+            return Err(Error::Write(format!(
+                "this credential is {} bytes, past the {MAX_COMMAND_BYTES}-byte command limit",
+                command_for(&self.account, service, contents).len()
+            )));
+        }
 
-        let out = security(&["-i"], &command_for(account, service, contents))
-            .map_err(|e| Error::Write(format!("{SECURITY} did not answer: {e}")))?;
+        // Measured on macOS 26: `security -i` reads at most 4097 bytes of command line and
+        // treats the rest as another command. Past that the only route `security` offers is
+        // the argument line, which is what Claude Code falls back to for the same login.
+        let hex = hex::encode(contents.as_bytes());
+        let out = if oversized {
+            let args = [
+                "add-generic-password",
+                "-U",
+                "-a",
+                account,
+                "-s",
+                service,
+                "-X",
+                &hex,
+            ];
+            security(&args, "")
+                .map_err(|e| Error::Write(format!("{SECURITY} did not answer: {e}")))?
+        } else {
+            security(&["-i"], &command_for(account, service, contents))
+                .map_err(|e| Error::Write(format!("{SECURITY} did not answer: {e}")))?
+        };
         if out.status.code() != Some(0) {
             return Err(Error::Write(format!(
                 "security exited {}: {}",
@@ -195,7 +224,7 @@ impl RawStore for Keychain {
     }
 
     fn too_large(&self, service: &str, contents: &str) -> bool {
-        command_for(&self.account, service, contents).len() > MAX_COMMAND_BYTES
+        !self.argv_fallback && self.over_stdin_limit(service, contents)
     }
 
     fn cost(&self, service: &str, contents: &str) -> Option<(usize, usize)> {

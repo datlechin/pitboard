@@ -21,6 +21,9 @@ pub struct Context {
     /// Environment variables that make Claude Code use something other than the login
     /// pitboard moves, so a switch would change nothing it can see.
     pub(crate) overriding_auth: Vec<String>,
+    /// Whether a login too large for `security -i` may be written the way Claude Code
+    /// writes it: as a command argument, where `ps` can see it for the length of the call.
+    pub(crate) argv_fallback: bool,
     /// Which front end asked, for the audit log. A change made from the menu bar and one
     /// typed at a prompt read the same otherwise.
     pub(crate) caller: String,
@@ -44,6 +47,7 @@ impl Context {
             secure_storage_dir: None,
             user: None,
             custom_oauth: false,
+            argv_fallback: false,
             overriding_auth: Vec::new(),
             caller: "unknown".into(),
             claude_program: PathBuf::from("claude"),
@@ -71,6 +75,12 @@ impl Context {
     }
 
     /// The login name whose keychain account Claude Code stores under.
+    /// Allows the argument-line write for a login too large for the stdin one.
+    pub fn with_argv_fallback(mut self, allowed: bool) -> Context {
+        self.argv_fallback = allowed;
+        self
+    }
+
     /// Whether a custom OAuth endpoint is configured, which moves Claude Code's login.
     pub fn custom_oauth(&self) -> bool {
         self.custom_oauth
@@ -79,6 +89,11 @@ impl Context {
     /// The `claude` pitboard would run to sign someone in.
     pub fn claude_program(&self) -> &std::path::Path {
         &self.claude_program
+    }
+
+    /// Whether the argument-line write is allowed for an oversized login.
+    pub fn argv_fallback(&self) -> bool {
+        self.argv_fallback
     }
 
     /// Environment variables that authenticate Claude Code some other way, if any.
@@ -117,6 +132,7 @@ impl Context {
             secure_storage_dir: var("CLAUDE_SECURESTORAGE_CONFIG_DIR"),
             user: var("USER"),
             custom_oauth: var("CLAUDE_CODE_CUSTOM_OAUTH_URL").is_some_and(|v| !v.is_empty()),
+            argv_fallback: var("PITBOARD_ARGV_FALLBACK").is_some_and(|v| v == "1"),
             overriding_auth: OVERRIDING_AUTH
                 .iter()
                 .filter(|name| var(name).is_some_and(|v| !v.is_empty()))

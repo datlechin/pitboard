@@ -10,8 +10,15 @@ says where they live, what pitboard defends against, and what it does not.
 Claude Code's own login stays in the keychain item it created. Parked copies are
 keychain items named `pitboard-park-<account>-<time>`, in your login keychain. They are
 read and written only through `/usr/bin/security`, the one application the item's access
-list trusts. No token is ever passed on a command line, where `ps` could see it; it goes
-to `security` on standard input.
+list trusts. No token is passed on a command line, where `ps` could see it; it goes to `security` on
+standard input.
+
+`security` reads at most 4097 bytes of command from standard input, measured on macOS 26.
+A login larger than that, which MCP server tokens can make it, cannot go that way at all.
+Claude Code then writes it on the argument line instead, where any process running as you
+can read it for the length of the call, and it does that for the same login on every
+refresh. pitboard refuses by default and says so; `PITBOARD_ARGV_FALLBACK=1` tells it to
+write the login the way Claude Code already does.
 
 ### Linux
 

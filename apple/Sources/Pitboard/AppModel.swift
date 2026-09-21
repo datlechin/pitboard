@@ -21,6 +21,8 @@ final class AppModel {
     private(set) var advice: Advice?
     /// When sessions that were already open will have picked up the last switch.
     private(set) var adopted: Date?
+    /// Every check pitboard makes about this machine, once someone asks for them.
+    private(set) var checks: [Check] = []
 
     /// Usage is asked of Anthropic for every account, so it is asked sparingly: on opening the
     /// menu when the numbers are a minute old, and in the background every five minutes.
@@ -89,6 +91,16 @@ final class AppModel {
         }
     }
 
+    /// What `pitboard doctor` reports, for when something is wrong at machine level and
+    /// the one line a failed call carries is not enough to act on.
+    func diagnose() async {
+        checks = await service.doctor().checks
+    }
+
+    func forgetDiagnosis() {
+        checks = []
+    }
+
     /// pitboard's errors already say what to do, so they are shown as they are.
     private static func saying(_ error: Error) -> String {
         if case PitboardError.Failed(_, let message, _) = error {
@@ -101,8 +113,12 @@ final class AppModel {
 /// What the menu bar says: the account in use and the limit closest to its end. Nothing is
 /// known until the first read, and an account signed in but not enrolled has no name here.
 func menuTitle(for status: Status?) -> String {
-    guard let account = status?.accounts.first(where: \.signedIn) else { return "pitboard" }
-    let name = account.label ?? "unenrolled"
-    guard let tightest = account.usage?.windows.map(\.percent).max() else { return name }
+    guard let account = status?.accounts.first(where: \.signedIn) else { return "" }
+    // Long labels are bounded, because this sits in a bar someone else also wants space in.
+    let full = account.label ?? "unenrolled"
+    let name = full.count > 12 ? full.prefix(11) + "…" : full[...]
+    guard let tightest = account.usage?.windows.map(\.percent).max() else {
+        return String(name)
+    }
     return "\(name) \(Int(tightest.rounded()))%"
 }

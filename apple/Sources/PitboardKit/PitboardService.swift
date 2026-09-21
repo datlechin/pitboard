@@ -43,19 +43,26 @@ public final class PitboardService: Sendable {
 extension Settings {
     /// Claude Code's defaults for the person running this app. An app started from Finder sees
     /// no shell environment, so `claude` is looked for where its installers put it.
+    /// What the core would read from a shell, as far as an app can see it. An app opened
+    /// from Finder inherits none of a shell's exports, so these are usually absent and the
+    /// defaults apply; when one is set, reading it is what keeps the app and the command
+    /// line looking at the same keychain item.
     public static func forCurrentUser() -> Settings {
-        let home = FileManager.default.homeDirectoryForCurrentUser.path
-        let claude = [
-            "\(home)/.local/bin/claude",
-            "/opt/homebrew/bin/claude",
-            "/usr/local/bin/claude",
-        ].first { FileManager.default.isExecutableFile(atPath: $0) }
+        let environment = ProcessInfo.processInfo.environment
+        let home = environment["HOME"] ?? FileManager.default.homeDirectoryForCurrentUser.path
+        let claude =
+            environment["PITBOARD_CLAUDE"]
+            ?? [
+                "\(home)/.local/bin/claude",
+                "/opt/homebrew/bin/claude",
+                "/usr/local/bin/claude",
+            ].first { FileManager.default.isExecutableFile(atPath: $0) }
         return Settings(
             home: home,
-            pitboardHome: nil,
-            claudeConfigDir: nil,
-            secureStorageDir: nil,
-            user: NSUserName(),
+            pitboardHome: environment["PITBOARD_HOME"],
+            claudeConfigDir: environment["CLAUDE_CONFIG_DIR"],
+            secureStorageDir: environment["CLAUDE_SECURESTORAGE_CONFIG_DIR"],
+            user: environment["USER"] ?? NSUserName(),
             claudeProgram: claude
         )
     }

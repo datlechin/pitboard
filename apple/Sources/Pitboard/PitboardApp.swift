@@ -11,7 +11,15 @@ struct PitboardApp: App {
         MenuBarExtra {
             MenuView(model: model, updater: updater)
         } label: {
-            Text(model.title)
+            // A mark as well as words: on a crowded menu bar macOS drops the widest items
+            // first, and an item that is only text is the widest thing up there. A Label
+            // would render as the icon alone, so both are placed by hand.
+            HStack(spacing: 4) {
+                Image(systemName: "speedometer")
+                if !model.title.isEmpty {
+                    Text(model.title)
+                }
+            }
         }
         .menuBarExtraStyle(.window)
     }
