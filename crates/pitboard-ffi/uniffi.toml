@@ -1,0 +1,7 @@
+[bindings.swift]
+module_name = "PitboardBindings"
+ffi_module_name = "PitboardFFI"
+ffi_module_filename = "PitboardFFI"
+generate_immutable_records = true
+# The app words its own errors, from the stable code each one carries.
+omit_localized_error_conformance = true

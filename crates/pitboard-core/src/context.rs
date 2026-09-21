@@ -24,6 +24,52 @@ pub struct Context {
 }
 
 impl Context {
+    /// Claude Code's defaults for a person whose home is `home`: `~/.pitboard`, `~/.claude`,
+    /// the default credential slot, `claude` looked up on `PATH`. An app starts here and sets
+    /// only what differs.
+    pub fn new(home: PathBuf) -> Context {
+        Context {
+            pitboard_home: home.join(".pitboard"),
+            home,
+            claude_config_dir: None,
+            secure_storage_dir: None,
+            user: None,
+            claude_program: PathBuf::from("claude"),
+            api_base: None,
+            hover_rest: false,
+        }
+    }
+
+    pub fn with_pitboard_home(mut self, dir: PathBuf) -> Context {
+        self.pitboard_home = dir;
+        self
+    }
+
+    /// Empty means unset, as Claude Code reads `CLAUDE_CONFIG_DIR`.
+    pub fn with_claude_config_dir(mut self, dir: String) -> Context {
+        self.claude_config_dir = Some(dir).filter(|d| !d.is_empty());
+        self
+    }
+
+    /// Empty is set, and pins the default slot, as Claude Code reads
+    /// `CLAUDE_SECURESTORAGE_CONFIG_DIR`.
+    pub fn with_secure_storage_dir(mut self, dir: String) -> Context {
+        self.secure_storage_dir = Some(dir);
+        self
+    }
+
+    /// The login name whose keychain account Claude Code stores under.
+    pub fn with_user(mut self, user: String) -> Context {
+        self.user = Some(user);
+        self
+    }
+
+    /// An app started from Finder does not see the shell's `PATH`, so it names `claude` itself.
+    pub fn with_claude_program(mut self, program: PathBuf) -> Context {
+        self.claude_program = program;
+        self
+    }
+
     pub fn from_env() -> Context {
         let var = |name: &str| std::env::var(name).ok();
         let home = std::env::var_os("HOME")
@@ -41,5 +87,25 @@ impl Context {
             api_base: var("PITBOARD_API_BASE"),
             hover_rest: var("CLAUDE_CODE_HOVER_REST").is_some_and(|v| v == "1" || v == "true"),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn an_explicit_context_reads_claude_codes_settings_the_way_the_environment_does() {
+        let ctx = Context::new(PathBuf::from("/home/x"))
+            .with_claude_config_dir(String::new())
+            .with_secure_storage_dir(String::new());
+        assert_eq!(ctx.pitboard_home, PathBuf::from("/home/x/.pitboard"));
+        assert_eq!(ctx.claude_config_dir, None, "empty means unset");
+        assert_eq!(
+            ctx.secure_storage_dir.as_deref(),
+            Some(""),
+            "empty is set, and pins the default slot"
+        );
+        assert_eq!(ctx.claude_program, PathBuf::from("claude"));
     }
 }

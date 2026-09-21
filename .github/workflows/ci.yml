@@ -52,6 +52,19 @@ jobs:
       - if: runner.os == 'macOS'
         run: cargo test --locked -p pitboard --test keychain_write_is_harmless writing_preserves_attributes
 
+  apple:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: rustup toolchain install
+      - run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      # Proves the core still links into a native app and its bindings still match.
+      - run: ./apple/scripts/build-xcframework.sh
+      - run: swift test --package-path apple/PitboardKit
+
   deny:
     runs-on: ubuntu-latest
     steps:

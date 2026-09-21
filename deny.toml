@@ -15,8 +15,9 @@ yanked = "deny"
 
 [licenses]
 version = 2
-# ISC and BSD-3-Clause come with any real TLS stack in Rust (ring, rustls-webpki).
-allow = ["MIT", "Apache-2.0", "Unicode-3.0", "Zlib", "Unlicense", "ISC", "BSD-3-Clause"]
+# ISC and BSD-3-Clause come with any real TLS stack in Rust (ring, rustls-webpki). MPL-2.0 is
+# UniFFI's, linked unmodified into the native apps; its copyleft covers only its own files.
+allow = ["MIT", "Apache-2.0", "Unicode-3.0", "Zlib", "Unlicense", "ISC", "BSD-3-Clause", "MPL-2.0"]
 confidence-threshold = 0.9
 
 [bans]

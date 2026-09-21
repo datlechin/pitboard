@@ -41,6 +41,20 @@ impl Stale {
         }
     }
 
+    /// Stable, for a program to branch on; the same as its JSON form.
+    pub fn code(self) -> &'static str {
+        match self {
+            Stale::NothingSignedIn => "nothing_signed_in",
+            Stale::SessionExpired => "session_expired",
+            Stale::ParkedAccessExpired => "parked_access_expired",
+            Stale::NothingParked => "nothing_parked",
+            Stale::ParkUnreadable => "park_unreadable",
+            Stale::RateLimited => "rate_limited",
+            Stale::Unreachable => "unreachable",
+            Stale::Unexpected => "unexpected",
+        }
+    }
+
     /// Only what is worth a word: a parked login going quiet is how parking works.
     pub fn explanation(self) -> Option<&'static str> {
         match self {
@@ -321,6 +335,22 @@ mod tests {
 
     fn nothing_remembered(_: &str) -> Option<Snapshot> {
         None
+    }
+
+    #[test]
+    fn every_stale_code_is_its_json_form() {
+        for stale in [
+            Stale::NothingSignedIn,
+            Stale::SessionExpired,
+            Stale::ParkedAccessExpired,
+            Stale::NothingParked,
+            Stale::ParkUnreadable,
+            Stale::RateLimited,
+            Stale::Unreachable,
+            Stale::Unexpected,
+        ] {
+            assert_eq!(serde_json::to_value(stale).unwrap(), stale.code());
+        }
     }
 
     #[test]

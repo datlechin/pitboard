@@ -1,0 +1,14 @@
+[package]
+name = "uniffi-bindgen-swift"
+description = "Generates pitboard-ffi's Swift bindings with exactly the UniFFI the library uses."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+uniffi = { workspace = true, features = ["cli"] }
+
+[lints]
+workspace = true

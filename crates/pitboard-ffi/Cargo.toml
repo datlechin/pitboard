@@ -1,0 +1,20 @@
+[package]
+name = "pitboard-ffi"
+description = "pitboard's core as generated bindings for its native apps."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[lib]
+crate-type = ["lib", "staticlib"]
+
+[dependencies]
+pitboard-core.workspace = true
+thiserror.workspace = true
+uniffi.workspace = true
+
+[lints]
+workspace = true
