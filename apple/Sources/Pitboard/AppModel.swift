@@ -16,6 +16,11 @@ final class AppModel {
     /// The account a switch is running for, so its row can say so.
     private(set) var switching: String?
     private(set) var updatedAt: Date?
+    /// An account has run out and another has room. Shown in the panel whether or not
+    /// notifications are allowed, so the advice does not depend on a permission.
+    private(set) var advice: Advice?
+    /// When sessions that were already open will have picked up the last switch.
+    private(set) var adopted: Date?
 
     /// Usage is asked of Anthropic for every account, so it is asked sparingly: on opening the
     /// menu when the numbers are a minute old, and in the background every five minutes.
@@ -26,7 +31,6 @@ final class AppModel {
 
     init(service: PitboardService = PitboardService(settings: .forCurrentUser())) {
         self.service = service
-        notifier.start()
         notifier.onSwitch = { [weak self] label in
             Task { await self?.use(label) }
         }
@@ -62,7 +66,8 @@ final class AppModel {
             status = read
             problem = read.warnings.first?.message
             updatedAt = Date()
-            notifier.consider(read)
+            advice = Advice.about(read, unless: notifier.told)
+            if let advice { notifier.tell(advice) }
         } catch {
             problem = Self.saying(error)
         }
@@ -72,7 +77,11 @@ final class AppModel {
         switching = label
         defer { switching = nil }
         do {
-            _ = try await service.switchTo(label)
+            let done = try await service.switchTo(label)
+            if case .switched(_, _, let ceiling) = done.outcome {
+                adopted = Date().addingTimeInterval(TimeInterval(ceiling))
+            }
+            advice = nil
             updatedAt = nil
             await refresh()
         } catch {

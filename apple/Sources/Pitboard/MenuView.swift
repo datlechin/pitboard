@@ -9,6 +9,24 @@ struct MenuView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
+            if let advice = model.advice {
+                Label(
+                    "\(advice.ran) has none of its \(advice.limit) limit left. "
+                        + "\(advice.use) has \(advice.left)% of its own left.",
+                    systemImage: "exclamationmark.circle"
+                )
+                .font(.callout)
+                .fixedSize(horizontal: false, vertical: true)
+            }
+            if let adopted = model.adopted, adopted > Date() {
+                Text(
+                    "Sessions already open follow in ",
+                    comment: "followed by a countdown"
+                )
+                .font(.caption).foregroundStyle(.secondary)
+                    + Text(timerInterval: Date()...adopted, countsDown: true)
+                    .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+            }
             if let problem = model.problem {
                 Label(problem, systemImage: "exclamationmark.triangle")
                     .font(.callout)

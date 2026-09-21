@@ -133,23 +133,28 @@ jobs:
           # Stapled, so the app opens on a machine that cannot reach Apple.
           xcrun stapler staple apple/build/Pitboard.app
 
+      # No `if` on the appcast. Every copy already installed reads the newest release's feed,
+      # so a release that skips it strands them, and a missing key has to be a red job
+      # rather than a quiet omission.
       - name: Package
         env:
           SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
         run: |
+          if [ -z "$SPARKLE_PRIVATE_KEY" ]; then
+            echo "SPARKLE_PRIVATE_KEY is not set: the feed cannot be signed" >&2
+            exit 1
+          fi
           out=$RUNNER_TEMP/dist
           mkdir -p "$out"
           ditto -c -k --keepParent apple/build/Pitboard.app \
             "$out/Pitboard-${GITHUB_REF_NAME}-macos.zip"
-          if [ -n "$SPARKLE_PRIVATE_KEY" ]; then
-            printf '%s' "$SPARKLE_PRIVATE_KEY" | \
-              apple/.build/artifacts/sparkle/Sparkle/bin/generate_appcast \
-                --ed-key-file - \
-                --download-url-prefix \
-                  "https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/" \
-                --link "https://github.com/${GITHUB_REPOSITORY}" \
-                "$out"
-          fi
+          printf '%s' "$SPARKLE_PRIVATE_KEY" | \
+            apple/.build/artifacts/sparkle/Sparkle/bin/generate_appcast \
+              --ed-key-file - \
+              --download-url-prefix \
+                "https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/" \
+              --link "https://github.com/${GITHUB_REPOSITORY}" \
+              "$out"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: app
@@ -186,3 +191,35 @@ jobs:
             ${{ runner.temp }}/dist/*.zip
             ${{ runner.temp }}/dist/appcast.xml
             ${{ runner.temp }}/dist/SHA256SUMS
+
+  # What an installed copy will actually fetch, fetched. A release whose feed is missing,
+  # stale, marked pre-release or signed with the wrong key is only visible from outside.
+  feed:
+    needs: publish
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: swift package --package-path apple resolve
+      - env:
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+        run: |
+          feed=$RUNNER_TEMP/appcast.xml
+          curl -fsSL --retry 5 --retry-delay 10 --retry-all-errors \
+            -o "$feed" \
+            "https://github.com/${GITHUB_REPOSITORY}/releases/latest/download/appcast.xml"
+          version=${GITHUB_REF_NAME#v}
+          if ! grep -q "<sparkle:shortVersionString>$version<" "$feed"; then
+            echo "the published feed does not offer $version:" >&2
+            cat "$feed" >&2
+            exit 1
+          fi
+          url=$(sed -n 's/.*enclosure url="\([^"]*\)".*/\1/p' "$feed" | head -1)
+          signature=$(sed -n 's/.*sparkle:edSignature="\([^"]*\)".*/\1/p' "$feed" | head -1)
+          curl -fsSL --retry 5 --retry-delay 10 --retry-all-errors -o "$RUNNER_TEMP/update.zip" "$url"
+          printf '%s' "$SPARKLE_PRIVATE_KEY" | \
+            apple/.build/artifacts/sparkle/Sparkle/bin/sign_update \
+              --verify "$RUNNER_TEMP/update.zip" "$signature" --ed-key-file -
+          ditto -x -k "$RUNNER_TEMP/update.zip" "$RUNNER_TEMP/unpacked"
+          spctl --assess --type execute -v "$RUNNER_TEMP/unpacked/Pitboard.app"

@@ -14,9 +14,12 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     private nonisolated static let action = "switch"
     /// The reset time of the window each kind was last reported for, so one exhausted
     /// window is mentioned once rather than every few minutes until it resets.
-    private var told: [String: Int64] = [:]
+    private(set) var told: [String: Int64] = [:]
 
-    func start() {
+    /// Permission is asked for when there is finally something to say, not at launch, where
+    /// a prompt arrives before the app has shown what it is for.
+    func tell(_ advice: Advice) {
+        told[advice.window.kind] = advice.window.resetsAt ?? 0
         centre.delegate = self
         centre.setNotificationCategories([
             UNNotificationCategory(
@@ -27,16 +30,15 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
                 ],
                 intentIdentifiers: [])
         ])
-        centre.requestAuthorization(options: [.alert]) { _, _ in }
-    }
-
-    func consider(_ status: Status) {
-        guard let advice = Advice.about(status, unless: told) else { return }
-        told[advice.window.kind] = advice.window.resetsAt ?? 0
-        centre.add(
-            UNNotificationRequest(
-                identifier: "\(advice.window.kind)-\(advice.window.resetsAt ?? 0)",
-                content: advice.notification, trigger: nil))
+        let request = UNNotificationRequest(
+            identifier: "\(advice.window.kind)-\(advice.window.resetsAt ?? 0)",
+            content: advice.notification, trigger: nil)
+        Task {
+            // Refused is not an error: the panel carries the same advice either way.
+            if (try? await centre.requestAuthorization(options: [.alert])) == true {
+                try? await centre.add(request)
+            }
+        }
     }
 
     nonisolated func userNotificationCenter(
@@ -87,9 +89,11 @@ struct Advice {
             .percent ?? 100
     }
 
+    /// How a person names the window that ran out.
+    var limit: String { window.kind == "session" ? "5-hour" : "weekly" }
+
     var notification: UNNotificationContent {
         let content = UNMutableNotificationContent()
-        let limit = window.kind == "session" ? "5-hour" : "weekly"
         content.title = "\(ran) has no \(limit) limit left"
         content.body = "\(use) has \(left)% of its own left."
         content.categoryIdentifier = Notifier.category
