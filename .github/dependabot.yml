@@ -8,9 +8,3 @@ updates:
     directory: /
     schedule:
       interval: weekly
-  # Sparkle is the code that downloads and installs updates on someone else's machine, so
-  # it is the dependency that most needs to be noticed when it moves.
-  - package-ecosystem: swift
-    directory: /apple
-    schedule:
-      interval: weekly

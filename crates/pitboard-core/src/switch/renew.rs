@@ -67,10 +67,40 @@ pub fn renew_parked(ctx: &Context) -> Vec<(String, Renewal)> {
                 .then(|| (a.label.clone(), held.clone()))
         })
         .collect();
-    let outcomes = due
+    // Each renewal is a round trip that can take as long as the request timeout, so they
+    // are asked together. What comes back is then written one at a time: the state file is
+    // one file, and the order of writes to it is not something to leave to chance.
+    let asked: Vec<(String, Park, Result<Asked>)> = std::thread::scope(|scope| {
+        let handles: Vec<_> = due
+            .into_iter()
+            .map(|(label, held)| {
+                let ctx = &*ctx;
+                let handle = scope.spawn({
+                    let label = label.clone();
+                    let held = held.clone();
+                    move || ask(ctx, &label, &held)
+                });
+                (label, held, handle)
+            })
+            .collect();
+        handles
+            .into_iter()
+            .map(|(label, held, handle)| {
+                let answer = handle.join().unwrap_or_else(|_| {
+                    Err(Error::RenewalFailed {
+                        label: label.clone(),
+                        detail: "the renewal thread stopped".into(),
+                    })
+                });
+                (label, held, answer)
+            })
+            .collect()
+    });
+    let outcomes = asked
         .into_iter()
-        .map(|(label, held)| {
-            let outcome = renew(ctx, &mut state, &label, &held).unwrap_or_else(Renewal::Failed);
+        .map(|(label, held, answer)| {
+            let outcome =
+                apply(ctx, &mut state, &label, &held, answer).unwrap_or_else(Renewal::Failed);
             (label, outcome)
         })
         .collect();
@@ -78,7 +108,18 @@ pub fn renew_parked(ctx: &Context) -> Vec<(String, Renewal)> {
     outcomes
 }
 
-fn renew(ctx: &Context, state: &mut State, label: &str, held: &Park) -> Result<Renewal> {
+/// What one round trip produced, before anything is written down.
+struct Asked {
+    /// The parked document as it was, which the fresh tokens are folded into.
+    oauth: Value,
+    fresh: Option<api::Renewed>,
+    /// Anthropic refuses this login for good.
+    refused: bool,
+}
+
+/// The part of a renewal that talks to Anthropic. Touches no shared state, so several run
+/// at once.
+fn ask(ctx: &Context, label: &str, held: &Park) -> Result<Asked> {
     let oauth = park::load(ctx, label, held)?;
     let refresh = oauth["refreshToken"].as_str().unwrap_or_default();
     let mut scopes: Vec<String> = oauth["scopes"]
@@ -91,27 +132,52 @@ fn renew(ctx: &Context, state: &mut State, label: &str, held: &Park) -> Result<R
     if scopes.is_empty() {
         scopes = DEFAULT_SCOPES.map(str::to_owned).to_vec();
     }
-
     let client_id = oauth["clientId"].as_str();
-    let fresh = match api::renew(ctx, refresh, &scopes, client_id) {
-        Ok(fresh) => fresh,
-        Err(ApiError::InvalidGrant) => {
-            state.discard(&held.service);
-            state::save(ctx, state)?;
-            return Ok(Renewal::Refused);
-        }
-        Err(ApiError::Network(_) | ApiError::RateLimited) => return Ok(Renewal::Deferred),
-        Err(e) => {
-            return Err(Error::RenewalFailed {
-                label: label.to_string(),
-                detail: e.to_string(),
-            });
-        }
+    match api::renew(ctx, refresh, &scopes, client_id) {
+        Ok(fresh) => Ok(Asked {
+            oauth,
+            fresh: Some(fresh),
+            refused: false,
+        }),
+        Err(ApiError::InvalidGrant) => Ok(Asked {
+            oauth,
+            fresh: None,
+            refused: true,
+        }),
+        // Unreachable or asked to slow down: nothing is written and the next run tries.
+        Err(ApiError::Network(_) | ApiError::RateLimited) => Ok(Asked {
+            oauth,
+            fresh: None,
+            refused: false,
+        }),
+        Err(e) => Err(Error::RenewalFailed {
+            label: label.to_string(),
+            detail: e.to_string(),
+        }),
+    }
+}
+
+/// The part that writes: one at a time, in the order the accounts are listed.
+fn apply(
+    ctx: &Context,
+    state: &mut State,
+    label: &str,
+    held: &Park,
+    asked: Result<Asked>,
+) -> Result<Renewal> {
+    let asked = asked?;
+    if asked.refused {
+        state.discard(&held.service);
+        state::save(ctx, state)?;
+        return Ok(Renewal::Refused);
+    }
+    let Some(fresh) = asked.fresh else {
+        return Ok(Renewal::Deferred);
     };
 
     // The old refresh token may already be spent, so the answer is written at once, and a
     // second time under another name if the first write fails.
-    let next = park::renewed(&oauth, &fresh, time::now_millis());
+    let next = park::renewed(&asked.oauth, &fresh, time::now_millis());
     let uuid = state
         .get(label)
         .map(|a| a.account_uuid.clone())

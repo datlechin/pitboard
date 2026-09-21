@@ -1,0 +1,36 @@
+name: Sparkle
+
+# Dependabot cannot read apple/Package.swift: it names an XCFramework that is built rather
+# than committed, so resolution fails. Sparkle is the code that installs updates on someone
+# else's machine, so a move still has to be noticed.
+on:
+  schedule:
+    - cron: "23 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  behind:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          pinned=$(python3 -c "import json;print([p for p in json.load(open('apple/Package.resolved'))['pins'] if p['identity']=='sparkle'][0]['state']['version'])")
+          latest=$(gh api repos/sparkle-project/Sparkle/releases/latest --jq .tag_name)
+          echo "pinned $pinned, latest $latest"
+          [ "$pinned" = "$latest" ] && exit 0
+          title="Sparkle $latest is out (we pin $pinned)"
+          if [ -n "$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "$title in:title" --json number --jq '.[0].number')" ]; then
+            echo "already open"
+            exit 0
+          fi
+          gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --body \
+            "apple/Package.resolved pins Sparkle $pinned; $latest is released. Bump with \`swift package --package-path apple update\`, then run apple/scripts/build-app.sh and check the app still updates itself."
