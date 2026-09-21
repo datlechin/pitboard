@@ -47,13 +47,11 @@ fn generations_of(env: &Env, label: &str) -> Vec<String> {
 /// A switch from alpha to beta that died after parking alpha and before installing beta.
 fn interrupted_switch(env: &Env) -> String {
     let orphan = format!("pitboard-park-{}-1789900000000", env.uuid('a'));
-    common::guard_not_live(&orphan);
-    pitboard::store::vault_write(
+    env.write_park(
         &orphan,
         &serde_json::json!({"accessToken": "access-refresh-a", "refreshToken": "refresh-a"})
             .to_string(),
-    )
-    .unwrap();
+    );
     let journal = serde_json::json!({
         "started_at": 1_789_900_000,
         "from_label": "alpha",
@@ -82,7 +80,7 @@ fn a_park_the_state_never_recorded_is_recovered_on_the_next_run() {
         "the orphaned park must be attached back to the account it came from"
     );
     assert!(!env.root.join("pitboard/journal.json").exists());
-    let _ = pitboard::store::vault_delete(&orphan);
+    env.delete_park(&orphan);
 }
 
 /// Recovery that cannot tell what happened must change nothing and keep its record, so a
@@ -103,5 +101,5 @@ fn an_undeterminable_outcome_keeps_the_record_and_changes_nothing() {
         "the only record of the interrupted switch must survive"
     );
     assert_eq!(env.state(), before, "nothing may change on a guess");
-    let _ = pitboard::store::vault_delete(&orphan);
+    env.delete_park(&orphan);
 }

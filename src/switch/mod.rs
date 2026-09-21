@@ -54,13 +54,27 @@ pub(super) fn oauth_of(document: &Value) -> Result<Value> {
         })
 }
 
-/// The lock that makes two pitboard runs exclusive of each other.
-pub(super) fn exclusive() -> Result<lock::Guard> {
-    home::ensure().map_err(|source| Error::RecoveryFailed {
-        path: home::dir(),
+/// Makes two pitboard runs exclusive of each other.
+///
+/// This one is a kernel file lock, not the directory lock used around Claude Code's
+/// credential writes: that one must match Claude Code's own protocol, but between pitboard
+/// runs the operating system can hold the lock itself and release it when the process
+/// ends, so there is no staleness rule for two runs to both satisfy.
+pub(super) fn exclusive() -> Result<std::fs::File> {
+    let path = home::dir().join("state.lock");
+    let fail = |source| Error::RecoveryFailed {
+        path: path.clone(),
         source,
-    })?;
-    Ok(lock::acquire(&home::dir().join("state"))?)
+    };
+    home::ensure().map_err(fail)?;
+    let file = std::fs::OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .write(true)
+        .open(&path)
+        .map_err(fail)?;
+    file.lock().map_err(fail)?;
+    Ok(file)
 }
 
 /// Who a live access token belongs to. Refusing when this cannot be answered is the point:
@@ -138,6 +152,15 @@ pub fn switch(label: &str) -> Result<Outcome> {
         return Err(Error::SignedInAccountChanged);
     }
 
+    // Settled before anything is parked, so a switch that could never be written changes
+    // nothing at all.
+    let next = splice(&before, &incoming)?;
+    if store::too_large(&service, &next) {
+        return Err(Error::LiveCredentialShapeUnexpected {
+            detail: "the login to install is past the keychain's size limit".into(),
+        });
+    }
+
     let park_service = park::reserve(&outgoing.account_uuid)?;
     write_journal(&Journal {
         started_at: time::now(),
@@ -153,14 +176,7 @@ pub fn switch(label: &str) -> Result<Outcome> {
     state.attach(&outgoing_label, parked.clone());
     state::save(&state)?;
 
-    if let Err(e) = install(
-        &service,
-        &before,
-        &before_raw,
-        &incoming,
-        &outgoing_label,
-        label,
-    ) {
+    if let Err(e) = install(&service, &next, &before_raw, &outgoing_label, label) {
         // The outgoing account is still signed in, so Claude Code keeps rotating the token
         // this copy was taken from. It would go stale, and restoring a stale copy zeroes the
         // login, so it is retired now rather than left to be picked later.
@@ -197,40 +213,59 @@ pub fn switch(label: &str) -> Result<Outcome> {
     })
 }
 
-/// Replace `claudeAiOauth` in the live document, restoring the previous bytes if anything
-/// about the write does not hold. Every other key belongs to this machine and stays.
-/// Replace `claudeAiOauth` in the live document, putting the previous bytes back if
-/// anything about the write does not hold. Every other key belongs to this machine.
-fn install(
-    service: &str,
-    before: &Value,
-    before_raw: &str,
-    incoming: &Value,
-    from: &str,
-    to: &str,
-) -> Result<()> {
+/// The live document with `claudeAiOauth` replaced. Every other key belongs to this machine.
+fn splice(before: &Value, incoming: &Value) -> Result<String> {
     let mut next = before.clone();
     next.as_object_mut()
         .ok_or_else(|| Error::LiveCredentialShapeUnexpected {
             detail: "it is not a JSON object".into(),
         })?
         .insert("claudeAiOauth".into(), incoming.clone());
-    let body = serde_json::to_string(&next).expect("a credential document stays serialisable");
+    Ok(serde_json::to_string(&next).expect("a credential document stays serialisable"))
+}
 
-    match store::write_raw(service, &body) {
-        Ok(()) => Ok(()),
-        Err(failure) => match store::write_raw(service, before_raw) {
-            Ok(()) => Err(Error::SwitchRolledBack {
-                from: from.to_string(),
-                to: to.to_string(),
-                detail: failure.to_string(),
-            }),
-            Err(rollback) => Err(Error::SwitchCorrupted {
-                from: from.to_string(),
-                to: to.to_string(),
-                detail: format!("{failure}; {rollback}"),
-            }),
-        },
+fn install(service: &str, next: &str, before_raw: &str, from: &str, to: &str) -> Result<()> {
+    install_with(
+        |body| store::write_raw(service, body),
+        || store::read_raw(service),
+        next,
+        before_raw,
+        from,
+        to,
+    )
+}
+
+/// Write the new login, and if that fails, leave the old one in place.
+///
+/// A failed write often changes nothing. Only when the slot no longer holds the previous
+/// login is a rollback needed, and only a rollback that also fails means the user has lost
+/// something — reporting that when nothing moved would send them to sign in for no reason.
+fn install_with(
+    write: impl Fn(&str) -> std::result::Result<(), store::Error>,
+    read: impl Fn() -> std::result::Result<Option<String>, store::Error>,
+    next: &str,
+    before_raw: &str,
+    from: &str,
+    to: &str,
+) -> Result<()> {
+    let Err(failure) = write(next) else {
+        return Ok(());
+    };
+    let rolled_back = |detail: String| Error::SwitchRolledBack {
+        from: from.to_string(),
+        to: to.to_string(),
+        detail,
+    };
+    if matches!(read(), Ok(Some(now)) if now == before_raw) {
+        return Err(rolled_back(failure.to_string()));
+    }
+    match write(before_raw) {
+        Ok(()) => Err(rolled_back(failure.to_string())),
+        Err(rollback) => Err(Error::SwitchCorrupted {
+            from: from.to_string(),
+            to: to.to_string(),
+            detail: format!("{failure}; {rollback}"),
+        }),
     }
 }
 
@@ -253,6 +288,86 @@ fn update_config(target: &Account, outgoing_account: &str, outgoing_org: &str) -
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use std::cell::RefCell;
+
+    fn failing(message: &str) -> store::Error {
+        store::Error::Write(message.into())
+    }
+
+    #[test]
+    fn a_successful_write_needs_no_rollback() {
+        let written = RefCell::new(Vec::new());
+        let result = install_with(
+            |b| {
+                written.borrow_mut().push(b.to_string());
+                Ok(())
+            },
+            || unreachable!(),
+            "new",
+            "old",
+            "a",
+            "b",
+        );
+        assert!(result.is_ok());
+        assert_eq!(*written.borrow(), vec!["new"]);
+    }
+
+    #[test]
+    fn a_failed_write_that_changed_nothing_is_not_reported_as_a_lost_login() {
+        let result = install_with(
+            |_| Err(failing("keychain locked")),
+            || Ok(Some("old".into())),
+            "new",
+            "old",
+            "a",
+            "b",
+        );
+        assert!(
+            matches!(result, Err(Error::SwitchRolledBack { .. })),
+            "the old login never left, so the user must not be told to sign in again"
+        );
+    }
+
+    #[test]
+    fn a_half_write_is_rolled_back() {
+        let slot = RefCell::new("old".to_string());
+        let result = install_with(
+            |b| {
+                if b == "new" {
+                    *slot.borrow_mut() = "garbled".into();
+                    Err(failing("interrupted"))
+                } else {
+                    *slot.borrow_mut() = b.to_string();
+                    Ok(())
+                }
+            },
+            || Ok(Some(slot.borrow().clone())),
+            "new",
+            "old",
+            "a",
+            "b",
+        );
+        assert!(matches!(result, Err(Error::SwitchRolledBack { .. })));
+        assert_eq!(
+            *slot.borrow(),
+            "old",
+            "the previous login must be back in place"
+        );
+    }
+
+    #[test]
+    fn only_a_failed_rollback_after_a_change_is_reported_as_corruption() {
+        let result = install_with(
+            |_| Err(failing("disk full")),
+            || Ok(Some("garbled".into())),
+            "new",
+            "old",
+            "a",
+            "b",
+        );
+        assert!(matches!(result, Err(Error::SwitchCorrupted { .. })));
+    }
 
     #[test]
     fn a_credential_without_claude_ai_oauth_is_refused() {

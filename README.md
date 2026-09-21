@@ -17,26 +17,33 @@ real Linux install.
 cargo install pitboard
 ```
 
-Enroll the account you are signed in as now. This parks a copy of its login:
+Enroll the account you are signed in as now:
 
 ```sh
 pitboard enroll personal
 ```
 
-To add another account, sign in as it the way you normally would — run `claude` and use
-`/login`. The first account is already parked, so replacing its login is safe. Then:
+Add another account without signing out of this one:
 
 ```sh
-pitboard enroll work
+pitboard enroll work --sign-in
 ```
+
+That runs Claude Code's own sign-in in a private directory, so the login you are using is
+never touched. Do not add accounts by signing in with `/login` instead: that replaces the
+login in use, and pitboard cannot keep a copy of a login it did not see leave.
 
 From then on:
 
 ```sh
-pitboard            # what is signed in, and how much of it is left
+pitboard            # who is signed in, and how much each account has left
 pitboard use work   # switch
 pitboard doctor     # check that pitboard's model of Claude Code still holds
 ```
+
+Usage is asked of Anthropic each time, for every account at once. A parked account can be
+asked for about twelve hours after it was parked; after that pitboard shows the last number
+it measured, and says when.
 
 A Claude Code session that is already running picks up a switch within about 33 seconds,
 without restarting. Until then it keeps using the previous account.
@@ -67,10 +74,15 @@ Honestly listed, because none of these are pitboard's to fix:
 - **The prompt cache** is per account, so the first message after a switch rebuilds it. On
   this project's own measurements that costs about the same as leaving a session idle for
   an hour — which a five-hour limit usually means has happened anyway.
-- **Usage for parked accounts** is only as fresh as the last time pitboard saw it. Another
-  machine using the same account in the meantime is not visible from here.
+- **Usage for a parked account** is live for about twelve hours after it was parked, and
+  after that is the last number pitboard measured. Another machine using the same account
+  since then is counted once it can be asked again.
 
 ## How it works
+
+pitboard asks Anthropic which account a login belongs to, rather than trusting Claude
+Code's config, which can be a day behind the login it describes. It will not move a login
+it cannot identify.
 
 On macOS, Claude Code keeps its login in a keychain item that only `/usr/bin/security` is
 trusted to read. pitboard reads and writes it the same way, deliberately: calling the

@@ -214,9 +214,9 @@ fn an_account_whose_only_copy_was_already_used_is_refused_not_destroyed() {
     assert_eq!(env.live()["claudeAiOauth"]["refreshToken"], "refresh-a");
 }
 
-/// Two simultaneous switches must never interleave. Which outcome the second one sees
-/// depends on timing: it either finds beta already signed in, or gives up waiting for the
-/// lock and says another run is busy. Both are correct; interleaving is not.
+/// Two simultaneous switches must never interleave. pitboard's runs exclude each other with
+/// a kernel lock, so the second waits for the first to finish and then finds beta already
+/// signed in.
 #[test]
 fn two_switches_at_once_do_not_interleave() {
     let env = two_accounts("concurrent");
@@ -234,18 +234,17 @@ fn two_switches_at_once_do_not_interleave() {
     ];
 
     for out in &outcomes {
-        let said = format!(
-            "{}{}",
-            String::from_utf8_lossy(&out.stdout),
+        assert!(
+            out.status.success(),
+            "{}",
             String::from_utf8_lossy(&out.stderr)
         );
-        let acceptable = out.status.success() || said.contains("another process is writing");
-        assert!(acceptable, "unexpected outcome: {said}");
     }
-    assert!(
-        outcomes.iter().any(|o| o.status.success()),
-        "at least one of them must have switched"
-    );
+    let already = outcomes
+        .iter()
+        .filter(|o| String::from_utf8_lossy(&o.stdout).contains("already signed in"))
+        .count();
+    assert_eq!(already, 1, "the second run must see the first one's result");
     assert_eq!(env.live()["claudeAiOauth"]["refreshToken"], "refresh-b");
     assert_eq!(
         account(&env, "alpha")["generations"]

@@ -32,12 +32,18 @@ pub fn reserve(account_uuid: &str) -> Result<String> {
 
 /// Write a credential into a reserved name and prove it reads back.
 pub fn store_at(service: &str, oauth: &Value) -> Result<Generation> {
+    let refresh_fingerprint = fingerprint_of(oauth);
+    if refresh_fingerprint.is_empty() {
+        return Err(Error::LiveCredentialShapeUnexpected {
+            detail: "it has no refresh token, so it could never be restored".into(),
+        });
+    }
     let body = serde_json::to_string(oauth).expect("an oauth block is always serialisable");
     store::vault_write(service, &body)?;
     Ok(Generation {
         service: service.to_string(),
         parked_at: time::now(),
-        refresh_fingerprint: fingerprint_of(oauth),
+        refresh_fingerprint,
         installed_at: None,
     })
 }
@@ -61,7 +67,9 @@ pub fn load(label: &str, generation: &Generation) -> Result<Value> {
         label: label.to_string(),
         detail: e.to_string(),
     })?;
-    if fingerprint_of(&value) != generation.refresh_fingerprint {
+    if generation.refresh_fingerprint.is_empty()
+        || fingerprint_of(&value) != generation.refresh_fingerprint
+    {
         return Err(Error::ParkedCredentialCorrupt {
             label: label.to_string(),
             detail: "it does not match the fingerprint pitboard recorded".into(),
@@ -107,6 +115,17 @@ mod tests {
             s.starts_with("pitboard-park-"),
             "must never collide with a Claude Code item"
         );
+    }
+
+    /// A login with no refresh token can never be restored, and its fingerprint is the empty
+    /// string, which would make every later "is this the copy I parked" check pass vacuously.
+    #[test]
+    fn a_credential_with_no_refresh_token_is_refused_rather_than_parked() {
+        let refused = store_at(
+            "pitboard-park-test-no-refresh",
+            &serde_json::json!({"accessToken": "a"}),
+        );
+        assert!(refused.is_err());
     }
 
     #[test]

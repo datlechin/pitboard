@@ -46,6 +46,7 @@ pub struct Facts {
     pub credential: Result<Option<Value>, store::Error>,
     pub home: PathBuf,
     pub home_mode: Option<u32>,
+    pub machine_id_known: bool,
     pub now: i64,
 }
 
@@ -67,6 +68,7 @@ pub fn gather() -> Facts {
         credential: store::read(&service),
         home: home::dir(),
         home_mode: mode_of(&home::dir()),
+        machine_id_known: crate::state::machine_id() != "unknown",
         service,
         now: crate::time::now(),
     }
@@ -265,6 +267,16 @@ pub fn evaluate(facts: &Facts) -> Vec<Check> {
         ),
     });
 
+    if !facts.machine_id_known {
+        checks.push(warn(
+            "machine_id",
+            "machine id",
+            "this machine has no stable identifier",
+            "pitboard cannot tell this machine from another that also lacks one, so it cannot \
+             refuse state copied between them. Never copy ~/.pitboard between machines.",
+        ));
+    }
+
     checks.push(judge_storage_v5(facts));
     checks
 }
@@ -409,6 +421,7 @@ mod tests {
             }}))),
             home: PathBuf::from("/home/x/.pitboard"),
             home_mode: Some(0o700),
+            machine_id_known: true,
             now: 1_789_935_600,
         }
     }
@@ -480,6 +493,15 @@ mod tests {
                 assert!(!c.advice.is_empty(), "{} has no advice", c.code);
             }
         }
+    }
+
+    #[test]
+    fn a_machine_without_a_stable_identifier_is_flagged() {
+        let mut f = facts();
+        f.machine_id_known = false;
+        let checks = evaluate(&f);
+        assert_eq!(check(&checks, "machine_id").level, Level::Warn);
+        assert!(evaluate(&facts()).iter().all(|c| c.code != "machine_id"));
     }
 
     #[test]

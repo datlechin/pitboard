@@ -165,6 +165,25 @@ impl Env {
         std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
     }
 
+    /// Park a login where the binary under test will look for it. On macOS that is the
+    /// keychain; elsewhere it is this test's own pitboard home, never the machine's.
+    pub fn write_park(&self, service: &str, contents: &str) {
+        guard_not_live(service);
+        if cfg!(target_os = "macos") {
+            pitboard::store::vault_write(service, contents).unwrap();
+        } else {
+            let vault = self.root.join("pitboard/vault");
+            std::fs::create_dir_all(&vault).unwrap();
+            std::fs::write(vault.join(format!("{service}.json")), contents).unwrap();
+        }
+    }
+
+    pub fn delete_park(&self, service: &str) {
+        if cfg!(target_os = "macos") {
+            let _ = pitboard::store::vault_delete(service);
+        }
+    }
+
     /// Make the fake Anthropic answer as it does for an expired session.
     pub fn expire(&mut self, access_token: &str) {
         let mock = self
