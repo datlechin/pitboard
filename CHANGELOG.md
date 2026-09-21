@@ -5,6 +5,8 @@ All notable changes are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-09-21
+
 ### Fixed
 - `enroll --sign-in` no longer holds pitboard's lock while the browser sign-in waits, so
   `use`, `forget` and `rename` go ahead meanwhile; a second sign-in is refused, not queued.
@@ -34,5 +36,6 @@ First release.
 - Schema 3: one parked login per account, with when it expires. Earlier files are refused
   rather than migrated; nothing was ever released that wrote them.
 
-[Unreleased]: https://github.com/datlechin/pitboard/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/datlechin/pitboard/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/datlechin/pitboard/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/datlechin/pitboard/releases/tag/v0.1.0
