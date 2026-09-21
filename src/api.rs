@@ -12,6 +12,23 @@ use ureq::Agent;
 use ureq::tls::{RootCerts, TlsConfig, TlsProvider};
 
 const BASE: &str = "https://api.anthropic.com";
+
+/// Where requests go. Tests point this at a local fake server; nothing else may, because an
+/// address that answers "this token belongs to account X" decides which account a credential
+/// is filed under. Only loopback is accepted, so the override can never send a token or take
+/// an answer off this machine.
+fn base() -> String {
+    std::env::var("PITBOARD_API_BASE")
+        .ok()
+        .filter(|url| is_loopback(url))
+        .unwrap_or_else(|| BASE.to_string())
+}
+
+fn is_loopback(url: &str) -> bool {
+    ["http://127.0.0.1:", "http://localhost:", "http://[::1]:"]
+        .iter()
+        .any(|prefix| url.starts_with(prefix))
+}
 const TIMEOUT: Duration = Duration::from_secs(5);
 
 /// Who a token belongs to, as the server sees it. Unlike a refresh-token fingerprint, this
@@ -62,7 +79,7 @@ fn agent() -> &'static Agent {
 
 fn get(path: &str, access_token: &str) -> Result<Value, ApiError> {
     let mut response = agent()
-        .get(format!("{BASE}{path}"))
+        .get(format!("{}{path}", base()))
         .header("Authorization", format!("Bearer {access_token}"))
         .header("anthropic-beta", "oauth-2025-04-20")
         .call()
@@ -134,6 +151,30 @@ mod tests {
                 organization_uuid: "org".into(),
             }
         );
+    }
+
+    #[test]
+    fn only_a_loopback_address_can_redirect_requests() {
+        for allowed in [
+            "http://127.0.0.1:8080",
+            "http://localhost:1",
+            "http://[::1]:9",
+        ] {
+            assert!(is_loopback(allowed), "{allowed}");
+        }
+        for refused in [
+            "https://evil.example.com",
+            "http://127.0.0.1.evil.example.com:80",
+            "http://localhost.evil.example.com:80",
+            "https://127.0.0.1:443",
+            "http://10.0.0.1:80",
+            "",
+        ] {
+            assert!(
+                !is_loopback(refused),
+                "{refused} must not be able to answer identity"
+            );
+        }
     }
 
     #[test]

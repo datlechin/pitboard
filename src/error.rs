@@ -118,7 +118,10 @@ pub enum Error {
     )]
     LiveAccountNotEnrolled { email: String },
 
-    #[error("{email} is already enrolled as `{label}`. Run `pitboard use {label}` instead.")]
+    #[error(
+        "{email} is already enrolled as `{label}`. To add a different account, run \
+         `pitboard enroll <label> --sign-in`."
+    )]
     AlreadyEnrolled { email: String, label: String },
 
     #[error("`{label}` already refers to {email}. Choose a different label.")]
@@ -149,11 +152,41 @@ pub enum Error {
         source: std::io::Error,
     },
 
+    /// The login moved but the config still names the previous account. Claude Code only
+    /// refetches its profile once a day, so this is not self-correcting; pitboard repairs it
+    /// on the next command it runs.
     #[error(
         "the login moved, but Claude Code's config at {path} could not be updated ({detail}). \
-         Claude Code corrects this itself on its next call."
+         Claude Code may show the previous account's name until pitboard repairs it on its \
+         next run."
     )]
     ConfigWriteFailed { path: PathBuf, detail: String },
+
+    #[error(
+        "Claude Code's session has expired, so pitboard cannot confirm which account is \
+         signed in. Run `claude` once so it refreshes, then try again."
+    )]
+    SessionExpired,
+
+    #[error(
+        "pitboard could not confirm with Anthropic which account is signed in ({detail}), \
+         and will not move a login it cannot identify. Check the connection and try again."
+    )]
+    IdentityUnverifiable { detail: String },
+
+    #[error("the signed-in account changed while switching. Nothing was moved; try again.")]
+    SignedInAccountChanged,
+
+    #[error(
+        "an earlier switch from `{from}` to `{to}` was interrupted, and pitboard cannot yet \
+         tell whether it finished ({detail}). Nothing was changed. Run `claude` once so its \
+         session is current, then try again."
+    )]
+    RecoveryUndetermined {
+        from: String,
+        to: String,
+        detail: String,
+    },
 
     #[error(
         "could not sign in as `{to}` ({detail}); `{from}` is still signed in, nothing was lost."
@@ -180,6 +213,12 @@ pub enum Error {
         #[source]
         source: std::io::Error,
     },
+
+    #[error("`claude` was not found on PATH. Install Claude Code, run it once, then try again.")]
+    ClaudeNotFound,
+
+    #[error("the sign-in did not finish, so nothing was enrolled.")]
+    SignInIncomplete,
 
     #[error(transparent)]
     Store(#[from] crate::store::Error),
@@ -219,6 +258,12 @@ impl Error {
             SwitchRolledBack { .. } => "switch_rolled_back",
             SwitchCorrupted { .. } => "switch_corrupted",
             RecoveryFailed { .. } => "recovery_failed",
+            SessionExpired => "session_expired",
+            IdentityUnverifiable { .. } => "identity_unverifiable",
+            SignedInAccountChanged => "signed_in_account_changed",
+            RecoveryUndetermined { .. } => "recovery_undetermined",
+            ClaudeNotFound => "claude_not_found",
+            SignInIncomplete => "sign_in_incomplete",
             Store(e) => e.code(),
             Lock(e) => e.code(),
         }

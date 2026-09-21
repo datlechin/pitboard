@@ -160,6 +160,47 @@ pub fn write_raw(service: &str, contents: &str) -> Result<(), Error> {
     write_in(&live_chain(), service, contents)
 }
 
+/// The credential Claude Code would keep for a given config directory: the hashed keychain
+/// slot on macOS, `.credentials.json` inside it everywhere else. Used to collect a login made
+/// in a private directory, so signing in never touches the live slot.
+pub fn read_signin(dir: &std::path::Path) -> Result<Option<String>, Error> {
+    #[cfg(target_os = "macos")]
+    {
+        keychain::LIVE.read(&slot::service_for_dir(&dir.to_string_lossy()))
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        match std::fs::read_to_string(dir.join(slot::CRED_FILE)) {
+            Ok(s) => Ok(Some(s)),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(e) => Err(Error::Unreadable(e.to_string())),
+        }
+    }
+}
+
+/// Remove a login collected from a private directory, once it has been parked.
+///
+/// This deletes an item Claude Code created, so it refuses any name that could be a real
+/// login: only the slot derived from a directory pitboard itself made may go.
+pub fn discard_signin(dir: &std::path::Path) -> Result<(), Error> {
+    #[cfg(target_os = "macos")]
+    {
+        let service = slot::service_for_dir(&dir.to_string_lossy());
+        if service == slot::LIVE_SERVICE || service == claude::live_service() {
+            return Err(Error::Write(format!("refusing to delete {service}")));
+        }
+        keychain::LIVE.delete(&service)
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        match std::fs::remove_file(dir.join(slot::CRED_FILE)) {
+            Ok(()) => Ok(()),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(e) => Err(Error::Write(e.to_string())),
+        }
+    }
+}
+
 pub fn vault_read(service: &str) -> Result<Option<String>, Error> {
     vault().read(service)
 }

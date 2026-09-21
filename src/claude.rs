@@ -60,9 +60,19 @@ pub fn config_file() -> PathBuf {
 
 /// The directory whose path string selects the credential slot.
 pub fn storage_dir() -> String {
-    match secure_storage_env() {
-        Some(v) => v,
-        None => config_dir().to_string_lossy().into_owned(),
+    storage_dir_from(
+        secure_storage_env(),
+        &home(),
+        &config_dir().to_string_lossy(),
+    )
+}
+
+fn storage_dir_from(secure: Option<String>, home: &std::path::Path, config_dir: &str) -> String {
+    use unicode_normalization::UnicodeNormalization;
+    match secure {
+        Some(v) if v.is_empty() => home.join(".claude").to_string_lossy().nfc().collect(),
+        Some(v) => v.nfc().collect(),
+        None => config_dir.to_string(),
     }
 }
 
@@ -144,6 +154,25 @@ mod tests {
             Some(String::new()),
             "an empty storage dir is set, and pins the default slot"
         );
+    }
+
+    /// Transcribed from Claude Code's own function:
+    /// `if (n !== undefined) return (n || join(homedir(), ".claude")).normalize("NFC")`.
+    /// An empty value is defined, so it wins over CLAUDE_CONFIG_DIR, but it is also falsy,
+    /// so it means `~/.claude` — never the empty string, which would make every credential
+    /// and lock path relative to wherever pitboard happened to be run from.
+    #[test]
+    fn an_empty_storage_dir_means_the_default_directory_not_the_current_one() {
+        let home = std::path::Path::new("/home/x");
+        assert_eq!(
+            storage_dir_from(Some(String::new()), home, "/cfg"),
+            "/home/x/.claude"
+        );
+        assert_eq!(
+            storage_dir_from(Some("/elsewhere".into()), home, "/cfg"),
+            "/elsewhere"
+        );
+        assert_eq!(storage_dir_from(None, home, "/cfg"), "/cfg");
     }
 
     #[test]

@@ -1,6 +1,6 @@
 use clap::{CommandFactory, Parser, Subcommand};
 use pitboard::error::Error;
-use pitboard::switch::Outcome;
+use pitboard::switch::{Enrolled, Outcome};
 use pitboard::{audit, doctor, state, status, switch};
 use serde_json::{Value, json};
 use std::process::ExitCode;
@@ -26,10 +26,14 @@ struct Cli {
 enum Command {
     /// What is signed in, and how much of it is left (the default)
     Status,
-    /// Remember the account signed in now, so it can be parked
+    /// Add an account: the one signed in now, or with --sign-in, another one
     Enroll {
         /// A short name for this account, such as `personal` or `work`
         label: String,
+        /// Sign in to a different account through Claude Code's own sign-in, without
+        /// signing out of the one in use now
+        #[arg(long)]
+        sign_in: bool,
     },
     /// Sign in as an enrolled account
     Use {
@@ -138,24 +142,31 @@ fn doctor() -> Report {
     }
 }
 
-fn enroll(label: &str) -> Report {
-    let outcome = switch::enroll_current(label);
+fn enroll(label: &str, sign_in: bool) -> Report {
+    let outcome = switch::enroll(label, sign_in);
     audit::record(
         "enroll",
         label,
         outcome.as_ref().map_or_else(|e| e.code(), |_| "ok"),
     );
     match outcome {
-        Ok(account) => Report {
+        Ok(Enrolled::Current { email }) => Report {
             command: "enroll",
-            // The step people get stuck on is the next one, so say it.
             human: format!(
-                "enrolled {} as `{label}`, and parked a copy of its login\n\n\
-                 To add another account: sign in as it the usual way (`claude`, then /login),\n\
-                 then run `pitboard enroll <label>` again. This one is safe while you do.\n",
-                account.email
+                "enrolled {email}, the account signed in now, as `{label}`\n\n\
+                 To add another account without signing out of this one:\n  \
+                 pitboard enroll <label> --sign-in\n"
             ),
-            result: Ok(json!({ "label": label, "email": account.email })),
+            result: Ok(json!({ "label": label, "email": email, "signed_in_now": true })),
+            warnings: Vec::new(),
+            exit: 0,
+        },
+        Ok(Enrolled::SignedIn { email }) => Report {
+            command: "enroll",
+            human: format!(
+                "enrolled {email} as `{label}`; switch to it with `pitboard use {label}`\n"
+            ),
+            result: Ok(json!({ "label": label, "email": email, "signed_in_now": false })),
             warnings: Vec::new(),
             exit: 0,
         },
@@ -257,7 +268,7 @@ fn main() -> ExitCode {
     let report = match cli.command.unwrap_or(Command::Status) {
         Command::Status => status(),
         Command::Doctor => doctor(),
-        Command::Enroll { label } => enroll(&label),
+        Command::Enroll { label, sign_in } => enroll(&label, sign_in),
         Command::Use { label } => use_account(&label),
         Command::Forget { label } => forget(&label),
         Command::Completions { shell } => {

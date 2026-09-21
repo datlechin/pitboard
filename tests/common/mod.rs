@@ -46,6 +46,10 @@ pub struct Env {
     pub root: PathBuf,
     pub service: String,
     name: String,
+    /// Stands in for Anthropic. It answers who a token belongs to exactly the way the real
+    /// profile endpoint does, so the binary identifies accounts through its real code path.
+    server: mockito::ServerGuard,
+    mocks: std::cell::RefCell<Vec<mockito::Mock>>,
 }
 
 /// Distinct per test, because park item names contain the account uuid and the tests
@@ -76,30 +80,46 @@ impl Env {
 
         let service = pitboard::slot::service_for_dir(&root.to_string_lossy());
         guard_not_live(&service);
+
+        let mut server = mockito::Server::new();
+        let usage = server
+            .mock("GET", "/api/oauth/usage")
+            .with_status(200)
+            .with_body(
+                serde_json::json!({
+                    "five_hour": {"utilization": 12.0, "resets_at": "2026-09-21T10:30:00+00:00"},
+                    "seven_day": {"utilization": 40.0, "resets_at": "2026-09-27T02:00:00+00:00"},
+                })
+                .to_string(),
+            )
+            .create();
         Env {
             root,
             service,
             name: name.to_string(),
+            server,
+            mocks: std::cell::RefCell::new(vec![usage]),
         }
     }
 
     pub fn command(&self, args: &[&str]) -> Command {
+        let path = format!(
+            "{}:{}",
+            self.root.join("bin").display(),
+            std::env::var("PATH").unwrap_or_default()
+        );
         let mut c = Command::new(env!("CARGO_BIN_EXE_pitboard"));
         c.args(args)
             .env("CLAUDE_CONFIG_DIR", &self.root)
             .env_remove("CLAUDE_SECURESTORAGE_CONFIG_DIR")
-            .env("PITBOARD_HOME", self.root.join("pitboard"));
+            .env("PITBOARD_HOME", self.root.join("pitboard"))
+            .env("PITBOARD_API_BASE", self.server.url())
+            .env("PATH", path);
         c
     }
 
     pub fn run(&self, args: &[&str]) -> (String, String, i32) {
-        let out = Command::new(env!("CARGO_BIN_EXE_pitboard"))
-            .args(args)
-            .env("CLAUDE_CONFIG_DIR", &self.root)
-            .env_remove("CLAUDE_SECURESTORAGE_CONFIG_DIR")
-            .env("PITBOARD_HOME", self.root.join("pitboard"))
-            .output()
-            .expect("run pitboard");
+        let out = self.command(args).output().expect("run pitboard");
         (
             String::from_utf8_lossy(&out.stdout).into_owned(),
             String::from_utf8_lossy(&out.stderr).into_owned(),
@@ -107,19 +127,78 @@ impl Env {
         )
     }
 
-    pub fn sign_in(&self, uuid: &str, email: &str, org: &str, refresh: &str) {
-        let credential = serde_json::json!({
-            "claudeAiOauth": {
-                "accessToken": format!("access-{refresh}"),
-                "refreshToken": refresh,
-                "expiresAt": 1789928611576i64,
-                "refreshTokenExpiresAt": 1792216138576i64,
-                "scopes": ["user:inference", "user:profile"],
-                "subscriptionType": "max"
-            },
-            "slackTag": {"machineBound": true}
-        });
+    /// Enroll another account through `--sign-in`, the way a user would, with a stand-in
+    /// for `claude auth login` that stores a login for the private directory it is given.
+    pub fn enroll_by_signing_in(
+        &mut self,
+        label: &str,
+        uuid: &str,
+        email: &str,
+        org: &str,
+        refresh: &str,
+    ) -> (String, String, i32) {
+        let credential = credential(refresh).to_string();
+        self.install_fake_claude(&credential);
+        self.owns(&format!("access-{refresh}"), uuid, email, org);
+        self.run(&["enroll", label, "--sign-in"])
+    }
+
+    fn install_fake_claude(&self, credential: &str) {
+        let bin = self.root.join("bin");
+        std::fs::create_dir_all(&bin).unwrap();
+        let store = if cfg!(target_os = "macos") {
+            format!(
+                r#"hash=$(printf %s "$CLAUDE_CONFIG_DIR" | shasum -a 256 | cut -c1-8)
+/usr/bin/security add-generic-password -U -a "{account}" -s "Claude Code-credentials-$hash" -w '{credential}'"#,
+                account = account(),
+            )
+        } else {
+            format!(r#"printf %s '{credential}' > "$CLAUDE_CONFIG_DIR/.credentials.json""#)
+        };
+        let script = bin.join("claude");
+        std::fs::write(
+            &script,
+            format!("#!/bin/sh\n[ \"$1 $2\" = \"auth login\" ] || exit 64\n{store}\n"),
+        )
+        .unwrap();
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
+
+    /// Make the fake Anthropic answer as it does for an expired session.
+    pub fn expire(&mut self, access_token: &str) {
+        let mock = self
+            .server
+            .mock("GET", "/api/oauth/profile")
+            .match_header("authorization", format!("Bearer {access_token}").as_str())
+            .with_status(401)
+            .with_body(r#"{"type":"error","error":{"type":"authentication_error"}}"#)
+            .create();
+        self.mocks.borrow_mut().push(mock);
+    }
+
+    /// Teach the fake Anthropic who a token belongs to.
+    pub fn owns(&mut self, access_token: &str, uuid: &str, email: &str, org: &str) {
+        let mock = self
+            .server
+            .mock("GET", "/api/oauth/profile")
+            .match_header("authorization", format!("Bearer {access_token}").as_str())
+            .with_status(200)
+            .with_body(
+                serde_json::json!({
+                    "account": {"uuid": uuid, "email": email},
+                    "organization": {"uuid": org},
+                })
+                .to_string(),
+            )
+            .create();
+        self.mocks.borrow_mut().push(mock);
+    }
+
+    pub fn sign_in(&mut self, uuid: &str, email: &str, org: &str, refresh: &str) {
+        let credential = credential(refresh);
         self.write_live(&credential.to_string());
+        self.owns(&format!("access-{refresh}"), uuid, email, org);
 
         let config = serde_json::json!({
             "oauthAccount": {
@@ -201,4 +280,19 @@ impl Drop for Env {
         }
         let _ = std::fs::remove_dir_all(&self.root);
     }
+}
+
+/// A credential shaped like Claude Code's, keyed so the fake Anthropic can tell who owns it.
+pub fn credential(refresh: &str) -> serde_json::Value {
+    serde_json::json!({
+        "claudeAiOauth": {
+            "accessToken": format!("access-{refresh}"),
+            "refreshToken": refresh,
+            "expiresAt": 1789928611576i64,
+            "refreshTokenExpiresAt": 1792216138576i64,
+            "scopes": ["user:inference", "user:profile"],
+            "subscriptionType": "max"
+        },
+        "slackTag": {"machineBound": true}
+    })
 }
