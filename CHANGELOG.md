@@ -5,10 +5,24 @@ All notable changes are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-09-22
+
+### Added
+- The menu bar panel says when an account has run out and which account has the most left,
+  whether or not notifications are allowed, and asks for permission only when there is
+  something to say. After a switch it counts down the time until sessions that were already
+  open follow.
+- A Homebrew tap: `brew install datlechin/tap/pitboard`, and `--cask` for the app.
+
 ### Fixed
 - The app's build number now counts up with its version. 0.1.2 shipped with the build
   number the template carried, which Sparkle would have read as newer than the release
   after it.
+
+### Internal
+- A release now fails if the update feed is missing or unsigned, and a job after the release
+  reads the feed back the way an installed copy will.
+- Dead code, duplicated constants and a thrice-written test fixture removed.
 
 ## [0.1.2] - 2026-09-22
 
@@ -52,7 +66,8 @@ First release.
 - Schema 3: one parked login per account, with when it expires. Earlier files are refused
   rather than migrated; nothing was ever released that wrote them.
 
-[Unreleased]: https://github.com/datlechin/pitboard/compare/v0.1.2...HEAD
+[Unreleased]: https://github.com/datlechin/pitboard/compare/v0.1.3...HEAD
+[0.1.3]: https://github.com/datlechin/pitboard/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/datlechin/pitboard/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/datlechin/pitboard/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/datlechin/pitboard/releases/tag/v0.1.0

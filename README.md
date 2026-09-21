@@ -13,12 +13,14 @@ Code stores its login there has not been checked on a real signed-in install.
 ## Install
 
 ```sh
-cargo install pitboard
+brew install datlechin/tap/pitboard        # the command line
+brew install --cask datlechin/tap/pitboard # the menu bar app, macOS 14 or later
 ```
 
-For the menu bar app, download `Pitboard-<version>-macos.zip` from the
-[latest release](https://github.com/datlechin/pitboard/releases/latest), unzip it and move
-`Pitboard.app` to `/Applications`. It needs macOS 14 or later.
+Or `cargo install pitboard` for the command line on its own. The app is also a signed and
+notarised download on the
+[latest release](https://github.com/datlechin/pitboard/releases/latest) if you would rather
+not use Homebrew.
 
 ## Set up
 
