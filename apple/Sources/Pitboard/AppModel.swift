@@ -1,5 +1,9 @@
+import AppKit
 import Foundation
 import PitboardKit
+
+/// SwiftUI has a `Window` of its own, so a limit's window is named for what it is here.
+typealias Limits = PitboardBindings.Window
 
 /// What the menu shows, and the only place that calls the core. Every call runs off the main
 /// thread inside `PitboardService`; this only holds the answers.
@@ -18,12 +22,26 @@ final class AppModel {
     static let staleAfter: TimeInterval = 60
     private static let refreshEvery: Duration = .seconds(300)
 
+    private let notifier = Notifier()
+
     init(service: PitboardService = PitboardService(settings: .forCurrentUser())) {
         self.service = service
+        notifier.start()
+        notifier.onSwitch = { [weak self] label in
+            Task { await self?.use(label) }
+        }
         Task { [weak self] in
             while !Task.isCancelled {
                 await self?.refresh()
                 try? await Task.sleep(for: Self.refreshEvery, tolerance: .seconds(60))
+            }
+        }
+        // Numbers read before the machine slept say nothing about now.
+        Task { [weak self] in
+            let woke = NSWorkspace.shared.notificationCenter.notifications(
+                named: NSWorkspace.didWakeNotification)
+            for await _ in woke {
+                await self?.refresh()
             }
         }
     }
@@ -45,9 +63,11 @@ final class AppModel {
     func refresh(ifOlderThan seconds: TimeInterval = 0) async {
         if let updatedAt, Date().timeIntervalSince(updatedAt) < seconds { return }
         do {
-            status = try await service.status()
-            problem = status?.warnings.first?.message
+            let read = try await service.status()
+            status = read
+            problem = read.warnings.first?.message
             updatedAt = Date()
+            notifier.consider(read)
         } catch {
             problem = Self.saying(error)
         }
@@ -67,7 +87,7 @@ final class AppModel {
 
     /// pitboard's errors already say what to do, so they are shown as they are.
     private static func saying(_ error: Error) -> String {
-        if case let PitboardError.Failed(_, message, _) = error {
+        if case PitboardError.Failed(_, let message, _) = error {
             return message
         }
         return error.localizedDescription

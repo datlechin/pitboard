@@ -3,9 +3,6 @@ import PitboardKit
 import ServiceManagement
 import SwiftUI
 
-/// SwiftUI has a `Window` of its own, so a limit's window is named for what it is.
-private typealias Limits = PitboardBindings.Window
-
 struct MenuView: View {
     let model: AppModel
     let updater: Updater
@@ -53,7 +50,8 @@ private struct AccountRow: View {
                 Spacer()
                 standing
             }
-            ForEach(Array(account.usage?.windows.enumerated() ?? [].enumerated()), id: \.offset) {
+            ForEach(Array(account.usage?.windows.enumerated() ?? [].enumerated()), id: \.offset)
+            {
                 _, window in
                 Limit(window: window)
             }
@@ -85,7 +83,8 @@ private struct Limit: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            Text(name).font(.caption).foregroundStyle(.secondary).frame(width: 78, alignment: .leading)
+            Text(name).font(.caption).foregroundStyle(.secondary).frame(
+                width: 78, alignment: .leading)
             ProgressView(value: min(window.percent, 100) / 100).tint(colour)
             Text("\(Int(window.percent.rounded()))%")
                 .font(.caption.monospacedDigit())
@@ -128,7 +127,9 @@ private struct Footer: View {
                 }
                 Toggle("Open at login", isOn: $openAtLogin)
                     .onChange(of: openAtLogin) { _, wanted in
-                        try? wanted ? SMAppService.mainApp.register() : SMAppService.mainApp.unregister()
+                        try? wanted
+                            ? SMAppService.mainApp.register()
+                            : SMAppService.mainApp.unregister()
                         openAtLogin = SMAppService.mainApp.status == .enabled
                     }
                 Divider()
