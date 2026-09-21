@@ -65,9 +65,8 @@ release still happens and the app is signed ad-hoc, which Gatekeeper warns about
 | --- | --- |
 | `CERTIFICATES_P12` | The Developer ID Application certificate, exported from Keychain Access as .p12, `base64` |
 | `CERTIFICATES_PASSWORD` | The password given to that export |
-| `APPLE_ID` | The Apple ID the notary submissions are made under |
-| `APPLE_TEAM_ID` | The team the certificate belongs to, as `security find-identity -v` prints it in brackets |
-| `NOTARY_PASSWORD` | An app-specific password from appleid.apple.com, not the Apple ID's own |
+| `APPLE_API_KEY_P8` | An App Store Connect team key with the Developer role, `base64` |
+| `APPLE_API_KEY_ID`, `APPLE_API_ISSUER` | Shown beside that key |
 | `SPARKLE_PUBLIC_KEY`, `SPARKLE_PRIVATE_KEY` | `apple/.build/artifacts/sparkle/Sparkle/bin/generate_keys --account pitboard` once, then the same with `-x -` to read the private one |
 
 The signing identity is read from the certificate itself, so there is no secret for it.

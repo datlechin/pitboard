@@ -67,9 +67,9 @@ jobs:
 
   # The menu bar app, signed and notarised when the Apple secrets are set; without them it
   # is still built and released, ad-hoc signed, which Gatekeeper warns about on first
-  # launch. Secrets: CERTIFICATES_P12 (base64 .p12), CERTIFICATES_PASSWORD, APPLE_ID,
-  # APPLE_TEAM_ID, NOTARY_PASSWORD (an app-specific password), SPARKLE_PUBLIC_KEY,
-  # SPARKLE_PRIVATE_KEY.
+  # launch. Secrets: CERTIFICATES_P12 (base64 .p12), CERTIFICATES_PASSWORD,
+  # APPLE_API_KEY_P8 (base64 .p8), APPLE_API_KEY_ID, APPLE_API_ISSUER,
+  # SPARKLE_PUBLIC_KEY, SPARKLE_PRIVATE_KEY.
   app:
     runs-on: macos-latest
     steps:
@@ -121,13 +121,15 @@ jobs:
       - name: Notarise
         if: steps.apple.outputs.signed == 'true'
         env:
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          PASSWORD: ${{ secrets.NOTARY_PASSWORD }}
+          KEY: ${{ secrets.APPLE_API_KEY_P8 }}
+          KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          ISSUER: ${{ secrets.APPLE_API_ISSUER }}
         run: |
+          echo "$KEY" | base64 --decode > "$RUNNER_TEMP/key.p8"
           ditto -c -k --keepParent apple/build/Pitboard.app "$RUNNER_TEMP/notarise.zip"
           xcrun notarytool submit "$RUNNER_TEMP/notarise.zip" \
-            --apple-id "$APPLE_ID" --team-id "$TEAM_ID" --password "$PASSWORD" --wait
+            --key "$RUNNER_TEMP/key.p8" --key-id "$KEY_ID" --issuer "$ISSUER" --wait
+          rm -f "$RUNNER_TEMP/key.p8"
           # Stapled, so the app opens on a machine that cannot reach Apple.
           xcrun stapler staple apple/build/Pitboard.app
 
