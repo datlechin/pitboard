@@ -4,6 +4,11 @@
 
 - `crates/pitboard-core`: the engine. Parking, switching, recovery, the stores, usage. It
   reads no environment variable except in `Context::from_env`, and prints nothing.
+- `crates/pitboard-ffi`: the core as UniFFI bindings, for the app. Records and enums only,
+  every call synchronous.
+- `apple`: the Swift package. `PitboardKit` calls the bindings off the main thread,
+  `Pitboard` is the menu bar app. `scripts/build-xcframework.sh` builds the core for both
+  architectures, `scripts/build-app.sh` assembles `Pitboard.app` from it.
 - `crates/pitboard`: the command line. Arguments, rendering for people, and the `--json`
   contract, pinned by the snapshots in `crates/pitboard/tests/snapshots`.
 
@@ -49,6 +54,25 @@ difference with `cargo insta review`, and say in the change why the contract mov
 4. **Measure rather than infer anything about Claude Code.** Its behaviour here is
    undocumented. A claim about it needs an experiment, and the experiment belongs in the
    commit message or a test.
+
+## Releasing
+
+A tag `v<version>` releases: the crates to crates.io, the command line for four targets,
+and the app, signed and notarised when these repository secrets are set. Without them the
+release still happens and the app is signed ad-hoc, which Gatekeeper warns about.
+
+| Secret | Where it comes from |
+| --- | --- |
+| `APPLE_SIGN_IDENTITY` | The certificate's name, as `security find-identity -v` prints it |
+| `APPLE_CERT_P12` | The Developer ID Application certificate, exported from Keychain Access, `base64` |
+| `APPLE_CERT_PASSWORD` | The password given to that export |
+| `APPLE_API_KEY_P8` | An App Store Connect API key with the Developer role, `base64` |
+| `APPLE_API_KEY_ID`, `APPLE_API_ISSUER` | Shown beside that key |
+| `SPARKLE_PUBLIC_KEY`, `SPARKLE_PRIVATE_KEY` | `apple/.build/artifacts/sparkle/Sparkle/bin/generate_keys` once, then `generate_keys -x -` to read the private one |
+
+The update key must never change once a release carries it: an app checks the feed's
+signature against the key it was built with, so a new key strands every copy already
+installed.
 
 ## Dependencies
 

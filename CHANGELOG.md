@@ -6,6 +6,9 @@ All notable changes are recorded here. The format follows
 ## [Unreleased]
 
 ### Added
+- A macOS menu bar app: the account in use and its tightest limit in the menu bar, every
+  account's limits in the panel, one click to switch, a notification when an account runs
+  out, and launch at login. It calls the same core the command line does, directly.
 - `status` renews a parked login whose access token has expired, so every account's usage
   is live and a parked login no longer lapses after its refresh token's lifetime. Only
   parked logins are renewed; the one signed in stays Claude Code's to renew. A login
