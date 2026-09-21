@@ -6,6 +6,8 @@ import SwiftUI
 struct MenuView: View {
     let model: AppModel
     let updater: Updater
+    /// The account a "Forget" is waiting to be confirmed for.
+    @State private var forgetting: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -49,6 +51,16 @@ struct MenuView: View {
                 }
                 ForEach(status.accounts, id: \.accountUuid) { account in
                     AccountRow(account: account, model: model)
+                        .contextMenu {
+                            if let label = account.label, !account.signedIn {
+                                Button("Forget \(label)…", role: .destructive) {
+                                    forgetting = label
+                                }
+                            }
+                        }
+                }
+                if let naming = model.naming {
+                    NameIt(model: model, typed: naming)
                 }
             } else if model.problem == nil {
                 ProgressView().controlSize(.small)
@@ -63,6 +75,20 @@ struct MenuView: View {
         .padding(14)
         .frame(width: 400)
         .task { await model.refresh(ifOlderThan: AppModel.staleAfter) }
+        .alert(
+            "Forget \(forgetting ?? "")?",
+            isPresented: .init(get: { forgetting != nil }, set: { if !$0 { forgetting = nil } })
+        ) {
+            Button("Cancel", role: .cancel) { forgetting = nil }
+            Button("Forget", role: .destructive) {
+                if let label = forgetting {
+                    Task { await model.forget(label) }
+                }
+                forgetting = nil
+            }
+        } message: {
+            Text("Its parked login is deleted. Adding it again needs a browser sign-in.")
+        }
     }
 }
 
@@ -188,6 +214,33 @@ private struct Limit: View {
     }
 }
 
+/// Asks for the name to record the account in use under. Anything else about adding an
+/// account needs a browser, which the command line drives.
+private struct NameIt: View {
+    let model: AppModel
+    @State var typed: String
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        HStack(spacing: 6) {
+            TextField("a name for this account", text: $typed)
+                .textFieldStyle(.roundedBorder)
+                .focused($focused)
+                .onSubmit { enrol() }
+            Button("Enrol", action: enrol)
+                .disabled(typed.trimmingCharacters(in: .whitespaces).isEmpty)
+            Button("Cancel") { model.naming = nil }
+        }
+        .onAppear { focused = true }
+    }
+
+    private func enrol() {
+        let label = typed.trimmingCharacters(in: .whitespaces)
+        guard !label.isEmpty else { return }
+        Task { await model.enrol(as: label) }
+    }
+}
+
 /// What doctor found, in the panel, so a machine-level problem does not have to be chased
 /// from a terminal.
 private struct Diagnosis: View {
@@ -241,6 +294,19 @@ private struct Footer: View {
     let updater: Updater
     @State private var openAtLogin = SMAppService.mainApp.status == .enabled
 
+    /// Adding an account signs in through a browser and prints what Claude Code says, which
+    /// needs a terminal. The command line has one, so this opens it there rather than
+    /// pretending a menu bar panel can show a sign-in.
+    private func addAnother() {
+        let script = """
+            tell application "Terminal"
+                activate
+                do script "pitboard enroll <name> --sign-in"
+            end tell
+            """
+        NSAppleScript(source: script)?.executeAndReturnError(nil)
+    }
+
     var body: some View {
         HStack {
             Text(model.updated).font(.caption).foregroundStyle(.secondary)
@@ -250,6 +316,11 @@ private struct Footer: View {
                 if updater.available {
                     Button("Check for Updates…") { updater.check() }
                 }
+                if model.unenrolled {
+                    Button("Enrol the account in use…") { model.naming = "" }
+                }
+                Button("Add another account…") { addAnother() }
+                Divider()
                 Button(model.checks.isEmpty ? "Check this machine…" : "Hide checks") {
                     if model.checks.isEmpty {
                         Task { await model.diagnose() }

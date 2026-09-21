@@ -7,6 +7,8 @@ public protocol Core: Sendable {
     func status() async throws -> Status
     func doctor() async -> Diagnosis
     func switchTo(_ label: String) async throws -> Switched
+    func enrollCurrent(_ label: String) async throws -> Enrolled
+    func forget(_ label: String) async throws -> Changed
     func rename(_ from: String, to: String) async throws -> Changed
 }
 
@@ -32,6 +34,16 @@ public final class PitboardService: Core, Sendable {
 
     public func switchTo(_ label: String) async throws -> Switched {
         try await run(on: changes) { try $0.switchTo(label: label) }
+    }
+
+    /// Records the account signed in now. The other kind of enrolment opens a browser and
+    /// belongs to the command line, which has somewhere to print what Claude Code says.
+    public func enrollCurrent(_ label: String) async throws -> Enrolled {
+        try await run(on: changes) { try $0.enrollCurrent(label: label) }
+    }
+
+    public func forget(_ label: String) async throws -> Changed {
+        try await run(on: changes) { try $0.forget(label: label) }
     }
 
     public func rename(_ from: String, to: String) async throws -> Changed {

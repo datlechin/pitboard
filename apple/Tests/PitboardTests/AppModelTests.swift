@@ -11,6 +11,10 @@ private final class Stub: Core, @unchecked Sendable {
     var switched: Result<Switched, Error> = .success(
         Switched(outcome: .alreadyActive(label: "work"), warnings: []))
     private(set) var switchedTo: [String] = []
+    private(set) var enrolled: [String] = []
+    private(set) var forgot: [String] = []
+    var enrolling: Result<Enrolled, Error> = .success(
+        Enrolled(email: "a@b.c", enrolled: .current, warnings: []))
 
     init(_ answer: Result<Status, Error>) {
         self.answer = answer
@@ -27,6 +31,14 @@ private final class Stub: Core, @unchecked Sendable {
     func switchTo(_ label: String) async throws -> Switched {
         switchedTo.append(label)
         return try switched.get()
+    }
+    func enrollCurrent(_ label: String) async throws -> Enrolled {
+        enrolled.append(label)
+        return try enrolling.get()
+    }
+    func forget(_ label: String) async throws -> Changed {
+        forgot.append(label)
+        return Changed(email: "\(label)@example.com", warnings: [])
     }
     func rename(_ from: String, to: String) async throws -> Changed {
         Changed(email: "a@b.c", warnings: [])
@@ -111,4 +123,38 @@ private func account(_ label: String, signedIn: Bool, percent: Double) -> Accoun
     #expect(model.checks.map(\.code) == ["state"])
     model.forgetDiagnosis()
     #expect(model.checks.isEmpty)
+}
+
+/// The account signed in but not enrolled is the one the app can record by itself: no
+/// browser, no terminal.
+@MainActor
+@Test func onlyAnUnenrolledSignedInAccountCanBeNamedHere() async {
+    let stub = Stub(
+        .success(
+            Status(
+                now: 0,
+                accounts: [
+                    Account(
+                        label: nil, email: "a@b.c", accountUuid: "a", signedIn: true,
+                        switchable: false, parked: nil, usage: nil, stale: nil,
+                        staleExplanation: nil)
+                ], warnings: [])))
+    let model = AppModel(service: stub)
+    await model.refresh()
+    #expect(model.unenrolled)
+
+    model.naming = "work"
+    await model.enrol(as: "work")
+    #expect(stub.enrolled == ["work"])
+    #expect(model.naming == nil, "the form closes once it has been used")
+}
+
+/// Forgetting is destructive, so what the model does with a refusal matters.
+@MainActor
+@Test func aRefusedForgetIsReported() async {
+    let stub = Stub(.success(Status(now: 0, accounts: [], warnings: [])))
+    let model = AppModel(service: stub)
+    await model.forget("alpha")
+    #expect(stub.forgot == ["alpha"])
+    #expect(model.problem == nil)
 }

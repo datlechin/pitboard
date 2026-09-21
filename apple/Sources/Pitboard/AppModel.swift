@@ -23,6 +23,8 @@ final class AppModel {
     private(set) var adopted: Date?
     /// Every check pitboard makes about this machine, once someone asks for them.
     private(set) var checks: [Check] = []
+    /// A label being typed, when the panel is asking for one.
+    var naming: String?
 
     /// Usage is asked of Anthropic for every account, so it is asked sparingly: on opening the
     /// menu when the numbers are a minute old, and in the background every five minutes.
@@ -85,6 +87,36 @@ final class AppModel {
                 adopted = Date().addingTimeInterval(TimeInterval(ceiling))
             }
             advice = nil
+            updatedAt = nil
+            await refresh()
+        } catch {
+            problem = Self.saying(error)
+        }
+    }
+
+    /// The account signed in now, if it is not enrolled. Everything else about adding an
+    /// account needs a browser and somewhere to print what Claude Code says, which is the
+    /// command line's job.
+    var unenrolled: Bool {
+        status?.accounts.contains { $0.signedIn && $0.label == nil } ?? false
+    }
+
+    /// Records the account signed in now under a name.
+    func enrol(as label: String) async {
+        naming = nil
+        do {
+            _ = try await service.enrollCurrent(label)
+            updatedAt = nil
+            await refresh()
+        } catch {
+            problem = Self.saying(error)
+        }
+    }
+
+    /// Drops an account and the login parked for it.
+    func forget(_ label: String) async {
+        do {
+            _ = try await service.forget(label)
             updatedAt = nil
             await refresh()
         } catch {
