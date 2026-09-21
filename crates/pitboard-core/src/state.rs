@@ -50,12 +50,17 @@ pub struct Account {
     pub parked: Option<Park>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct State {
     pub schema: u32,
     pub machine: String,
     pub accounts: Vec<Account>,
     pub active: Option<String>,
+    /// The credential slot `active` was recorded for. One state file serves every slot a
+    /// machine uses, and CLAUDE_CONFIG_DIR changes which keychain item is the live one, so
+    /// a record made in one slot says nothing about another.
+    #[serde(default)]
+    pub slot: Option<String>,
     /// Parked items no account refers to any more. Listed in the same save that drops them
     /// and removed once deleted, so a delete that fails or is interrupted is retried.
     #[serde(default)]
@@ -69,6 +74,7 @@ impl Default for State {
             machine: machine_id(),
             accounts: Vec::new(),
             active: None,
+            slot: None,
             discarded: Vec::new(),
         }
     }
@@ -197,6 +203,13 @@ pub fn load(ctx: &Context) -> Result<State> {
     if state.machine != machine_id() {
         return Err(Error::StateWrongMachine { path });
     }
+    let mut state = state;
+    // Which account is in use is a fact about one slot. Read from another, the record says
+    // nothing, and pitboard asks Anthropic who is signed in anyway.
+    let slot = crate::claude::live_service(ctx);
+    if state.slot.is_some() && state.slot.as_deref() != Some(slot.as_str()) {
+        state.active = None;
+    }
     Ok(state)
 }
 
@@ -229,6 +242,9 @@ fn migrate(document: &mut serde_json::Value, path: &std::path::Path) -> Result<(
 
 pub fn save(ctx: &Context, state: &State) -> Result<()> {
     home::check_location(&home::dir(ctx))?;
+    let mut state = state.clone();
+    state.slot = Some(crate::claude::live_service(ctx));
+    let state = &state;
     let path = file(ctx);
     let write = |source| Error::StateWriteFailed {
         path: path.clone(),
@@ -241,6 +257,39 @@ pub fn save(ctx: &Context, state: &State) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
+    /// CLAUDE_CONFIG_DIR picks which keychain item is the live one, and one state file
+    /// serves every slot on a machine. A record of what was switched to in one slot says
+    /// nothing about another, so it is not carried over.
+    #[test]
+    fn what_was_active_in_another_slot_is_not_claimed_here() {
+        let home = std::env::temp_dir().join(format!("pitboard-slots-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&home);
+        let here = Context::new(home.clone()).with_pitboard_home(home.clone());
+        let elsewhere = here
+            .clone()
+            .with_claude_config_dir("/somewhere/else".into());
+
+        let mut state = State::default();
+        state.accounts.push(Account {
+            label: "work".into(),
+            account_uuid: "acc".into(),
+            email: "a@b.c".into(),
+            organization_uuid: "org".into(),
+            oauth_account: serde_json::json!({}),
+            parked: None,
+        });
+        state.active = Some("work".into());
+        save(&here, &state).expect("saved");
+
+        assert_eq!(load(&here).unwrap().active.as_deref(), Some("work"));
+        assert_eq!(
+            load(&elsewhere).unwrap().active,
+            None,
+            "another slot's record of what is in use is not this slot's"
+        );
+        let _ = std::fs::remove_dir_all(&home);
+    }
+
     /// A file written by the version in people's hands today. The command line and the app
     /// update separately, so a file one of them wrote has to keep loading in the other.
     #[test]
