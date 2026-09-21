@@ -75,11 +75,38 @@ jobs:
 
       - run: cargo build --release --locked -p pitboard --target ${{ matrix.target }}
 
-      # Only a Developer ID certificate can be notarised. Without one, an ad-hoc signature
-      # is what Apple Silicon requires to run a binary at all; Gatekeeper will still warn on
-      # first launch of a downloaded copy, which is why `cargo install` is the primary route.
+      # Signed and notarised like the app, so a tarball opened from a browser, which
+      # arrives quarantined, is not stopped by Gatekeeper. Without a certificate an ad-hoc
+      # signature is what Apple Silicon needs to run a binary at all.
       - if: runner.os == 'macOS'
-        run: codesign --force --sign - --timestamp=none target/${{ matrix.target }}/release/pitboard
+        id: apple
+        uses: ./.github/actions/apple-keychain
+        with:
+          certificate: ${{ secrets.CERTIFICATES_P12 }}
+          password: ${{ secrets.CERTIFICATES_PASSWORD }}
+      - if: runner.os == 'macOS'
+        env:
+          IDENTITY: ${{ steps.apple.outputs.identity }}
+          SIGNED: ${{ steps.apple.outputs.signed }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          KEY: ${{ secrets.APPLE_API_KEY_P8 }}
+          KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+        run: |
+          binary=target/${{ matrix.target }}/release/pitboard
+          if [ "$SIGNED" != "true" ]; then
+            codesign --force --sign - --timestamp=none "$binary"
+            exit 0
+          fi
+          codesign --force --options runtime --timestamp --sign "$IDENTITY" "$binary"
+          codesign --verify --strict "$binary"
+          # notarytool takes an archive, and a bare binary cannot be stapled, so the ticket
+          # lives with Apple and Gatekeeper asks for it when a quarantined copy is opened.
+          echo "$KEY" | base64 --decode > "$RUNNER_TEMP/key.p8"
+          ditto -c -k "$binary" "$RUNNER_TEMP/pitboard.zip"
+          xcrun notarytool submit "$RUNNER_TEMP/pitboard.zip" \
+            --key "$RUNNER_TEMP/key.p8" --key-id "$KEY_ID" --issuer "$ISSUER" --wait
+          rm -f "$RUNNER_TEMP/key.p8"
 
       - name: Package
         shell: bash
@@ -114,38 +141,11 @@ jobs:
       - run: rustup toolchain install
       - run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
 
-      - name: Take the signing certificate
-        id: apple
-        env:
-          CERTIFICATE: ${{ secrets.CERTIFICATES_P12 }}
-          CERTIFICATE_PASSWORD: ${{ secrets.CERTIFICATES_PASSWORD }}
-        run: |
-          if [ -z "$CERTIFICATE" ]; then
-            echo "no Developer ID certificate: building ad-hoc, without notarisation" >&2
-            echo "signed=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          # A keychain of this job's own, unlocked, and left unlocked for six hours so a
-          # long notarisation cannot relock it mid-run. The runner is thrown away after.
-          keychain=$RUNNER_TEMP/signing.keychain-db
-          security create-keychain -p "" "$keychain"
-          security set-keychain-settings -lut 21600 "$keychain"
-          security unlock-keychain -p "" "$keychain"
-          echo "$CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/certificate.p12"
-          security import "$RUNNER_TEMP/certificate.p12" -P "$CERTIFICATE_PASSWORD" \
-            -A -t cert -f pkcs12 -k "$keychain"
-          rm -f "$RUNNER_TEMP/certificate.p12"
-          security set-key-partition-list -S apple-tool:,apple: -k "" "$keychain"
-          security list-keychain -d user -s "$keychain" login.keychain
-          # The certificate says who it is, so the identity is read rather than configured.
-          identity=$(security find-identity -v -p codesigning |
-            sed -n 's/.*"\(Developer ID Application:.*\)"/\1/p' | head -1)
-          if [ -z "$identity" ]; then
-            echo "that certificate is not a Developer ID Application one" >&2
-            exit 1
-          fi
-          echo "identity=$identity" >> "$GITHUB_OUTPUT"
-          echo "signed=true" >> "$GITHUB_OUTPUT"
+      - id: apple
+        uses: ./.github/actions/apple-keychain
+        with:
+          certificate: ${{ secrets.CERTIFICATES_P12 }}
+          password: ${{ secrets.CERTIFICATES_PASSWORD }}
 
       - name: Build
         env:

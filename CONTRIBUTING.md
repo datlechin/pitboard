@@ -82,12 +82,15 @@ release still happens and the app is signed ad-hoc, which Gatekeeper warns about
 | `CERTIFICATES_P12` | The Developer ID Application certificate, exported from Keychain Access as .p12, `base64` |
 | `CERTIFICATES_PASSWORD` | The password given to that export |
 | `APPLE_API_KEY_P8` | An App Store Connect team key with the Developer role, `base64` |
+| `APPLE_ID` | Only needed if the notarisation route ever goes back to an app-specific password |
 | `APPLE_API_KEY_ID`, `APPLE_API_ISSUER` | Shown beside that key |
 | `SPARKLE_PUBLIC_KEY`, `SPARKLE_PRIVATE_KEY` | `apple/.build/artifacts/sparkle/Sparkle/bin/generate_keys --account pitboard` once, then the same with `-x -` to read the private one |
 
 The signing identity is read from the certificate itself, so there is no secret for it.
 Every archive is attested, so a downloader can check what built it with
-`gh attestation verify <file> --repo datlechin/pitboard`.
+`gh attestation verify <file> --repo datlechin/pitboard`. The command line binaries are
+signed and notarised like the app, because a tarball opened from a browser arrives
+quarantined and Gatekeeper stops an ad-hoc signature.
 
 Never change the update key once a release carries it. An app checks the feed's signature
 against the key it was built with, so a new key strands every copy already installed.
