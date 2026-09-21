@@ -5,6 +5,12 @@ All notable changes are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+- `status` renews a parked login whose access token has expired, so every account's usage
+  is live and a parked login no longer lapses after its refresh token's lifetime. Only
+  parked logins are renewed; the one signed in stays Claude Code's to renew. A login
+  Anthropic refuses is dropped, with the command that signs in to it again.
+
 ## [0.1.1] - 2026-09-21
 
 ### Fixed

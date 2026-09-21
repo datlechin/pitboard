@@ -3,8 +3,8 @@
 
 use crate::error::{Error, Result};
 use crate::state::{Park, State};
-use crate::{store, time};
-use serde_json::Value;
+use crate::{api, store, time};
+use serde_json::{Value, json};
 
 pub fn service_name(account_uuid: &str, at_millis: i64) -> String {
     format!("pitboard-park-{account_uuid}-{at_millis}")
@@ -47,6 +47,39 @@ pub fn describe(service: &str, parked_at: i64, oauth: &Value) -> Park {
         access_expires_at: expiry("expiresAt"),
         refresh_expires_at: expiry("refreshTokenExpiresAt"),
     }
+}
+
+/// The parked login with fresh tokens, stored as Claude Code stores its own after renewing,
+/// so it reads the same to Claude Code once restored. With no refresh-token lifetime in the
+/// answer, Claude Code drops the old one rather than keep a date that may no longer hold.
+pub fn renewed(oauth: &Value, fresh: &api::Renewed, now_millis: i64) -> Value {
+    let mut next = oauth.clone();
+    let Some(fields) = next.as_object_mut() else {
+        return next;
+    };
+    fields.insert("accessToken".into(), json!(fresh.access_token));
+    if let Some(refresh) = &fresh.refresh_token {
+        fields.insert("refreshToken".into(), json!(refresh));
+    }
+    fields.insert(
+        "expiresAt".into(),
+        json!(now_millis + fresh.expires_in * 1000),
+    );
+    match fresh.refresh_token_expires_in {
+        Some(seconds) => {
+            fields.insert(
+                "refreshTokenExpiresAt".into(),
+                json!(now_millis + seconds * 1000),
+            );
+        }
+        None => {
+            fields.remove("refreshTokenExpiresAt");
+        }
+    }
+    if let Some(scopes) = &fresh.scopes {
+        fields.insert("scopes".into(), json!(scopes));
+    }
+    next
 }
 
 pub fn fingerprint_of(oauth: &Value) -> String {
@@ -105,6 +138,48 @@ mod tests {
             park.refresh_fingerprint,
             fingerprint_of(&serde_json::json!({"refreshToken": "r"}))
         );
+    }
+
+    #[test]
+    fn a_renewed_login_is_stored_as_claude_code_stores_its_own() {
+        let parked = json!({
+            "accessToken": "a1", "refreshToken": "r1", "expiresAt": 1,
+            "refreshTokenExpiresAt": 2, "scopes": ["user:inference"],
+            "subscriptionType": "max", "rateLimitTier": "default_claude_max_20x"
+        });
+        let fresh = api::Renewed {
+            access_token: "a2".into(),
+            refresh_token: Some("r2".into()),
+            expires_in: 60,
+            refresh_token_expires_in: Some(120),
+            scopes: None,
+        };
+        let next = renewed(&parked, &fresh, 1_000_000);
+        assert_eq!(next["accessToken"], "a2");
+        assert_eq!(next["refreshToken"], "r2");
+        assert_eq!(next["expiresAt"], 1_060_000);
+        assert_eq!(next["refreshTokenExpiresAt"], 1_120_000);
+        assert_eq!(
+            next["scopes"],
+            json!(["user:inference"]),
+            "kept when not answered"
+        );
+        assert_eq!(
+            next["subscriptionType"], "max",
+            "what renewal does not touch stays"
+        );
+
+        let kept = api::Renewed {
+            refresh_token: None,
+            refresh_token_expires_in: None,
+            ..fresh
+        };
+        let next = renewed(&parked, &kept, 1_000_000);
+        assert_eq!(
+            next["refreshToken"], "r1",
+            "the server kept the refresh token"
+        );
+        assert!(next.get("refreshTokenExpiresAt").is_none());
     }
 
     #[test]

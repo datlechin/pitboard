@@ -223,6 +223,12 @@ pub enum Error {
     #[error("`claude` was not found on PATH. Install Claude Code, run it once, then try again.")]
     ClaudeNotFound,
 
+    #[error(
+        "could not renew the parked login for `{label}` ({detail}); its last reading is shown \
+         instead. Run `pitboard doctor` if this keeps happening."
+    )]
+    RenewalFailed { label: String, detail: String },
+
     #[error("the sign-in did not finish, so nothing was enrolled.")]
     SignInIncomplete,
 
@@ -282,6 +288,7 @@ impl Error {
             RecoveryUndetermined { .. } => "recovery_undetermined",
             ClaudeNotFound => "claude_not_found",
             SignInIncomplete => "sign_in_incomplete",
+            RenewalFailed { .. } => "renewal_failed",
             SignInInProgress => "sign_in_in_progress",
             Usage(_) => "usage",
             Store(e) => e.code(),

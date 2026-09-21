@@ -10,11 +10,13 @@ mod enroll;
 mod forget;
 mod journal;
 mod rename;
+mod renew;
 
 pub use enroll::{Enrolled, SignIn, enroll, sign_in};
 pub use forget::forget;
 pub use journal::{Recovered, pending as interrupted};
 pub use rename::rename;
+pub use renew::{Renewal, renew_parked};
 
 use crate::error::{Error, Result};
 use crate::state::{Account, Park, State};
@@ -91,6 +93,20 @@ fn purge(state: &mut State) -> usize {
 /// Claude Code's protocol requires around its own writes: the operating system releases it
 /// when a process ends, so there is no staleness rule for two runs to both satisfy.
 fn exclusive() -> Result<std::fs::File> {
+    let (file, path) = lock_file()?;
+    file.lock()
+        .map_err(|source| Error::HomeUnwritable { path, source })?;
+    Ok(file)
+}
+
+/// `exclusive` without waiting: `None` while another pitboard run holds it.
+fn try_exclusive() -> Option<std::fs::File> {
+    let (file, _) = lock_file().ok()?;
+    file.try_lock().ok()?;
+    Some(file)
+}
+
+fn lock_file() -> Result<(std::fs::File, PathBuf)> {
     let path = home::dir().join("state.lock");
     let fail = |source| Error::HomeUnwritable {
         path: path.clone(),
@@ -104,8 +120,7 @@ fn exclusive() -> Result<std::fs::File> {
         .mode(0o600)
         .open(&path)
         .map_err(fail)?;
-    file.lock().map_err(fail)?;
-    Ok(file)
+    Ok((file, path))
 }
 
 /// Who a live access token belongs to. When this cannot be answered, nothing moves: a login

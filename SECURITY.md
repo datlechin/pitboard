@@ -26,12 +26,17 @@ holds labels, codes and times only.
 
 pitboard makes two read-only requests to `https://api.anthropic.com`, each carrying an
 access token: `/api/oauth/profile`, to learn which account a login belongs to, and
-`/api/oauth/usage`, for the numbers `pitboard status` shows. TLS is verified against your
-operating system's trust store.
+`/api/oauth/usage`, for the numbers `pitboard status` shows.
 
-A refresh token is never sent anywhere. pitboard never calls a token endpoint and never
-refreshes a login; that is Claude Code's job, and a second refresher would break the
-login for both. There is no telemetry.
+It sends a refresh token in exactly one case: to renew a **parked** login whose access
+token has expired, through `https://platform.claude.com/v1/oauth/token` with Claude Code's
+own client id, the request Claude Code makes to renew its own login. A parked login is held
+by pitboard alone, so renewing it puts no second holder on its refresh chain. The new
+tokens replace the parked copy before the old one is deleted, and all of this happens under
+pitboard's lock, so no switch can install the old copy meanwhile. The login signed in is
+never renewed by pitboard: that is Claude Code's job, and a second renewer would break it.
+
+TLS is verified against your operating system's trust store. There is no telemetry.
 
 `PITBOARD_API_BASE` redirects these requests for tests, and is honoured only for a loopback
 IP address.

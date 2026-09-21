@@ -291,6 +291,96 @@ fn a_sign_in_in_progress_does_not_hold_up_a_switch() {
     assert!(env.parked_service("side").is_some());
 }
 
+fn access_lapsed(env: &Env, label: &str) {
+    env.edit_state(|s| {
+        for a in s["accounts"].as_array_mut().unwrap() {
+            if a["label"] == label {
+                a["parked"]["access_expires_at"] = serde_json::json!(1_000);
+            }
+        }
+    });
+}
+
+/// A parked login is pitboard's alone, so status renews it once its access lapses, stores
+/// it the way Claude Code would, and a later switch installs the renewed login.
+#[test]
+fn status_renews_a_parked_login_whose_access_has_lapsed() {
+    let mut env = two_accounts("renewal");
+    let old = env.parked_service("beta").unwrap();
+    access_lapsed(&env, "beta");
+    let renewal = env.answers_renewal(
+        "refresh-b",
+        200,
+        serde_json::json!({
+            "access_token": "access-refresh-b2", "refresh_token": "refresh-b2",
+            "expires_in": 28_800, "refresh_token_expires_in": 2_592_000,
+            "scope": "user:inference user:profile", "token_type": "Bearer"
+        }),
+    );
+
+    let (out, err, code) = env.run(&["status", "--json"]);
+
+    assert_eq!(code, 0, "{err}");
+    let status = envelope(&out);
+    assert_eq!(status["warnings"], serde_json::json!([]));
+    let beta = status["data"]["accounts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|a| a["label"] == "beta")
+        .unwrap()
+        .clone();
+    assert_eq!(
+        beta["usage"]["source"], "live",
+        "asked with the renewed token"
+    );
+    assert!(beta["parked"]["access_expires_at"].as_i64().unwrap() > 1_000);
+    let new = env.parked_service("beta").unwrap();
+    assert_ne!(new, old);
+    assert!(
+        !env.is_parked(&old),
+        "the copy holding the spent token is deleted"
+    );
+    renewal.assert();
+
+    let (_, err, code) = env.run(&["use", "beta"]);
+    assert_eq!(code, 0, "{err}");
+    let live = env.live();
+    assert_eq!(live["claudeAiOauth"]["refreshToken"], "refresh-b2");
+    assert_eq!(
+        live["claudeAiOauth"]["scopes"],
+        serde_json::json!(["user:inference", "user:profile"])
+    );
+    assert_eq!(live["claudeAiOauth"]["subscriptionType"], "max");
+}
+
+#[test]
+fn a_parked_login_anthropic_refuses_is_dropped_with_the_way_back() {
+    let mut env = two_accounts("refused");
+    let old = env.parked_service("beta").unwrap();
+    access_lapsed(&env, "beta");
+    let renewal = env.answers_renewal(
+        "refresh-b",
+        400,
+        serde_json::json!({"error": "invalid_grant", "error_description": "refresh token revoked"}),
+    );
+
+    let (out, err, code) = env.run(&["status", "--json"]);
+
+    assert_eq!(code, 0, "{err}");
+    let status = envelope(&out);
+    assert_eq!(status["warnings"][0]["code"], "parked_login_refused");
+    assert!(
+        status["warnings"][0]["message"]
+            .as_str()
+            .unwrap()
+            .contains("pitboard enroll beta --sign-in")
+    );
+    assert!(env.parked_service("beta").is_none());
+    assert!(!env.is_parked(&old));
+    renewal.assert();
+}
+
 #[test]
 fn forgetting_the_signed_in_account_is_refused() {
     let env = two_accounts("forget");

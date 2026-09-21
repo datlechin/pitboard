@@ -2,7 +2,7 @@ use anstream::{eprintln, print, println};
 use anstyle::{AnsiColor, Style};
 use clap::{CommandFactory, Parser, Subcommand};
 use pitboard::error::Error;
-use pitboard::switch::{Enrolled, Outcome, Settled, SignIn};
+use pitboard::switch::{Enrolled, Outcome, Renewal, Settled, SignIn};
 use pitboard::ui::{BOLD, paint};
 use pitboard::{audit, doctor, state, status, statusline, switch};
 use serde_json::{Value, json};
@@ -160,6 +160,11 @@ fn emit(report: Report, as_json: bool) -> ExitCode {
 }
 
 fn status() -> Report {
+    // Parked logins whose access has lapsed are renewed first, so every account is asked live.
+    let renewals = switch::renew_parked();
+    for (label, outcome) in &renewals {
+        audit::record("renew", label, outcome.code());
+    }
     // Unreadable is not the same as empty: reporting it as empty would tell the user their
     // enrolled logins are gone.
     let state = match state::load() {
@@ -167,11 +172,27 @@ fn status() -> Report {
         Err(e) => return Report::failed(Some("status"), e),
     };
     let report = status::gather(&state);
-    Report::done(
+    let mut done = Report::done(
         "status",
         status::render_json(&report),
         status::render_human(&report),
-    )
+    );
+    done.warnings.extend(
+        renewals
+            .iter()
+            .filter_map(|(label, outcome)| match outcome {
+                Renewal::Refused => Some(warning(
+                    outcome.code(),
+                    format!(
+                        "Anthropic no longer accepts the parked login for `{label}`. Run \
+                     `pitboard enroll {label} --sign-in` to sign in to it again."
+                    ),
+                )),
+                Renewal::Failed(e) => Some(warning(e.code(), e)),
+                Renewal::Renewed | Renewal::Deferred => None,
+            }),
+    );
+    done
 }
 
 fn doctor() -> Report {

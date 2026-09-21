@@ -46,9 +46,10 @@ pitboard use work   # switch
     week  ████░░░░░░   40%  resets in 2d 4h
 ```
 
-Usage is asked of Anthropic each time, for every account at once. A parked login can answer
-until its access token expires, a few hours after Claude Code last renewed it; after that
-pitboard shows the last number it measured, and when.
+Usage is asked of Anthropic each time, for every account at once. A parked login whose
+access token has expired is renewed first, the way Claude Code renews its own, so every
+account answers live and none lapses while parked. If Anthropic cannot be reached, pitboard
+shows the last number it measured, and when.
 
 A Claude Code session that is already running picks up a switch within about 33 seconds,
 without restarting. Until then it keeps using the previous account.
@@ -100,7 +101,8 @@ These are rules, not gaps:
 - No automatic switching on any server signal.
 - No request pooling, proxying, or `ANTHROPIC_BASE_URL` interception.
 - No failover when an account is on hold.
-- No OAuth grant of any kind. Refreshing tokens is Claude Code's job, never pitboard's.
+- No renewing of the login signed in: that is Claude Code's. pitboard renews only a parked
+  login, which it alone holds.
 - No export, import or sync of parked logins between machines.
 
 That last one is a safety property, not a missing feature. Each machine must sign in to
@@ -116,9 +118,8 @@ Honestly listed, because none of these are pitboard's to fix:
 - **The prompt cache** is per account, so the first message after a switch rebuilds it. On
   this project's own measurements that costs about the same as leaving a session idle for
   an hour — which a five-hour limit usually means has happened anyway.
-- **Usage for a parked account** is live until its access token expires, and after that is
-  the last number pitboard measured. Another machine using the same account since then is
-  counted once it can be asked again.
+- **Usage for a parked account** is asked with its parked login, so what other machines
+  used on that account is counted too.
 
 ## How it works
 

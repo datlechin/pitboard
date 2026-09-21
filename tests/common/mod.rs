@@ -195,6 +195,27 @@ impl Env {
         }
     }
 
+    /// Make the fake token endpoint answer a renewal of `refresh`. The caller keeps the mock
+    /// alive and asserts it was asked exactly once.
+    pub fn answers_renewal(
+        &mut self,
+        refresh: &str,
+        status: usize,
+        body: serde_json::Value,
+    ) -> mockito::Mock {
+        self.server
+            .mock("POST", "/v1/oauth/token")
+            .match_body(mockito::Matcher::PartialJson(serde_json::json!({
+                "grant_type": "refresh_token",
+                "refresh_token": refresh,
+                "client_id": "9d1c250a-e61b-44d9-88ed-5944d1962f5e",
+            })))
+            .with_status(status)
+            .with_body(body.to_string())
+            .expect(1)
+            .create()
+    }
+
     /// Make the fake Anthropic answer as it does for an expired session.
     pub fn expire(&mut self, access_token: &str) {
         let mock = self

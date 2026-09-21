@@ -1,9 +1,9 @@
 //! The last usage reading pitboard took for each account.
 //!
-//! A parked login's access token stops working hours after it was issued, and pitboard does
-//! not renew it, so from then on the only honest thing to show is the last number actually
-//! measured, and when. Nothing here is secret; it is a disposable cache, written
-//! last-writer-wins without a lock.
+//! When an account cannot be asked, because Anthropic is unreachable or its parked login
+//! could not be renewed, the only honest thing to show is the last number actually measured,
+//! and when. Nothing here is secret; it is a disposable cache, written last-writer-wins
+//! without a lock.
 
 use crate::usage::{Snapshot, Source};
 use crate::{atomic, home};

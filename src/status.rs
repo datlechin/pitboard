@@ -22,7 +22,7 @@ pub enum Stale {
     NothingSignedIn,
     /// Claude Code's own session has expired; its next call renews it.
     SessionExpired,
-    /// A parked login's access token has expired, and pitboard does not renew it.
+    /// A parked login's access token has expired and could not be renewed this time.
     ParkedAccessExpired,
     NothingParked,
     ParkUnreadable,
@@ -38,7 +38,9 @@ impl Stale {
             ApiError::Unauthorized => Stale::ParkedAccessExpired,
             ApiError::RateLimited => Stale::RateLimited,
             ApiError::Network(_) => Stale::Unreachable,
-            ApiError::Unexpected { .. } | ApiError::Malformed(_) => Stale::Unexpected,
+            ApiError::Unexpected { .. } | ApiError::Malformed(_) | ApiError::InvalidGrant => {
+                Stale::Unexpected
+            }
         }
     }
 

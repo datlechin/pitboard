@@ -21,7 +21,7 @@ pub struct Park {
     pub service: String,
     pub parked_at: i64,
     pub refresh_fingerprint: String,
-    /// Until then its usage can be asked; the access token is not renewed while parked.
+    /// Until then its usage can be asked without renewing it first.
     pub access_expires_at: Option<i64>,
     /// Until then it can be restored.
     pub refresh_expires_at: Option<i64>,
