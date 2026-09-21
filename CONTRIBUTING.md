@@ -63,13 +63,14 @@ release still happens and the app is signed ad-hoc, which Gatekeeper warns about
 
 | Secret | Where it comes from |
 | --- | --- |
-| `APPLE_SIGN_IDENTITY` | The certificate's name, as `security find-identity -v` prints it |
-| `APPLE_CERT_P12` | The Developer ID Application certificate, exported from Keychain Access, `base64` |
-| `APPLE_CERT_PASSWORD` | The password given to that export |
-| `APPLE_API_KEY_P8` | An App Store Connect API key with the Developer role, `base64` |
-| `APPLE_API_KEY_ID` | Shown beside that key |
-| `APPLE_API_ISSUER` | The issuer a team key belongs to; left unset for an individual key |
-| `SPARKLE_PUBLIC_KEY`, `SPARKLE_PRIVATE_KEY` | `apple/.build/artifacts/sparkle/Sparkle/bin/generate_keys` once, then `generate_keys -x -` to read the private one |
+| `CERTIFICATES_P12` | The Developer ID Application certificate, exported from Keychain Access as .p12, `base64` |
+| `CERTIFICATES_PASSWORD` | The password given to that export |
+| `APPLE_ID` | The Apple ID the notary submissions are made under |
+| `APPLE_TEAM_ID` | The team the certificate belongs to, as `security find-identity -v` prints it in brackets |
+| `NOTARY_PASSWORD` | An app-specific password from appleid.apple.com, not the Apple ID's own |
+| `SPARKLE_PUBLIC_KEY`, `SPARKLE_PRIVATE_KEY` | `apple/.build/artifacts/sparkle/Sparkle/bin/generate_keys --account pitboard` once, then the same with `-x -` to read the private one |
+
+The signing identity is read from the certificate itself, so there is no secret for it.
 
 The update key must never change once a release carries it: an app checks the feed's
 signature against the key it was built with, so a new key strands every copy already
