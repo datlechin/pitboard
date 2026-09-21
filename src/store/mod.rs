@@ -101,13 +101,29 @@ pub fn credential_file() -> PathBuf {
 ///
 /// Resolved on every call, never cached: Claude Code migrates between backends when a
 /// keychain write fails, so a remembered answer goes wrong without warning.
-fn resolve_backend(service: &str) -> Result<Option<&'static dyn RawStore>, Error> {
-    for backend in live_chain() {
+/// Which backend in `chain` holds `service`.
+///
+/// Taking the chain as an argument is the whole test seam: the shipped code passes the
+/// platform's list, and a test passes fakes. Nothing else changes.
+fn resolve_in<'a>(
+    chain: &[&'a dyn RawStore],
+    service: &str,
+) -> Result<Option<&'a dyn RawStore>, Error> {
+    for backend in chain {
         if backend.contains(service)? {
-            return Ok(Some(backend));
+            return Ok(Some(*backend));
         }
     }
     Ok(None)
+}
+
+fn write_in(chain: &[&dyn RawStore], service: &str, contents: &str) -> Result<(), Error> {
+    let backend = resolve_in(chain, service)?.unwrap_or(chain[0]);
+    backend.write(service, contents)
+}
+
+fn resolve_backend(service: &str) -> Result<Option<&'static dyn RawStore>, Error> {
+    resolve_in(&live_chain(), service)
 }
 
 pub fn resolve(service: &str) -> Result<Backend, Error> {
@@ -135,9 +151,13 @@ pub fn read(service: &str) -> Result<Option<Value>, Error> {
 /// A failed keychain write is never answered by writing the plaintext file: that demotion
 /// is Claude Code's to perform, and doing it here would quietly downgrade where the user's
 /// token is kept.
+/// Write the live credential where it already lives.
+///
+/// A failed keychain write is never answered by writing the plaintext file: that demotion
+/// is Claude Code's to perform, and doing it here would quietly downgrade where the user's
+/// token is kept.
 pub fn write_raw(service: &str, contents: &str) -> Result<(), Error> {
-    let backend = resolve_backend(service)?.unwrap_or(live_chain()[0]);
-    backend.write(service, contents)
+    write_in(&live_chain(), service, contents)
 }
 
 pub fn vault_read(service: &str) -> Result<Option<String>, Error> {
@@ -166,6 +186,164 @@ pub fn fingerprint(secret: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::cell::RefCell;
+    use std::collections::HashMap;
+
+    /// A backend that can be told to fail, so the policies around a write can be tested
+    /// without breaking a real keychain — which is neither safe nor deterministic.
+    struct Fake {
+        kind: Backend,
+        stored: RefCell<HashMap<String, String>>,
+        fail_write: bool,
+        /// What a read returns after a write, when it should differ from what was written.
+        corrupt_readback: Option<String>,
+    }
+
+    // The fakes are only ever used from one test thread at a time.
+    unsafe impl Sync for Fake {}
+
+    impl Fake {
+        fn empty(kind: Backend) -> Fake {
+            Fake {
+                kind,
+                stored: RefCell::new(HashMap::new()),
+                fail_write: false,
+                corrupt_readback: None,
+            }
+        }
+        fn holding(kind: Backend, service: &str, value: &str) -> Fake {
+            let f = Fake::empty(kind);
+            f.stored.borrow_mut().insert(service.into(), value.into());
+            f
+        }
+    }
+
+    impl RawStore for Fake {
+        fn kind(&self) -> Backend {
+            self.kind
+        }
+        fn contains(&self, service: &str) -> Result<bool, Error> {
+            Ok(self.stored.borrow().contains_key(service))
+        }
+        fn read(&self, service: &str) -> Result<Option<String>, Error> {
+            Ok(self.stored.borrow().get(service).cloned())
+        }
+        fn write(&self, service: &str, contents: &str) -> Result<(), Error> {
+            if self.fail_write {
+                return Err(Error::Write("the fake was told to fail".into()));
+            }
+            let stored = self
+                .corrupt_readback
+                .clone()
+                .unwrap_or_else(|| contents.to_string());
+            self.stored.borrow_mut().insert(service.into(), stored);
+            match self.read(service)? {
+                Some(back) if back == contents => Ok(()),
+                _ => Err(Error::NotDurable(format!(
+                    "{service} holds different bytes"
+                ))),
+            }
+        }
+        fn delete(&self, service: &str) -> Result<(), Error> {
+            self.stored.borrow_mut().remove(service);
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn a_failed_keychain_write_never_falls_through_to_the_plaintext_file() {
+        let keychain = Fake {
+            fail_write: true,
+            ..Fake::holding(Backend::Keychain, "svc", "before")
+        };
+        let plaintext = Fake::empty(Backend::File);
+        let chain: [&dyn RawStore; 2] = [&keychain, &plaintext];
+
+        let result = write_in(&chain, "svc", "after");
+
+        assert!(matches!(result, Err(Error::Write(_))));
+        assert_eq!(
+            plaintext.read("svc").unwrap(),
+            None,
+            "demoting the credential to a plaintext file is Claude Code's decision, not ours"
+        );
+        assert_eq!(keychain.read("svc").unwrap().as_deref(), Some("before"));
+    }
+
+    #[test]
+    fn a_write_that_does_not_read_back_is_reported_rather_than_believed() {
+        let keychain = Fake {
+            corrupt_readback: Some("something else".into()),
+            ..Fake::holding(Backend::Keychain, "svc", "before")
+        };
+        let chain: [&dyn RawStore; 1] = [&keychain];
+        assert!(matches!(
+            write_in(&chain, "svc", "after"),
+            Err(Error::NotDurable(_))
+        ));
+    }
+
+    #[test]
+    fn a_credential_already_in_the_file_backend_stays_there() {
+        let keychain = Fake::empty(Backend::Keychain);
+        let plaintext = Fake::holding(Backend::File, "svc", "before");
+        let chain: [&dyn RawStore; 2] = [&keychain, &plaintext];
+
+        write_in(&chain, "svc", "after").unwrap();
+
+        assert_eq!(plaintext.read("svc").unwrap().as_deref(), Some("after"));
+        assert_eq!(
+            keychain.read("svc").unwrap(),
+            None,
+            "a credential must not be promoted behind Claude Code's back either"
+        );
+    }
+
+    #[test]
+    fn an_absent_credential_is_written_to_the_preferred_backend() {
+        let keychain = Fake::empty(Backend::Keychain);
+        let plaintext = Fake::empty(Backend::File);
+        let chain: [&dyn RawStore; 2] = [&keychain, &plaintext];
+
+        write_in(&chain, "svc", "fresh").unwrap();
+
+        assert_eq!(keychain.read("svc").unwrap().as_deref(), Some("fresh"));
+        assert_eq!(plaintext.read("svc").unwrap(), None);
+    }
+
+    #[test]
+    fn an_unreadable_backend_aborts_instead_of_looking_further_down_the_chain() {
+        struct Broken;
+        impl RawStore for Broken {
+            fn kind(&self) -> Backend {
+                Backend::Keychain
+            }
+            fn contains(&self, _: &str) -> Result<bool, Error> {
+                Err(Error::Unreadable("security exited 1".into()))
+            }
+            fn read(&self, _: &str) -> Result<Option<String>, Error> {
+                unreachable!()
+            }
+            fn write(&self, _: &str, _: &str) -> Result<(), Error> {
+                unreachable!()
+            }
+            fn delete(&self, _: &str) -> Result<(), Error> {
+                unreachable!()
+            }
+        }
+        let plaintext = Fake::empty(Backend::File);
+        let chain: [&dyn RawStore; 2] = [&Broken, &plaintext];
+
+        assert!(matches!(
+            write_in(&chain, "svc", "x"),
+            Err(Error::Unreadable(_))
+        ));
+        assert_eq!(
+            plaintext.read("svc").unwrap(),
+            None,
+            "could-not-tell must never be read as nothing-there"
+        );
+    }
 
     #[test]
     fn fingerprints_are_short_stable_and_not_the_secret() {
