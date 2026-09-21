@@ -136,10 +136,11 @@ mod tests {
     #[test]
     fn a_program_is_found_on_path_and_a_missing_one_is_not() {
         let ctx = Context::new(std::path::PathBuf::from("/home/x"));
-        assert_eq!(
-            program(&ctx.clone().with_claude_program("ls".into())),
-            Some(std::path::PathBuf::from("/bin/ls"))
-        );
+        let found = program(&ctx.clone().with_claude_program("ls".into()))
+            .expect("every machine that runs these tests has ls on PATH");
+        assert!(found.ends_with("ls"), "{found:?}");
+        assert!(found.is_absolute(), "a shell would get an absolute path");
+        assert!(std::fs::metadata(&found).is_ok());
         assert_eq!(
             program(
                 &ctx.clone()
