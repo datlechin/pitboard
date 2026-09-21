@@ -303,6 +303,12 @@ impl Env {
         self.root.join(".credentials.json")
     }
 
+    /// Replaces the live credential document, for a test that needs it to be a particular
+    /// shape rather than whatever a sign-in produced.
+    pub fn replace_live(&self, credential: &serde_json::Value) {
+        self.write_live(&credential.to_string());
+    }
+
     fn write_live(&self, credential: &str) {
         if cfg!(target_os = "macos") {
             pitboard_core::testing::vault_write(&ctx(), &self.service, credential).unwrap();

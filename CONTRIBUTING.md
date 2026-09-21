@@ -56,8 +56,10 @@ difference with `cargo insta review`, and say in the change why the contract mov
 
 ## The site
 
-`website/` is one page, published to usepitboard.com by the Pages workflow. `docs/` holds
-the documentation source, which belongs at docs.usepitboard.com and does not exist yet.
+`website/` is where usepitboard.com will be built, with Astro; it is empty until then.
+`docs/` holds the documentation source for docs.usepitboard.com. Neither is published by
+this repository yet, and the README and the app already link to the documentation, so it
+has to be standing before the next release.
 
 ## The state file
 

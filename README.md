@@ -7,7 +7,7 @@ Switch between your own Claude Code logins, and see how much each one has left.
 [![crates.io](https://img.shields.io/crates/v/pitboard.svg)](https://crates.io/crates/pitboard)
 [![Licence](https://img.shields.io/badge/licence-Apache--2.0-blue.svg)](LICENSE)
 
-<img src="docs/panel.png" alt="The pitboard menu bar panel, listing three accounts with their five hour and weekly limits" width="380">
+<img src=".github/media/panel.png" alt="The pitboard menu bar panel, listing three accounts with their five hour and weekly limits" width="380">
 
 If you have more than one Claude subscription, changing accounts normally means signing out
 and back in through a browser. pitboard keeps a copy of each login and puts the one you ask

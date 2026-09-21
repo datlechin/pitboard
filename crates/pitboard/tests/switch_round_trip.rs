@@ -542,3 +542,32 @@ fn uninstalling_takes_the_parked_logins_with_it() {
     // The account that was signed in is still signed in: uninstalling is not a logout.
     assert_eq!(env.live()["claudeAiOauth"]["refreshToken"], "refresh-a");
 }
+
+/// macOS reads at most 4097 bytes of command from `security`'s stdin, and MCP server tokens
+/// can make a login larger than that. The switch has to refuse before it touches anything:
+/// the account in use stays in use, and the copy it was going to install stays where it is.
+#[cfg(target_os = "macos")]
+#[test]
+fn a_login_too_large_to_write_changes_nothing() {
+    let env = two_accounts("too-large");
+    let parked = env.parked_service("beta").expect("beta has a parked login");
+
+    // The live document, with a block the size MCP server tokens reach. It belongs to the
+    // machine, so a switch carries it across and the document it writes is this big.
+    let mut live = env.live();
+    live["mcpOAuth"] = serde_json::json!({ "server": "x".repeat(4096) });
+    env.replace_live(&live);
+    let live_before = env.live();
+
+    let (out, err, code) = env.run(&["use", "beta"]);
+    assert_eq!(code, 3, "refused, not a half-done switch: {out}{err}");
+    assert!(err.contains("bytes"), "it says how big and how big it may be: {err}");
+
+    assert_eq!(env.live(), live_before, "the account in use did not move");
+    assert!(env.is_parked(&parked), "the copy it would have installed is still there");
+    assert_eq!(
+        account(&env, "beta")["parked"]["service"],
+        parked,
+        "and is still the one beta holds"
+    );
+}
