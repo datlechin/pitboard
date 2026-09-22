@@ -56,6 +56,7 @@ pub(crate) mod store;
 #[cfg(feature = "test-support")]
 #[doc(hidden)]
 pub mod testing {
+    pub use crate::api::scripted::{Answer, Asked, ScriptedApi, Trouble};
     pub use crate::claude::live_service;
     pub use crate::slot::{LIVE_SERVICE, dir_hash, service_for_dir};
     pub use crate::store::memory::{Fault, MemoryPlatform, MemoryStore};

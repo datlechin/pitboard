@@ -5,6 +5,9 @@
 //! signed in is Claude Code's to renew: two holders renewing one refresh chain would break
 //! it for both.
 
+#[cfg(any(test, feature = "test-support"))]
+pub mod scripted;
+
 use crate::context::Context;
 use crate::usage::{self, Snapshot};
 use serde_json::Value;
@@ -80,7 +83,7 @@ pub enum ApiError {
 }
 
 /// Fresh tokens for a parked login, as the token endpoint returns them.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Renewed {
     pub access_token: String,
     /// `None` when the server keeps the refresh token it was given.
@@ -88,6 +91,66 @@ pub struct Renewed {
     pub expires_in: i64,
     pub refresh_token_expires_in: Option<i64>,
     pub scopes: Option<Vec<String>>,
+}
+
+/// What pitboard asks Anthropic, as a seam.
+///
+/// The loopback server the integration tests run answers requests, which proves the
+/// parsing and the wiring. What it cannot produce on demand is the half that decides
+/// behaviour: a request that times out, a 429, a refresh token Anthropic has stopped
+/// accepting. Those are the answers the engine has to be right about.
+pub(crate) trait Api: Send + Sync + std::fmt::Debug {
+    fn owner(&self, ctx: &Context, access_token: &str) -> Result<Owner, ApiError>;
+    fn usage(&self, ctx: &Context, access_token: &str) -> Result<Snapshot, ApiError>;
+    fn renew(
+        &self,
+        ctx: &Context,
+        refresh_token: &str,
+        scopes: &[String],
+        client_id: Option<&str>,
+    ) -> Result<Renewed, ApiError>;
+}
+
+/// Anthropic, over the network. What every real context uses.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct Anthropic;
+
+impl Api for Anthropic {
+    fn owner(&self, ctx: &Context, access_token: &str) -> Result<Owner, ApiError> {
+        ask_owner(ctx, access_token)
+    }
+
+    fn usage(&self, ctx: &Context, access_token: &str) -> Result<Snapshot, ApiError> {
+        ask_usage(ctx, access_token)
+    }
+
+    fn renew(
+        &self,
+        ctx: &Context,
+        refresh_token: &str,
+        scopes: &[String],
+        client_id: Option<&str>,
+    ) -> Result<Renewed, ApiError> {
+        ask_renew(ctx, refresh_token, scopes, client_id)
+    }
+}
+
+/// Ask Anthropic through this context.
+pub fn owner(ctx: &Context, access_token: &str) -> Result<Owner, ApiError> {
+    ctx.api().owner(ctx, access_token)
+}
+
+pub fn usage(ctx: &Context, access_token: &str) -> Result<Snapshot, ApiError> {
+    ctx.api().usage(ctx, access_token)
+}
+
+pub fn renew(
+    ctx: &Context,
+    refresh_token: &str,
+    scopes: &[String],
+    client_id: Option<&str>,
+) -> Result<Renewed, ApiError> {
+    ctx.api().renew(ctx, refresh_token, scopes, client_id)
 }
 
 fn agent() -> &'static Agent {
@@ -137,7 +200,7 @@ fn get(ctx: &Context, path: &str, access_token: &str) -> Result<Value, ApiError>
 ///
 /// A login issued to another client carries its own `clientId`, and Claude Code renews it
 /// as that client. Renewing it as the first-party one would be a different login.
-pub fn renew(
+fn ask_renew(
     ctx: &Context,
     refresh_token: &str,
     scopes: &[String],
@@ -186,12 +249,12 @@ fn parse_renewed(body: &Value) -> Result<Renewed, ApiError> {
     })
 }
 
-pub fn owner(ctx: &Context, access_token: &str) -> Result<Owner, ApiError> {
+fn ask_owner(ctx: &Context, access_token: &str) -> Result<Owner, ApiError> {
     let body = get(ctx, "/api/oauth/profile", access_token)?;
     parse_owner(&body)
 }
 
-pub fn usage(ctx: &Context, access_token: &str) -> Result<Snapshot, ApiError> {
+fn ask_usage(ctx: &Context, access_token: &str) -> Result<Snapshot, ApiError> {
     let body = get(ctx, "/api/oauth/usage", access_token)?;
     Ok(usage::from_usage_object(&body, ctx.now()))
 }

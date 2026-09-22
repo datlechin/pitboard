@@ -2,6 +2,7 @@
 //! `Context` from the process environment once. A program linking the library builds one
 //! itself: an app started from Finder does not see a shell's environment.
 
+use crate::api::{Anthropic, Api};
 use crate::store::Platform;
 use crate::time::{Clock, SystemClock};
 use std::path::PathBuf;
@@ -43,6 +44,8 @@ pub struct Context {
     pub(crate) clock: Arc<dyn Clock>,
     /// The machine's credential stores. This build's platform in every real context.
     pub(crate) platform: Arc<dyn Platform>,
+    /// Who answers for Anthropic. The network in every real context.
+    pub(crate) api: Arc<dyn Api>,
 }
 
 impl Context {
@@ -59,6 +62,11 @@ impl Context {
     /// The credential stores this context reaches.
     pub(crate) fn platform(&self) -> &dyn Platform {
         self.platform.as_ref()
+    }
+
+    /// Who this context asks about a login.
+    pub(crate) fn api(&self) -> &dyn Api {
+        self.api.as_ref()
     }
 
     /// Claude Code's defaults for a person whose home is `home`: `~/.pitboard`, `~/.claude`,
@@ -80,6 +88,7 @@ impl Context {
             hover_rest: false,
             clock: Arc::new(SystemClock),
             platform: crate::store::host(),
+            api: Arc::new(Anthropic),
         }
     }
 
@@ -171,7 +180,16 @@ impl Context {
             hover_rest: var("CLAUDE_CODE_HOVER_REST").is_some_and(|v| v == "1" || v == "true"),
             clock: Arc::new(SystemClock),
             platform: crate::store::host(),
+            api: Arc::new(Anthropic),
         }
+    }
+
+    /// Answer for Anthropic from a script, where a test can produce a 429 or a refusal.
+    #[cfg(any(test, feature = "test-support"))]
+    #[doc(hidden)]
+    pub fn with_scripted_api(mut self, api: Arc<crate::api::scripted::ScriptedApi>) -> Context {
+        self.api = api;
+        self
     }
 
     /// Put the credential stores in memory, where a test can make them fail. Only the

@@ -37,6 +37,7 @@ pub struct MemoryStore {
     kind: Backend,
     items: Mutex<HashMap<String, String>>,
     faults: Mutex<HashMap<String, Fault>>,
+    blanket: Mutex<Option<Fault>>,
 }
 
 impl MemoryStore {
@@ -46,6 +47,7 @@ impl MemoryStore {
             kind,
             items: Mutex::new(HashMap::new()),
             faults: Mutex::new(HashMap::new()),
+            blanket: Mutex::new(None),
         })
     }
 
@@ -87,6 +89,15 @@ impl MemoryStore {
             .insert(service.into(), fault);
     }
 
+    /// From now on, every service misbehaves in this way, including ones that do not
+    /// exist yet. A name reserved at the moment of the write cannot be named in advance.
+    pub fn fault_all(&self, fault: Fault) {
+        *self
+            .blanket
+            .lock()
+            .expect("a poisoned test store is a failed test") = Some(fault);
+    }
+
     /// Stop misbehaving.
     pub fn heal(&self, service: &str) {
         self.faults
@@ -101,6 +112,12 @@ impl MemoryStore {
             .expect("a poisoned test store is a failed test")
             .get(service)
             .cloned()
+            .or_else(|| {
+                self.blanket
+                    .lock()
+                    .expect("a poisoned test store is a failed test")
+                    .clone()
+            })
     }
 }
 
