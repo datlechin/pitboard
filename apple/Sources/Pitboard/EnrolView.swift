@@ -20,8 +20,8 @@ struct NameIt: View {
             }
             if asking == .another {
                 Text(
-                    "Opens a terminal running the sign-in, which uses a browser. "
-                        + "Sign in as the account you want to add, not the one in use."
+                    "Opens Claude Code's own sign-in in your browser, and shows what it "
+                        + "says here. Sign in as the account you are adding."
                 )
                 .font(.caption2)
                 .foregroundStyle(.secondary)

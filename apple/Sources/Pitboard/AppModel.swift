@@ -40,6 +40,9 @@ final class AppModel {
     private(set) var schedule: Schedule = .absent
     /// What the last renewal came to, for the settings pane that started it.
     private(set) var renewals: [Renewed]?
+    /// The stable code behind `problem`, for deciding what to offer. Branching on the
+    /// wording of a message is how an offer survives the message changing under it.
+    private(set) var problemCode: String?
 
     enum Naming: Equatable {
         /// Record the account signed in now: no browser, so the app does it itself.
@@ -142,10 +145,12 @@ final class AppModel {
             stuck = read.warnings.contains { $0.code == "recovery_undetermined" }
             updatedAt = Date()
             lastChangedAt = await service.changedAt()
+            problemCode = read.warnings.first?.code
             advice = Advice.about(read, unless: notifier.told)
             if let advice { notifier.tell(advice) }
         } catch {
             problem = Self.saying(error)
+            problemCode = Self.code(of: error)
             // A read that could not reach Anthropic still has something true to show: the
             // last numbers measured, and who Claude Code's config says is signed in. An
             // empty panel says the accounts are gone, which is not what happened.
@@ -222,11 +227,45 @@ final class AppModel {
         }
     }
 
-    /// The account signed in now, if it is not enrolled. Everything else about adding an
-    /// account needs a browser and somewhere to print what Claude Code says, which is the
-    /// command line's job.
+    /// The account signed in now, if it is not enrolled.
     var unenrolled: Bool {
         status?.accounts.contains { $0.signedIn && $0.label == nil } ?? false
+    }
+
+    /// How far along setting pitboard up this machine is.
+    ///
+    /// Somebody who installed the app from the cask and nothing else has never typed a
+    /// pitboard command and may never want to. Every state before `ready` used to show
+    /// either a line naming a command to run or nothing at all, which is the same as
+    /// telling them the app does not work.
+    enum Footing: Equatable {
+        /// Claude Code is not on this machine. Nothing pitboard does means anything
+        /// without it, and pitboard cannot install it.
+        case noClaudeCode
+        /// Claude Code is here and nobody is signed in to it.
+        case noOneSignedIn
+        /// Somebody is signed in and pitboard has not been told what to call them. Their
+        /// login cannot be parked until it has a name.
+        case unnamed(String)
+        /// One account, so there is nothing yet to switch to.
+        case onlyOne(String)
+        /// Set up, or too early to say.
+        case ready
+    }
+
+    var footing: Footing {
+        if problemCode == "claude_program_missing" { return .noClaudeCode }
+        // Before the first read there is nothing to go on, and guessing at this point
+        // shows somebody a setup step they may have finished years ago.
+        guard let accounts = status?.accounts else { return .ready }
+        guard let inUse = accounts.first(where: \.signedIn) else {
+            // Enrolled accounts with nobody signed in is a machine mid-switch or one whose
+            // login was signed out from elsewhere, not a machine that needs setting up.
+            return accounts.isEmpty ? .noOneSignedIn : .ready
+        }
+        if inUse.label == nil { return .unnamed(inUse.email) }
+        if accounts.count == 1, let label = inUse.label { return .onlyOne(label) }
+        return .ready
     }
 
     /// Records the account signed in now under a name.
@@ -321,7 +360,7 @@ final class AppModel {
 
     /// The stable code behind an error, for deciding what to offer rather than reading the
     /// wording of a message.
-    private static func code(of error: Error) -> String? {
+    static func code(of error: Error) -> String? {
         if case PitboardError.Failed(let code, _, _, _) = error {
             return code
         }

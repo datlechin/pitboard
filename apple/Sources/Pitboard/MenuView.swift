@@ -65,12 +65,12 @@ struct MenuView: View {
                         .help("Keeps every login. Nothing is deleted.")
                 }
             }
+            // Before the accounts, because on a machine that is not set up yet the thing
+            // to do comes before the nothing there is to show.
+            if model.naming == nil, model.signingIn == nil {
+                FirstRun(model: model)
+            }
             if let status = model.status {
-                if status.accounts.isEmpty {
-                    Text("No account is enrolled yet. Run `pitboard enroll <label>`.")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                }
                 ForEach(status.accounts, id: \.accountUuid) { account in
                     AccountRow(account: account, model: model)
                         .contextMenu {

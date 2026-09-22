@@ -13,15 +13,7 @@ struct PitboardApp: App {
         MenuBarExtra {
             MenuView(model: model, updater: updater)
         } label: {
-            // A mark as well as words: on a crowded menu bar macOS drops the widest items
-            // first, and an item that is only text is the widest thing up there. A Label
-            // would render as the icon alone, so both are placed by hand.
-            HStack(spacing: 4) {
-                Image(systemName: "speedometer")
-                if !model.title.isEmpty {
-                    Text(model.title)
-                }
-            }
+            BarLabel(model: model)
         }
         .menuBarExtraStyle(.window)
 
@@ -31,7 +23,7 @@ struct PitboardApp: App {
                 // because nothing has brought it to the front.
                 .onAppear { NSApp.activate(ignoringOtherApps: true) }
         }
-        .defaultSize(width: 720, height: 480)
+        .defaultSize(width: 760, height: 520)
         .commands {
             // A menu bar app has no application menu, so the only way to a window is a
             // keyboard shortcut and the panel's own button.
@@ -41,6 +33,37 @@ struct PitboardApp: App {
         Settings {
             SettingsView(model: model, updater: updater)
                 .onAppear { NSApp.activate(ignoringOtherApps: true) }
+        }
+    }
+}
+
+/// What sits in the menu bar, and the only view alive at launch.
+private struct BarLabel: View {
+    let model: AppModel
+    @Environment(\.openWindow) private var openWindow
+    /// Whether this app has ever shown anyone anything.
+    ///
+    /// An app with no Dock icon that launches straight into a status item shows a person
+    /// who has just installed it nothing at all, and the cask installs the command line
+    /// beside it, so there is not even a leftover window to explain the mark that appeared
+    /// in their menu bar. Once, and never again.
+    @AppStorage("hasBeenSeen") private var seen = false
+
+    var body: some View {
+        // A mark as well as words: on a crowded menu bar macOS drops the widest items
+        // first, and an item that is only text is the widest thing up there. A Label would
+        // render as the icon alone, so both are placed by hand.
+        HStack(spacing: 4) {
+            Image(systemName: "speedometer")
+            if !model.title.isEmpty {
+                Text(model.title)
+            }
+        }
+        .task {
+            guard !seen else { return }
+            seen = true
+            NSApp.activate(ignoringOtherApps: true)
+            openWindow(id: DetailWindow.id)
         }
     }
 }

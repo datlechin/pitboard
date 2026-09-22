@@ -54,6 +54,9 @@ private struct Accounts: View {
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 16) {
+                // The window is what a new install opens into, so the one thing to do
+                // belongs here as much as in the panel.
+                FirstRun(model: model)
                 ForEach(model.status?.accounts ?? [], id: \.accountUuid) { account in
                     GroupBox {
                         VStack(alignment: .leading, spacing: 8) {

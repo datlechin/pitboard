@@ -71,6 +71,10 @@ private final class Stub: Core, @unchecked Sendable {
     }
 }
 
+private func status(_ accounts: [Account]) -> Status {
+    Status(now: 0, accounts: accounts, warnings: [])
+}
+
 private func account(_ label: String, signedIn: Bool, percent: Double) -> Account {
     Account(
         label: label, email: "\(label)@example.com", accountUuid: label, signedIn: signedIn,
@@ -276,4 +280,93 @@ private func account(_ label: String, signedIn: Bool, percent: Double) -> Accoun
     await model.refresh()
     #expect(model.warnings.count == 2)
     #expect(model.warnings.map(\.code) == ["auth_overridden", "config_write_failed"])
+}
+
+// MARK: - What a machine that is not set up yet is told to do
+
+/// An app from the cask and nothing else. Before the first read there is nothing true to
+/// say, and a setup step shown to somebody who finished it years ago is worse than silence.
+@MainActor
+@Test func nothingIsAskedOfAnyoneBeforeTheFirstRead() {
+    let model = AppModel(
+        watching: false, service: Stub(.success(Status(now: 0, accounts: [], warnings: []))))
+    #expect(model.footing == .ready)
+}
+
+/// The one state pitboard cannot do anything about. It has to say so rather than show an
+/// empty panel, which reads as an app that does not work.
+@MainActor
+@Test func aMachineWithoutClaudeCodeIsToldThatFirst() async {
+    let model = AppModel(
+        watching: false,
+        service: Stub(
+            .failure(
+                PitboardError.Failed(
+                    code: "claude_program_missing", cause: nil,
+                    message: "`claude` is not on this machine", warnings: []))))
+    await model.refresh()
+    #expect(model.footing == .noClaudeCode)
+}
+
+@MainActor
+@Test func anEmptyMachineIsAskedToSignInOnce() async {
+    let model = AppModel(
+        watching: false, service: Stub(.success(Status(now: 0, accounts: [], warnings: []))))
+    await model.refresh()
+    #expect(model.footing == .noOneSignedIn)
+}
+
+/// A login with no name cannot be parked, so this is the step between signing in and
+/// pitboard being able to do anything at all.
+@MainActor
+@Test func anAccountSignedInWithoutANameIsAskedForOne() async {
+    let model = AppModel(
+        watching: false,
+        service: Stub(
+            .success(
+                Status(
+                    now: 0,
+                    accounts: [
+                        Account(
+                            label: nil, email: "a@b.c", accountUuid: "a", signedIn: true,
+                            switchable: false, parked: nil, usage: nil, stale: nil,
+                            staleExplanation: nil, lastsSeconds: nil, lastsBurning: false)
+                    ], warnings: []))))
+    await model.refresh()
+    #expect(model.footing == .unnamed("a@b.c"))
+}
+
+@MainActor
+@Test func oneEnrolledAccountIsToldThereIsNothingToSwitchTo() async {
+    let model = AppModel(
+        watching: false,
+        service: Stub(.success(status([account("work", signedIn: true, percent: 10)]))))
+    await model.refresh()
+    #expect(model.footing == .onlyOne("work"))
+}
+
+@MainActor
+@Test func twoAccountsAreAskedNothing() async {
+    let model = AppModel(
+        watching: false,
+        service: Stub(
+            .success(
+                status([
+                    account("work", signedIn: true, percent: 10),
+                    account("personal", signedIn: false, percent: 4),
+                ]))))
+    await model.refresh()
+    #expect(model.footing == .ready)
+}
+
+/// Mid-switch, and a login signed out from somewhere else, both leave accounts enrolled
+/// with nobody signed in. Neither is a machine that needs setting up, and asking somebody
+/// to sign in again there would have them sign in over an account pitboard already holds.
+@MainActor
+@Test func enrolledAccountsWithNobodySignedInAreNotAskedToStartOver() async {
+    let model = AppModel(
+        watching: false,
+        service: Stub(.success(status([account("work", signedIn: false, percent: 10)]))))
+    await model.refresh()
+    #expect(model.footing == .ready)
 }
