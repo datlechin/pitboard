@@ -21,10 +21,26 @@ private final class Stub: Core, @unchecked Sendable {
     }
 
     private(set) var freshAsks = 0
+    var offline: Result<Status, Error> = .success(Status(now: 0, accounts: [], warnings: []))
+    var changed: Int64 = 0
+    private(set) var offlineReads = 0
+    var abandoned: Abandoned?
+
     func status(fresh: Bool) async throws -> Status {
         if fresh { freshAsks += 1 }
         return try answer.get()
     }
+    func statusOffline() async throws -> Status {
+        offlineReads += 1
+        return try offline.get()
+    }
+    func abandonRecovery() async throws -> Abandoned? { abandoned }
+    func log(limit: UInt32) async -> [Change] { [] }
+    func renew() async -> [Renewed] { [] }
+    func schedule() async -> Schedule { .absent }
+    func scheduleInstall() async throws -> String { "/nowhere" }
+    func scheduleUninstall() async throws -> Bool { false }
+    func changedAt() async -> Int64 { changed }
     func doctor() async -> Diagnosis {
         Diagnosis(
             checks: [
@@ -96,7 +112,9 @@ private func account(_ label: String, signedIn: Bool, percent: Double) -> Accoun
                     warnings: []))))
     await model.refresh()
     #expect(model.problem == "was written on another computer")
-    #expect(model.status == nil)
+    #expect(
+        model.status?.accounts.isEmpty == true,
+        "the panel falls back to what is already known, which here is nothing")
 }
 
 /// A switch that failed must not read as one that worked.
@@ -106,7 +124,7 @@ private func account(_ label: String, signedIn: Bool, percent: Double) -> Accoun
     stub.switched = .failure(
         PitboardError.Failed(
             code: "nothing_parked", cause: nil, message: "nothing parked", warnings: []))
-    let model = AppModel(service: stub)
+    let model = AppModel(watching: false, service: stub)
     await model.use("work")
     #expect(stub.switchedTo == ["work"])
     #expect(model.problem == "nothing parked")
@@ -121,7 +139,7 @@ private func account(_ label: String, signedIn: Bool, percent: Double) -> Accoun
         Switched(
             outcome: .switched(from: "personal", to: "work", adoptionCeilingSeconds: 33),
             warnings: []))
-    let model = AppModel(service: stub)
+    let model = AppModel(watching: false, service: stub)
     await model.use("work")
     let left = model.adopted?.timeIntervalSinceNow ?? 0
     #expect(left > 30 && left <= 33)
@@ -129,7 +147,7 @@ private func account(_ label: String, signedIn: Bool, percent: Double) -> Accoun
 
 @MainActor
 @Test func doctorIsOnlyReadWhenAskedFor() async {
-    let model = AppModel(service: Stub(.success(Status(now: 0, accounts: [], warnings: []))))
+    let model = AppModel(watching: false, service: Stub(.success(Status(now: 0, accounts: [], warnings: []))))
     #expect(model.checks.isEmpty)
     await model.diagnose()
     #expect(model.checks.map(\.code) == ["state"])
@@ -151,7 +169,7 @@ private func account(_ label: String, signedIn: Bool, percent: Double) -> Accoun
                         switchable: false, parked: nil, usage: nil, stale: nil,
                         staleExplanation: nil)
                 ], warnings: [])))
-    let model = AppModel(service: stub)
+    let model = AppModel(watching: false, service: stub)
     await model.refresh()
     #expect(model.unenrolled)
 
@@ -165,7 +183,7 @@ private func account(_ label: String, signedIn: Bool, percent: Double) -> Accoun
 @MainActor
 @Test func aRefusedForgetIsReported() async {
     let stub = Stub(.success(Status(now: 0, accounts: [], warnings: [])))
-    let model = AppModel(service: stub)
+    let model = AppModel(watching: false, service: stub)
     await model.forget("alpha")
     #expect(stub.forgot == ["alpha"])
     #expect(model.problem == nil)
@@ -174,7 +192,7 @@ private func account(_ label: String, signedIn: Bool, percent: Double) -> Accoun
 /// A sign-in that cannot start says why, and leaves nothing half-shown in the panel.
 @MainActor
 @Test func aSignInThatCannotStartIsReported() async {
-    let model = AppModel(service: Stub(.success(Status(now: 0, accounts: [], warnings: []))))
+    let model = AppModel(watching: false, service: Stub(.success(Status(now: 0, accounts: [], warnings: []))))
     model.naming = .another
     await model.signIn(as: "work")
     #expect(model.signingIn == nil)
@@ -187,11 +205,72 @@ private func account(_ label: String, signedIn: Bool, percent: Double) -> Accoun
 @MainActor
 @Test func onlyAskingForAReadingAsksAnthropicAgain() async {
     let stub = Stub(.success(Status(now: 0, accounts: [], warnings: [])))
-    let model = AppModel(service: stub)
+    let model = AppModel(watching: false, service: stub)
 
     await model.refresh()
     #expect(stub.freshAsks == 0, "a poll takes whatever the core already knows")
 
     await model.refresh(asked: true)
     #expect(stub.freshAsks == 1)
+}
+
+/// Three front ends run on one machine and none of them could tell when another had changed
+/// anything. A switch typed in a terminal left the menu bar naming the account the person
+/// had just stopped using, for as long as five minutes.
+@MainActor
+@Test func aChangeMadeSomewhereElseIsNoticedWithoutAskingAnthropic() async {
+    let stub = Stub(.success(Status(now: 0, accounts: [], warnings: [])))
+    stub.offline = .success(
+        Status(now: 0, accounts: [account("work", signedIn: true, percent: 5)], warnings: []))
+    let model = AppModel(watching: false, service: stub)
+
+    // A read establishes where things stand, and costs one offline read at most.
+    await model.refresh()
+    let before = stub.offlineReads
+
+    // Something else changes the account index.
+    stub.changed = 42
+    await model.noticeOtherChangesForTesting()
+
+    #expect(stub.offlineReads == before + 1, "it read what is already known")
+    #expect(stub.freshAsks == 0, "and asked Anthropic nothing")
+    #expect(model.status?.accounts.first?.label == "work")
+}
+
+/// A read that could not reach Anthropic still has something true to show. An empty panel
+/// says the accounts are gone, which is not what happened.
+@MainActor
+@Test func aFailedFirstReadFallsBackToWhatIsAlreadyKnown() async {
+    let stub = Stub(
+        .failure(
+            PitboardError.Failed(
+                code: "unreachable", cause: nil, message: "could not reach Anthropic",
+                warnings: [])))
+    stub.offline = .success(
+        Status(now: 0, accounts: [account("work", signedIn: true, percent: 5)], warnings: []))
+    let model = AppModel(watching: false, service: stub)
+
+    await model.refresh()
+
+    #expect(model.problem == "could not reach Anthropic")
+    #expect(model.status?.accounts.count == 1, "the last numbers measured are still true")
+}
+
+/// Every warning, not only the first. A switch can warn about an overriding environment
+/// variable and a config that did not update, and showing one is how somebody fixes the
+/// wrong thing.
+@MainActor
+@Test func everyWarningIsKeptNotOnlyTheFirst() async {
+    let model = AppModel(
+        service: Stub(
+            .success(
+                Status(
+                    now: 0, accounts: [],
+                    warnings: [
+                        Warning(code: "auth_overridden", message: "ANTHROPIC_API_KEY is set"),
+                        Warning(code: "config_write_failed", message: "the config did not update"),
+                    ]))))
+    await model.refresh()
+    #expect(model.warnings.count == 2)
+    #expect(model.warnings.map(\.code) == ["auth_overridden", "config_write_failed"])
 }

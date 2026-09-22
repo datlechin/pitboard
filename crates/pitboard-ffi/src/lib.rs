@@ -67,6 +67,48 @@ fn warnings(found: &[service::Warning]) -> Vec<Warning> {
         .collect()
 }
 
+/// One change pitboard made, as `pitboard log` shows them.
+#[derive(Debug, uniffi::Record)]
+pub struct Change {
+    /// Local time, as the log records it.
+    pub at: String,
+    /// Which front end asked: `app`, `cli`, or `unknown` for a line written before this
+    /// was recorded.
+    pub caller: String,
+    pub verb: String,
+    pub subject: String,
+    /// `ok`, or the code of whatever stopped it.
+    pub outcome: String,
+}
+
+/// An interrupted switch that was given up on, keeping every login it named.
+#[derive(Debug, uniffi::Record)]
+pub struct Abandoned {
+    pub from: String,
+    pub to: String,
+    /// Copies kept rather than deleted, because which one is live is now unknown.
+    pub logins_kept: u32,
+}
+
+/// What renewing every due parked login came to.
+#[derive(Debug, uniffi::Record)]
+pub struct Renewed {
+    pub label: String,
+    /// `renewed`, `renewal_deferred`, `parked_login_refused`, or the code of a failure.
+    pub outcome: String,
+}
+
+/// Whether anything keeps parked logins alive on this machine without a command being run.
+#[derive(Debug, uniffi::Enum)]
+pub enum Schedule {
+    /// The platform's own scheduler runs `pitboard renew` every `every_seconds`.
+    Installed { path: String, every_seconds: u32 },
+    /// Nothing does. Parked logins are renewed when pitboard runs, and otherwise not.
+    Absent,
+    /// This platform has no scheduler pitboard knows how to write.
+    Unsupported,
+}
+
 #[derive(Debug, thiserror::Error, uniffi::Error)]
 pub enum PitboardError {
     /// `code` is stable, for the app to branch on; `message` names the cause and what to do.
@@ -458,6 +500,103 @@ impl Pitboard {
             email,
             warnings,
         })
+    }
+
+    /// When pitboard's account index last changed, in epoch seconds, or 0 when there is
+    /// none.
+    ///
+    /// One stat of one file, so an app can ask often. A switch typed in a terminal used to
+    /// leave the menu bar naming the account the person had just stopped using, for as
+    /// long as five minutes, with a button offering a switch that had already happened.
+    /// Poll this, and when it moves, read `status_offline`: no network and no keychain.
+    pub fn changed_at(&self) -> i64 {
+        self.core.changed_at()
+    }
+
+    /// The same report without asking anyone: the last numbers pitboard measured, and who
+    /// Claude Code's config says is signed in.
+    ///
+    /// What the app shows on a plane, and what it shows while a live read is still in
+    /// flight, rather than an empty panel and a spinner.
+    pub fn status_offline(&self) -> Result<Status, PitboardError> {
+        let done = self.core.status_offline()?;
+        let now = done.value.now;
+        Ok(Status {
+            now,
+            accounts: done
+                .value
+                .rows
+                .into_iter()
+                .map(|row| account(row, now))
+                .collect(),
+            warnings: warnings(&done.warnings),
+        })
+    }
+
+    /// Give up on an interrupted switch that cannot be finished, keeping every login it
+    /// names. The way out when recovery cannot reach Anthropic, which until now sent the
+    /// person to a terminal.
+    ///
+    /// `None` when there was no interrupted switch.
+    pub fn abandon_recovery(&self) -> Result<Option<Abandoned>, PitboardError> {
+        Ok(self.core.abandon_recovery()?.map(|a| Abandoned {
+            from: a.from,
+            to: a.to,
+            logins_kept: u32::try_from(a.kept).unwrap_or(u32::MAX),
+        }))
+    }
+
+    /// What pitboard has changed, newest last.
+    pub fn log(&self, limit: u32) -> Vec<Change> {
+        self.core
+            .log(limit as usize)
+            .into_iter()
+            .map(|e| Change {
+                at: e.at,
+                caller: e.caller,
+                verb: e.verb,
+                subject: e.subject,
+                outcome: e.outcome,
+            })
+            .collect()
+    }
+
+    /// Renew every parked login that is due, and nothing else.
+    pub fn renew(&self) -> Vec<Renewed> {
+        self.core
+            .renew()
+            .into_iter()
+            .map(|(label, outcome)| Renewed {
+                label,
+                outcome: outcome.code().to_string(),
+            })
+            .collect()
+    }
+
+    /// Whether anything keeps parked logins alive without a command being run.
+    pub fn schedule(&self) -> Schedule {
+        match self.core.schedule() {
+            pitboard_core::schedule::Installed::Yes {
+                path,
+                every_seconds,
+            } => Schedule::Installed {
+                path: path.to_string_lossy().into_owned(),
+                every_seconds,
+            },
+            pitboard_core::schedule::Installed::No => Schedule::Absent,
+            pitboard_core::schedule::Installed::Unsupported => Schedule::Unsupported,
+        }
+    }
+
+    /// Ask this computer's own scheduler to renew parked logins daily. Opt-in, and the
+    /// caller is expected to say what it does before offering it.
+    pub fn schedule_install(&self) -> Result<String, PitboardError> {
+        Ok(self.core.schedule_install()?.to_string_lossy().into_owned())
+    }
+
+    /// Take it away. `false` when there was nothing installed.
+    pub fn schedule_uninstall(&self) -> Result<bool, PitboardError> {
+        Ok(self.core.schedule_uninstall()?)
     }
 
     pub fn doctor(&self) -> Diagnosis {

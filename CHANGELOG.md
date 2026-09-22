@@ -47,6 +47,23 @@ All notable changes are recorded here. The format follows
   apart too, where they used to share one code.
 
 ### Added
+- The app follows a switch made anywhere else on the machine. Three front ends ran on one
+  machine and none could tell when another had changed something, so a switch typed in a
+  terminal left the menu bar naming the account the person had just stopped using for as
+  long as five minutes, with a button offering a switch that had already happened. The app
+  now asks every couple of seconds when pitboard's account index last changed, which is one
+  stat of one file, and re-reads what it already knows when it moves: no network, no
+  keychain and nothing asked of Anthropic. Deliberately the index alone and not the whole
+  directory, because the status line writes usage readings after every message in every
+  open session.
+- The app's bindings reach the rest of the core: the offline report, giving up on an
+  interrupted switch, the change log, renewing, and the renewal schedule. A read that cannot
+  reach Anthropic now falls back to the last numbers measured rather than an empty panel,
+  which said the accounts were gone. An interrupted switch that recovery cannot finish has
+  a way out in the panel rather than sending somebody to a terminal, which is the one place
+  a person who installed only the app has not got. And every warning is shown rather than
+  the first: a switch can warn about an overriding environment variable and a config that
+  did not update at once, and showing one of them is how somebody fixes the wrong thing.
 - pitboard keeps what each account's limits have been doing, and says how long each account
   lasts. The single decision this tool exists to support is which account to use next, and
   it answered with two instantaneous percentages and left the arithmetic to the person: 73%

@@ -2,3 +2,5 @@
 
 # macOS leaves these everywhere
 .DS_Store
+# Scratch checkouts an agent working in this tree makes
+.claude/worktrees/

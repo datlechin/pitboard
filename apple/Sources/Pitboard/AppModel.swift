@@ -27,6 +27,13 @@ final class AppModel {
     var naming: Naming?
     /// A sign-in in progress, and everything Claude Code has said about it.
     private(set) var signingIn: SigningIn?
+    /// Everything that went wrong on the way, not only the first of them. A switch can warn
+    /// about an overriding environment variable and a config that did not update at once,
+    /// and showing one of those and dropping the other is how a person fixes the wrong
+    /// thing.
+    private(set) var warnings: [Warning] = []
+    /// An interrupted switch nothing can finish, which the panel offers a way out of.
+    private(set) var stuck: Bool = false
 
     enum Naming: Equatable {
         /// Record the account signed in now: no browser, so the app does it itself.
@@ -42,12 +49,28 @@ final class AppModel {
 
     private let notifier = Notifier()
 
-    init(service: any Core = PitboardService(settings: .forCurrentUser())) {
+    /// How often to ask whether anything on this machine has changed. One stat of one
+    /// file, so it costs nothing to ask often; before it, a switch typed in a terminal
+    /// left the menu bar naming the account the person had just stopped using for as long
+    /// as five minutes, with a button offering a switch that had already happened.
+    private static let noticeEvery: Duration = .seconds(2)
+    /// Nil until something has looked. A machine with no account index reports 0, which
+    /// is a real answer and not an absence.
+    private var lastChangedAt: Int64?
+
+    /// `watching` starts the timers: the periodic read, the wake notice and the poll that
+    /// notices a change made somewhere else. A test drives those itself, and two of them
+    /// firing under a test is how a test stops telling the truth about what set what.
+    init(
+        watching: Bool = true,
+        service: any Core = PitboardService(settings: .forCurrentUser())
+    ) {
         self.service = service
         notifier.start()
         notifier.onSwitch = { [weak self] label in
             Task { await self?.use(label) }
         }
+        guard watching else { return }
         Task { [weak self] in
             while !Task.isCancelled {
                 await self?.refresh()
@@ -62,6 +85,34 @@ final class AppModel {
                 await self?.refresh()
             }
         }
+        // Somebody else on this machine changing something. Reading it costs no network
+        // and no keychain, so it can follow a terminal switch within a second or two.
+        Task { [weak self] in
+            while !Task.isCancelled {
+                await self?.noticeOtherChanges()
+                try? await Task.sleep(for: Self.noticeEvery, tolerance: .seconds(1))
+            }
+        }
+    }
+
+    #if DEBUG
+        /// The change poll, for a test that must not wait two seconds for a timer.
+        func noticeOtherChangesForTesting() async { await noticeOtherChanges() }
+    #endif
+
+    /// Has anything on this machine changed since the last look. Reads only what is already
+    /// known: no network, no keychain, and no request of Anthropic.
+    private func noticeOtherChanges() async {
+        let now = await service.changedAt()
+        let seen = lastChangedAt
+        lastChangedAt = now
+        // The first look only records where things stand; there is nothing to compare to.
+        guard let seen, seen != now, let read = try? await service.statusOffline() else {
+            return
+        }
+        status = read
+        // A switch made somewhere else is not the one this app is counting down for.
+        adopted = nil
     }
 
     /// The account in use and its tightest limit, as the menu bar reads it.
@@ -80,10 +131,36 @@ final class AppModel {
         do {
             let read = try await service.status(fresh: asked)
             status = read
+            warnings = read.warnings
             problem = read.warnings.first?.message
+            stuck = read.warnings.contains { $0.code == "recovery_undetermined" }
             updatedAt = Date()
+            lastChangedAt = await service.changedAt()
             advice = Advice.about(read, unless: notifier.told)
             if let advice { notifier.tell(advice) }
+        } catch {
+            problem = Self.saying(error)
+            // A read that could not reach Anthropic still has something true to show: the
+            // last numbers measured, and who Claude Code's config says is signed in. An
+            // empty panel says the accounts are gone, which is not what happened.
+            if status == nil, let known = try? await service.statusOffline() {
+                status = known
+            }
+            stuck = Self.code(of: error) == "recovery_undetermined"
+        }
+    }
+
+    /// Give up on an interrupted switch that cannot be finished, keeping every login. The
+    /// way out when recovery cannot reach Anthropic, which used to mean opening a terminal.
+    func abandonStuckSwitch() async {
+        do {
+            if let given = try await service.abandonRecovery() {
+                problem =
+                    "Gave up on the switch from \(given.from) to \(given.to). "
+                    + "\(given.loginsKept) login(s) kept; nothing was deleted."
+            }
+            stuck = false
+            await refresh(asked: true)
         } catch {
             problem = Self.saying(error)
         }
@@ -200,6 +277,15 @@ final class AppModel {
             return message
         }
         return error.localizedDescription
+    }
+
+    /// The stable code behind an error, for deciding what to offer rather than reading the
+    /// wording of a message.
+    private static func code(of error: Error) -> String? {
+        if case PitboardError.Failed(let code, _, _, _) = error {
+            return code
+        }
+        return nil
     }
 }
 

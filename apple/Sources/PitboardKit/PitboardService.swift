@@ -5,6 +5,9 @@ import Foundation
 /// core, which would read the real keychain of whoever is running the tests.
 public protocol Core: Sendable {
     func status(fresh: Bool) async throws -> Status
+    /// The last numbers pitboard measured, and who Claude Code's config says is signed in.
+    /// No network and no keychain, so it answers at once and works on a plane.
+    func statusOffline() async throws -> Status
     func doctor() async -> Diagnosis
     func switchTo(_ label: String) async throws -> Switched
     func enrollCurrent(_ label: String) async throws -> Enrolled
@@ -13,6 +16,21 @@ public protocol Core: Sendable {
     /// Starts Claude Code's own sign-in for a new account, watched rather than handed to a
     /// terminal. Returns nil where a front end cannot run one.
     func signIn(_ label: String) async throws -> SignIn
+    /// Give up on an interrupted switch that cannot be finished, keeping every login it
+    /// names. Nil when there was none. The way out when recovery cannot reach Anthropic,
+    /// which used to send the person to a terminal.
+    func abandonRecovery() async throws -> Abandoned?
+    /// What pitboard has changed, newest last.
+    func log(limit: UInt32) async -> [Change]
+    /// Renew every parked login that is due, and nothing else.
+    func renew() async -> [Renewed]
+    /// Whether anything keeps parked logins alive without a command being run.
+    func schedule() async -> Schedule
+    func scheduleInstall() async throws -> String
+    func scheduleUninstall() async throws -> Bool
+    /// When pitboard's account index last changed, in epoch seconds. One stat of one file,
+    /// so it can be asked often: it is how this app notices a switch typed in a terminal.
+    func changedAt() async -> Int64
 }
 
 /// pitboard's core, called off the main thread. Any call may wait on the keychain, a lock or
@@ -32,6 +50,40 @@ public final class PitboardService: Core, Sendable {
     /// command line to one request between them.
     public func status(fresh: Bool) async throws -> Status {
         try await run(on: reads) { try $0.status(fresh: fresh) }
+    }
+
+    public func statusOffline() async throws -> Status {
+        try await run(on: reads) { try $0.statusOffline() }
+    }
+
+    public func abandonRecovery() async throws -> Abandoned? {
+        try await run(on: changes) { try $0.abandonRecovery() }
+    }
+
+    public func log(limit: UInt32) async -> [Change] {
+        (try? await run(on: reads) { $0.log(limit: limit) }) ?? []
+    }
+
+    public func renew() async -> [Renewed] {
+        (try? await run(on: changes) { $0.renew() }) ?? []
+    }
+
+    public func schedule() async -> Schedule {
+        (try? await run(on: reads) { $0.schedule() }) ?? .unsupported
+    }
+
+    public func scheduleInstall() async throws -> String {
+        try await run(on: changes) { try $0.scheduleInstall() }
+    }
+
+    public func scheduleUninstall() async throws -> Bool {
+        try await run(on: changes) { try $0.scheduleUninstall() }
+    }
+
+    /// One stat of one file. Deliberately not on the `changes` queue: it must answer while
+    /// a switch is in flight, which is exactly when something has changed.
+    public func changedAt() async -> Int64 {
+        (try? await run(on: reads) { $0.changedAt() }) ?? 0
     }
 
     public func doctor() async -> Diagnosis {
@@ -80,8 +132,6 @@ public final class PitboardService: Core, Sendable {
 }
 
 extension Settings {
-    /// Claude Code's defaults for the person running this app. An app started from Finder sees
-    /// no shell environment, so `claude` is looked for where its installers put it.
     /// What the core would read from a shell, as far as an app can see it. An app opened
     /// from Finder inherits none of a shell's exports, so these are usually absent and the
     /// defaults apply; when one is set, reading it is what keeps the app and the command

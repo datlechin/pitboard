@@ -43,6 +43,29 @@ struct MenuView: View {
                     .foregroundStyle(.orange)
                     .fixedSize(horizontal: false, vertical: true)
             }
+            // Every warning, not only the first. A switch can warn about an overriding
+            // environment variable and a config that did not update at once, and showing
+            // one of them is how somebody fixes the wrong thing.
+            ForEach(model.warnings.dropFirst(), id: \.code) { warning in
+                Label(warning.message, systemImage: "exclamationmark.triangle")
+                    .font(.callout)
+                    .foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            // An interrupted switch nothing can finish. Until now this sent the person to a
+            // terminal, which is the one place somebody who installed only the app has not
+            // got.
+            if model.stuck {
+                HStack(alignment: .firstTextBaseline) {
+                    Text("An interrupted switch cannot be finished until Anthropic answers.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer()
+                    Button("Give up on it") { Task { await model.abandonStuckSwitch() } }
+                        .help("Keeps every login. Nothing is deleted.")
+                }
+            }
             if let status = model.status {
                 if status.accounts.isEmpty {
                     Text("No account is enrolled yet. Run `pitboard enroll <label>`.")

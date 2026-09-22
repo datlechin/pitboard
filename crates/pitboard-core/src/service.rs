@@ -120,6 +120,7 @@ impl Pitboard {
 
     /// Who is signed in and what every account has left. Parked logins whose access has
     /// lapsed are renewed first, so every account is asked live.
+    ///
     /// `fresh` asks Anthropic about every account whatever was asked recently. Ordinarily
     /// false: a number is only asked for again once the tightest limit it describes could
     /// have moved by a percentage point, which collapses several front ends on one machine
@@ -147,7 +148,6 @@ impl Pitboard {
         doctor::run(&self.ctx)
     }
 
-    /// The status line for Claude Code's session JSON. Reads only files.
     /// The same report without asking anyone: the last numbers pitboard measured, and who
     /// Claude Code's config says is signed in. Nothing is renewed and nothing is asked, so
     /// it answers at once wherever there is no network.
@@ -159,6 +159,7 @@ impl Pitboard {
         })
     }
 
+    /// The status line for Claude Code's session JSON. Reads only files.
     pub fn statusline(&self, session: &str) -> statusline::StatusLine {
         statusline::read(&self.ctx, session)
     }
@@ -279,6 +280,12 @@ impl Pitboard {
         self.changing("repair", "", |settled| {
             switch::repair(settled).map(|r| (r, Vec::new()))
         })
+    }
+
+    /// When pitboard's account index last changed, for a front end that wants to know
+    /// whether another one has done something without asking Anthropic about it.
+    pub fn changed_at(&self) -> i64 {
+        state::changed_at(&self.ctx)
     }
 
     /// The changes pitboard has made, newest last.

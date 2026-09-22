@@ -203,6 +203,27 @@ fn file(ctx: &Context) -> PathBuf {
     home::dir(ctx).join("state.json")
 }
 
+/// When pitboard's account index last changed, in epoch seconds, or 0 when there is none.
+///
+/// Three front ends run on one machine and none of them could tell when another had
+/// changed anything. A switch typed in a terminal left the menu bar naming the account the
+/// person had just stopped using, for as long as five minutes, with a button offering a
+/// switch that had already happened.
+///
+/// This is the cheapest true answer there is: one stat of one file. It is deliberately the
+/// account index alone and not the whole directory, because the status line writes usage
+/// readings after every message in every open session, and something that fires on those
+/// would turn a menu bar app into a busy loop.
+pub fn changed_at(ctx: &Context) -> i64 {
+    std::fs::metadata(file(ctx))
+        .and_then(|m| m.modified())
+        .ok()
+        .and_then(|at| at.duration_since(std::time::UNIX_EPOCH).ok())
+        .map_or(0, |since| {
+            i64::try_from(since.as_secs()).unwrap_or(i64::MAX)
+        })
+}
+
 pub fn load(ctx: &Context) -> Result<State> {
     let (state, here) = load_any_machine(ctx)?;
     if !here {
