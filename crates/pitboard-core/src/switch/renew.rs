@@ -112,7 +112,7 @@ pub fn renew_parked(ctx: &Context) -> Vec<(String, Renewal)> {
 
 /// What one round trip produced, before anything is written down.
 struct Asked {
-    /// The parked document as it was, which the fresh tokens are folded into.
+    /// The parked document as it was, whole, which the fresh tokens are folded into.
     oauth: Value,
     fresh: Option<api::Renewed>,
     /// Anthropic refuses this login for good.
@@ -122,7 +122,8 @@ struct Asked {
 /// The part of a renewal that talks to Anthropic. Touches no shared state, so several run
 /// at once.
 fn ask(ctx: &Context, label: &str, held: &Park) -> Result<Asked> {
-    let oauth = park::load(ctx, label, held)?;
+    let document = park::load(ctx, label, held)?;
+    let oauth = park::oauth_in(&document).clone();
     let refresh = oauth["refreshToken"].as_str().unwrap_or_default();
     let mut scopes: Vec<String> = oauth["scopes"]
         .as_array()
@@ -137,18 +138,18 @@ fn ask(ctx: &Context, label: &str, held: &Park) -> Result<Asked> {
     let client_id = oauth["clientId"].as_str();
     match api::renew(ctx, refresh, &scopes, client_id) {
         Ok(fresh) => Ok(Asked {
-            oauth,
+            oauth: document,
             fresh: Some(fresh),
             refused: false,
         }),
         Err(ApiError::InvalidGrant) => Ok(Asked {
-            oauth,
+            oauth: document,
             fresh: None,
             refused: true,
         }),
         // Unreachable or asked to slow down: nothing is written and the next run tries.
         Err(ApiError::Network(_) | ApiError::RateLimited) => Ok(Asked {
-            oauth,
+            oauth: document,
             fresh: None,
             refused: false,
         }),

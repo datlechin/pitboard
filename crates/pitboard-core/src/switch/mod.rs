@@ -56,13 +56,38 @@ pub enum Outcome {
     AlreadyActive { label: String },
 }
 
-fn oauth_of(document: &Value) -> Result<Value> {
-    document
-        .get("claudeAiOauth")
-        .cloned()
+/// The account's whole slice of a credential document: `claudeAiOauth` and whatever else of
+/// [`ACCOUNT_SCOPED`] is there.
+///
+/// This is what gets parked. Parking the OAuth block alone meant a switch away deleted the
+/// rest of the account's keys and a switch back could not put them there, so an account
+/// came back to Claude Code slightly less than it left. Whether that costs a device
+/// re-verification is not something pitboard has measured, and it is not claimed anywhere;
+/// what is claimed is that restoring an account restores what was there.
+///
+/// Measured on one real account: the slice is 524 bytes against 506 for the OAuth block
+/// alone, which is nothing against the 4032-byte ceiling. An account holding a device token
+/// has not been measured, and the write path handles an oversized login either way.
+fn slice_of(document: &Value) -> Result<Value> {
+    let object = document
+        .as_object()
         .ok_or_else(|| Error::LiveCredentialShapeUnexpected {
-            detail: "it has no claudeAiOauth block".into(),
-        })
+            detail: "it is not a JSON object".into(),
+        })?;
+    let oauth =
+        object
+            .get("claudeAiOauth")
+            .ok_or_else(|| Error::LiveCredentialShapeUnexpected {
+                detail: "it has no claudeAiOauth block".into(),
+            })?;
+    let mut slice = serde_json::Map::new();
+    slice.insert("claudeAiOauth".into(), oauth.clone());
+    for key in ACCOUNT_SCOPED {
+        if let Some(value) = object.get(key) {
+            slice.insert(key.into(), value.clone());
+        }
+    }
+    Ok(Value::Object(slice))
 }
 
 /// pitboard's state, held exclusively, with any interrupted switch already finished. Every
@@ -306,7 +331,7 @@ pub fn switch(settled: Settled, label: &str) -> Result<(Outcome, Vec<Warning>)> 
     // Until the incoming login is installed there is nothing for a later run to finish, so
     // a failure here takes the record of intent away with it. A copy that was written but
     // could not be recorded is deleted: nothing that survives would name it.
-    let parked = match park::store_at(ctx, &park_service, &oauth_of(&before)?) {
+    let parked = match park::store_at(ctx, &park_service, &slice_of(&before)?) {
         Ok(parked) => parked,
         Err(e) => {
             clear_journal(ctx);
@@ -428,13 +453,12 @@ fn prove_incoming(
 ) -> Result<(Park, Value)> {
     let usable = held.askable_at(ctx.now());
     if usable {
-        let token =
-            incoming["accessToken"]
-                .as_str()
-                .ok_or_else(|| Error::ParkedCredentialCorrupt {
-                    label: label.to_string(),
-                    detail: "it has no access token".into(),
-                })?;
+        let token = park::oauth_in(&incoming)["accessToken"]
+            .as_str()
+            .ok_or_else(|| Error::ParkedCredentialCorrupt {
+                label: label.to_string(),
+                detail: "it has no access token".into(),
+            })?;
         match api::owner(ctx, token) {
             Ok(owner) if owner.account_uuid == target.account_uuid => return Ok((held, incoming)),
             Ok(other) => {
@@ -495,9 +519,15 @@ fn splice(before: &Value, incoming: &Value) -> Result<String> {
         .ok_or_else(|| Error::LiveCredentialShapeUnexpected {
             detail: "it is not a JSON object".into(),
         })?;
-    document.insert("claudeAiOauth".into(), incoming.clone());
+    document.insert("claudeAiOauth".into(), park::oauth_in(incoming).clone());
+    // The outgoing account's keys go, and the incoming account's take their place where the
+    // park holds them. A park from a version that kept only the OAuth block holds none, and
+    // then this is exactly what it always did.
     for key in ACCOUNT_SCOPED {
-        document.remove(key);
+        match incoming.get(key) {
+            Some(value) => document.insert(key.into(), value.clone()),
+            None => document.remove(key),
+        };
     }
     Ok(serde_json::to_string(&next).expect("a credential document stays serialisable"))
 }
@@ -596,6 +626,84 @@ mod tests {
     /// Claude Code deletes these along with the login on logout, so they belong to the
     /// account. Left behind, the incoming account would present the outgoing account's
     /// device token, and hold its second OAuth block.
+    /// What gets parked is the account's whole slice, so a switch back restores what was
+    /// there rather than the OAuth block and a set of missing keys.
+    #[test]
+    fn what_is_parked_is_everything_that_belongs_to_the_account() {
+        let live = serde_json::json!({
+            "claudeAiOauth": {"refreshToken": "a"},
+            "organizationUuid": "org-a",
+            "trustedDeviceToken": "device-of-a",
+            "enterpriseGateway": {"url": "https://gateway.example"},
+            "designOauth": {"refreshToken": "design-of-a"},
+            "mcpOAuth": {"a-server": "token"},
+            "somethingOfThisMachine": true,
+        });
+        let slice = slice_of(&live).expect("it has an oauth block");
+        assert_eq!(
+            slice,
+            serde_json::json!({
+                "claudeAiOauth": {"refreshToken": "a"},
+                "organizationUuid": "org-a",
+                "trustedDeviceToken": "device-of-a",
+                "enterpriseGateway": {"url": "https://gateway.example"},
+                "designOauth": {"refreshToken": "design-of-a"},
+            }),
+            "everything the account owns, and nothing the machine or another server owns"
+        );
+    }
+
+    /// Restoring puts the incoming account's keys where the outgoing account's were, and
+    /// takes away any the incoming account does not have.
+    #[test]
+    fn restoring_a_slice_replaces_the_outgoing_accounts_keys_rather_than_only_removing_them() {
+        let before = serde_json::json!({
+            "claudeAiOauth": {"refreshToken": "a"},
+            "organizationUuid": "org-a",
+            "trustedDeviceToken": "device-of-a",
+            "designOauth": {"refreshToken": "design-of-a"},
+            "mcpOAuth": {"a-server": "token"},
+        });
+        let incoming = serde_json::json!({
+            "claudeAiOauth": {"refreshToken": "b"},
+            "organizationUuid": "org-b",
+            "trustedDeviceToken": "device-of-b",
+        });
+        let after: Value =
+            serde_json::from_str(&splice(&before, &incoming).expect("spliced")).expect("json");
+
+        assert_eq!(after["claudeAiOauth"]["refreshToken"], "b");
+        assert_eq!(after["organizationUuid"], "org-b");
+        assert_eq!(after["trustedDeviceToken"], "device-of-b");
+        assert!(
+            after.get("designOauth").is_none(),
+            "a key the incoming account does not have must not be left holding the \
+             outgoing account's value"
+        );
+        assert_eq!(
+            after["mcpOAuth"]["a-server"], "token",
+            "and what belongs to neither account stays"
+        );
+    }
+
+    /// A park written by a version that kept only the OAuth block still restores, and still
+    /// clears the outgoing account's keys, which is exactly what it always did.
+    #[test]
+    fn a_park_from_before_the_slice_still_restores() {
+        let before = serde_json::json!({
+            "claudeAiOauth": {"refreshToken": "a"},
+            "organizationUuid": "org-a",
+            "trustedDeviceToken": "device-of-a",
+        });
+        let legacy = serde_json::json!({"refreshToken": "b", "accessToken": "b-access"});
+        let after: Value =
+            serde_json::from_str(&splice(&before, &legacy).expect("spliced")).expect("json");
+
+        assert_eq!(after["claudeAiOauth"]["refreshToken"], "b");
+        assert!(after.get("organizationUuid").is_none());
+        assert!(after.get("trustedDeviceToken").is_none());
+    }
+
     #[test]
     fn a_switch_leaves_nothing_of_the_outgoing_account() {
         let before = serde_json::json!({
@@ -740,7 +848,7 @@ mod tests {
 
     #[test]
     fn a_credential_without_claude_ai_oauth_is_refused() {
-        assert!(oauth_of(&serde_json::json!({"slackTag": {}})).is_err());
-        assert!(oauth_of(&serde_json::json!({"claudeAiOauth": {"accessToken": "a"}})).is_ok());
+        assert!(slice_of(&serde_json::json!({"slackTag": {}})).is_err());
+        assert!(slice_of(&serde_json::json!({"claudeAiOauth": {"accessToken": "a"}})).is_ok());
     }
 }

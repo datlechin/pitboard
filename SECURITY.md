@@ -8,7 +8,14 @@ says where they live, what pitboard defends against, and what it does not.
 ### macOS
 
 Claude Code's own login stays in the keychain item it created. Parked copies are
-keychain items named `pitboard-park-<account>-<time>`, in your login keychain. They are
+keychain items named `pitboard-park-<account>-<time>`, in your login keychain. What a park
+holds is the account's whole slice of Claude Code's credential document: its OAuth block,
+and whichever of `organizationUuid`, `trustedDeviceToken`, `enterpriseGateway` and
+`designOauth` were there, which are the keys Claude Code itself deletes on a logout. That
+is what a switch back puts there, so an account comes back as it left. On one real account
+the slice is 524 bytes against 506 for the OAuth block alone; an account holding a device
+token has not been measured. Whether restoring a device token spares a re-verification is
+also not measured, and is not claimed. They are
 read and written only through `/usr/bin/security`, the one application the item's access
 list trusts. No token is passed on a command line, where `ps` could see it; it goes to `security` on
 standard input.

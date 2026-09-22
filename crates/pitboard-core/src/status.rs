@@ -135,8 +135,10 @@ struct Facts {
     claude_code_cache: Option<Snapshot>,
 }
 
-fn access_token(oauth: &Value) -> Option<String> {
-    oauth
+/// A parked login holds the account's whole slice of the credential document, so the token
+/// is inside its OAuth block; a park from a version that kept less is that block.
+fn access_token(document: &Value) -> Option<String> {
+    park::oauth_in(document)
         .get("accessToken")
         .and_then(Value::as_str)
         .map(str::to_owned)

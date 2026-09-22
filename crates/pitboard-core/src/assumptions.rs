@@ -101,7 +101,7 @@ pub const ASSUMPTIONS: &[Assumption] = &[
                enterpriseGateway and designOauth, so those belong to the account",
         read_from: "the logout path",
         verified_against: VERIFIED_AGAINST,
-        depends: "switch::ACCOUNT_SCOPED",
+        depends: "switch::ACCOUNT_SCOPED, and what a park holds",
     },
     Assumption {
         name: "credential_cache",

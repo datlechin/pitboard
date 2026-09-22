@@ -47,6 +47,14 @@ All notable changes are recorded here. The format follows
   apart too, where they used to share one code.
 
 ### Added
+- A park holds the account's whole slice of Claude Code's credential document rather than
+  its OAuth block alone: the four other keys a logout deletes go with it, and a switch back
+  puts them there. Before this, switching away deleted them and switching back could not
+  restore them, so an account came back to Claude Code with slightly less than it left.
+  Parks written by earlier versions still restore, and still behave exactly as they did.
+  Measured on one real account: the slice is 524 bytes against 506, which is nothing against
+  the 4032-byte ceiling. Whether restoring a device token spares a re-verification is not
+  measured and is not claimed anywhere.
 - pitboard reads what a session here would actually authenticate with, from files rather
   than from three environment variables. Claude Code resolves authentication from layered
   settings, and a managed policy or a line in a person's own `settings.json` can set an

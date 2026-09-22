@@ -46,20 +46,21 @@ pub fn reserve(ctx: &Context, account_uuid: &str) -> Result<String> {
 }
 
 /// Write a login into a reserved name and prove it reads back.
-pub fn store_at(ctx: &Context, service: &str, oauth: &Value) -> Result<Park> {
-    let park = describe(service, ctx.now(), oauth);
+pub fn store_at(ctx: &Context, service: &str, document: &Value) -> Result<Park> {
+    let park = describe(service, ctx.now(), document);
     if park.refresh_fingerprint.is_empty() {
         return Err(Error::LiveCredentialShapeUnexpected {
             detail: "it has no refresh token, so it could never be restored".into(),
         });
     }
-    let body = serde_json::to_string(oauth).expect("an oauth block is always serialisable");
+    let body = serde_json::to_string(document).expect("a credential slice is always serialisable");
     store::vault_write(ctx, service, &body)?;
     Ok(park)
 }
 
 /// What the account index records about a login: nothing secret.
-pub fn describe(service: &str, parked_at: i64, oauth: &Value) -> Park {
+pub fn describe(service: &str, parked_at: i64, document: &Value) -> Park {
+    let oauth = oauth_in(document);
     // Claude Code records both expiries in epoch milliseconds.
     let expiry = |key: &str| oauth.get(key).and_then(Value::as_i64).map(|ms| ms / 1000);
     Park {
@@ -76,9 +77,14 @@ pub fn describe(service: &str, parked_at: i64, oauth: &Value) -> Park {
 /// answer Claude Code keeps the date it already had (`refreshTokenExpiresAt ?? previous`,
 /// measured in 2.1.278); dropping it instead would make a lapsed park look immortal, and
 /// pitboard would keep offering and renewing it forever.
-pub fn renewed(oauth: &Value, fresh: &api::Renewed, now_millis: i64) -> Value {
-    let mut next = oauth.clone();
-    let Some(fields) = next.as_object_mut() else {
+pub fn renewed(document: &Value, fresh: &api::Renewed, now_millis: i64) -> Value {
+    let mut next = document.clone();
+    // Whatever else the slice holds is kept; only the tokens move.
+    let oauth = match next.get_mut("claudeAiOauth") {
+        Some(block) => block,
+        None => &mut next,
+    };
+    let Some(fields) = oauth.as_object_mut() else {
         return next;
     };
     fields.insert("accessToken".into(), json!(fresh.access_token));
@@ -101,8 +107,19 @@ pub fn renewed(oauth: &Value, fresh: &api::Renewed, now_millis: i64) -> Value {
     next
 }
 
-pub fn fingerprint_of(oauth: &Value) -> String {
-    oauth
+/// The OAuth block inside a parked login.
+///
+/// A park holds the account's whole slice of Claude Code's credential document, which is
+/// `claudeAiOauth` plus whatever else of [`crate::switch::ACCOUNT_SCOPED`] was there. A
+/// park written before that held the OAuth block alone, so a document with no
+/// `claudeAiOauth` key is one of those and is the block itself. Reading either shape is
+/// what lets a park from an older pitboard still be restored.
+pub fn oauth_in(document: &Value) -> &Value {
+    document.get("claudeAiOauth").unwrap_or(document)
+}
+
+pub fn fingerprint_of(document: &Value) -> String {
+    oauth_in(document)
         .get("refreshToken")
         .and_then(Value::as_str)
         .map(store::fingerprint)

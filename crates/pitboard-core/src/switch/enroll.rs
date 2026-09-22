@@ -6,7 +6,7 @@
 //! and any other account is signed in inside a private directory, where the live slot is
 //! never touched and the vault is the new login's only holder.
 
-use super::{Error, Result, Settled, access_token, identify, oauth_of, purge};
+use super::{Error, Result, Settled, access_token, identify, purge, slice_of};
 use crate::api::Owner;
 use crate::context::Context;
 use crate::state::{Account, Park, State};
@@ -297,7 +297,7 @@ fn park_signed_in(
     let owner = identify(ctx, &access_token(&login.document)?)?;
     claim(state, label, &owner)?;
     let service = park::reserve(ctx, &owner.account_uuid)?;
-    let fresh = park::store_at(ctx, &service, &oauth_of(&login.document)?)?;
+    let fresh = park::store_at(ctx, &service, &slice_of(&login.document)?)?;
     // The window the roadmap named: the login is in the vault and nothing on the machine
     // says so yet.
     crate::fault::point("enroll.park_stored");
