@@ -43,10 +43,15 @@ passes it as an argument, and says so in the warnings of that switch and in `doc
 ### Linux
 
 Claude Code keeps its login in a plaintext file, `.credentials.json`, in its
-config directory. That is Claude Code's design and pitboard cannot change it. Parked copies
-live in `~/.pitboard/vault/`, one file per copy, each 0600, in a directory held at 0700.
-Any process running as your user can read them, which is the exposure Claude Code's own
-file already has.
+config directory. That is Claude Code's design and pitboard cannot change it: the shipping
+build has no Secret Service, libsecret, gnome-keyring or KWallet backend, only the macOS
+keychain and the Windows credential manager. Parked copies live in `~/.pitboard/vault/`,
+one file per copy, each 0600, in a directory held at 0700. Any process running as your user
+can read them, which is the exposure Claude Code's own file already has.
+
+A mode bit is the whole of that protection, and a backup restore, a `cp -r` or a careless
+umask changes one quietly. `pitboard doctor` looks at the actual modes of the live
+credential file, the vault and everything in it, and fails if anyone but you can read one.
 
 ### Everywhere else
 

@@ -45,9 +45,11 @@ fn main() -> ExitCode {
         .iter()
         .map(|a| (a, assumptions::read_from_build(a, &strings)))
         .collect();
+    // Both kinds of drift count. A fact that rested on a keyring backend not existing is
+    // as broken by one arriving as a service name is by being renamed.
     let moved: Vec<&assumptions::Assumption> = readings
         .iter()
-        .filter(|(_, r)| matches!(r, Reading::Moved(_)))
+        .filter(|(_, r)| matches!(r, Reading::Moved(_) | Reading::Appeared(_)))
         .map(|(a, _)| *a)
         .collect();
 
@@ -61,9 +63,14 @@ fn main() -> ExitCode {
                     Reading::Holds => "holds",
                     Reading::NotReadable => "not_readable",
                     Reading::Moved(_) => "moved",
+                    Reading::Appeared(_) => "appeared",
                 },
                 "gone": match r {
                     Reading::Moved(gone) => gone.clone(),
+                    _ => Vec::new(),
+                },
+                "appeared": match r {
+                    Reading::Appeared(found) => found.clone(),
                     _ => Vec::new(),
                 },
                 "verified_against": a.verified_against,
@@ -90,6 +97,13 @@ fn main() -> ExitCode {
                     println!("  MOVED    {}", a.name);
                     for needle in gone {
                         println!("             gone: {needle}");
+                    }
+                    println!("             this breaks: {}", a.depends);
+                }
+                Reading::Appeared(found) => {
+                    println!("  APPEARED {}", a.name);
+                    for needle in found {
+                        println!("             now present: {needle}");
                     }
                     println!("             this breaks: {}", a.depends);
                 }

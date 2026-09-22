@@ -45,6 +45,10 @@ pub struct Facts {
     pub credential_parts: Vec<(String, usize)>,
     pub home: PathBuf,
     pub home_mode: Option<u32>,
+    /// Anything on this disk holding a login that somebody other than the owner can read:
+    /// (path, mode). Empty on a machine with a keychain and a tidy plaintext fallback,
+    /// and the whole security story on a machine without one.
+    pub readable_by_others: Vec<(String, u32)>,
     pub machine_id_known: bool,
     /// `CLAUDE_CODE_HOVER_REST`, which switches on the successor credential backend.
     pub hover_rest_env: bool,
@@ -130,6 +134,7 @@ pub fn gather(ctx: &Context) -> Facts {
             .unwrap_or_default(),
         credential: store::read(ctx, &service),
         home_mode: mode_of(&home),
+        readable_by_others: loose_logins(ctx),
         home,
         machine_id_known: crate::state::machine_id() != "unknown",
         hover_rest_env: ctx.hover_rest,
@@ -178,6 +183,38 @@ fn parts_of(document: &Value) -> Vec<(String, usize)> {
 fn mode_of(path: &std::path::Path) -> Option<u32> {
     use std::os::unix::fs::PermissionsExt;
     Some(std::fs::metadata(path).ok()?.permissions().mode() & 0o777)
+}
+
+/// Every file on this machine that holds a usable login and is not private to its owner.
+///
+/// Claude Code has no keyring backend outside macOS and Windows, so on Linux its own login
+/// is a plaintext file it chmods to 0600, and pitboard's parked logins are plaintext files
+/// beside it. That is not pitboard weakening anything, but it does mean the only thing
+/// between a parked OAuth token and everyone else with an account on the machine is a mode
+/// bit, and a mode bit is something a backup restore, a `cp`, an rsync or a careless umask
+/// quietly changes. So it is looked at rather than assumed.
+fn loose_logins(ctx: &Context) -> Vec<(String, u32)> {
+    // Group and other, read or write. Anything there is somebody who is not the owner.
+    const SHARED: u32 = 0o077;
+    let mut loose = Vec::new();
+    let mut look = |path: std::path::PathBuf| {
+        if let Some(mode) = mode_of(&path)
+            && mode & SHARED != 0
+        {
+            loose.push((path.display().to_string(), mode));
+        }
+    };
+    look(store::credential_file(ctx));
+    let vault = store::vault_dir(ctx);
+    look(vault.clone());
+    if let Ok(entries) = std::fs::read_dir(&vault) {
+        let mut parks: Vec<std::path::PathBuf> = entries.flatten().map(|e| e.path()).collect();
+        parks.sort();
+        for park in parks {
+            look(park);
+        }
+    }
+    loose
 }
 
 fn ok(code: &'static str, name: impl Into<String>, detail: impl Into<String>) -> Check {
@@ -426,6 +463,34 @@ pub fn evaluate(facts: &Facts) -> Vec<Check> {
                 facts.home.display()
             ),
         ),
+    });
+
+    checks.push(if facts.readable_by_others.is_empty() {
+        ok(
+            "private_on_disk",
+            "logins on disk",
+            "nothing holding a login is readable by anyone else",
+        )
+    } else {
+        let names: Vec<String> = facts
+            .readable_by_others
+            .iter()
+            .map(|(path, mode)| format!("{path} is mode {mode:o}"))
+            .collect();
+        fail(
+            "private_on_disk",
+            "logins on disk",
+            names.join("; "),
+            format!(
+                "These hold usable OAuth tokens in plain text, which is how Claude Code                  stores them where there is no keychain. Anyone else on this machine can                  read them: `chmod go-rwx {}`.",
+                facts
+                    .readable_by_others
+                    .iter()
+                    .map(|(path, _)| path.as_str())
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            ),
+        )
     });
 
     checks.push(match &facts.state {
@@ -928,6 +993,7 @@ mod tests {
             }}))),
             home: PathBuf::from("/home/x/.pitboard"),
             home_mode: Some(0o700),
+            readable_by_others: Vec::new(),
             machine_id_known: true,
             hover_rest_env: false,
             daemon: None,
@@ -973,6 +1039,73 @@ mod tests {
         let checks = evaluate(&facts());
         assert!(checks.iter().all(|c| c.level != Level::Fail));
         assert!(healthy(&checks));
+    }
+
+    /// What the check above is given, read off a real disk.
+    ///
+    /// Everything else here hands `evaluate` its facts, so nothing until now had ever
+    /// looked at a file's mode. A gatherer that returns an empty list whatever the disk
+    /// says would pass every one of those tests.
+    #[test]
+    fn a_world_readable_park_is_found_on_the_disk() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let root = std::env::temp_dir().join(format!(
+            "pitboard-doctor-modes-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let _ = std::fs::remove_dir_all(&root);
+        struct Scratch(std::path::PathBuf);
+        impl Drop for Scratch {
+            fn drop(&mut self) {
+                let _ = std::fs::remove_dir_all(&self.0);
+            }
+        }
+        let _guard = Scratch(root.clone());
+
+        let ctx = Context::new(root.clone()).with_pitboard_home(root.join(".pitboard"));
+        let vault = store::vault_dir(&ctx);
+        std::fs::create_dir_all(&vault).expect("a vault");
+        std::fs::set_permissions(&vault, std::fs::Permissions::from_mode(0o700)).unwrap();
+        assert!(
+            loose_logins(&ctx).is_empty(),
+            "a private vault is not loose"
+        );
+
+        let park = vault.join("pitboard-park-x.json");
+        std::fs::write(&park, "{}").expect("a park");
+        std::fs::set_permissions(&park, std::fs::Permissions::from_mode(0o644)).unwrap();
+        let found = loose_logins(&ctx);
+        assert_eq!(found.len(), 1, "{found:?}");
+        assert_eq!(found[0].1, 0o644);
+        assert!(found[0].0.ends_with("pitboard-park-x.json"), "{found:?}");
+
+        std::fs::set_permissions(&park, std::fs::Permissions::from_mode(0o600)).unwrap();
+        assert!(loose_logins(&ctx).is_empty(), "0600 is private");
+    }
+
+    /// On a machine with no keychain every parked login is a plaintext OAuth token in a
+    /// file, and the only thing between it and everyone else with an account here is a
+    /// mode bit. A backup restore, a `cp -r`, an rsync or a careless umask changes one
+    /// quietly, and nothing else in pitboard would ever mention it.
+    #[test]
+    fn a_login_anyone_on_this_machine_can_read_is_a_failure() {
+        let mut f = facts();
+        assert_eq!(check(&evaluate(&f), "private_on_disk").level, Level::Ok);
+
+        f.readable_by_others = vec![
+            ("/home/a/.pitboard/vault/pitboard-park-x.json".into(), 0o644),
+            ("/home/a/.claude/.credentials.json".into(), 0o640),
+        ];
+        let checks = evaluate(&f);
+        let found = check(&checks, "private_on_disk");
+        assert_eq!(found.level, Level::Fail);
+        assert!(found.detail.contains("mode 644"), "{}", found.detail);
+        assert!(found.detail.contains("mode 640"), "{}", found.detail);
+        // The advice has to be something a person can run, not a description of a problem.
+        assert!(found.advice.contains("chmod go-rwx"), "{}", found.advice);
+        assert!(!healthy(&checks));
     }
 
     #[test]

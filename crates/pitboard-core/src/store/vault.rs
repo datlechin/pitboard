@@ -13,7 +13,7 @@ pub(super) struct FileVault {
 impl FileVault {
     pub(super) fn new(ctx: &Context) -> FileVault {
         FileVault {
-            dir: home::dir(ctx).join("vault"),
+            dir: super::vault_dir(ctx),
         }
     }
 
@@ -107,6 +107,47 @@ impl RawStore for FileVault {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// SECURITY.md tells people that a parked login here is 0600 inside a 0700 directory,
+    /// and that this is the whole of what keeps it from everyone else with an account on
+    /// the machine. Nothing checked it. `atomic::Perms::Secret` and `home::create_private`
+    /// are two other modules' promises, and a change to either would quietly widen every
+    /// parked login on Linux.
+    #[test]
+    fn a_parked_login_is_readable_only_by_its_owner() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let root = std::env::temp_dir().join(format!(
+            "pitboard-vault-modes-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let _ = std::fs::remove_dir_all(&root);
+        struct Scratch(PathBuf);
+        impl Drop for Scratch {
+            fn drop(&mut self) {
+                let _ = std::fs::remove_dir_all(&self.0);
+            }
+        }
+        let _guard = Scratch(root.clone());
+
+        let ctx = Context::new(root.clone()).with_pitboard_home(root.join(".pitboard"));
+        let vault = FileVault::new(&ctx);
+        let name = "pitboard-park-9aeb9c89-316c-4344-84c5-603d71dc5c9a-1789935600123";
+        vault
+            .write(name, r#"{"claudeAiOauth":{}}"#)
+            .expect("a park");
+
+        let mode = |p: &std::path::Path| {
+            std::fs::metadata(p)
+                .expect("it exists")
+                .permissions()
+                .mode()
+                & 0o777
+        };
+        assert_eq!(mode(&vault.dir), 0o700, "the vault directory");
+        assert_eq!(mode(&vault.path(name).unwrap()), 0o600, "the parked login");
+    }
 
     #[test]
     fn only_names_pitboard_generates_are_accepted() {

@@ -14,8 +14,11 @@ and back in through a browser. pitboard keeps a copy of each login and puts the 
 for where Claude Code reads it. Your history, sessions, settings and projects stay where
 they are. Only the account changes.
 
-Status: pre-release. macOS is tested. On Linux it builds and the tests pass, but how Claude
-Code stores its login there has not been checked on a real signed-in install.
+Status: pre-release. macOS is tested. On Linux it builds and the tests pass, and how Claude
+Code stores its login there has been read out of the shipping build: there is no keyring
+backend outside macOS and Windows, so it is a plaintext file at mode 0600 and pitboard's
+parked copies are files beside it. What has not happened is a run on a Linux machine with a
+real signed-in Claude Code.
 
 ## Install
 

@@ -22,7 +22,9 @@ use crate::context::Context;
 use crate::error::{Error, Result};
 use std::path::PathBuf;
 
-/// The name both platforms use, so a person can find it without pitboard telling them.
+/// What launchd calls the job, so a person can find it without pitboard telling them.
+/// systemd names its own unit, which is why this is macOS only.
+#[cfg(target_os = "macos")]
 const LABEL: &str = "com.datlechin.pitboard.renew";
 
 /// Once a day. A refresh token's life is measured in weeks and pitboard starts renewing

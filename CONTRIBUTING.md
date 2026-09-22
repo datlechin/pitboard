@@ -152,6 +152,17 @@ coupling comes from:
   keychain of 362 items, and emits attributes only: no secret of any item. Reads afterwards
   take the usual 0.016 seconds, so listing carries none of the access-list side effect an
   in-process read does. Service names appear as `    "svce"<blob>="<name>"`.
+- Claude Code has two guarded credential stores and no others: the macOS keychain, and the
+  Windows credential manager behind the `tengu_windows_credman` GrowthBook flag. Searching
+  the whole 2.1.278 bundle finds no `libsecret`, no `org.freedesktop.secrets`, no
+  `gnome-keyring` and no `SecretService`. `secret-tool` and `kwallet-query` do appear, in
+  the list of credential helpers its Bash sandbox keeps out of a shell, which is why
+  neither is used as a needle. So on Linux the keychain backend's `security` call simply
+  fails and the plaintext file is what holds the login. It is written and then chmod'd to
+  0600. pitboard's `PlainUnix` platform matches that, and `assumptions.rs` carries the
+  absence under `no_keyring_off_macos`, checked on every build by the conformance job:
+  a fact resting on something not existing is wrong the moment it does, and nothing
+  disappearing would ever say so.
 
 ## Dependencies
 

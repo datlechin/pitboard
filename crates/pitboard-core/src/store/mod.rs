@@ -241,6 +241,13 @@ pub fn credential_file(ctx: &Context) -> PathBuf {
     PathBuf::from(claude::storage_dir(ctx)).join(slot::CRED_FILE)
 }
 
+/// Where parked logins live when there is no keychain to put them in: one file each, in
+/// pitboard's own directory. Named here rather than in the backend so `doctor` can look at
+/// what is actually on the disk without the two spellings drifting apart.
+pub fn vault_dir(ctx: &Context) -> PathBuf {
+    crate::home::dir(ctx).join("vault")
+}
+
 /// Which backend in `chain` holds `service`. The chain is a parameter so tests can pass
 /// backends that fail on demand.
 fn resolve_in<'a>(
