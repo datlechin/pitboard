@@ -1016,6 +1016,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "pitboard-conformance"
+version = "0.2.0"
+dependencies = [
+ "pitboard-core",
+ "serde_json",
+]
+
+[[package]]
 name = "pitboard-core"
 version = "0.2.0"
 dependencies = [

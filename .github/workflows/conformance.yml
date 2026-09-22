@@ -1,0 +1,64 @@
+name: Conformance
+
+# Every load-bearing fact pitboard has about Claude Code was read out of one build, and
+# Claude Code ships several times a week. This fetches the newest one and checks that the
+# facts can still be read from it.
+#
+# It is shallow on purpose: a literal being present does not prove the behaviour around it
+# is unchanged. A literal disappearing does prove something moved, which is the only thing
+# worth an issue. Measured across six builds: the probe set holds from 2.1.273 onwards and
+# correctly goes red on 2.1.124, which predates the credential write lock.
+
+on:
+  schedule:
+    # Twice a week, a few hours apart from the Sparkle check so two failures do not arrive
+    # together.
+    - cron: "17 6 * * 1,4"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Which Claude Code to check, or blank for the newest
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+
+      - name: Fetch the Claude Code to check
+        id: fetch
+        run: |
+          version="${{ inputs.version }}"
+          if [ -z "$version" ]; then
+            version=$(npm view @anthropic-ai/claude-code version)
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          # The wrapper on npm carries no code; the native build is its own package.
+          npm pack "@anthropic-ai/claude-code-linux-x64@$version" --silent
+          tar xzf ./*.tgz
+          binary=$(find package -type f -perm -u+x ! -name '*.json' ! -name '*.md' | head -1)
+          test -n "$binary" || { echo "no binary in the package"; exit 1; }
+          echo "binary=$binary" >> "$GITHUB_OUTPUT"
+
+      - name: Read pitboard's facts out of it
+        id: probe
+        run: |
+          cargo run --locked --release -p pitboard-conformance -- \
+            "${{ steps.fetch.outputs.binary }}" | tee report.txt
+          cargo run --locked --release -p pitboard-conformance -- \
+            "${{ steps.fetch.outputs.binary }}" --json > report.json
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: conformance-${{ steps.fetch.outputs.version }}
+          path: |
+            report.txt
+            report.json

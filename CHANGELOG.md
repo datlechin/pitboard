@@ -47,6 +47,14 @@ All notable changes are recorded here. The format follows
   apart too, where they used to share one code.
 
 ### Added
+- A conformance checker, and a job that runs it. `pitboard-conformance` reads the literals
+  each of pitboard's facts about Claude Code is readable by out of a Claude Code build and
+  says which are still there; a scheduled workflow fetches the newest build twice a week
+  and runs it. Shallow on purpose, and it says so: a literal being present does not prove
+  the behaviour around it is unchanged, while a literal disappearing does prove something
+  moved. Measured across six builds before it was trusted at all: the probe set holds from
+  2.1.273 through 2.1.278 and correctly goes red on 2.1.124, which predates the credential
+  write lock, two of the five account-scoped keys, and the keychain error classification.
 - A park holds the account's whole slice of Claude Code's credential document rather than
   its OAuth block alone: the four other keys a logout deletes go with it, and a switch back
   puts them there. Before this, switching away deleted them and switching back could not

@@ -5,6 +5,7 @@ members = [
     "crates/pitboard",
     "crates/pitboard-ffi",
     "crates/uniffi-bindgen-swift",
+    "crates/pitboard-conformance",
 ]
 
 [workspace.package]

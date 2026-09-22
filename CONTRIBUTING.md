@@ -132,6 +132,13 @@ coupling comes from:
   deletes the keychain item when it does. pitboard does not, on purpose.
 - The supervisor daemon records itself in `<config dir>/daemon.lock` with its pid and the
   Claude Code version that launched it, and leaves the file behind when it dies.
+- The facts in `pitboard-core::assumptions` carry the literals they are readable by, and
+  `cargo run -p pitboard-conformance -- <a claude binary>` checks them. Measured across six
+  builds: the set holds from 2.1.273 through 2.1.278 and correctly goes red on 2.1.124,
+  which predates the credential write lock, two of the five account-scoped keys and the
+  keychain error classification. It is shallow on purpose, and the tool says so: a literal
+  being present does not prove the behaviour around it, and a literal disappearing does
+  prove something moved.
 - APFS stores a directory's mtime to the nanosecond and stores it approximately: setting
   one and reading it straight back gives a value 18 to 60 nanoseconds away. A lock that
   remembered the value it asked for would find a mismatch every time; the value read back

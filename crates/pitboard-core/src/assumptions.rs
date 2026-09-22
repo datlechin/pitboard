@@ -32,6 +32,16 @@ pub struct Assumption {
     pub verified_against: &'static str,
     /// What in this crate stops being true if it moves.
     pub depends: &'static str,
+    /// Literals that must be present in a Claude Code build for this fact to still be
+    /// readable there. Empty where the fact cannot be read out of a build at all, which is
+    /// every fact that is about behaviour rather than about a name.
+    ///
+    /// These are a cheap and shallow check. A literal being present does not prove the
+    /// behaviour around it is unchanged; a literal disappearing does prove something moved.
+    /// Measured across six builds: the set below holds from 2.1.273 onwards, and correctly
+    /// goes red on 2.1.124, which predates the write lock, the two extra account-scoped
+    /// keys and the keychain error classification.
+    pub probe: &'static [&'static str],
 }
 
 pub const ASSUMPTIONS: &[Assumption] = &[
@@ -43,6 +53,7 @@ pub const ASSUMPTIONS: &[Assumption] = &[
         read_from: "the secure storage module's service name and slot derivation",
         verified_against: VERIFIED_AGAINST,
         depends: "slot.rs, and every read and write of the live credential",
+        probe: &["-credentials", "OAUTH_FILE_SUFFIX"],
     },
     Assumption {
         name: "keychain_account_name",
@@ -51,6 +62,7 @@ pub const ASSUMPTIONS: &[Assumption] = &[
         read_from: "the secure storage module's account name",
         verified_against: VERIFIED_AGAINST,
         depends: "slot::account_name",
+        probe: &["claude-code-user"],
     },
     Assumption {
         name: "live_chain_order",
@@ -60,6 +72,7 @@ pub const ASSUMPTIONS: &[Assumption] = &[
         read_from: "the keychain-with-plaintext-fallback store",
         verified_against: VERIFIED_AGAINST,
         depends: "store::resolve and everything that reads or writes through it",
+        probe: &[".credentials.json", "-with-", "-fallback"],
     },
     Assumption {
         name: "keychain_write_route",
@@ -69,6 +82,10 @@ pub const ASSUMPTIONS: &[Assumption] = &[
         read_from: "the keychain backend's update path",
         verified_against: VERIFIED_AGAINST,
         depends: "store::keychain::MAX_COMMAND_BYTES and the write path",
+        probe: &[
+            "add-generic-password",
+            "exceeds security -i stdin limit; using argv",
+        ],
     },
     Assumption {
         name: "keychain_absence_codes",
@@ -77,6 +94,11 @@ pub const ASSUMPTIONS: &[Assumption] = &[
         read_from: "the keychain backend's read path",
         verified_against: VERIFIED_AGAINST,
         depends: "store::keychain::classify",
+        probe: &[
+            "errsecitemnotfound",
+            "errsecinteractionnotallowed",
+            "show-keychain-info",
+        ],
     },
     Assumption {
         name: "write_lock",
@@ -86,6 +108,7 @@ pub const ASSUMPTIONS: &[Assumption] = &[
         read_from: "the secure storage module's write wrapper",
         verified_against: VERIFIED_AGAINST,
         depends: "lock.rs and the whole switch",
+        probe: &[".storage-write", "[secureStorage] write lock compromised: "],
     },
     Assumption {
         name: "logout_skips_the_lock",
@@ -94,6 +117,7 @@ pub const ASSUMPTIONS: &[Assumption] = &[
         read_from: "the secure storage module's already-locked escape hatch",
         verified_against: VERIFIED_AGAINST,
         depends: "the slot re-read in switch, which exists for this",
+        probe: &["secureStorage.READ_FAILED"],
     },
     Assumption {
         name: "account_scoped_keys",
@@ -102,6 +126,13 @@ pub const ASSUMPTIONS: &[Assumption] = &[
         read_from: "the logout path",
         verified_against: VERIFIED_AGAINST,
         depends: "switch::ACCOUNT_SCOPED, and what a park holds",
+        probe: &[
+            "claudeAiOauth",
+            "organizationUuid",
+            "trustedDeviceToken",
+            "enterpriseGateway",
+            "designOauth",
+        ],
     },
     Assumption {
         name: "credential_cache",
@@ -110,6 +141,7 @@ pub const ASSUMPTIONS: &[Assumption] = &[
         read_from: "the keychain backend's cache, and measured against a running session",
         verified_against: VERIFIED_AGAINST,
         depends: "switch::ADOPTION_CEILING_SECONDS",
+        probe: &[],
     },
     Assumption {
         name: "config_file_location",
@@ -118,6 +150,7 @@ pub const ASSUMPTIONS: &[Assumption] = &[
         read_from: "the config path resolution",
         verified_against: VERIFIED_AGAINST,
         depends: "claude::config_file",
+        probe: &[".config.json", "CLAUDE_CONFIG_DIR"],
     },
     Assumption {
         name: "oauth_client",
@@ -126,6 +159,7 @@ pub const ASSUMPTIONS: &[Assumption] = &[
         read_from: "the OAuth client id and the token refresh path",
         verified_against: VERIFIED_AGAINST,
         depends: "api::CLIENT_ID and park::renewed",
+        probe: &["9d1c250a-e61b-44d9-88ed-5944d1962f5e"],
     },
     Assumption {
         name: "supervisor_daemon",
@@ -135,12 +169,73 @@ pub const ASSUMPTIONS: &[Assumption] = &[
         read_from: "the daemon's auth scheduler and its lock file",
         verified_against: VERIFIED_AGAINST,
         depends: "daemon.rs, and the lock discipline the switch relies on",
+        probe: &[
+            "daemon.lock",
+            "daemon.status.json",
+            "auth: scheduling proactive refresh in ",
+        ],
     },
 ];
 
 /// The assumption of that name, for a check or a probe that wants to speak about one.
 pub fn named(name: &str) -> Option<&'static Assumption> {
     ASSUMPTIONS.iter().find(|a| a.name == name)
+}
+
+/// What a probe found in one Claude Code build.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Reading {
+    /// Every literal this fact is readable by is there.
+    Holds,
+    /// This fact cannot be read out of a build at all; it is about behaviour, not a name.
+    NotReadable,
+    /// Something moved. These literals are gone.
+    Moved(Vec<&'static str>),
+}
+
+/// Check one assumption against the printable strings of a Claude Code build.
+///
+/// Shallow on purpose. A literal being present does not prove the behaviour around it is
+/// unchanged, and this never claims it does; a literal disappearing does prove something
+/// moved, which is the only thing worth waking somebody for.
+pub fn read_from_build(assumption: &Assumption, strings: &str) -> Reading {
+    if assumption.probe.is_empty() {
+        return Reading::NotReadable;
+    }
+    let gone: Vec<&'static str> = assumption
+        .probe
+        .iter()
+        .filter(|needle| !strings.contains(**needle))
+        .copied()
+        .collect();
+    if gone.is_empty() {
+        Reading::Holds
+    } else {
+        Reading::Moved(gone)
+    }
+}
+
+/// Every printable run of `least` bytes or more, which is all a probe needs of a binary and
+/// is the one thing a compiled bundle reliably gives up.
+pub fn printable_runs(bytes: &[u8], least: usize) -> String {
+    let mut out = String::new();
+    let mut run = Vec::new();
+    for &b in bytes {
+        if (0x20..0x7f).contains(&b) || b == b'\t' {
+            run.push(b);
+            continue;
+        }
+        if run.len() >= least {
+            out.push_str(&String::from_utf8_lossy(&run));
+            out.push('\n');
+        }
+        run.clear();
+    }
+    if run.len() >= least {
+        out.push_str(&String::from_utf8_lossy(&run));
+        out.push('\n');
+    }
+    out
 }
 
 #[cfg(test)]
@@ -173,6 +268,33 @@ mod tests {
                 a.name
             );
         }
+    }
+
+    #[test]
+    fn a_probe_reads_what_is_there_and_names_what_is_not() {
+        let write_lock = named("write_lock").expect("listed");
+        let whole = write_lock.probe.join(" and also ");
+        assert_eq!(read_from_build(write_lock, &whole), Reading::Holds);
+
+        let moved = read_from_build(write_lock, "nothing of the sort");
+        assert_eq!(moved, Reading::Moved(write_lock.probe.to_vec()));
+
+        // A fact about behaviour cannot be read out of a build, and says so rather than
+        // pretending either way.
+        let cache = named("credential_cache").expect("listed");
+        assert_eq!(read_from_build(cache, ""), Reading::NotReadable);
+    }
+
+    #[test]
+    fn printable_runs_finds_the_strings_and_nothing_else() {
+        let bytes = b"\x00\x01hello there\x00\x02tiny\x00wide load\xff";
+        let found = printable_runs(bytes, 6);
+        assert!(found.contains("hello there"));
+        assert!(found.contains("wide load"));
+        assert!(
+            !found.contains("tiny"),
+            "a run shorter than asked for is not a string"
+        );
     }
 
     #[test]
