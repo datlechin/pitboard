@@ -307,6 +307,15 @@ pub enum Error {
     },
 
     #[error(
+        "signed in as `{to}`, and the login was gone again before pitboard finished. \
+         Claude Code removes a login without taking the write lock when `/logout` has given \
+         up waiting, which is the one write pitboard cannot exclude. Nothing was lost: both \
+         `{from}` and `{to}` are parked. Run `claude` and sign in to any enrolled account, \
+         then `pitboard use {to}`."
+    )]
+    SwitchDidNotHold { from: String, to: String },
+
+    #[error(
         "could not sign in as `{to}` ({detail}), and could not read the credential store \
          back to find out whether anything changed. Nothing has been deleted and both \
          logins are still here. Unlock the keychain and run `pitboard` again; it finishes \
@@ -414,6 +423,7 @@ impl Error {
             ConfigBackupFailed { .. } => "config_backup_failed",
             ConfigWriteFailed { .. } => "config_write_failed",
             SwitchRolledBack { .. } => "switch_rolled_back",
+            SwitchDidNotHold { .. } => "switch_did_not_hold",
             SwitchUnverified { .. } => "switch_unverified",
             SwitchCorrupted { .. } => "switch_corrupted",
             RecoveryFailed { .. } => "recovery_failed",
@@ -456,6 +466,7 @@ impl Error {
             | ClaudeConfigNotJson { .. }
             | SwitchCorrupted { .. }
             | SwitchUnverified { .. }
+            | SwitchDidNotHold { .. }
             | CredentialTooLarge { .. }
             | CustomOauthEndpoint
             | RecoveryRecordCorrupt { .. } => 3,

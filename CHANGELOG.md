@@ -47,6 +47,22 @@ All notable changes are recorded here. The format follows
   apart too, where they used to share one code.
 
 ### Fixed
+- A switch no longer reports success it did not have. Claude Code's `/logout` deletes the
+  credential with no write lock held once it has given up waiting, which is the one write
+  pitboard cannot exclude; landing just after the install, it left the incoming account
+  signed out while `pitboard use` printed "Switched to work" and exited 0. The slot is now
+  read back before the incoming copy is discarded, so a switch that did not hold leaves
+  both logins parked and says what happened, instead of leaving neither and saying nothing.
+  The new code is `switch_did_not_hold`.
+- The credential write lock now notices when it stops being pitboard's. A machine that
+  sleeps mid-switch lets the lock age past its staleness window, and Claude Code reclaims
+  it and writes underneath a switch that believes it still holds it. The heartbeat compares
+  the directory's mtime against what it last stored and stops, marking the lock lost, and
+  releasing it then leaves the directory alone rather than taking away a lock that now
+  belongs to somebody else. Claude Code treats the same event as a warning and keeps
+  writing, so pitboard cannot expect the other side to stop. Measured first: APFS returns a
+  mtime 18 to 60 nanoseconds from the one it was given, so a check against the value asked
+  for would abandon every switch.
 - A locked keychain no longer reads as a lost login. On a machine whose keychain is locked
   the write fails, the read-back that decides whether anything changed fails too, and that
   second failure was taken to mean the slot had changed: pitboard attempted a rollback,

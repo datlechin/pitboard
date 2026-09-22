@@ -334,6 +334,44 @@ fn enrolling_killed_between_the_write_and_the_record_leaves_nothing_unnamed() {
     }
 }
 
+/// The one Claude Code write this lock cannot exclude. Measured in 2.1.278: a `/logout`
+/// that has given up waiting deletes the credential with nothing held. If it lands just
+/// after the install, the incoming login is gone, and pitboard used to print "Switched to
+/// work" and exit 0 over an account that was signed out.
+#[test]
+fn a_switch_whose_login_was_removed_again_does_not_report_a_switch() {
+    let m = machine("did-not-hold");
+    let parked_before = m.mem.vault().services();
+
+    let settled = settle(&m.ctx).expect("nothing to recover yet").0;
+    m.mem
+        .live()
+        .fault(&m.service, crate::store::memory::Fault::DeletedAfterWrite);
+    let failed = switch(settled, "there").expect_err("the login did not stay");
+    assert!(
+        matches!(failed, Error::SwitchDidNotHold { .. }),
+        "got {failed:?}"
+    );
+
+    let state = state::load(&m.ctx).expect("state");
+    // Both logins are still here: the one that was parked on the way out, and the one that
+    // was being installed. Neither may be thrown away over a write that did not hold.
+    assert!(
+        state.get("here").expect("account").parked.is_some(),
+        "the outgoing login was parked and stays parked"
+    );
+    assert!(
+        state.get("there").expect("account").parked.is_some(),
+        "the incoming login is not discarded over a switch that did not stand"
+    );
+    assert!(m.mem.vault().services().len() > parked_before.len());
+    assert!(
+        !journal::pending(&m.ctx),
+        "and there is nothing half-done to finish"
+    );
+    hold(&m, "did not hold");
+}
+
 /// A switch that could not find out what it did keeps everything, including its record of
 /// intent, so a later run with a store that answers decides. Nothing here is a crash: this
 /// is the ordinary shape of a machine whose keychain is locked.

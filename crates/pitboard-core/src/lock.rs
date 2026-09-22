@@ -29,6 +29,7 @@
 
 use std::io;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 use std::thread;
 use std::time::{Duration, SystemTime};
@@ -64,6 +65,17 @@ pub struct Guard {
     path: PathBuf,
     stop: Stop,
     beat: Option<thread::JoinHandle<()>>,
+    /// Set by the heartbeat when the lock directory stopped being the one this guard took.
+    compromised: Arc<AtomicBool>,
+}
+
+impl Guard {
+    /// Whether this lock stopped being ours while we held it. A caller that has written
+    /// something must not report success on a compromised lock: for the span between the
+    /// two, Claude Code believed it held the lock too.
+    pub fn compromised(&self) -> bool {
+        self.compromised.load(Ordering::Acquire)
+    }
 }
 
 impl Drop for Guard {
@@ -74,7 +86,11 @@ impl Drop for Guard {
         if let Some(handle) = self.beat.take() {
             let _ = handle.join();
         }
-        let _ = std::fs::remove_dir(&self.path);
+        // A compromised lock belongs to whoever reclaimed it. Removing it here would take
+        // their lock away and leave the next writer colliding with them too.
+        if !self.compromised() {
+            let _ = std::fs::remove_dir(&self.path);
+        }
     }
 }
 
@@ -83,9 +99,21 @@ fn age(path: &Path) -> Option<Duration> {
     SystemTime::now().duration_since(mtime).ok()
 }
 
-/// proper-lockfile renews the lock by setting the directory's mtime.
-fn touch(path: &Path, at: SystemTime) -> io::Result<()> {
-    std::fs::File::open(path)?.set_modified(at)
+fn mtime(path: &Path) -> io::Result<SystemTime> {
+    std::fs::metadata(path)?.modified()
+}
+
+/// proper-lockfile renews the lock by setting the directory's mtime, and remembers what the
+/// filesystem stored rather than what it was asked to store.
+///
+/// Measured on macOS 26: APFS keeps nanoseconds and keeps them approximately, returning a
+/// value 18 to 60 nanoseconds from the one it was given. A check that compared against the
+/// value it asked for would find a mismatch every single time and abandon every switch, so
+/// the value read back is the only one worth remembering. It also makes a filesystem that
+/// truncates, which a network home may, a case that needs no special handling at all.
+fn touch(path: &Path, at: SystemTime) -> io::Result<SystemTime> {
+    std::fs::File::open(path)?.set_modified(at)?;
+    mtime(path)
 }
 
 /// Take the lock guarding `target`, waiting up to about seven and a half seconds.
@@ -98,7 +126,7 @@ pub fn acquire(target: &Path) -> Result<Guard, LockError> {
     let mut backoff = MIN_BACKOFF;
     for attempt in 0..=RETRIES {
         match std::fs::create_dir(&path) {
-            Ok(()) => return Ok(start(path)),
+            Ok(()) => return start(path).map_err(LockError::Io),
             Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {
                 if age(&path).is_some_and(|a| a > STALE) {
                     let _ = std::fs::remove_dir(&path);
@@ -115,10 +143,14 @@ pub fn acquire(target: &Path) -> Result<Guard, LockError> {
     Err(LockError::Busy)
 }
 
-fn start(path: PathBuf) -> Guard {
+fn start(path: PathBuf) -> io::Result<Guard> {
+    // What the filesystem actually stored for the directory we just made. Every later beat
+    // compares against this, and replaces it with what it stores next.
+    let mut held = mtime(&path)?;
     let stop: Stop = Arc::new((Mutex::new(false), Condvar::new()));
+    let compromised = Arc::new(AtomicBool::new(false));
     let beat = {
-        let (path, stop) = (path.clone(), Arc::clone(&stop));
+        let (path, stop, compromised) = (path.clone(), Arc::clone(&stop), Arc::clone(&compromised));
         thread::spawn(move || {
             let (flag, wake) = &*stop;
             let mut stopped = flag.lock().unwrap_or_else(|e| e.into_inner());
@@ -128,17 +160,36 @@ fn start(path: PathBuf) -> Guard {
                     .wait_timeout_while(stopped, HEARTBEAT, |stop| !*stop)
                     .unwrap_or_else(|e| e.into_inner());
                 stopped = next;
-                if *stopped || touch(&path, SystemTime::now()).is_err() {
+                if *stopped {
                     return;
+                }
+                // Look before touching. A directory that is gone, or whose mtime is not the
+                // one this guard last stored, is not this guard's lock any more: something
+                // aged it out and took it, and is writing under it right now. Touching it
+                // then would renew somebody else's lock.
+                match mtime(&path) {
+                    Ok(found) if found == held => {}
+                    _ => {
+                        compromised.store(true, Ordering::Release);
+                        return;
+                    }
+                }
+                match touch(&path, SystemTime::now()) {
+                    Ok(stored) => held = stored,
+                    Err(_) => {
+                        compromised.store(true, Ordering::Release);
+                        return;
+                    }
                 }
             }
         })
     };
-    Guard {
+    Ok(Guard {
         path,
         stop,
         beat: Some(beat),
-    }
+        compromised,
+    })
 }
 
 #[cfg(test)]
@@ -204,21 +255,79 @@ mod tests {
 
     /// Aged past staleness first, so only a live heartbeat can bring it back.
     #[test]
-    fn the_heartbeat_rescues_a_lock_that_has_aged_out() {
+    fn the_heartbeat_keeps_a_held_lock_young() {
         let t = scratch("beat");
-        let _g = acquire(&t).unwrap();
+        let g = acquire(&t).unwrap();
+        let lock = PathBuf::from(format!("{}.lock", t.display()));
+        let when_taken = mtime(&lock).unwrap();
+
+        thread::sleep(HEARTBEAT + Duration::from_millis(400));
+
+        assert!(
+            mtime(&lock).unwrap() > when_taken,
+            "the heartbeat never touched the lock"
+        );
+        assert!(age(&lock).unwrap() < STALE);
+        assert!(!g.compromised(), "nobody else touched it");
+    }
+
+    /// The half of proper-lockfile's protocol this omitted, and the reason it matters. A
+    /// machine that sleeps mid-switch lets the lock age past its staleness window; Claude
+    /// Code reclaims it and starts writing the credential underneath a switch that believes
+    /// it still holds it. An mtime that is not the one this guard last stored is the only
+    /// evidence of that there is.
+    #[test]
+    fn a_lock_somebody_else_touched_is_never_ours_again() {
+        let t = scratch("compromised");
+        let g = acquire(&t).unwrap();
         let lock = PathBuf::from(format!("{}.lock", t.display()));
 
+        // What reclaiming it looks like from here: the directory's mtime is somebody else's.
         age_past_staleness(&lock);
-        assert!(
-            age(&lock).unwrap() > STALE,
-            "the lock should start out stale"
-        );
 
         thread::sleep(HEARTBEAT + Duration::from_millis(400));
         assert!(
-            age(&lock).unwrap() < STALE,
-            "the heartbeat never touched the lock"
+            g.compromised(),
+            "a lock whose mtime this guard did not set is not this guard's"
+        );
+
+        drop(g);
+        assert!(
+            lock.exists(),
+            "and releasing it must not take away the lock that now belongs to somebody else"
+        );
+        let _ = std::fs::remove_dir(&lock);
+    }
+
+    /// A lock directory that vanished is gone whoever removed it, and renewing it would
+    /// mean making one nobody is coordinating through.
+    #[test]
+    fn a_lock_that_vanished_is_not_quietly_remade() {
+        let t = scratch("vanished");
+        let g = acquire(&t).unwrap();
+        let lock = PathBuf::from(format!("{}.lock", t.display()));
+        std::fs::remove_dir(&lock).unwrap();
+
+        thread::sleep(HEARTBEAT + Duration::from_millis(400));
+        assert!(g.compromised());
+        assert!(!lock.exists(), "the heartbeat did not put it back");
+    }
+
+    /// APFS stores a value 18 to 60 nanoseconds from the one it is given, so a guard that
+    /// remembered what it asked for would call every lock compromised and abandon every
+    /// switch. The value read back is the only one worth keeping.
+    #[test]
+    fn what_the_filesystem_stored_is_what_gets_remembered() {
+        let t = scratch("granularity");
+        let _g = acquire(&t).unwrap();
+        let lock = PathBuf::from(format!("{}.lock", t.display()));
+
+        let asked = SystemTime::now();
+        let stored = touch(&lock, asked).unwrap();
+        assert_eq!(
+            stored,
+            mtime(&lock).unwrap(),
+            "reading it back twice gives the same answer, whatever it is"
         );
     }
 }

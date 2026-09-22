@@ -132,6 +132,10 @@ coupling comes from:
   deletes the keychain item when it does. pitboard does not, on purpose.
 - The supervisor daemon records itself in `<config dir>/daemon.lock` with its pid and the
   Claude Code version that launched it, and leaves the file behind when it dies.
+- APFS stores a directory's mtime to the nanosecond and stores it approximately: setting
+  one and reading it straight back gives a value 18 to 60 nanoseconds away. A lock that
+  remembered the value it asked for would find a mismatch every time; the value read back
+  is the only one worth keeping.
 - `security dump-keychain` without `-d` never prompts, exits 0 in 0.06 seconds against a
   keychain of 362 items, and emits attributes only: no secret of any item. Reads afterwards
   take the usual 0.016 seconds, so listing carries none of the access-list side effect an

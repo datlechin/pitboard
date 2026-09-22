@@ -25,6 +25,8 @@ pub enum Warning {
         label: String,
     },
     RenewalFailed(Error),
+    /// Claude Code's write lock stopped being pitboard's while a change was under way.
+    LockCompromised,
     /// The environment authenticates Claude Code some other way, so the login pitboard
     /// moved is not the one a session will use.
     AuthOverridden {
@@ -42,6 +44,7 @@ impl Warning {
     pub fn code(&self) -> &'static str {
         match self {
             Warning::Recovered(r) => r.code(),
+            Warning::LockCompromised => "lock_compromised",
             Warning::ConfigNotUpdated(e) | Warning::RenewalFailed(e) => e.code(),
             Warning::ParksPendingRemoval(_) => "parks_pending_removal",
             Warning::ParkedLoginRefused { .. } => "parked_login_refused",
@@ -55,6 +58,13 @@ impl fmt::Display for Warning {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Warning::Recovered(r) => write!(f, "{r}"),
+            Warning::LockCompromised => write!(
+                f,
+                "Claude Code reclaimed the credential write lock while this change was \
+                 under way, so it may have written the login at the same time. pitboard \
+                 read the slot back and the change stood, but check with `pitboard` that \
+                 the right account is signed in."
+            ),
             Warning::ConfigNotUpdated(e) | Warning::RenewalFailed(e) => write!(f, "{e}"),
             Warning::ParksPendingRemoval(count) => write!(
                 f,

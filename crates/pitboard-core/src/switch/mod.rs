@@ -328,6 +328,39 @@ pub fn switch(settled: Settled, label: &str) -> Result<(Outcome, Vec<Warning>)> 
         return Err(e);
     }
     fault::point("switch.installed");
+
+    // The write landed. That is not the same as it having held. Measured in 2.1.278, a
+    // `/logout` that has given up waiting deletes the credential with no lock held at all,
+    // which is the one Claude Code write this lock does not exclude; and a lock that aged
+    // out while the machine slept lets Claude Code reclaim it and write underneath. Both
+    // cost one keychain read to notice here, at 0.016 seconds against the two network round
+    // trips this command has already made, and cost a browser sign-in to discover later.
+    //
+    // Checked before the incoming copy is discarded, so finding it did not hold leaves both
+    // logins parked rather than neither.
+    let lock_lost = guard.compromised();
+    match store::read_raw(ctx, &service) {
+        Ok(Some(now)) if now.contains("\"claudeAiOauth\"") => {
+            // Claude Code may have rotated the token it was just given, which keeps the
+            // account and changes the bytes. A login being there at all is the fact.
+            let _ = now;
+        }
+        Ok(_) => {
+            clear_journal(ctx);
+            return Err(Error::SwitchDidNotHold {
+                from: outgoing_label,
+                to: label.to_string(),
+            });
+        }
+        Err(unreadable) => {
+            return Err(Error::SwitchUnverified {
+                from: outgoing_label,
+                to: label.to_string(),
+                detail: unreadable.to_string(),
+            });
+        }
+    }
+
     state.discard(&held.service);
     state.active = Some(label.to_string());
     state::save(ctx, &state)?;
@@ -349,6 +382,7 @@ pub fn switch(settled: Settled, label: &str) -> Result<(Outcome, Vec<Warning>)> 
 
     let warnings = on_the_command_line
         .into_iter()
+        .chain(lock_lost.then_some(Warning::LockCompromised))
         .chain(config_warning)
         .chain((parks_pending > 0).then_some(Warning::ParksPendingRemoval(parks_pending)))
         .collect();

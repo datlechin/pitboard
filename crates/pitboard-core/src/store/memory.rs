@@ -33,6 +33,10 @@ pub enum Fault {
     /// what a screen lock does, and which cannot be produced by counting calls without
     /// pinning a test to the exact number the code happens to make.
     LocksOnWrite,
+    /// The write lands, and the item is gone by the time anything reads it back. Claude
+    /// Code's `/logout` deletes the credential with no lock held once it has given up
+    /// waiting, which is the one write pitboard cannot exclude.
+    DeletedAfterWrite,
 }
 
 /// One store. Plant, peek and enumerate without going through the store's own rules, so a
@@ -204,6 +208,16 @@ impl RawStore for Arc<MemoryStore> {
                 return Err(Error::Write("the keychain is locked".into()));
             }
             Some(Fault::CorruptWrite(instead)) => self.plant(service, &instead),
+            Some(Fault::DeletedAfterWrite) => {
+                // The write lands and whoever else is writing gets there before the
+                // read-back, so the store reports the item as absent, not as unreadable.
+                self.items
+                    .lock()
+                    .expect("a poisoned test store is a failed test")
+                    .remove(service);
+                self.heal(service);
+                return Ok(());
+            }
             _ => self.plant(service, contents),
         }
         // The rule every backend keeps: believe the store, not the call that wrote to it.
