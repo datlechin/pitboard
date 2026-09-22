@@ -240,7 +240,7 @@ fn migrate(document: &mut serde_json::Value, path: &std::path::Path) -> Result<(
     }
 }
 
-pub fn save(ctx: &Context, state: &State) -> Result<()> {
+pub(crate) fn save(ctx: &Context, state: &State) -> Result<()> {
     home::check_location(&home::dir(ctx))?;
     let mut state = state.clone();
     state.slot = Some(crate::claude::live_service(ctx));

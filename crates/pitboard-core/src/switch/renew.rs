@@ -24,6 +24,7 @@ const DEFAULT_SCOPES: [&str; 6] = [
 ];
 
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum Renewal {
     Renewed,
     /// Anthropic refuses the login for good; it has been dropped.

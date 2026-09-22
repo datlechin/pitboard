@@ -40,6 +40,7 @@ const MIN_BACKOFF: Duration = Duration::from_millis(100);
 const MAX_BACKOFF: Duration = Duration::from_millis(1_000);
 
 #[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
 pub enum LockError {
     #[error("another process is writing credentials right now; try again in a few seconds")]
     Busy,

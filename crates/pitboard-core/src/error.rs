@@ -19,6 +19,7 @@ impl std::fmt::Display for Enrolled {
 }
 
 #[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
 pub enum Error {
     #[error(
         "{path} looks like it is inside {marker}, which syncs to other machines. \

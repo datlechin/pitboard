@@ -2,6 +2,22 @@
 //! reading what each has left. It serves pitboard's own front ends, the command line and the
 //! native apps, which reach it through [`service::Pitboard`] with an explicit
 //! [`context::Context`].
+//!
+//! # What is supported
+//!
+//! This crate is published because the `pitboard` binary depends on it, not because it was
+//! designed for other programs to build on. The supported interface is [`service::Pitboard`],
+//! [`context::Context`], and the types those two return. Everything else is reachable so the
+//! front ends in this repository can reach it, and may change in any release.
+//!
+//! What a version promises, for the part that is supported: a code is a name, and names are
+//! kept. Adding an error, warning or check code is not a breaking change, which is why every
+//! enum a caller reads codes out of is `#[non_exhaustive]` and every such caller needs a
+//! fallback arm. Renaming or removing a code is a breaking change and gets a major version.
+//!
+//! What is deliberately not reachable: nothing outside this crate may write pitboard's index.
+//! Every change goes through [`switch`], which records what it is about to do first and
+//! finishes an interrupted one before starting another.
 
 #[cfg(not(unix))]
 compile_error!(

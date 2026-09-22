@@ -84,6 +84,22 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       - run: cargo "+$FLOOR" check --workspace --all-targets --locked
 
+  semver:
+    # What a published version promises, checked against the published version. It reports
+    # and does not block: the crate is the binary's engine before it is anyone's library,
+    # and a first run on a young crate finds things worth reading rather than obeying.
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: taiki-e/install-action@94c31af3204a9f15ab40b35ad084410b905bbc73 # v2.87.17
+        with:
+          tool: cargo-semver-checks
+      - run: cargo semver-checks --package pitboard-core
+
   deny:
     runs-on: ubuntu-latest
     steps:

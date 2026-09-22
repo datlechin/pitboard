@@ -6,6 +6,23 @@ All notable changes are recorded here. The format follows
 ## [Unreleased]
 
 ### Changed
+- `pitboard-core` says what it supports. The interface other programs may build on is
+  `service::Pitboard`, `context::Context` and what they return; the rest is reachable for
+  this repository's own front ends and may change in any release. The enums a caller reads
+  codes out of are now `#[non_exhaustive]`, so adding a code is not a breaking change for a
+  consumer, which is what the command line's JSON contract has always promised. Writing
+  pitboard's index is no longer reachable from outside the crate: every change goes through
+  `switch`, which records its intent first. Marking those enums and withdrawing `state::save`
+  are themselves breaking changes for anyone who built on 0.2.0, so this is the release that
+  makes them, while the crate is young enough for that to cost nothing. Nothing changes for
+  anyone using the command line or the app.
+- Claude Code's supervisor daemon is named as what it is, a second writer of the login that
+  runs on a schedule of its own. It takes the same write lock and re-reads the credential
+  inside it, so it cannot put an older account back over a switch. `doctor` reports it.
+- The storage v5 question is settled rather than open. The successor backend replaces the
+  fallback half of Claude Code's chain and only for a caller that hands a backend in, so an
+  ordinary `claude` still reads the keychain first. `doctor` now warns only for the
+  combination that can mislead, the flag on and the login in the fallback.
 - A login too large for `security`'s standard input is now written the only other way
   `security` offers, as an argument, which is what Claude Code does for the same login on
   every token refresh. The switch says so, and `doctor` shows the size. `PITBOARD_NO_ARGV=1`

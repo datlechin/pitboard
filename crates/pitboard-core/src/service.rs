@@ -12,6 +12,7 @@ use std::fmt;
 
 /// Something to know about that did not stop the operation.
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum Warning {
     /// An earlier switch had been interrupted; this run found what it did and recorded it.
     Recovered(Recovered),

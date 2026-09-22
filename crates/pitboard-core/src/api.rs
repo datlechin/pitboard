@@ -61,6 +61,7 @@ pub struct Owner {
 }
 
 #[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
 pub enum ApiError {
     /// The access token has expired or been revoked.
     #[error("the session has expired")]

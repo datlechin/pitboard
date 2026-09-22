@@ -19,6 +19,7 @@ pub(crate) const SECURITY: &str = "/usr/bin/security";
 /// Where a credential lives. `Keychain` never occurs off macOS: the platform's backend list
 /// rules it out, so callers need no platform checks of their own.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Backend {
     Keychain,
     File,
@@ -36,6 +37,7 @@ impl Backend {
 }
 
 #[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
 pub enum Error {
     /// The store could not be interrogated. Never treat this as "no credential".
     #[error("the credential store could not be read: {0}")]
