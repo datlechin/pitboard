@@ -291,6 +291,7 @@ mod tests {
             expires_in: 60,
             refresh_token_expires_in: Some(120),
             scopes: None,
+            at: None,
         };
         let next = renewed(&parked, &fresh, 1_000_000);
         assert_eq!(next["accessToken"], "a2");

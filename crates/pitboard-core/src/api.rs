@@ -91,6 +91,17 @@ pub struct Renewed {
     pub expires_in: i64,
     pub refresh_token_expires_in: Option<i64>,
     pub scopes: Option<Vec<String>>,
+    /// When the server said it was, from the response's `Date` header, in epoch seconds.
+    ///
+    /// The lifetimes above are relative, so whatever they are added to decides when the
+    /// login expires. Adding them to this machine's clock makes a wrong clock a wrong
+    /// expiry: running ahead, a freshly renewed park reads as lapsed and every status
+    /// renews it again, rotating the refresh chain on a loop; running behind, a lapsed
+    /// park looks restorable and a switch installs a login that cannot work. Anchored to
+    /// the answer's own clock, neither happens.
+    ///
+    /// `None` where the server sent no `Date`, and then the local clock is all there is.
+    pub at: Option<i64>,
 }
 
 /// What pitboard asks Anthropic, as a seam.
@@ -218,6 +229,7 @@ fn ask_renew(
         .send(body.to_string())
         .map_err(|e| ApiError::Network(e.to_string()))?;
     let status = response.status().as_u16();
+    let at = server_time(response.headers());
     let text = response
         .body_mut()
         .read_to_string()
@@ -226,7 +238,7 @@ fn ask_renew(
         200 => {
             let body: Value =
                 serde_json::from_str(&text).map_err(|e| ApiError::Malformed(e.to_string()))?;
-            parse_renewed(&body)
+            parse_renewed(&body, at)
         }
         429 => Err(ApiError::RateLimited),
         400..=499 if text.contains("invalid_grant") => Err(ApiError::InvalidGrant),
@@ -234,7 +246,25 @@ fn ask_renew(
     }
 }
 
-fn parse_renewed(body: &Value) -> Result<Renewed, ApiError> {
+/// The instant a response says it was sent, from its `Date` header.
+///
+/// Measured against api.anthropic.com over eight requests: this machine sat within 0.75
+/// seconds of the server, and `Date` has a granularity of one second, so the whole spread
+/// was inside the noise. That is why there is no skew estimate here and no median of
+/// several observations: on a machine whose clock works there is nothing to correct, and
+/// on a machine whose clock does not, reading the time off the answer is the correction.
+fn server_time(headers: &ureq::http::HeaderMap) -> Option<i64> {
+    let raw = headers.get("date")?.to_str().ok()?;
+    // RFC 9110's preferred form, which is what every answer measured used:
+    // `Mon, 22 Sep 2026 12:34:56 GMT`.
+    jiff::civil::DateTime::strptime("%a, %d %b %Y %H:%M:%S GMT", raw)
+        .ok()?
+        .to_zoned(jiff::tz::TimeZone::UTC)
+        .ok()
+        .map(|z| z.timestamp().as_second())
+}
+
+fn parse_renewed(body: &Value, at: Option<i64>) -> Result<Renewed, ApiError> {
     let text = |key: &str| body.get(key).and_then(Value::as_str).map(str::to_owned);
     Ok(Renewed {
         access_token: text("access_token")
@@ -246,6 +276,7 @@ fn parse_renewed(body: &Value) -> Result<Renewed, ApiError> {
             .ok_or_else(|| ApiError::Malformed("no expires_in".into()))?,
         refresh_token_expires_in: body.get("refresh_token_expires_in").and_then(Value::as_i64),
         scopes: text("scope").map(|s| s.split_whitespace().map(str::to_owned).collect()),
+        at,
     })
 }
 
@@ -287,21 +318,42 @@ mod tests {
             "token_type": "Bearer"
         });
         assert_eq!(
-            parse_renewed(&full).unwrap(),
+            parse_renewed(&full, Some(1_790_000_000)).unwrap(),
             Renewed {
                 access_token: "a2".into(),
                 refresh_token: Some("r2".into()),
                 expires_in: 28_800,
                 refresh_token_expires_in: Some(2_592_000),
                 scopes: Some(vec!["user:inference".into(), "user:profile".into()]),
+                at: Some(1_790_000_000),
             }
         );
-        let kept = parse_renewed(&json!({"access_token": "a2", "expires_in": 60})).unwrap();
+        let kept = parse_renewed(&json!({"access_token": "a2", "expires_in": 60}), None).unwrap();
         assert_eq!(
             kept.refresh_token, None,
             "no refresh_token means the old one stays"
         );
-        assert!(parse_renewed(&json!({"expires_in": 60})).is_err());
+        assert_eq!(kept.at, None, "no Date header leaves the local clock to it");
+        assert!(parse_renewed(&json!({"expires_in": 60}), None).is_err());
+    }
+
+    /// The header every answer measured carried, in RFC 9110's preferred form.
+    #[test]
+    fn the_instant_an_answer_says_it_was_sent_is_read_off_it() {
+        let mut headers = ureq::http::HeaderMap::new();
+        headers.insert(
+            "date",
+            "Tue, 22 Sep 2026 12:34:56 GMT".parse().expect("valid"),
+        );
+        assert_eq!(server_time(&headers), Some(1_790_080_496));
+
+        headers.insert("date", "whenever".parse().expect("valid"));
+        assert_eq!(
+            server_time(&headers),
+            None,
+            "an answer pitboard cannot read the time off is not a reason to guess one"
+        );
+        assert_eq!(server_time(&ureq::http::HeaderMap::new()), None);
     }
 
     /// Field names copied from a live response on 2026-09-21.

@@ -200,7 +200,16 @@ fn apply(
 
     // The old refresh token may already be spent, so the answer is written at once, and a
     // second time under another name if the first write fails.
-    let next = park::renewed(&asked.oauth, &fresh, ctx.now_millis());
+    // Anchored to the clock of the answer that carried these lifetimes, where it gave one.
+    // `expires_in` and `refresh_token_expires_in` are relative, so whatever they are added
+    // to decides when the login expires: added to a machine running ahead, a freshly
+    // renewed park reads as already lapsed and every status renews it again, rotating the
+    // refresh chain on a loop; added to one running behind, a lapsed park looks restorable
+    // and a switch installs a login that cannot work.
+    let anchor = fresh
+        .at
+        .map_or_else(|| ctx.now_millis(), |seconds| seconds * 1000);
+    let next = park::renewed(&asked.oauth, &fresh, anchor);
     let uuid = state
         .get(label)
         .map(|a| a.account_uuid.clone())
@@ -318,6 +327,7 @@ mod tests {
             expires_in: 3600,
             refresh_token_expires_in: Some(30 * 86_400),
             scopes: None,
+            at: None,
         }
     }
 
@@ -327,6 +337,64 @@ mod tests {
             .find(|(l, _)| l == label)
             .map(|(_, r)| r.code().to_string())
             .unwrap_or_else(|| "not attempted".into())
+    }
+
+    /// The lifetimes a renewal answers with are relative, so what they are added to decides
+    /// when the login expires. A machine whose clock is wrong must not get an expiry to
+    /// match, or every status renews the park again and rotates the refresh chain on a loop.
+    #[test]
+    fn a_renewed_expiry_is_measured_from_anthropics_clock_not_this_machines() {
+        let m = machine("anchored");
+        with_park(&m, "work", "old", NOW - 1);
+        // This machine believes it is two hours later than it is.
+        let server_now = NOW - 7200;
+        m.api.renews(
+            "old",
+            Renewed {
+                access_token: "new-access".into(),
+                refresh_token: Some("new".into()),
+                expires_in: 3600,
+                refresh_token_expires_in: Some(30 * 86_400),
+                scopes: None,
+                at: Some(server_now),
+            },
+        );
+
+        renew_parked(&m.ctx);
+
+        let park = state::load(&m.ctx)
+            .expect("state")
+            .get("work")
+            .expect("account")
+            .parked
+            .clone()
+            .expect("renewed");
+        assert_eq!(
+            park.access_expires_at,
+            Some(server_now + 3600),
+            "an hour after the answer, not an hour after this machine's idea of now"
+        );
+        assert_eq!(park.refresh_expires_at, Some(server_now + 30 * 86_400));
+    }
+
+    /// An answer with no `Date` leaves the local clock as all there is, which is what it
+    /// always was.
+    #[test]
+    fn an_answer_with_no_clock_of_its_own_falls_back_to_this_machines() {
+        let m = machine("unanchored");
+        with_park(&m, "work", "old", NOW - 1);
+        m.api.renews("old", fresh("new"));
+
+        renew_parked(&m.ctx);
+
+        let park = state::load(&m.ctx)
+            .expect("state")
+            .get("work")
+            .expect("account")
+            .parked
+            .clone()
+            .expect("renewed");
+        assert_eq!(park.access_expires_at, Some(NOW + 3600));
     }
 
     /// The budget question, asked of the code rather than of a stopwatch: a park whose

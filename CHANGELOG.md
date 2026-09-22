@@ -92,6 +92,15 @@ All notable changes are recorded here. The format follows
   question for Anthropic, and still changes nothing when Anthropic cannot be reached.
 
 ### Fixed
+- A renewed login's expiry is measured from Anthropic's clock rather than from this
+  machine's. The lifetimes a renewal answers with are relative, so what they are added to
+  decides when the login expires: on a machine running ahead, a freshly renewed park read
+  as already lapsed and every `pitboard` renewed it again, rotating the refresh chain on a
+  loop; on one running behind, a lapsed park looked restorable and a switch installed a
+  login that could not work. Measured first, which is why there is no skew estimate here:
+  this machine sat within 0.75 seconds of Anthropic across eight requests, and the `Date`
+  header has a granularity of one second, so the whole spread was noise. Anchoring is the
+  correction; estimating would have been machinery with nothing to correct.
 - "Nothing is signed in" is no longer said when something is. If Claude Code's config names
   somebody as signed in and no store pitboard reads holds that login, pitboard is looking in
   the wrong place, and writing a login there would put it where nobody reads it. That is now

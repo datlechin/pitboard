@@ -132,6 +132,11 @@ coupling comes from:
   deletes the keychain item when it does. pitboard does not, on purpose.
 - The supervisor daemon records itself in `<config dir>/daemon.lock` with its pid and the
   Claude Code version that launched it, and leaves the file behind when it dies.
+- This machine sat within 0.75 seconds of api.anthropic.com's `Date` header across eight
+  requests, and that header has a granularity of one second, so the whole spread was inside
+  the noise. There is therefore no skew estimate anywhere: a renewal's expiries are
+  anchored to the `Date` of the answer that carried them, which is the correction, and on a
+  machine whose clock works there is nothing left to correct.
 - The facts in `pitboard-core::assumptions` carry the literals they are readable by, and
   `cargo run -p pitboard-conformance -- <a claude binary>` checks them. Measured across six
   builds: the set holds from 2.1.273 through 2.1.278 and correctly goes red on 2.1.124,

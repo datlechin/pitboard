@@ -275,6 +275,7 @@ fn renewing_killed_between_the_write_and_the_record_leaves_nothing_unnamed() {
             expires_in: 3600,
             refresh_token_expires_in: Some(30 * 86_400),
             scopes: None,
+            at: None,
         },
     );
 
