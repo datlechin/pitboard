@@ -45,8 +45,6 @@ All notable changes are recorded here. The format follows
   `identity_unverifiable` and a sentence of prose, so nothing could tell being offline from
   being rate limited from a login Anthropic had finished with. `status` tells the same three
   apart too, where they used to share one code.
-
-### Added
 - The app follows a switch made anywhere else on the machine. Three front ends ran on one
   machine and none could tell when another had changed something, so a switch typed in a
   terminal left the menu bar naming the account the person had just stopped using for as
@@ -56,6 +54,26 @@ All notable changes are recorded here. The format follows
   keychain and nothing asked of Anthropic. Deliberately the index alone and not the whole
   directory, because the status line writes usage readings after every message in every
   open session.
+- The app has a window and a Settings scene. The panel is 400 points wide and everything
+  that needed more than that either expanded inside it or sent the person to a terminal,
+  and everything configurable lived in an ellipsis menu where opening at login sat between
+  hiding the checks and quitting. The window holds each account with what its limits have
+  been doing, the whole log of what pitboard has changed, and all of what it found about
+  this machine. Settings opens with Command-comma where people look for it, and reaches the
+  scheduled renewal the core could already do and the app could not.
+- A first run for somebody who installed only the app. The cask puts the command line on
+  the machine too, but an empty panel used to say "Run `pitboard enroll <label>`" and a
+  machine without Claude Code said one line of error, which between them sent every new
+  person to a terminal to find out whether the thing they had just installed worked. The
+  app now names the state it is in, no Claude Code, nobody signed in, signed in but
+  unnamed, or one account with nothing to switch to, and offers the one next step, each of
+  which it can do itself. Nothing is asked before the first read. The first launch ever
+  opens the window, because a status item is invisible to somebody who has just installed
+  it.
+- `doctor` reads the modes of everything on the disk that holds a login: the plaintext
+  credential file, pitboard's vault and every parked login in it, and fails when anyone
+  but the owner can read one. Where there is no keychain, a mode bit is the whole of that
+  protection, and a backup restore, a `cp -r` or a careless umask changes one quietly.
 - The app's bindings reach the rest of the core: the offline report, giving up on an
   interrupted switch, the change log, renewing, and the renewal schedule. A read that cannot
   reach Anthropic now falls back to the last numbers measured rather than an empty panel,
@@ -242,6 +260,20 @@ All notable changes are recorded here. The format follows
   fallback half of Claude Code's chain and only for a caller that hands a backend in, so an
   ordinary `claude` still reads the keychain first. `doctor` now warns only for the
   combination that can mislead, the flag on and the login in the fallback.
+- Linux is decided rather than assumed. Claude Code has exactly two guarded credential
+  stores, the macOS keychain and the Windows credential manager behind a feature flag;
+  searched whole, the shipping build carries no libsecret, no `org.freedesktop.secrets`, no
+  gnome-keyring and no Secret Service. So on Linux its login is a plaintext file at mode
+  0600 and pitboard's parked copies are files beside it, which is what pitboard already
+  did. There is no keyring backend to add. The facts pitboard stands on can now rest on an
+  absence: each one may name literals whose arrival would disprove it, and the conformance
+  run fails when one turns up, because a fact resting on something not existing is wrong
+  the moment it does and nothing disappearing would ever say so.
+- Text in the app grows with the person's own. Every column was a width fixed at the
+  default size, so anyone with larger text got a limit name running into its bar and a
+  reset time clipped off the right. The checks were read out without saying whether they
+  passed, an account row was six separate stops for a screen reader rather than one, and
+  the status item announced itself as "speedometer".
 - A login too large for `security`'s standard input is now written the only other way
   `security` offers, as an argument, which is what Claude Code does for the same login on
   every token refresh. The switch says so, and `doctor` shows the size. `PITBOARD_NO_ARGV=1`
