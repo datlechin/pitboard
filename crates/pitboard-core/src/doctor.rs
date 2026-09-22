@@ -40,7 +40,7 @@ pub struct Facts {
     pub credential_file: PathBuf,
     pub credential: Result<Option<Value>, store::Error>,
     /// What the live login costs against the store's ceiling, where there is one.
-    pub credential_cost: Option<(usize, usize)>,
+    pub credential_cost: Option<store::Cost>,
     pub home: PathBuf,
     pub home_mode: Option<u32>,
     pub machine_id_known: bool,
@@ -234,8 +234,20 @@ pub fn evaluate(facts: &Facts) -> Vec<Check> {
 
     // A login that grows past the ceiling cannot be switched at all, and it grows by things
     // done elsewhere, so it is worth saying before the day it refuses.
-    if let Some((bytes, limit)) = facts.credential_cost {
-        checks.push(if bytes > limit {
+    if let Some(price) = facts.credential_cost {
+        let (bytes, limit) = (price.needs, price.limit);
+        checks.push(if price.refused() {
+            // The refusal was asked for. Say what it will cost when the day comes rather
+            // than only on the day itself.
+            fail(
+                "credential_size",
+                "login size",
+                format!("{bytes} of {limit} bytes, and PITBOARD_NO_ARGV refuses that"),
+                "There is no third way to write a login this size. Sign out of MCP servers \
+                 you no longer use to make it smaller, or unset PITBOARD_NO_ARGV and accept \
+                 the argument-line write.",
+            )
+        } else if price.over() {
             // Not a fault: `security` takes this much of a command from stdin and no more,
             // and the argument line is the only other way it offers. Claude Code writes
             // this same login that way itself on every refresh.
@@ -599,7 +611,11 @@ mod tests {
                 subscription: None,
                 rate_limit_tier: None,
             }),
-            credential_cost: Some((900, 4032)),
+            credential_cost: Some(store::Cost {
+                needs: 900,
+                limit: 4032,
+                second_route: true,
+            }),
             service: "Claude Code-credentials".into(),
             account: "someone".into(),
             default_slot: true,
@@ -725,6 +741,37 @@ mod tests {
         f.backend = Ok(store::Backend::File);
         let checks = evaluate(&f);
         assert_eq!(check(&checks, "storage_v5").level, Level::Ok);
+    }
+
+    #[test]
+    fn a_login_past_the_ceiling_reads_differently_when_the_way_past_it_is_refused() {
+        let mut f = facts();
+        let checks = evaluate(&f);
+        assert_eq!(check(&checks, "credential_size").level, Level::Ok);
+
+        f.credential_cost = Some(store::Cost {
+            needs: 8503,
+            limit: 4032,
+            second_route: true,
+        });
+        let checks = evaluate(&f);
+        let written = check(&checks, "credential_size");
+        assert_eq!(written.level, Level::Warn);
+        assert!(written.detail.contains("argument line"));
+
+        f.credential_cost = Some(store::Cost {
+            needs: 8503,
+            limit: 4032,
+            second_route: false,
+        });
+        let checks = evaluate(&f);
+        let refused = check(&checks, "credential_size");
+        assert_eq!(
+            refused.level,
+            Level::Fail,
+            "there is no third way to write it"
+        );
+        assert!(refused.detail.contains("PITBOARD_NO_ARGV"));
     }
 
     #[test]

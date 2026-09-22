@@ -232,18 +232,26 @@ pub fn switch(settled: Settled, label: &str) -> Result<(Outcome, Vec<Warning>)> 
     // Checked before anything is parked, so a switch that could never be written changes
     // nothing.
     let next = splice(&before, &incoming)?;
-    let (bytes, limit) = store::cost(ctx, &service, &next).unwrap_or_default();
-    if store::too_large(ctx, &service, &next) {
+    // Asked once. The answer is about the backend that would take this write, so a login
+    // living in the fallback file is not told it has the keychain's ceiling.
+    let price = store::cost(ctx, &service, &next);
+    if price.is_some_and(store::Cost::refused) {
+        let price = price.expect("refused implies a ceiling");
         return Err(Error::CredentialTooLarge {
             label: label.to_string(),
-            bytes,
-            limit,
+            bytes: price.needs,
+            limit: price.limit,
         });
     }
     // Said once per switch rather than hidden: the same bytes are visible to `ps` for the
     // length of one `security` call, which is the only way to write a login this size.
-    let on_the_command_line = store::over_stdin_limit(ctx, &service, &next)
-        .then_some(Warning::WrittenOnTheCommandLine { bytes, limit });
+    let on_the_command_line =
+        price
+            .filter(|p| p.on_the_second_route())
+            .map(|p| Warning::WrittenOnTheCommandLine {
+                bytes: p.needs,
+                limit: p.limit,
+            });
 
     let park_service = park::reserve(ctx, &outgoing.account_uuid)?;
     write_journal(

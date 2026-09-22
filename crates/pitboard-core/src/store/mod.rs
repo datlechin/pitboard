@@ -70,6 +70,38 @@ impl Error {
     }
 }
 
+/// What writing a document costs a store that has a ceiling, and what happens above it.
+///
+/// One value rather than three questions. Asking separately meant hex-encoding the same
+/// login three times per switch, and meant every caller knowing that only one platform has
+/// a ceiling at all.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Cost {
+    /// Bytes this document needs of the store's cheapest route.
+    pub needs: usize,
+    /// Bytes that route has.
+    pub limit: usize,
+    /// Whether the store has another route above the ceiling, and is allowed to use it.
+    pub second_route: bool,
+}
+
+impl Cost {
+    /// Past the cheapest route.
+    pub fn over(self) -> bool {
+        self.needs > self.limit
+    }
+
+    /// Past it, and written the more visible way rather than refused.
+    pub fn on_the_second_route(self) -> bool {
+        self.over() && self.second_route
+    }
+
+    /// Past it with nothing left to try.
+    pub fn refused(self) -> bool {
+        self.over() && !self.second_route
+    }
+}
+
 /// One credential store. `write` must read its result back and return `Ok` only if it
 /// holds exactly what was written.
 pub(crate) trait RawStore: Send + Sync {
@@ -78,14 +110,10 @@ pub(crate) trait RawStore: Send + Sync {
     fn read(&self, service: &str) -> Result<Option<String>, Error>;
     fn write(&self, service: &str, contents: &str) -> Result<(), Error>;
     fn delete(&self, service: &str) -> Result<(), Error>;
-    /// Only the keychain has a hard ceiling.
-    fn too_large(&self, _service: &str, _contents: &str) -> bool {
-        false
-    }
 
-    /// What this document would cost against that ceiling, and what the ceiling is.
-    /// `None` where there is no ceiling.
-    fn cost(&self, _service: &str, _contents: &str) -> Option<(usize, usize)> {
+    /// What a write would cost against this store's ceiling. `None` where there is none,
+    /// which is every store but the keychain.
+    fn cost(&self, _service: &str, _contents: &str) -> Option<Cost> {
         None
     }
 }
@@ -247,18 +275,17 @@ pub fn vault_delete(ctx: &Context, service: &str) -> Result<(), Error> {
     vault(ctx).delete(service)
 }
 
-pub fn too_large(ctx: &Context, service: &str, contents: &str) -> bool {
-    vault(ctx).too_large(service, contents)
-}
-
-/// Whether writing this would have to go on the argument line rather than through stdin.
-pub fn over_stdin_limit(ctx: &Context, service: &str, contents: &str) -> bool {
-    cost(ctx, service, contents).is_some_and(|(needs, limit)| needs > limit)
-}
-
-/// The bytes a document would need and the bytes there are, where that is bounded.
-pub fn cost(ctx: &Context, service: &str, contents: &str) -> Option<(usize, usize)> {
-    vault(ctx).cost(service, contents)
+/// What writing the live credential would cost, asked of the backend that would take the
+/// write. A login living in the fallback file has no ceiling, and used to be told it had
+/// the keychain's.
+pub fn cost(ctx: &Context, service: &str, contents: &str) -> Option<Cost> {
+    with_live(ctx, |chain| {
+        resolve_in(chain, service)
+            .ok()
+            .flatten()
+            .unwrap_or(chain[0])
+            .cost(service, contents)
+    })
 }
 
 /// A handle for comparing and logging tokens without the secret leaving this process.

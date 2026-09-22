@@ -116,9 +116,13 @@ fn command_for(account: &str, service: &str, secret: &str) -> String {
 }
 
 impl Keychain {
-    /// Whether the command that writes this would be longer than `security -i` reads.
-    fn over_stdin_limit(&self, service: &str, contents: &str) -> bool {
-        command_for(&self.account, service, contents).len() > MAX_COMMAND_BYTES
+    /// What the command that writes this would cost against what `security -i` reads.
+    fn price(&self, service: &str, contents: &str) -> super::Cost {
+        super::Cost {
+            needs: command_for(&self.account, service, contents).len(),
+            limit: MAX_COMMAND_BYTES,
+            second_route: self.argv_fallback,
+        }
     }
 
     fn find(&self, service: &str, with_data: bool) -> Presence {
@@ -164,11 +168,11 @@ impl RawStore for Keychain {
                 "account or service name contains a quote".into(),
             ));
         }
-        let oversized = self.over_stdin_limit(service, contents);
-        if oversized && !self.argv_fallback {
+        let price = self.price(service, contents);
+        if price.refused() {
             return Err(Error::Write(format!(
                 "this credential is {} bytes, past the {MAX_COMMAND_BYTES}-byte command limit",
-                command_for(&self.account, service, contents).len()
+                price.needs
             )));
         }
 
@@ -176,7 +180,7 @@ impl RawStore for Keychain {
         // treats the rest as another command. Past that the only route `security` offers is
         // the argument line, which is what Claude Code falls back to for the same login.
         let hex = hex::encode(contents.as_bytes());
-        let out = if oversized {
+        let out = if price.over() {
             let args = [
                 "add-generic-password",
                 "-U",
@@ -223,15 +227,8 @@ impl RawStore for Keychain {
         }
     }
 
-    fn too_large(&self, service: &str, contents: &str) -> bool {
-        !self.argv_fallback && self.over_stdin_limit(service, contents)
-    }
-
-    fn cost(&self, service: &str, contents: &str) -> Option<(usize, usize)> {
-        Some((
-            command_for(&self.account, service, contents).len(),
-            MAX_COMMAND_BYTES,
-        ))
+    fn cost(&self, service: &str, contents: &str) -> Option<super::Cost> {
+        Some(self.price(service, contents))
     }
 }
 
@@ -303,17 +300,22 @@ mod tests {
     fn the_stdin_route_stops_at_about_two_kilobytes() {
         let ctx = Context::from_env();
         let live = Keychain::live(&ctx);
-        assert!(live.over_stdin_limit("svc", &"x".repeat(2100)));
-        assert!(!live.over_stdin_limit("svc", &"x".repeat(1900)));
+        assert!(live.price("svc", &"x".repeat(2100)).over());
+        assert!(!live.price("svc", &"x".repeat(1900)).over());
     }
 
     /// The refusal is available to whoever wants it, and is not the default: there is no
     /// third way to write a login this size.
     #[test]
-    fn only_a_refusing_context_calls_it_too_large() {
+    fn only_a_refusing_context_refuses_a_login_this_size() {
         let ctx = Context::from_env();
-        assert!(!Keychain::live(&ctx).too_large("svc", &"x".repeat(2100)));
-        let refusing = ctx.with_argv_fallback(false);
-        assert!(Keychain::live(&refusing).too_large("svc", &"x".repeat(2100)));
+        let big = "x".repeat(2100);
+        let allowed = Keychain::live(&ctx).price("svc", &big);
+        assert!(allowed.on_the_second_route());
+        assert!(!allowed.refused());
+
+        let refusing = Keychain::live(&ctx.with_argv_fallback(false)).price("svc", &big);
+        assert!(refusing.refused());
+        assert!(!refusing.on_the_second_route());
     }
 }
