@@ -119,6 +119,91 @@ pub fn purge(ctx: &Context, state: &mut State) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::store::memory::{Fault, MemoryPlatform};
+    use crate::time::FixedClock;
+    use std::sync::Arc;
+
+    fn oauth(token: &str) -> Value {
+        json!({
+            "refreshToken": token,
+            "accessToken": "a",
+            "expiresAt": 1_790_000_000_000i64,
+            "refreshTokenExpiresAt": 1_792_000_000_000i64
+        })
+    }
+
+    /// A machine whose stores are in memory and whose clock stands still.
+    fn machine() -> (Context, Arc<MemoryPlatform>, Arc<FixedClock>) {
+        let mem = MemoryPlatform::new();
+        let clock = Arc::new(FixedClock::at(1_760_000_000));
+        let ctx = Context::new(std::path::PathBuf::from("/nowhere"))
+            .with_memory_stores(Arc::clone(&mem))
+            .with_clock(clock.clone() as Arc<dyn crate::time::Clock>);
+        (ctx, mem, clock)
+    }
+
+    /// Park, then read it back through the same rules a switch uses. Before the stores were
+    /// a seam this needed a real keychain, so it only ran on one platform and only against
+    /// whatever the machine happened to hold.
+    #[test]
+    fn a_parked_login_reads_back_through_its_fingerprint() {
+        let (ctx, mem, _clock) = machine();
+        let name = reserve(&ctx, "acc").expect("a free name");
+        let park = store_at(&ctx, &name, &oauth("r")).expect("stored");
+
+        assert_eq!(mem.vault().services(), vec![name.clone()]);
+        assert_eq!(load(&ctx, "work", &park).expect("loads"), oauth("r"));
+    }
+
+    /// The distinction the whole store layer exists to keep. A park that is gone is gone and
+    /// the account needs signing in to again; a park that cannot be read says nothing about
+    /// whether it is there, and telling someone to sign in again would be wrong.
+    #[test]
+    fn a_park_that_vanished_and_one_that_cannot_be_read_are_different_answers() {
+        let (ctx, mem, _clock) = machine();
+        let name = reserve(&ctx, "acc").expect("a free name");
+        let park = store_at(&ctx, &name, &oauth("r")).expect("stored");
+
+        mem.vault().fault(&name, Fault::Vanish);
+        assert!(matches!(
+            load(&ctx, "work", &park),
+            Err(Error::ParkedCredentialMissing { .. })
+        ));
+
+        mem.vault()
+            .fault(&name, Fault::Unreadable("the keychain is locked".into()));
+        assert!(
+            matches!(
+                load(&ctx, "work", &park),
+                Err(Error::Store(crate::store::Error::Unreadable(_)))
+            ),
+            "a store that could not answer must never read as an absent login"
+        );
+    }
+
+    /// Two parks of one account in the same millisecond must not share a name: reusing one
+    /// would destroy the login already there.
+    #[test]
+    fn a_reserved_name_steps_past_one_that_is_taken() {
+        let (ctx, mem, _clock) = machine();
+        let first = reserve(&ctx, "acc").expect("a free name");
+        mem.vault().plant(&first, "{}");
+        let second = reserve(&ctx, "acc").expect("another free name");
+        assert_ne!(first, second, "the clock has not moved, so the name must");
+    }
+
+    /// A login with nothing to restore is refused before it is written, so the vault never
+    /// holds a park that could not be used.
+    #[test]
+    fn a_login_with_no_refresh_token_is_never_parked() {
+        let (ctx, mem, _clock) = machine();
+        let name = reserve(&ctx, "acc").expect("a free name");
+        assert!(matches!(
+            store_at(&ctx, &name, &json!({"accessToken": "a"})),
+            Err(Error::LiveCredentialShapeUnexpected { .. })
+        ));
+        assert!(mem.vault().services().is_empty());
+    }
 
     #[test]
     fn a_park_records_when_its_login_stops_working() {

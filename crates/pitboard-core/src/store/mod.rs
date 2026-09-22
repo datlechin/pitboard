@@ -3,6 +3,8 @@
 mod file;
 #[cfg(target_os = "macos")]
 mod keychain;
+#[cfg(any(test, feature = "test-support"))]
+pub mod memory;
 #[cfg(not(target_os = "macos"))]
 mod vault;
 
@@ -118,30 +120,106 @@ pub(crate) trait RawStore: Send + Sync {
     }
 }
 
-/// Backends that may hold Claude Code's live credential, in the order it looks.
-///
-/// On macOS it writes the plaintext file and deletes the keychain item when a keychain
-/// write fails outright, so both can be the live one at different times.
-#[cfg(target_os = "macos")]
-fn live_chain(ctx: &Context) -> Vec<Box<dyn RawStore>> {
-    vec![
-        Box::new(keychain::Keychain::live(ctx)),
-        Box::new(file::PlainFile::live(ctx)),
-    ]
-}
-#[cfg(not(target_os = "macos"))]
-fn live_chain(ctx: &Context) -> Vec<Box<dyn RawStore>> {
-    vec![Box::new(file::PlainFile::live(ctx))]
+/// The machine pitboard is standing on, as one value rather than a set of `cfg` branches
+/// spread through the module. A platform answers where the live credential may be, where
+/// pitboard's own parked ones go, and how a private sign-in's credential is read and
+/// discarded. It takes the context on every call because a context is built by a builder
+/// and can still change after it exists.
+pub(crate) trait Platform: Send + Sync + std::fmt::Debug {
+    /// Backends that may hold Claude Code's live credential, in the order it looks.
+    fn live_chain(&self, ctx: &Context) -> Vec<Box<dyn RawStore>>;
+
+    /// Where pitboard's own parked credentials go. Never Claude Code's fallback file.
+    fn vault(&self, ctx: &Context) -> Box<dyn RawStore>;
+
+    /// The credential Claude Code keeps for a config directory, during a private sign-in.
+    fn read_signin(&self, ctx: &Context, dir: &std::path::Path) -> Result<Option<String>, Error>;
+
+    /// Deletes an item Claude Code created, so it refuses any name that could hold a real
+    /// login.
+    fn discard_signin(&self, ctx: &Context, dir: &std::path::Path) -> Result<(), Error>;
 }
 
-/// Where pitboard's own parked credentials go. Never Claude Code's fallback file.
+/// macOS: the keychain, with Claude Code's plaintext file behind it.
+///
+/// Claude Code writes that file and deletes the keychain item when a keychain write fails
+/// outright, so both can be the live one at different times.
 #[cfg(target_os = "macos")]
-fn vault(ctx: &Context) -> Box<dyn RawStore> {
-    Box::new(keychain::Keychain::vault(ctx))
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct MacOs;
+
+#[cfg(target_os = "macos")]
+impl Platform for MacOs {
+    fn live_chain(&self, ctx: &Context) -> Vec<Box<dyn RawStore>> {
+        vec![
+            Box::new(keychain::Keychain::live(ctx)),
+            Box::new(file::PlainFile::live(ctx)),
+        ]
+    }
+
+    fn vault(&self, ctx: &Context) -> Box<dyn RawStore> {
+        Box::new(keychain::Keychain::vault(ctx))
+    }
+
+    fn read_signin(&self, ctx: &Context, dir: &std::path::Path) -> Result<Option<String>, Error> {
+        keychain::Keychain::live(ctx).read(&slot::service_for_dir(&dir.to_string_lossy()))
+    }
+
+    fn discard_signin(&self, ctx: &Context, dir: &std::path::Path) -> Result<(), Error> {
+        let service = slot::service_for_dir(&dir.to_string_lossy());
+        if service == slot::LIVE_SERVICE || service == claude::live_service(ctx) {
+            return Err(Error::Write(format!("refusing to delete {service}")));
+        }
+        keychain::Keychain::live(ctx).delete(&service)
+    }
 }
+
+/// Everywhere else: one plaintext file per storage directory, and pitboard's own file vault.
 #[cfg(not(target_os = "macos"))]
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct PlainUnix;
+
+#[cfg(not(target_os = "macos"))]
+impl Platform for PlainUnix {
+    fn live_chain(&self, ctx: &Context) -> Vec<Box<dyn RawStore>> {
+        vec![Box::new(file::PlainFile::live(ctx))]
+    }
+
+    fn vault(&self, ctx: &Context) -> Box<dyn RawStore> {
+        Box::new(vault::FileVault::new(ctx))
+    }
+
+    fn read_signin(&self, _ctx: &Context, dir: &std::path::Path) -> Result<Option<String>, Error> {
+        match std::fs::read_to_string(dir.join(slot::CRED_FILE)) {
+            Ok(s) => Ok(Some(s)),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(e) => Err(Error::Unreadable(e.to_string())),
+        }
+    }
+
+    fn discard_signin(&self, _ctx: &Context, dir: &std::path::Path) -> Result<(), Error> {
+        match std::fs::remove_file(dir.join(slot::CRED_FILE)) {
+            Ok(()) => Ok(()),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(e) => Err(Error::Write(e.to_string())),
+        }
+    }
+}
+
+/// The platform of this build, which is what every real context uses.
+pub(crate) fn host() -> std::sync::Arc<dyn Platform> {
+    #[cfg(target_os = "macos")]
+    {
+        std::sync::Arc::new(MacOs)
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        std::sync::Arc::new(PlainUnix)
+    }
+}
+
 fn vault(ctx: &Context) -> Box<dyn RawStore> {
-    Box::new(vault::FileVault::new(ctx))
+    ctx.platform().vault(ctx)
 }
 
 /// Only "not found" means absent. A permission error or a loop in the path says nothing about
@@ -177,7 +255,7 @@ fn write_in(chain: &[&dyn RawStore], service: &str, contents: &str) -> Result<()
 /// Resolved on every call, never cached: Claude Code moves the credential between backends
 /// when a keychain write fails, so a remembered answer goes wrong without warning.
 fn with_live<T>(ctx: &Context, run: impl FnOnce(&[&dyn RawStore]) -> T) -> T {
-    let owned = live_chain(ctx);
+    let owned = ctx.platform().live_chain(ctx);
     let chain: Vec<&dyn RawStore> = owned.iter().map(Box::as_ref).collect();
     run(&chain)
 }
@@ -226,41 +304,13 @@ pub fn write_raw(ctx: &Context, service: &str, contents: &str) -> Result<(), Err
 /// The credential Claude Code keeps for a config directory: the hashed keychain slot on
 /// macOS, `.credentials.json` inside it elsewhere.
 pub fn read_signin(ctx: &Context, dir: &std::path::Path) -> Result<Option<String>, Error> {
-    #[cfg(target_os = "macos")]
-    {
-        keychain::Keychain::live(ctx).read(&slot::service_for_dir(&dir.to_string_lossy()))
-    }
-    #[cfg(not(target_os = "macos"))]
-    {
-        let _ = ctx;
-        match std::fs::read_to_string(dir.join(slot::CRED_FILE)) {
-            Ok(s) => Ok(Some(s)),
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
-            Err(e) => Err(Error::Unreadable(e.to_string())),
-        }
-    }
+    ctx.platform().read_signin(ctx, dir)
 }
 
 /// This deletes an item Claude Code created, so it refuses any name that could hold a real
 /// login.
 pub fn discard_signin(ctx: &Context, dir: &std::path::Path) -> Result<(), Error> {
-    #[cfg(target_os = "macos")]
-    {
-        let service = slot::service_for_dir(&dir.to_string_lossy());
-        if service == slot::LIVE_SERVICE || service == claude::live_service(ctx) {
-            return Err(Error::Write(format!("refusing to delete {service}")));
-        }
-        keychain::Keychain::live(ctx).delete(&service)
-    }
-    #[cfg(not(target_os = "macos"))]
-    {
-        let _ = ctx;
-        match std::fs::remove_file(dir.join(slot::CRED_FILE)) {
-            Ok(()) => Ok(()),
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
-            Err(e) => Err(Error::Write(e.to_string())),
-        }
-    }
+    ctx.platform().discard_signin(ctx, dir)
 }
 
 pub fn vault_read(ctx: &Context, service: &str) -> Result<Option<String>, Error> {
@@ -296,76 +346,28 @@ pub fn fingerprint(secret: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    use super::memory::{Fault, MemoryStore};
     use super::*;
-    use std::collections::HashMap;
-    use std::sync::Mutex;
+    use std::sync::Arc;
 
-    /// Breaking a real keychain on demand is neither safe nor deterministic.
-    struct Fake {
-        kind: Backend,
-        stored: Mutex<HashMap<String, String>>,
-        fail_write: bool,
-        corrupt_readback: Option<String>,
+    /// Breaking a real keychain on demand is neither safe nor deterministic, so the chain
+    /// rules are proved against stores that fail when they are told to. The same stores are
+    /// what the engine's own tests drive, through `Context::with_memory_stores`.
+    fn store(kind: Backend) -> Arc<MemoryStore> {
+        MemoryStore::of(kind)
     }
 
-    impl Fake {
-        fn empty(kind: Backend) -> Fake {
-            Fake {
-                kind,
-                stored: Mutex::new(HashMap::new()),
-                fail_write: false,
-                corrupt_readback: None,
-            }
-        }
-        fn holding(kind: Backend, service: &str, value: &str) -> Fake {
-            let f = Fake::empty(kind);
-            f.stored
-                .lock()
-                .unwrap()
-                .insert(service.into(), value.into());
-            f
-        }
-    }
-
-    impl RawStore for Fake {
-        fn kind(&self) -> Backend {
-            self.kind
-        }
-        fn contains(&self, service: &str) -> Result<bool, Error> {
-            Ok(self.stored.lock().unwrap().contains_key(service))
-        }
-        fn read(&self, service: &str) -> Result<Option<String>, Error> {
-            Ok(self.stored.lock().unwrap().get(service).cloned())
-        }
-        fn write(&self, service: &str, contents: &str) -> Result<(), Error> {
-            if self.fail_write {
-                return Err(Error::Write("the fake was told to fail".into()));
-            }
-            let stored = self
-                .corrupt_readback
-                .clone()
-                .unwrap_or_else(|| contents.to_string());
-            self.stored.lock().unwrap().insert(service.into(), stored);
-            match self.read(service)? {
-                Some(back) if back == contents => Ok(()),
-                _ => Err(Error::NotDurable(format!(
-                    "{service} holds different bytes"
-                ))),
-            }
-        }
-        fn delete(&self, service: &str) -> Result<(), Error> {
-            self.stored.lock().unwrap().remove(service);
-            Ok(())
-        }
+    fn holding(kind: Backend, service: &str, value: &str) -> Arc<MemoryStore> {
+        let s = store(kind);
+        s.plant(service, value);
+        s
     }
 
     #[test]
     fn a_failed_keychain_write_never_falls_through_to_the_plaintext_file() {
-        let keychain = Fake {
-            fail_write: true,
-            ..Fake::holding(Backend::Keychain, "svc", "before")
-        };
-        let plaintext = Fake::empty(Backend::File);
+        let keychain = holding(Backend::Keychain, "svc", "before");
+        keychain.fault("svc", Fault::FailWrite("told to".into()));
+        let plaintext = store(Backend::File);
         let chain: [&dyn RawStore; 2] = [&keychain, &plaintext];
 
         let result = write_in(&chain, "svc", "after");
@@ -381,10 +383,8 @@ mod tests {
 
     #[test]
     fn a_write_that_does_not_read_back_is_reported_rather_than_believed() {
-        let keychain = Fake {
-            corrupt_readback: Some("something else".into()),
-            ..Fake::holding(Backend::Keychain, "svc", "before")
-        };
+        let keychain = holding(Backend::Keychain, "svc", "before");
+        keychain.fault("svc", Fault::CorruptWrite("something else".into()));
         let chain: [&dyn RawStore; 1] = [&keychain];
         assert!(matches!(
             write_in(&chain, "svc", "after"),
@@ -394,8 +394,8 @@ mod tests {
 
     #[test]
     fn a_credential_already_in_the_file_backend_stays_there() {
-        let keychain = Fake::empty(Backend::Keychain);
-        let plaintext = Fake::holding(Backend::File, "svc", "before");
+        let keychain = store(Backend::Keychain);
+        let plaintext = holding(Backend::File, "svc", "before");
         let chain: [&dyn RawStore; 2] = [&keychain, &plaintext];
 
         write_in(&chain, "svc", "after").unwrap();
@@ -410,8 +410,8 @@ mod tests {
 
     #[test]
     fn an_absent_credential_is_written_to_the_preferred_backend() {
-        let keychain = Fake::empty(Backend::Keychain);
-        let plaintext = Fake::empty(Backend::File);
+        let keychain = store(Backend::Keychain);
+        let plaintext = store(Backend::File);
         let chain: [&dyn RawStore; 2] = [&keychain, &plaintext];
 
         write_in(&chain, "svc", "fresh").unwrap();
@@ -440,7 +440,7 @@ mod tests {
                 unreachable!()
             }
         }
-        let plaintext = Fake::empty(Backend::File);
+        let plaintext = store(Backend::File);
         let chain: [&dyn RawStore; 2] = [&Broken, &plaintext];
 
         assert!(matches!(
@@ -465,7 +465,10 @@ mod tests {
 
     #[test]
     fn the_live_chain_never_offers_a_keychain_off_macos() {
-        let kinds: Vec<Backend> = live_chain(&Context::from_env())
+        let ctx = Context::from_env();
+        let kinds: Vec<Backend> = ctx
+            .platform()
+            .live_chain(&ctx)
             .iter()
             .map(|b| b.kind())
             .collect();

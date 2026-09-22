@@ -11,7 +11,8 @@ use jiff::Timestamp;
 use jiff::tz::TimeZone;
 
 /// What pitboard reads the time from.
-pub(crate) trait Clock: Send + Sync + std::fmt::Debug {
+#[doc(hidden)]
+pub trait Clock: Send + Sync + std::fmt::Debug {
     /// Epoch seconds: what everything pitboard stores is measured in.
     fn now(&self) -> i64;
 
@@ -37,17 +38,18 @@ impl Clock for SystemClock {
 /// A clock that says what it is told, and can be moved. What the interesting judgements in
 /// this crate are about is when something happens, so a test needs to say when.
 #[cfg(any(test, feature = "test-support"))]
+#[doc(hidden)]
 #[derive(Debug)]
-pub(crate) struct FixedClock(std::sync::atomic::AtomicI64);
+pub struct FixedClock(std::sync::atomic::AtomicI64);
 
 #[cfg(any(test, feature = "test-support"))]
 impl FixedClock {
-    pub(crate) fn at(epoch_seconds: i64) -> FixedClock {
+    pub fn at(epoch_seconds: i64) -> FixedClock {
         FixedClock(std::sync::atomic::AtomicI64::new(epoch_seconds))
     }
 
     /// Move the clock forward, or back.
-    pub(crate) fn advance(&self, seconds: i64) {
+    pub fn advance(&self, seconds: i64) {
         self.0
             .fetch_add(seconds, std::sync::atomic::Ordering::Relaxed);
     }

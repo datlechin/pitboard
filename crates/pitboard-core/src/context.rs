@@ -2,6 +2,7 @@
 //! `Context` from the process environment once. A program linking the library builds one
 //! itself: an app started from Finder does not see a shell's environment.
 
+use crate::store::Platform;
 use crate::time::{Clock, SystemClock};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -40,6 +41,8 @@ pub struct Context {
     /// Where the time comes from. The machine's clock in every real context; a test puts
     /// its own here to reach the judgements that only happen at a particular moment.
     pub(crate) clock: Arc<dyn Clock>,
+    /// The machine's credential stores. This build's platform in every real context.
+    pub(crate) platform: Arc<dyn Platform>,
 }
 
 impl Context {
@@ -51,6 +54,11 @@ impl Context {
     /// Epoch milliseconds, from this context's clock.
     pub(crate) fn now_millis(&self) -> i64 {
         self.clock.now_millis()
+    }
+
+    /// The credential stores this context reaches.
+    pub(crate) fn platform(&self) -> &dyn Platform {
+        self.platform.as_ref()
     }
 
     /// Claude Code's defaults for a person whose home is `home`: `~/.pitboard`, `~/.claude`,
@@ -71,6 +79,7 @@ impl Context {
             api_base: None,
             hover_rest: false,
             clock: Arc::new(SystemClock),
+            platform: crate::store::host(),
         }
     }
 
@@ -161,13 +170,27 @@ impl Context {
             api_base: var("PITBOARD_API_BASE"),
             hover_rest: var("CLAUDE_CODE_HOVER_REST").is_some_and(|v| v == "1" || v == "true"),
             clock: Arc::new(SystemClock),
+            platform: crate::store::host(),
         }
+    }
+
+    /// Put the credential stores in memory, where a test can make them fail. Only the
+    /// tests do this, which is why the trait behind it is not public.
+    #[cfg(any(test, feature = "test-support"))]
+    #[doc(hidden)]
+    pub fn with_memory_stores(
+        mut self,
+        memory: Arc<crate::store::memory::MemoryPlatform>,
+    ) -> Context {
+        self.platform = memory;
+        self
     }
 
     /// Read the time from somewhere else. Only the tests do this, which is why it is not
     /// part of the builder a front end uses.
     #[cfg(any(test, feature = "test-support"))]
-    pub(crate) fn with_clock(mut self, clock: Arc<dyn Clock>) -> Context {
+    #[doc(hidden)]
+    pub fn with_clock(mut self, clock: Arc<dyn Clock>) -> Context {
         self.clock = clock;
         self
     }
