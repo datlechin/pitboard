@@ -277,7 +277,8 @@ fn claim(state: &State, label: &str, owner: &Owner) -> Result<()> {
 }
 
 fn record_current(ctx: &Context, label: &str, state: &mut State) -> Result<Enrolled> {
-    let live = store::read(ctx, &claude::live_service(ctx))?.ok_or(Error::LiveCredentialAbsent)?;
+    let live = store::read(ctx, &claude::live_service(ctx))?
+        .ok_or_else(|| claude::nothing_signed_in(ctx))?;
     let owner = identify(ctx, &access_token(&live)?)?;
     claim(state, label, &owner)?;
     let parked = state.get(label).and_then(|a| a.parked.clone());

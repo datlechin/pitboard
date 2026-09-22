@@ -42,6 +42,60 @@ pub fn program(ctx: &Context) -> Option<PathBuf> {
         .find(|candidate| std::fs::metadata(candidate).is_ok())
 }
 
+/// Nothing in any store pitboard reads, and Claude Code's config naming somebody as signed
+/// in, are two different situations with one message today. The second means pitboard is
+/// looking in the wrong place, and writing a login there would put it where nobody reads.
+pub fn nothing_signed_in(ctx: &Context) -> Error {
+    match load_config(ctx).ok().as_ref().and_then(identity) {
+        Some(id) => Error::LiveCredentialElsewhere { email: id.email },
+        None => Error::LiveCredentialAbsent,
+    }
+}
+
+/// Which Claude Code is installed here, read off disk and never by running it.
+///
+/// Running `claude --version` would be the obvious way and is the wrong one: it starts the
+/// program pitboard is trying to describe, which starts a daemon, which writes. Three
+/// layouts cover how it is installed. The native installer puts the build at
+/// `<...>/versions/<version>` and points a symlink at it, so the version is the file's own
+/// name. An npm install has a `package.json` beside the resolved program. And a machine
+/// that has run Claude Code at all left `daemon.lock` behind, which records the version
+/// that wrote it.
+pub fn installed_version(ctx: &Context) -> Option<String> {
+    let resolved = program(ctx).and_then(|p| std::fs::canonicalize(p).ok());
+    if let Some(path) = &resolved
+        && let Some(name) = path.file_name().and_then(|n| n.to_str())
+        && looks_like_a_version(name)
+    {
+        return Some(name.to_string());
+    }
+    if let Some(dir) = resolved.as_ref().and_then(|p| p.parent())
+        && let Some(version) = version_in_package_json(&dir.join("package.json"))
+            .or_else(|| version_in_package_json(&dir.join("../package.json")))
+    {
+        return Some(version);
+    }
+    crate::daemon::read(ctx).and_then(|d| d.version)
+}
+
+fn looks_like_a_version(name: &str) -> bool {
+    let parts: Vec<&str> = name.split('.').collect();
+    parts.len() == 3
+        && parts
+            .iter()
+            .all(|p| !p.is_empty() && p.bytes().all(|b| b.is_ascii_digit()))
+}
+
+fn version_in_package_json(path: &std::path::Path) -> Option<String> {
+    let raw = std::fs::read_to_string(path).ok()?;
+    let json: Value = serde_json::from_str(&raw).ok()?;
+    let name = json.get("name")?.as_str()?;
+    if name != "@anthropic-ai/claude-code" {
+        return None;
+    }
+    Some(json.get("version")?.as_str()?.to_string())
+}
+
 /// The directory whose path string selects the credential slot.
 pub fn storage_dir(ctx: &Context) -> String {
     storage_dir_from(

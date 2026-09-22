@@ -37,6 +37,13 @@ pub(super) struct Machine {
     pub(super) service: String,
 }
 
+impl Machine {
+    /// Where Claude Code's own files are, for a test that needs to change one.
+    pub(super) fn ctx_home(&self) -> PathBuf {
+        self.root.clone()
+    }
+}
+
 impl Drop for Machine {
     fn drop(&mut self) {
         let _ = std::fs::remove_dir_all(&self.root);

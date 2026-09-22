@@ -26,6 +26,7 @@ compile_error!(
 );
 
 pub mod api;
+pub mod assumptions;
 pub mod audit;
 pub mod context;
 pub mod doctor;

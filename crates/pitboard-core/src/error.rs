@@ -196,6 +196,15 @@ pub enum Error {
     LiveCredentialAbsent,
 
     #[error(
+        "Claude Code's config says {email} is signed in, but pitboard cannot find that \
+         login in the keychain or in the file it also reads. It will not write a login \
+         where nobody reads it. This usually means Claude Code has started keeping logins \
+         somewhere pitboard does not know about yet: check for a pitboard update, and \
+         report it with `pitboard doctor --json` if there is none."
+    )]
+    LiveCredentialElsewhere { email: String },
+
+    #[error(
         "the signed-in credential is not shaped like a Claude Code login ({detail}). \
          Run `pitboard doctor` before switching again."
     )]
@@ -423,6 +432,7 @@ impl Error {
             ClaudeConfigUnreadable { .. } => "claude_config_unreadable",
             ClaudeConfigNotJson { .. } => "claude_config_not_json",
             LiveCredentialAbsent => "live_credential_absent",
+            LiveCredentialElsewhere { .. } => "live_credential_elsewhere",
             LiveCredentialShapeUnexpected { .. } => "live_credential_shape_unexpected",
             AccountUnknown { .. } => "account_unknown",
             NothingParked { .. } => "nothing_parked",
@@ -483,6 +493,7 @@ impl Error {
             | SwitchCorrupted { .. }
             | SwitchUnverified { .. }
             | SwitchDidNotHold { .. }
+            | LiveCredentialElsewhere { .. }
             | CredentialTooLarge { .. }
             | CustomOauthEndpoint
             | RecoveryRecordCorrupt { .. } => 3,

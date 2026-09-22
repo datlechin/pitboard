@@ -208,7 +208,7 @@ pub fn switch(settled: Settled, label: &str) -> Result<(Outcome, Vec<Warning>)> 
     // Asked before taking Claude Code's lock so the round trip does not hold up its writes,
     // then confirmed under the lock.
     let service = claude::live_service(ctx);
-    let live = store::read(ctx, &service)?.ok_or(Error::LiveCredentialAbsent)?;
+    let live = store::read(ctx, &service)?.ok_or_else(|| claude::nothing_signed_in(ctx))?;
     let identified_with = access_token(&live)?;
     let outgoing = identify(ctx, &identified_with)?;
 
@@ -246,7 +246,8 @@ pub fn switch(settled: Settled, label: &str) -> Result<(Outcome, Vec<Warning>)> 
     let storage = PathBuf::from(claude::storage_dir(ctx)).join(".storage-write");
     let guard = lock::acquire(&storage)?;
 
-    let before_raw = store::read_raw(ctx, &service)?.ok_or(Error::LiveCredentialAbsent)?;
+    let before_raw =
+        store::read_raw(ctx, &service)?.ok_or_else(|| claude::nothing_signed_in(ctx))?;
     let before: Value =
         serde_json::from_str(&before_raw).map_err(|e| Error::LiveCredentialShapeUnexpected {
             detail: e.to_string(),

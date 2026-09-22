@@ -117,6 +117,15 @@ impl MemoryStore {
             .expect("a poisoned test store is a failed test") = Some(fault);
     }
 
+    /// Empty the store, as a Claude Code that keeps its login somewhere pitboard has never
+    /// heard of would look from here.
+    pub fn delete_everything(&self) {
+        self.items
+            .lock()
+            .expect("a poisoned test store is a failed test")
+            .clear();
+    }
+
     /// Stop misbehaving everywhere.
     pub fn heal_all(&self) {
         *self

@@ -50,6 +50,8 @@ pub struct Facts {
     pub daemon: Option<crate::daemon::Daemon>,
     /// Names pitboard wrote down before creating a park and has not resolved yet.
     pub pending_parks: Vec<String>,
+    /// Which Claude Code is installed here, read off disk.
+    pub claude_version: Option<String>,
     pub state: Result<State, Error>,
     /// Each enrolled account's parked login, read back from the vault.
     pub parks: Vec<ParkFact>,
@@ -118,6 +120,7 @@ pub fn gather(ctx: &Context) -> Facts {
         hover_rest_env: ctx.hover_rest,
         daemon: crate::daemon::read(ctx),
         pending_parks: crate::pending::outstanding(ctx),
+        claude_version: claude::installed_version(ctx),
         parks: state
             .as_ref()
             .map(|s| park_facts(ctx, s, identity.as_ref().map(|i| i.account_uuid.as_str())))
@@ -287,6 +290,25 @@ pub fn evaluate(facts: &Facts) -> Vec<Check> {
                 ok("credential_store", "credential store", detail)
             }
         }
+        // The one wrong diagnosis in this file. If Claude Code's config names somebody as
+        // signed in, "nothing is signed in" is not an observation, it is pitboard looking
+        // in the wrong place, and it is the failure that would follow Claude Code moving
+        // where it keeps a login.
+        Ok(store::Backend::Absent) if facts.identity.is_some() => fail(
+            "credential_store",
+            "credential store",
+            format!(
+                "Claude Code's config says {} is signed in, and no store pitboard reads \
+                 holds that login",
+                facts
+                    .identity
+                    .as_ref()
+                    .map(|i| i.email.as_str())
+                    .unwrap_or("somebody")
+            ),
+            "pitboard will not write a login where nobody reads it. Check for a pitboard \
+             update; if there is none, this is worth reporting.",
+        ),
         Ok(store::Backend::Absent) => warn(
             "credential_store",
             "credential store",
@@ -415,6 +437,7 @@ pub fn evaluate(facts: &Facts) -> Vec<Check> {
     checks.push(judge_storage_v5(facts));
     checks.push(judge_daemon(facts));
     checks.push(judge_pending(facts));
+    checks.push(judge_claude_version(facts));
     checks
 }
 
@@ -553,6 +576,33 @@ fn judge_storage_v5(facts: &Facts) -> Check {
     }
 }
 
+/// Which Claude Code is installed, against which one pitboard's facts were read.
+///
+/// Stated rather than warned about. Claude Code ships several times a week, so a mismatch
+/// is the ordinary state of the world within days of a release and warning about it would
+/// be noise on every machine. What is worth a warning is an assumption that has actually
+/// stopped holding, which is a probe's job and not a version number's.
+fn judge_claude_version(facts: &Facts) -> Check {
+    let verified = crate::assumptions::VERIFIED_AGAINST;
+    match facts.claude_version.as_deref() {
+        None => ok(
+            "claude_version",
+            "Claude Code build",
+            format!("not found here; pitboard's facts were read from {verified}"),
+        ),
+        Some(installed) if installed == verified => ok(
+            "claude_version",
+            "Claude Code build",
+            format!("{installed}, which is what pitboard's facts were read from"),
+        ),
+        Some(installed) => ok(
+            "claude_version",
+            "Claude Code build",
+            format!("{installed} installed; pitboard's facts were read from {verified}"),
+        ),
+    }
+}
+
 /// A name written down before a park was created, still unresolved. Ordinarily there is
 /// nothing here: the next change resolves every one of them. What is left is an item that
 /// could not be read, which on macOS is a locked keychain and nothing worse.
@@ -661,6 +711,7 @@ mod tests {
             hover_rest_env: false,
             daemon: None,
             pending_parks: Vec::new(),
+            claude_version: Some(crate::assumptions::VERIFIED_AGAINST.into()),
             state: Ok(State::default()),
             parks: Vec::new(),
             interrupted: false,
@@ -771,6 +822,26 @@ mod tests {
         f.backend = Ok(store::Backend::File);
         let checks = evaluate(&f);
         assert_eq!(check(&checks, "storage_v5").level, Level::Ok);
+    }
+
+    /// The failure that would follow Claude Code moving where it keeps a login: not an
+    /// absence, a mismatch, and the difference is what decides whether the advice is "sign
+    /// in" or "pitboard is looking in the wrong place".
+    #[test]
+    fn a_config_that_names_somebody_signed_in_with_no_login_anywhere_is_a_failure() {
+        let mut f = facts();
+        f.backend = Ok(store::Backend::Absent);
+        let checks = evaluate(&f);
+        let store = check(&checks, "credential_store");
+        assert_eq!(store.level, Level::Fail);
+        assert!(store.detail.contains("a@b.c"));
+
+        // Nobody signed in at all is an ordinary state with an ordinary answer.
+        f.identity = None;
+        let checks = evaluate(&f);
+        let store = check(&checks, "credential_store");
+        assert_eq!(store.level, Level::Warn);
+        assert!(store.advice.contains("Nothing is signed in"));
     }
 
     #[test]

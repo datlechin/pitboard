@@ -47,6 +47,14 @@ All notable changes are recorded here. The format follows
   apart too, where they used to share one code.
 
 ### Added
+- Every fact pitboard stands on about Claude Code is now a list rather than a comment:
+  what it is, where in Claude Code it was read, which build it was last verified against,
+  and what in this crate stops being true if it moves. `pitboard doctor` says which Claude
+  Code is installed here, read off disk and never by running it, beside the build those
+  facts came from. It states rather than warns: Claude Code ships several times a week, so
+  a mismatch is the ordinary state of the world within days and warning about it on every
+  machine would be noise. An assumption that has actually stopped holding is a different
+  thing and wants a probe, not a version number.
 - An interrupted switch is recovered without a network. Deciding what it did meant asking
   Anthropic who owns the live login, so a switch interrupted on a plane, or while Anthropic
   was having a bad morning, stopped every command that changes anything until it could be
@@ -57,6 +65,12 @@ All notable changes are recorded here. The format follows
   question for Anthropic, and still changes nothing when Anthropic cannot be reached.
 
 ### Fixed
+- "Nothing is signed in" is no longer said when something is. If Claude Code's config names
+  somebody as signed in and no store pitboard reads holds that login, pitboard is looking in
+  the wrong place, and writing a login there would put it where nobody reads it. That is now
+  its own refusal and its own failing check, with the code `live_credential_elsewhere`,
+  rather than advice to sign in again. It is the failure that would follow Claude Code
+  moving where it keeps a login, and the one the Linux platform has been most at risk of.
 - A switch asks about the login going in, not only about the one coming out. It used to ask
   Anthropic twice about the login it was throwing away and never once about the login it was
   installing, so an account whose refresh chain had been revoked or signed out elsewhere

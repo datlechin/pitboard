@@ -123,3 +123,31 @@ fn a_park_that_answers_for_its_own_account_is_installed() {
         "the login going in is asked about, not only the one coming out: {asked:?}"
     );
 }
+
+/// Two situations with one message until now. Nobody signed in is an ordinary state with an
+/// ordinary answer. Claude Code's config naming somebody as signed in while pitboard finds
+/// no login anywhere it looks means pitboard is looking in the wrong place, and writing a
+/// login there would put it where nobody reads.
+#[test]
+fn a_login_pitboard_cannot_find_is_not_the_same_as_nobody_being_signed_in() {
+    let m = machine("elsewhere");
+
+    // Claude Code's config still says who is signed in; the login is not in any store.
+    m.mem.live().delete_everything();
+    let settled = settle(&m.ctx).expect("nothing to recover").0;
+    let failed = switch(settled, "there").expect_err("there is nothing to move");
+    match &failed {
+        Error::LiveCredentialElsewhere { email } => assert_eq!(email, "here@example.com"),
+        other => panic!("got {other:?}"),
+    }
+    assert_eq!(failed.code(), "live_credential_elsewhere");
+
+    // With nothing in the config either, nobody is signed in and that is all it says.
+    std::fs::write(m.ctx_home().join(".claude.json"), "{}").expect("a config");
+    let settled = settle(&m.ctx).expect("nothing to recover").0;
+    let failed = switch(settled, "there").expect_err("still nothing to move");
+    assert!(
+        matches!(failed, Error::LiveCredentialAbsent),
+        "got {failed:?}"
+    );
+}
