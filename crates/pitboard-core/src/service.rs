@@ -7,7 +7,7 @@ use crate::doctor::{self, Diagnosis};
 use crate::error::{Error, Result};
 use crate::state::{self, Account};
 use crate::switch::{self, Enrolled, Outcome, Recovered, Renewal, Settled, SignIn};
-use crate::{audit, claude, status, statusline};
+use crate::{audit, claude, schedule, status, statusline};
 use std::fmt;
 
 /// Something to know about that did not stop the operation.
@@ -234,6 +234,32 @@ impl Pitboard {
             },
         );
         outcome
+    }
+
+    /// Renew every parked login that is due, and nothing else. No switch, no usage, and
+    /// no request but the token exchange. This is what the schedule runs.
+    pub fn renew(&self) -> Vec<(String, Renewal)> {
+        let outcomes = switch::renew_due(&self.ctx, switch::Due::ToStayAlive);
+        for (label, outcome) in &outcomes {
+            audit::record(&self.ctx, "renew", label, outcome.code());
+        }
+        outcomes
+    }
+
+    /// Whether anything is keeping parked logins alive on this machine without somebody
+    /// running a command.
+    pub fn schedule(&self) -> schedule::Installed {
+        schedule::status(&self.ctx)
+    }
+
+    /// Ask the platform's own scheduler to run `renew` daily. Opt-in, and stays opt-in.
+    pub fn schedule_install(&self) -> Result<std::path::PathBuf> {
+        schedule::install(&self.ctx)
+    }
+
+    /// Take it away. `false` when there was nothing installed.
+    pub fn schedule_uninstall(&self) -> Result<bool> {
+        schedule::uninstall(&self.ctx)
     }
 
     /// Take over a pitboard directory another machine wrote: keep the accounts, drop the

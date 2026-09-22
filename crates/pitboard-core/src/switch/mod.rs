@@ -26,7 +26,7 @@ pub use enroll::{Enrolled, SignIn, WatchedSignIn, enroll, sign_in, sign_in_watch
 pub use forget::forget;
 pub use journal::{Abandoned, Recovered, pending as interrupted};
 pub use rename::rename;
-pub use renew::{Renewal, renew_parked};
+pub use renew::{Due, Renewal, renew_due, renew_parked};
 pub use uninstall::{Removed, uninstall};
 
 use crate::context::Context;
@@ -240,6 +240,9 @@ pub fn switch(settled: Settled, label: &str) -> Result<(Outcome, Vec<Warning>)> 
     if outgoing.account_uuid == target.account_uuid {
         if state.active.as_deref() != Some(label) {
             state.active = Some(label.to_string());
+            if let Some(account) = state.accounts.iter_mut().find(|a| a.label == label) {
+                account.last_used_at = Some(ctx.now());
+            }
             state::save(ctx, &state)?;
         }
         return Ok((
@@ -399,6 +402,9 @@ pub fn switch(settled: Settled, label: &str) -> Result<(Outcome, Vec<Warning>)> 
 
     state.discard(&held.service);
     state.active = Some(label.to_string());
+    if let Some(account) = state.accounts.iter_mut().find(|a| a.label == label) {
+        account.last_used_at = Some(ctx.now());
+    }
     state::save(ctx, &state)?;
     fault::point("switch.recorded");
     drop(guard);

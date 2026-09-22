@@ -47,6 +47,19 @@ All notable changes are recorded here. The format follows
   apart too, where they used to share one code.
 
 ### Added
+- `pitboard renew` renews every parked login that is due and does nothing else, and
+  `pitboard schedule install` hands that to the platform's own scheduler, a LaunchAgent on
+  macOS and a systemd user timer on Linux. Until now the only two things that renewed a
+  parked login were somebody typing `pitboard` and the menu bar app's poll, so the tool was
+  safe for a macOS user who leaves the app running and quietly unsafe for everyone else:
+  go away for the refresh window and every parked login is dead. It is opt-in and stays
+  opt-in, it runs one verb, it never switches and never asks for usage, and `RunAtLoad` is
+  off because installing it is not a reason to talk to Anthropic that second.
+- `pitboard doctor` says when an account has not been switched to for longer than a refresh
+  token's own life. pitboard renews a parked login for as long as its account is enrolled,
+  so one enrolled and forgotten keeps a live, continuously rotated token on the machine
+  indefinitely, and nothing said so. Nothing is dropped on a timer pitboard chose: the
+  threshold is the token's own lifetime and all the check does is say it.
 - pitboard owns how often it asks Anthropic anything. `status` asked about every enrolled
   account plus the live login on every run with no memory of having just asked, and the
   menu bar app asked the same questions every five minutes, on every wake and on every

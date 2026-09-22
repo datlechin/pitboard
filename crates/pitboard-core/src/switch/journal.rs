@@ -345,6 +345,7 @@ mod tests {
 
     fn account(label: &str, parked: Option<&str>) -> Account {
         Account {
+            last_used_at: None,
             label: label.into(),
             account_uuid: format!("{label}-uuid"),
             email: format!("{label}@example.com"),

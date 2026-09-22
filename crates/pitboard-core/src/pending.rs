@@ -249,6 +249,7 @@ mod tests {
 
     fn account(label: &str, uuid: &str) -> crate::state::Account {
         crate::state::Account {
+            last_used_at: None,
             label: label.into(),
             account_uuid: uuid.into(),
             email: format!("{uuid}@example.com"),

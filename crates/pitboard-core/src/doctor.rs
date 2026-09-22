@@ -67,6 +67,8 @@ pub struct Facts {
 pub struct ParkFact {
     pub label: String,
     pub active: bool,
+    /// When this account was last switched to, where that is recorded.
+    pub last_used_at: Option<i64>,
     pub park: Option<Park>,
     /// Why it cannot be read back, if it cannot.
     pub unreadable: Option<String>,
@@ -78,6 +80,7 @@ fn park_facts(ctx: &Context, state: &State, live_uuid: Option<&str>) -> Vec<Park
         .iter()
         .map(|a| ParkFact {
             label: a.label.clone(),
+            last_used_at: a.last_used_at,
             // What Claude Code's config says, when it says anything. pitboard's own
             // record of its last switch says nothing about a sign-in made elsewhere.
             active: match live_uuid {
@@ -447,7 +450,49 @@ pub fn evaluate(facts: &Facts) -> Vec<Check> {
     checks.push(judge_claude_version(facts));
     checks.push(judge_auth(facts));
     checks.push(judge_asking(facts));
+    checks.extend(
+        facts
+            .parks
+            .iter()
+            .filter_map(|p| judge_dormant(p, facts.now)),
+    );
     checks
+}
+
+/// A refresh token's own life, from a real renewal answer: thirty days. An account that has
+/// been parked for longer than that without being switched to has had its login kept alive
+/// purely by pitboard, through at least one whole token lifetime, for nobody.
+const A_TOKEN_LIFETIME: i64 = 30 * 86_400;
+
+/// An account nobody has come back to.
+///
+/// pitboard renews a parked login for as long as the account is enrolled, so one enrolled
+/// once and never used again keeps a live, continuously rotated refresh token on this
+/// machine indefinitely. That is a defensible thing to do and an indefensible thing to do
+/// silently. Nothing is dropped on a timer pitboard chose: the threshold here is the
+/// token's own lifetime, and all it does is say so.
+fn judge_dormant(park: &ParkFact, now: i64) -> Option<Check> {
+    if park.active || park.park.is_none() {
+        return None;
+    }
+    let dormant_for = now - park.last_used_at?;
+    if dormant_for < A_TOKEN_LIFETIME {
+        return None;
+    }
+    Some(warn(
+        "dormant_account",
+        format!("account {}", park.label),
+        format!(
+            "not switched to for {}; pitboard has kept its login alive that whole time",
+            time::span(dormant_for)
+        ),
+        format!(
+            "Every `pitboard` renews it, so its refresh token is rotated and kept live on \
+             this machine for as long as it stays enrolled. If you are not coming back to \
+             it, `pitboard forget {}` deletes the login and the record.",
+            park.label
+        ),
+    ))
 }
 
 fn judge_credential(facts: &Facts) -> Check {
@@ -795,6 +840,7 @@ mod tests {
 
     fn parked(label: &str, refresh_expires_at: Option<i64>) -> ParkFact {
         ParkFact {
+            last_used_at: None,
             label: label.into(),
             active: false,
             park: Some(Park {
@@ -947,6 +993,46 @@ mod tests {
         assert!(refused.detail.contains("PITBOARD_NO_ARGV"));
     }
 
+    /// An account nobody has come back to keeps a live, continuously rotated refresh token
+    /// on this machine for as long as it stays enrolled. Nothing is dropped on a timer
+    /// pitboard chose; the threshold is the token's own lifetime and all it does is say so.
+    #[test]
+    fn an_account_nobody_has_come_back_to_is_said_out_loud() {
+        let mut f = facts();
+        f.parks = vec![ParkFact {
+            label: "work".into(),
+            active: false,
+            last_used_at: Some(f.now - 31 * 86_400),
+            park: Some(Park {
+                service: "pitboard-park-acc-1".into(),
+                parked_at: f.now - 31 * 86_400,
+                refresh_fingerprint: "f".into(),
+                access_expires_at: Some(f.now + 3600),
+                refresh_expires_at: Some(f.now + 30 * 86_400),
+            }),
+            unreadable: None,
+        }];
+        let checks = evaluate(&f);
+        let dormant = check(&checks, "dormant_account");
+        assert_eq!(dormant.level, Level::Warn);
+        assert!(dormant.advice.contains("pitboard forget work"));
+
+        // A month is the token's own life. Inside it, there is nothing to say.
+        f.parks[0].last_used_at = Some(f.now - 29 * 86_400);
+        assert!(
+            !evaluate(&f).iter().any(|c| c.code == "dormant_account"),
+            "an account used within a token's lifetime is not dormant"
+        );
+
+        // Neither is one that is signed in, nor one holding nothing.
+        f.parks[0].last_used_at = Some(f.now - 400 * 86_400);
+        f.parks[0].active = true;
+        assert!(!evaluate(&f).iter().any(|c| c.code == "dormant_account"));
+        f.parks[0].active = false;
+        f.parks[0].park = None;
+        assert!(!evaluate(&f).iter().any(|c| c.code == "dormant_account"));
+    }
+
     #[test]
     fn the_daemon_is_reported_without_being_a_problem() {
         let mut f = facts();
@@ -1020,12 +1106,14 @@ mod tests {
             parked("gone", Some(NOW - 1)),
             unusable,
             ParkFact {
+                last_used_at: None,
                 label: "empty".into(),
                 active: false,
                 park: None,
                 unreadable: None,
             },
             ParkFact {
+                last_used_at: None,
                 label: "live".into(),
                 active: true,
                 park: None,

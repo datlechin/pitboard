@@ -45,10 +45,45 @@ impl Renewal {
     }
 }
 
+/// Why a parked login is being renewed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Due {
+    /// What a reading needs: a park whose access token has lapsed cannot be asked about.
+    /// This is the one `status` does, and it is the read path's own requirement rather
+    /// than a job it does on the side.
+    ToBeAsked,
+    /// What keeps a park usable: a refresh token has a finite life, and one that lapses
+    /// costs a browser sign-in. Also covers everything `ToBeAsked` covers.
+    ToStayAlive,
+}
+
+impl Due {
+    fn covers(self, held: &Park, now: i64) -> bool {
+        if !held.restorable_at(now) {
+            return false;
+        }
+        let access_lapsed = !held.askable_at(now + AHEAD_SECONDS);
+        match self {
+            Due::ToBeAsked => access_lapsed,
+            Due::ToStayAlive => {
+                access_lapsed
+                    || held
+                        .refresh_expires_at
+                        .is_some_and(|at| at - now < crate::doctor::RENEW_WITHIN)
+            }
+        }
+    }
+}
+
 /// Renew every parked login whose access token has expired or is about to. Nothing is done
 /// while another pitboard run holds the lock or a switch waits to be finished: a renewal
 /// replaces the refresh token, and nothing may install the old copy meanwhile.
 pub fn renew_parked(ctx: &Context) -> Vec<(String, Renewal)> {
+    renew_due(ctx, Due::ToBeAsked)
+}
+
+/// The same, for whichever reason.
+pub fn renew_due(ctx: &Context, due: Due) -> Vec<(String, Renewal)> {
     let Some(_exclusive) = try_exclusive(ctx) else {
         return Vec::new();
     };
@@ -64,7 +99,7 @@ pub fn renew_parked(ctx: &Context) -> Vec<(String, Renewal)> {
         .iter()
         .filter_map(|a| {
             let held = a.parked.as_ref()?;
-            (!held.askable_at(now + AHEAD_SECONDS) && held.restorable_at(now))
+            due.covers(held, now)
                 .then(|| (a.label.clone(), held.clone()))
         })
         .collect();
@@ -309,6 +344,7 @@ mod tests {
             park::store_at(&m.ctx, &service, &oauth(refresh, access_expires_at)).expect("parked");
         let mut state = State::default();
         state.accounts.push(Account {
+            last_used_at: None,
             label: label.into(),
             account_uuid: "acc".into(),
             email: "me@example.com".into(),

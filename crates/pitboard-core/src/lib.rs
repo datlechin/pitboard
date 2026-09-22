@@ -32,6 +32,7 @@ pub mod budget;
 pub mod context;
 pub mod doctor;
 pub mod error;
+pub mod schedule;
 pub mod service;
 pub mod settings;
 pub mod state;

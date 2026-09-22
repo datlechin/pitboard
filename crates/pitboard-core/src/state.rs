@@ -48,6 +48,17 @@ pub struct Account {
     /// so Claude Code fetches the rest of its profile itself.
     pub oauth_account: Value,
     pub parked: Option<Park>,
+    /// When this account was last switched to, in epoch seconds.
+    ///
+    /// pitboard renews a parked login for as long as the account is enrolled, so an account
+    /// somebody enrolled once and never came back to keeps a live, continuously rotated
+    /// refresh token on the machine indefinitely. Nothing said so, and nothing asked.
+    /// Recording this is what lets `doctor` say it.
+    ///
+    /// `None` on an account enrolled before this was recorded, and on one that has never
+    /// been switched to.
+    #[serde(default)]
+    pub last_used_at: Option<i64>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -292,6 +303,7 @@ mod tests {
 
         let mut state = State::default();
         state.accounts.push(Account {
+            last_used_at: None,
             label: "work".into(),
             account_uuid: "acc".into(),
             email: "a@b.c".into(),
@@ -380,6 +392,7 @@ mod tests {
 
     fn account(label: &str, parked: Option<Park>) -> Account {
         Account {
+            last_used_at: None,
             label: label.into(),
             account_uuid: format!("{label}-uuid"),
             email: format!("{label}@example.com"),

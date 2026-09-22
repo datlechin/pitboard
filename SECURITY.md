@@ -95,6 +95,14 @@ IP address.
 - Leftover copies: a parked login that is no longer needed stays listed until it is
   deleted, so a failed or interrupted delete is retried. Temporary files a killed run left
   behind are removed on the next write to the same directory.
+- pitboard renews a parked login for as long as its account is enrolled, so an account you
+  enrol once and never come back to keeps a live, continuously rotated refresh token on the
+  machine. `pitboard doctor` says so once an account has been left for longer than a refresh
+  token's own life, and `pitboard forget <label>` deletes the login and the record. Deleting
+  is not revoking: a token pitboard deletes stays valid at Anthropic until it expires on its
+  own. Whether the endpoint pitboard uses accepts a revocation, and whether one would end
+  only the chain pitboard holds or the whole grant, has not been measured, so pitboard does
+  not try.
 - Copies nothing names: every name pitboard is about to write a login into is written down
   before the login is, so a run killed between the two leaves a name the next command
   resolves rather than a login nothing on the machine can see. An item whose account is

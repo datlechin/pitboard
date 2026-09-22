@@ -172,7 +172,25 @@ fn enrolling_the_signed_in_account_again_is_not_an_error() {
     let before = env.state();
     let (_, err, code) = env.run(&["enroll", "alpha"]);
     assert_eq!(code, 0, "{err}");
-    assert_eq!(env.state()["accounts"], before["accounts"]);
+
+    // Nothing moves but when the account was last used, which naming the account you are
+    // signed in as is: it is how pitboard can tell an account nobody has come back to.
+    let forget_when = |accounts: &serde_json::Value| {
+        let mut accounts = accounts.clone();
+        for a in accounts.as_array_mut().expect("accounts") {
+            a["last_used_at"] = serde_json::Value::Null;
+        }
+        accounts
+    };
+    assert_eq!(
+        forget_when(&env.state()["accounts"]),
+        forget_when(&before["accounts"])
+    );
+    assert!(
+        env.state()["accounts"][0]["last_used_at"].as_i64()
+            >= before["accounts"][0]["last_used_at"].as_i64(),
+        "and that only ever moves forward"
+    );
 }
 
 /// The way back for an account whose parked login was used or expired, and what every

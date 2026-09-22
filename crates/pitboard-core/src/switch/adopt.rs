@@ -118,6 +118,7 @@ mod tests {
             ..State::default()
         };
         state.accounts.push(Account {
+            last_used_at: None,
             label: "work".into(),
             account_uuid: "acc".into(),
             email: "me@example.com".into(),
@@ -173,6 +174,7 @@ mod tests {
         let (ctx, _mem, _scratch) = machine("nothing-to-do");
         let mut state = State::default();
         state.accounts.push(Account {
+            last_used_at: None,
             label: "work".into(),
             account_uuid: "acc".into(),
             email: "me@example.com".into(),

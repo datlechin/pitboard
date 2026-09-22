@@ -140,6 +140,7 @@ pub(super) fn machine(name: &str) -> Machine {
 
 pub(super) fn account(label: &str, uuid: &str, parked: Option<Park>) -> Account {
     Account {
+        last_used_at: None,
         label: label.into(),
         account_uuid: uuid.into(),
         email: format!("{uuid}@example.com"),

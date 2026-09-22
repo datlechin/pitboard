@@ -5,7 +5,7 @@ use pitboard_core::context::Context;
 use pitboard_core::doctor;
 use pitboard_core::error::Error;
 use pitboard_core::service::{Changing, Done, Failed, Pitboard, Warning};
-use pitboard_core::switch::{self, Enrolled, Outcome};
+use pitboard_core::switch::{self, Enrolled, Outcome, Renewal};
 use serde_json::{Value, json};
 use std::io::{IsTerminal, Read, Write};
 use std::process::ExitCode;
@@ -74,6 +74,13 @@ enum Command {
     Repair,
     /// Take over a pitboard directory another computer wrote, keeping the accounts
     Adopt,
+    /// Renew every parked login that is due, and nothing else
+    Renew,
+    /// Keep parked logins alive without running anything yourself
+    Schedule {
+        #[command(subcommand)]
+        what: ScheduleCommand,
+    },
     /// What pitboard has changed, and when
     Log {
         /// How many changes to show
@@ -398,6 +405,106 @@ fn abandon(pitboard: &Pitboard) -> Report {
     }
 }
 
+#[derive(Subcommand)]
+enum ScheduleCommand {
+    /// Ask this computer's own scheduler to renew parked logins daily
+    Install,
+    /// Say whether it is installed
+    Status,
+    /// Take it away
+    Uninstall,
+}
+
+fn renew(pitboard: &Pitboard) -> Report {
+    let outcomes = pitboard.renew();
+    let renewed = outcomes
+        .iter()
+        .filter(|(_, r)| matches!(r, Renewal::Renewed))
+        .count();
+    let human = match (outcomes.len(), renewed) {
+        (0, _) => "No parked login was due.\n".to_string(),
+        (_, 0) => format!("{} due; none could be renewed this time.\n", outcomes.len()),
+        (all, done) if all == done => format!("Renewed {done}.\n"),
+        (all, done) => format!("Renewed {done} of {all}; the rest are tried again next time.\n"),
+    };
+    Report::done(
+        "renew",
+        json!({
+            "accounts": outcomes.iter().map(|(label, outcome)| json!({
+                "label": label,
+                "outcome": outcome.code(),
+            })).collect::<Vec<_>>(),
+            "renewed": renewed,
+        }),
+        human,
+    )
+}
+
+fn schedule(pitboard: &Pitboard, what: &ScheduleCommand) -> Report {
+    use pitboard_core::schedule::Installed;
+    let say = |installed: &Installed| match installed {
+        Installed::Yes {
+            path,
+            every_seconds,
+        } => (
+            json!({
+                "installed": true,
+                "path": path,
+                "every_seconds": every_seconds,
+            }),
+            format!(
+                "Parked logins are renewed every {} by this computer's own scheduler.\n{}\n",
+                pitboard_core::time::span(i64::from(*every_seconds)),
+                path.display()
+            ),
+        ),
+        Installed::No => (
+            json!({"installed": false}),
+            "Nothing is keeping parked logins alive here. They are renewed when you run \
+             `pitboard`, and otherwise not.\nRun `pitboard schedule install` to change \
+             that.\n"
+                .to_string(),
+        ),
+        Installed::Unsupported => (
+            json!({"installed": false, "supported": false}),
+            "This computer has no scheduler pitboard knows how to write.\n".to_string(),
+        ),
+    };
+    match what {
+        ScheduleCommand::Status => {
+            let (data, human) = say(&pitboard.schedule());
+            Report::done("schedule", data, human)
+        }
+        ScheduleCommand::Install => match pitboard.schedule_install() {
+            Err(error) => Report::failed(Some("schedule"), error),
+            Ok(path) => Report::done(
+                "schedule",
+                json!({"installed": true, "path": path}),
+                format!(
+                    "Parked logins will be renewed daily.\n{}\n\nIt renews your own \
+                     parked logins and does nothing else: it never switches account and \
+                     never asks Anthropic for usage.\n",
+                    path.display()
+                ),
+            ),
+        },
+        ScheduleCommand::Uninstall => match pitboard.schedule_uninstall() {
+            Err(error) => Report::failed(Some("schedule"), error),
+            Ok(removed) => Report::done(
+                "schedule",
+                json!({"installed": false, "removed": removed}),
+                if removed {
+                    "Stopped renewing parked logins on a schedule. They are renewed when \
+                     you run `pitboard`, and otherwise not.\n"
+                        .to_string()
+                } else {
+                    "There was nothing scheduled.\n".to_string()
+                },
+            ),
+        },
+    }
+}
+
 fn adopt(pitboard: &Pitboard) -> Report {
     match pitboard.adopt() {
         Err(error) => Report::failed(Some("adopt"), error),
@@ -626,6 +733,8 @@ fn main() -> ExitCode {
         Command::Abandon => abandon(&pitboard),
         Command::Repair => repair(&pitboard),
         Command::Adopt => adopt(&pitboard),
+        Command::Renew => renew(&pitboard),
+        Command::Schedule { ref what } => schedule(&pitboard, what),
         Command::Log { lines } => log(&pitboard, lines),
         Command::Uninstall { yes } => {
             if !yes

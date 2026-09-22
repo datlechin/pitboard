@@ -75,8 +75,10 @@ A Claude Code session that is already open picks up the switch within about 33 s
 do not have to restart it.
 
 Each account holds one parked login. Switching to an account uses that login up, and
-switching away parks a fresh one. If one expires or goes missing, sign in to that account
-again. The rest of what pitboard knows about it stays:
+switching away parks a fresh one. A parked login is renewed whenever you run `pitboard`,
+and otherwise not, so one you leave alone for weeks expires and needs a browser sign-in.
+`pitboard schedule install` hands that to your computer's own scheduler instead. If one
+expires or goes missing, sign in to that account again. The rest of what pitboard knows about it stays:
 
 ```sh
 pitboard enroll work --sign-in
@@ -96,6 +98,10 @@ Other commands:
 - `pitboard adopt` takes over a `~/.pitboard` that came from another computer, keeping the
   accounts and dropping the logins they came with. Each then needs one
   `pitboard enroll <label> --sign-in`.
+- `pitboard renew` renews every parked login that is due, and nothing else.
+- `pitboard schedule install` asks this computer's own scheduler to run that daily, so
+  parked logins stay alive while you are away. Opt-in; `pitboard schedule status` says
+  whether it is on and `pitboard schedule uninstall` takes it away.
 - `pitboard uninstall` deletes every parked login and pitboard's own files.
 
 ## Status line

@@ -155,6 +155,15 @@ pub enum Error {
     )]
     StateWrongMachine { path: PathBuf },
 
+    #[error(
+        "this platform has no scheduler pitboard knows how to write. Keeping parked logins \
+         alive here means running `pitboard` yourself from time to time."
+    )]
+    ScheduleUnsupported,
+
+    #[error("the scheduler refused: {detail}")]
+    ScheduleRefused { detail: String },
+
     #[error("could not write to pitboard's directory at {path}: {source}")]
     HomeUnwritable {
         path: PathBuf,
@@ -427,6 +436,8 @@ impl Error {
             StateVersionUnknown { .. } => "state_version_unknown",
             StateWrongMachine { .. } => "state_wrong_machine",
             StateWriteFailed { .. } => "state_write_failed",
+            ScheduleUnsupported => "schedule_unsupported",
+            ScheduleRefused { .. } => "schedule_refused",
             HomeUnwritable { .. } => "home_unwritable",
             ClaudeConfigMissing { .. } => "claude_config_missing",
             ClaudeConfigUnreadable { .. } => "claude_config_unreadable",

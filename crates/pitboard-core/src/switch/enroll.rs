@@ -281,8 +281,11 @@ fn record_current(ctx: &Context, label: &str, state: &mut State) -> Result<Enrol
         .ok_or_else(|| claude::nothing_signed_in(ctx))?;
     let owner = identify(ctx, &access_token(&live)?)?;
     claim(state, label, &owner)?;
-    let parked = state.get(label).and_then(|a| a.parked.clone());
-    state.upsert(account(label, &owner, parked));
+    let existing = state.get(label);
+    let parked = existing.and_then(|a| a.parked.clone());
+    // Enrolling the account that is signed in is using it.
+    let last_used_at = Some(ctx.now());
+    state.upsert(account(label, &owner, parked, last_used_at));
     state.active = Some(label.to_string());
     state::save(ctx, state)?;
     Ok(Enrolled::Current { email: owner.email })
@@ -304,7 +307,8 @@ fn park_signed_in(
     let existing = state.get(label);
     let previous = existing.and_then(|a| a.parked.clone());
     let renewed = existing.is_some();
-    state.upsert(account(label, &owner, previous));
+    let last_used_at = existing.and_then(|a| a.last_used_at);
+    state.upsert(account(label, &owner, previous, last_used_at));
     state.park(label, fresh);
     // Unrecorded, the new login would be an item nothing refers to, never deleted.
     state::save(ctx, state).inspect_err(|_| {
@@ -321,8 +325,9 @@ fn park_signed_in(
 
 /// Only what Anthropic just confirmed. Leaving the rest out makes Claude Code fetch its own
 /// profile after a switch rather than trust a copy pitboard wrote.
-fn account(label: &str, owner: &Owner, parked: Option<Park>) -> Account {
+fn account(label: &str, owner: &Owner, parked: Option<Park>, last_used_at: Option<i64>) -> Account {
     Account {
+        last_used_at,
         label: label.to_string(),
         account_uuid: owner.account_uuid.clone(),
         email: owner.email.clone(),

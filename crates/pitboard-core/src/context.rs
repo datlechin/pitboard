@@ -60,6 +60,11 @@ impl Context {
         self.clock.now_millis()
     }
 
+    /// The person's home directory, which is where a platform's own scheduler lives.
+    pub(crate) fn home(&self) -> &std::path::Path {
+        &self.home
+    }
+
     /// The credential stores this context reaches.
     pub(crate) fn platform(&self) -> &dyn Platform {
         self.platform.as_ref()
