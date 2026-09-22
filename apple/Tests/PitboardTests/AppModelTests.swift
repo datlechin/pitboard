@@ -82,7 +82,7 @@ private func account(_ label: String, signedIn: Bool, percent: Double) -> Accoun
                     kind: "session", scope: nil, percent: percent, resetsAt: nil, severity: nil,
                     isActive: true)
             ]),
-        stale: nil, staleExplanation: nil)
+        stale: nil, staleExplanation: nil, lastsSeconds: nil, lastsBurning: false)
 }
 
 @MainActor
@@ -147,7 +147,8 @@ private func account(_ label: String, signedIn: Bool, percent: Double) -> Accoun
 
 @MainActor
 @Test func doctorIsOnlyReadWhenAskedFor() async {
-    let model = AppModel(watching: false, service: Stub(.success(Status(now: 0, accounts: [], warnings: []))))
+    let model = AppModel(
+        watching: false, service: Stub(.success(Status(now: 0, accounts: [], warnings: []))))
     #expect(model.checks.isEmpty)
     await model.diagnose()
     #expect(model.checks.map(\.code) == ["state"])
@@ -167,7 +168,7 @@ private func account(_ label: String, signedIn: Bool, percent: Double) -> Accoun
                     Account(
                         label: nil, email: "a@b.c", accountUuid: "a", signedIn: true,
                         switchable: false, parked: nil, usage: nil, stale: nil,
-                        staleExplanation: nil)
+                        staleExplanation: nil, lastsSeconds: nil, lastsBurning: false)
                 ], warnings: [])))
     let model = AppModel(watching: false, service: stub)
     await model.refresh()
@@ -192,7 +193,8 @@ private func account(_ label: String, signedIn: Bool, percent: Double) -> Accoun
 /// A sign-in that cannot start says why, and leaves nothing half-shown in the panel.
 @MainActor
 @Test func aSignInThatCannotStartIsReported() async {
-    let model = AppModel(watching: false, service: Stub(.success(Status(now: 0, accounts: [], warnings: []))))
+    let model = AppModel(
+        watching: false, service: Stub(.success(Status(now: 0, accounts: [], warnings: []))))
     model.naming = .another
     await model.signIn(as: "work")
     #expect(model.signingIn == nil)
@@ -268,7 +270,8 @@ private func account(_ label: String, signedIn: Bool, percent: Double) -> Accoun
                     now: 0, accounts: [],
                     warnings: [
                         Warning(code: "auth_overridden", message: "ANTHROPIC_API_KEY is set"),
-                        Warning(code: "config_write_failed", message: "the config did not update"),
+                        Warning(
+                            code: "config_write_failed", message: "the config did not update"),
                     ]))))
     await model.refresh()
     #expect(model.warnings.count == 2)

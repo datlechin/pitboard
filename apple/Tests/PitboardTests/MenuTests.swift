@@ -19,7 +19,7 @@ private func account(
         label: label, email: "\(label)@example.com", accountUuid: label, signedIn: signedIn,
         switchable: switchable, parked: nil,
         usage: Usage(source: .live, observedAt: 0, windows: windows), stale: nil,
-        staleExplanation: nil)
+        staleExplanation: nil, lastsSeconds: nil, lastsBurning: false)
 }
 
 private func status(_ accounts: [Account]) -> Status {

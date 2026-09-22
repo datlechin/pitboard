@@ -215,6 +215,15 @@ pub struct Account {
     pub stale: Option<String>,
     /// What to tell a person about `stale`, when it is worth a word.
     pub stale_explanation: Option<String>,
+    /// How long this account lasts, in seconds: until its tightest limit fills at the rate
+    /// it has been filling, or until that limit resets, whichever comes first.
+    ///
+    /// `None` until there is enough to go on. A wrong runway tells somebody to switch when
+    /// they need not, which is worse than none.
+    pub lasts_seconds: Option<i64>,
+    /// Whether `lasts_seconds` is a limit filling or a limit resetting, which is the
+    /// difference between "about an hour left" and "whole again in an hour".
+    pub lasts_burning: bool,
 }
 
 #[derive(uniffi::Record)]
@@ -295,6 +304,8 @@ pub struct Diagnosis {
 fn account(row: status::Row, now: i64) -> Account {
     Account {
         switchable: row.switchable(now),
+        lasts_seconds: row.runway.seconds(),
+        lasts_burning: matches!(row.runway, pitboard_core::history::Runway::Burning(_)),
         stale: row.stale.map(|s| s.code().to_string()),
         stale_explanation: row.stale.and_then(|s| s.explanation()).map(str::to_owned),
         parked: row.parked.map(|p| Parked {

@@ -34,6 +34,12 @@ final class AppModel {
     private(set) var warnings: [Warning] = []
     /// An interrupted switch nothing can finish, which the panel offers a way out of.
     private(set) var stuck: Bool = false
+    /// What pitboard has changed, once someone asks for it.
+    private(set) var changes: [Change] = []
+    /// Whether anything keeps parked logins alive without a command being run.
+    private(set) var schedule: Schedule = .absent
+    /// What the last renewal came to, for the settings pane that started it.
+    private(set) var renewals: [Renewed]?
 
     enum Naming: Equatable {
         /// Record the account signed in now: no browser, so the app does it itself.
@@ -148,6 +154,40 @@ final class AppModel {
             }
             stuck = Self.code(of: error) == "recovery_undetermined"
         }
+    }
+
+    /// What pitboard has changed, newest last. Read when something asks to see it.
+    func readChanges(_ limit: UInt32 = 200) async {
+        changes = await service.log(limit: limit)
+    }
+
+    /// Whether anything keeps parked logins alive without a command being run.
+    func readSchedule() async {
+        schedule = await service.schedule()
+    }
+
+    /// Hand the renewal of parked logins to this computer's own scheduler, or take it back.
+    ///
+    /// Opt-in, and the caller says what it does before offering it: a background process
+    /// that talks to Anthropic on a schedule is the shape most likely to be read as
+    /// automation, so it is something a person turns on knowing what it is.
+    func setSchedule(on: Bool) async {
+        do {
+            if on {
+                _ = try await service.scheduleInstall()
+            } else {
+                _ = try await service.scheduleUninstall()
+            }
+        } catch {
+            problem = Self.saying(error)
+        }
+        await readSchedule()
+    }
+
+    /// Renew every parked login that is due, now. Never switches and never asks for usage.
+    func renewNow() async {
+        renewals = await service.renew()
+        await refresh(asked: true)
     }
 
     /// Give up on an interrupted switch that cannot be finished, keeping every login. The
