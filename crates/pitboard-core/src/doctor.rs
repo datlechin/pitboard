@@ -41,6 +41,8 @@ pub struct Facts {
     pub credential: Result<Option<Value>, store::Error>,
     /// What the live login costs against the store's ceiling, where there is one.
     pub credential_cost: Option<store::Cost>,
+    /// What is taking up the room, largest first: (what it is, bytes).
+    pub credential_parts: Vec<(String, usize)>,
     pub home: PathBuf,
     pub home_mode: Option<u32>,
     pub machine_id_known: bool,
@@ -121,6 +123,11 @@ pub fn gather(ctx: &Context) -> Facts {
             .ok()
             .flatten()
             .and_then(|raw| store::cost(ctx, &service, &raw)),
+        credential_parts: store::read(ctx, &service)
+            .ok()
+            .flatten()
+            .map(|doc| parts_of(&doc))
+            .unwrap_or_default(),
         credential: store::read(ctx, &service),
         home_mode: mode_of(&home),
         home,
@@ -140,6 +147,32 @@ pub fn gather(ctx: &Context) -> Facts {
         service,
         now: ctx.now(),
     }
+}
+
+/// What is taking up the room in a credential document, largest first.
+///
+/// A login that will not fit is almost never the login: on one real machine the OAuth block
+/// was 506 bytes and eleven MCP server tokens were 3679. Saying "8503 of 4032 bytes" leaves
+/// a person to guess which of those to do something about, and the answer is in the
+/// document pitboard has already read.
+fn parts_of(document: &Value) -> Vec<(String, usize)> {
+    let weigh = |value: &Value| serde_json::to_string(value).map(|s| s.len()).unwrap_or(0);
+    let Some(root) = document.as_object() else {
+        return Vec::new();
+    };
+    let mut parts: Vec<(String, usize)> = root
+        .iter()
+        .flat_map(|(key, value)| match (key.as_str(), value.as_object()) {
+            // The usual culprit, and the one a person can act on server by server.
+            ("mcpOAuth", Some(servers)) if servers.len() > 1 => servers
+                .iter()
+                .map(|(server, held)| (format!("mcpOAuth {server}"), weigh(held)))
+                .collect(),
+            _ => vec![(key.clone(), weigh(value))],
+        })
+        .collect();
+    parts.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
+    parts
 }
 
 fn mode_of(path: &std::path::Path) -> Option<u32> {
@@ -258,7 +291,10 @@ pub fn evaluate(facts: &Facts) -> Vec<Check> {
             fail(
                 "credential_size",
                 "login size",
-                format!("{bytes} of {limit} bytes, and PITBOARD_NO_ARGV refuses that"),
+                format!(
+                    "{bytes} of {limit} bytes, and PITBOARD_NO_ARGV refuses that{}",
+                    biggest(&facts.credential_parts)
+                ),
                 "There is no third way to write a login this size. Sign out of MCP servers \
                  you no longer use to make it smaller, or unset PITBOARD_NO_ARGV and accept \
                  the argument-line write.",
@@ -270,7 +306,10 @@ pub fn evaluate(facts: &Facts) -> Vec<Check> {
             warn(
                 "credential_size",
                 "login size",
-                format!("{bytes} of {limit} bytes: written on the argument line"),
+                format!(
+                    "{bytes} of {limit} bytes: written on the argument line{}",
+                    biggest(&facts.credential_parts)
+                ),
                 "A login this size can only be written by passing it as an argument, where \
                  a process running as you could read it while the call lasts. Signing out \
                  of MCP servers you no longer use makes it smaller; PITBOARD_NO_ARGV=1 \
@@ -630,6 +669,21 @@ fn judge_storage_v5(facts: &Facts) -> Check {
     }
 }
 
+/// The three things taking up the most room, for a check that would otherwise leave a
+/// person guessing which of them to do something about.
+fn biggest(parts: &[(String, usize)]) -> String {
+    let named: Vec<String> = parts
+        .iter()
+        .take(3)
+        .map(|(what, bytes)| format!("{what} {bytes}"))
+        .collect();
+    if named.is_empty() {
+        String::new()
+    } else {
+        format!(". Mostly: {}", named.join(", "))
+    }
+}
+
 /// Whether pitboard is waiting before asking Anthropic about anything.
 ///
 /// Ordinarily nothing is waiting: an account is asked about whenever its tightest limit
@@ -856,6 +910,7 @@ mod tests {
                 subscription: None,
                 rate_limit_tier: None,
             }),
+            credential_parts: Vec::new(),
             credential_cost: Some(store::Cost {
                 needs: 900,
                 limit: 4032,
@@ -1047,6 +1102,57 @@ mod tests {
     /// An account nobody has come back to keeps a live, continuously rotated refresh token
     /// on this machine for as long as it stays enrolled. Nothing is dropped on a timer
     /// pitboard chose; the threshold is the token's own lifetime and all it does is say so.
+    /// A login that will not fit is almost never the login. On one real machine the OAuth
+    /// block was 506 bytes and eleven MCP server tokens were 3679, and the check said
+    /// "8503 of 4032 bytes" and left the person to guess which of those to act on.
+    #[test]
+    fn a_login_too_big_says_what_is_taking_up_the_room() {
+        let mut f = facts();
+        f.credential_cost = Some(store::Cost {
+            needs: 8503,
+            limit: 4032,
+            second_route: true,
+        });
+        f.credential_parts = parts_of(&json!({
+            "claudeAiOauth": {"refreshToken": "r"},
+            "mcpOAuth": {
+                "one": {"token": "x".repeat(300)},
+                "two": {"token": "y".repeat(200)},
+                "three": {"token": "z".repeat(100)},
+            },
+        }));
+
+        let checks = evaluate(&f);
+        let size = check(&checks, "credential_size");
+        assert!(size.detail.contains("mcpOAuth one"), "{}", size.detail);
+        assert!(size.detail.contains("mcpOAuth two"), "{}", size.detail);
+        assert!(
+            !size.detail.contains("claudeAiOauth"),
+            "three is enough to act on, and the login itself is never the problem: {}",
+            size.detail
+        );
+    }
+
+    #[test]
+    fn what_takes_up_the_room_is_listed_largest_first_and_named_per_server() {
+        let parts = parts_of(&json!({
+            "claudeAiOauth": {"refreshToken": "r"},
+            "mcpOAuth": {"small": {"t": "x"}, "large": {"t": "y".repeat(500)}},
+        }));
+        let names: Vec<&str> = parts.iter().map(|(what, _)| what.as_str()).collect();
+        assert_eq!(names[0], "mcpOAuth large", "largest first: {names:?}");
+        assert!(names.contains(&"claudeAiOauth"));
+        assert!(
+            names.contains(&"mcpOAuth small"),
+            "each server is named, because that is what a person signs out of"
+        );
+
+        // One server is not worth breaking apart; the key says it already.
+        let single = parts_of(&json!({"mcpOAuth": {"only": {"t": "x"}}}));
+        assert_eq!(single.len(), 1);
+        assert_eq!(single[0].0, "mcpOAuth");
+    }
+
     #[test]
     fn an_account_nobody_has_come_back_to_is_said_out_loud() {
         let mut f = facts();

@@ -24,6 +24,9 @@ macro_rules! contract {
             ".envelope.data.accounts[].parked.access_expires_at" => "[time]",
             ".envelope.data.accounts[].parked.refresh_expires_at" => "[time]",
             ".envelope.data.parked_at" => "[time]",
+            // Hashed from the config directory, so it is this machine's; `slot` has its
+            // own tests.
+            ".envelope.data.slot.service" => "[slot]",
         });
     };
 }

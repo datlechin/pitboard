@@ -124,6 +124,23 @@ pub struct Report {
     /// Who the live login belongs to, as Anthropic says: Claude Code's config can be a day
     /// behind.
     pub signed_in: Result<Owner, String>,
+    /// Which credential slot this report speaks for.
+    ///
+    /// `CLAUDE_CONFIG_DIR` selects a different keychain item, so "who is signed in" is a
+    /// fact about one slot and not about the machine. Accounts and their parked logins
+    /// belong to the machine; what is in use does not. This report used to name accounts
+    /// without ever saying which slot it was speaking for, so on a machine with a second
+    /// config directory it was silently answering about one of them.
+    pub slot: Slot,
+}
+
+/// A credential slot, named.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Slot {
+    /// The keychain item, which is what actually selects the login.
+    pub service: String,
+    /// Whether this is the one a `claude` with no `CLAUDE_CONFIG_DIR` reads.
+    pub default: bool,
 }
 
 /// Everything gathered from the machine and the network, so assembling it touches neither.
@@ -171,6 +188,14 @@ fn parked_token(
 /// What is known without asking anyone: who Claude Code's config says is signed in, and
 /// the last numbers pitboard measured. Touches no network and no login, so it answers at
 /// once and works on a train.
+/// Which slot this machine's `claude` would read right now.
+fn slot_of(ctx: &Context) -> Slot {
+    Slot {
+        service: claude::live_service(ctx),
+        default: claude::is_default_slot(ctx),
+    }
+}
+
 pub fn gather_offline(ctx: &Context, state: &State) -> Report {
     let config = claude::load_config(ctx).ok();
     let identity = config.as_ref().and_then(claude::identity);
@@ -189,6 +214,7 @@ pub fn gather_offline(ctx: &Context, state: &State) -> Report {
     let remembered = readings::load(ctx);
     Report {
         now: ctx.now(),
+        slot: slot_of(ctx),
         rows: assemble(state, &facts, |uuid| remembered.get(uuid).cloned()),
         // Claude Code's config, which can be a day behind the login it describes. Good
         // enough to say who is in use; never good enough to move a login.
@@ -348,6 +374,7 @@ pub fn gather(ctx: &Context, state: &State, fresh: bool) -> Report {
     );
 
     Report {
+        slot: slot_of(ctx),
         now,
         rows,
         signed_in: match facts.signed_in {

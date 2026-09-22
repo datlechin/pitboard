@@ -1,5 +1,5 @@
 ---
-source: tests/contract.rs
+source: crates/pitboard/tests/contract.rs
 expression: "serde_json :: json! ({ \"exit\" : code, \"envelope\" : value })"
 ---
 {
@@ -9,6 +9,10 @@ expression: "serde_json :: json! ({ \"exit\" : code, \"envelope\" : value })"
     "command": "status",
     "ok": true,
     "data": {
+      "slot": {
+        "service": "[slot]",
+        "default": false
+      },
       "signed_in": {
         "account_uuid": "b662f2f9-a111-4111-8111-111111111111",
         "email": "a@example.com",

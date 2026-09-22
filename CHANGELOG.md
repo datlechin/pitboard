@@ -47,6 +47,15 @@ All notable changes are recorded here. The format follows
   apart too, where they used to share one code.
 
 ### Added
+- `pitboard doctor` says what is taking up the room in a login that will not fit, largest
+  first and named per MCP server. A login too big for `security`'s standard input is almost
+  never the login: on one real machine the OAuth block was 506 bytes and eleven MCP server
+  tokens were 3679. Saying "8503 of 4032 bytes" left a person to guess which of those to
+  sign out of, and the answer was in the document pitboard had already read.
+- `pitboard status` names the credential slot it is speaking for, in `--json` always and in
+  the human report when it is not the default. `CLAUDE_CONFIG_DIR` selects a different
+  keychain item, so who is signed in is a fact about one slot and not about the machine;
+  the report named accounts without ever saying which slot it meant.
 - `pitboard renew` renews every parked login that is due and does nothing else, and
   `pitboard schedule install` hands that to the platform's own scheduler, a LaunchAgent on
   macOS and a systemd user timer on Linux. Until now the only two things that renewed a

@@ -162,11 +162,31 @@ pub fn human(report: &Report) -> String {
         }
         blocks.push(block);
     }
-    blocks.join("\n")
+    let mut out = blocks.join("\n");
+    // Said only when it is not the default, so the ordinary answer is unchanged. Where it
+    // is not, "who is signed in" is a fact about this slot and not about the machine, and
+    // a report that does not say which slot it means is answering a question nobody asked.
+    if !report.slot.default {
+        out.push_str(&format!(
+            "\n{}\n",
+            paint(
+                DIM,
+                format!("for the credential slot {}", report.slot.service)
+            )
+        ));
+    }
+    out
 }
 
 pub fn json(report: &Report) -> Value {
     json!({
+        // Which slot this answer is about. Accounts and their parked logins belong to the
+        // machine; who is signed in belongs to one credential slot, and CLAUDE_CONFIG_DIR
+        // selects a different one.
+        "slot": {
+            "service": report.slot.service,
+            "default": report.slot.default,
+        },
         "signed_in": report.signed_in.as_ref().ok().map(|o| json!({
             "account_uuid": o.account_uuid,
             "email": o.email,
@@ -243,6 +263,10 @@ mod tests {
 
     fn report(rows: Vec<Row>) -> Report {
         Report {
+            slot: pitboard_core::status::Slot {
+                service: "Claude Code-credentials".into(),
+                default: true,
+            },
             now: NOW,
             rows,
             signed_in: Ok(Owner {
