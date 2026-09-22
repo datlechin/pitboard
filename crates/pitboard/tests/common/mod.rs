@@ -43,6 +43,28 @@ fn the_guard_refuses_the_slots_that_hold_a_real_login() {
     assert!(caught.is_err(), "this machine's live slot must be refused");
 }
 
+/// The harness stands in for the credential store on two platforms, and each thing it does
+/// there is written twice. `delete_park`'s second half was missing: on Linux it deleted
+/// nothing and said nothing, so a test that took a login away still had it, and the test
+/// went on to watch the opposite of what it meant to. Nothing asserted the harness itself
+/// did what it said, so this does, on whichever platform it is running.
+#[test]
+fn the_harness_can_park_a_login_find_it_and_take_it_away() {
+    let env = Env::new("harness-round-trip");
+    let service = format!(
+        "pitboard-park-{}-1",
+        pitboard_core::testing::dir_hash("harness")
+    );
+
+    assert!(!env.is_parked(&service), "nothing is parked to begin with");
+    env.write_park(&service, r#"{"claudeAiOauth":{"refreshToken":"r"}}"#);
+    assert!(env.is_parked(&service), "what was written is found");
+    env.delete_park(&service);
+    assert!(!env.is_parked(&service), "what was deleted is gone");
+    // Twice: a test may delete a park that is already gone, and that is not an error.
+    env.delete_park(&service);
+}
+
 use std::path::PathBuf;
 use std::process::Command;
 
