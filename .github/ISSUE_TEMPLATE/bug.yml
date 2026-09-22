@@ -5,8 +5,14 @@ body:
   - type: markdown
     attributes:
       value: |
-        `pitboard doctor --json` answers most of what a report needs. It prints labels,
-        codes, paths and times: no tokens, no email addresses, no account identifiers.
+        `pitboard doctor --json` answers most of what a report needs. It prints the labels
+        you chose, codes, paths and times. No tokens, no email addresses and no account
+        identifiers: those become digests, so two mentions of one account line up inside
+        your report without naming it, and two reports do not line up with each other.
+        Paths under your home are shortened to `~`.
+
+        `pitboard doctor` without `--json` is the one to read yourself; it shows your own
+        account, and is not the one to paste.
   - type: textarea
     id: what
     attributes:

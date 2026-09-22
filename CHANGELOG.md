@@ -119,6 +119,25 @@ All notable changes are recorded here. The format follows
   question for Anthropic, and still changes nothing when Anthropic cannot be reached.
 
 ### Fixed
+- `pitboard doctor --json` is now what the bug template says it is. The template asks people
+  to paste it and promises labels, codes, paths and times with no tokens, no email addresses
+  and no account identifiers; it printed the signed-in email address and organisation uuid,
+  the login name, a value derived from the refresh token, and home paths carrying the
+  username, and the contract snapshot could not catch it because it redacted the whole
+  checks array. Identifiers are now salted digests, so two mentions of one account line up
+  inside a report and two reports do not line up with each other, and paths under the home
+  are shortened. `pitboard doctor` without `--json` is untouched: a person reading their own
+  machine should see their own account. The contract test pins the promise rather than a
+  snapshot of one machine.
+- Changing Claude Code's config no longer loses what Claude Code wrote meanwhile. It was
+  read, edited in memory, and a whole new file renamed over it, so anything written in
+  between was silently gone from the file that holds a person's project history and MCP
+  configuration. Measured on 22 September 2026 against a running session: it is rewritten
+  about every forty seconds and every rewrite changes something. Claude Code takes no lock
+  on it, so pitboard checks that the bytes it parsed are still the bytes on disk and starts
+  again from the new ones when they are not, and after four tries writes nothing rather than
+  writing over what Claude Code just put there. What pitboard removed from the file is
+  written into `pitboard log` rather than left to be inferred from a backup.
 - A renewed login's expiry is measured from Anthropic's clock rather than from this
   machine's. The lifetimes a renewal answers with are relative, so what they are added to
   decides when the login expires: on a machine running ahead, a freshly renewed park read

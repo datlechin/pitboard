@@ -767,11 +767,15 @@ fn judge_daemon(facts: &Facts) -> Check {
 pub struct Diagnosis {
     pub checks: Vec<Check>,
     pub environment: Value,
+    /// What must not leave this machine in a report. A person reading their own diagnosis
+    /// should see their own email; the thing they paste somewhere else should not carry it.
+    pub redaction: crate::redact::Sheet,
 }
 
 pub fn run(ctx: &Context) -> Diagnosis {
     let facts = gather(ctx);
     Diagnosis {
+        redaction: redaction_for(ctx, &facts),
         checks: evaluate(&facts),
         environment: json!({
             "config_file": facts.config_path,
@@ -781,6 +785,53 @@ pub fn run(ctx: &Context) -> Diagnosis {
             "home": facts.home,
         }),
     }
+}
+
+/// Everything in a diagnosis that names a person or an account.
+///
+/// The salt is this machine and this moment, so identifiers line up inside one report and
+/// two reports from one machine do not line up with each other. It is never printed.
+fn redaction_for(ctx: &Context, facts: &Facts) -> crate::redact::Sheet {
+    let mut sheet = crate::redact::Sheet::new(
+        format!("{}:{}", crate::state::machine_id(), ctx.now_millis()),
+        ctx.home().to_string_lossy(),
+    )
+    .hide(facts.account.clone(), "user");
+
+    if let Some(id) = &facts.identity {
+        sheet = sheet
+            .hide(id.email.clone(), "email")
+            .hide(id.account_uuid.clone(), "account")
+            .hide(id.organization_uuid.clone(), "org");
+        if let Some(name) = &id.organization_name {
+            sheet = sheet.hide(name.clone(), "org");
+        }
+    }
+    if let Ok(state) = &facts.state {
+        for account in &state.accounts {
+            sheet = sheet
+                .hide(account.email.clone(), "email")
+                .hide(account.account_uuid.clone(), "account")
+                .hide(account.organization_uuid.clone(), "org");
+        }
+    }
+    // A fingerprint is not a token, and it still identifies one login across reports.
+    if let Ok(Some(doc)) = &facts.credential
+        && let Some(fingerprint) = doc
+            .get("claudeAiOauth")
+            .map(crate::park::fingerprint_of)
+            .filter(|f| !f.is_empty())
+    {
+        sheet = sheet.hide(fingerprint, "login");
+    }
+    for park in &facts.parks {
+        if let Some(held) = &park.park {
+            sheet = sheet
+                .hide(held.refresh_fingerprint.clone(), "login")
+                .hide(held.service.clone(), "park");
+        }
+    }
+    sheet
 }
 
 /// No check failed. Warnings are advice; a failure means an assumption broke.

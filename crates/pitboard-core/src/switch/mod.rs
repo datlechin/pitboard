@@ -616,13 +616,14 @@ fn update_config(
 ) -> Result<()> {
     let path = claude::config_file(ctx);
     configfile::backup(ctx, &path)?;
-    let mut config = claude::load_config(ctx)?;
-    configfile::splice_identity(
-        &mut config,
-        &target.oauth_account,
-        &[outgoing_account, outgoing_org],
-    );
-    configfile::write(&path, &config)
+    configfile::update(ctx, &path, |config| {
+        configfile::splice_identity(
+            config,
+            &target.oauth_account,
+            &[outgoing_account, outgoing_org],
+        )
+    })
+    .map(|_| ())
 }
 
 #[cfg(test)]

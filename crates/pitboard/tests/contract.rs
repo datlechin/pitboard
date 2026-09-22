@@ -149,10 +149,40 @@ fn usage_error() {
 
 /// Which checks run depends on the platform, so the snapshot pins the envelope and every
 /// check is held to the same five fields.
+///
+/// The promise is pinned here rather than in the snapshot, because a snapshot of the checks
+/// would be a snapshot of this machine. The bug template asks people to paste this, and
+/// tells them it carries labels, codes, paths and times and nothing else. It used to carry
+/// their email address, their organisation uuid, their login name and a value derived from
+/// their refresh token, and the snapshot could not catch it because it redacted the whole
+/// array.
 #[test]
 fn doctor() {
     let env = two_accounts("contract-doctor");
     let (value, code) = json(&env, &["doctor"]);
+
+    let printed = value.to_string();
+    let alpha = env.uuid('a');
+    let beta = env.uuid('b');
+    for (secret, what) in [
+        ("a@example.com", "an email address"),
+        ("b@example.com", "another email address"),
+        (alpha.as_str(), "an account uuid"),
+        (beta.as_str(), "another account uuid"),
+    ] {
+        assert!(
+            !printed.contains(secret),
+            "a report meant to be pasted somewhere carries {what}: {secret}"
+        );
+    }
+    // Paths are what the template promises and what a report is for; it is the name inside
+    // a home path that goes, and `redact` proves that on its own.
+    assert!(
+        printed.contains("alpha"),
+        "the labels are the person's own words"
+    );
+    assert!(printed.contains("beta"), "{printed}");
+
     for check in value["data"]["checks"].as_array().unwrap() {
         let mut keys: Vec<&str> = check
             .as_object()

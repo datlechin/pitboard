@@ -39,8 +39,11 @@ pub fn human(checks: &[Check]) -> String {
     out
 }
 
+/// What the bug template promises: labels, codes, paths and times, and no email address,
+/// account identifier or login name. The human-readable report above is not touched; a
+/// person looking at their own machine should see their own account.
 pub fn json(diagnosis: &Diagnosis) -> Value {
-    json!({
+    let report = json!({
         "environment": diagnosis.environment,
         "checks": diagnosis.checks.iter().map(|c| json!({
             "code": c.code,
@@ -49,7 +52,8 @@ pub fn json(diagnosis: &Diagnosis) -> Value {
             "detail": c.detail,
             "advice": c.advice,
         })).collect::<Vec<_>>(),
-    })
+    });
+    diagnosis.redaction.over_json(&report)
 }
 
 #[cfg(test)]
