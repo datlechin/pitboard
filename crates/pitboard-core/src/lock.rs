@@ -3,11 +3,29 @@
 //! abandoned once older than `STALE`. Only the same lock taken the same way excludes Claude
 //! Code. A process killed outright leaves the directory behind for staleness to reclaim.
 //!
-//! One path is not excluded: measured in 2.1.278, `/logout` retries for its own 7.5 seconds
-//! and then deletes the credential with no lock held at all. Every other write, the OAuth
-//! refresh included, fails with ELOCKED instead. So holding this lock makes a switch safe
-//! against Claude Code writing underneath it, but not against a logout that has given up
-//! waiting.
+//! Measured in 2.1.278, against the storage layer in the installed build. Every constant
+//! below is the one Claude Code passes: stale 15000, ten retries, 100ms to 1000ms of
+//! backoff, and the heartbeat at half the staleness. A write under this lock is always a
+//! read-modify-write: the read cache is dropped, the credential is read again inside the
+//! lock, and a read that fails abandons the write rather than guessing. That is why a
+//! session or a daemon holding an older idea of who is signed in cannot write it back over
+//! a switch.
+//!
+//! Two things this lock does not give, and both matter more than the lock itself.
+//!
+//! Claude Code treats its own lock going missing as a warning and carries on writing, so
+//! pitboard cannot expect the other side to stop when a lock is broken. Whatever pitboard
+//! does about a compromised lock, it has to do alone.
+//!
+//! And one write path skips the lock entirely. A write can be marked as already inside the
+//! lock without the lock being taken, which is what `/logout` does after it has retried for
+//! its own 7.5 seconds: it deletes the credential with nothing held. Every other write,
+//! the OAuth refresh included, waits or fails. So holding this lock makes a switch safe
+//! against Claude Code writing underneath it, but not against a logout that gave up
+//! waiting, which is why a switch reads the slot back rather than trusting its own write.
+//!
+//! The writers are a session and [`crate::daemon`], the supervisor that outlives sessions
+//! and refreshes on a timer of its own. Both come through here.
 
 use std::io;
 use std::path::{Path, PathBuf};

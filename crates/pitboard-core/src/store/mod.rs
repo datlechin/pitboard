@@ -154,11 +154,16 @@ fn with_live<T>(ctx: &Context, run: impl FnOnce(&[&dyn RawStore]) -> T) -> T {
 
 /// Which backend holds a credential, or `Absent`.
 ///
-/// Open question, 2.1.278: the bundle also contains a file backend ("storageV5") behind a
-/// predicate that could not be resolved without running Claude Code. If that predicate is
-/// ever true on an ordinary local install, the session reads that file and not the keychain,
-/// and a switch would write where nobody reads. `doctor` reports what pitboard found, which
-/// is the one place such a mismatch would show.
+/// Settled in 2.1.278, which the earlier note here left open. Claude Code builds its live
+/// chain as keychain-with-plaintext-fallback and the successor backend ("storageV5", gated
+/// on `tengu_hover_rest`) does not change that: it replaces what backs the fallback half,
+/// and only for a caller that hands a backend in. An ordinary `claude` hands none in, so
+/// the fallback stays `<storage dir>/.credentials.json` and the keychain stays first. The
+/// order below is therefore the order Claude Code reads in, not a guess.
+///
+/// One divergence, on purpose. Claude Code demotes to the plaintext file when a keychain
+/// write fails for good, and deletes the keychain item when it does. pitboard never does:
+/// see the note on `write_in`.
 pub fn resolve(ctx: &Context, service: &str) -> Result<Backend, Error> {
     with_live(ctx, |chain| {
         Ok(resolve_in(chain, service)?.map_or(Backend::Absent, |b| b.kind()))

@@ -46,6 +46,8 @@ pub struct Facts {
     pub machine_id_known: bool,
     /// `CLAUDE_CODE_HOVER_REST`, which switches on the successor credential backend.
     pub hover_rest_env: bool,
+    /// Claude Code's supervisor daemon, where one has ever run for this slot.
+    pub daemon: Option<crate::daemon::Daemon>,
     pub state: Result<State, Error>,
     /// Each enrolled account's parked login, read back from the vault.
     pub parks: Vec<ParkFact>,
@@ -112,6 +114,7 @@ pub fn gather(ctx: &Context) -> Facts {
         home,
         machine_id_known: crate::state::machine_id() != "unknown",
         hover_rest_env: ctx.hover_rest,
+        daemon: crate::daemon::read(ctx),
         parks: state
             .as_ref()
             .map(|s| park_facts(ctx, s, identity.as_ref().map(|i| i.account_uuid.as_str())))
@@ -387,6 +390,7 @@ pub fn evaluate(facts: &Facts) -> Vec<Check> {
     }
 
     checks.push(judge_storage_v5(facts));
+    checks.push(judge_daemon(facts));
     checks
 }
 
@@ -488,8 +492,15 @@ fn judge_park(fact: &ParkFact, now: i64) -> Check {
     }
 }
 
-/// Claude Code's successor credential backend: a stub in every build so far, but compiled
-/// in and switched on from the server.
+/// Claude Code's successor credential backend.
+///
+/// Measured in 2.1.278: the flag does not move the login out of the keychain. The live
+/// chain is built as keychain-with-plaintext-fallback either way, and the flag only decides
+/// what backs the fallback half, and only for a caller that hands a backend in. An ordinary
+/// `claude` hands none in, so the fallback stays `<storage dir>/.credentials.json`. The
+/// combination worth saying something about is the flag on *and* the login living in the
+/// fallback, because that is the one case where what pitboard reads may not be what a
+/// session reads.
 fn judge_storage_v5(facts: &Facts) -> Check {
     let flag_on = facts
         .config
@@ -499,15 +510,49 @@ fn judge_storage_v5(facts: &Facts) -> Check {
         .and_then(|f| f.get("tengu_hover_rest"))
         .and_then(Value::as_bool)
         .unwrap_or(false);
-    if facts.hover_rest_env || flag_on {
-        warn(
+    if !(facts.hover_rest_env || flag_on) {
+        return ok("storage_v5", "storage v5", "inactive");
+    }
+    match facts.backend {
+        Ok(store::Backend::File) => warn(
             "storage_v5",
             "storage v5",
-            "the successor credential backend is switched on",
-            "pitboard has not been verified against it. Check for an update before switching.",
+            "switched on, and this login is in the fallback store",
+            "pitboard reads the plaintext file. If Claude Code was given a backend of its \
+             own, that is not the same file. Check for an update before switching.",
+        ),
+        _ => ok(
+            "storage_v5",
+            "storage v5",
+            "switched on; the keychain is still where the login is",
+        ),
+    }
+}
+
+/// Claude Code's supervisor daemon is a second writer of the login, on a schedule nobody
+/// typed. It takes the same write lock, so it cannot write underneath a switch, but a
+/// person reading a diagnosis should be able to see that it is there.
+fn judge_daemon(facts: &Facts) -> Check {
+    let Some(d) = &facts.daemon else {
+        return ok("claude_daemon", "Claude Code daemon", "none has run here");
+    };
+    let version = d
+        .version
+        .as_deref()
+        .map(|v| format!("Claude Code {v}"))
+        .unwrap_or_else(|| "an unrecorded version".into());
+    if d.running {
+        ok(
+            "claude_daemon",
+            "Claude Code daemon",
+            format!("running, {version}, pid {}", d.pid),
         )
     } else {
-        ok("storage_v5", "storage v5", "inactive")
+        ok(
+            "claude_daemon",
+            "Claude Code daemon",
+            format!("not running; {version} ran here last"),
+        )
     }
 }
 
@@ -569,6 +614,7 @@ mod tests {
             home_mode: Some(0o700),
             machine_id_known: true,
             hover_rest_env: false,
+            daemon: None,
             state: Ok(State::default()),
             parks: Vec::new(),
             interrupted: false,
@@ -648,18 +694,65 @@ mod tests {
     }
 
     #[test]
-    fn the_successor_backend_is_flagged_when_the_server_turns_it_on() {
-        let mut f = facts();
-        f.config = Ok(json!({"cachedGrowthBookFeatures": {"tengu_hover_rest": true}}));
-        assert_eq!(check(&evaluate(&f), "storage_v5").level, Level::Warn);
+    fn the_successor_backend_alone_does_not_move_the_login() {
+        let server_on = || {
+            let mut f = facts();
+            f.config = Ok(json!({"cachedGrowthBookFeatures": {"tengu_hover_rest": true}}));
+            f
+        };
+        let env_on = || {
+            let mut f = facts();
+            f.hover_rest_env = true;
+            f
+        };
+        for mut f in [server_on(), env_on()] {
+            // On the keychain, the flag changes nothing pitboard reads.
+            let checks = evaluate(&f);
+            assert_eq!(check(&checks, "storage_v5").level, Level::Ok);
+            // In the fallback, it is the one case worth saying something about.
+            f.backend = Ok(store::Backend::File);
+            let checks = evaluate(&f);
+            assert_eq!(check(&checks, "storage_v5").level, Level::Warn);
+        }
     }
 
     #[test]
-    fn the_successor_backend_is_flagged_when_the_environment_turns_it_on() {
+    fn the_successor_backend_is_quiet_when_it_is_off() {
         let mut f = facts();
-        assert_eq!(check(&evaluate(&f), "storage_v5").level, Level::Ok);
-        f.hover_rest_env = true;
-        assert_eq!(check(&evaluate(&f), "storage_v5").level, Level::Warn);
+        let checks = evaluate(&f);
+        assert_eq!(check(&checks, "storage_v5").level, Level::Ok);
+        // The fallback store on its own is not the successor backend.
+        f.backend = Ok(store::Backend::File);
+        let checks = evaluate(&f);
+        assert_eq!(check(&checks, "storage_v5").level, Level::Ok);
+    }
+
+    #[test]
+    fn the_daemon_is_reported_without_being_a_problem() {
+        let mut f = facts();
+        let checks = evaluate(&f);
+        assert!(check(&checks, "claude_daemon").detail.contains("none"));
+
+        f.daemon = Some(crate::daemon::Daemon {
+            pid: 4321,
+            version: Some("2.1.278".into()),
+            started_at: Some(1_790_079_766_317),
+            origin: Some("transient".into()),
+            launch_target: None,
+            running: true,
+        });
+        let checks = evaluate(&f);
+        let running = check(&checks, "claude_daemon");
+        assert_eq!(running.level, Level::Ok);
+        assert!(running.detail.contains("running"));
+        assert!(running.detail.contains("2.1.278"));
+        assert!(running.detail.contains("4321"));
+
+        f.daemon.as_mut().expect("set above").running = false;
+        let checks = evaluate(&f);
+        let stopped = check(&checks, "claude_daemon");
+        assert_eq!(stopped.level, Level::Ok);
+        assert!(stopped.detail.contains("not running"));
     }
 
     #[test]

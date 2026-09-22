@@ -25,6 +25,7 @@ pub mod usage;
 pub(crate) mod atomic;
 pub(crate) mod claude;
 pub(crate) mod configfile;
+pub(crate) mod daemon;
 pub(crate) mod home;
 pub(crate) mod lock;
 pub(crate) mod park;

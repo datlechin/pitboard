@@ -99,7 +99,7 @@ against the key it was built with, so a new key strands every copy already insta
 
 ## Measured, not assumed
 
-Three of these decide the design, and all three were measured rather than reasoned about:
+These decide the design, and each was measured rather than reasoned about:
 
 - `security -i` reads 4097 bytes of command line, no continuation. Its `-w` prompt reads 128.
 - Writing a keychain item in process, through the Security framework, makes every later
@@ -107,6 +107,31 @@ Three of these decide the design, and all three were measured rather than reason
 - A running Claude Code session picks up a swapped credential within about 33 seconds.
 
 Redo the first two on a scratch item before changing anything that depends on them.
+
+Read against Claude Code 2.1.278's own storage layer, which is where the rest of the
+coupling comes from:
+
+- The write lock is proper-lockfile at `<storage dir>/.storage-write`, stale 15000ms, ten
+  retries, 100ms to 1000ms of backoff. `lock.rs` carries the same numbers.
+- Every write under it drops the read cache, reads the credential again inside the lock,
+  and abandons the write when that read fails. A stale account cannot be written back.
+- Claude Code treats its own lock going missing as a warning and keeps writing, so pitboard
+  cannot expect the other side to stop.
+- A write can be marked as already locked without the lock being taken. `/logout` is the
+  path that does it.
+- The keychain write is `security -i` below 4032 bytes of command and
+  `add-generic-password -U -a <account> -s <service> -X <hex>` above it, with a 2 second
+  timeout, and only a timeout counts as retryable.
+- The keychain read is `find-generic-password -a <account> -w -s <service>`. Exit 0 with
+  nothing is absent; 44 is absent; 36 is a locked keychain and means unreadable, not empty.
+  `security show-keychain-info` exiting 36 is the same signal for the keychain as a whole.
+- The live chain is the keychain with the plaintext file behind it. The successor backend
+  (`tengu_hover_rest`) replaces the fallback half and only for a caller that hands a backend
+  in, so an ordinary `claude` still reads the keychain first.
+- Claude Code demotes to the plaintext file when a keychain write fails for good, and
+  deletes the keychain item when it does. pitboard does not, on purpose.
+- The supervisor daemon records itself in `<config dir>/daemon.lock` with its pid and the
+  Claude Code version that launched it, and leaves the file behind when it dies.
 
 ## Dependencies
 

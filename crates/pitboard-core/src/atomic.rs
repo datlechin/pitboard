@@ -127,7 +127,7 @@ fn sweep(dir: &Path) {
     }
 }
 
-fn may_be_running(pid: u32) -> bool {
+pub(crate) fn may_be_running(pid: u32) -> bool {
     let Ok(pid) = libc::pid_t::try_from(pid) else {
         return true;
     };

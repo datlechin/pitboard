@@ -94,8 +94,14 @@ IP address.
   login, deleted as soon as it is installed, and a copy of a login that is still signed in
   is never kept, because presenting a superseded refresh token makes Claude Code discard
   the login. A parked login past its expiry is refused rather than installed.
-- Writing alongside a running Claude Code: pitboard takes the same lock Claude Code takes
-  around every credential write.
+- Writing alongside a running Claude Code: pitboard takes the same lock Claude Code takes,
+  with the same staleness and the same heartbeat. Two writers come through that lock, a
+  session and the supervisor daemon Claude Code leaves running behind it, which refreshes
+  the login on a schedule of its own. Both wait for pitboard, and both re-read the
+  credential inside the lock before changing it, so neither can write an older account back
+  over a switch. One path does not take the lock at all: a `/logout` that has given up
+  waiting deletes the credential with nothing held. pitboard cannot exclude that, so it
+  reads the slot back after a switch rather than trusting that its own write stood.
 - A state directory inside a cloud-synced folder: refused, because a parked login belongs
   to exactly one machine.
 
