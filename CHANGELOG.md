@@ -47,6 +47,17 @@ All notable changes are recorded here. The format follows
   apart too, where they used to share one code.
 
 ### Added
+- pitboard keeps what each account's limits have been doing, and says how long each account
+  lasts. The single decision this tool exists to support is which account to use next, and
+  it answered with two instantaneous percentages and left the arithmetic to the person: 73%
+  of a weekly limit means nothing without knowing whether it was 40% this morning. It
+  already had the data and threw it away, one snapshot per account in a map every write
+  replaced. Each account now has a series, and from it the only number that answers the
+  question: until the tightest limit fills at the rate it has been filling, or until it
+  resets, whichever is sooner. It says nothing until there are three readings a quarter of
+  an hour apart, because a wrong runway tells somebody to switch when they need not, which
+  is worse than no runway. Sized before it was written: one reading is 319 bytes, a reading
+  that says nothing new is not kept, and anything older than a fortnight goes.
 - `pitboard doctor` says what is taking up the room in a login that will not fit, largest
   first and named per MCP server. A login too big for `security`'s standard input is almost
   never the login: on one real machine the OAuth block was 506 bytes and eleven MCP server

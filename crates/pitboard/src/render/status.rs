@@ -147,6 +147,21 @@ pub fn human(report: &Report) -> String {
                     paint(DIM, resets)
                 ));
             }
+            // The answer to the question the whole tool exists for, where there is one.
+            if let Some(seconds) = row.runway.seconds() {
+                block.push_str(&format!(
+                    "    {}  {}\n",
+                    pad("", name_width),
+                    paint(
+                        DIM,
+                        match row.runway {
+                            pitboard_core::history::Runway::Burning(_) =>
+                                format!("about {} left at this rate", time::span(seconds)),
+                            _ => format!("resets in {}", time::span(seconds)),
+                        }
+                    )
+                ));
+            }
             let note = row.usage.as_ref().and_then(|u| provenance(u, now));
             let line = match (note, why) {
                 (Some(note), Some(why)) => {
@@ -204,6 +219,17 @@ pub fn json(report: &Report) -> Value {
                 "access_expires_at": p.access_expires_at,
                 "refresh_expires_at": p.refresh_expires_at,
             })),
+            // How long this account lasts, from what its limits have been doing. Null when
+            // there is not enough to go on: a wrong runway tells somebody to switch when
+            // they need not, which is worse than no runway.
+            "lasts": r.runway.seconds().map(|seconds| json!({
+                "seconds": seconds,
+                "why": match r.runway {
+                    pitboard_core::history::Runway::Burning(_) => "filling",
+                    pitboard_core::history::Runway::Resting(_) => "resets",
+                    pitboard_core::history::Runway::Unknown => "unknown",
+                },
+            })),
             "usage": r.usage.as_ref().map(|u| json!({
                 "source": u.source,
                 "observed_at": u.observed_at,
@@ -251,6 +277,7 @@ mod tests {
     fn row(label: Option<&str>, signed_in: bool) -> Row {
         let name = label.unwrap_or("someone");
         Row {
+            runway: pitboard_core::history::Runway::Unknown,
             label: label.map(str::to_owned),
             email: format!("{name}@example.com"),
             account_uuid: format!("{name}-uuid"),

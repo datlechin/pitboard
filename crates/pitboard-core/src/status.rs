@@ -109,6 +109,12 @@ pub struct Row {
     pub parked: Option<Park>,
     pub usage: Option<Snapshot>,
     pub stale: Option<Stale>,
+    /// How long this account lasts, from what its limits have been doing.
+    ///
+    /// The question this whole tool exists to answer is which account to use next, and two
+    /// instantaneous percentages do not answer it: 73% of a weekly limit means nothing
+    /// without knowing whether it was 40% this morning.
+    pub runway: crate::history::Runway,
 }
 
 impl Row {
@@ -215,7 +221,12 @@ pub fn gather_offline(ctx: &Context, state: &State) -> Report {
     Report {
         now: ctx.now(),
         slot: slot_of(ctx),
-        rows: assemble(state, &facts, |uuid| remembered.get(uuid).cloned()),
+        rows: assemble(
+            state,
+            &facts,
+            |uuid| remembered.get(uuid).cloned(),
+            |uuid| crate::history::runway_for(ctx, uuid, ctx.now()),
+        ),
         // Claude Code's config, which can be a day behind the login it describes. Good
         // enough to say who is in use; never good enough to move a login.
         signed_in: identity.map_or_else(
@@ -359,7 +370,17 @@ pub fn gather(ctx: &Context, state: &State, fresh: bool) -> Report {
         claude_code_cache: config.as_ref().and_then(crate::usage::from_config_cache),
         config_uuid: live_uuid,
     };
-    let rows = assemble(state, &facts, |uuid| remembered.get(uuid).cloned());
+    let rows = assemble(
+        state,
+        &facts,
+        |uuid| remembered.get(uuid).cloned(),
+        |uuid| crate::history::runway_for(ctx, uuid, now),
+    );
+    for row in &rows {
+        if let Some(live) = row.usage.as_ref().filter(|u| u.source == Source::Live) {
+            crate::history::record(ctx, &row.account_uuid, live);
+        }
+    }
     readings::remember(
         ctx,
         &rows
@@ -385,7 +406,12 @@ pub fn gather(ctx: &Context, state: &State, fresh: bool) -> Report {
     }
 }
 
-fn assemble(state: &State, facts: &Facts, recall: impl Fn(&str) -> Option<Snapshot>) -> Vec<Row> {
+fn assemble(
+    state: &State,
+    facts: &Facts,
+    recall: impl Fn(&str) -> Option<Snapshot>,
+    lasting: impl Fn(&str) -> crate::history::Runway,
+) -> Vec<Row> {
     let live_uuid = match (&facts.signed_in, facts.asked) {
         (Some(Ok(owner)), _) => Some(owner.account_uuid.as_str()),
         // Unreachable, or never asked. Anthropic decides who is signed in; without its
@@ -425,6 +451,7 @@ fn assemble(state: &State, facts: &Facts, recall: impl Fn(&str) -> Option<Snapsh
                 parked: account.parked.clone(),
                 usage,
                 stale,
+                runway: lasting(uuid),
             }
         })
         .collect();
@@ -441,6 +468,7 @@ fn assemble(state: &State, facts: &Facts, recall: impl Fn(&str) -> Option<Snapsh
             parked: None,
             usage,
             stale,
+            runway: lasting(&owner.account_uuid),
         });
     }
 
@@ -539,7 +567,7 @@ mod tests {
             parked_usage: vec![Err(Stale::Unreachable), Err(Stale::Unreachable)],
             claude_code_cache: None,
         };
-        let rows = assemble(&state, &facts, nothing_remembered);
+        let rows = assemble(&state, &facts, nothing_remembered, nothing_known);
         let a = rows
             .iter()
             .find(|r| r.account_uuid == "alpha-uuid")
@@ -554,6 +582,10 @@ mod tests {
 
     fn nothing_remembered(_: &str) -> Option<Snapshot> {
         None
+    }
+
+    fn nothing_known(_: &str) -> crate::history::Runway {
+        crate::history::Runway::Unknown
     }
 
     #[test]
@@ -618,7 +650,7 @@ mod tests {
             vec![Err(Stale::NothingParked)],
         );
         f.claude_code_cache = Some(reading(2.0, Source::ClaudeCodeCache, Some("work-uuid")));
-        let rows = assemble(&s, &f, nothing_remembered);
+        let rows = assemble(&s, &f, nothing_remembered, nothing_known);
         let usage = rows[0].usage.as_ref().unwrap();
         assert_eq!(usage.source, Source::Live);
         assert_eq!(usage.windows[0].percent, 30.0);
@@ -634,7 +666,7 @@ mod tests {
             vec![Err(Stale::NothingParked)],
         );
         f.claude_code_cache = Some(reading(2.0, Source::ClaudeCodeCache, Some("work-uuid")));
-        let rows = assemble(&s, &f, nothing_remembered);
+        let rows = assemble(&s, &f, nothing_remembered, nothing_known);
         assert_eq!(
             rows[0].usage.as_ref().unwrap().source,
             Source::ClaudeCodeCache
@@ -651,7 +683,11 @@ mod tests {
             vec![Err(Stale::NothingParked)],
         );
         f.claude_code_cache = Some(reading(99.0, Source::ClaudeCodeCache, Some("someone-else")));
-        assert!(assemble(&s, &f, nothing_remembered)[0].usage.is_none());
+        assert!(
+            assemble(&s, &f, nothing_remembered, nothing_known)[0]
+                .usage
+                .is_none()
+        );
     }
 
     #[test]
@@ -665,7 +701,7 @@ mod tests {
                 Ok(reading(12.0, Source::Live, None)),
             ],
         );
-        let rows = assemble(&s, &f, nothing_remembered);
+        let rows = assemble(&s, &f, nothing_remembered, nothing_known);
         let personal = rows
             .iter()
             .find(|r| r.label.as_deref() == Some("personal"))
@@ -696,7 +732,7 @@ mod tests {
         let remembered = |uuid: &str| {
             (uuid == "personal-uuid").then(|| reading(44.0, Source::Remembered, Some(uuid)))
         };
-        let rows = assemble(&s, &f, remembered);
+        let rows = assemble(&s, &f, remembered, nothing_known);
         let personal = rows
             .iter()
             .find(|r| r.label.as_deref() == Some("personal"))
@@ -713,7 +749,7 @@ mod tests {
             Ok(reading(5.0, Source::Live, None)),
             vec![Err(Stale::NothingParked), Err(Stale::NothingParked)],
         );
-        let rows = assemble(&s, &f, nothing_remembered);
+        let rows = assemble(&s, &f, nothing_remembered, nothing_known);
         assert_eq!(rows[0].label.as_deref(), Some("beta"));
         assert!(rows[0].signed_in && !rows[0].switchable(NOW));
         assert!(!rows[1].signed_in);

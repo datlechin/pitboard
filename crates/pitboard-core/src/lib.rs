@@ -48,6 +48,7 @@ pub(crate) mod claude;
 pub(crate) mod configfile;
 pub(crate) mod daemon;
 pub(crate) mod fault;
+pub mod history;
 pub(crate) mod home;
 pub(crate) mod lock;
 pub(crate) mod park;

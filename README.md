@@ -58,11 +58,20 @@ pitboard status --offline # the last numbers measured, without asking Anthropic
 ● personal  me@example.com  signed in
     5h    ██████░░░░   59%  resets in 1h 10m
     week  ███████░░░   73%  resets in 5d 18h
+          about 48m left at this rate
 
 ○ work      me@company.com  ready · good for 26d 4h
     5h    █░░░░░░░░░   12%  resets in 3h 02m
     week  ████░░░░░░   40%  resets in 2d 4h
+          resets in 3h 02m
 ```
+
+The last line of each account is the one that answers the question. 73% of a weekly limit
+means nothing without knowing whether it was 40% this morning, so pitboard keeps what each
+limit has been doing and works out how long the account lasts: until its tightest limit
+fills at the rate it has been filling, or until that limit resets, whichever comes first.
+It says nothing at all until there is enough to go on, because a wrong answer here tells
+you to switch when you need not.
 
 Usage comes from Anthropic for all accounts at once. A number is asked for again once the
 tightest limit it describes could have moved by a percentage point, which for a five-hour

@@ -715,3 +715,34 @@ fn asking_for_a_fresh_reading_asks_anthropic_again() {
 
     env.assert_usage_requests();
 }
+
+/// The data this tool needs to answer its own question, kept rather than thrown away. One
+/// snapshot per account in a map that every write replaced could never say whether 73% of a
+/// weekly limit was 40% this morning.
+#[test]
+fn what_each_accounts_limits_have_been_doing_is_kept() {
+    let env = two_accounts("history");
+    let (_, err, code) = env.run(&["status", "--json"]);
+    assert_eq!(code, 0, "{err}");
+
+    let readings = env.root.join("pitboard/readings");
+    let kept: Vec<String> = std::fs::read_dir(&readings)
+        .expect("a readings directory")
+        .flatten()
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .collect();
+    assert_eq!(kept.len(), 2, "one series per account: {kept:?}");
+
+    let alpha = readings.join(format!("{}.ndjson", env.uuid('a')));
+    let body = std::fs::read_to_string(&alpha).expect("alpha's series");
+    let line: serde_json::Value =
+        serde_json::from_str(body.lines().next().expect("a reading")).expect("json");
+    assert!(line["at"].is_i64());
+    assert_eq!(line["windows"][0][0], "five_hour");
+    assert_eq!(line["windows"][0][1], 12.0);
+
+    // And it goes when the account does.
+    let (_, err, code) = env.run(&["forget", "beta", "-y"]);
+    assert_eq!(code, 0, "{err}");
+    assert!(!readings.join(format!("{}.ndjson", env.uuid('b'))).exists());
+}

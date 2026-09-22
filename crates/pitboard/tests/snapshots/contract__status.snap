@@ -27,6 +27,7 @@ expression: "serde_json :: json! ({ \"exit\" : code, \"envelope\" : value })"
           "signed_in": true,
           "switchable": false,
           "parked": null,
+          "lasts": null,
           "usage": {
             "source": "live",
             "observed_at": "[time]",
@@ -62,6 +63,7 @@ expression: "serde_json :: json! ({ \"exit\" : code, \"envelope\" : value })"
             "access_expires_at": "[time]",
             "refresh_expires_at": "[time]"
           },
+          "lasts": null,
           "usage": {
             "source": "live",
             "observed_at": "[time]",
