@@ -303,6 +303,18 @@ All notable changes are recorded here. The format follows
   `SHA256SUMS` and `appcast.xml`, which are made in the same job and published in the same
   release as the files they describe: on their own they said a download had arrived whole
   and nothing about who put it there.
+- The release checks the published feed against the public key in the published app bundle,
+  which is the key an installed copy checks it against. It used to check it with the
+  private key that signed it, in the job that signed it, so a wrong key verified against
+  itself. Nothing in that job reads a secret now. A release whose update key differs from
+  the last one's is refused unless a repository variable says that is what it means to do.
+- `CONTRIBUTING.md` has a procedure for replacing the Sparkle update key or the Developer
+  ID certificate, and `.github/workflows/rotation.yml` runs the awkward half of it every
+  month against keys it makes on the runner, a feed on `127.0.0.1` and bundles under an
+  `invalid.` identifier. It names no repository secret, so it cannot reach the real key,
+  and CI checks that it still names none. Running it found the trap: `generate_appcast`
+  will not sign a bundle carrying a key other than the one it is handed, and says so by
+  writing the feed with no signature and exiting 0.
 
 ## [0.2.0] - 2026-09-22
 

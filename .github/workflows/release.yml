@@ -153,6 +153,60 @@ jobs:
           SPARKLE_PUBLIC_KEY: ${{ secrets.SPARKLE_PUBLIC_KEY }}
         run: ./apple/scripts/build-app.sh
 
+      # An installed copy checks the archive against the public key in the bundle it came
+      # from, and takes an update whose key has changed only through the other route, which
+      # needs the new bundle to satisfy the old one's designated requirement. That holds
+      # for a Developer ID build and never for an ad-hoc one. So a changed key either is a
+      # rotation somebody is running on purpose or strands whoever installed an ad-hoc
+      # build, and no revocation reaches either. The key is compared with the one the last
+      # release shipped, and a change is refused unless the repository variable
+      # SPARKLE_KEY_ROTATION names this version.
+      - name: The update key this release ships
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          VERSION: ${{ needs.guard.outputs.version }}
+          ROTATION: ${{ vars.SPARKLE_KEY_ROTATION }}
+        run: |
+          plist=apple/build/Pitboard.app/Contents/Info.plist
+          now=$(/usr/libexec/PlistBuddy -c "Print :SUPublicEDKey" "$plist" 2>/dev/null || true)
+          if [ -z "$now" ]; then
+            echo "the app carries no update key: SPARKLE_PUBLIC_KEY is not set" >&2
+            exit 1
+          fi
+          shipped=$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq '
+            .[] | select(.draft == false and .prerelease == false)
+                | select([.assets[].name] | any(startswith("Pitboard-")))
+                | .tag_name')
+          previous=$(printf '%s\n' "$shipped" | grep -vx "$TAG" | awk 'NR == 1' || true)
+          if [ -z "$previous" ]; then
+            echo "no earlier release ships an app, so there is no key to compare with"
+            exit 0
+          fi
+          gh release download "$previous" --repo "$GITHUB_REPOSITORY" \
+            --pattern 'Pitboard-*-macos.zip' --dir "$RUNNER_TEMP/previous"
+          ditto -x -k "$RUNNER_TEMP/previous"/*.zip "$RUNNER_TEMP/previous/unpacked"
+          was=$(/usr/libexec/PlistBuddy -c "Print :SUPublicEDKey" \
+            "$RUNNER_TEMP/previous/unpacked/Pitboard.app/Contents/Info.plist" 2>/dev/null || true)
+          if [ -z "$was" ]; then
+            echo "$previous shipped no update key, so there is nothing to compare with"
+            exit 0
+          fi
+          if [ "$now" = "$was" ]; then
+            echo "the update key is the one $previous shipped"
+            exit 0
+          fi
+          if [ "$ROTATION" = "$VERSION" ]; then
+            echo "declared rotation: $previous shipped $was, $VERSION ships $now"
+            exit 0
+          fi
+          echo "this build's update key is $now and $previous shipped $was." >&2
+          echo "An installed copy takes this only through the Apple code signing route," >&2
+          echo "which an ad-hoc installed copy has not got. Read 'Rotating the update" >&2
+          echo "key' in CONTRIBUTING.md, and set the repository variable" >&2
+          echo "SPARKLE_KEY_ROTATION to $VERSION when this release means to." >&2
+          exit 1
+
       - name: Notarise
         if: steps.apple.outputs.signed == 'true'
         env:
@@ -195,6 +249,15 @@ jobs:
                 "https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/" \
               --link "https://github.com/${GITHUB_REPOSITORY}" \
               "$out"
+          # generate_appcast cross-checks the private key it is given against the bundle's
+          # SUPublicEDKey and, when they disagree, writes the feed with no signature at all
+          # and exits 0. An unsigned feed is one every installed copy refuses, so the two
+          # secrets disagreeing has to be found here rather than by them.
+          if ! grep -q 'sparkle:edSignature="' "$out/appcast.xml"; then
+            echo "the feed was written without a signature, which is what generate_appcast" >&2
+            echo "does when SPARKLE_PRIVATE_KEY is not the key SPARKLE_PUBLIC_KEY names" >&2
+            exit 1
+          fi
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: app
@@ -357,22 +420,25 @@ jobs:
 
   # What an installed copy will actually fetch, fetched. A release whose feed is missing,
   # stale, marked pre-release or signed with the wrong key is only visible from outside.
+  #
+  # The signature is checked against the public key in the bundle this release published,
+  # which is the key an installed copy checks it against. It used to be checked with
+  # SPARKLE_PRIVATE_KEY, which is the key that made it: the job that signed the feed was
+  # the job that agreed with itself about the signature, and a wrong key passed. Nothing
+  # here reads a secret any more.
   feed:
     needs: [guard, publish]
     if: needs.guard.outputs.prerelease == 'false'
     runs-on: macos-latest
+    permissions:
+      contents: read
+      attestations: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      # Sparkle's own distribution, at the version the package resolved to. Resolving the
-      # package here instead would mean building the core first, for one small tool.
-      - run: |
-          version=$(python3 -c "import json;print([p for p in json.load(open('apple/Package.resolved'))['pins'] if p['identity']=='sparkle'][0]['state']['version'])")
-          curl -fsSL "https://github.com/sparkle-project/Sparkle/releases/download/$version/Sparkle-$version.tar.xz" \
-            | tar -xJ -C "$RUNNER_TEMP" bin/sign_update
       - env:
-          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           feed=$RUNNER_TEMP/appcast.xml
           curl -fsSL --retry 5 --retry-delay 10 --retry-all-errors \
@@ -387,11 +453,29 @@ jobs:
           url=$(sed -n 's/.*enclosure url="\([^"]*\)".*/\1/p' "$feed" | head -1)
           signature=$(sed -n 's/.*sparkle:edSignature="\([^"]*\)".*/\1/p' "$feed" | head -1)
           curl -fsSL --retry 5 --retry-delay 10 --retry-all-errors -o "$RUNNER_TEMP/update.zip" "$url"
-          printf '%s' "$SPARKLE_PRIVATE_KEY" | \
-            "$RUNNER_TEMP/bin/sign_update" \
-              --verify "$RUNNER_TEMP/update.zip" "$signature" --ed-key-file -
           ditto -x -k "$RUNNER_TEMP/update.zip" "$RUNNER_TEMP/unpacked"
+          key=$(/usr/libexec/PlistBuddy -c "Print :SUPublicEDKey" \
+            "$RUNNER_TEMP/unpacked/Pitboard.app/Contents/Info.plist")
+          swift .github/scripts/eddsa-verify.swift "$key" "$signature" "$RUNNER_TEMP/update.zip"
           spctl --assess --type execute -v "$RUNNER_TEMP/unpacked/Pitboard.app"
+
+          # The attestation is the part of this that says who published the file, rather
+          # than only that the bytes arrived whole. Sigstore takes a moment to serve one
+          # that was written seconds ago.
+          attested() {
+            for attempt in 1 2 3 4 5; do
+              gh attestation verify "$1" --repo "$GITHUB_REPOSITORY" && return 0
+              echo "no attestation for $1 yet (attempt $attempt)"
+              sleep 15
+            done
+            return 1
+          }
+          curl -fsSL --retry 5 --retry-delay 10 --retry-all-errors \
+            -o "$RUNNER_TEMP/SHA256SUMS" \
+            "https://github.com/${GITHUB_REPOSITORY}/releases/latest/download/SHA256SUMS"
+          attested "$feed"
+          attested "$RUNNER_TEMP/SHA256SUMS"
+          attested "$RUNNER_TEMP/update.zip"
 
   # `brew install datlechin/tap/pitboard` is the first line of the README, so the tap is
   # part of a release rather than something done to it afterwards. It used to be a workflow

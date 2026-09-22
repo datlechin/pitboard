@@ -1,0 +1,221 @@
+name: Update key rehearsal
+
+# Sparkle takes an update when either the archive's EdDSA signature verifies under the
+# public key in the installed bundle or the new bundle satisfies the installed bundle's
+# designated requirement, and there is no way to revoke either. "Rotating the update key"
+# in CONTRIBUTING.md has a route for each. This runs the one that needs no certificate,
+# which is the awkward one and the one that still works when both are in doubt: a release
+# signed with the current key that carries the next public key, then a release signed with
+# the next key, and a floor version below which a copy cannot follow and has to be
+# installed again from the cask.
+#
+# It is run rather than written so that the procedure is one that has been executed. Its
+# first rung is the step nobody would get right from reading: generate_appcast will not
+# sign a bundle carrying a key other than the one it is given, and refuses by leaving the
+# signature out and exiting 0.
+#
+# It cannot touch anything real, by construction rather than by care. This file names no
+# repository secret, so no job it starts is given the update key or the certificate; the
+# keys it uses are made on the runner and go when the runner does; its feed is on the
+# loopback address, which no release can publish to; and its bundles carry an identifier
+# under a reserved domain. A step checks all four before a single byte is signed.
+
+on:
+  schedule:
+    - cron: "41 6 1 * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  # The bundles are real and really update themselves against this feed. invalid. is the
+  # reserved top-level domain, so no reversed-domain identifier under it can be anybody's.
+  STAGING_ID: invalid.rehearsal.Pitboard
+  STAGING_FEED: http://127.0.0.1:8973/appcast.xml
+  STAGING_PREFIX: http://127.0.0.1:8973/
+
+jobs:
+  ladder:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: rustup toolchain install
+      - run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+
+      # Two keys that exist for the next twenty minutes. sign_update reads a private key as
+      # the base64 of a 32 byte seed, which is what generate_keys -x exports, so these need
+      # no keychain and leave nothing behind on the runner.
+      - name: Two keys of this job's own
+        run: |
+          mkdir -p "$RUNNER_TEMP/keys"
+          openssl rand -base64 32 > "$RUNNER_TEMP/keys/current"
+          openssl rand -base64 32 > "$RUNNER_TEMP/keys/next"
+          swift .github/scripts/eddsa-public-key.swift \
+            < "$RUNNER_TEMP/keys/current" > "$RUNNER_TEMP/keys/current.pub"
+          swift .github/scripts/eddsa-public-key.swift \
+            < "$RUNNER_TEMP/keys/next" > "$RUNNER_TEMP/keys/next.pub"
+
+      # One build, then three bundles cut from it. What the ladder turns on is the key in a
+      # bundle and the key a feed was signed with, not anything the Swift compiles to, so
+      # building it three times would buy nothing and cost three times as long.
+      - name: Three rungs
+        run: |
+          SPARKLE_PUBLIC_KEY=$(cat "$RUNNER_TEMP/keys/current.pub") \
+          SPARKLE_FEED_URL=$STAGING_FEED \
+            ./apple/scripts/build-app.sh
+          rung() {
+            app=$RUNNER_TEMP/rungs/$1/Pitboard.app
+            mkdir -p "$RUNNER_TEMP/rungs/$1"
+            ditto apple/build/Pitboard.app "$app"
+            plist=$app/Contents/Info.plist
+            /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $STAGING_ID" "$plist"
+            /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $2" "$plist"
+            /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $3" "$plist"
+            /usr/libexec/PlistBuddy -c "Set :SUPublicEDKey $(cat "$RUNNER_TEMP/keys/$4.pub")" "$plist"
+            /usr/libexec/PlistBuddy -c "Set :SUFeedURL $STAGING_FEED" "$plist"
+            # The plist is inside the signature, so the bundle is sealed again after it
+            # changes or it will not open at all.
+            codesign --force --sign - --timestamp=none "$app"
+            codesign --verify --strict "$app"
+          }
+          # The copy somebody already has, the rung that reaches it, and the rung after.
+          rung installed 0.0.1 1 current
+          rung first 0.0.2 2 next
+          rung second 0.0.3 3 next
+
+      # Before anything is signed. The production identifier and feed are read out of the
+      # tree rather than repeated here, so this cannot drift away from what they are.
+      - name: None of this is production
+        run: |
+          production_id=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" \
+            apple/Resources/Info.plist)
+          production_feed=$(sed -n 's/^FEED=//p' apple/scripts/build-app.sh)
+          for rung in installed first second; do
+            plist=$RUNNER_TEMP/rungs/$rung/Pitboard.app/Contents/Info.plist
+            id=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$plist")
+            feed=$(/usr/libexec/PlistBuddy -c "Print :SUFeedURL" "$plist")
+            if [ "$id" = "$production_id" ]; then
+              echo "$rung carries the production bundle identifier" >&2
+              exit 1
+            fi
+            if [ "$feed" = "$production_feed" ]; then
+              echo "$rung points at the production feed" >&2
+              exit 1
+            fi
+            case "$feed" in
+              http://127.0.0.1:*) ;;
+              *) echo "$rung's feed is $feed, which is not on this runner" >&2; exit 1 ;;
+            esac
+          done
+          # The other half of it: a job that never asks for the real key cannot be handed it.
+          if grep -q 'secrets\.' .github/workflows/rotation.yml; then
+            echo "this workflow asks for a repository secret, so it can be given one" >&2
+            exit 1
+          fi
+
+      # Rung one is the release that reaches a copy on the current key and leaves it
+      # trusting the next one. generate_appcast refuses to sign a bundle whose SUPublicEDKey
+      # is not the key it was handed, and refuses by writing no signature and exiting 0, so
+      # the feed is generated with the next key and its signature then replaced with one the
+      # current key made. That replacement is the whole of rung one and the reason this is
+      # rehearsed: a rotation that met it for the first time on the day would have published
+      # a feed nobody could install.
+      - name: The two feeds
+        run: |
+          sparkle=$(cd apple/.build/artifacts/sparkle/Sparkle/bin && pwd)
+          feed() {
+            mkdir -p "$RUNNER_TEMP/feeds/$1"
+            ditto -c -k --keepParent "$RUNNER_TEMP/rungs/$2/Pitboard.app" \
+              "$RUNNER_TEMP/feeds/$1/Pitboard-$3.zip"
+            "$sparkle/generate_appcast" --ed-key-file "$RUNNER_TEMP/keys/next" \
+              --download-url-prefix "$STAGING_PREFIX" \
+              --link "https://example.invalid" \
+              "$RUNNER_TEMP/feeds/$1"
+          }
+          feed one first 0.0.2
+          feed two second 0.0.3
+          signed_by_current=$("$sparkle/sign_update" --ed-key-file "$RUNNER_TEMP/keys/current" \
+            -p "$RUNNER_TEMP/feeds/one/Pitboard-0.0.2.zip")
+          # base64 has no | in it, and no & for sed to read as the whole match.
+          sed -i '' "s|sparkle:edSignature=\"[^\"]*\"|sparkle:edSignature=\"$signed_by_current\"|" \
+            "$RUNNER_TEMP/feeds/one/appcast.xml"
+
+      - name: Climb it
+        run: |
+          set -u
+          current=$(cat "$RUNNER_TEMP/keys/current.pub")
+          next=$(cat "$RUNNER_TEMP/keys/next.pub")
+          served=$RUNNER_TEMP/served
+          mkdir -p "$served"
+          python3 -m http.server 8973 --directory "$served" > /dev/null 2>&1 &
+          server=$!
+          trap 'kill $server' EXIT
+          for _ in $(seq 1 20); do
+            curl -fs -o /dev/null "$STAGING_PREFIX" && break
+            sleep 1
+          done
+
+          # Fetched from the address in the bundle, not from one written down twice, so what
+          # is checked is the feed an installed copy of that bundle would go and read.
+          publish() {
+            rm -f "$served"/*
+            cp "$RUNNER_TEMP/feeds/$1"/* "$served/"
+          }
+          fetch() {
+            url=$(/usr/libexec/PlistBuddy -c "Print :SUFeedURL" \
+              "$RUNNER_TEMP/rungs/$1/Pitboard.app/Contents/Info.plist")
+            curl -fsS -o "$RUNNER_TEMP/fetched.xml" "$url"
+          }
+          offered() {
+            sed -n 's/.*<sparkle:shortVersionString>\(.*\)<.*/\1/p' "$RUNNER_TEMP/fetched.xml" |
+              awk 'NR == 1'
+          }
+          # What Sparkle does with the feed it just read: take the enclosure, and check its
+          # signature against the key in the bundle that is running.
+          accepts() {
+            signature=$(sed -n 's/.*sparkle:edSignature="\([^"]*\)".*/\1/p' \
+              "$RUNNER_TEMP/fetched.xml" | awk 'NR == 1')
+            url=$(sed -n 's/.*enclosure url="\([^"]*\)".*/\1/p' "$RUNNER_TEMP/fetched.xml" |
+              awk 'NR == 1')
+            curl -fsS -o "$RUNNER_TEMP/update.zip" "$url"
+            swift .github/scripts/eddsa-verify.swift "$1" "$signature" "$RUNNER_TEMP/update.zip"
+          }
+
+          publish one
+          fetch installed
+          [ "$(offered)" = "0.0.2" ] || { echo "rung one offers $(offered)" >&2; exit 1; }
+          if ! accepts "$current"; then
+            echo "a copy on the current key cannot install rung one, so nobody can" >&2
+            exit 1
+          fi
+          if accepts "$next"; then
+            echo "rung one verifies under the next key as well, so it proves nothing" >&2
+            exit 1
+          fi
+          ditto -x -k "$RUNNER_TEMP/update.zip" "$RUNNER_TEMP/installed-one"
+          carried=$(/usr/libexec/PlistBuddy -c "Print :SUPublicEDKey" \
+            "$RUNNER_TEMP/installed-one/Pitboard.app/Contents/Info.plist")
+          if [ "$carried" != "$next" ]; then
+            echo "rung one leaves a copy trusting $carried, not the next key" >&2
+            exit 1
+          fi
+
+          publish two
+          fetch second
+          [ "$(offered)" = "0.0.3" ] || { echo "rung two offers $(offered)" >&2; exit 1; }
+          if ! accepts "$next"; then
+            echo "a copy that took rung one cannot install rung two" >&2
+            exit 1
+          fi
+          # The floor, stated as a fact rather than as an intention: a copy that never took
+          # rung one is on 0.0.1 for good and has to be installed again from the cask.
+          if accepts "$current"; then
+            echo "rung two installs on a copy that never took rung one, so the floor is" >&2
+            echo "not where the procedure says it is" >&2
+            exit 1
+          fi
+          echo "the ladder holds: 0.0.1 reaches 0.0.2 reaches 0.0.3, and the floor is 0.0.2"

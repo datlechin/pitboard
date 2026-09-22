@@ -102,9 +102,6 @@ of materials beside each of them, `SHA256SUMS`, and `appcast.xml`. The last two 
 the same job and published in the same release as the files they describe, so on their own
 they say a download arrived whole and nothing about who put it there.
 
-Never change the update key once a release carries it. An app checks the feed's signature
-against the key it was built with, so a new key strands every copy already installed.
-
 ### What the maintainer has to set up by hand
 
 Once, in this order:
@@ -133,6 +130,58 @@ held revoked on crates.io.
 If the tap push fails, re-run the `tap` job. There is no script for doing it by hand any
 more: the checksums come from the `SHA256SUMS` the release computed, and a second download
 somewhere else is what this replaced.
+
+### Rotating the update key
+
+For a plain `.app` zip update, which is what pitboard ships, Sparkle takes an update when
+either the archive's EdDSA signature verifies under the public key in the installed bundle
+or the new bundle satisfies the installed bundle's designated requirement. One of the two,
+not both; its own source says this is so that a key can be rotated without breaking the
+chain of trust. When the EdDSA check is the one that failed, the archive must also verify
+under the key the new bundle carries, so the copy comes out able to take the release after
+this one.
+
+There are therefore two routes, and what is still in hand decides which.
+
+The code signing route is one release. The bundle carries the new public key, the archive
+is signed with the new private key, and the app is code signed with the same Developer ID
+as the copies already out there, which take it through the designated requirement and come
+out trusting the new key. It needs no signature from the old key, so this is the route when
+the update key is gone rather than merely suspect. It is also the route for a new Developer
+ID certificate with the update key unchanged: a certificate reissued for the same team
+still satisfies the designated requirement, a different team does not.
+
+The EdDSA route is two releases and depends on nothing but the update key, so it is the one
+to use when the certificate is in doubt as well, and the only one that reaches a copy
+installed from an ad-hoc signed build, whose designated requirement is its own cdhash. It
+signs with the current key, so it is a way off a key that is suspect and not a way back
+from one that is lost.
+
+1. A release signed with the current key whose bundle carries the next public key.
+   `generate_appcast` will not sign a bundle carrying a key other than the one it is
+   handed, and refuses by writing the feed with no signature and exiting 0, so this rung is
+   made by generating the feed with the next key and then replacing the `edSignature` with
+   one `sign_update` makes from the current key.
+2. A release signed with the next key.
+
+The floor is the version of rung one. A copy older than it never learned the next key and
+has nothing to check rung two with, so it stays where it is until somebody installs it
+again with `brew install --cask datlechin/tap/pitboard`. Say the floor version out loud in
+the release notes.
+
+Either route changes the key in the bundle, so set the repository variable
+`SPARKLE_KEY_ROTATION` to that version first or the app job refuses the build. Rung two
+ships the same key as rung one, so it does not need the variable and should not have it.
+
+`.github/workflows/rotation.yml` runs the EdDSA route every month against two keys it makes
+on the runner, a feed on `127.0.0.1`, and bundles under an `invalid.` identifier, so the
+procedure is one that has been executed rather than one that has been written. It names no
+repository secret, which is what stops it reaching the real key, and CI checks that it
+still names none.
+
+If both the update key and the certificate are gone there is no route: nothing an installed
+copy will accept can be made. Reinstalling from the cask is the only way back, which is the
+argument for keeping the two in different places.
 
 ## Measured, not assumed
 
@@ -201,13 +250,38 @@ coupling comes from:
   a fact resting on something not existing is wrong the moment it does, and nothing
   disappearing would ever say so.
 
-Read on 2026-09-22, against Homebrew 7.0.6 and the tap as it then stood:
+Read on 2026-09-22, against Sparkle 2.10.0, Homebrew 7.0.6 and the tap as it then stood.
+These decide how a release is allowed to move:
 
-- `cargo cyclonedx` writes a bill of materials beside every `Cargo.toml` in the workspace
-  whatever `--manifest-path` says, so the release keeps the one belonging to the crate in
-  the artefact and deletes the rest. A target that is not installed still resolves. The two
-  macOS targets resolve to the same 83 components, which is why the app has one bill of
-  materials and not two; macOS and musl differ by 7, which is why each target has its own.
+- `generate_appcast` cross-checks the private key it is given against the bundle's
+  `SUPublicEDKey`, and when they disagree it writes the feed with no `sparkle:edSignature`
+  at all and exits 0, saying "Wrote 1 new update". Tried with a key that was not base64 and
+  again with a valid key that was simply a different one: no signature either time. Two
+  consequences. A release whose `SPARKLE_PUBLIC_KEY` and `SPARKLE_PRIVATE_KEY` drift apart
+  would publish a feed nobody can install, so the app job greps for the attribute. And the
+  first rung of an EdDSA-only rotation cannot be made by `generate_appcast` at all.
+- `sign_update --verify` takes the private key and derives the public one from it, so
+  the job that signed a feed could only ever agree with its own arithmetic. CryptoKit's
+  `Curve25519.Signing` verifies the same signature from the public key alone: exit 0 with
+  the right key, exit 1 with a different one, over a signature `sign_update` had just made.
+  The feed job checks the published feed against the key in the published bundle now, and
+  reads no secret.
+- `sign_update --ed-key-file` accepts a bare base64 of 32 random bytes, so the rehearsal
+  makes keys with `openssl rand -base64 32` and never touches a keychain.
+- Sparkle's `SUUpdateValidator.m` takes a plain `.app` zip update when either the
+  archive's EdDSA signature verifies under the installed bundle's public key or the new
+  bundle satisfies the installed bundle's designated requirement, and says in a comment that
+  this is what allows key rotation. This was read, not run. What was run: an ad-hoc signed
+  bundle's designated requirement is a list of cdhashes, so for a copy installed from an
+  ad-hoc build there is no code signing route and the EdDSA one is all there is.
+- `pitboard doctor` exits 3 where Claude Code has never run, which is every clean runner, so
+  the job that installs from the tap treats 0 and 3 as the binary having run its checks and
+  anything else as it having failed to.
+- `cargo cyclonedx` writes a bill of materials beside every `Cargo.toml` in the
+  workspace whatever `--manifest-path` says, so the release keeps the one belonging to the
+  crate in the artefact and deletes the rest. A target that is not installed still resolves.
+  The two macOS targets resolve to the same 83 components, which is why the app has one bill
+  of materials and not two; macOS and musl differ by 7, which is why each target has its own.
 - crates.io issues a Trusted Publishing token that lasts 30 minutes, and matches on
   repository owner, repository name, workflow filename and, when it is given one, the
   environment. Registration is per crate, so `pitboard` and `pitboard-core` each need it.
@@ -216,9 +290,6 @@ Read on 2026-09-22, against Homebrew 7.0.6 and the tap as it then stood:
   could install what it published, and `packaging/pitboard.rb` in this repository still said
   v0.1.2 while the tap served 0.2.0 and the workspace was at 0.2.0. Nothing anywhere
   compared the three.
-- `pitboard doctor` exits 3 where Claude Code has never run, which is every clean runner, so
-  the job that installs from the tap treats 0 and 3 as the binary having run its checks and
-  anything else as it having failed to.
 
 ## Dependencies
 

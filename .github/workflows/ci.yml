@@ -65,6 +65,7 @@ jobs:
       - run: >
           swift format lint --strict --recursive --configuration apple/.swift-format
           apple/Sources/Pitboard apple/Sources/PitboardKit apple/Tests apple/scripts
+          .github/scripts
       # Proves the core still links into the app, that its bindings still match, and that
       # the bundle still assembles and signs.
       - run: ./apple/scripts/build-app.sh
@@ -107,3 +108,19 @@ jobs:
         with:
           persist-credentials: false
       - uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
+
+  # The update key rehearsal ships bundles that really do update themselves, so it must
+  # never be able to reach the real key, the real certificate or the real feed. A job that
+  # never asks for a repository secret cannot be handed one, and that is worth knowing on
+  # the pull request that changes it rather than the month after.
+  rehearsal:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: |
+          if grep -q 'secrets\.' .github/workflows/rotation.yml; then
+            echo "the rehearsal asks for a repository secret, so it can be given one" >&2
+            exit 1
+          fi
