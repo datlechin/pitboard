@@ -141,7 +141,7 @@ fn resolve(
         if state.names(&service) {
             continue;
         }
-        let written_here = ours.iter().any(|n| *n == service);
+        let written_here = ours.contains(&service);
         match store::vault_read(ctx, &service) {
             // Claimed but never written to. Nothing was ever there.
             Ok(None) => {}
