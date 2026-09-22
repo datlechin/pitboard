@@ -32,6 +32,7 @@ pub mod context;
 pub mod doctor;
 pub mod error;
 pub mod service;
+pub mod settings;
 pub mod state;
 pub mod status;
 pub mod statusline;

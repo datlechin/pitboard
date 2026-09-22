@@ -76,7 +76,7 @@ pub struct Settled {
 /// Throws away a record of an interrupted switch that cannot be finished, keeping every
 /// copy it names. Takes pitboard's own lock but never Claude Code's: it installs nothing.
 pub fn abandon(ctx: &Context) -> Result<Option<Abandoned>> {
-    if ctx.custom_oauth {
+    if crate::settings::custom_oauth(ctx) {
         return Err(Error::CustomOauthEndpoint);
     }
     let _exclusive = exclusive(ctx)?;
@@ -90,7 +90,7 @@ pub fn settle(ctx: &Context) -> Result<(Settled, Option<Recovered>)> {
     // Under a custom OAuth endpoint the live login is in "Claude Code-custom-oauth-
     // credentials", not the item pitboard reads. Acting would park nothing and restore
     // into an item nobody reads, so pitboard does not act at all.
-    if ctx.custom_oauth {
+    if crate::settings::custom_oauth(ctx) {
         return Err(Error::CustomOauthEndpoint);
     }
     let exclusive = exclusive(ctx)?;

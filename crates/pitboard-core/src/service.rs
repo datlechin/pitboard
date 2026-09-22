@@ -286,9 +286,12 @@ impl Pitboard {
             }
         })?;
         let mut warnings = Vec::new();
-        if !self.ctx.overriding_auth().is_empty() {
+        // Read from files as well as from this process's environment, so the app, which
+        // has no shell environment at all, gets the same answer as the command line.
+        let overridden = crate::settings::overrides(&self.ctx);
+        if !overridden.is_empty() {
             warnings.push(Warning::AuthOverridden {
-                names: self.ctx.overriding_auth().to_vec(),
+                names: overridden.iter().map(ToString::to_string).collect(),
             });
         }
         if let Some(r) = recovered {

@@ -22,8 +22,9 @@ pub struct Context {
     /// `CLAUDE_CODE_CUSTOM_OAUTH_URL`. Set, it renames both the keychain item and the config
     /// file Claude Code uses, so pitboard would be reading and writing the wrong ones.
     pub(crate) custom_oauth: bool,
-    /// Environment variables that make Claude Code use something other than the login
-    /// pitboard moves, so a switch would change nothing it can see.
+    /// Environment variables this process was started with that make Claude Code use
+    /// something other than the login pitboard moves. Only half the answer: the rest is in
+    /// files, which [`crate::settings::overrides`] reads and an app can see too.
     pub(crate) overriding_auth: Vec<String>,
     /// Whether a login too large for `security -i` may be written the way Claude Code
     /// writes it: as a command argument, where `ps` can see it for the length of the call.
@@ -169,7 +170,7 @@ impl Context {
             user: var("USER"),
             custom_oauth: var("CLAUDE_CODE_CUSTOM_OAUTH_URL").is_some_and(|v| !v.is_empty()),
             argv_fallback: !var("PITBOARD_NO_ARGV").is_some_and(|v| v == "1"),
-            overriding_auth: OVERRIDING_AUTH
+            overriding_auth: crate::settings::OVERRIDING_ENV
                 .iter()
                 .filter(|name| var(name).is_some_and(|v| !v.is_empty()))
                 .map(|name| (*name).to_string())
@@ -213,14 +214,6 @@ impl Context {
         self
     }
 }
-
-/// Set, any of these makes Claude Code authenticate with something other than the login in
-/// the credential store, so moving that login changes nothing a session would notice.
-const OVERRIDING_AUTH: [&str; 3] = [
-    "ANTHROPIC_API_KEY",
-    "ANTHROPIC_AUTH_TOKEN",
-    "CLAUDE_CODE_OAUTH_TOKEN",
-];
 
 #[cfg(test)]
 mod tests {

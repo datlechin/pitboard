@@ -47,6 +47,17 @@ All notable changes are recorded here. The format follows
   apart too, where they used to share one code.
 
 ### Added
+- pitboard reads what a session here would actually authenticate with, from files rather
+  than from three environment variables. Claude Code resolves authentication from layered
+  settings, and a managed policy or a line in a person's own `settings.json` can set an
+  `env` block, an `apiKeyHelper`, or a third-party provider switch; under any of those a
+  session ignores the login pitboard moves and every switch is a no-op that reported
+  success. Worse, the app has no shell environment at all, so the one surface that could not
+  warn was the one most likely to be used on a machine that needed the warning. Managed
+  settings and the person's own are read; a project's are deliberately not, because an
+  answer true only in the directory pitboard happened to run in is worse than none.
+  `pitboard doctor` says which it is, and a custom OAuth endpoint set in a file now refuses
+  a switch the way one set in the environment always did.
 - Every fact pitboard stands on about Claude Code is now a list rather than a comment:
   what it is, where in Claude Code it was read, which build it was last verified against,
   and what in this crate stops being true if it moves. `pitboard doctor` says which Claude

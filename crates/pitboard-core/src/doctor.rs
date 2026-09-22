@@ -52,6 +52,9 @@ pub struct Facts {
     pub pending_parks: Vec<String>,
     /// Which Claude Code is installed here, read off disk.
     pub claude_version: Option<String>,
+    /// Every reason a session here would authenticate as something other than the stored
+    /// login, read from settings files as well as from this process's environment.
+    pub auth_overrides: Vec<crate::settings::Override>,
     pub state: Result<State, Error>,
     /// Each enrolled account's parked login, read back from the vault.
     pub parks: Vec<ParkFact>,
@@ -121,6 +124,7 @@ pub fn gather(ctx: &Context) -> Facts {
         daemon: crate::daemon::read(ctx),
         pending_parks: crate::pending::outstanding(ctx),
         claude_version: claude::installed_version(ctx),
+        auth_overrides: crate::settings::overrides(ctx),
         parks: state
             .as_ref()
             .map(|s| park_facts(ctx, s, identity.as_ref().map(|i| i.account_uuid.as_str())))
@@ -438,6 +442,7 @@ pub fn evaluate(facts: &Facts) -> Vec<Check> {
     checks.push(judge_daemon(facts));
     checks.push(judge_pending(facts));
     checks.push(judge_claude_version(facts));
+    checks.push(judge_auth(facts));
     checks
 }
 
@@ -576,6 +581,36 @@ fn judge_storage_v5(facts: &Facts) -> Check {
     }
 }
 
+/// Whether moving the stored login would change anything a session sees.
+///
+/// Claude Code resolves this from layered settings, so a managed policy or a line in a
+/// person's own `settings.json` can make every switch pitboard performs a no-op. Read from
+/// files rather than from this process's environment, because an app launched from Finder
+/// has no environment to read and is the surface most likely to be used on a machine that
+/// needs the answer.
+fn judge_auth(facts: &Facts) -> Check {
+    if facts.auth_overrides.is_empty() {
+        return ok(
+            "auth_source",
+            "what a session authenticates with",
+            "the stored login, which is what pitboard moves",
+        );
+    }
+    let named: Vec<String> = facts
+        .auth_overrides
+        .iter()
+        .map(ToString::to_string)
+        .collect();
+    warn(
+        "auth_source",
+        "what a session authenticates with",
+        format!("something else: {}", named.join("; ")),
+        "Claude Code here authenticates with that rather than with the stored login, so \
+         switching accounts changes nothing a session would notice. Remove it, or accept \
+         that pitboard is moving a login nothing reads.",
+    )
+}
+
 /// Which Claude Code is installed, against which one pitboard's facts were read.
 ///
 /// Stated rather than warned about. Claude Code ships several times a week, so a mismatch
@@ -712,6 +747,7 @@ mod tests {
             daemon: None,
             pending_parks: Vec::new(),
             claude_version: Some(crate::assumptions::VERIFIED_AGAINST.into()),
+            auth_overrides: Vec::new(),
             state: Ok(State::default()),
             parks: Vec::new(),
             interrupted: false,
