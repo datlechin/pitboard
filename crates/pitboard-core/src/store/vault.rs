@@ -43,6 +43,31 @@ impl RawStore for FileVault {
         super::exists(&self.path(service)?)
     }
 
+    /// A directory enumerates itself. A vault that is not there yet holds nothing, which is
+    /// an answer; anything else that stops the read is not, and says so.
+    fn list(&self) -> Result<Option<Vec<String>>, Error> {
+        let entries = match std::fs::read_dir(&self.dir) {
+            Ok(entries) => entries,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Some(Vec::new())),
+            Err(e) => {
+                return Err(Error::Unreadable(format!(
+                    "cannot list {}: {e}",
+                    self.dir.display()
+                )));
+            }
+        };
+        let mut names: Vec<String> = entries
+            .flatten()
+            .filter_map(|entry| {
+                let name = entry.file_name().into_string().ok()?;
+                let service = name.strip_suffix(".json")?.to_string();
+                crate::park::is_park_name(&service).then_some(service)
+            })
+            .collect();
+        names.sort();
+        Ok(Some(names))
+    }
+
     fn read(&self, service: &str) -> Result<Option<String>, Error> {
         let path = self.path(service)?;
         match std::fs::read_to_string(&path) {

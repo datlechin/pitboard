@@ -13,6 +13,16 @@ All notable changes are recorded here. The format follows
   between writing a login and recording it left a live refresh token that no entry named,
   never renewed, never deleted by `pitboard uninstall`, and on macOS not listable by any
   tool a person has. `pitboard doctor` reports anything still outstanding.
+- `pitboard repair` asks the credential store itself what parked logins are on this
+  machine, rather than reading pitboard's own index, and accounts for every one it finds:
+  given back to the account whose name it carries, or deleted when no account here wants
+  it, or reported and left exactly where it is. Only a name this pitboard wrote down itself
+  is ever deleted: a keychain belongs to a whole login session while pitboard's records
+  belong to one `PITBOARD_HOME`, so a parked login it cannot account for is evidence of
+  another pitboard rather than of an orphan, and deleting it would end that account's
+  session for somebody who never ran the command. Giving one back is additive and safe on a
+  guess; deleting one is not. Measured first: `security dump-keychain` without `-d` never
+  prompts, takes 0.06 seconds, emits no secret of any item, and does not slow later reads.
 - A crash matrix: every durable step of a switch, an enrolment, a renewal and a forget,
   killed where it stands, recovered, and checked against what must be true afterwards
   rather than against a particular outcome. Every case runs recovery twice, because a

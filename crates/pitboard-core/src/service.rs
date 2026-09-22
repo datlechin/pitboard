@@ -222,6 +222,16 @@ impl Pitboard {
         outcome
     }
 
+    /// Ask the credential store what parked logins are on this machine, and give back or
+    /// delete every one pitboard's own records do not name. Ordinarily there is nothing to
+    /// do: every change resolves the names it wrote down. This is for a machine whose state
+    /// file was lost or restored from a backup, where the store is the only record left.
+    pub fn repair(&self) -> Changing<switch::Reclaimed> {
+        self.changing("repair", "", |settled| {
+            switch::repair(settled).map(|r| (r, Vec::new()))
+        })
+    }
+
     /// The changes pitboard has made, newest last.
     pub fn log(&self, limit: usize) -> Vec<audit::Entry> {
         audit::read(&self.ctx, limit)
@@ -296,6 +306,7 @@ impl Audited for Outcome {
     }
 }
 
+impl Audited for switch::Reclaimed {}
 impl Audited for Enrolled {}
 impl Audited for String {}
 

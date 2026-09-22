@@ -15,6 +15,7 @@ mod rename;
 mod renew;
 mod uninstall;
 
+pub use crate::pending::Reclaimed;
 pub use enroll::{Enrolled, SignIn, WatchedSignIn, enroll, sign_in, sign_in_watched};
 pub use forget::forget;
 pub use journal::{Abandoned, Recovered, pending as interrupted};
@@ -100,6 +101,21 @@ pub fn settle(ctx: &Context) -> Result<(Settled, Option<Recovered>)> {
         },
         recovered,
     ))
+}
+
+/// Ask the store itself what parked logins are on this machine, and resolve every one the
+/// state does not name. `settle` already does this from pitboard's own list of names on
+/// every change; this is the thorough version, for a machine whose list was lost with its
+/// state file, or written by a version that kept no list.
+pub fn repair(settled: Settled) -> Result<pending::Reclaimed> {
+    let Settled {
+        _exclusive,
+        mut state,
+        ctx,
+    } = settled;
+    let reclaimed = pending::reclaim(&ctx, &mut state)?;
+    purge(&ctx, &mut state);
+    Ok(reclaimed)
 }
 
 /// Delete what no account refers to any more. A failed save only leaves deleted names

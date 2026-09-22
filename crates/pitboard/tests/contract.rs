@@ -56,6 +56,29 @@ fn a_failure_says_what_went_wrong_underneath() {
     contract!("use_anthropic_unwell", value, code);
 }
 
+/// The keychain belongs to the whole machine, so what `repair` finds depends on what else
+/// is on it. The envelope's shape is the contract; the lists are not snapshotted.
+#[test]
+fn repair() {
+    let env = two_accounts("contract-repair");
+    let (value, code) = json(&env, &["repair"]);
+    assert_eq!(code, 0);
+    assert_eq!(value["command"], "repair");
+    assert_eq!(value["ok"], true);
+    for field in ["given_back", "deleted", "strangers", "unreadable"] {
+        assert!(
+            value["data"][field].is_array(),
+            "the envelope always carries {field}"
+        );
+    }
+    assert!(
+        value["data"]["deleted"]
+            .as_array()
+            .is_some_and(Vec::is_empty),
+        "this pitboard wrote nothing down that nothing recorded, so it deletes nothing"
+    );
+}
+
 #[test]
 fn enroll() {
     let mut env = Env::new("contract-enroll");

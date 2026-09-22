@@ -87,6 +87,9 @@ Other commands:
 - `pitboard log` shows what pitboard has changed, and when.
 - `pitboard abandon` gives up on an interrupted switch that cannot be finished, keeping
   every login. Only needed when recovery cannot reach Anthropic.
+- `pitboard repair` asks the keychain what parked logins are on this machine and accounts
+  for every one: given back to the account it belongs to, or deleted when nothing wants it.
+  Only needed if pitboard's own files were lost or restored from a backup.
 - `pitboard uninstall` deletes every parked login and pitboard's own files.
 
 ## Status line

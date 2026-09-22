@@ -161,6 +161,15 @@ impl RawStore for Arc<MemoryStore> {
             .remove(service);
         Ok(())
     }
+
+    fn list(&self) -> Result<Option<Vec<String>>, Error> {
+        Ok(Some(
+            self.services()
+                .into_iter()
+                .filter(|s| crate::park::is_park_name(s))
+                .collect(),
+        ))
+    }
 }
 
 /// A machine with no keychain and no files: a live chain, a vault, and whatever Claude Code

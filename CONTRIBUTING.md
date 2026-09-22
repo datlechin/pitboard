@@ -132,6 +132,10 @@ coupling comes from:
   deletes the keychain item when it does. pitboard does not, on purpose.
 - The supervisor daemon records itself in `<config dir>/daemon.lock` with its pid and the
   Claude Code version that launched it, and leaves the file behind when it dies.
+- `security dump-keychain` without `-d` never prompts, exits 0 in 0.06 seconds against a
+  keychain of 362 items, and emits attributes only: no secret of any item. Reads afterwards
+  take the usual 0.016 seconds, so listing carries none of the access-list side effect an
+  in-process read does. Service names appear as `    "svce"<blob>="<name>"`.
 
 ## Dependencies
 

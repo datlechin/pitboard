@@ -113,6 +113,14 @@ pub(crate) trait RawStore: Send + Sync {
     fn write(&self, service: &str, contents: &str) -> Result<(), Error>;
     fn delete(&self, service: &str) -> Result<(), Error>;
 
+    /// Every name pitboard put here, where the store can be asked. `None` where it cannot,
+    /// which is what a store with no way to enumerate answers rather than an empty list:
+    /// nothing found and nothing askable are different, and one of them means an item can
+    /// be lost track of for good.
+    fn list(&self) -> Result<Option<Vec<String>>, Error> {
+        Ok(None)
+    }
+
     /// What a write would cost against this store's ceiling. `None` where there is none,
     /// which is every store but the keychain.
     fn cost(&self, _service: &str, _contents: &str) -> Option<Cost> {
@@ -323,6 +331,12 @@ pub fn vault_write(ctx: &Context, service: &str, contents: &str) -> Result<(), E
 
 pub fn vault_delete(ctx: &Context, service: &str) -> Result<(), Error> {
     vault(ctx).delete(service)
+}
+
+/// Every parked login on this machine, asked of the store rather than read out of
+/// pitboard's own index. `None` where the store cannot be enumerated.
+pub fn vault_list(ctx: &Context) -> Result<Option<Vec<String>>, Error> {
+    vault(ctx).list()
 }
 
 /// What writing the live credential would cost, asked of the backend that would take the

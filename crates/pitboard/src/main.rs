@@ -67,6 +67,8 @@ enum Command {
     },
     /// Give up on an interrupted switch that cannot be finished, keeping every login
     Abandon,
+    /// Ask the credential store what parked logins are here, and account for every one
+    Repair,
     /// What pitboard has changed, and when
     Log {
         /// How many changes to show
@@ -391,6 +393,57 @@ fn abandon(pitboard: &Pitboard) -> Report {
     }
 }
 
+fn repair(pitboard: &Pitboard) -> Report {
+    changed("repair", pitboard.repair(), |r| {
+        let human = if r.is_empty() {
+            "Every parked login here is accounted for.\n".to_string()
+        } else {
+            let mut said = String::new();
+            for (label, _) in &r.given_back {
+                said.push_str(&format!(
+                    "Gave {} back a parked login that nothing named.\n",
+                    paint(BOLD, label)
+                ));
+            }
+            if !r.deleted.is_empty() {
+                said.push_str(&format!(
+                    "Deleted {} parked login(s) pitboard wrote down here and nothing \
+                     recorded.\n",
+                    r.deleted.len()
+                ));
+            }
+            if !r.strangers.is_empty() {
+                said.push_str(&format!(
+                    "{} parked login(s) here belong to no account pitboard knows and were \
+                     not written down by this one. Left alone: the keychain is shared by \
+                     the whole machine, and they may be another pitboard's.\n",
+                    r.strangers.len()
+                ));
+            }
+            if !r.unreadable.is_empty() {
+                said.push_str(&format!(
+                    "{} could not be read this time and were left alone. Unlock the \
+                     keychain and run this again.\n",
+                    r.unreadable.len()
+                ));
+            }
+            said
+        };
+        (
+            json!({
+                "given_back": r.given_back.iter().map(|(label, service)| json!({
+                    "label": label,
+                    "service": service,
+                })).collect::<Vec<_>>(),
+                "deleted": r.deleted,
+                "strangers": r.strangers,
+                "unreadable": r.unreadable,
+            }),
+            human,
+        )
+    })
+}
+
 fn log(pitboard: &Pitboard, lines: usize) -> Report {
     let entries = pitboard.log(lines);
     let width = entries.iter().map(|e| e.verb.len()).max().unwrap_or(0);
@@ -525,6 +578,7 @@ fn main() -> ExitCode {
             forget(&pitboard, &label)
         }
         Command::Abandon => abandon(&pitboard),
+        Command::Repair => repair(&pitboard),
         Command::Log { lines } => log(&pitboard, lines),
         Command::Uninstall { yes } => {
             if !yes
