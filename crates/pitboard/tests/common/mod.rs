@@ -259,6 +259,18 @@ impl Env {
         self.mocks.push(mock);
     }
 
+    /// Anthropic answers, badly. The switch that cannot identify the signed-in account
+    /// must say so in a way a program can act on, rather than as one code and a sentence.
+    pub fn profile_trouble(&mut self, status: usize) {
+        let mock = self
+            .server
+            .mock("GET", "/api/oauth/profile")
+            .with_status(status)
+            .with_body(r#"{"type":"error","error":{"type":"api_error"}}"#)
+            .create();
+        self.mocks.push(mock);
+    }
+
     /// Teach the fake Anthropic who a token belongs to.
     pub fn owns(&mut self, access_token: &str, uuid: &str, email: &str, org: &str) {
         let mock = self

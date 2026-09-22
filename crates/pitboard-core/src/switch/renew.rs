@@ -90,6 +90,7 @@ pub fn renew_parked(ctx: &Context) -> Vec<(String, Renewal)> {
                 let answer = handle.join().unwrap_or_else(|_| {
                     Err(Error::RenewalFailed {
                         label: label.clone(),
+                        cause: None,
                         detail: "the renewal thread stopped".into(),
                     })
                 });
@@ -153,6 +154,7 @@ fn ask(ctx: &Context, label: &str, held: &Park) -> Result<Asked> {
         }),
         Err(e) => Err(Error::RenewalFailed {
             label: label.to_string(),
+            cause: Some(crate::error::Cause::of(&e)),
             detail: e.to_string(),
         }),
     }
@@ -195,6 +197,8 @@ fn apply(
             let _ = state::save(ctx, state);
             return Err(Error::RenewalFailed {
                 label: label.to_string(),
+                // Anthropic answered; it is this machine that could not keep the answer.
+                cause: None,
                 detail: e.to_string(),
             });
         }

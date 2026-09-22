@@ -148,6 +148,7 @@ fn identify(ctx: &Context, access_token: &str) -> Result<api::Owner> {
     api::owner(ctx, access_token).map_err(|e| match e {
         api::ApiError::Unauthorized => Error::SessionExpired,
         other => Error::IdentityUnverifiable {
+            cause: crate::error::Cause::of(&other),
             detail: other.to_string(),
         },
     })

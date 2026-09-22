@@ -18,6 +18,68 @@ impl std::fmt::Display for Enrolled {
     }
 }
 
+/// Why a request to Anthropic did not produce an answer pitboard could use.
+///
+/// The code on an error says what pitboard was doing; this says what went wrong underneath
+/// it, and whether trying again is worth anything. Without it every failure that was not a
+/// 401 arrived at a front end as one code with a sentence of prose, so neither the command
+/// line nor the app could tell being offline from being rate limited from a login Anthropic
+/// has finished with.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum Cause {
+    /// Anthropic could not be reached at all.
+    Unreachable,
+    /// Anthropic asked for less traffic.
+    RateLimited,
+    /// Anthropic answered, badly, and may answer well later.
+    ServerError,
+    /// Anthropic answered something pitboard does not understand, which means its shape
+    /// moved. Trying again will produce the same thing.
+    AnswerNotUnderstood,
+    /// This login is finished: revoked, or already used somewhere else.
+    LoginRefused,
+    /// The token has expired. For the signed-in login that is ordinary and Claude Code
+    /// renews it; for a parked one it means the park needs renewing first.
+    TokenExpired,
+}
+
+impl Cause {
+    pub fn of(error: &crate::api::ApiError) -> Cause {
+        use crate::api::ApiError;
+        match error {
+            ApiError::Unauthorized => Cause::TokenExpired,
+            ApiError::RateLimited => Cause::RateLimited,
+            ApiError::Network(_) => Cause::Unreachable,
+            ApiError::Unexpected { .. } => Cause::ServerError,
+            ApiError::Malformed(_) => Cause::AnswerNotUnderstood,
+            ApiError::InvalidGrant => Cause::LoginRefused,
+        }
+    }
+
+    /// Stable, for a program to branch on; the same as its JSON form.
+    pub fn code(self) -> &'static str {
+        match self {
+            Cause::Unreachable => "unreachable",
+            Cause::RateLimited => "rate_limited",
+            Cause::ServerError => "server_error",
+            Cause::AnswerNotUnderstood => "answer_not_understood",
+            Cause::LoginRefused => "login_refused",
+            Cause::TokenExpired => "token_expired",
+        }
+    }
+
+    /// Whether the same request, later, could answer differently. A front end deciding
+    /// whether to back off or to give up reads this and nothing else.
+    pub fn worth_retrying(self) -> bool {
+        match self {
+            Cause::Unreachable | Cause::RateLimited | Cause::ServerError => true,
+            Cause::AnswerNotUnderstood | Cause::LoginRefused | Cause::TokenExpired => false,
+        }
+    }
+}
+
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum Error {
@@ -217,7 +279,7 @@ pub enum Error {
         "pitboard could not confirm with Anthropic which account is signed in ({detail}), \
          and will not move a login it cannot identify. Check the connection and try again."
     )]
-    IdentityUnverifiable { detail: String },
+    IdentityUnverifiable { cause: Cause, detail: String },
 
     #[error("the signed-in account changed while switching. Nothing was moved; try again.")]
     SignedInAccountChanged,
@@ -278,7 +340,11 @@ pub enum Error {
         "could not renew the parked login for `{label}` ({detail}); its last reading is shown \
          instead. Run `pitboard doctor` if this keeps happening."
     )]
-    RenewalFailed { label: String, detail: String },
+    RenewalFailed {
+        label: String,
+        cause: Option<Cause>,
+        detail: String,
+    },
 
     #[error("the sign-in did not finish, so nothing was enrolled.")]
     SignInIncomplete,
@@ -354,6 +420,18 @@ impl Error {
     /// 1 when a request could not be met; 2 when the command line was wrong; 3 when a login
     /// or Claude Code's files are in a state pitboard cannot safely act on: an unexpected
     /// format, or a login that could not be put back.
+    /// What went wrong underneath, where the failure came from a request to Anthropic.
+    /// `None` where nothing was asked.
+    pub fn cause(&self) -> Option<Cause> {
+        use Error::*;
+        match self {
+            IdentityUnverifiable { cause, .. } => Some(*cause),
+            RenewalFailed { cause, .. } => *cause,
+            SessionExpired => Some(Cause::TokenExpired),
+            _ => None,
+        }
+    }
+
     pub fn exit_code(&self) -> u8 {
         use Error::*;
         match self {

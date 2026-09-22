@@ -129,7 +129,9 @@ cp -R apple/build/Pitboard.app /Applications/
 
 Every command that reports a result takes `--json` and prints the same envelope, including
 on failure and for a mistyped command line: `{v, command, ok, data, warnings, error}`.
-Error codes are stable. `completions` and `manpage` write a generated file to stdout, so
+Error codes are stable. When a failure came from asking Anthropic, `error.cause` says what
+went wrong underneath and whether asking again is worth anything:
+`{"code": "rate_limited", "worth_retrying": true}`. `completions` and `manpage` write a generated file to stdout, so
 they have no JSON form and refuse the flag rather than ignore it.
 Exit codes: 0 done, 1 not done, 2 command line wrong, 3 a login or Claude Code's files are
 in a state pitboard will not act on.

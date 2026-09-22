@@ -70,19 +70,32 @@ fn warnings(found: &[service::Warning]) -> Vec<Warning> {
 #[derive(Debug, thiserror::Error, uniffi::Error)]
 pub enum PitboardError {
     /// `code` is stable, for the app to branch on; `message` names the cause and what to do.
-    /// `warnings` are what was found on the way, reported even though the operation failed.
+    /// `cause` is what went wrong underneath, where Anthropic was asked, and is what decides
+    /// whether another try is worth offering. `warnings` are what was found on the way,
+    /// reported even though the operation failed.
     #[error("{message}")]
     Failed {
         code: String,
+        cause: Option<Cause>,
         message: String,
         warnings: Vec<Warning>,
     },
+}
+
+/// Why a request to Anthropic did not produce an answer pitboard could use.
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct Cause {
+    /// Stable, for the app to branch on.
+    pub code: String,
+    /// Whether the same request, later, could answer differently.
+    pub worth_retrying: bool,
 }
 
 impl From<pitboard_core::error::Error> for PitboardError {
     fn from(error: pitboard_core::error::Error) -> Self {
         PitboardError::Failed {
             code: error.code().to_string(),
+            cause: cause(&error),
             message: error.to_string(),
             warnings: Vec::new(),
         }
@@ -93,10 +106,20 @@ impl From<service::Failed> for PitboardError {
     fn from(failed: service::Failed) -> Self {
         PitboardError::Failed {
             code: failed.error.code().to_string(),
+            cause: cause(&failed.error),
             message: failed.error.to_string(),
             warnings: warnings(&failed.warnings),
         }
     }
+}
+
+/// What went wrong underneath, where Anthropic was asked. The app decides whether to offer
+/// another try from this rather than from the wording of a message.
+fn cause(error: &pitboard_core::error::Error) -> Option<Cause> {
+    error.cause().map(|c| Cause {
+        code: c.code().to_string(),
+        worth_retrying: c.worth_retrying(),
+    })
 }
 
 #[derive(uniffi::Enum)]
@@ -295,6 +318,7 @@ impl SignIn {
     pub fn paste(&self, line: String) -> Result<(), PitboardError> {
         let mut held = self.watched.lock().map_err(|_| PitboardError::Failed {
             code: "sign_in_gone".into(),
+            cause: None,
             message: "this sign-in is no longer running".into(),
             warnings: Vec::new(),
         })?;
@@ -313,6 +337,7 @@ impl SignIn {
             .and_then(|mut held| held.take())
             .ok_or_else(|| PitboardError::Failed {
                 code: "sign_in_gone".into(),
+                cause: None,
                 message: "this sign-in is no longer running".into(),
                 warnings: Vec::new(),
             })?;

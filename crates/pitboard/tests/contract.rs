@@ -46,6 +46,16 @@ fn use_switches() {
     contract!("use_unknown", value, code);
 }
 
+/// The cause is the field a program reads to decide whether to try again. Without it every
+/// failure that was not a 401 arrived as `identity_unverifiable` and a sentence of prose.
+#[test]
+fn a_failure_says_what_went_wrong_underneath() {
+    let mut env = two_accounts("contract-cause");
+    env.profile_trouble(503);
+    let (value, code) = json(&env, &["use", "beta"]);
+    contract!("use_anthropic_unwell", value, code);
+}
+
 #[test]
 fn enroll() {
     let mut env = Env::new("contract-enroll");

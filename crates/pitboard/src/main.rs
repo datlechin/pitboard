@@ -151,7 +151,17 @@ fn emit(report: Report, as_json: bool) -> ExitCode {
             }
             (Err(e), _) => (
                 Value::Null,
-                json!({ "code": e.code(), "message": e.to_string() }),
+                json!({
+                    "code": e.code(),
+                    "message": e.to_string(),
+                    // What went wrong underneath, where Anthropic was asked. The code says
+                    // what pitboard was doing; this says whether asking again is worth
+                    // anything.
+                    "cause": e.cause().map(|c| json!({
+                        "code": c.code(),
+                        "worth_retrying": c.worth_retrying(),
+                    })),
+                }),
             ),
         };
         let envelope = json!({

@@ -7,6 +7,7 @@
 
 use crate::api::{self, ApiError, Owner};
 use crate::context::Context;
+use crate::error::Cause;
 use crate::state::{Park, State};
 use crate::usage::{Snapshot, Source};
 use crate::{claude, park, readings, store};
@@ -26,21 +27,33 @@ pub enum Stale {
     ParkUnreadable,
     RateLimited,
     Unreachable,
-    Unexpected,
+    /// Anthropic answered badly and may answer well later.
+    ServerError,
+    /// Anthropic's answer was not in a shape pitboard understands, which means the shape
+    /// moved. Asking again produces the same thing.
+    AnswerNotUnderstood,
+    /// Anthropic will not accept this parked login again.
+    LoginRefused,
+    /// The thread that was asking stopped before it answered. Nothing to do with
+    /// Anthropic, which is why it used to be filed under the same code as a bad answer.
+    Interrupted,
     /// Nobody was asked: this reading was taken without touching the network.
     NotAsked,
 }
 
 impl Stale {
+    /// Three answers used to arrive here as one. A front end deciding whether to ask
+    /// again needs to tell a bad morning at Anthropic from an answer whose shape moved
+    /// from a login that is finished, and could not.
     fn of(error: &ApiError, signed_in: bool) -> Stale {
-        match error {
-            ApiError::Unauthorized if signed_in => Stale::SessionExpired,
-            ApiError::Unauthorized => Stale::ParkedAccessExpired,
-            ApiError::RateLimited => Stale::RateLimited,
-            ApiError::Network(_) => Stale::Unreachable,
-            ApiError::Unexpected { .. } | ApiError::Malformed(_) | ApiError::InvalidGrant => {
-                Stale::Unexpected
-            }
+        match Cause::of(error) {
+            Cause::TokenExpired if signed_in => Stale::SessionExpired,
+            Cause::TokenExpired => Stale::ParkedAccessExpired,
+            Cause::RateLimited => Stale::RateLimited,
+            Cause::Unreachable => Stale::Unreachable,
+            Cause::ServerError => Stale::ServerError,
+            Cause::AnswerNotUnderstood => Stale::AnswerNotUnderstood,
+            Cause::LoginRefused => Stale::LoginRefused,
         }
     }
 
@@ -54,7 +67,10 @@ impl Stale {
             Stale::ParkUnreadable => "park_unreadable",
             Stale::RateLimited => "rate_limited",
             Stale::Unreachable => "unreachable",
-            Stale::Unexpected => "unexpected",
+            Stale::ServerError => "server_error",
+            Stale::AnswerNotUnderstood => "answer_not_understood",
+            Stale::LoginRefused => "login_refused",
+            Stale::Interrupted => "interrupted",
             Stale::NotAsked => "not_asked",
         }
     }
@@ -68,7 +84,10 @@ impl Stale {
             Stale::ParkUnreadable => Some("its parked login cannot be read; run `pitboard doctor`"),
             Stale::RateLimited => Some("Anthropic is rate limiting usage checks"),
             Stale::Unreachable => Some("Anthropic could not be reached"),
-            Stale::Unexpected => Some("Anthropic's answer was not understood"),
+            Stale::ServerError => Some("Anthropic answered with an error; try again later"),
+            Stale::AnswerNotUnderstood => Some("Anthropic's answer was not understood"),
+            Stale::LoginRefused => Some("its parked login is no longer accepted; sign in again"),
+            Stale::Interrupted => Some("the check did not finish"),
             Stale::NotAsked => Some("read without asking Anthropic"),
         }
     }
@@ -206,10 +225,10 @@ pub fn gather(ctx: &Context, state: &State) -> Report {
             .collect();
         (
             owner.join().ok().flatten(),
-            live.join().unwrap_or(Err(Stale::Unexpected)),
+            live.join().unwrap_or(Err(Stale::Interrupted)),
             parked
                 .into_iter()
-                .map(|h| h.join().unwrap_or(Err(Stale::Unexpected)))
+                .map(|h| h.join().unwrap_or(Err(Stale::Interrupted)))
                 .collect(),
         )
     });
@@ -432,10 +451,44 @@ mod tests {
             Stale::ParkUnreadable,
             Stale::RateLimited,
             Stale::Unreachable,
-            Stale::Unexpected,
+            Stale::ServerError,
+            Stale::AnswerNotUnderstood,
+            Stale::LoginRefused,
+            Stale::Interrupted,
+            Stale::NotAsked,
         ] {
             assert_eq!(serde_json::to_value(stale).unwrap(), stale.code());
         }
+    }
+
+    /// The three answers that used to arrive as one. What a front end does next differs for
+    /// each: wait and ask again, stop asking because the shape moved, or tell the person
+    /// their parked login is finished.
+    #[test]
+    fn anthropics_failures_are_told_apart() {
+        use crate::api::ApiError;
+        let parked = |e: &ApiError| Stale::of(e, false);
+        assert_eq!(
+            parked(&ApiError::Unexpected { status: 503 }),
+            Stale::ServerError
+        );
+        assert_eq!(
+            parked(&ApiError::Malformed("no windows".into())),
+            Stale::AnswerNotUnderstood
+        );
+        assert_eq!(parked(&ApiError::InvalidGrant), Stale::LoginRefused);
+        assert_eq!(parked(&ApiError::RateLimited), Stale::RateLimited);
+        assert_eq!(
+            parked(&ApiError::Network("down".into())),
+            Stale::Unreachable
+        );
+
+        // The same token failure means different things for a live login and a parked one.
+        assert_eq!(parked(&ApiError::Unauthorized), Stale::ParkedAccessExpired);
+        assert_eq!(
+            Stale::of(&ApiError::Unauthorized, true),
+            Stale::SessionExpired
+        );
     }
 
     #[test]

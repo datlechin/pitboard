@@ -45,7 +45,8 @@ private final class Stub: Core, @unchecked Sendable {
     }
     func signIn(_ label: String) async throws -> SignIn {
         throw PitboardError.Failed(
-            code: "claude_program_missing", message: "`claude` is not on this machine",
+            code: "claude_program_missing", cause: nil,
+            message: "`claude` is not on this machine",
             warnings: [])
     }
 }
@@ -86,7 +87,8 @@ private func account(_ label: String, signedIn: Bool, percent: Double) -> Accoun
         service: Stub(
             .failure(
                 PitboardError.Failed(
-                    code: "state_wrong_machine", message: "was written on another computer",
+                    code: "state_wrong_machine", cause: nil,
+                    message: "was written on another computer",
                     warnings: []))))
     await model.refresh()
     #expect(model.problem == "was written on another computer")
@@ -98,7 +100,8 @@ private func account(_ label: String, signedIn: Bool, percent: Double) -> Accoun
 @Test func aFailedSwitchSaysSoAndChangesNothing() async {
     let stub = Stub(.success(Status(now: 0, accounts: [], warnings: [])))
     stub.switched = .failure(
-        PitboardError.Failed(code: "nothing_parked", message: "nothing parked", warnings: []))
+        PitboardError.Failed(
+            code: "nothing_parked", cause: nil, message: "nothing parked", warnings: []))
     let model = AppModel(service: stub)
     await model.use("work")
     #expect(stub.switchedTo == ["work"])

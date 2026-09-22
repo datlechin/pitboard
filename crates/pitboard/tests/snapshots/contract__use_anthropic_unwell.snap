@@ -1,0 +1,22 @@
+---
+source: crates/pitboard/tests/contract.rs
+expression: "serde_json :: json! ({ \"exit\" : code, \"envelope\" : value })"
+---
+{
+  "exit": 1,
+  "envelope": {
+    "v": 1,
+    "command": "use",
+    "ok": false,
+    "data": null,
+    "warnings": [],
+    "error": {
+      "code": "identity_unverifiable",
+      "message": "pitboard could not confirm with Anthropic which account is signed in (Anthropic answered 503), and will not move a login it cannot identify. Check the connection and try again.",
+      "cause": {
+        "code": "server_error",
+        "worth_retrying": true
+      }
+    }
+  }
+}

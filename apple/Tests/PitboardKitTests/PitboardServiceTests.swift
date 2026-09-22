@@ -29,9 +29,10 @@ private func scratch() throws -> Settings {
     do {
         _ = try await service.rename("nobody", to: "somebody")
         Issue.record("renaming an account that does not exist must fail")
-    } catch let PitboardError.Failed(code, message, _) {
+    } catch let PitboardError.Failed(code, cause, message, _) {
         #expect(code == "account_unknown")
         #expect(message.contains("nobody"))
+        #expect(cause == nil, "nothing was asked of Anthropic, so nothing went wrong there")
     }
 }
 

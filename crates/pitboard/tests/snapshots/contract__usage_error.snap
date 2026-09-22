@@ -1,5 +1,5 @@
 ---
-source: tests/contract.rs
+source: crates/pitboard/tests/contract.rs
 expression: "serde_json :: json! ({ \"exit\" : code, \"envelope\" : value })"
 ---
 {
@@ -12,7 +12,8 @@ expression: "serde_json :: json! ({ \"exit\" : code, \"envelope\" : value })"
     "warnings": [],
     "error": {
       "code": "usage",
-      "message": "error: the following required arguments were not provided:\n  <LABEL>\n\nUsage: pitboard use --json <LABEL>\n\nFor more information, try '--help'."
+      "message": "error: the following required arguments were not provided:\n  <LABEL>\n\nUsage: pitboard use --json <LABEL>\n\nFor more information, try '--help'.",
+      "cause": null
     }
   }
 }

@@ -194,7 +194,7 @@ final class AppModel {
 
     /// pitboard's errors already say what to do, so they are shown as they are.
     private static func saying(_ error: Error) -> String {
-        if case PitboardError.Failed(_, let message, _) = error {
+        if case PitboardError.Failed(_, _, let message, _) = error {
             return message
         }
         return error.localizedDescription

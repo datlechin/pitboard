@@ -5,6 +5,15 @@ All notable changes are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+- A failure that came from asking Anthropic now carries a cause beside its code, in both
+  `--json` and the app's bindings: `unreachable`, `rate_limited`, `server_error`,
+  `answer_not_understood`, `login_refused` or `token_expired`, each saying whether asking
+  again is worth anything. Before this, everything that was not a 401 arrived as
+  `identity_unverifiable` and a sentence of prose, so nothing could tell being offline from
+  being rate limited from a login Anthropic had finished with. `status` tells the same three
+  apart too, where they used to share one code.
+
 ### Changed
 - `pitboard-core` says what it supports. The interface other programs may build on is
   `service::Pitboard`, `context::Context` and what they return; the rest is reachable for
