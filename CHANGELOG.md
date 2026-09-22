@@ -293,6 +293,16 @@ All notable changes are recorded here. The format follows
   formula now builds from a source tarball the release publishes and attests, rather than
   from the archive GitHub generates for a tag, whose bytes GitHub has changed before now.
   `packaging/update-tap.sh` is gone with the second download it did.
+- There is no `CARGO_REGISTRY_TOKEN` any more. crates.io issues the publish job a token
+  from its GitHub identity and revokes it when the job ends, so there is no standing
+  credential to leak, and the exchange runs on a pre-release tag too, where a registration
+  that does not match is found out before a release reaches the one step nobody can undo.
+  That step now waits in a GitHub environment with required reviewers.
+- Every artefact carries a CycloneDX bill of materials, generated from the lockfile per
+  target, published with the release and attested like the artefact it describes. So are
+  `SHA256SUMS` and `appcast.xml`, which are made in the same job and published in the same
+  release as the files they describe: on their own they said a download had arrived whole
+  and nothing about who put it there.
 
 ## [0.2.0] - 2026-09-22
 

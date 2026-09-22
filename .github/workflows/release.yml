@@ -205,13 +205,19 @@ jobs:
   publish:
     needs: [guard, build, app]
     runs-on: ubuntu-latest
+    # Required reviewers on this environment are what stops an unexpected tag walking into
+    # a crates.io upload, which is the one step of a release nobody can undo. crates.io
+    # matches the environment name as well as the repository and the workflow, so a run
+    # outside it cannot mint a publish token at all.
+    environment: release
     outputs:
       source: ${{ steps.sums.outputs.source }}
       app: ${{ steps.sums.outputs.app }}
     permissions:
       contents: write
       # Provenance: GitHub signs a statement of which workflow, at which commit, built
-      # each file, so a downloader can check it with `gh attestation verify`.
+      # each file, so a downloader can check it with `gh attestation verify`. The same
+      # identity is what crates.io exchanges for a token, so there is no second secret.
       id-token: write
       attestations: write
     steps:
@@ -251,14 +257,59 @@ jobs:
           echo "app=$app" >> "$GITHUB_OUTPUT"
 
       - run: rustup toolchain install
+      - uses: taiki-e/install-action@94c31af3204a9f15ab40b35ad084410b905bbc73 # v2.87.17
+        with:
+          tool: cargo-cyclonedx
+      # One bill of materials per artefact, read out of the lockfile, so what is inside a
+      # download can be answered without the download. cargo-cyclonedx writes a file beside
+      # every Cargo.toml in the workspace whatever --manifest-path says, so the one that
+      # belongs to the crate in the artefact is kept and the rest deleted. A target that is
+      # not installed still resolves, because the filter comes from cargo metadata and not
+      # from a standard library it has to find. The source tarball gets none: what it
+      # depends on is decided by the target somebody builds it for, and those are these.
+      - name: Bill of materials
+        run: |
+          bom() {
+            cargo cyclonedx --manifest-path "crates/$1/Cargo.toml" --target "$2" \
+              --format json --spec-version 1.5 --all --override-filename bom
+            mv "crates/$1/bom.json" "$RUNNER_TEMP/dist/$3.cdx.json"
+            find crates -name bom.json -delete
+          }
+          for target in aarch64-apple-darwin x86_64-apple-darwin \
+                        x86_64-unknown-linux-musl aarch64-unknown-linux-musl; do
+            bom pitboard "$target" "pitboard-${GITHUB_REF_NAME}-${target}.tar.gz"
+          done
+          # The app carries the core for both macOS architectures, which resolve to the
+          # same dependencies, and Sparkle, which no lockfile here mentions.
+          bom pitboard-ffi aarch64-apple-darwin "Pitboard-${GITHUB_REF_NAME}-macos.zip"
+          python3 .github/scripts/sbom-add-sparkle.py \
+            "$RUNNER_TEMP/dist/Pitboard-${GITHUB_REF_NAME}-macos.zip.cdx.json" \
+            apple/Package.resolved
+
+      # crates.io gives this job a token of its own, made from GitHub's word about which
+      # workflow in which repository is running, and revokes it when the job ends. There is
+      # no CARGO_REGISTRY_TOKEN left to leak and nothing to rotate. What can be wrong
+      # instead is the registration on crates.io, so the exchange runs on a pre-release
+      # too, where finding out costs nothing.
+      - uses: rust-lang/crates-io-auth-action@c6f97d42243bad5fab37ca0427f495c86d5b1a18 # v1.0.5
+        id: registry
       # First, because a crates.io upload cannot be undone and a GitHub release can. The
       # core first, then the command line that depends on it. Skipped when that version is
       # already there, so a release that failed later can simply be run again.
-      - if: needs.guard.outputs.prerelease == 'false'
+      - name: Publish to crates.io
         env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+          CARGO_REGISTRY_TOKEN: ${{ steps.registry.outputs.token }}
+          PRERELEASE: ${{ needs.guard.outputs.prerelease }}
           VERSION: ${{ needs.guard.outputs.version }}
         run: |
+          if [ -z "$CARGO_REGISTRY_TOKEN" ]; then
+            echo "crates.io returned no token; check Trusted Publishing on both crates" >&2
+            exit 1
+          fi
+          if [ "$PRERELEASE" = "true" ]; then
+            echo "the token exchange works; a pre-release publishes nothing to crates.io"
+            exit 0
+          fi
           on_crates_io=$(curl -fsSL -A "pitboard release" \
             "https://crates.io/api/v1/crates/pitboard/$VERSION" -o /dev/null -w "%{http_code}" || true)
           if [ "$on_crates_io" = "200" ]; then
@@ -266,11 +317,24 @@ jobs:
           else
             cargo publish --locked --workspace
           fi
+
+      # SHA256SUMS is made in this job and published in the release it describes, so on its
+      # own it is evidence against a download that went wrong and not against anyone who
+      # could change the release. Attested, it is both.
       - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: |
             ${{ runner.temp }}/dist/*.tar.gz
             ${{ runner.temp }}/dist/*.zip
+            ${{ runner.temp }}/dist/*.cdx.json
+            ${{ runner.temp }}/dist/SHA256SUMS
+      # The feed decides what every installed copy runs next, which makes it the most worth
+      # attesting of anything here. A pre-release publishes none, so it is its own step.
+      - if: needs.guard.outputs.prerelease == 'false'
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: ${{ runner.temp }}/dist/appcast.xml
+
       - name: What changed
         env:
           VERSION: ${{ needs.guard.outputs.version }}
@@ -287,6 +351,7 @@ jobs:
           files: |
             ${{ runner.temp }}/dist/*.tar.gz
             ${{ runner.temp }}/dist/*.zip
+            ${{ runner.temp }}/dist/*.cdx.json
             ${{ runner.temp }}/dist/appcast.xml
             ${{ runner.temp }}/dist/SHA256SUMS
 

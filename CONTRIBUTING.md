@@ -89,24 +89,46 @@ them the release still happens and the app is signed ad-hoc, which Gatekeeper wa
 | `SPARKLE_PUBLIC_KEY`, `SPARKLE_PRIVATE_KEY` | `apple/.build/artifacts/sparkle/Sparkle/bin/generate_keys --account pitboard` once, then the same with `-x -` to read the private one |
 | `HOMEBREW_TAP_TOKEN` | In the `homebrew-tap` environment. A fine-grained personal access token, `datlechin/homebrew-tap` as its only repository, Contents read and write as its only permission, and an expiry the maintainer will notice |
 
+There is no `CARGO_REGISTRY_TOKEN`. crates.io hands the publish job a token made from
+GitHub's word about which workflow is running, and revokes it when the job ends.
+
 The signing identity is read from the certificate itself, so there is no secret for it.
-Every archive is attested, so a downloader can check what built it with
-`gh attestation verify <file> --repo datlechin/pitboard`. The command line binaries are
-signed and notarised like the app, because a tarball opened from a browser arrives
-quarantined and Gatekeeper stops an ad-hoc signature.
+The command line binaries are signed and notarised like the app, because a tarball opened
+from a browser arrives quarantined and Gatekeeper stops an ad-hoc signature.
+
+Everything published is attested, so a downloader can check what built it with
+`gh attestation verify <file> --repo datlechin/pitboard`: the tarballs, the app, the bill
+of materials beside each of them, `SHA256SUMS`, and `appcast.xml`. The last two are made in
+the same job and published in the same release as the files they describe, so on their own
+they say a download arrived whole and nothing about who put it there.
 
 Never change the update key once a release carries it. An app checks the feed's signature
 against the key it was built with, so a new key strands every copy already installed.
 
 ### What the maintainer has to set up by hand
 
-1. An environment named `homebrew-tap` holding `HOMEBREW_TAP_TOKEN`. An environment rather
+Once, in this order:
+
+1. On crates.io, for `pitboard-core` and then for `pitboard`: Settings, Trusted Publishing,
+   Add, GitHub. Repository owner `datlechin`, repository name `pitboard`, workflow filename
+   `release.yml`, environment `release`. Both crates need their own entry; registration is
+   per crate. Both are already published, which Trusted Publishing requires.
+2. In this repository's settings, an environment named `release` with required reviewers.
+   The publish job waits in it, so an unexpected tag stops before the one step of a release
+   that cannot be undone. The name has to be the one registered on crates.io above.
+3. An environment named `homebrew-tap` holding `HOMEBREW_TAP_TOKEN`. An environment rather
    than a repository secret because it is the only credential here that reaches another
    repository, and a secret in an environment is readable only by a job that asks for that
    environment by name.
-2. Delete `.github/workflows/follow-releases.yml` from `datlechin/homebrew-tap`. The
+4. Delete `.github/workflows/follow-releases.yml` from `datlechin/homebrew-tap`. The
    release writes the tap now; leaving the old poller in place means two writers and a
    version that can come from either.
+5. Push a pre-release tag, `v<next>-rc1`, and watch the publish job. It exchanges the
+   crates.io token and uploads nothing, which is where a registration that does not match
+   is meant to be found out.
+
+Then `CARGO_REGISTRY_TOKEN` can be deleted from this repository's secrets, and the token it
+held revoked on crates.io.
 
 If the tap push fails, re-run the `tap` job. There is no script for doing it by hand any
 more: the checksums come from the `SHA256SUMS` the release computed, and a second download
@@ -181,6 +203,14 @@ coupling comes from:
 
 Read on 2026-09-22, against Homebrew 7.0.6 and the tap as it then stood:
 
+- `cargo cyclonedx` writes a bill of materials beside every `Cargo.toml` in the workspace
+  whatever `--manifest-path` says, so the release keeps the one belonging to the crate in
+  the artefact and deletes the rest. A target that is not installed still resolves. The two
+  macOS targets resolve to the same 83 components, which is why the app has one bill of
+  materials and not two; macOS and musl differ by 7, which is why each target has its own.
+- crates.io issues a Trusted Publishing token that lasts 30 minutes, and matches on
+  repository owner, repository name, workflow filename and, when it is given one, the
+  environment. Registration is per crate, so `pitboard` and `pitboard-core` each need it.
 - The tap was being written by `follow-releases.yml` inside `datlechin/homebrew-tap`, on
   `17 */6 * * *`. A release was therefore finished and green up to six hours before anyone
   could install what it published, and `packaging/pitboard.rb` in this repository still said
