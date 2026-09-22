@@ -46,6 +46,16 @@ All notable changes are recorded here. The format follows
   being rate limited from a login Anthropic had finished with. `status` tells the same three
   apart too, where they used to share one code.
 
+### Fixed
+- A locked keychain no longer reads as a lost login. On a machine whose keychain is locked
+  the write fails, the read-back that decides whether anything changed fails too, and that
+  second failure was taken to mean the slot had changed: pitboard attempted a rollback,
+  that failed as well, and the person was told their login could not be put back and they
+  should sign in again. Nothing had been written and it had never moved. The read-back now
+  has three answers rather than two, and not knowing is one of them: nothing further is
+  written, every copy is kept, and the record of intent stays so a later run with a store
+  that answers finishes or undoes the switch. The new code is `switch_unverified`.
+
 ### Changed
 - `pitboard-core` says what it supports. The interface other programs may build on is
   `service::Pitboard`, `context::Context` and what they return; the rest is reachable for

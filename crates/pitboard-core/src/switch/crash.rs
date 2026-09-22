@@ -334,6 +334,52 @@ fn enrolling_killed_between_the_write_and_the_record_leaves_nothing_unnamed() {
     }
 }
 
+/// A switch that could not find out what it did keeps everything, including its record of
+/// intent, so a later run with a store that answers decides. Nothing here is a crash: this
+/// is the ordinary shape of a machine whose keychain is locked.
+#[test]
+fn a_switch_that_cannot_read_the_store_back_keeps_every_copy_and_its_record() {
+    let m = machine("unverified");
+    let before = m.mem.live().peek(&m.service).expect("a live login");
+    let parked_before = m.mem.vault().services();
+
+    // The keychain locks partway through, which is what a screen lock does. The reads the
+    // switch makes before it writes still answer; the write and everything after it do not.
+    let settled = settle(&m.ctx).expect("nothing to recover yet").0;
+    m.mem
+        .live()
+        .fault(&m.service, crate::store::memory::Fault::LocksOnWrite);
+    let failed = switch(settled, "there").expect_err("a keychain that locked partway");
+    assert!(
+        matches!(failed, Error::SwitchUnverified { .. }),
+        "got {failed:?}"
+    );
+
+    assert!(
+        journal::pending(&m.ctx),
+        "the record of intent stays, because nobody can say what happened"
+    );
+    assert_eq!(
+        m.mem.live().peek(&m.service).as_deref(),
+        Some(before.as_str()),
+        "and nothing was written"
+    );
+    let state = state::load(&m.ctx).expect("state");
+    assert!(
+        state.discarded.is_empty(),
+        "nothing may be listed for deletion on a guess"
+    );
+    assert!(
+        m.mem.vault().services().len() >= parked_before.len(),
+        "and no parked login was thrown away"
+    );
+
+    // Once the store answers again, the same machine recovers and holds together.
+    m.mem.live().heal_all();
+    recover(&m).expect("recovery once the keychain is unlocked");
+    hold(&m, "unverified, then unlocked");
+}
+
 /// The other window the roadmap named. A renewal reserves a name, writes the fresh login
 /// into it, and records it; killed between the write and the record, the copy is an orphan,
 /// and the renewal runs inside every plain `pitboard`.

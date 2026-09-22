@@ -28,6 +28,11 @@ pub enum Fault {
     Unreadable(String),
     /// The item is gone from this call onwards, as if something else had deleted it.
     Vanish,
+    /// Reads work until the first write is attempted; the write fails, and every read after
+    /// it says it could not tell. A keychain that locks partway through a change, which is
+    /// what a screen lock does, and which cannot be produced by counting calls without
+    /// pinning a test to the exact number the code happens to make.
+    LocksOnWrite,
 }
 
 /// One store. Plant, peek and enumerate without going through the store's own rules, so a
@@ -36,8 +41,10 @@ pub enum Fault {
 pub struct MemoryStore {
     kind: Backend,
     items: Mutex<HashMap<String, String>>,
-    faults: Mutex<HashMap<String, Fault>>,
+    faults: Mutex<HashMap<String, (usize, Fault)>>,
     blanket: Mutex<Option<Fault>>,
+    /// Services whose `LocksOnWrite` has fired.
+    locked: Mutex<std::collections::HashSet<String>>,
 }
 
 impl MemoryStore {
@@ -48,6 +55,7 @@ impl MemoryStore {
             items: Mutex::new(HashMap::new()),
             faults: Mutex::new(HashMap::new()),
             blanket: Mutex::new(None),
+            locked: Mutex::new(std::collections::HashSet::new()),
         })
     }
 
@@ -83,10 +91,17 @@ impl MemoryStore {
 
     /// From now on, this service misbehaves in this way.
     pub fn fault(&self, service: &str, fault: Fault) {
+        self.fault_after(service, 0, fault);
+    }
+
+    /// Misbehave only once this service has been touched `calls` more times. A keychain
+    /// that locks in the middle of a change is an ordinary thing and cannot be produced
+    /// any other way.
+    pub fn fault_after(&self, service: &str, calls: usize, fault: Fault) {
         self.faults
             .lock()
             .expect("a poisoned test store is a failed test")
-            .insert(service.into(), fault);
+            .insert(service.into(), (calls, fault));
     }
 
     /// From now on, every service misbehaves in this way, including ones that do not
@@ -98,6 +113,22 @@ impl MemoryStore {
             .expect("a poisoned test store is a failed test") = Some(fault);
     }
 
+    /// Stop misbehaving everywhere.
+    pub fn heal_all(&self) {
+        *self
+            .blanket
+            .lock()
+            .expect("a poisoned test store is a failed test") = None;
+        self.faults
+            .lock()
+            .expect("a poisoned test store is a failed test")
+            .clear();
+        self.locked
+            .lock()
+            .expect("a poisoned test store is a failed test")
+            .clear();
+    }
+
     /// Stop misbehaving.
     pub fn heal(&self, service: &str) {
         self.faults
@@ -106,18 +137,38 @@ impl MemoryStore {
             .remove(service);
     }
 
-    fn fault_for(&self, service: &str) -> Option<Fault> {
-        self.faults
+    fn has_locked(&self, service: &str) -> bool {
+        self.locked
             .lock()
             .expect("a poisoned test store is a failed test")
-            .get(service)
-            .cloned()
-            .or_else(|| {
-                self.blanket
-                    .lock()
-                    .expect("a poisoned test store is a failed test")
-                    .clone()
-            })
+            .contains(service)
+    }
+
+    fn lock_now(&self, service: &str) {
+        self.locked
+            .lock()
+            .expect("a poisoned test store is a failed test")
+            .insert(service.to_string());
+    }
+
+    /// What this service does on this call, counting the call down towards its fault.
+    fn fault_for(&self, service: &str) -> Option<Fault> {
+        let mut faults = self
+            .faults
+            .lock()
+            .expect("a poisoned test store is a failed test");
+        if let Some((countdown, fault)) = faults.get_mut(service) {
+            if *countdown == 0 {
+                return Some(fault.clone());
+            }
+            *countdown -= 1;
+            return None;
+        }
+        drop(faults);
+        self.blanket
+            .lock()
+            .expect("a poisoned test store is a failed test")
+            .clone()
     }
 }
 
@@ -131,6 +182,9 @@ impl RawStore for Arc<MemoryStore> {
     }
 
     fn read(&self, service: &str) -> Result<Option<String>, Error> {
+        if self.has_locked(service) {
+            return Err(Error::Unreadable("the keychain is locked".into()));
+        }
         match self.fault_for(service) {
             Some(Fault::Unreadable(why)) => Err(Error::Unreadable(why)),
             Some(Fault::Vanish) => Ok(None),
@@ -139,9 +193,16 @@ impl RawStore for Arc<MemoryStore> {
     }
 
     fn write(&self, service: &str, contents: &str) -> Result<(), Error> {
+        if self.has_locked(service) {
+            return Err(Error::Write("the keychain is locked".into()));
+        }
         match self.fault_for(service) {
             Some(Fault::FailWrite(why)) => return Err(Error::Write(why)),
             Some(Fault::Unreadable(why)) => return Err(Error::Unreadable(why)),
+            Some(Fault::LocksOnWrite) => {
+                self.lock_now(service);
+                return Err(Error::Write("the keychain is locked".into()));
+            }
             Some(Fault::CorruptWrite(instead)) => self.plant(service, &instead),
             _ => self.plant(service, contents),
         }
@@ -286,6 +347,41 @@ mod tests {
         assert_eq!(s.peek("svc").as_deref(), Some("before"));
         s.heal("svc");
         assert_eq!(s.read("svc").expect("healed"), Some("before".into()));
+    }
+
+    #[test]
+    fn a_store_that_locks_on_a_write_reads_fine_until_then() {
+        let s = store();
+        s.plant("svc", "before");
+        s.fault("svc", Fault::LocksOnWrite);
+
+        assert_eq!(
+            s.read("svc").expect("still readable"),
+            Some("before".into())
+        );
+        assert!(matches!(s.write("svc", "after"), Err(Error::Write(_))));
+        assert!(
+            matches!(s.read("svc"), Err(Error::Unreadable(_))),
+            "once it is locked it cannot answer at all"
+        );
+        assert_eq!(
+            s.peek("svc").as_deref(),
+            Some("before"),
+            "and nothing moved"
+        );
+
+        s.heal_all();
+        assert_eq!(s.read("svc").expect("unlocked"), Some("before".into()));
+    }
+
+    #[test]
+    fn a_fault_can_wait_for_a_few_calls_first() {
+        let s = store();
+        s.plant("svc", "before");
+        s.fault_after("svc", 2, Fault::Vanish);
+        assert_eq!(s.read("svc").expect("first"), Some("before".into()));
+        assert_eq!(s.read("svc").expect("second"), Some("before".into()));
+        assert_eq!(s.read("svc").expect("third"), None, "now it is gone");
     }
 
     #[test]

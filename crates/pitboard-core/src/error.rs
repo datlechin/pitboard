@@ -307,6 +307,18 @@ pub enum Error {
     },
 
     #[error(
+        "could not sign in as `{to}` ({detail}), and could not read the credential store \
+         back to find out whether anything changed. Nothing has been deleted and both \
+         logins are still here. Unlock the keychain and run `pitboard` again; it finishes \
+         or undoes this before doing anything else."
+    )]
+    SwitchUnverified {
+        from: String,
+        to: String,
+        detail: String,
+    },
+
+    #[error(
         "could not sign in as `{to}`, and could not put `{from}` back either ({detail}). \
          `{from}`'s login is still parked: run `claude` and sign in to any enrolled account, \
          then `pitboard use {from}`."
@@ -402,6 +414,7 @@ impl Error {
             ConfigBackupFailed { .. } => "config_backup_failed",
             ConfigWriteFailed { .. } => "config_write_failed",
             SwitchRolledBack { .. } => "switch_rolled_back",
+            SwitchUnverified { .. } => "switch_unverified",
             SwitchCorrupted { .. } => "switch_corrupted",
             RecoveryFailed { .. } => "recovery_failed",
             RecoveryRecordCorrupt { .. } => "recovery_record_corrupt",
@@ -442,6 +455,7 @@ impl Error {
             LiveCredentialShapeUnexpected { .. }
             | ClaudeConfigNotJson { .. }
             | SwitchCorrupted { .. }
+            | SwitchUnverified { .. }
             | CredentialTooLarge { .. }
             | CustomOauthEndpoint
             | RecoveryRecordCorrupt { .. } => 3,

@@ -312,6 +312,13 @@ pub fn switch(settled: Settled, label: &str) -> Result<(Outcome, Vec<Warning>)> 
     fault::point("switch.park_recorded");
 
     if let Err(e) = install(ctx, &service, &next, &before_raw, &outgoing_label, label) {
+        // Nobody could say what the slot holds. Keep every copy, and keep the record of
+        // intent, so the next run with a store that answers finishes this or undoes it.
+        // Everything below deletes something or forgets something, and neither is a thing
+        // to do without knowing.
+        if matches!(e, Error::SwitchUnverified { .. }) {
+            return Err(e);
+        }
         if !only_copy_left(&e) {
             state.discard(&parked.service);
         }
@@ -409,9 +416,15 @@ fn install(
     )
 }
 
-/// Write the new login, and if that fails, leave the old one in place. A failed write
-/// often changes nothing, so the slot is read back before deciding a rollback is needed,
-/// and only a rollback that also fails is reported as a lost login.
+/// Write the new login, and if that fails, leave the old one in place.
+///
+/// A failed write often changes nothing, so the slot is read back before deciding a
+/// rollback is needed. That read-back has three answers, not two. It used to have two, and
+/// the missing one is the likeliest failure there is: on a machine whose keychain is
+/// locked, the write fails, the read-back fails too, "could not read" was taken to mean
+/// "the slot changed", a rollback was attempted, that failed as well, and the person was
+/// told pitboard could not put their login back and they should sign in again. Nothing had
+/// been written and their login had never moved.
 fn install_with(
     write: impl Fn(&str) -> std::result::Result<(), store::Error>,
     read: impl Fn() -> std::result::Result<Option<String>, store::Error>,
@@ -428,8 +441,20 @@ fn install_with(
         to: to.to_string(),
         detail,
     };
-    if matches!(read(), Ok(Some(now)) if now == before_raw) {
-        return Err(rolled_back(failure.to_string()));
+    match read() {
+        // Unchanged. The write never landed and there is nothing to undo.
+        Ok(Some(now)) if now == before_raw => return Err(rolled_back(failure.to_string())),
+        // Could not tell. Change nothing further and keep every copy: the caller leaves its
+        // record of intent in place so a later run, with a store that answers, decides.
+        Err(unreadable) => {
+            return Err(Error::SwitchUnverified {
+                from: from.to_string(),
+                to: to.to_string(),
+                detail: format!("{failure}; {unreadable}"),
+            });
+        }
+        // Changed, or gone. Put back what was there.
+        _ => {}
     }
     match write(before_raw) {
         Ok(()) => Err(rolled_back(failure.to_string())),
@@ -552,6 +577,36 @@ mod tests {
             *slot.borrow(),
             "old",
             "the previous login must be back in place"
+        );
+    }
+
+    /// The likeliest failure of all, and the one that used to produce the most alarming
+    /// message pitboard has. A locked keychain fails the write, fails the read-back, and
+    /// would have failed the rollback too; "could not read" was taken to mean "the slot
+    /// changed", so the person was told their login could not be put back. Nothing had been
+    /// written and it had never moved.
+    #[test]
+    fn a_store_that_cannot_be_read_back_is_not_a_lost_login() {
+        let writes = RefCell::new(0);
+        let result = install_with(
+            |_| {
+                *writes.borrow_mut() += 1;
+                Err(failing("the keychain is locked"))
+            },
+            || Err(store::Error::Unreadable("the keychain is locked".into())),
+            "new",
+            "old",
+            "a",
+            "b",
+        );
+        assert!(
+            matches!(result, Err(Error::SwitchUnverified { .. })),
+            "not knowing is its own answer, and must not read as a lost login"
+        );
+        assert_eq!(
+            *writes.borrow(),
+            1,
+            "and nothing further is written into a store that cannot be read"
         );
     }
 
