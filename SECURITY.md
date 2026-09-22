@@ -13,12 +13,25 @@ read and written only through `/usr/bin/security`, the one application the item'
 list trusts. No token is passed on a command line, where `ps` could see it; it goes to `security` on
 standard input.
 
-`security` reads at most 4097 bytes of command from standard input, measured on macOS 26.
-A login larger than that, which MCP server tokens can make it, cannot go that way at all.
-Claude Code then writes it on the argument line instead, where any process running as you
-can read it for the length of the call, and it does that for the same login on every
-refresh. pitboard refuses by default and says so; `PITBOARD_ARGV_FALLBACK=1` tells it to
-write the login the way Claude Code already does.
+A login larger than about two kilobytes, which MCP server tokens make it, cannot go that
+way: `security` reads at most 4097 bytes of command from standard input, with no line
+continuation, and its interactive prompt takes 128 bytes. Measured on macOS 26 on 22
+September 2026, along with the two alternatives:
+
+| How to write a large login | Cost |
+| --- | --- |
+| `security ... -X <hex>` on the argument line | Visible to `ps` for the length of one call |
+| The Security framework, in pitboard's own process | Every later read of that item by `security` takes about a second instead of 0.01, for good |
+
+The second was measured on a scratch item: reads went from 0.01 seconds to 20.55, then
+settled around 0.8. Claude Code reads its login on every cache miss, so pitboard would be
+making Claude Code permanently slower to save an exposure of a few milliseconds. It also
+cannot be undone without `security set-key-partition-list`, which asks for the keychain
+password.
+
+So pitboard does what Claude Code itself does for the same login on every token refresh: it
+passes it as an argument, and says so in the warnings of that switch and in `doctor`.
+`PITBOARD_NO_ARGV=1` refuses the switch instead, for anyone who would rather have neither.
 
 ### Linux
 

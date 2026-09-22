@@ -232,14 +232,18 @@ pub fn switch(settled: Settled, label: &str) -> Result<(Outcome, Vec<Warning>)> 
     // Checked before anything is parked, so a switch that could never be written changes
     // nothing.
     let next = splice(&before, &incoming)?;
+    let (bytes, limit) = store::cost(ctx, &service, &next).unwrap_or_default();
     if store::too_large(ctx, &service, &next) {
-        let (bytes, limit) = store::cost(ctx, &service, &next).unwrap_or_default();
         return Err(Error::CredentialTooLarge {
             label: label.to_string(),
             bytes,
             limit,
         });
     }
+    // Said once per switch rather than hidden: the same bytes are visible to `ps` for the
+    // length of one `security` call, which is the only way to write a login this size.
+    let on_the_command_line = store::over_stdin_limit(ctx, &service, &next)
+        .then_some(Warning::WrittenOnTheCommandLine { bytes, limit });
 
     let park_service = park::reserve(ctx, &outgoing.account_uuid)?;
     write_journal(
@@ -298,8 +302,9 @@ pub fn switch(settled: Settled, label: &str) -> Result<(Outcome, Vec<Warning>)> 
     let parks_pending = purge(ctx, &mut state);
     clear_journal(ctx);
 
-    let warnings = config_warning
+    let warnings = on_the_command_line
         .into_iter()
+        .chain(config_warning)
         .chain((parks_pending > 0).then_some(Warning::ParksPendingRemoval(parks_pending)))
         .collect();
     Ok((

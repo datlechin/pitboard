@@ -232,19 +232,25 @@ pub fn evaluate(facts: &Facts) -> Vec<Check> {
     // A login that grows past the ceiling cannot be switched at all, and it grows by things
     // done elsewhere, so it is worth saying before the day it refuses.
     if let Some((bytes, limit)) = facts.credential_cost {
-        let detail = format!("{bytes} of {limit} bytes");
-        checks.push(if bytes * 10 >= limit * 9 {
+        checks.push(if bytes > limit {
+            // Not a fault: `security` takes this much of a command from stdin and no more,
+            // and the argument line is the only other way it offers. Claude Code writes
+            // this same login that way itself on every refresh.
             warn(
                 "credential_size",
                 "login size",
-                detail,
-                "`security` reads at most this much of a command from stdin, and pitboard \
-                 will not put a token on the argument line unless asked. Past the limit a \
-                 switch is refused, unless PITBOARD_ARGV_FALLBACK=1 says to write it the \
-                 way Claude Code writes it.",
+                format!("{bytes} of {limit} bytes: written on the argument line"),
+                "A login this size can only be written by passing it as an argument, where \
+                 a process running as you could read it while the call lasts. Signing out \
+                 of MCP servers you no longer use makes it smaller; PITBOARD_NO_ARGV=1 \
+                 refuses the switch instead.",
             )
         } else {
-            ok("credential_size", "login size", detail)
+            ok(
+                "credential_size",
+                "login size",
+                format!("{bytes} of {limit} bytes"),
+            )
         });
     }
 

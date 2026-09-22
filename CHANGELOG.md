@@ -5,6 +5,13 @@ All notable changes are recorded here. The format follows
 
 ## [Unreleased]
 
+### Changed
+- A login too large for `security`'s standard input is now written the only other way
+  `security` offers, as an argument, which is what Claude Code does for the same login on
+  every token refresh. The switch says so, and `doctor` shows the size. `PITBOARD_NO_ARGV=1`
+  refuses instead. Measured first: writing the item in process would have made every later
+  read by `security` take about a second instead of 0.01, for good.
+
 ## [0.2.0] - 2026-09-22
 
 Everything a stranger hits in the first ten minutes, every state a person could be stuck in,

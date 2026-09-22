@@ -109,14 +109,42 @@ fn writing_preserves_attributes_and_does_not_slow_later_reads() {
     );
 }
 
+/// A login past what `security` reads from stdin has one route left, the argument line,
+/// which is what Claude Code uses for the same login. What matters is that taking it costs
+/// nothing afterwards: the item must still read as fast as one written any other way, or
+/// Claude Code pays for pitboard's write on every re-read.
 #[test]
-fn an_oversize_credential_is_refused_before_anything_is_written() {
+fn a_credential_past_the_stdin_limit_is_written_without_taxing_later_reads() {
     let svc = format!("{}-oversize", service());
     remove(&svc);
     seed(&svc, "original");
+    let (_, baseline) = timed_read(&svc);
 
-    let err = pitboard_core::testing::vault_write(&common::ctx(), &svc, &"x".repeat(2100))
-        .expect_err("a credential past the command limit must be refused");
+    let big = "x".repeat(2100);
+    pitboard_core::testing::vault_write(&common::ctx(), &svc, &big)
+        .expect("the argument line is the only way to write one this size");
+
+    let (back, after) = timed_read(&svc);
+    remove(&svc);
+    assert_eq!(back, big, "the value must round-trip byte for byte");
+    assert!(
+        after < POISONED,
+        "read cost {after:?} after the write (was {baseline:?}); \
+         a write must never make later reads expensive"
+    );
+}
+
+/// Anyone who would rather refuse than have the login on an argument line can say so, and
+/// then nothing is written at all.
+#[test]
+fn the_argument_line_can_be_refused() {
+    let svc = format!("{}-refused", service());
+    remove(&svc);
+    seed(&svc, "original");
+
+    let refusing = common::ctx().with_argv_fallback(false);
+    let err = pitboard_core::testing::vault_write(&refusing, &svc, &"x".repeat(2100))
+        .expect_err("refused, because it cannot go through stdin");
 
     let (still, _) = timed_read(&svc);
     remove(&svc);

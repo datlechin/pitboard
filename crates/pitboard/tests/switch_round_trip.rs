@@ -544,36 +544,56 @@ fn uninstalling_takes_the_parked_logins_with_it() {
 }
 
 /// macOS reads at most 4097 bytes of command from `security`'s stdin, and MCP server tokens
-/// can make a login larger than that. The switch has to refuse before it touches anything:
-/// the account in use stays in use, and the copy it was going to install stays where it is.
+/// make a login larger than that. There is no third way to write one: the only other route
+/// `security` offers is the argument line, which is what Claude Code uses for the same
+/// login. So the switch goes through, and says that is what it did.
 #[cfg(target_os = "macos")]
 #[test]
-fn a_login_too_large_to_write_changes_nothing() {
+fn a_login_too_large_for_stdin_is_written_on_the_argument_line() {
     let env = two_accounts("too-large");
-    let parked = env.parked_service("beta").expect("beta has a parked login");
-
-    // The live document, with a block the size MCP server tokens reach. It belongs to the
-    // machine, so a switch carries it across and the document it writes is this big.
     let mut live = env.live();
     live["mcpOAuth"] = serde_json::json!({ "server": "x".repeat(4096) });
     env.replace_live(&live);
-    let live_before = env.live();
 
     let (out, err, code) = env.run(&["use", "beta"]);
-    assert_eq!(code, 3, "refused, not a half-done switch: {out}{err}");
-    assert!(
-        err.contains("bytes"),
-        "it says how big and how big it may be: {err}"
-    );
-
-    assert_eq!(env.live(), live_before, "the account in use did not move");
-    assert!(
-        env.is_parked(&parked),
-        "the copy it would have installed is still there"
+    assert_eq!(code, 0, "{out}{err}");
+    assert!(err.contains("argument line"), "it says what it did: {err}");
+    assert_eq!(
+        env.live()["claudeAiOauth"]["refreshToken"],
+        "refresh-b",
+        "and the switch actually happened"
     );
     assert_eq!(
-        account(&env, "beta")["parked"]["service"],
-        parked,
-        "and is still the one beta holds"
+        env.live()["mcpOAuth"]["server"].as_str().map(str::len),
+        Some(4096),
+        "what belongs to the machine came across with it"
     );
+}
+
+/// For anyone who would rather have the refusal: it says the size, the limit, and that the
+/// refusal is theirs.
+#[cfg(target_os = "macos")]
+#[test]
+fn the_argument_line_can_be_refused() {
+    let env = two_accounts("too-large-refused");
+    let mut live = env.live();
+    live["mcpOAuth"] = serde_json::json!({ "server": "x".repeat(4096) });
+    env.replace_live(&live);
+    let before = env.live();
+
+    let (_, err, code) = env
+        .command(&["use", "beta"])
+        .env("PITBOARD_NO_ARGV", "1")
+        .output()
+        .map(|o| {
+            (
+                String::from_utf8_lossy(&o.stdout).into_owned(),
+                String::from_utf8_lossy(&o.stderr).into_owned(),
+                o.status.code().unwrap_or(-1),
+            )
+        })
+        .expect("ran");
+    assert_eq!(code, 3, "{err}");
+    assert!(err.contains("PITBOARD_NO_ARGV"), "{err}");
+    assert_eq!(env.live(), before, "nothing moved");
 }

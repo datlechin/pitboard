@@ -23,6 +23,8 @@ pub struct Context {
     pub(crate) overriding_auth: Vec<String>,
     /// Whether a login too large for `security -i` may be written the way Claude Code
     /// writes it: as a command argument, where `ps` can see it for the length of the call.
+    /// On by default, because there is no third way and Claude Code writes the same
+    /// document that way itself on every token refresh.
     pub(crate) argv_fallback: bool,
     /// Which front end asked, for the audit log. A change made from the menu bar and one
     /// typed at a prompt read the same otherwise.
@@ -47,7 +49,7 @@ impl Context {
             secure_storage_dir: None,
             user: None,
             custom_oauth: false,
-            argv_fallback: false,
+            argv_fallback: true,
             overriding_auth: Vec::new(),
             caller: "unknown".into(),
             claude_program: PathBuf::from("claude"),
@@ -132,7 +134,7 @@ impl Context {
             secure_storage_dir: var("CLAUDE_SECURESTORAGE_CONFIG_DIR"),
             user: var("USER"),
             custom_oauth: var("CLAUDE_CODE_CUSTOM_OAUTH_URL").is_some_and(|v| !v.is_empty()),
-            argv_fallback: var("PITBOARD_ARGV_FALLBACK").is_some_and(|v| v == "1"),
+            argv_fallback: !var("PITBOARD_NO_ARGV").is_some_and(|v| v == "1"),
             overriding_auth: OVERRIDING_AUTH
                 .iter()
                 .filter(|name| var(name).is_some_and(|v| !v.is_empty()))

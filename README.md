@@ -182,6 +182,12 @@ it does it. The next command finishes that, and says so. When it cannot tell wha
 it changes nothing and keeps the record for a later run. `pitboard doctor` reports the
 state, and `pitboard log` is the record of every change it has made.
 
+**My login is too big for the keychain, what now?** MCP server tokens live in the same
+keychain item as the login, and `security` reads only about two kilobytes of a command from
+standard input. Past that there is one route left, passing it as an argument, which is what
+Claude Code does for the same login on every token refresh, so pitboard does it too and
+says so. `PITBOARD_NO_ARGV=1` refuses the switch instead. `pitboard doctor` shows the size.
+
 **Why trust the download?** The macOS app is signed with a Developer ID and notarised by
 Apple, and its update feed is signed too. Every release carries `SHA256SUMS` and a build
 provenance attestation, so you can check which workflow at which commit produced a file:

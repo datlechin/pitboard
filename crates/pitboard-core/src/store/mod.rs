@@ -244,6 +244,11 @@ pub fn too_large(ctx: &Context, service: &str, contents: &str) -> bool {
     vault(ctx).too_large(service, contents)
 }
 
+/// Whether writing this would have to go on the argument line rather than through stdin.
+pub fn over_stdin_limit(ctx: &Context, service: &str, contents: &str) -> bool {
+    cost(ctx, service, contents).is_some_and(|(needs, limit)| needs > limit)
+}
+
 /// The bytes a document would need and the bytes there are, where that is bounded.
 pub fn cost(ctx: &Context, service: &str, contents: &str) -> Option<(usize, usize)> {
     vault(ctx).cost(service, contents)

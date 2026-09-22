@@ -29,6 +29,11 @@ pub enum Warning {
     AuthOverridden {
         names: Vec<String>,
     },
+    /// The login was too large for `security`'s stdin, so it went on the argument line.
+    WrittenOnTheCommandLine {
+        bytes: usize,
+        limit: usize,
+    },
 }
 
 impl Warning {
@@ -40,6 +45,7 @@ impl Warning {
             Warning::ParksPendingRemoval(_) => "parks_pending_removal",
             Warning::ParkedLoginRefused { .. } => "parked_login_refused",
             Warning::AuthOverridden { .. } => "auth_overridden",
+            Warning::WrittenOnTheCommandLine { .. } => "written_on_the_command_line",
         }
     }
 }
@@ -58,6 +64,13 @@ impl fmt::Display for Warning {
                 f,
                 "Anthropic no longer accepts the parked login for `{label}`. Run `pitboard \
                  enroll {label} --sign-in` to sign in to it again."
+            ),
+            Warning::WrittenOnTheCommandLine { bytes, limit } => write!(
+                f,
+                "this login needs {bytes} bytes and `security` reads {limit} from stdin, so \
+                 it was written on the argument line, where a process running as you could \
+                 have read it while the call lasted. Claude Code writes this same login the \
+                 same way whenever it refreshes the token."
             ),
             Warning::AuthOverridden { names } => write!(
                 f,

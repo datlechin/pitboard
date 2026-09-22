@@ -28,11 +28,9 @@ pub enum Error {
 
     #[error(
         "the login for `{label}` needs {bytes} bytes and `security` reads {limit} from \
-         stdin. Claude Code writes a login this size by putting it on the argument line, \
-         where any process running as you can read it while the call lasts, and it does \
-         that for this same login on every refresh. pitboard does it only if you say so: \
-         set PITBOARD_ARGV_FALLBACK=1. Otherwise, signing out of MCP servers you no longer \
-         use makes the login smaller."
+         stdin, so it can only be written on the argument line, which PITBOARD_NO_ARGV \
+         forbids. Unset it, or sign out of MCP servers you no longer use to make the login \
+         smaller."
     )]
     CredentialTooLarge {
         label: String,

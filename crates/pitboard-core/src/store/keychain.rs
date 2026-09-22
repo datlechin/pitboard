@@ -295,10 +295,25 @@ mod tests {
         );
     }
 
+    /// Measured on macOS 26: `security -i` reads 4097 bytes of a command and treats the
+    /// rest as another command, so a hex-encoded secret of about two kilobytes is the most
+    /// that route carries. Past it the argument line is the only way, which is what Claude
+    /// Code uses for the same login.
     #[test]
-    fn oversize_credentials_are_refused_before_anything_is_written() {
-        let live = Keychain::live(&Context::from_env());
-        assert!(live.too_large("svc", &"x".repeat(2100)));
-        assert!(!live.too_large("svc", &"x".repeat(1900)));
+    fn the_stdin_route_stops_at_about_two_kilobytes() {
+        let ctx = Context::from_env();
+        let live = Keychain::live(&ctx);
+        assert!(live.over_stdin_limit("svc", &"x".repeat(2100)));
+        assert!(!live.over_stdin_limit("svc", &"x".repeat(1900)));
+    }
+
+    /// The refusal is available to whoever wants it, and is not the default: there is no
+    /// third way to write a login this size.
+    #[test]
+    fn only_a_refusing_context_calls_it_too_large() {
+        let ctx = Context::from_env();
+        assert!(!Keychain::live(&ctx).too_large("svc", &"x".repeat(2100)));
+        let refusing = ctx.with_argv_fallback(false);
+        assert!(Keychain::live(&refusing).too_large("svc", &"x".repeat(2100)));
     }
 }

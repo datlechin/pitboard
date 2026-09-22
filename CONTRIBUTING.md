@@ -97,6 +97,17 @@ quarantined and Gatekeeper stops an ad-hoc signature.
 Never change the update key once a release carries it. An app checks the feed's signature
 against the key it was built with, so a new key strands every copy already installed.
 
+## Measured, not assumed
+
+Three of these decide the design, and all three were measured rather than reasoned about:
+
+- `security -i` reads 4097 bytes of command line, no continuation. Its `-w` prompt reads 128.
+- Writing a keychain item in process, through the Security framework, makes every later
+  read of that item by `security` take about a second instead of 0.01, for good.
+- A running Claude Code session picks up a swapped credential within about 33 seconds.
+
+Redo the first two on a scratch item before changing anything that depends on them.
+
 ## Dependencies
 
 Every new dependency needs a reason in the pull request. `cargo deny check` must pass.
