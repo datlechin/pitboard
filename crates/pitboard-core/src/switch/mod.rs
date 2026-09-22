@@ -295,6 +295,9 @@ pub fn switch(settled: Settled, label: &str) -> Result<(Outcome, Vec<Warning>)> 
             to_uuid: target.account_uuid.clone(),
             park_service: park_service.clone(),
             incoming_service: held.service.clone(),
+            // Which side the live credential came from, answerable without asking anyone.
+            from_fingerprint: park::fingerprint_of(&before["claudeAiOauth"]),
+            to_fingerprint: held.refresh_fingerprint.clone(),
         },
     )?;
     fault::point("switch.journal_written");

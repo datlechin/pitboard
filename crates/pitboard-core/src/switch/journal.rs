@@ -22,6 +22,15 @@ pub(super) struct Journal {
     pub(super) park_service: String,
     /// The park being installed, so recovery consumes exactly that copy.
     pub(super) incoming_service: String,
+    /// The refresh tokens on each side, as fingerprints. Eight bytes of SHA-256, which is
+    /// what `Park` already records, and no more a secret there than here.
+    ///
+    /// These let recovery answer the question it usually needs Anthropic for. Empty on a
+    /// record written before they existed, which is a record that simply asks.
+    #[serde(default)]
+    pub(super) from_fingerprint: String,
+    #[serde(default)]
+    pub(super) to_fingerprint: String,
 }
 
 /// What a later run found an interrupted switch had done, now recorded in the state.
@@ -162,6 +171,39 @@ fn live_owner(ctx: &Context) -> std::result::Result<String, String> {
         .map_err(|e| e.to_string())
 }
 
+/// Who owns the live login, answered from the record rather than from Anthropic, where the
+/// record is enough to answer it.
+///
+/// Recovery needs to know which side of the switch the live credential came from, and
+/// asking Anthropic is the only answer that survives Claude Code rotating a token. But the
+/// two candidates are both pitboard's own documents and their refresh tokens were
+/// fingerprinted when the record was written, so the common case is a comparison and not a
+/// round trip. That is what lets a switch be recovered on a plane.
+///
+/// It narrows the network dependency rather than removing it. A rotation inside the seconds
+/// of an interrupted switch leaves a fingerprint matching neither side, which is exactly
+/// when this says nothing and Anthropic is asked after all.
+fn live_owner_by_fingerprint(ctx: &Context, journal: &Journal) -> Option<String> {
+    if journal.from_fingerprint.is_empty() || journal.to_fingerprint.is_empty() {
+        return None;
+    }
+    if journal.from_fingerprint == journal.to_fingerprint {
+        return None;
+    }
+    let live = store::read(ctx, &claude::live_service(ctx)).ok()??;
+    let found = park::fingerprint_of(&live["claudeAiOauth"]);
+    if found.is_empty() {
+        return None;
+    }
+    if found == journal.to_fingerprint {
+        Some(journal.to_uuid.clone())
+    } else if found == journal.from_fingerprint {
+        Some(journal.from_uuid.clone())
+    } else {
+        None
+    }
+}
+
 /// What abandoning an unfinishable record decided to keep.
 #[derive(Debug)]
 pub struct Abandoned {
@@ -227,7 +269,13 @@ pub(super) fn reconcile(ctx: &Context, state: &mut State) -> Result<Option<Recov
     let journal = serde_json::from_str::<Journal>(&raw)
         .map_err(|source| Error::RecoveryRecordCorrupt { path, source })?;
 
-    let owner = live_owner(ctx);
+    // The fingerprints settle it without a round trip whenever they can, which is what
+    // makes an interrupted switch recoverable with no network at all.
+    let by_fingerprint = live_owner_by_fingerprint(ctx, &journal);
+    let owner = match &by_fingerprint {
+        Some(uuid) => Ok(uuid.clone()),
+        None => live_owner(ctx),
+    };
     let found = Found {
         parked: read_park(ctx, &journal.park_service),
         live_owner: owner.as_ref().ok().cloned(),
@@ -270,7 +318,29 @@ mod tests {
             to_uuid: "to-uuid".into(),
             park_service: PARK.into(),
             incoming_service: INCOMING.into(),
+            from_fingerprint: "ffffffffffffffff".into(),
+            to_fingerprint: "0000000000000000".into(),
         }
+    }
+
+    /// A record written before fingerprints existed simply asks, which is what it always
+    /// did. Reading an old record must never be a reason to refuse.
+    #[test]
+    fn a_record_from_before_the_fingerprints_falls_back_to_asking() {
+        let ctx = Context::new(std::path::PathBuf::from("/nowhere"));
+        let mut j = journal();
+        j.from_fingerprint = String::new();
+        j.to_fingerprint = String::new();
+        assert_eq!(live_owner_by_fingerprint(&ctx, &j), None);
+    }
+
+    /// Two sides that fingerprint the same are not two sides. Nothing can be read off that.
+    #[test]
+    fn identical_fingerprints_settle_nothing() {
+        let ctx = Context::new(std::path::PathBuf::from("/nowhere"));
+        let mut j = journal();
+        j.to_fingerprint = j.from_fingerprint.clone();
+        assert_eq!(live_owner_by_fingerprint(&ctx, &j), None);
     }
 
     fn account(label: &str, parked: Option<&str>) -> Account {

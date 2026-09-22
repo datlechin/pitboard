@@ -188,9 +188,12 @@ you do not own. Whether several subscriptions suit what you are doing is between
 Anthropic's terms.
 
 **What if it dies halfway through a switch?** It writes down what it is about to do before
-it does it. The next command finishes that, and says so. When it cannot tell what happened,
-it changes nothing and keeps the record for a later run. `pitboard doctor` reports the
-state, and `pitboard log` is the record of every change it has made.
+it does it, including a fingerprint of the login on each side. The next command reads which
+one is in place and finishes or undoes the switch from that, with no network needed. Only
+when the login in place is neither, which is what Claude Code refreshing a token in those
+few seconds looks like, does it need to ask Anthropic; and when it cannot ask, it changes
+nothing and keeps the record for a later run. `pitboard doctor` reports the state, and
+`pitboard log` is the record of every change it has made.
 
 **My login is too big for the keychain, what now?** MCP server tokens live in the same
 keychain item as the login, and `security` reads only about two kilobytes of a command from

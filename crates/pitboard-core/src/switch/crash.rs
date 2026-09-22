@@ -48,10 +48,11 @@ fn a_switch_killed_at_any_step_recovers_to_something_whole() {
 }
 
 /// The same kills, with Anthropic unreachable afterwards. Recovery decides what an
-/// interrupted switch did by asking who owns the live login, so with nobody to ask it must
-/// change nothing and keep the record for later, rather than guess.
+/// interrupted switch did from which side the live credential's refresh token came from,
+/// and both sides were fingerprinted when the record was written, so the common case is a
+/// comparison and not a round trip. That is what makes a switch recoverable on a plane.
 #[test]
-fn a_switch_killed_with_nobody_to_ask_changes_nothing_and_keeps_the_record() {
+fn a_switch_killed_with_nobody_to_ask_is_recovered_from_the_record() {
     for point in POINTS {
         let m = machine(&format!("offline-{}", point.replace('.', "-")));
 
@@ -59,38 +60,75 @@ fn a_switch_killed_with_nobody_to_ask_changes_nothing_and_keeps_the_record() {
         let died = fault::killing(point, || switch(settled, "there"));
         assert_eq!(died.unwrap_err(), point);
 
-        let before = m.mem.vault().services();
-        let live_before = m.mem.live().peek(&m.service);
-
         // Anthropic goes away. A scripted api answers Unauthorized for tokens it does not
-        // know, so forgetting the tokens is how it goes offline for this run.
+        // know, so telling it to be unreachable for both is how it goes offline.
         let offline = ScriptedApi::new();
         let ctx = m.ctx.clone().with_scripted_api(Arc::clone(&offline));
         offline.token_trouble("access-here-refresh", Trouble::Offline);
         offline.token_trouble("access-there-refresh", Trouble::Offline);
 
-        let settled = settle(&ctx);
-        if journal::pending(&ctx) {
-            assert!(
-                settled.is_err(),
-                "{point}: with nobody to ask, an interrupted switch must not be guessed at"
-            );
-        }
-        assert_eq!(
-            m.mem.vault().services(),
-            before,
-            "{point}: nothing may be deleted while it cannot be told what happened"
+        // Which side the live credential came from is written in the record as two
+        // fingerprints, so this settles without asking anyone. Dropped at once: a settled
+        // machine holds pitboard's exclusivity lock until it is.
+        let decided = settle(&ctx).is_ok();
+        assert!(
+            decided,
+            "{point}: recovery should read the live login's fingerprint rather than \
+             needing Anthropic"
         );
         assert_eq!(
-            m.mem.live().peek(&m.service),
-            live_before,
-            "{point}: the live login may not be moved either"
+            offline.calls(),
+            0,
+            "{point}: and it should not have asked at all"
         );
+        hold(&m, &format!("{point}, recovered with no network"));
 
-        // And once Anthropic answers again, the same machine recovers.
+        // Still true when Anthropic comes back, and still true run twice.
         recover(&m).unwrap_or_else(|e| panic!("{point}: recovery refused once back: {e}"));
-        hold(&m, &format!("{point}, after being offline"));
+        hold(&m, &format!("{point}, then online"));
     }
+}
+
+/// The fingerprints narrow the network dependency; they do not remove it. Claude Code
+/// rotating the token inside the seconds of an interrupted switch leaves a live credential
+/// matching neither side, which is exactly when there is nothing to read off and Anthropic
+/// has to be asked. With nobody to ask, the only right answer is to change nothing.
+#[test]
+fn a_switch_whose_token_rotated_while_it_was_interrupted_still_needs_anthropic() {
+    let m = machine("rotated-offline");
+    let settled = settle(&m.ctx).expect("nothing to recover yet").0;
+    let died = fault::killing("switch.park_recorded", || switch(settled, "there"));
+    assert_eq!(died.unwrap_err(), "switch.park_recorded");
+
+    // Claude Code refreshes the login it still believes is signed in, so the slot now holds
+    // a token neither side of the record fingerprints to.
+    m.mem.live().plant(
+        &m.service,
+        &json!({"claudeAiOauth": {
+            "refreshToken": "rotated-since",
+            "accessToken": "access-here-refresh",
+            "expiresAt": (NOW + 3600) * 1000,
+            "refreshTokenExpiresAt": (NOW + 30 * 86_400) * 1000,
+        }})
+        .to_string(),
+    );
+
+    let before = m.mem.vault().services();
+    let live_before = m.mem.live().peek(&m.service);
+    let offline = ScriptedApi::new();
+    let ctx = m.ctx.clone().with_scripted_api(Arc::clone(&offline));
+    offline.token_trouble("access-here-refresh", Trouble::Offline);
+
+    assert!(
+        settle(&ctx).is_err(),
+        "with nothing to read off and nobody to ask, this must not be guessed at"
+    );
+    assert_eq!(m.mem.vault().services(), before, "nothing may be deleted");
+    assert_eq!(m.mem.live().peek(&m.service), live_before);
+    assert!(
+        journal::pending(&ctx),
+        "and the record is kept for a later run"
+    );
 }
 
 /// Enrolling by signing in writes a login into the vault before anything names it. Killed

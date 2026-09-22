@@ -46,6 +46,16 @@ All notable changes are recorded here. The format follows
   being rate limited from a login Anthropic had finished with. `status` tells the same three
   apart too, where they used to share one code.
 
+### Added
+- An interrupted switch is recovered without a network. Deciding what it did meant asking
+  Anthropic who owns the live login, so a switch interrupted on a plane, or while Anthropic
+  was having a bad morning, stopped every command that changes anything until it could be
+  asked. The record now carries a fingerprint of the refresh token on each side, which is
+  the same eight bytes of SHA-256 a park already records, so the common case is a
+  comparison. It narrows the dependency rather than removing it: Claude Code refreshing the
+  token inside those few seconds leaves a login matching neither side, and that is still a
+  question for Anthropic, and still changes nothing when Anthropic cannot be reached.
+
 ### Fixed
 - A switch asks about the login going in, not only about the one coming out. It used to ask
   Anthropic twice about the login it was throwing away and never once about the login it was
