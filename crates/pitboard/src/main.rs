@@ -69,6 +69,8 @@ enum Command {
     Abandon,
     /// Ask the credential store what parked logins are here, and account for every one
     Repair,
+    /// Take over a pitboard directory another computer wrote, keeping the accounts
+    Adopt,
     /// What pitboard has changed, and when
     Log {
         /// How many changes to show
@@ -393,6 +395,44 @@ fn abandon(pitboard: &Pitboard) -> Report {
     }
 }
 
+fn adopt(pitboard: &Pitboard) -> Report {
+    match pitboard.adopt() {
+        Err(error) => Report::failed(Some("adopt"), error),
+        Ok(None) => Report::done(
+            "adopt",
+            json!({ "adopted": false }),
+            "This pitboard directory was already written on this computer.\n".into(),
+        ),
+        Ok(Some(a)) => {
+            let ways_back: Vec<String> = a
+                .logins_dropped
+                .iter()
+                .map(|label| format!("  pitboard enroll {label} --sign-in\n"))
+                .collect();
+            Report::done(
+                "adopt",
+                json!({
+                    "adopted": true,
+                    "accounts": a.accounts,
+                    "logins_dropped": a.logins_dropped,
+                }),
+                format!(
+                    "Took over this directory: {} account(s) kept.\n\
+                     {} parked login(s) dropped, because a login belongs to the computer \
+                     that signed in.\n{}",
+                    a.accounts.len(),
+                    a.logins_dropped.len(),
+                    if ways_back.is_empty() {
+                        String::new()
+                    } else {
+                        format!("Sign in to each again:\n{}", ways_back.concat())
+                    }
+                ),
+            )
+        }
+    }
+}
+
 fn repair(pitboard: &Pitboard) -> Report {
     changed("repair", pitboard.repair(), |r| {
         let human = if r.is_empty() {
@@ -579,6 +619,7 @@ fn main() -> ExitCode {
         }
         Command::Abandon => abandon(&pitboard),
         Command::Repair => repair(&pitboard),
+        Command::Adopt => adopt(&pitboard),
         Command::Log { lines } => log(&pitboard, lines),
         Command::Uninstall { yes } => {
             if !yes

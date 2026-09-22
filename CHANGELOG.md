@@ -13,6 +13,15 @@ All notable changes are recorded here. The format follows
   between writing a login and recording it left a live refresh token that no entry named,
   never renewed, never deleted by `pitboard uninstall`, and on macOS not listable by any
   tool a person has. `pitboard doctor` reports anything still outstanding.
+- `pitboard adopt` takes over a `~/.pitboard` that another computer wrote. The machine
+  stamp is right and its reason is sound, but the refusal stopped every command including
+  `uninstall`, so somebody whose home and keychain arrived through Migration Assistant met
+  a tool that would not do anything and an error telling them to enrol again with no
+  command that made it possible. Adopting keeps what is a fact about an account, the label,
+  the email, the uuids and the remembered numbers, and drops every parked login, because a
+  login belongs to the computer that signed in. It deliberately does not ask Anthropic
+  whether a parked token still works: finding out means exchanging it, and exchanging it is
+  the act that would rotate it past the other machine's copy.
 - `pitboard repair` asks the credential store itself what parked logins are on this
   machine, rather than reading pitboard's own index, and accounts for every one it finds:
   given back to the account whose name it carries, or deleted when no account here wants

@@ -371,7 +371,15 @@ pub fn evaluate(facts: &Facts) -> Vec<Check> {
             "state",
             "accounts",
             e.to_string(),
-            "pitboard will not switch until its account list can be read.",
+            match e {
+                // The one unreadable state that has a command of its own.
+                Error::StateWrongMachine { .. } => {
+                    "Run `pitboard adopt` to keep these accounts on this computer. The \
+                     logins they came with are dropped, because a login belongs to the \
+                     computer that signed in."
+                }
+                _ => "pitboard will not switch until its account list can be read.",
+            },
         ),
     });
     checks.extend(facts.parks.iter().map(|p| judge_park(p, facts.now)));

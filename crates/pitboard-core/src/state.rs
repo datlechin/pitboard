@@ -193,11 +193,24 @@ fn file(ctx: &Context) -> PathBuf {
 }
 
 pub fn load(ctx: &Context) -> Result<State> {
+    let (state, here) = load_any_machine(ctx)?;
+    if !here {
+        return Err(Error::StateWrongMachine { path: file(ctx) });
+    }
+    Ok(state)
+}
+
+/// The state whatever machine wrote it, and whether that machine is this one.
+///
+/// Only `adopt` reads it this way. Everything else goes through [`load`], which refuses a
+/// file from elsewhere: a parked login is a refresh token, and two machines taking turns
+/// presenting one ends the login for both.
+pub(crate) fn load_any_machine(ctx: &Context) -> Result<(State, bool)> {
     let path = file(ctx);
     home::check_location(&home::dir(ctx))?;
     let raw = match std::fs::read_to_string(&path) {
         Ok(s) => s,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(State::default()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok((State::default(), true)),
         Err(source) => return Err(Error::StateUnreadable { path, source }),
     };
     let mut document: serde_json::Value =
@@ -210,9 +223,7 @@ pub fn load(ctx: &Context) -> Result<State> {
         path: path.clone(),
         source,
     })?;
-    if state.machine != machine_id() {
-        return Err(Error::StateWrongMachine { path });
-    }
+    let here = state.machine == machine_id();
     let mut state = state;
     // Which account is in use is a fact about one slot. Read from another, the record says
     // nothing, and pitboard asks Anthropic who is signed in anyway.
@@ -220,7 +231,7 @@ pub fn load(ctx: &Context) -> Result<State> {
     if state.slot.is_some() && state.slot.as_deref() != Some(slot.as_str()) {
         state.active = None;
     }
-    Ok(state)
+    Ok((state, here))
 }
 
 /// Brings an older file up to the current format in place.

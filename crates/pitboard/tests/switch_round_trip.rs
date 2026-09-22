@@ -395,6 +395,49 @@ fn forgetting_an_account_deletes_its_parked_login() {
     );
 }
 
+/// A home that arrived from another computer stops every command, which is right: a parked
+/// login is a refresh token, and two machines taking turns presenting one ends the login
+/// for both. What was missing was a way out that is not "delete everything and start over".
+#[test]
+fn a_home_from_another_computer_is_taken_over_rather_than_being_a_dead_end() {
+    let env = two_accounts("adopted");
+    let parked = env.parked_service("beta").expect("beta is parked");
+    env.edit_state(|s| s["machine"] = serde_json::json!("a hash from another computer"));
+
+    // Every ordinary command refuses it, and says what to run.
+    let (_, err, code) = env.run(&["use", "beta"]);
+    assert_eq!(code, 1);
+    assert!(err.contains("pitboard adopt"), "{err}");
+
+    let (out, err, code) = env.run(&["adopt", "--json"]);
+    assert_eq!(code, 0, "{err}");
+    let envelope = envelope(&out);
+    assert_eq!(envelope["data"]["adopted"], true);
+    assert_eq!(
+        envelope["data"]["logins_dropped"],
+        serde_json::json!(["beta"])
+    );
+
+    // The accounts are still here, the logins are not, and the tool works again.
+    let labels: Vec<String> = accounts(&env)
+        .iter()
+        .map(|a| a["label"].as_str().unwrap_or_default().to_string())
+        .collect();
+    assert!(labels.contains(&"alpha".to_string()));
+    assert!(labels.contains(&"beta".to_string()));
+    assert!(
+        !env.is_parked(&parked),
+        "the login that came with it is deleted"
+    );
+
+    let (_, err, code) = env.run(&["use", "beta"]);
+    assert_eq!(code, 1, "{err}");
+    assert!(
+        err.contains("nothing parked") || err.contains("--sign-in"),
+        "the refusal is now about the login, not about the computer: {err}"
+    );
+}
+
 #[test]
 fn an_account_with_nothing_parked_is_refused_with_the_way_back() {
     let env = two_accounts("exhausted");

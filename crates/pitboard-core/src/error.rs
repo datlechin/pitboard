@@ -149,7 +149,9 @@ pub enum Error {
 
     #[error(
         "{path} was written on another computer. Parked logins do not move between \
-         machines; enroll your accounts again on this one."
+         machines, because two machines taking turns presenting one refresh token ends the \
+         login for both. Run `pitboard adopt` to keep your accounts here and drop the \
+         logins they came with; each then needs one `pitboard enroll <label> --sign-in`."
     )]
     StateWrongMachine { path: PathBuf },
 

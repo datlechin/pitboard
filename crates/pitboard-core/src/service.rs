@@ -222,6 +222,15 @@ impl Pitboard {
         outcome
     }
 
+    /// Take over a pitboard directory another machine wrote: keep the accounts, drop the
+    /// logins that came with them. `None` when the directory was already this machine's.
+    ///
+    /// The one change that does not settle first, because a stamp from elsewhere is what
+    /// stops settling. Everything after it settles normally.
+    pub fn adopt(&self) -> Result<Option<switch::Adopted>> {
+        switch::adopt(&self.ctx)
+    }
+
     /// Ask the credential store what parked logins are on this machine, and give back or
     /// delete every one pitboard's own records do not name. Ordinarily there is nothing to
     /// do: every change resolves the names it wrote down. This is for a machine whose state

@@ -88,8 +88,11 @@ Other commands:
 - `pitboard abandon` gives up on an interrupted switch that cannot be finished, keeping
   every login. Only needed when recovery cannot reach Anthropic.
 - `pitboard repair` asks the keychain what parked logins are on this machine and accounts
-  for every one: given back to the account it belongs to, or deleted when nothing wants it.
+  for every one: given back to the account it belongs to, or reported and left alone.
   Only needed if pitboard's own files were lost or restored from a backup.
+- `pitboard adopt` takes over a `~/.pitboard` that came from another computer, keeping the
+  accounts and dropping the logins they came with. Each then needs one
+  `pitboard enroll <label> --sign-in`.
 - `pitboard uninstall` deletes every parked login and pitboard's own files.
 
 ## Status line
@@ -156,7 +159,9 @@ These are rules, not gaps:
 
 The last one is a safety rule, not a missing feature. Each machine has to sign in to each
 account itself. If a machine presents a refresh token another machine has already rotated,
-Claude Code drops the login on both.
+Claude Code drops the login on both. If a `~/.pitboard` does arrive from another computer,
+for instance through Migration Assistant, `pitboard adopt` keeps the accounts and drops the
+logins rather than leaving you with a tool that refuses to do anything.
 
 ## What a switch costs you
 

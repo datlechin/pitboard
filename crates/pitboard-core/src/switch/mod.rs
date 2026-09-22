@@ -6,6 +6,7 @@
 //! writes become durable before destructive ones, so a run that dies midway leaves a spare
 //! copy, never a missing one.
 
+mod adopt;
 #[cfg(test)]
 mod crash;
 mod enroll;
@@ -16,6 +17,7 @@ mod renew;
 mod uninstall;
 
 pub use crate::pending::Reclaimed;
+pub use adopt::{Adopted, adopt};
 pub use enroll::{Enrolled, SignIn, WatchedSignIn, enroll, sign_in, sign_in_watched};
 pub use forget::forget;
 pub use journal::{Abandoned, Recovered, pending as interrupted};
