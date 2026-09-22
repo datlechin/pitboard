@@ -370,3 +370,31 @@ private func account(_ label: String, signedIn: Bool, percent: Double) -> Accoun
     await model.refresh()
     #expect(model.footing == .ready)
 }
+
+/// A failure carries its own warnings. Leaving the last successful read's in place put a
+/// fresh network error above warnings about things that may have been fixed since.
+@MainActor
+@Test func aFailedReadShowsItsOwnWarningsRatherThanTheLastOnes() async {
+    let stub = Stub(
+        .success(
+            Status(
+                now: 0, accounts: [],
+                warnings: [
+                    Warning(
+                        code: "state_on_synced_drive", message: "~/.pitboard is on iCloud Drive"
+                    )
+                ])))
+    let model = AppModel(watching: false, service: stub)
+    await model.refresh()
+    #expect(model.warnings.map(\.code) == ["state_on_synced_drive"])
+
+    stub.answer = .failure(
+        PitboardError.Failed(
+            code: "identity_unverifiable",
+            cause: Cause(code: "unreachable", worthRetrying: true),
+            message: "Anthropic could not be reached",
+            warnings: [Warning(code: "overriding_env", message: "ANTHROPIC_API_KEY is set")]))
+    await model.refresh()
+    #expect(model.warnings.map(\.code) == ["overriding_env"])
+    #expect(model.problem == "Anthropic could not be reached")
+}

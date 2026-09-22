@@ -269,6 +269,9 @@ All notable changes are recorded here. The format follows
   absence: each one may name literals whose arrival would disprove it, and the conformance
   run fails when one turns up, because a fact resting on something not existing is wrong
   the moment it does and nothing disappearing would ever say so.
+- A failed read in the app shows that failure's own warnings rather than the last
+  successful read's. A fresh network error used to sit above warnings about things that
+  may have been fixed since.
 - Text in the app grows with the person's own. Every column was a width fixed at the
   default size, so anyone with larger text got a limit name running into its bar and a
   reset time clipped off the right. The checks were read out without saying whether they

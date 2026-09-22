@@ -151,6 +151,10 @@ final class AppModel {
         } catch {
             problem = Self.saying(error)
             problemCode = Self.code(of: error)
+            // What went wrong this time, in place of what was wrong last time. A failure
+            // carries its own warnings, and leaving the previous read's in place showed a
+            // fresh network error above warnings that may have been fixed since.
+            warnings = Self.warnings(of: error)
             // A read that could not reach Anthropic still has something true to show: the
             // last numbers measured, and who Claude Code's config says is signed in. An
             // empty panel says the accounts are gone, which is not what happened.
@@ -356,6 +360,15 @@ final class AppModel {
             return message
         }
         return error.localizedDescription
+    }
+
+    /// Everything a failure warns about, not only what stopped it. A switch can fail and
+    /// still have something to say about an overriding environment variable.
+    private static func warnings(of error: Error) -> [Warning] {
+        if case PitboardError.Failed(_, _, _, let warnings) = error {
+            return warnings
+        }
+        return []
     }
 
     /// The stable code behind an error, for deciding what to offer rather than reading the
