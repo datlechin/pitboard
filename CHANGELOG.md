@@ -269,6 +269,10 @@ All notable changes are recorded here. The format follows
   absence: each one may name literals whose arrival would disprove it, and the conformance
   run fails when one turns up, because a fact resting on something not existing is wrong
   the moment it does and nothing disappearing would ever say so.
+- README and SECURITY.md say what a downloader can actually check: the archives, the
+  source tarball Homebrew builds from, `SHA256SUMS`, a bill of materials beside each
+  artefact and `appcast.xml` are all attested, and `gh attestation verify` checks any of
+  them against the workflow and commit that produced it. They named one archive.
 - A failed read in the app shows that failure's own warnings rather than the last
   successful read's. A fresh network error used to sit above warnings about things that
   may have been fixed since.

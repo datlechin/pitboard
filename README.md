@@ -223,12 +223,19 @@ Claude Code does for the same login on every token refresh, so pitboard does it 
 says so. `PITBOARD_NO_ARGV=1` refuses the switch instead. `pitboard doctor` shows the size.
 
 **Why trust the download?** The macOS app is signed with a Developer ID and notarised by
-Apple, and its update feed is signed too. Every release carries `SHA256SUMS` and a build
-provenance attestation, so you can check which workflow at which commit produced a file:
+Apple, and its update feed is signed too. Every release attests what it published: each
+archive, the source tarball Homebrew builds from, `SHA256SUMS`, a bill of materials beside
+each artefact, and `appcast.xml`, which is the file that decides what an installed copy
+runs next. The attestation names the workflow and the commit that produced the file:
 
 ```sh
 gh attestation verify Pitboard-v0.1.5-macos.zip --repo datlechin/pitboard
+gh attestation verify SHA256SUMS --repo datlechin/pitboard
+gh attestation verify appcast.xml --repo datlechin/pitboard
 ```
+
+`SHA256SUMS` is worth attesting rather than only reading: on its own it is evidence against
+a download that went wrong, not against anyone who could change the release.
 
 Or build it yourself: `cargo install pitboard`.
 

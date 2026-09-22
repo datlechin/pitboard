@@ -130,13 +130,28 @@ IP address.
   reads the slot back after a switch rather than trusting that its own write stood.
 - A state directory inside a cloud-synced folder: refused, because a parked login belongs
   to exactly one machine.
+- A changed download. Every release attests each archive, the source tarball Homebrew
+  builds from, `SHA256SUMS`, a bill of materials beside each artefact, and `appcast.xml`,
+  which is the file that decides what an installed copy runs next. `gh attestation verify
+  <file> --repo datlechin/pitboard` checks any of them against the workflow and the commit
+  that produced it. The checksums Homebrew checks are the lines the release itself wrote
+  over the files it published, not ones taken later somewhere else.
+- A changed update key. An installed copy takes an update signed by the key in the bundle
+  it came from. A release whose key differs from the one the previous release shipped is
+  refused unless the repository says that release means to rotate, because an ad-hoc
+  installed copy has no other route to accept a new key and would silently stop updating.
 
 ## What pitboard does not defend against
 
 - Another process running as your user. It can read what you can read.
 - Another user with administrative access to your machine.
 - A compromised Claude Code binary, or a compromised dependency of pitboard itself. The
-  dependency tree is checked for known advisories, licences and sources in CI.
+  dependency tree is checked for known advisories, licences and sources in CI, and each
+  release publishes what was in it as a CycloneDX bill of materials beside the artefact it
+  describes.
+- Anyone who can already read your files. Where there is no keychain, a parked login is a
+  file and a mode bit is the whole of what keeps it private. `pitboard doctor` checks the
+  modes and fails when one is wrong, which is all it can do.
 
 ## If something goes wrong
 
