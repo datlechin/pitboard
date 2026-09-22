@@ -160,6 +160,25 @@ fn ask(ctx: &Context, label: &str, held: &Park) -> Result<Asked> {
     }
 }
 
+/// Renew one parked login now, for a caller that needs it usable rather than merely
+/// present. Returns the park that replaces it, or `None` when Anthropic could not be
+/// reached or asked for less traffic, which is a reason to stop and not a reason to act.
+pub(super) fn renew_one(
+    ctx: &Context,
+    state: &mut State,
+    label: &str,
+    held: &Park,
+) -> Result<Option<Park>> {
+    match apply(ctx, state, label, held, ask(ctx, label, held))? {
+        Renewal::Renewed => Ok(state.get(label).and_then(|a| a.parked.clone())),
+        Renewal::Refused => Err(Error::ParkedLoginRefused {
+            label: label.to_string(),
+        }),
+        Renewal::Deferred => Ok(None),
+        Renewal::Failed(e) => Err(e),
+    }
+}
+
 /// The part that writes: one at a time, in the order the accounts are listed.
 fn apply(
     ctx: &Context,

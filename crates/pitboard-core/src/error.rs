@@ -307,6 +307,20 @@ pub enum Error {
     },
 
     #[error(
+        "Anthropic no longer accepts `{label}`'s parked login, so pitboard did not move \
+         anything. The copy has been dropped; sign in to that account again with \
+         `pitboard enroll {label} --sign-in`."
+    )]
+    ParkedLoginRefused { label: String },
+
+    #[error(
+        "`{label}`'s parked login belongs to {email}, not to the account pitboard has \
+         under that label. Nothing was moved. Run `pitboard doctor`, then \
+         `pitboard enroll {label} --sign-in` to replace it."
+    )]
+    ParkedLoginBelongsElsewhere { label: String, email: String },
+
+    #[error(
         "signed in as `{to}`, and the login was gone again before pitboard finished. \
          Claude Code removes a login without taking the write lock when `/logout` has given \
          up waiting, which is the one write pitboard cannot exclude. Nothing was lost: both \
@@ -413,6 +427,8 @@ impl Error {
             AccountUnknown { .. } => "account_unknown",
             NothingParked { .. } => "nothing_parked",
             ParkedLoginExpired { .. } => "parked_login_expired",
+            ParkedLoginRefused { .. } => "parked_login_refused",
+            ParkedLoginBelongsElsewhere { .. } => "parked_login_belongs_elsewhere",
             LiveAccountNotEnrolled { .. } => "live_account_not_enrolled",
             AlreadyEnrolled { .. } => "already_enrolled",
             LabelTaken { .. } => "label_taken",

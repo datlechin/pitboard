@@ -11,7 +11,11 @@ mod adopt;
 mod crash;
 mod enroll;
 mod forget;
+#[cfg(test)]
+mod harness;
 mod journal;
+#[cfg(test)]
+mod refusals;
 mod rename;
 mod renew;
 mod uninstall;
@@ -235,6 +239,9 @@ pub fn switch(settled: Settled, label: &str) -> Result<(Outcome, Vec<Warning>)> 
         });
     }
     let incoming = park::load(ctx, label, &held)?;
+    // Asked before Claude Code's lock is taken, like the outgoing question, so the round
+    // trip does not hold up its writes.
+    let (held, incoming) = prove_incoming(ctx, &mut state, label, &target, held, incoming)?;
 
     let storage = PathBuf::from(claude::storage_dir(ctx)).join(".storage-write");
     let guard = lock::acquire(&storage)?;
@@ -394,6 +401,65 @@ pub fn switch(settled: Settled, label: &str) -> Result<(Outcome, Vec<Warning>)> 
         },
         warnings,
     ))
+}
+
+/// Ask Anthropic about the login going in, not only about the one coming out.
+///
+/// A switch used to ask twice about the login it was throwing away and never once about
+/// the one it was installing. If that account's refresh chain had been revoked, signed out
+/// elsewhere or refused by Anthropic, the switch installed it, read it back, found a login
+/// there and reported success; the person discovered they were signed out the next time
+/// they ran `claude`, with no login to go back to on either side.
+///
+/// A lapsed park is renewed rather than refused, which is the whole point of parking one.
+/// That is a write, so it happens here, before anything is parked, while both copies are
+/// still where they were.
+fn prove_incoming(
+    ctx: &Context,
+    state: &mut State,
+    label: &str,
+    target: &Account,
+    held: Park,
+    incoming: Value,
+) -> Result<(Park, Value)> {
+    let usable = held.askable_at(ctx.now());
+    if usable {
+        let token =
+            incoming["accessToken"]
+                .as_str()
+                .ok_or_else(|| Error::ParkedCredentialCorrupt {
+                    label: label.to_string(),
+                    detail: "it has no access token".into(),
+                })?;
+        match api::owner(ctx, token) {
+            Ok(owner) if owner.account_uuid == target.account_uuid => return Ok((held, incoming)),
+            Ok(other) => {
+                return Err(Error::ParkedLoginBelongsElsewhere {
+                    label: label.to_string(),
+                    email: other.email,
+                });
+            }
+            // The access token has lapsed earlier than the recorded expiry said it
+            // would. Renewing settles it either way.
+            Err(api::ApiError::Unauthorized) => {}
+            Err(e) => {
+                return Err(Error::IdentityUnverifiable {
+                    cause: crate::error::Cause::of(&e),
+                    detail: e.to_string(),
+                });
+            }
+        }
+    }
+
+    // Lapsed, or refused as lapsed. Renew it and switch to what comes back.
+    let Some(fresh) = renew::renew_one(ctx, state, label, &held)? else {
+        return Err(Error::IdentityUnverifiable {
+            cause: crate::error::Cause::Unreachable,
+            detail: format!("`{label}`'s parked login needs renewing and Anthropic did not answer"),
+        });
+    };
+    let document = park::load(ctx, label, &fresh)?;
+    Ok((fresh, document))
 }
 
 /// After a failed install, whether the copy just parked is the outgoing account's only login.

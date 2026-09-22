@@ -305,6 +305,10 @@ fn status_renews_a_parked_login_whose_access_has_lapsed() {
             "scope": "user:inference user:profile", "token_type": "Bearer"
         }),
     );
+    // The renewed token has to be answerable too: a switch asks who the login going in
+    // belongs to before it takes the live one away.
+    let beta_uuid = env.uuid('b');
+    env.owns("access-refresh-b2", &beta_uuid, "beta@example.com", "org-b");
 
     let (out, err, code) = env.run(&["status", "--json"]);
 

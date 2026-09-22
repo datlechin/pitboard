@@ -47,6 +47,15 @@ All notable changes are recorded here. The format follows
   apart too, where they used to share one code.
 
 ### Fixed
+- A switch asks about the login going in, not only about the one coming out. It used to ask
+  Anthropic twice about the login it was throwing away and never once about the login it was
+  installing, so an account whose refresh chain had been revoked or signed out elsewhere
+  installed cleanly, read back cleanly and reported a switch; the person found out the next
+  time they ran `claude`, by which point the login they had left was parked and the one they
+  had arrived at did not work. A park Anthropic refuses is dropped and the switch does not
+  happen; one filed under the wrong account is refused by name; one whose access token has
+  lapsed is renewed and the renewed login is what gets installed. Costs one round trip,
+  asked before Claude Code's write lock is taken, so it does not hold up its writes.
 - A switch no longer reports success it did not have. Claude Code's `/logout` deletes the
   credential with no write lock held once it has given up waiting, which is the one write
   pitboard cannot exclude; landing just after the install, it left the incoming account
