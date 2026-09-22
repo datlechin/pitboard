@@ -4,7 +4,7 @@
 use crate::context::Context;
 use crate::error::{Error, Result};
 use crate::state::{Park, State};
-use crate::{api, store, time};
+use crate::{api, store};
 use serde_json::{Value, json};
 
 pub fn service_name(account_uuid: &str, at_millis: i64) -> String {
@@ -14,7 +14,7 @@ pub fn service_name(account_uuid: &str, at_millis: i64) -> String {
 /// Claim a free name before writing to it, so the caller can record it first and recovery
 /// can find a park left by a run that died. Reusing a name would destroy the park there.
 pub fn reserve(ctx: &Context, account_uuid: &str) -> Result<String> {
-    let start = time::now_millis();
+    let start = ctx.now_millis();
     for offset in 0..1_000 {
         let candidate = service_name(account_uuid, start + offset);
         if store::vault_read(ctx, &candidate)?.is_none() {
@@ -26,7 +26,7 @@ pub fn reserve(ctx: &Context, account_uuid: &str) -> Result<String> {
 
 /// Write a login into a reserved name and prove it reads back.
 pub fn store_at(ctx: &Context, service: &str, oauth: &Value) -> Result<Park> {
-    let park = describe(service, time::now(), oauth);
+    let park = describe(service, ctx.now(), oauth);
     if park.refresh_fingerprint.is_empty() {
         return Err(Error::LiveCredentialShapeUnexpected {
             detail: "it has no refresh token, so it could never be restored".into(),

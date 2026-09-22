@@ -122,7 +122,7 @@ pub fn gather(ctx: &Context) -> Facts {
         state,
         interrupted: switch::interrupted(ctx),
         service,
-        now: crate::time::now(),
+        now: ctx.now(),
     }
 }
 

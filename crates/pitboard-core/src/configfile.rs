@@ -7,7 +7,7 @@
 
 use crate::context::Context;
 use crate::error::{Error, Result};
-use crate::{atomic, home, time};
+use crate::{atomic, home};
 use serde_json::{Map, Value};
 use std::path::{Path, PathBuf};
 
@@ -85,7 +85,7 @@ pub fn backup(ctx: &Context, path: &Path) -> Result<PathBuf> {
     };
     let dir = backups_dir(ctx);
     home::create_private(&dir).map_err(fail)?;
-    let target = dir.join(format!("claude.json.{}", time::now()));
+    let target = dir.join(format!("claude.json.{}", ctx.now()));
     std::fs::copy(path, &target).map_err(fail)?;
 
     let mut existing: Vec<PathBuf> = std::fs::read_dir(&dir)

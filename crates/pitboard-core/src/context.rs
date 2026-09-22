@@ -2,7 +2,9 @@
 //! `Context` from the process environment once. A program linking the library builds one
 //! itself: an app started from Finder does not see a shell's environment.
 
+use crate::time::{Clock, SystemClock};
 use std::path::PathBuf;
+use std::sync::Arc;
 
 #[derive(Clone, Debug)]
 pub struct Context {
@@ -35,9 +37,22 @@ pub struct Context {
     pub(crate) api_base: Option<String>,
     /// `CLAUDE_CODE_HOVER_REST`, which switches on Claude Code's successor credential backend.
     pub(crate) hover_rest: bool,
+    /// Where the time comes from. The machine's clock in every real context; a test puts
+    /// its own here to reach the judgements that only happen at a particular moment.
+    pub(crate) clock: Arc<dyn Clock>,
 }
 
 impl Context {
+    /// Epoch seconds, from this context's clock.
+    pub(crate) fn now(&self) -> i64 {
+        self.clock.now()
+    }
+
+    /// Epoch milliseconds, from this context's clock.
+    pub(crate) fn now_millis(&self) -> i64 {
+        self.clock.now_millis()
+    }
+
     /// Claude Code's defaults for a person whose home is `home`: `~/.pitboard`, `~/.claude`,
     /// the default credential slot, `claude` looked up on `PATH`. An app starts here and sets
     /// only what differs.
@@ -55,6 +70,7 @@ impl Context {
             claude_program: PathBuf::from("claude"),
             api_base: None,
             hover_rest: false,
+            clock: Arc::new(SystemClock),
         }
     }
 
@@ -144,7 +160,16 @@ impl Context {
             claude_program: PathBuf::from("claude"),
             api_base: var("PITBOARD_API_BASE"),
             hover_rest: var("CLAUDE_CODE_HOVER_REST").is_some_and(|v| v == "1" || v == "true"),
+            clock: Arc::new(SystemClock),
         }
+    }
+
+    /// Read the time from somewhere else. Only the tests do this, which is why it is not
+    /// part of the builder a front end uses.
+    #[cfg(any(test, feature = "test-support"))]
+    pub(crate) fn with_clock(mut self, clock: Arc<dyn Clock>) -> Context {
+        self.clock = clock;
+        self
     }
 }
 

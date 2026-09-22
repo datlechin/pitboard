@@ -9,7 +9,7 @@ use crate::api::{self, ApiError, Owner};
 use crate::context::Context;
 use crate::state::{Park, State};
 use crate::usage::{Snapshot, Source};
-use crate::{claude, park, readings, store, time};
+use crate::{claude, park, readings, store};
 use serde_json::Value;
 
 /// Why a reading is not live.
@@ -160,7 +160,7 @@ pub fn gather_offline(ctx: &Context, state: &State) -> Report {
     };
     let remembered = readings::load(ctx);
     Report {
-        now: time::now(),
+        now: ctx.now(),
         rows: assemble(state, &facts, |uuid| remembered.get(uuid).cloned()),
         // Claude Code's config, which can be a day behind the login it describes. Good
         // enough to say who is in use; never good enough to move a login.
@@ -178,7 +178,7 @@ pub fn gather_offline(ctx: &Context, state: &State) -> Report {
 }
 
 pub fn gather(ctx: &Context, state: &State) -> Report {
-    let now = time::now();
+    let now = ctx.now();
     let live_token = store::read(ctx, &claude::live_service(ctx))
         .ok()
         .flatten()

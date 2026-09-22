@@ -153,7 +153,7 @@ pub fn read(ctx: &Context, input: &str) -> StatusLine {
         .as_ref()
         .and_then(crate::claude::identity)
         .map(|id| id.account_uuid);
-    let now = crate::time::now();
+    let now = ctx.now();
     let remembered = crate::readings::load(ctx);
     if let Some(uuid) = signed_in.as_deref() {
         let stale = remembered

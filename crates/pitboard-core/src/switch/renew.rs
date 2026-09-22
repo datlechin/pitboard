@@ -7,7 +7,7 @@ use crate::api::{self, ApiError};
 use crate::context::Context;
 use crate::error::{Error, Result};
 use crate::state::{Park, State};
-use crate::{park, state, store, time};
+use crate::{park, state, store};
 use serde_json::Value;
 
 /// Renewed this long before its access token expires, so a read just after still answers.
@@ -58,7 +58,7 @@ pub fn renew_parked(ctx: &Context) -> Vec<(String, Renewal)> {
     let Ok(mut state) = state::load(ctx) else {
         return Vec::new();
     };
-    let now = time::now();
+    let now = ctx.now();
     let due: Vec<(String, Park)> = state
         .accounts
         .iter()
@@ -178,7 +178,7 @@ fn apply(
 
     // The old refresh token may already be spent, so the answer is written at once, and a
     // second time under another name if the first write fails.
-    let next = park::renewed(&asked.oauth, &fresh, time::now_millis());
+    let next = park::renewed(&asked.oauth, &fresh, ctx.now_millis());
     let uuid = state
         .get(label)
         .map(|a| a.account_uuid.clone())

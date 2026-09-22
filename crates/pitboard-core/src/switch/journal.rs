@@ -8,7 +8,7 @@
 use super::{Error, Result, identify};
 use crate::context::Context;
 use crate::state::{Park, State};
-use crate::{atomic, claude, home, park, state, store, time};
+use crate::{atomic, claude, home, park, state, store};
 use serde_json::Value;
 use std::path::PathBuf;
 
@@ -195,7 +195,7 @@ pub(super) fn abandon(ctx: &Context, state: &mut State) -> Result<Option<Abandon
     {
         state.park(
             &label,
-            park::describe(&journal.park_service, time::now(), &document),
+            park::describe(&journal.park_service, ctx.now(), &document),
         );
         kept += 1;
     }

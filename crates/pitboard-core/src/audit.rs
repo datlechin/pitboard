@@ -18,7 +18,7 @@ fn path(ctx: &Context) -> PathBuf {
 
 /// A failure to audit never fails the operation it describes.
 pub fn record(ctx: &Context, verb: &str, subject: &str, outcome: &str) {
-    let _ = append(ctx, &line(time::now(), &ctx.caller, verb, subject, outcome));
+    let _ = append(ctx, &line(ctx.now(), &ctx.caller, verb, subject, outcome));
 }
 
 fn line(at: i64, caller: &str, verb: &str, subject: &str, outcome: &str) -> String {
@@ -122,6 +122,36 @@ mod tests {
         assert_eq!(entries[1].caller, "app");
         assert_eq!(entries[1].verb, "use");
         assert_eq!(entries[1].outcome, "ok");
+    }
+
+    /// The seam the rest of this crate's time judgements hang on: what gets written is the
+    /// context's idea of now, not the machine's.
+    #[test]
+    fn a_change_is_stamped_with_the_contexts_clock() {
+        use crate::time::FixedClock;
+        use std::sync::Arc;
+
+        let home = tempdir("audit-clock");
+        std::fs::create_dir_all(&home).unwrap();
+        let clock = Arc::new(FixedClock::at(1_760_000_000));
+        let ctx = Context::new(home.clone())
+            .with_pitboard_home(home.clone())
+            .with_caller("cli".into())
+            .with_clock(clock.clone());
+
+        record(&ctx, "use", "work", "ok");
+        clock.advance(3600);
+        record(&ctx, "use", "personal", "ok");
+
+        let entries = read(&ctx, 10);
+        assert_eq!(entries.len(), 2);
+        let stamp = |epoch| time::local(epoch, "%Y-%m-%dT%H:%M:%S%:z");
+        assert_eq!(entries[0].at, stamp(1_760_000_000));
+        assert_eq!(
+            entries[1].at,
+            stamp(1_760_003_600),
+            "an hour later, because we said so"
+        );
     }
 
     fn tempdir(name: &str) -> PathBuf {

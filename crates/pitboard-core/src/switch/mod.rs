@@ -24,7 +24,7 @@ use crate::context::Context;
 use crate::error::{Error, Result};
 use crate::service::Warning;
 use crate::state::{Account, Park, State};
-use crate::{api, claude, configfile, home, lock, park, state, store, time};
+use crate::{api, claude, configfile, home, lock, park, state, store};
 use journal::{Journal, clear_journal, reconcile, write_journal};
 use serde_json::Value;
 use std::os::unix::fs::OpenOptionsExt;
@@ -205,7 +205,7 @@ pub fn switch(settled: Settled, label: &str) -> Result<(Outcome, Vec<Warning>)> 
     let held = target.parked.clone().ok_or_else(|| Error::NothingParked {
         label: label.to_string(),
     })?;
-    if !held.restorable_at(time::now()) {
+    if !held.restorable_at(ctx.now()) {
         return Err(Error::ParkedLoginExpired {
             label: label.to_string(),
         });
@@ -257,7 +257,7 @@ pub fn switch(settled: Settled, label: &str) -> Result<(Outcome, Vec<Warning>)> 
     write_journal(
         ctx,
         &Journal {
-            started_at: time::now(),
+            started_at: ctx.now(),
             from_label: outgoing_label.clone(),
             from_uuid: outgoing.account_uuid.clone(),
             to_label: label.to_string(),

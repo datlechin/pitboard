@@ -193,7 +193,7 @@ pub fn owner(ctx: &Context, access_token: &str) -> Result<Owner, ApiError> {
 
 pub fn usage(ctx: &Context, access_token: &str) -> Result<Snapshot, ApiError> {
     let body = get(ctx, "/api/oauth/usage", access_token)?;
-    Ok(usage::from_usage_object(&body, crate::time::now()))
+    Ok(usage::from_usage_object(&body, ctx.now()))
 }
 
 fn parse_owner(body: &Value) -> Result<Owner, ApiError> {

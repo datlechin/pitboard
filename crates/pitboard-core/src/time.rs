@@ -1,16 +1,67 @@
 //! Time through jiff: epoch seconds in everything pitboard stores, the local time zone only
 //! in what it shows a person.
+//!
+//! There is no free function that reads the clock. Everything that needs to know the time
+//! asks its [`Context`](crate::context::Context), which holds a [`Clock`]. The expiry of a
+//! parked login, whether a renewal is due, and how long doctor says is left are all
+//! judgements about time, and none of them could be tested while the clock was a call into
+//! the operating system made wherever it was needed.
 
 use jiff::Timestamp;
 use jiff::tz::TimeZone;
 
-pub fn now() -> i64 {
-    Timestamp::now().as_second()
+/// What pitboard reads the time from.
+pub(crate) trait Clock: Send + Sync + std::fmt::Debug {
+    /// Epoch seconds: what everything pitboard stores is measured in.
+    fn now(&self) -> i64;
+
+    /// Epoch milliseconds. Park names carry this, so two parks of one account in the same
+    /// second do not collide.
+    fn now_millis(&self) -> i64;
 }
 
-/// Park names carry this, so two parks of one account in the same second do not collide.
-pub fn now_millis() -> i64 {
-    Timestamp::now().as_millisecond()
+/// This machine's clock, which is what every real context uses.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct SystemClock;
+
+impl Clock for SystemClock {
+    fn now(&self) -> i64 {
+        Timestamp::now().as_second()
+    }
+
+    fn now_millis(&self) -> i64 {
+        Timestamp::now().as_millisecond()
+    }
+}
+
+/// A clock that says what it is told, and can be moved. What the interesting judgements in
+/// this crate are about is when something happens, so a test needs to say when.
+#[cfg(any(test, feature = "test-support"))]
+#[derive(Debug)]
+pub(crate) struct FixedClock(std::sync::atomic::AtomicI64);
+
+#[cfg(any(test, feature = "test-support"))]
+impl FixedClock {
+    pub(crate) fn at(epoch_seconds: i64) -> FixedClock {
+        FixedClock(std::sync::atomic::AtomicI64::new(epoch_seconds))
+    }
+
+    /// Move the clock forward, or back.
+    pub(crate) fn advance(&self, seconds: i64) {
+        self.0
+            .fetch_add(seconds, std::sync::atomic::Ordering::Relaxed);
+    }
+}
+
+#[cfg(any(test, feature = "test-support"))]
+impl Clock for FixedClock {
+    fn now(&self) -> i64 {
+        self.0.load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    fn now_millis(&self) -> i64 {
+        self.now() * 1000
+    }
 }
 
 /// An RFC 3339 instant such as `2026-09-20T22:20:00.095287+00:00`, as epoch seconds. `None`
@@ -88,7 +139,7 @@ mod tests {
 
     #[test]
     fn a_moment_today_is_just_its_time() {
-        let now = now();
+        let now = SystemClock.now();
         assert_eq!(moment(now, now).len(), 5);
         assert!(moment(now - 3 * 86_400, now).len() > 5);
     }
