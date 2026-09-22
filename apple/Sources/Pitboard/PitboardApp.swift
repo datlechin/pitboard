@@ -59,6 +59,8 @@ private struct BarLabel: View {
                 Text(model.title)
             }
         }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(model.title.isEmpty ? "pitboard" : "pitboard, \(model.title)")
         .task {
             guard !seen else { return }
             seen = true

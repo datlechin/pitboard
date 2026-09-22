@@ -31,3 +31,12 @@ private func renewed(_ outcome: String) -> Renewed {
     #expect(renewalNote([renewed("renewed"), renewed("expired")]) == "Renewed 1 of 2.")
     #expect(renewalNote([renewed("expired")]) == "1 due; none could be renewed this time.")
 }
+
+/// A check is shown as a shape and a colour, and said as a word. If two levels ever came to
+/// look or sound the same, a broken check would read as a passing one.
+@Test func everyLevelLooksAndSoundsLikeItself() {
+    let levels: [Level] = [.ok, .warn, .fail]
+    #expect(Set(levels.map(\.symbol)).count == levels.count)
+    #expect(Set(levels.map(\.spoken)).count == levels.count)
+    #expect(levels.allSatisfy { !$0.spoken.isEmpty })
+}

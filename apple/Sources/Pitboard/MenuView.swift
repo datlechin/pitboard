@@ -7,6 +7,9 @@ struct MenuView: View {
     let updater: Updater
     /// The account a "Forget" is waiting to be confirmed for.
     @State private var forgetting: String?
+    /// The panel grows with the text in it. Bounded because this is a popover hung off the
+    /// menu bar and not a window: past about half a small screen it stops being a glance.
+    @ScaledMetric(relativeTo: .body) private var width: CGFloat = 400
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -98,7 +101,7 @@ struct MenuView: View {
             Footer(model: model, updater: updater)
         }
         .padding(14)
-        .frame(width: 400)
+        .frame(width: min(width, 620))
         .task { await model.refresh(ifOlderThan: AppModel.staleAfter) }
         .alert(
             "Forget \(forgetting ?? "")?",
@@ -127,6 +130,7 @@ struct Footer: View {
             Text(model.updated).font(.caption).foregroundStyle(.secondary)
             Spacer()
             Button("Refresh") { Task { await model.refresh(asked: true) } }
+                .keyboardShortcut("r")
             Menu {
                 if updater.available {
                     Button("Check for Updates…") { updater.check() }
@@ -169,6 +173,7 @@ struct Footer: View {
             }
             .menuStyle(.borderlessButton)
             .fixedSize()
+            .accessibilityLabel("More")
         }
     }
 }

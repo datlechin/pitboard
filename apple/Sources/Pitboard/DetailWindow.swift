@@ -74,8 +74,11 @@ private struct Accounts: View {
                                 }
                             }
                             Text(account.email).font(.caption).foregroundStyle(.secondary)
-                            ForEach(account.usage?.windows ?? [], id: \.kind) { limit in
-                                LimitRow(limit: limit, now: model.status?.now ?? 0)
+                            ForEach(
+                                Array((account.usage?.windows ?? []).enumerated()), id: \.offset
+                            ) {
+                                _, window in
+                                Limit(window: window)
                             }
                             if let lasts = account.lastsSeconds {
                                 Text(lasting(lasts, burning: account.lastsBurning))
@@ -90,32 +93,6 @@ private struct Accounts: View {
             .scenePadding()
         }
         .task { await model.refresh(ifOlderThan: AppModel.staleAfter) }
-    }
-}
-
-private struct LimitRow: View {
-    let limit: Limits
-    let now: Int64
-
-    var body: some View {
-        HStack(spacing: 12) {
-            Text(limit.kind == "five_hour" ? "5h" : "week")
-                .font(.caption.monospaced())
-                .frame(width: 40, alignment: .leading)
-            ProgressView(value: min(limit.percent, 100), total: 100)
-            Text("\(Int(limit.percent.rounded()))%")
-                .font(.caption.monospacedDigit())
-                .frame(width: 44, alignment: .trailing)
-            if let resets = limit.resetsAt, resets > now {
-                Text(
-                    "resets in "
-                        + Duration.seconds(resets - now)
-                        .formatted(.units(allowed: [.days, .hours, .minutes], width: .narrow))
-                )
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            }
-        }
     }
 }
 
@@ -163,9 +140,9 @@ private struct Checks: View {
             VStack(alignment: .leading, spacing: 10) {
                 ForEach(model.checks, id: \.code) { check in
                     HStack(alignment: .firstTextBaseline, spacing: 10) {
-                        Image(systemName: symbol(check.level))
-                            .foregroundStyle(colour(check.level))
-                            .accessibilityLabel(spoken(check.level))
+                        Image(systemName: check.level.symbol)
+                            .foregroundStyle(check.level.tint)
+                            .accessibilityLabel(check.level.spoken)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(check.name).font(.headline)
                             Text(check.detail)
@@ -187,30 +164,5 @@ private struct Checks: View {
             .scenePadding()
         }
         .task { await model.diagnose() }
-    }
-
-    private func symbol(_ level: Level) -> String {
-        switch level {
-        case .ok: "checkmark.circle"
-        case .warn: "exclamationmark.triangle"
-        case .fail: "xmark.octagon"
-        }
-    }
-
-    private func colour(_ level: Level) -> Color {
-        switch level {
-        case .ok: .green
-        case .warn: .orange
-        case .fail: .red
-        }
-    }
-
-    /// What VoiceOver says instead of naming a shape or a colour.
-    private func spoken(_ level: Level) -> String {
-        switch level {
-        case .ok: "fine"
-        case .warn: "worth looking at"
-        case .fail: "broken"
-        }
     }
 }

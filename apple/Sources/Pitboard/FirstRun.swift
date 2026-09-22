@@ -34,6 +34,7 @@ struct FirstRun: View {
                         string: "https://docs.claude.com/en/docs/claude-code/setup")!
                 )
                 .buttonStyle(.borderedProminent)
+                .keyboardShortcut(.defaultAction)
             }
         case .noOneSignedIn:
             Card(
@@ -45,6 +46,7 @@ struct FirstRun: View {
             ) {
                 Button("Sign in…") { model.naming = .another }
                     .buttonStyle(.borderedProminent)
+                    .keyboardShortcut(.defaultAction)
             }
         case .unnamed(let email):
             Card(
@@ -56,6 +58,7 @@ struct FirstRun: View {
             ) {
                 Button("Name it…") { model.naming = .theOneInUse }
                     .buttonStyle(.borderedProminent)
+                    .keyboardShortcut(.defaultAction)
             }
         case .onlyOne(let label):
             if !hidden {
@@ -68,6 +71,7 @@ struct FirstRun: View {
                 ) {
                     Button("Add another account…") { model.naming = .another }
                         .buttonStyle(.borderedProminent)
+                        .keyboardShortcut(.defaultAction)
                     Button("Not now") { hidden = true }
                 }
             }

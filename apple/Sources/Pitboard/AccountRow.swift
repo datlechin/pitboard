@@ -32,6 +32,10 @@ struct AccountRow: View {
                 Text(note).font(.caption2).foregroundStyle(.secondary)
             }
         }
+        // One account, read as one thing with a button in it, rather than six separate
+        // stops on the way past.
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(account.label ?? "unenrolled, \(account.email)")
     }
 
     /// When the login held for this account stops being usable. The command line says the
@@ -67,21 +71,26 @@ struct AccountRow: View {
 
 struct Limit: View {
     let window: Limits
+    /// The columns line up across rows, which needs fixed widths, and a fixed width set at
+    /// the default text size clips the moment somebody has text larger than that.
+    @ScaledMetric(relativeTo: .caption) private var nameWidth: CGFloat = 78
+    @ScaledMetric(relativeTo: .caption) private var percentWidth: CGFloat = 34
+    @ScaledMetric(relativeTo: .caption2) private var resetsWidth: CGFloat = 62
 
     var body: some View {
         HStack(spacing: 8) {
             Text(name)
                 .font(.caption)
                 .foregroundStyle(.secondary)
-                .frame(width: 78, alignment: .leading)
+                .frame(width: nameWidth, alignment: .leading)
             ProgressView(value: min(window.percent, 100) / 100).tint(colour)
             Text("\(Int(window.percent.rounded()))%")
                 .font(.caption.monospacedDigit())
-                .frame(width: 34, alignment: .trailing)
+                .frame(width: percentWidth, alignment: .trailing)
             Text(resets ?? "")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
-                .frame(width: 62, alignment: .trailing)
+                .frame(width: resetsWidth, alignment: .trailing)
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(spoken)
