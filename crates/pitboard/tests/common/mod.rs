@@ -210,7 +210,13 @@ impl Env {
                 account = account(),
             )
         } else {
-            format!(r#"printf %s '{credential}' > "$CLAUDE_CONFIG_DIR/.credentials.json""#)
+            // 0600, and by the same route Claude Code takes: write, then chmod. A shim
+            // that leaves the umask to decide writes a login anybody can read, which
+            // `doctor` is right to fail on and which Claude Code does not do.
+            format!(
+                r#"printf %s '{credential}' > "$CLAUDE_CONFIG_DIR/.credentials.json"
+chmod 600 "$CLAUDE_CONFIG_DIR/.credentials.json""#
+            )
         };
         let script = bin.join("claude");
         std::fs::write(
@@ -257,9 +263,19 @@ impl Env {
         }
     }
 
+    /// Take a parked login out of the store behind pitboard's back, which is how a test
+    /// says "this one is gone" without pitboard's own records agreeing.
+    ///
+    /// The Linux half was missing, so on Linux this deleted nothing and every test that
+    /// used it went on with the park still there. `use` then gave it back, which is
+    /// `repair`'s own behaviour and correct, so the test that meant to see a refusal saw a
+    /// switch. Never caught, because CI's Linux leg was being cancelled by a lint failure
+    /// before it got this far.
     pub fn delete_park(&self, service: &str) {
         if cfg!(target_os = "macos") {
             let _ = pitboard_core::testing::vault_delete(&ctx(), service);
+        } else {
+            let _ = std::fs::remove_file(self.root.join(format!("pitboard/vault/{service}.json")));
         }
     }
 

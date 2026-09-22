@@ -203,9 +203,9 @@ account a login belongs to and what it has left, and renews a login it parked it
 the same endpoint Claude Code uses. There is no telemetry and no server of its own. Parked
 logins stay on the machine that made them, in the keychain on macOS.
 
-**Is this allowed?** pitboard only moves logins you already hold between the place Claude
-Code reads. It does not share an account between people, pool requests, or touch an account
-you do not own. Whether several subscriptions suit what you are doing is between you and
+**Is this allowed?** pitboard only moves logins you already hold, between its own store and
+the place Claude Code reads. It does not share an account between people, pool requests, or
+touch an account you do not own. Whether several subscriptions suit what you are doing is between you and
 Anthropic's terms.
 
 **What if it dies halfway through a switch?** It writes down what it is about to do before
