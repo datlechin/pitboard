@@ -64,9 +64,12 @@ pitboard status --offline # the last numbers measured, without asking Anthropic
     week  ████░░░░░░   40%  resets in 2d 4h
 ```
 
-Usage comes from Anthropic every time you run it, for all accounts at once. If a parked
-login has expired, pitboard renews it first, so every account answers with live numbers. If
-Anthropic cannot be reached, you get the last numbers pitboard saw, and when it saw them.
+Usage comes from Anthropic for all accounts at once. A number is asked for again once the
+tightest limit it describes could have moved by a percentage point, which for a five-hour
+window is three minutes, so running `pitboard` twice in a row costs one set of requests and
+the app and the command line share one between them. `pitboard status --fresh` asks anyway.
+If a parked login has expired, pitboard renews it first. If Anthropic cannot be reached, or
+asks for less traffic, you get the last numbers pitboard saw, and when it saw them.
 
 A Claude Code session that is already open picks up the switch within about 33 seconds. You
 do not have to restart it.

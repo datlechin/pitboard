@@ -120,7 +120,11 @@ impl Pitboard {
 
     /// Who is signed in and what every account has left. Parked logins whose access has
     /// lapsed are renewed first, so every account is asked live.
-    pub fn status(&self) -> Result<Done<status::Report>> {
+    /// `fresh` asks Anthropic about every account whatever was asked recently. Ordinarily
+    /// false: a number is only asked for again once the tightest limit it describes could
+    /// have moved by a percentage point, which collapses several front ends on one machine
+    /// to one request per account per few minutes.
+    pub fn status(&self, fresh: bool) -> Result<Done<status::Report>> {
         let mut warnings = Vec::new();
         for (label, outcome) in switch::renew_parked(&self.ctx) {
             audit::record(&self.ctx, "renew", &label, outcome.code());
@@ -134,7 +138,7 @@ impl Pitboard {
         // logins are gone.
         let state = state::load(&self.ctx)?;
         Ok(Done {
-            value: status::gather(&self.ctx, &state),
+            value: status::gather(&self.ctx, &state, fresh),
             warnings,
         })
     }

@@ -73,10 +73,12 @@ final class AppModel {
         return ago < 60 ? "updated just now" : "updated \(ago / 60)m ago"
     }
 
-    func refresh(ifOlderThan seconds: TimeInterval = 0) async {
+    /// `asked` means somebody asked for this reading rather than a timer producing it, and
+    /// is what tells the core to go to Anthropic whatever it read moments ago.
+    func refresh(ifOlderThan seconds: TimeInterval = 0, asked: Bool = false) async {
         if let updatedAt, Date().timeIntervalSince(updatedAt) < seconds { return }
         do {
-            let read = try await service.status()
+            let read = try await service.status(fresh: asked)
             status = read
             problem = read.warnings.first?.message
             updatedAt = Date()

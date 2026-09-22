@@ -19,7 +19,7 @@ private func scratch() throws -> Settings {
 }
 
 @Test func statusOfAnEmptyHomeHasNoAccounts() async throws {
-    let status = try await PitboardService(settings: try scratch()).status()
+    let status = try await PitboardService(settings: try scratch()).status(fresh: false)
     #expect(status.accounts.isEmpty)
     #expect(status.warnings.isEmpty)
 }

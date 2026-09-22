@@ -55,6 +55,8 @@ pub struct Facts {
     /// Every reason a session here would authenticate as something other than the stored
     /// login, read from settings files as well as from this process's environment.
     pub auth_overrides: Vec<crate::settings::Override>,
+    /// Accounts pitboard is not asking Anthropic about yet, and for how long: (uuid, seconds).
+    pub asking_held: Vec<(String, i64)>,
     pub state: Result<State, Error>,
     /// Each enrolled account's parked login, read back from the vault.
     pub parks: Vec<ParkFact>,
@@ -125,6 +127,7 @@ pub fn gather(ctx: &Context) -> Facts {
         pending_parks: crate::pending::outstanding(ctx),
         claude_version: claude::installed_version(ctx),
         auth_overrides: crate::settings::overrides(ctx),
+        asking_held: crate::budget::holds(ctx),
         parks: state
             .as_ref()
             .map(|s| park_facts(ctx, s, identity.as_ref().map(|i| i.account_uuid.as_str())))
@@ -443,6 +446,7 @@ pub fn evaluate(facts: &Facts) -> Vec<Check> {
     checks.push(judge_pending(facts));
     checks.push(judge_claude_version(facts));
     checks.push(judge_auth(facts));
+    checks.push(judge_asking(facts));
     checks
 }
 
@@ -578,6 +582,37 @@ fn judge_storage_v5(facts: &Facts) -> Check {
             "storage v5",
             "switched on; the keychain is still where the login is",
         ),
+    }
+}
+
+/// Whether pitboard is waiting before asking Anthropic about anything.
+///
+/// Ordinarily nothing is waiting: an account is asked about whenever its tightest limit
+/// could have moved by a percentage point, and that is the floor rather than a wait. A wait
+/// means Anthropic asked for less traffic or could not be reached, and a person watching a
+/// number not move deserves to know which.
+fn judge_asking(facts: &Facts) -> Check {
+    match facts.asking_held.len() {
+        0 => ok("asking", "asking Anthropic", "nothing is being held back"),
+        n => {
+            let longest = facts
+                .asking_held
+                .iter()
+                .map(|(_, seconds)| *seconds)
+                .max()
+                .unwrap_or_default();
+            warn(
+                "asking",
+                "asking Anthropic",
+                format!(
+                    "{n} account(s) not being asked about for up to {}",
+                    time::span(longest)
+                ),
+                "Anthropic asked for less traffic, or could not be reached. The numbers \
+                 shown are the last ones measured until then; `pitboard status --fresh` \
+                 does not override a wait Anthropic asked for.",
+            )
+        }
     }
 }
 
@@ -748,6 +783,7 @@ mod tests {
             pending_parks: Vec::new(),
             claude_version: Some(crate::assumptions::VERIFIED_AGAINST.into()),
             auth_overrides: Vec::new(),
+            asking_held: Vec::new(),
             state: Ok(State::default()),
             parks: Vec::new(),
             interrupted: false,

@@ -4,7 +4,7 @@ import Foundation
 /// What the app asks of pitboard. A protocol so a test can answer instead of the real
 /// core, which would read the real keychain of whoever is running the tests.
 public protocol Core: Sendable {
-    func status() async throws -> Status
+    func status(fresh: Bool) async throws -> Status
     func doctor() async -> Diagnosis
     func switchTo(_ label: String) async throws -> Switched
     func enrollCurrent(_ label: String) async throws -> Enrolled
@@ -26,8 +26,12 @@ public final class PitboardService: Core, Sendable {
         core = Pitboard(settings: settings)
     }
 
-    public func status() async throws -> Status {
-        try await run(on: reads) { try $0.status() }
+    /// `fresh` asks Anthropic about every account even if it was asked moments ago. Pass
+    /// false for a poll: an account is otherwise only asked about again once its tightest
+    /// limit could have moved by a percentage point, which is what keeps this app and the
+    /// command line to one request between them.
+    public func status(fresh: Bool) async throws -> Status {
+        try await run(on: reads) { try $0.status(fresh: fresh) }
     }
 
     public func doctor() async -> Diagnosis {

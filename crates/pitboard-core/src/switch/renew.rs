@@ -148,7 +148,7 @@ fn ask(ctx: &Context, label: &str, held: &Park) -> Result<Asked> {
             refused: true,
         }),
         // Unreachable or asked to slow down: nothing is written and the next run tries.
-        Err(ApiError::Network(_) | ApiError::RateLimited) => Ok(Asked {
+        Err(ApiError::Network(_) | ApiError::RateLimited { .. }) => Ok(Asked {
             oauth: document,
             fresh: None,
             refused: false,

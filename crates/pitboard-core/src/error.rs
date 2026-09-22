@@ -50,7 +50,7 @@ impl Cause {
         use crate::api::ApiError;
         match error {
             ApiError::Unauthorized => Cause::TokenExpired,
-            ApiError::RateLimited => Cause::RateLimited,
+            ApiError::RateLimited { .. } => Cause::RateLimited,
             ApiError::Network(_) => Cause::Unreachable,
             ApiError::Unexpected { .. } => Cause::ServerError,
             ApiError::Malformed(_) => Cause::AnswerNotUnderstood,

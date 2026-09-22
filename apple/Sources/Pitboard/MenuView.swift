@@ -355,7 +355,7 @@ private struct Footer: View {
         HStack {
             Text(model.updated).font(.caption).foregroundStyle(.secondary)
             Spacer()
-            Button("Refresh") { Task { await model.refresh() } }
+            Button("Refresh") { Task { await model.refresh(asked: true) } }
             Menu {
                 if updater.available {
                     Button("Check for Updates…") { updater.check() }

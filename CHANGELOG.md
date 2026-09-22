@@ -47,6 +47,20 @@ All notable changes are recorded here. The format follows
   apart too, where they used to share one code.
 
 ### Added
+- pitboard owns how often it asks Anthropic anything. `status` asked about every enrolled
+  account plus the live login on every run with no memory of having just asked, and the
+  menu bar app asked the same questions every five minutes, on every wake and on every
+  panel open, from a process that knew nothing about the command line's; nothing honoured
+  `Retry-After`, so a 429 became a stale row and the identical request went out on the next
+  tick. Two accounts and a running app is on the order of six hundred authenticated
+  requests a day nobody asked for, and it is the part of pitboard's behaviour that reads
+  least like a person switching between their own accounts.
+  An account is now asked about again once the tightest limit it describes could have moved
+  by a percentage point, which is three minutes for a five-hour window and derived from the
+  window rather than picked. A refusal is recorded and waited out, with `Retry-After`
+  believed over anything pitboard would choose, and the wait is shared by every front end
+  on the machine. `pitboard status --fresh` asks anyway; a wait Anthropic asked for is not
+  overridden. `pitboard doctor` says what is being held back and for how long.
 - A conformance checker, and a job that runs it. `pitboard-conformance` reads the literals
   each of pitboard's facts about Claude Code is readable by out of a Claude Code build and
   says which are still there; a scheduled workflow fetches the newest build twice a week

@@ -10,7 +10,7 @@ use crate::context::Context;
 use crate::error::Cause;
 use crate::state::{Park, State};
 use crate::usage::{Snapshot, Source};
-use crate::{claude, park, readings, store};
+use crate::{budget, claude, park, readings, store};
 use serde_json::Value;
 
 /// Why a reading is not live.
@@ -34,6 +34,9 @@ pub enum Stale {
     AnswerNotUnderstood,
     /// Anthropic will not accept this parked login again.
     LoginRefused,
+    /// Asked recently enough that the answer cannot have moved by a percentage point, so
+    /// the number shown is the one already measured rather than a new request.
+    AskedRecently,
     /// The thread that was asking stopped before it answered. Nothing to do with
     /// Anthropic, which is why it used to be filed under the same code as a bad answer.
     Interrupted,
@@ -70,6 +73,7 @@ impl Stale {
             Stale::ServerError => "server_error",
             Stale::AnswerNotUnderstood => "answer_not_understood",
             Stale::LoginRefused => "login_refused",
+            Stale::AskedRecently => "asked_recently",
             Stale::Interrupted => "interrupted",
             Stale::NotAsked => "not_asked",
         }
@@ -87,6 +91,9 @@ impl Stale {
             Stale::ServerError => Some("Anthropic answered with an error; try again later"),
             Stale::AnswerNotUnderstood => Some("Anthropic's answer was not understood"),
             Stale::LoginRefused => Some("its parked login is no longer accepted; sign in again"),
+            // Not worth a word: it is the ordinary state of a number that is
+            // already as true as asking again would make it.
+            Stale::AskedRecently => None,
             Stale::Interrupted => Some("the check did not finish"),
             Stale::NotAsked => Some("read without asking Anthropic"),
         }
@@ -198,7 +205,52 @@ pub fn gather_offline(ctx: &Context, state: &State) -> Report {
     }
 }
 
-pub fn gather(ctx: &Context, state: &State) -> Report {
+/// What one account's request came to: the reading, and what the budget should learn from
+/// it. Recorded by the caller once every request has finished, never from the thread that
+/// made it.
+type Asked = (Result<Snapshot, Stale>, Option<(String, budget::Outcome)>);
+
+/// Ask about one account, or say why not.
+fn ask_usage(
+    ctx: &Context,
+    account_uuid: Option<&str>,
+    token: &str,
+    signed_in: bool,
+    remembered: Option<&Snapshot>,
+    fresh: bool,
+) -> Asked {
+    // An account pitboard cannot name cannot be budgeted for; it is asked about, which is
+    // what always happened.
+    if let Some(uuid) = account_uuid
+        && let Some(held) = budget::may_ask(ctx, uuid, remembered, fresh)
+    {
+        let stale = match held {
+            budget::Held::Fresh => Stale::AskedRecently,
+            budget::Held::RateLimited => Stale::RateLimited,
+            budget::Held::Unreachable => Stale::Unreachable,
+        };
+        return (Err(stale), None);
+    }
+    let answer = api::usage(ctx, token);
+    let learned = account_uuid.and_then(|uuid| {
+        let outcome = match &answer {
+            Ok(_) => budget::Outcome::Answered,
+            Err(api::ApiError::RateLimited { retry_after }) => {
+                budget::Outcome::RateLimited(*retry_after)
+            }
+            Err(api::ApiError::Network(_) | api::ApiError::Unexpected { .. }) => {
+                budget::Outcome::Unreachable
+            }
+            // A token that is refused, or an answer that is not understood, is not a reason
+            // to wait: waiting fixes neither.
+            Err(_) => return None,
+        };
+        Some((uuid.to_string(), outcome))
+    });
+    (answer.map_err(|e| Stale::of(&e, signed_in)), learned)
+}
+
+pub fn gather(ctx: &Context, state: &State, fresh: bool) -> Report {
     let now = ctx.now();
     let live_token = store::read(ctx, &claude::live_service(ctx))
         .ok()
@@ -209,45 +261,78 @@ pub fn gather(ctx: &Context, state: &State) -> Report {
         .iter()
         .map(|a| parked_token(ctx, &a.label, a.parked.as_ref(), now))
         .collect();
-
-    let (signed_in, live_usage, parked_usage) = std::thread::scope(|scope| {
-        let owner = scope.spawn(|| live_token.as_deref().map(|t| api::owner(ctx, t)));
-        let live = scope.spawn(|| match live_token.as_deref() {
-            Some(token) => api::usage(ctx, token).map_err(|e| Stale::of(&e, true)),
-            None => Err(Stale::NothingSignedIn),
-        });
-        let parked: Vec<_> = parked_tokens
-            .iter()
-            .map(|token| {
-                scope.spawn(move || {
-                    let token = token.as_deref().map_err(|stale| *stale)?;
-                    api::usage(ctx, token).map_err(|e| Stale::of(&e, false))
-                })
-            })
-            .collect();
-        (
-            owner.join().ok().flatten(),
-            live.join().unwrap_or(Err(Stale::Interrupted)),
-            parked
-                .into_iter()
-                .map(|h| h.join().unwrap_or(Err(Stale::Interrupted)))
-                .collect(),
-        )
-    });
-
     let config = claude::load_config(ctx).ok();
+    let live_uuid = config
+        .as_ref()
+        .and_then(claude::identity)
+        .map(|id| id.account_uuid);
+    let remembered = readings::load(ctx);
+
+    let (signed_in, live_asked, parked_asked): (_, Asked, Vec<Asked>) =
+        std::thread::scope(|scope| {
+            // Who owns the live login is asked whatever the budget says: it decides which
+            // account a row belongs to, it is not a measurement, and a switch needs it.
+            let owner = scope.spawn(|| live_token.as_deref().map(|t| api::owner(ctx, t)));
+            let live = scope.spawn(|| match live_token.as_deref() {
+                Some(token) => ask_usage(
+                    ctx,
+                    live_uuid.as_deref(),
+                    token,
+                    true,
+                    live_uuid.as_deref().and_then(|u| remembered.get(u)),
+                    fresh,
+                ),
+                None => (Err(Stale::NothingSignedIn), None),
+            });
+            let parked: Vec<_> = parked_tokens
+                .iter()
+                .zip(state.accounts.iter())
+                .map(|(token, account)| {
+                    let remembered = &remembered;
+                    scope.spawn(move || match token.as_deref() {
+                        Err(stale) => (Err(*stale), None),
+                        Ok(token) => ask_usage(
+                            ctx,
+                            Some(&account.account_uuid),
+                            token,
+                            false,
+                            remembered.get(&account.account_uuid),
+                            fresh,
+                        ),
+                    })
+                })
+                .collect();
+            (
+                owner.join().ok().flatten(),
+                live.join().unwrap_or((Err(Stale::Interrupted), None)),
+                parked
+                    .into_iter()
+                    .map(|h| h.join().unwrap_or((Err(Stale::Interrupted), None)))
+                    .collect(),
+            )
+        });
+
+    // Once, from one thread. Every account's record lives in one file, so a thread each
+    // reading it, changing one entry and writing it back would erase what the others
+    // learned.
+    let learned: Vec<(String, budget::Outcome)> = std::iter::once(&live_asked)
+        .chain(parked_asked.iter())
+        .filter_map(|(_, learned)| learned.clone())
+        .collect();
+    budget::record(ctx, &learned);
+    let (live_usage, parked_usage) = (
+        live_asked.0,
+        parked_asked.into_iter().map(|(usage, _)| usage).collect(),
+    );
+
     let facts = Facts {
         signed_in,
         asked: true,
         live_usage,
         parked_usage,
         claude_code_cache: config.as_ref().and_then(crate::usage::from_config_cache),
-        config_uuid: config
-            .as_ref()
-            .and_then(claude::identity)
-            .map(|id| id.account_uuid),
+        config_uuid: live_uuid,
     };
-    let remembered = readings::load(ctx);
     let rows = assemble(state, &facts, |uuid| remembered.get(uuid).cloned());
     readings::remember(
         ctx,
@@ -479,7 +564,10 @@ mod tests {
             Stale::AnswerNotUnderstood
         );
         assert_eq!(parked(&ApiError::InvalidGrant), Stale::LoginRefused);
-        assert_eq!(parked(&ApiError::RateLimited), Stale::RateLimited);
+        assert_eq!(
+            parked(&ApiError::RateLimited { retry_after: None }),
+            Stale::RateLimited
+        );
         assert_eq!(
             parked(&ApiError::Network("down".into())),
             Stale::Unreachable

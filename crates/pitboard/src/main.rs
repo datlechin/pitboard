@@ -41,6 +41,9 @@ enum Command {
         /// Answer from what was last measured, without asking Anthropic
         #[arg(long)]
         offline: bool,
+        /// Ask Anthropic about every account, even one asked about moments ago
+        #[arg(long, conflicts_with = "offline")]
+        fresh: bool,
     },
     /// Add an account: the one signed in now, or with --sign-in, another one
     Enroll {
@@ -226,11 +229,11 @@ fn changed<T>(
     }
 }
 
-fn status(pitboard: &Pitboard, offline: bool) -> Report {
+fn status(pitboard: &Pitboard, offline: bool, fresh: bool) -> Report {
     let read = if offline {
         pitboard.status_offline()
     } else {
-        pitboard.status()
+        pitboard.status(fresh)
     };
     match read {
         Ok(Done {
@@ -584,8 +587,11 @@ fn main() -> ExitCode {
         Err(exit) => return exit,
     };
     let pitboard = Pitboard::new(Context::from_env());
-    let report = match cli.command.unwrap_or(Command::Status { offline: false }) {
-        Command::Status { offline } => status(&pitboard, offline),
+    let report = match cli.command.unwrap_or(Command::Status {
+        offline: false,
+        fresh: false,
+    }) {
+        Command::Status { offline, fresh } => status(&pitboard, offline, fresh),
         Command::Doctor => doctor(&pitboard),
         Command::Statusline => statusline(&pitboard),
         Command::Enroll {

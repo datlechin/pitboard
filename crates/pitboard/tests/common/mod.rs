@@ -55,6 +55,9 @@ pub struct Env {
     /// Stands in for Anthropic. It answers who a token belongs to exactly the way the real
     /// profile endpoint does, so the binary identifies accounts through its real code path.
     server: mockito::ServerGuard,
+    /// The usage endpoint, kept apart so a test can say how often pitboard asked it. How
+    /// often is a design question here, not an accident, so it is worth counting.
+    usage: mockito::Mock,
     mocks: Vec<mockito::Mock>,
 }
 
@@ -109,8 +112,36 @@ impl Env {
             service,
             name: name.to_string(),
             server,
-            mocks: vec![usage],
+            usage,
+            mocks: Vec::new(),
         }
+    }
+
+    /// Count how often pitboard asks Anthropic what an account has left, from here on.
+    ///
+    /// How often is a design question in this project rather than an accident, so it is
+    /// worth a test. The expectation has to be set when the mock is made, so this replaces
+    /// the one the environment started with.
+    pub fn expect_usage_requests(&mut self, expected: usize) {
+        self.usage.remove();
+        self.usage = self
+            .server
+            .mock("GET", "/api/oauth/usage")
+            .with_status(200)
+            .with_body(
+                serde_json::json!({
+                    "five_hour": {"utilization": 12.0, "resets_at": "2026-09-21T10:30:00+00:00"},
+                    "seven_day": {"utilization": 40.0, "resets_at": "2026-09-27T02:00:00+00:00"},
+                })
+                .to_string(),
+            )
+            .expect(expected)
+            .create();
+    }
+
+    /// Check what `expect_usage_requests` asked for.
+    pub fn assert_usage_requests(&self) {
+        self.usage.assert();
     }
 
     pub fn command(&self, args: &[&str]) -> Command {

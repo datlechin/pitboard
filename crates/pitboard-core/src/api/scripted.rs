@@ -20,6 +20,8 @@ pub enum Trouble {
     /// The access token has expired or been revoked.
     Unauthorized,
     RateLimited,
+    /// Rate limited, with Anthropic saying how long to wait.
+    RateLimitedFor(i64),
     /// No route to Anthropic at all: a plane, a captive portal, a bad morning.
     Offline,
     Server(u16),
@@ -31,7 +33,10 @@ impl From<Trouble> for ApiError {
     fn from(t: Trouble) -> ApiError {
         match t {
             Trouble::Unauthorized => ApiError::Unauthorized,
-            Trouble::RateLimited => ApiError::RateLimited,
+            Trouble::RateLimited => ApiError::RateLimited { retry_after: None },
+            Trouble::RateLimitedFor(seconds) => ApiError::RateLimited {
+                retry_after: Some(seconds),
+            },
             Trouble::Offline => ApiError::Network("no route to host".into()),
             Trouble::Server(status) => ApiError::Unexpected { status },
             Trouble::InvalidGrant => ApiError::InvalidGrant,
@@ -217,11 +222,11 @@ mod tests {
 
         assert!(matches!(
             api.owner(&ctx, "live"),
-            Err(ApiError::RateLimited)
+            Err(ApiError::RateLimited { .. })
         ));
         assert!(matches!(
             api.usage(&ctx, "live"),
-            Err(ApiError::RateLimited)
+            Err(ApiError::RateLimited { .. })
         ));
         assert!(matches!(
             api.renew(&ctx, "stale", &[], None),

@@ -69,8 +69,9 @@ pub enum ApiError {
     /// The access token has expired or been revoked.
     #[error("the session has expired")]
     Unauthorized,
+    /// `retry_after` is what Anthropic said to wait, in seconds, where it said anything.
     #[error("Anthropic is rate limiting this request")]
-    RateLimited,
+    RateLimited { retry_after: Option<i64> },
     #[error("could not reach Anthropic: {0}")]
     Network(String),
     #[error("Anthropic answered {status}")]
@@ -201,9 +202,25 @@ fn get(ctx: &Context, path: &str, access_token: &str) -> Result<Value, ApiError>
             serde_json::from_str(&body).map_err(|e| ApiError::Malformed(e.to_string()))
         }
         401 | 403 => Err(ApiError::Unauthorized),
-        429 => Err(ApiError::RateLimited),
+        429 => Err(ApiError::RateLimited {
+            retry_after: retry_after(response.headers()),
+        }),
         status => Err(ApiError::Unexpected { status }),
     }
+}
+
+/// How long Anthropic asked us to wait, from `Retry-After`. Only the seconds form is read:
+/// the date form is allowed by the standard and has not been seen from this endpoint, and
+/// misreading one would be worse than not reading it.
+fn retry_after(headers: &ureq::http::HeaderMap) -> Option<i64> {
+    headers
+        .get("retry-after")?
+        .to_str()
+        .ok()?
+        .trim()
+        .parse::<i64>()
+        .ok()
+        .filter(|seconds| *seconds > 0)
 }
 
 /// The request Claude Code makes to renew its own login, for a parked one. The scopes asked
@@ -230,6 +247,7 @@ fn ask_renew(
         .map_err(|e| ApiError::Network(e.to_string()))?;
     let status = response.status().as_u16();
     let at = server_time(response.headers());
+    let rate_limit_wait = retry_after(response.headers());
     let text = response
         .body_mut()
         .read_to_string()
@@ -240,7 +258,9 @@ fn ask_renew(
                 serde_json::from_str(&text).map_err(|e| ApiError::Malformed(e.to_string()))?;
             parse_renewed(&body, at)
         }
-        429 => Err(ApiError::RateLimited),
+        429 => Err(ApiError::RateLimited {
+            retry_after: rate_limit_wait,
+        }),
         400..=499 if text.contains("invalid_grant") => Err(ApiError::InvalidGrant),
         status => Err(ApiError::Unexpected { status }),
     }

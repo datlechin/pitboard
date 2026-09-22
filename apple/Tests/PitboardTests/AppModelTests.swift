@@ -20,7 +20,11 @@ private final class Stub: Core, @unchecked Sendable {
         self.answer = answer
     }
 
-    func status() async throws -> Status { try answer.get() }
+    private(set) var freshAsks = 0
+    func status(fresh: Bool) async throws -> Status {
+        if fresh { freshAsks += 1 }
+        return try answer.get()
+    }
     func doctor() async -> Diagnosis {
         Diagnosis(
             checks: [
@@ -176,4 +180,18 @@ private func account(_ label: String, signedIn: Bool, percent: Double) -> Accoun
     #expect(model.signingIn == nil)
     #expect(model.naming == nil)
     #expect(model.problem == "`claude` is not on this machine")
+}
+
+/// A timer producing a reading is not somebody asking for one, and the core decides whether
+/// to go to Anthropic from that. The panel's own Refresh is asking; everything else is not.
+@MainActor
+@Test func onlyAskingForAReadingAsksAnthropicAgain() async {
+    let stub = Stub(.success(Status(now: 0, accounts: [], warnings: [])))
+    let model = AppModel(service: stub)
+
+    await model.refresh()
+    #expect(stub.freshAsks == 0, "a poll takes whatever the core already knows")
+
+    await model.refresh(asked: true)
+    #expect(stub.freshAsks == 1)
 }

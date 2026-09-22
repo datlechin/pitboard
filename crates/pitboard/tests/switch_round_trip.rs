@@ -651,3 +651,49 @@ fn the_argument_line_can_be_refused() {
     assert!(err.contains("PITBOARD_NO_ARGV"), "{err}");
     assert_eq!(env.live(), before, "nothing moved");
 }
+
+/// How often pitboard asks Anthropic is a design question, not an accident. A number is
+/// only worth asking for again once the tightest limit it describes could have moved by a
+/// percentage point, which for a five-hour window is three minutes. Two runs inside that
+/// make one request between them, however many front ends are involved.
+#[test]
+fn asking_twice_in_a_row_asks_anthropic_once() {
+    let mut env = two_accounts("budget");
+    // Two accounts, so one pass is two requests. The second pass is none.
+    env.expect_usage_requests(2);
+
+    let (_, err, code) = env.run(&["status", "--json"]);
+    assert_eq!(code, 0, "{err}");
+    let (out, err, code) = env.run(&["status", "--json"]);
+    assert_eq!(code, 0, "{err}");
+
+    env.assert_usage_requests();
+
+    // And it says so rather than passing a remembered number off as a live one.
+    let rows = envelope(&out)["data"]["accounts"].clone();
+    let stale: Vec<&str> = rows
+        .as_array()
+        .expect("accounts")
+        .iter()
+        .filter_map(|a| a["stale"].as_str())
+        .collect();
+    assert!(
+        stale.contains(&"asked_recently"),
+        "a number served from the last reading must say so: {stale:?}"
+    );
+}
+
+/// Asking for it is always allowed: the floor is a default, not a rule about what a person
+/// may do.
+#[test]
+fn asking_for_a_fresh_reading_asks_anthropic_again() {
+    let mut env = two_accounts("budget-fresh");
+    env.expect_usage_requests(4);
+
+    let (_, err, code) = env.run(&["status", "--json"]);
+    assert_eq!(code, 0, "{err}");
+    let (_, err, code) = env.run(&["status", "--fresh", "--json"]);
+    assert_eq!(code, 0, "{err}");
+
+    env.assert_usage_requests();
+}

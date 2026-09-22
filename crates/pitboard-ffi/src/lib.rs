@@ -385,8 +385,13 @@ impl Pitboard {
 
     /// Every account and what it has left, asked of Anthropic. Parked logins whose access
     /// has lapsed are renewed first.
-    pub fn status(&self) -> Result<Status, PitboardError> {
-        let done = self.core.status()?;
+    ///
+    /// `fresh` asks about every account whatever was asked moments ago. Pass false for a
+    /// poll and true when somebody asked for it: an account is otherwise only asked about
+    /// again once its tightest limit could have moved by a percentage point, which is what
+    /// keeps the app and the command line to one request between them.
+    pub fn status(&self, fresh: bool) -> Result<Status, PitboardError> {
+        let done = self.core.status(fresh)?;
         let now = done.value.now;
         Ok(Status {
             now,
