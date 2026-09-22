@@ -233,9 +233,15 @@ impl Env {
         if cfg!(target_os = "macos") {
             pitboard_core::testing::vault_write(&ctx(), service, contents).unwrap();
         } else {
+            // The modes pitboard's own file vault writes, for the same reason: a parked
+            // login is a plaintext token and `doctor` fails on one anybody can read.
+            use std::os::unix::fs::PermissionsExt;
             let vault = self.root.join("pitboard/vault");
             std::fs::create_dir_all(&vault).unwrap();
-            std::fs::write(vault.join(format!("{service}.json")), contents).unwrap();
+            std::fs::set_permissions(&vault, std::fs::Permissions::from_mode(0o700)).unwrap();
+            let path = vault.join(format!("{service}.json"));
+            std::fs::write(&path, contents).unwrap();
+            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).unwrap();
         }
     }
 
@@ -382,7 +388,14 @@ impl Env {
         if cfg!(target_os = "macos") {
             pitboard_core::testing::vault_write(&ctx(), &self.service, credential).unwrap();
         } else {
-            std::fs::write(self.live_path(), credential).unwrap();
+            // 0600, because that is what Claude Code writes: it chmods the plaintext
+            // credential after writing it, and a stand-in that leaves the umask to decide
+            // is a stand-in for something else. `doctor` reads these modes and fails on a
+            // login anybody can read, which is how this was found.
+            use std::os::unix::fs::PermissionsExt;
+            let path = self.live_path();
+            std::fs::write(&path, credential).unwrap();
+            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).unwrap();
         }
     }
 
