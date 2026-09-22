@@ -1,10 +1,13 @@
 # Homebrew cask for the menu bar app, for the tap datlechin/homebrew-tap.
 #
-# The download is the notarised build from the release, so Gatekeeper accepts it with no
-# further step. Sparkle keeps it up to date afterwards, which is why auto_updates is set.
+# This is the template. The release's `tap` job writes the version and the checksum into it
+# and commits the result to the tap, in the same commit as the formula, so the pair cannot
+# be half updated. The download is the notarised build from the release, so Gatekeeper
+# accepts it with no further step. Sparkle keeps it up to date afterwards, which is why
+# auto_updates is set.
 cask "pitboard" do
-  version "0.1.2"
-  sha256 "b556d0983206d455fda28f1561e58e4f30cae5f8c9b706ba665fc52674c61769"
+  version "0.0.0"
+  sha256 "0000000000000000000000000000000000000000000000000000000000000000"
 
   url "https://github.com/datlechin/pitboard/releases/download/v#{version}/Pitboard-v#{version}-macos.zip"
   name "pitboard"

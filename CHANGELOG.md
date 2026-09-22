@@ -283,6 +283,17 @@ All notable changes are recorded here. The format follows
   refuses instead. Measured first: writing the item in process would have made every later
   read by `security` take about a second instead of 0.01, for good.
 
+### Internal
+- The release publishes the Homebrew tap itself, from the checksums it has already computed
+  for `SHA256SUMS`, and then installs the formula and the cask from the public tap on a
+  clean runner and fails if what it serves is not the version just released. The tap used
+  to be written by a workflow of its own inside the tap repository, waking every six hours
+  and taking the checksum of whatever it downloaded, so `brew install` could be a version
+  behind for most of a day with the release green and nothing anywhere saying so. The
+  formula now builds from a source tarball the release publishes and attests, rather than
+  from the archive GitHub generates for a tag, whose bytes GitHub has changed before now.
+  `packaging/update-tap.sh` is gone with the second download it did.
+
 ## [0.2.0] - 2026-09-22
 
 Everything a stranger hits in the first ten minutes, every state a person could be stuck in,

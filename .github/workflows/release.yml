@@ -205,6 +205,9 @@ jobs:
   publish:
     needs: [guard, build, app]
     runs-on: ubuntu-latest
+    outputs:
+      source: ${{ steps.sums.outputs.source }}
+      app: ${{ steps.sums.outputs.app }}
     permissions:
       contents: write
       # Provenance: GitHub signs a statement of which workflow, at which commit, built
@@ -219,9 +222,34 @@ jobs:
         with:
           path: ${{ runner.temp }}/dist
           merge-multiple: true
+
+      # What the Homebrew formula builds from. GitHub makes an archive of a tag on demand
+      # and has changed the bytes it makes before now, so the tarball is a file of this
+      # release instead: its checksum is settled the moment it is taken, it is in
+      # SHA256SUMS with everything else, and it is attested.
+      - name: The source, as a file of this release
+        run: |
+          git archive --format=tar.gz --prefix="pitboard-${GITHUB_REF_NAME#v}/" \
+            -o "$RUNNER_TEMP/dist/pitboard-${GITHUB_REF_NAME}-source.tar.gz" HEAD
+
       # A tampered download is a realistic threat for a tool that handles OAuth tokens.
-      - run: sha256sum -- *.tar.gz *.zip > SHA256SUMS
+      # These two lines are also what the tap is written from, so the checksum Homebrew
+      # checks is the one this release took of the file it published, not one taken later
+      # somewhere else.
+      - id: sums
         working-directory: ${{ runner.temp }}/dist
+        run: |
+          sha256sum -- *.tar.gz *.zip > SHA256SUMS
+          source=$(awk -v f="pitboard-${GITHUB_REF_NAME}-source.tar.gz" '$2 == f {print $1}' SHA256SUMS)
+          app=$(awk -v f="Pitboard-${GITHUB_REF_NAME}-macos.zip" '$2 == f {print $1}' SHA256SUMS)
+          if [ -z "$source" ] || [ -z "$app" ]; then
+            echo "SHA256SUMS has no line for the source tarball or for the app:" >&2
+            cat SHA256SUMS >&2
+            exit 1
+          fi
+          echo "source=$source" >> "$GITHUB_OUTPUT"
+          echo "app=$app" >> "$GITHUB_OUTPUT"
+
       - run: rustup toolchain install
       # First, because a crates.io upload cannot be undone and a GitHub release can. The
       # core first, then the command line that depends on it. Skipped when that version is
@@ -299,3 +327,144 @@ jobs:
               --verify "$RUNNER_TEMP/update.zip" "$signature" --ed-key-file -
           ditto -x -k "$RUNNER_TEMP/update.zip" "$RUNNER_TEMP/unpacked"
           spctl --assess --type execute -v "$RUNNER_TEMP/unpacked/Pitboard.app"
+
+  # `brew install datlechin/tap/pitboard` is the first line of the README, so the tap is
+  # part of a release rather than something done to it afterwards. It used to be a workflow
+  # in the tap repository, waking every six hours and taking the checksum of whatever it
+  # downloaded; between those two a release could be finished and green for most of a day
+  # with the tap still serving the version before it, and nothing anywhere said so. The two
+  # checksums written here are the lines the release put in SHA256SUMS, over the files it
+  # published itself.
+  tap:
+    needs: [guard, publish]
+    if: needs.guard.outputs.prerelease == 'false'
+    runs-on: ubuntu-latest
+    # HOMEBREW_TAP_TOKEN is a fine-grained token for datlechin/homebrew-tap alone, with
+    # Contents read and write and nothing else. It is the only credential in this release
+    # that reaches another repository, so it lives in an environment of its own and no
+    # other job can read it.
+    environment: homebrew-tap
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - env:
+          TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          VERSION: ${{ needs.guard.outputs.version }}
+          SOURCE_SHA: ${{ needs.publish.outputs.source }}
+          APP_SHA: ${{ needs.publish.outputs.app }}
+        run: |
+          set -euo pipefail
+          if [ -z "$TOKEN" ]; then
+            echo "HOMEBREW_TAP_TOKEN is not set, so the tap cannot be published" >&2
+            exit 1
+          fi
+          # A header rather than a URL, so the token is not written into a git remote. Its
+          # base64 is a different string from the secret, so it is masked by hand or the
+          # log would carry it unredacted.
+          auth="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$TOKEN" | base64 -w0)"
+          echo "::add-mask::$auth"
+          tap=$RUNNER_TEMP/tap
+          git -c "http.extraheader=$auth" clone --depth 1 \
+            "https://github.com/${GITHUB_REPOSITORY_OWNER}/homebrew-tap.git" "$tap"
+
+          # The version and the checksum are the only two things that move, and a sed that
+          # matched nothing would leave the previous release's in place, which is the
+          # failure this job exists to end.
+          rewrite() {
+            sed -e "s|^  version \".*\"|  version \"$VERSION\"|" \
+                -e "s|^  sha256 \".*\"|  sha256 \"$2\"|" "$1" > "$3"
+            grep -q "^  version \"$VERSION\"$" "$3"
+            grep -q "^  sha256 \"$2\"$" "$3"
+          }
+          mkdir -p "$tap/Formula" "$tap/Casks"
+          rewrite packaging/pitboard.rb "$SOURCE_SHA" "$tap/Formula/pitboard.rb"
+          rewrite packaging/pitboard-cask.rb "$APP_SHA" "$tap/Casks/pitboard.rb"
+
+          cd "$tap"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if [ -z "$(git status --porcelain)" ]; then
+            echo "the tap already serves $VERSION"
+            exit 0
+          fi
+          git commit -m "pitboard $VERSION"
+          git -c "http.extraheader=$auth" push
+
+  # What somebody following the README gets, got, on a machine with nothing of this
+  # repository on it. The cask depends on the formula, so a tap that moved one and not the
+  # other installs an old command line beside a new app and says nothing about it.
+  brew:
+    needs: [guard, tap]
+    if: needs.guard.outputs.prerelease == 'false'
+    runs-on: macos-latest
+    steps:
+      - name: Install the way the README says to
+        env:
+          VERSION: ${{ needs.guard.outputs.version }}
+        run: |
+          set -euo pipefail
+          cask_version() {
+            brew info --json=v2 --cask datlechin/tap/pitboard |
+              python3 -c "import json,sys; print(json.load(sys.stdin)['casks'][0]['version'])"
+          }
+          formula_version() {
+            brew info --json=v2 --formula datlechin/tap/pitboard |
+              python3 -c "import json,sys; print(json.load(sys.stdin)['formulae'][0]['versions']['stable'])"
+          }
+          # The push and this clone are two machines talking to GitHub, so the tap is given
+          # a couple of minutes to be servable before it is called stale.
+          cask=
+          for attempt in $(seq 1 12); do
+            brew untap datlechin/tap 2>/dev/null || true
+            brew tap datlechin/tap
+            cask=$(cask_version)
+            [ "$cask" = "$VERSION" ] && break
+            echo "the tap serves $cask, waiting for $VERSION (attempt $attempt)"
+            sleep 10
+          done
+          if [ "$cask" != "$VERSION" ]; then
+            echo "this release published $VERSION and the tap serves $cask" >&2
+            exit 1
+          fi
+          formula=$(formula_version)
+          if [ "$formula" != "$VERSION" ]; then
+            echo "the tap's formula is $formula and its cask is $cask" >&2
+            exit 1
+          fi
+          brew install --formula datlechin/tap/pitboard
+          brew install --cask datlechin/tap/pitboard
+
+      - name: What it installed
+        env:
+          VERSION: ${{ needs.guard.outputs.version }}
+        run: |
+          set -euo pipefail
+          pitboard --version
+          pitboard --version | grep -qw "$VERSION"
+          # doctor exits 3 where Claude Code has never run, which is every clean runner, so
+          # what is checked here is that the installed binary runs its checks at all.
+          exit=0
+          pitboard doctor || exit=$?
+          case $exit in
+            0 | 3) ;;
+            *)
+              echo "pitboard doctor exited $exit" >&2
+              exit 1
+              ;;
+          esac
+          app=
+          for candidate in /Applications "$HOME/Applications"; do
+            [ -d "$candidate/Pitboard.app" ] && app=$candidate/Pitboard.app && break
+          done
+          if [ -z "$app" ]; then
+            echo "the cask installed no Pitboard.app" >&2
+            exit 1
+          fi
+          installed=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" \
+            "$app/Contents/Info.plist")
+          if [ "$installed" != "$VERSION" ]; then
+            echo "the cask says $VERSION and installed $installed" >&2
+            exit 1
+          fi

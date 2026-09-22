@@ -75,9 +75,9 @@ A tag `v<version>` releases; a tag like `v0.2.0-rc1` is a pre-release, which ski
 crates.io and publishes no update feed, so nobody's installed copy updates into it. The
 guard job refuses a tag that disagrees with the manifest or has no CHANGELOG section.
 
-A release the crates to crates.io, the command line for four targets,
-and the app, signed and notarised when these repository secrets are set. Without them the
-release still happens and the app is signed ad-hoc, which Gatekeeper warns about.
+A release publishes the crates to crates.io, the command line for four targets, the app,
+and the Homebrew tap, signed and notarised when these repository secrets are set. Without
+them the release still happens and the app is signed ad-hoc, which Gatekeeper warns about.
 
 | Secret | Where it comes from |
 | --- | --- |
@@ -87,6 +87,7 @@ release still happens and the app is signed ad-hoc, which Gatekeeper warns about
 | `APPLE_ID` | Only needed if the notarisation route ever goes back to an app-specific password |
 | `APPLE_API_KEY_ID`, `APPLE_API_ISSUER` | Shown beside that key |
 | `SPARKLE_PUBLIC_KEY`, `SPARKLE_PRIVATE_KEY` | `apple/.build/artifacts/sparkle/Sparkle/bin/generate_keys --account pitboard` once, then the same with `-x -` to read the private one |
+| `HOMEBREW_TAP_TOKEN` | In the `homebrew-tap` environment. A fine-grained personal access token, `datlechin/homebrew-tap` as its only repository, Contents read and write as its only permission, and an expiry the maintainer will notice |
 
 The signing identity is read from the certificate itself, so there is no secret for it.
 Every archive is attested, so a downloader can check what built it with
@@ -96,6 +97,20 @@ quarantined and Gatekeeper stops an ad-hoc signature.
 
 Never change the update key once a release carries it. An app checks the feed's signature
 against the key it was built with, so a new key strands every copy already installed.
+
+### What the maintainer has to set up by hand
+
+1. An environment named `homebrew-tap` holding `HOMEBREW_TAP_TOKEN`. An environment rather
+   than a repository secret because it is the only credential here that reaches another
+   repository, and a secret in an environment is readable only by a job that asks for that
+   environment by name.
+2. Delete `.github/workflows/follow-releases.yml` from `datlechin/homebrew-tap`. The
+   release writes the tap now; leaving the old poller in place means two writers and a
+   version that can come from either.
+
+If the tap push fails, re-run the `tap` job. There is no script for doing it by hand any
+more: the checksums come from the `SHA256SUMS` the release computed, and a second download
+somewhere else is what this replaced.
 
 ## Measured, not assumed
 
@@ -163,6 +178,17 @@ coupling comes from:
   absence under `no_keyring_off_macos`, checked on every build by the conformance job:
   a fact resting on something not existing is wrong the moment it does, and nothing
   disappearing would ever say so.
+
+Read on 2026-09-22, against Homebrew 7.0.6 and the tap as it then stood:
+
+- The tap was being written by `follow-releases.yml` inside `datlechin/homebrew-tap`, on
+  `17 */6 * * *`. A release was therefore finished and green up to six hours before anyone
+  could install what it published, and `packaging/pitboard.rb` in this repository still said
+  v0.1.2 while the tap served 0.2.0 and the workspace was at 0.2.0. Nothing anywhere
+  compared the three.
+- `pitboard doctor` exits 3 where Claude Code has never run, which is every clean runner, so
+  the job that installs from the tap treats 0 and 3 as the binary having run its checks and
+  anything else as it having failed to.
 
 ## Dependencies
 
