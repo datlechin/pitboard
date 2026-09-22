@@ -203,6 +203,7 @@ fn apply(
             });
         }
     };
+    crate::fault::point("renew.park_stored");
     state.park(label, parked.clone());
     if let Err(e) = state::save(ctx, state) {
         // Nothing that survives names the copy just written. The record on disk still

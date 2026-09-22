@@ -38,6 +38,11 @@ pub fn uninstall(settled: Settled) -> Result<Removed> {
     state.active = None;
     state::save(&ctx, &state)?;
     let pending = purge(&ctx, &mut state);
+    // The sweep in settle has already resolved every outstanding name, so what is left
+    // refers to nothing. The home goes next, and an index of names with no home is noise.
+    if pending == 0 {
+        crate::pending::clear(&ctx);
+    }
     let home_removed = pending == 0 && remove_home(&ctx);
     Ok(Removed {
         parks: parks - pending,

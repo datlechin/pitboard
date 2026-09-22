@@ -48,6 +48,8 @@ pub struct Facts {
     pub hover_rest_env: bool,
     /// Claude Code's supervisor daemon, where one has ever run for this slot.
     pub daemon: Option<crate::daemon::Daemon>,
+    /// Names pitboard wrote down before creating a park and has not resolved yet.
+    pub pending_parks: Vec<String>,
     pub state: Result<State, Error>,
     /// Each enrolled account's parked login, read back from the vault.
     pub parks: Vec<ParkFact>,
@@ -115,6 +117,7 @@ pub fn gather(ctx: &Context) -> Facts {
         machine_id_known: crate::state::machine_id() != "unknown",
         hover_rest_env: ctx.hover_rest,
         daemon: crate::daemon::read(ctx),
+        pending_parks: crate::pending::outstanding(ctx),
         parks: state
             .as_ref()
             .map(|s| park_facts(ctx, s, identity.as_ref().map(|i| i.account_uuid.as_str())))
@@ -403,6 +406,7 @@ pub fn evaluate(facts: &Facts) -> Vec<Check> {
 
     checks.push(judge_storage_v5(facts));
     checks.push(judge_daemon(facts));
+    checks.push(judge_pending(facts));
     checks
 }
 
@@ -541,6 +545,23 @@ fn judge_storage_v5(facts: &Facts) -> Check {
     }
 }
 
+/// A name written down before a park was created, still unresolved. Ordinarily there is
+/// nothing here: the next change resolves every one of them. What is left is an item that
+/// could not be read, which on macOS is a locked keychain and nothing worse.
+fn judge_pending(facts: &Facts) -> Check {
+    match facts.pending_parks.len() {
+        0 => ok("pending_parks", "parks being reclaimed", "none outstanding"),
+        n => warn(
+            "pending_parks",
+            "parks being reclaimed",
+            format!("{n} could not be read this time"),
+            "pitboard wrote these names down before creating a login in them and cannot \
+             read them back to find out what is there. Unlock the keychain and run any \
+             pitboard command; it resolves them before doing anything else.",
+        ),
+    }
+}
+
 /// Claude Code's supervisor daemon is a second writer of the login, on a schedule nobody
 /// typed. It takes the same write lock, so it cannot write underneath a switch, but a
 /// person reading a diagnosis should be able to see that it is there.
@@ -631,6 +652,7 @@ mod tests {
             machine_id_known: true,
             hover_rest_env: false,
             daemon: None,
+            pending_parks: Vec::new(),
             state: Ok(State::default()),
             parks: Vec::new(),
             interrupted: false,

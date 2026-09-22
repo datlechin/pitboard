@@ -88,6 +88,12 @@ IP address.
 - Leftover copies: a parked login that is no longer needed stays listed until it is
   deleted, so a failed or interrupted delete is retried. Temporary files a killed run left
   behind are removed on the next write to the same directory.
+- Copies nothing names: every name pitboard is about to write a login into is written down
+  before the login is, so a run killed between the two leaves a name the next command
+  resolves rather than a login nothing on the machine can see. An item whose account is
+  enrolled and holds nothing goes back to that account; one nobody wants is deleted; one
+  that cannot be read is left alone and tried again, because a store that could not answer
+  says nothing about what is in it.
 - A locked or unreadable keychain: reported as unreadable, never taken to mean that no
   login is there.
 - Restoring a login Claude Code has already moved past: each account keeps one parked

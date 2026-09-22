@@ -87,6 +87,16 @@ impl State {
         crate::error::Enrolled(self.accounts.iter().map(|a| a.label.clone()).collect())
     }
 
+    /// Whether anything in the state refers to this vault item: an account holding it, or
+    /// the list of ones waiting to be deleted.
+    pub fn names(&self, service: &str) -> bool {
+        self.accounts
+            .iter()
+            .filter_map(|a| a.parked.as_ref())
+            .any(|p| p.service == service)
+            || self.discarded.iter().any(|s| s == service)
+    }
+
     pub fn get(&self, label: &str) -> Option<&Account> {
         self.accounts.iter().find(|a| a.label == label)
     }

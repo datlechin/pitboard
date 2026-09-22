@@ -7,8 +7,25 @@ use crate::state::{Park, State};
 use crate::{api, store};
 use serde_json::{Value, json};
 
+const PREFIX: &str = "pitboard-park-";
+
 pub fn service_name(account_uuid: &str, at_millis: i64) -> String {
-    format!("pitboard-park-{account_uuid}-{at_millis}")
+    format!("{PREFIX}{account_uuid}-{at_millis}")
+}
+
+/// A name pitboard made, rather than one Claude Code did. Nothing deletes an item without
+/// this being true of its name.
+pub fn is_park_name(service: &str) -> bool {
+    parts_of(service).is_some()
+}
+
+/// The account and the moment a name carries. An account uuid contains dashes, so the
+/// moment is taken from the end.
+pub fn parts_of(service: &str) -> Option<(String, i64)> {
+    let rest = service.strip_prefix(PREFIX)?;
+    let (uuid, millis) = rest.rsplit_once('-')?;
+    let at_millis: i64 = millis.parse().ok()?;
+    (!uuid.is_empty()).then(|| (uuid.to_string(), at_millis))
 }
 
 /// Claim a free name before writing to it, so the caller can record it first and recovery
@@ -18,6 +35,10 @@ pub fn reserve(ctx: &Context, account_uuid: &str) -> Result<String> {
     for offset in 0..1_000 {
         let candidate = service_name(account_uuid, start + offset);
         if store::vault_read(ctx, &candidate)?.is_none() {
+            // Written down before anything is written into it, so a run killed between the
+            // two leaves a name the next command can resolve rather than a login nothing
+            // on the machine can see.
+            crate::pending::reserve(ctx, &candidate)?;
             return Ok(candidate);
         }
     }
@@ -132,14 +153,30 @@ mod tests {
         })
     }
 
-    /// A machine whose stores are in memory and whose clock stands still.
-    fn machine() -> (Context, Arc<MemoryPlatform>, Arc<FixedClock>) {
+    /// A machine whose stores are in memory, whose clock stands still, and whose home is a
+    /// scratch directory: reserving a name writes it down before it is used.
+    fn machine() -> (Context, Arc<MemoryPlatform>, Scratch) {
+        let root = std::env::temp_dir().join(format!(
+            "pitboard-park-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let _ = std::fs::remove_dir_all(&root);
         let mem = MemoryPlatform::new();
         let clock = Arc::new(FixedClock::at(1_760_000_000));
-        let ctx = Context::new(std::path::PathBuf::from("/nowhere"))
+        let ctx = Context::new(root.clone())
+            .with_pitboard_home(root.clone())
             .with_memory_stores(Arc::clone(&mem))
-            .with_clock(clock.clone() as Arc<dyn crate::time::Clock>);
-        (ctx, mem, clock)
+            .with_clock(clock as Arc<dyn crate::time::Clock>);
+        (ctx, mem, Scratch(root))
+    }
+
+    /// Takes the scratch home away when the test ends, however it ends.
+    struct Scratch(std::path::PathBuf);
+    impl Drop for Scratch {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
     }
 
     /// Park, then read it back through the same rules a switch uses. Before the stores were
@@ -147,7 +184,7 @@ mod tests {
     /// whatever the machine happened to hold.
     #[test]
     fn a_parked_login_reads_back_through_its_fingerprint() {
-        let (ctx, mem, _clock) = machine();
+        let (ctx, mem, _scratch) = machine();
         let name = reserve(&ctx, "acc").expect("a free name");
         let park = store_at(&ctx, &name, &oauth("r")).expect("stored");
 
@@ -160,7 +197,7 @@ mod tests {
     /// whether it is there, and telling someone to sign in again would be wrong.
     #[test]
     fn a_park_that_vanished_and_one_that_cannot_be_read_are_different_answers() {
-        let (ctx, mem, _clock) = machine();
+        let (ctx, mem, _scratch) = machine();
         let name = reserve(&ctx, "acc").expect("a free name");
         let park = store_at(&ctx, &name, &oauth("r")).expect("stored");
 
@@ -185,7 +222,7 @@ mod tests {
     /// would destroy the login already there.
     #[test]
     fn a_reserved_name_steps_past_one_that_is_taken() {
-        let (ctx, mem, _clock) = machine();
+        let (ctx, mem, _scratch) = machine();
         let first = reserve(&ctx, "acc").expect("a free name");
         mem.vault().plant(&first, "{}");
         let second = reserve(&ctx, "acc").expect("another free name");
@@ -196,7 +233,7 @@ mod tests {
     /// holds a park that could not be used.
     #[test]
     fn a_login_with_no_refresh_token_is_never_parked() {
-        let (ctx, mem, _clock) = machine();
+        let (ctx, mem, _scratch) = machine();
         let name = reserve(&ctx, "acc").expect("a free name");
         assert!(matches!(
             store_at(&ctx, &name, &json!({"accessToken": "a"})),

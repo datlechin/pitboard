@@ -398,6 +398,13 @@ fn forgetting_an_account_deletes_its_parked_login() {
 #[test]
 fn an_account_with_nothing_parked_is_refused_with_the_way_back() {
     let env = two_accounts("exhausted");
+    // Nothing parked means nothing parked: the state must not name one, and the vault must
+    // not hold one either, or pitboard gives it back rather than refusing.
+    for label in ["alpha", "beta"] {
+        if let Some(service) = env.parked_service(label) {
+            env.delete_park(&service);
+        }
+    }
     env.edit_state(|s| {
         for a in s["accounts"].as_array_mut().unwrap() {
             a["parked"] = serde_json::Value::Null;

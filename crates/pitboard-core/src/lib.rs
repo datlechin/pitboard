@@ -42,9 +42,11 @@ pub(crate) mod atomic;
 pub(crate) mod claude;
 pub(crate) mod configfile;
 pub(crate) mod daemon;
+pub(crate) mod fault;
 pub(crate) mod home;
 pub(crate) mod lock;
 pub(crate) mod park;
+pub(crate) mod pending;
 #[cfg(target_os = "macos")]
 pub(crate) mod process;
 pub(crate) mod readings;

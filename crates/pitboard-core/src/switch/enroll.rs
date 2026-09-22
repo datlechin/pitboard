@@ -17,6 +17,7 @@ use std::os::unix::fs::OpenOptionsExt;
 use std::path::PathBuf;
 use std::process::Command;
 
+#[derive(Debug)]
 pub enum Enrolled {
     /// The account signed in now, recorded without parking: its first switch parks it.
     Current { email: String },
@@ -91,6 +92,15 @@ fn reserve_signin(ctx: &Context) -> Result<SignIn> {
         ctx: ctx.clone(),
         _one_at_a_time: one_at_a_time,
     })
+}
+
+/// A sign-in that never ran. The crash matrix needs the state a finished sign-in leaves,
+/// and running Claude Code's own login inside a test is neither possible nor wanted.
+#[cfg(test)]
+pub(super) fn planted(ctx: &Context, document: Value) -> Result<SignIn> {
+    let mut pending = reserve_signin(ctx)?;
+    pending.document = document;
+    Ok(pending)
 }
 
 pub fn sign_in(ctx: &Context) -> Result<SignIn> {
@@ -287,6 +297,9 @@ fn park_signed_in(
     claim(state, label, &owner)?;
     let service = park::reserve(ctx, &owner.account_uuid)?;
     let fresh = park::store_at(ctx, &service, &oauth_of(&login.document)?)?;
+    // The window the roadmap named: the login is in the vault and nothing on the machine
+    // says so yet.
+    crate::fault::point("enroll.park_stored");
     let existing = state.get(label);
     let previous = existing.and_then(|a| a.parked.clone());
     let renewed = existing.is_some();
@@ -296,6 +309,7 @@ fn park_signed_in(
     state::save(ctx, state).inspect_err(|_| {
         let _ = store::vault_delete(ctx, &service);
     })?;
+    crate::fault::point("enroll.park_recorded");
     purge(ctx, state);
     Ok(if renewed {
         Enrolled::Renewed { email: owner.email }

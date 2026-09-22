@@ -6,6 +6,19 @@ All notable changes are recorded here. The format follows
 ## [Unreleased]
 
 ### Added
+- No parked login goes unnamed. Every name pitboard is about to write a login into is
+  written down first, and the next command resolves any that nothing refers to: given back
+  to the account whose name it carries when that account holds nothing, deleted when nobody
+  wants it, and left alone when the store could not be read. Before this, a run killed
+  between writing a login and recording it left a live refresh token that no entry named,
+  never renewed, never deleted by `pitboard uninstall`, and on macOS not listable by any
+  tool a person has. `pitboard doctor` reports anything still outstanding.
+- A crash matrix: every durable step of a switch, an enrolment, a renewal and a forget,
+  killed where it stands, recovered, and checked against what must be true afterwards
+  rather than against a particular outcome. Every case runs recovery twice, because a
+  recovery that only works once leaves a machine nobody can fix, and once with Anthropic
+  unreachable, because the answer then must be to change nothing. The two windows above
+  are what it found on its first run.
 - A failure that came from asking Anthropic now carries a cause beside its code, in both
   `--json` and the app's bindings: `unreachable`, `rate_limited`, `server_error`,
   `answer_not_understood`, `login_refused` or `token_expired`, each saying whether asking

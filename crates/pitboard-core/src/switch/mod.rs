@@ -6,6 +6,8 @@
 //! writes become durable before destructive ones, so a run that dies midway leaves a spare
 //! copy, never a missing one.
 
+#[cfg(test)]
+mod crash;
 mod enroll;
 mod forget;
 mod journal;
@@ -24,7 +26,7 @@ use crate::context::Context;
 use crate::error::{Error, Result};
 use crate::service::Warning;
 use crate::state::{Account, Park, State};
-use crate::{api, claude, configfile, home, lock, park, state, store};
+use crate::{api, claude, configfile, fault, home, lock, park, pending, state, store};
 use journal::{Journal, clear_journal, reconcile, write_journal};
 use serde_json::Value;
 use std::os::unix::fs::OpenOptionsExt;
@@ -36,6 +38,7 @@ use std::path::PathBuf;
 /// and t+28 seconds took effect at t+32.3, t+33.5 and t+32.95 from process start.
 pub const ADOPTION_CEILING_SECONDS: u32 = 33;
 
+#[derive(Debug)]
 pub enum Outcome {
     Switched {
         from: String,
@@ -86,6 +89,8 @@ pub fn settle(ctx: &Context) -> Result<(Settled, Option<Recovered>)> {
     let exclusive = exclusive(ctx)?;
     let mut state = state::load(ctx)?;
     let recovered = reconcile(ctx, &mut state)?;
+    // After the journal has had its say, so a switch's own park is already accounted for.
+    pending::sweep(ctx, &mut state)?;
     purge(ctx, &mut state);
     Ok((
         Settled {
@@ -267,6 +272,7 @@ pub fn switch(settled: Settled, label: &str) -> Result<(Outcome, Vec<Warning>)> 
             incoming_service: held.service.clone(),
         },
     )?;
+    fault::point("switch.journal_written");
 
     // Until the incoming login is installed there is nothing for a later run to finish, so
     // a failure here takes the record of intent away with it. A copy that was written but
@@ -278,12 +284,14 @@ pub fn switch(settled: Settled, label: &str) -> Result<(Outcome, Vec<Warning>)> 
             return Err(e);
         }
     };
+    fault::point("switch.park_stored");
     state.park(&outgoing_label, parked.clone());
     if let Err(e) = state::save(ctx, &state) {
         let _ = store::vault_delete(ctx, &parked.service);
         clear_journal(ctx);
         return Err(e);
     }
+    fault::point("switch.park_recorded");
 
     if let Err(e) = install(ctx, &service, &next, &before_raw, &outgoing_label, label) {
         if !only_copy_left(&e) {
@@ -294,9 +302,11 @@ pub fn switch(settled: Settled, label: &str) -> Result<(Outcome, Vec<Warning>)> 
         purge(ctx, &mut state);
         return Err(e);
     }
+    fault::point("switch.installed");
     state.discard(&held.service);
     state.active = Some(label.to_string());
     state::save(ctx, &state)?;
+    fault::point("switch.recorded");
     drop(guard);
 
     // Claude Code does not correct a stale config on its own; the next switch rewrites it.
@@ -308,6 +318,7 @@ pub fn switch(settled: Settled, label: &str) -> Result<(Outcome, Vec<Warning>)> 
     )
     .err()
     .map(Warning::ConfigNotUpdated);
+    fault::point("switch.config_updated");
     let parks_pending = purge(ctx, &mut state);
     clear_journal(ctx);
 
