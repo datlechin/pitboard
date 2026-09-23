@@ -306,10 +306,10 @@ mod tests {
 
     #[test]
     fn service_names_carry_the_account_and_the_moment() {
-        let s = service_name("9aeb9c89-316c-4344-84c5-603d71dc5c9a", 1789935600123);
+        let s = service_name("1f0e2d3c-4b5a-4968-8776-a5b4c3d2e1f0", 1789935600123);
         assert_eq!(
             s,
-            "pitboard-park-9aeb9c89-316c-4344-84c5-603d71dc5c9a-1789935600123"
+            "pitboard-park-1f0e2d3c-4b5a-4968-8776-a5b4c3d2e1f0-1789935600123"
         );
         assert!(
             s.starts_with("pitboard-park-"),

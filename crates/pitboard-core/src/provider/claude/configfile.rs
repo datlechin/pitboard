@@ -298,9 +298,9 @@ mod tests {
         );
     }
 
-    const OLD_ACCOUNT: &str = "8499da91-744e-452b-ab4d-cca7cc448a36";
-    const OLD_ORG: &str = "b8b291b2-2645-4cf3-a69f-d3256e996a9b";
-    const NEW_ACCOUNT: &str = "9aeb9c89-316c-4344-84c5-603d71dc5c9a";
+    const OLD_ACCOUNT: &str = "7c6b5a49-3827-4165-a4b3-c2d1e0f9a8b7";
+    const OLD_ORG: &str = "3e2d1c0b-5a49-4837-9261-f0e1d2c3b4a5";
+    const NEW_ACCOUNT: &str = "1f0e2d3c-4b5a-4968-8776-a5b4c3d2e1f0";
 
     fn config() -> Value {
         serde_json::json!({

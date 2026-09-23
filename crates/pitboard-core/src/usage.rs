@@ -161,7 +161,7 @@ mod tests {
     fn real_config() -> Value {
         serde_json::json!({"cachedUsageUtilization": {
         "fetchedAtMs": 1789933772292i64,
-        "accountUuid": "9aeb9c89-316c-4344-84c5-603d71dc5c9a",
+        "accountUuid": "1f0e2d3c-4b5a-4968-8776-a5b4c3d2e1f0",
         "utilization": {
             "five_hour": {"utilization": 62, "resets_at": "2026-09-20T22:20:00.095287+00:00"},
             "seven_day": {"utilization": 48, "resets_at": "2026-09-27T02:00:00.095306+00:00"},
@@ -182,7 +182,7 @@ mod tests {
         assert_eq!(s.windows.len(), 3);
         assert_eq!(
             s.account_uuid.as_deref(),
-            Some("9aeb9c89-316c-4344-84c5-603d71dc5c9a")
+            Some("1f0e2d3c-4b5a-4968-8776-a5b4c3d2e1f0")
         );
         assert_eq!(s.observed_at, Some(1789933772));
         let scoped = s

@@ -154,7 +154,7 @@ mod tests {
 
         let ctx = Context::new(root.clone()).with_pitboard_home(root.join(".pitboard"));
         let vault = FileVault::new(&ctx);
-        let name = "pitboard-park-9aeb9c89-316c-4344-84c5-603d71dc5c9a-1789935600123";
+        let name = "pitboard-park-1f0e2d3c-4b5a-4968-8776-a5b4c3d2e1f0-1789935600123";
         vault
             .write(name, r#"{"claudeAiOauth":{}}"#)
             .expect("a park");
@@ -174,7 +174,7 @@ mod tests {
     fn only_names_pitboard_generates_are_accepted() {
         let vault = FileVault::new(&Context::from_env());
         for good in [
-            "pitboard-park-9aeb9c89-316c-4344-84c5-603d71dc5c9a-1789935600123",
+            "pitboard-park-1f0e2d3c-4b5a-4968-8776-a5b4c3d2e1f0-1789935600123",
             "a.b_c-1",
         ] {
             assert!(vault.path(good).is_ok(), "{good}");
