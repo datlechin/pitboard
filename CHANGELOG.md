@@ -6,6 +6,31 @@ All notable changes are recorded here. The format follows
 ## [Unreleased]
 
 ### Added
+- Codex, beside Claude Code. `pitboard enroll codex/work` records the Codex account signed
+  in now, reading its account, email and plan out of its own ID token with no network
+  call; `pitboard enroll codex/work --sign-in` runs `codex login` in a private
+  `CODEX_HOME` so the account in use stays signed in; `pitboard use codex/work` switches
+  it; and `pitboard` shows each Codex account's five-hour and weekly limits from the same
+  usage read Codex itself makes, which spends no quota. Everything pitboard does for Codex
+  was read out of codex-cli 0.154.0 and is dated in a register of its own, checked against
+  every new build by the weekly conformance run and still green on 0.156.1.
+  Codex is not Claude Code, and pitboard says where they differ rather than hiding it:
+  - A running `codex` never notices a switch, so a switch says to restart it instead of
+    counting down, and names how many sessions are still using the outgoing account.
+  - `codex login` and `codex logout` revoke the stored refresh token, so a Codex park is
+    never a copy: the outgoing login is moved into the vault and read back before
+    anything replaces it. Signing out inside a session still running from before a
+    switch would revoke the login just parked, and the switch says so.
+  - Codex's keychain stores are items Codex made for itself, which every read by another
+    program would put a permission prompt in front of, so pitboard handles Codex's
+    default store, the `auth.json` file, and refuses the others with a reason.
+- Labels belong to a tool. `work` can be a Claude Code account and a Codex account at
+  once, `codex/work` says which, and a bare `work` still means what it always did as long
+  as it names one account; where it names two, pitboard lists both rather than picking.
+  A bare name for a new account means Claude Code, so every command written before there
+  was a second tool does what it did. New codes: `provider_unknown`, `label_ambiguous`,
+  `sign_in_not_isolated`, `live_store_unsupported`, `state_names_unknown_tool`,
+  `sessions_still_running`, `codex_program_missing` and `codex_not_found`.
 - No parked login goes unnamed. Every name pitboard is about to write a login into is
   written down first, and the next command resolves any that nothing refers to: given back
   to the account whose name it carries when that account holds nothing, deleted when nobody
@@ -174,6 +199,12 @@ All notable changes are recorded here. The format follows
   question for Anthropic, and still changes nothing when Anthropic cannot be reached.
 
 ### Fixed
+- The floor between two questions about one account was the minute pitboard uses for a
+  window it cannot time, not the three minutes it promises. It worked a window's length out
+  from its kind and knew `five_hour` and `seven_day`, and Anthropic has been answering
+  `session`, `weekly_all` and `weekly_scoped`. A window now carries its length where it is
+  known: stated outright by OpenAI, derived from the kind for Anthropic. In `--json` a
+  window gains `length_seconds`.
 - `pitboard doctor --json` is now what the bug template says it is. The template asks people
   to paste it and promises labels, codes, paths and times with no tokens, no email addresses
   and no account identifiers; it printed the signed-in email address and organisation uuid,
@@ -243,6 +274,27 @@ All notable changes are recorded here. The format follows
   that answers finishes or undoes the switch. The new code is `switch_unverified`.
 
 ### Changed
+- pitboard's account list is at schema 4: every account says which tool it is for, and
+  which account is signed in is kept per tool. A schema 3 file is brought forward on its
+  first read with nothing moved and nothing in the keychain or the vault touched. An older
+  pitboard refuses the new file and says to upgrade whichever of the command line and the
+  app is behind, rather than calling it corrupt.
+- Messages name the tool they are about. An error that used to say "Claude Code",
+  "Anthropic" or `claude` whatever the account now names that account's tool, its service
+  and the command that signs in to it; for a Claude Code account it says what it said
+  before, and codes are unchanged.
+- In `--json`, `use` gains `provider` and an `adoption` object saying whether sessions
+  already running follow on their own within a number of seconds or need restarting;
+  `adoption_ceiling_seconds` is null for a tool that needs restarting. Enrolments and
+  renewals gain `provider`. All additive.
+- `CLAUDE_CODE_CUSTOM_OAUTH_URL` refuses changes to Claude Code accounts, and no longer
+  stops a change to a Codex one.
+- `pitboard-core` is reorganised around a provider boundary, and much of what it exposed
+  moved or changed shape: errors that name a tool carry it, `switch::settle` and
+  `sign_in` take the tool, renewals are keyed by account, and Claude Code's own document
+  rules live under `provider::claude`. A breaking change for anyone building on the crate,
+  declared as such; nothing changes for the command line's contract beyond the additions
+  above.
 - `pitboard-core` says what it supports. The interface other programs may build on is
   `service::Pitboard`, `context::Context` and what they return; the rest is reachable for
   this repository's own front ends and may change in any release. The enums a caller reads
