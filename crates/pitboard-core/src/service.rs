@@ -193,7 +193,7 @@ impl Pitboard {
     }
 
     /// The same report without asking anyone: the last numbers pitboard measured, and who
-    /// Claude Code's config says is signed in. Nothing is renewed and nothing is asked, so
+    /// each tool's own files say is signed in. Nothing is renewed and nothing is asked, so
     /// it answers at once wherever there is no network.
     pub fn status_offline(&self) -> Result<Done<status::Report>> {
         let state = state::load(&self.ctx)?;

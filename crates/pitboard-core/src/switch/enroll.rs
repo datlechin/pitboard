@@ -164,6 +164,11 @@ pub struct WatchedSignIn {
 }
 
 impl WatchedSignIn {
+    /// Which tool's sign-in this is.
+    pub fn provider(&self) -> ProviderId {
+        self.pending.provider
+    }
+
     /// The next thing the tool said, or `None` once it has finished saying anything.
     /// Blocks, so a caller reads it on a thread of its own.
     pub fn next_line(&self) -> Option<String> {
