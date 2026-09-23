@@ -189,11 +189,12 @@ The menu bar shows the account in use and its tightest limit. Open the panel to 
 account's limits and switch with one click. When an account runs out, the app says so once
 and offers the account with the most left.
 
-The app does not yet know about tools. It lists Claude Code and Codex accounts together
-without saying which tool each belongs to, and the menu bar shows one signed-in account
-even when both tools have one. After a Codex switch made in the app, restart `codex`
-yourself; the app does not tell you to. If two tools have an account with the same label,
-switch from the command line with `claude/<label>` or `codex/<label>`.
+With accounts of both tools, the panel lists them under a heading per tool, and the menu
+bar follows the signed-in account closest to running out, whichever tool it is for. When
+an account runs out, only another account of the same tool is offered. A Codex switch has
+no countdown: the panel says that running `codex` sessions keep the old account until you
+quit them and start them again, and how many pitboard found running, if any. "Add another
+account" asks which tool the account is for when both are installed.
 
 It calls the same core as the command line rather than running `pitboard` for each answer.
 Adding and dropping accounts is still the command line's job, which is why the cask
