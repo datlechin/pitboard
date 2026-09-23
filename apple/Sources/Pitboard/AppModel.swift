@@ -112,10 +112,13 @@ final class AppModel {
     private static let refreshEvery: Duration = .seconds(300)
 
     private let notifier = Notifier()
-    /// The codes of the tools whose program was found. Read once: what an app can find does
-    /// not change until it is started again, and asking crossed into the core on every
-    /// keystroke in the form that reads it.
-    private let installed: Set<String>
+    /// The codes of the tools whose program was found, once the first read has asked. Read
+    /// once: what an app can find does not change until it is started again, and asking
+    /// crossed into the core on every keystroke in the form that reads it. Asked from a read
+    /// rather than here, because finding them can mean waiting on the person's login shell.
+    private var installed: Set<String> = []
+    /// Set before the answer arrives, so two reads at once ask once.
+    private var askedWhatIsInstalled = false
     /// The tools somebody said "Not now" to a second account for, by code.
     private(set) var secondAccountDeclined: Set<String> = []
     private let defaults: UserDefaults
@@ -135,12 +138,11 @@ final class AppModel {
     /// firing under a test is how a test stops telling the truth about what set what.
     init(
         watching: Bool = true,
-        service: any Core = PitboardService(settings: .forCurrentUser()),
+        service: any Core = PitboardService(settings: { .forCurrentUser() }),
         defaults: UserDefaults = .standard
     ) {
         self.service = service
         tools = service.tools()
-        installed = Set(service.installed().map(\.code))
         self.defaults = defaults
         var declined = Set(defaults.stringArray(forKey: Self.declinedKey) ?? [])
         // Said before there was a second tool, so about the only tool there was.
@@ -287,8 +289,13 @@ final class AppModel {
     }
 
     /// `asked` means somebody asked for this reading rather than a timer producing it, and
-    /// is what tells the core to ask each service again whatever it read moments ago.
+    /// is what tells the core to ask each service again whatever it read moments ago. The
+    /// first read also asks which tools are installed, for the form for a new account.
     func refresh(ifOlderThan seconds: TimeInterval = 0, asked: Bool = false) async {
+        if !askedWhatIsInstalled {
+            askedWhatIsInstalled = true
+            installed = Set(await service.installed().map(\.code))
+        }
         if let updatedAt, Date().timeIntervalSince(updatedAt) < seconds { return }
         do {
             let read = try await service.status(fresh: asked)

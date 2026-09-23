@@ -142,7 +142,7 @@ impl Provider for Claude {
     /// `CLAUDE_SECURESTORAGE_CONFIG_DIR` is taken away because it would pin the credential
     /// slot back to a real one whatever `CLAUDE_CONFIG_DIR` says.
     fn sign_in(&self, ctx: &Context, dir: &std::path::Path) -> std::process::Command {
-        let mut command = std::process::Command::new(&ctx.claude_program);
+        let mut command = crate::provider::command(ctx, ProviderId::Claude);
         command
             .args(["auth", "login"])
             .env("CLAUDE_CONFIG_DIR", dir)

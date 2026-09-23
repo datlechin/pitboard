@@ -217,6 +217,18 @@ All notable changes are recorded here. The format follows
   question for Anthropic, and still changes nothing when Anthropic cannot be reached.
 
 ### Fixed
+- The menu bar app finds a tool installed through a Node version manager or an npm prefix,
+  and can start its sign-in. An app opened from Finder has none of a shell's `PATH`, so it
+  looked for `claude` and `codex` only where their own installers put them, and did not
+  offer one installed through nvm, volta, fnm, asdf, mise, pnpm, bun or a custom npm
+  prefix. One it did find could not start if npm had installed it: an npm install is a
+  script run by `node`, which was not on the app's `PATH` either. The app now asks the
+  person's login shell for its `PATH` once, off the main thread, and looks there after
+  `PITBOARD_CLAUDE` or `PITBOARD_CODEX` and before the installers' places; a shell that
+  does not answer within five seconds is stopped, and the app looks where it did before.
+  Every sign-in, from the app and the command line, now starts the program by the path it
+  was found at, with that program's own directory first on its `PATH`, which is where npm
+  puts the `node` that installed it.
 - Signing in again to the account in use puts its new login in use. `pitboard enroll
   <label> --sign-in` for the account signed in now parked the new login and left the tool
   on the old one, which is the login somebody signs in again to replace, and the next

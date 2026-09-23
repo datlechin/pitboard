@@ -468,19 +468,56 @@ pub(crate) trait Provider: Send + Sync + std::fmt::Debug {
 }
 
 /// Where a program somebody named is: the path itself when it has a directory in it, or
-/// the first match on `PATH` the way a shell would look.
-pub(crate) fn find_program(named: &std::path::Path) -> Option<std::path::PathBuf> {
+/// the first match on `search`, a list in `PATH`'s form, the way a shell would look.
+pub(crate) fn find_program(
+    named: &std::path::Path,
+    search: &std::ffi::OsStr,
+) -> Option<std::path::PathBuf> {
     if named.components().count() > 1 {
         return std::fs::metadata(named)
             .is_ok()
             .then(|| named.to_path_buf());
     }
-    std::env::var_os("PATH")?
-        .to_string_lossy()
-        .split(':')
-        .filter(|dir| !dir.is_empty())
-        .map(|dir| std::path::PathBuf::from(dir).join(named))
+    std::env::split_paths(search)
+        .filter(|dir| !dir.as_os_str().is_empty())
+        .map(|dir| dir.join(named))
         .find(|candidate| std::fs::metadata(candidate).is_ok())
+}
+
+/// Where `tool`'s own program is, looked for the way the context says to look.
+pub(crate) fn program_of(ctx: &Context, tool: ProviderId) -> Option<std::path::PathBuf> {
+    find_program(ctx.program_for(tool), &ctx.search_path())
+}
+
+/// A command that runs `tool`'s own program, by the path it was found at, with that
+/// program's own directory first on its `PATH`.
+///
+/// An npm install is a script that starts `#!/usr/bin/env node`, and npm puts it beside the
+/// `node` that installed it, under whatever prefix or version manager that was. So the
+/// program's own directory is where its interpreter is, even for an app whose `PATH` has
+/// neither. The directory as found, never the script it links to: npm links
+/// `<prefix>/bin/codex` to a file deep inside `lib/node_modules`, where no `node` is.
+///
+/// A program that was not found is left to the search path, where starting it fails the
+/// way a missing program does.
+pub(crate) fn command(ctx: &Context, tool: ProviderId) -> std::process::Command {
+    let search = ctx.search_path();
+    let Some(program) = program_of(ctx, tool) else {
+        let mut command = std::process::Command::new(ctx.program_for(tool));
+        command.env("PATH", search);
+        return command;
+    };
+    let mut path = std::ffi::OsString::new();
+    if let Some(dir) = program.parent().filter(|d| !d.as_os_str().is_empty()) {
+        path.push(dir);
+        if !search.is_empty() {
+            path.push(":");
+        }
+    }
+    path.push(&search);
+    let mut command = std::process::Command::new(program);
+    command.env("PATH", path);
+    command
 }
 
 /// The implementation for one tool.
@@ -575,5 +612,152 @@ mod tests {
         let restart = Adoption::RestartRequired { program: "codex" };
         assert_ne!(restart, Adoption::PollingWithin(0));
         assert!(matches!(Adoption::PollingWithin(33), Adoption::PollingWithin(s) if s == 33));
+    }
+
+    /// A scratch directory standing in for an npm prefix's `bin`, with an empty file for
+    /// each tool's program. Nothing here is ever run.
+    struct Prefix(std::path::PathBuf);
+
+    impl Prefix {
+        fn new(name: &str) -> Prefix {
+            let root = std::env::temp_dir().join(format!(
+                "pitboard-search-path-{name}-{}-{:?}",
+                std::process::id(),
+                std::thread::current().id()
+            ));
+            let _ = std::fs::remove_dir_all(&root);
+            let bin = root.join("npm/bin");
+            std::fs::create_dir_all(&bin).expect("a scratch prefix");
+            for &tool in ProviderId::ALL {
+                std::fs::write(bin.join(tool.program()), "").expect("a program");
+            }
+            Prefix(root)
+        }
+
+        fn bin(&self) -> std::path::PathBuf {
+            self.0.join("npm/bin")
+        }
+    }
+
+    impl Drop for Prefix {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    fn env_of<'a>(command: &'a std::process::Command, name: &str) -> Option<&'a std::ffi::OsStr> {
+        command
+            .get_envs()
+            .find(|(key, _)| *key == name)
+            .and_then(|(_, value)| value)
+    }
+
+    /// A program is looked for where the caller says, not on this process's own `PATH`: an
+    /// app opened from Finder has only the system's directories there.
+    #[test]
+    fn a_program_is_looked_for_on_the_search_path_it_is_given() {
+        let prefix = Prefix::new("find");
+        let search = format!("/nowhere/at/all::{}", prefix.bin().display());
+        let found = find_program(std::path::Path::new("codex"), search.as_ref());
+        assert_eq!(found, Some(prefix.bin().join("codex")));
+        assert_eq!(
+            find_program(std::path::Path::new("ls"), search.as_ref()),
+            None,
+            "ls is on this process's PATH and not on the one given"
+        );
+        assert_eq!(
+            find_program(std::path::Path::new("codex"), "".as_ref()),
+            None,
+            "an empty search path finds nothing, and is not the current directory"
+        );
+    }
+
+    /// Every tool's sign-in runs the program found, by its full path, with the program's
+    /// own directory first on `PATH`. An npm install's script names `node` through `env`,
+    /// and `node` is beside it, in a directory an app opened from Finder does not have.
+    #[test]
+    fn a_sign_in_runs_the_program_found_with_its_own_directory_first_on_path() {
+        let prefix = Prefix::new("sign-in");
+        let search = "/nowhere/before";
+        let ctx = Context::new(std::path::PathBuf::from("/nowhere"))
+            .with_search_path(format!("{search}:{}", prefix.bin().display()));
+        let dir = std::path::Path::new("/tmp/pitboard-signin-scratch");
+        for &tool in ProviderId::ALL {
+            let command = of(tool).sign_in(&ctx, dir);
+            let program = prefix.bin().join(tool.program());
+            assert_eq!(command.get_program(), program.as_os_str(), "{tool}");
+            assert_eq!(
+                env_of(&command, "PATH"),
+                Some(
+                    format!(
+                        "{}:{search}:{}",
+                        prefix.bin().display(),
+                        prefix.bin().display()
+                    )
+                    .as_ref()
+                ),
+                "{tool}"
+            );
+            assert_eq!(of(tool).program(&ctx), Some(program), "{tool}");
+        }
+    }
+
+    /// A program named outright is run from its own directory too, whatever the search
+    /// path holds, which is how an app that found it somewhere else starts it.
+    #[test]
+    fn a_program_named_outright_is_run_with_its_own_directory_on_path() {
+        let prefix = Prefix::new("named");
+        let ctx = Context::new(std::path::PathBuf::from("/nowhere"))
+            .with_claude_program(prefix.bin().join("claude"))
+            .with_codex_program(prefix.bin().join("codex"))
+            .with_search_path("/usr/bin:/bin".into());
+        let dir = std::path::Path::new("/tmp/pitboard-signin-scratch");
+        for &tool in ProviderId::ALL {
+            let command = of(tool).sign_in(&ctx, dir);
+            assert_eq!(
+                command.get_program(),
+                prefix.bin().join(tool.program()).as_os_str(),
+                "{tool}"
+            );
+            assert_eq!(
+                env_of(&command, "PATH"),
+                Some(format!("{}:/usr/bin:/bin", prefix.bin().display()).as_ref()),
+                "{tool}"
+            );
+        }
+    }
+
+    /// A program found nowhere is left to the search path, so starting it fails the way a
+    /// missing program does rather than running whatever this process's `PATH` has.
+    #[test]
+    fn a_program_found_nowhere_is_left_to_the_search_path() {
+        let ctx = Context::new(std::path::PathBuf::from("/nowhere"))
+            .with_search_path("/nowhere/at/all".into());
+        let dir = std::path::Path::new("/tmp/pitboard-signin-scratch");
+        for &tool in ProviderId::ALL {
+            let command = of(tool).sign_in(&ctx, dir);
+            assert_eq!(command.get_program(), tool.program(), "{tool}");
+            assert_eq!(
+                env_of(&command, "PATH"),
+                Some("/nowhere/at/all".as_ref()),
+                "{tool}"
+            );
+            assert_eq!(of(tool).program(&ctx), None, "{tool}");
+        }
+    }
+
+    /// Without a search path of its own, a context looks where this process would, which
+    /// is what the command line has always done.
+    #[test]
+    fn the_search_path_is_this_processs_own_path_unless_given() {
+        let ctx = Context::new(std::path::PathBuf::from("/nowhere"));
+        assert_eq!(
+            ctx.search_path(),
+            std::env::var_os("PATH").unwrap_or_default()
+        );
+        assert_eq!(
+            ctx.with_search_path("/opt/tools/bin".into()).search_path(),
+            "/opt/tools/bin"
+        );
     }
 }

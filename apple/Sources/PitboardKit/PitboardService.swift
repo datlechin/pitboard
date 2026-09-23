@@ -41,32 +41,61 @@ public protocol Core: Sendable {
     func tools() -> [Tool]
     /// The tools whose program was found where an app can look for one, in the same order.
     /// A tool missing here may still be on the `PATH`, so this narrows what is offered and
-    /// never forbids anything.
-    func installed() -> [Tool]
+    /// never forbids anything. Finding them can mean asking the person's login shell, which
+    /// takes a moment, so nothing waits on it on the main thread.
+    func installed() async -> [Tool]
 }
 
 /// pitboard's core, called off the main thread. Any call may wait on the keychain, a lock or
 /// the network, so reads run on one queue and changes on another, one change at a time.
+///
+/// The core itself is made on first use, by whichever of those gets there first: working
+/// out where each tool is installed can mean asking the person's login shell, and nothing
+/// on the main thread may wait for that.
 public final class PitboardService: Core, Sendable {
-    private let core: Pitboard
+    private let made: Once<Made>
     private let reads = DispatchQueue(label: "com.usepitboard.reads")
     private let changes = DispatchQueue(label: "com.usepitboard.changes")
-    /// The codes of the tools a program was given for, which is what `installed` answers.
-    private let found: Set<String>
 
-    public init(settings: Settings) {
-        core = Pitboard(settings: settings)
-        found = Set(
-            [("claude", settings.claudeProgram), ("codex", settings.codexProgram)]
-                .compactMap { code, program in program == nil ? nil : code })
+    /// What this service makes once and keeps.
+    private struct Made: Sendable {
+        let core: Pitboard
+        /// The codes of the tools a program was given for, which is what `installed`
+        /// answers.
+        let found: Set<String>
+    }
+
+    /// `settings` is asked for once, on first use and off the main thread, so it may take
+    /// its time: `Settings.forCurrentUser` asks the person's login shell.
+    public init(settings: @escaping @Sendable () -> Settings) {
+        made = Once {
+            let settings = settings()
+            return Made(
+                core: Pitboard(settings: settings),
+                found: Set(
+                    [("claude", settings.claudeProgram), ("codex", settings.codexProgram)]
+                        .compactMap { code, program in program == nil ? nil : code }))
+        }
+    }
+
+    public convenience init(settings: Settings) {
+        self.init { settings }
     }
 
     public func tools() -> [Tool] {
         PitboardBindings.tools()
     }
 
-    public func installed() -> [Tool] {
-        tools().filter { found.contains($0.code) }
+    public func installed() async -> [Tool] {
+        // Not on `reads`, where a read may be waiting on the network: what is installed is
+        // needed before the first read can say anything useful about it.
+        let made = self.made
+        let found = await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                continuation.resume(returning: made.value().found)
+            }
+        }
+        return tools().filter { found.contains($0.code) }
     }
 
     /// `fresh` asks each tool's service about every account even if it was asked moments
@@ -139,9 +168,9 @@ public final class PitboardService: Core, Sendable {
         // Its own queue: this waits on a person in a browser, and a read or a change must
         // not queue behind that.
         try await withCheckedThrowingContinuation { continuation in
-            let core = self.core
+            let made = self.made
             DispatchQueue(label: "com.usepitboard.signin").async {
-                continuation.resume(with: Result { try core.signIn(label: label) })
+                continuation.resume(with: Result { try made.value().core.signIn(label: label) })
             }
         }
     }
@@ -150,9 +179,32 @@ public final class PitboardService: Core, Sendable {
         on queue: DispatchQueue,
         _ work: @escaping @Sendable (Pitboard) throws -> T
     ) async throws -> T {
-        let core = self.core
+        let made = self.made
         return try await withCheckedThrowingContinuation { continuation in
-            queue.async { continuation.resume(with: Result { try work(core) }) }
+            queue.async { continuation.resume(with: Result { try work(made.value().core) }) }
+        }
+    }
+}
+
+/// A value made the first time it is asked for, by whichever thread asks first. Any other
+/// thread asking meanwhile waits for that one rather than making a second.
+private final class Once<Value: Sendable>: @unchecked Sendable {
+    // Unchecked because `made` is written after it is shared; every read and write of it
+    // holds `lock`.
+    private let lock = NSLock()
+    private var made: Value?
+    private let make: @Sendable () -> Value
+
+    init(_ make: @escaping @Sendable () -> Value) {
+        self.make = make
+    }
+
+    func value() -> Value {
+        lock.withLock {
+            if let made { return made }
+            let value = make()
+            made = value
+            return value
         }
     }
 }
@@ -162,18 +214,39 @@ extension Settings {
     /// from Finder inherits none of a shell's exports, so these are usually absent and the
     /// defaults apply; when one is set, reading it is what keeps the app and the command
     /// line looking at the same keychain item and the same files.
+    ///
+    /// Asks the person's login shell for its `PATH`, which can take a second or more, so this
+    /// is never called on the main thread: `PitboardService` asks for it on first use.
     public static func forCurrentUser() -> Settings {
         let environment = ProcessInfo.processInfo.environment
+        return forCurrentUser(
+            environment: environment,
+            loginPath: LoginShell.path(environment: environment),
+            isExecutable: FileManager.default.isExecutableFile(atPath:))
+    }
+
+    /// `forCurrentUser` with what it reads from the machine handed in, so a test can say
+    /// what the login shell answered without starting one.
+    ///
+    /// Each tool's program is looked for first where the variable naming it outright says,
+    /// then on the login shell's `PATH`, where a version manager or an npm prefix puts it,
+    /// and then where each tool's own installer puts it, which is all there is when the
+    /// shell could not be asked. The login shell's `PATH` is also where the core looks and
+    /// what a sign-in is given; without one, the core looks on this app's own, as it always
+    /// did.
+    static func forCurrentUser(
+        environment: [String: String],
+        loginPath: String?,
+        isExecutable: (String) -> Bool
+    ) -> Settings {
         let home = environment["HOME"] ?? FileManager.default.homeDirectoryForCurrentUser.path
-        // Finder's PATH has none of the places a tool installs itself, so each is looked for
-        // where its installers put it, after the variable that names it outright.
+        // A relative entry would be looked for wherever this app happens to be running.
+        let shell = (loginPath ?? "").split(separator: ":").map(String.init)
+            .filter { $0.hasPrefix("/") }
+        let places = shell + ["\(home)/.local/bin", "/opt/homebrew/bin", "/usr/local/bin"]
         func find(_ program: String, unless variable: String) -> String? {
             environment[variable]
-                ?? [
-                    "\(home)/.local/bin/\(program)",
-                    "/opt/homebrew/bin/\(program)",
-                    "/usr/local/bin/\(program)",
-                ].first { FileManager.default.isExecutableFile(atPath: $0) }
+                ?? places.lazy.map { "\($0)/\(program)" }.first(where: isExecutable)
         }
         return Settings(
             home: home,
@@ -183,7 +256,8 @@ extension Settings {
             user: environment["USER"] ?? NSUserName(),
             claudeProgram: find("claude", unless: "PITBOARD_CLAUDE"),
             codexHome: environment["CODEX_HOME"],
-            codexProgram: find("codex", unless: "PITBOARD_CODEX")
+            codexProgram: find("codex", unless: "PITBOARD_CODEX"),
+            searchPath: loginPath
         )
     }
 }

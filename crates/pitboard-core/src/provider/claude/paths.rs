@@ -29,9 +29,9 @@ pub fn config_file(ctx: &Context) -> PathBuf {
 }
 
 /// Where the `claude` that signs someone in actually is, if it is anywhere. A bare name is
-/// looked up in PATH the way a shell would.
+/// looked up on the context's search path the way a shell would.
 pub fn program(ctx: &Context) -> Option<PathBuf> {
-    crate::provider::find_program(&ctx.claude_program)
+    crate::provider::program_of(ctx, crate::provider::ProviderId::Claude)
 }
 
 /// Which Claude Code is installed here, read off disk and never by running it.

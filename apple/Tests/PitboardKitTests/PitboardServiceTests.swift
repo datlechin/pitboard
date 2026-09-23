@@ -41,12 +41,54 @@ private func scratch(codex: String? = nil) throws -> Settings {
 
 /// A tool is offered only where its program was found, and a program named outright
 /// counts as found: that is what `PITBOARD_CLAUDE` and `PITBOARD_CODEX` are for.
-@Test func onlyToolsWithAProgramAreInstalled() throws {
+@Test func onlyToolsWithAProgramAreInstalled() async throws {
     let neither = PitboardService(settings: try scratch())
     #expect(neither.tools().map(\.code) == ["claude", "codex"])
-    #expect(neither.installed().isEmpty)
+    #expect(await neither.installed().isEmpty)
     let codex = PitboardService(settings: try scratch(codex: "/nowhere/codex"))
-    #expect(codex.installed().map(\.code) == ["codex"])
+    #expect(await codex.installed().map(\.code) == ["codex"])
+}
+
+/// Counts how often the settings were asked for, and whether any ask was on the main
+/// thread.
+private final class Asks: @unchecked Sendable {
+    // Unchecked because the counts are written from the service's queues; every read and
+    // write holds `lock`.
+    private let lock = NSLock()
+    private var asked = 0
+    private var onMain = false
+
+    func note() {
+        let main = Thread.isMainThread
+        lock.withLock {
+            asked += 1
+            onMain = onMain || main
+        }
+    }
+
+    var count: Int { lock.withLock { asked } }
+    var anyOnMain: Bool { lock.withLock { onMain } }
+}
+
+/// Where the tools are can take asking the person's login shell, so the settings are asked
+/// for when something first needs the core, off the main thread, and once however many
+/// calls arrive at the same time.
+@Test func theSettingsAreAskedForOnceOffTheMainThread() async throws {
+    let settings = try scratch(codex: "/nowhere/codex")
+    let asks = Asks()
+    let service = PitboardService {
+        asks.note()
+        return settings
+    }
+    #expect(service.tools().count == 2, "listing the tools asks nothing")
+    #expect(asks.count == 0)
+    async let installed = service.installed()
+    async let changed = service.changedAt()
+    async let diagnosis = service.doctor()
+    let (found, _, _) = await (installed, changed, diagnosis)
+    #expect(found.map(\.code) == ["codex"])
+    #expect(asks.count == 1)
+    #expect(!asks.anyOnMain)
 }
 
 @Test func doctorReportsEveryCheck() async throws {

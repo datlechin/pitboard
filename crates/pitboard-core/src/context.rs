@@ -35,7 +35,7 @@ pub struct Context {
     /// Which front end asked, for the audit log. A change made from the menu bar and one
     /// typed at a prompt read the same otherwise.
     pub(crate) caller: String,
-    /// The `claude` that runs a sign-in; a bare name is looked up on `PATH`.
+    /// The `claude` that runs a sign-in; a bare name is looked up on the search path.
     pub(crate) claude_program: PathBuf,
     /// Where Anthropic's endpoints are reached instead, for tests; `api` honours loopback only.
     pub(crate) api_base: Option<String>,
@@ -43,8 +43,13 @@ pub struct Context {
     pub(crate) hover_rest: bool,
     /// `CODEX_HOME`, which moves everything Codex keeps, including its keyring account.
     pub(crate) codex_home: Option<String>,
-    /// The `codex` that runs a sign-in; a bare name is looked up on `PATH`.
+    /// The `codex` that runs a sign-in; a bare name is looked up on the search path.
     pub(crate) codex_program: PathBuf,
+    /// Where a tool's program is looked for, in `PATH`'s form, and what its sign-in is given
+    /// as `PATH` after the program's own directory. `None` is this process's own `PATH`: an
+    /// app opened from Finder has almost nothing on it, so it passes the one the person's
+    /// login shell would have.
+    pub(crate) search_path: Option<std::ffi::OsString>,
     /// Where the time comes from. The machine's clock in every real context; a test puts
     /// its own here to reach the judgements that only happen at a particular moment.
     pub(crate) clock: Arc<dyn Clock>,
@@ -105,6 +110,7 @@ impl Context {
             hover_rest: false,
             codex_home: None,
             codex_program: PathBuf::from("codex"),
+            search_path: None,
             clock: Arc::new(SystemClock),
             host: crate::store::host(),
             api: Arc::new(Anthropic),
@@ -195,6 +201,23 @@ impl Context {
         &self.codex_program
     }
 
+    /// Look for a tool's program on `path`, in `PATH`'s form, rather than on this process's
+    /// own `PATH`. An app opened from Finder has only the system's directories there, so a
+    /// tool installed through a version manager or an npm prefix is found only on the `PATH`
+    /// the person's shell has, and a script it runs finds its interpreter only there.
+    pub fn with_search_path(mut self, path: String) -> Context {
+        self.search_path = Some(path.into());
+        self
+    }
+
+    /// Where a tool's program is looked for: the path given, or this process's `PATH`.
+    pub(crate) fn search_path(&self) -> std::ffi::OsString {
+        self.search_path
+            .clone()
+            .or_else(|| std::env::var_os("PATH"))
+            .unwrap_or_default()
+    }
+
     /// The program named for this tool, found or not.
     pub fn program_for(&self, tool: crate::provider::ProviderId) -> &std::path::Path {
         match tool {
@@ -229,6 +252,7 @@ impl Context {
             hover_rest: var("CLAUDE_CODE_HOVER_REST").is_some_and(|v| v == "1" || v == "true"),
             codex_home: var("CODEX_HOME").filter(|v| !v.is_empty()),
             codex_program: PathBuf::from("codex"),
+            search_path: None,
             clock: Arc::new(SystemClock),
             host: crate::store::host(),
             api: Arc::new(Anthropic),

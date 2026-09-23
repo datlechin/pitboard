@@ -237,3 +237,55 @@ fn a_codex_sign_in_without_codex_says_so_first() {
         "nothing was started, so there is nothing to clean up"
     );
 }
+
+/// A Codex installed with npm is a script that starts through `env`, which finds its
+/// interpreter on `PATH`, and npm puts that interpreter beside the program under a prefix an
+/// app opened from Finder does not have on its `PATH`. Named by the path it was found at,
+/// with a search path lacking its directory, the sign-in still starts and hands back the
+/// login it stored.
+///
+/// Driven through the library, the way the app drives it: the command line looks for a
+/// program on its own `PATH`, where its directory always is.
+#[test]
+fn an_npm_installed_codex_signs_in_from_a_path_without_its_directory() {
+    let env = Env::new("codex-npm");
+    let program = env.install_fake_npm_codex_login(&codex_login(
+        &env.uuid('p'),
+        "p@example.com",
+        "codex-refresh-p",
+    ));
+    let search = "/usr/bin:/bin";
+    let alone = std::process::Command::new(&program)
+        .arg("login")
+        .env_clear()
+        .env("PATH", search)
+        .output()
+        .expect("env runs");
+    assert_eq!(
+        alone.status.code(),
+        Some(127),
+        "the stand-in cannot start from that PATH on its own, so the test would prove nothing"
+    );
+
+    let ctx = pitboard_core::context::Context::new(env.root.clone())
+        .with_pitboard_home(env.root.join("pitboard"))
+        .with_claude_config_dir(env.root.to_string_lossy().into_owned())
+        .with_codex_home(env.codex_home().to_string_lossy().into_owned())
+        .with_codex_program(program)
+        .with_search_path(search.into());
+    let pitboard = pitboard_core::service::Pitboard::new(ctx);
+    let signing_in = pitboard
+        .sign_in_watched("codex/personal")
+        .unwrap_or_else(|e| panic!("the sign-in did not start: {e}"));
+    let said = signing_in.said();
+    let login = signing_in
+        .finish()
+        .unwrap_or_else(|e| panic!("the sign-in did not finish: {e}"));
+    assert_eq!(login.provider(), pitboard_core::provider::ProviderId::Codex);
+    let heard: String = std::iter::from_fn(|| said.next()).collect();
+    assert!(heard.contains("Successfully logged in"), "{heard}");
+    assert!(
+        !env.codex_home().join("auth.json").exists(),
+        "it signed in to the private home and nowhere else"
+    );
+}

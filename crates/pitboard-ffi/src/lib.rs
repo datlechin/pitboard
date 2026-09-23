@@ -29,6 +29,11 @@ pub struct Settings {
     pub codex_home: Option<String>,
     /// The `codex` that runs a sign-in, since `PATH` may not find it.
     pub codex_program: Option<String>,
+    /// Where a tool's program is looked for, in `PATH`'s form, and what its sign-in is given
+    /// as `PATH` after the program's own directory: the person's login shell's, which an
+    /// app does not inherit. `None` is this process's own `PATH`.
+    #[uniffi(default)]
+    pub search_path: Option<String>,
 }
 
 impl Settings {
@@ -54,6 +59,9 @@ impl Settings {
         }
         if let Some(program) = self.codex_program {
             ctx = ctx.with_codex_program(PathBuf::from(program));
+        }
+        if let Some(path) = self.search_path {
+            ctx = ctx.with_search_path(path);
         }
         // These bindings exist for the app, so a change made through them says so.
         ctx.with_caller("app".into())

@@ -462,19 +462,40 @@ chmod 600 "$CLAUDE_CONFIG_DIR/.credentials.json""#
         std::fs::create_dir_all(&bin).unwrap();
         let script = bin.join("codex");
         let _ = std::fs::remove_file(&script);
+        std::fs::write(&script, format!("#!/bin/sh\n{}", fake_codex_login(login))).unwrap();
+        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
+
+    /// `install_fake_codex_login` laid out the way npm installs Codex, in a prefix of this
+    /// test's own that no `PATH` has. Returns `<prefix>/bin/codex`, the program as found.
+    ///
+    /// npm links `<prefix>/bin/codex` to a script inside `lib/node_modules` whose first line
+    /// is `#!/usr/bin/env node`, and puts the `node` that installed it in `<prefix>/bin`.
+    /// Here that is `fakenode`, which runs the script with `sh`, so a real `node` on this
+    /// machine can never be the one found: the script starts only where `PATH` has its
+    /// prefix's `bin`.
+    pub fn install_fake_npm_codex_login(&self, login: &serde_json::Value) -> PathBuf {
+        use std::os::unix::fs::PermissionsExt;
+        let prefix = self.root.join("npm");
+        let bin = prefix.join("bin");
+        let package = prefix.join("lib/node_modules/@openai/codex/bin");
+        std::fs::create_dir_all(&bin).unwrap();
+        std::fs::create_dir_all(&package).unwrap();
+        let node = bin.join("fakenode");
+        std::fs::write(&node, "#!/bin/sh\nexec /bin/sh \"$@\"\n").unwrap();
+        std::fs::set_permissions(&node, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let script = package.join("codex.js");
         std::fs::write(
             &script,
-            format!(
-                "#!/bin/sh\n\
-                 [ \"$1\" = login ] || exit 64\n\
-                 [ -n \"$CODEX_HOME\" ] || exit 65\n\
-                 cat > \"$CODEX_HOME/auth.json\" <<'LOGIN'\n{login}\nLOGIN\n\
-                 chmod 600 \"$CODEX_HOME/auth.json\"\n\
-                 echo 'Successfully logged in' >&2\n"
-            ),
+            format!("#!/usr/bin/env fakenode\n{}", fake_codex_login(login)),
         )
         .unwrap();
         std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let program = bin.join("codex");
+        let _ = std::fs::remove_file(&program);
+        std::os::unix::fs::symlink("../lib/node_modules/@openai/codex/bin/codex.js", &program)
+            .unwrap();
+        program
     }
 
     /// The live Codex login, as this test's `CODEX_HOME` holds it.
@@ -708,6 +729,18 @@ pub fn codex_login(account: &str, email: &str, refresh: &str) -> serde_json::Val
         },
         "last_refresh": "2026-09-15T05:05:11Z",
     })
+}
+
+/// What a stand-in for `codex login` does once started, whatever line starts it: store
+/// `login` in whichever `CODEX_HOME` it is run with, and nothing else.
+fn fake_codex_login(login: &serde_json::Value) -> String {
+    format!(
+        "[ \"$1\" = login ] || exit 64\n\
+         [ -n \"$CODEX_HOME\" ] || exit 65\n\
+         cat > \"$CODEX_HOME/auth.json\" <<'LOGIN'\n{login}\nLOGIN\n\
+         chmod 600 \"$CODEX_HOME/auth.json\"\n\
+         echo 'Successfully logged in' >&2\n"
+    )
 }
 
 /// Unpadded base64url, which is how every part of a JWT is written.

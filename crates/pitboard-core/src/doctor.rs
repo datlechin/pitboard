@@ -333,9 +333,10 @@ fn codex_facts(ctx: &Context, state: Option<&State>) -> CodexFacts {
     let backend = codex::backend(ctx);
     let auth_file = codex::auth_file(ctx);
     let home = codex::home(ctx);
-    // The program pitboard would run, as the context names it: an app started from Finder
-    // has no shell `PATH` and names it itself, and a test names one of its own.
-    let program = crate::provider::find_program(ctx.codex_program());
+    // The program pitboard would run, as the context names it and where the context looks:
+    // an app started from Finder has no shell `PATH` and passes the login shell's, and a
+    // test names a program of its own.
+    let program = crate::provider::program_of(ctx, ProviderId::Codex);
     CodexFacts {
         present: home.is_dir(),
         enrolled: state.map_or(0, |s| {

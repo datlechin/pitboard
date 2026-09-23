@@ -80,7 +80,7 @@ private final class Stub: Core, @unchecked Sendable {
         return session
     }
     func tools() -> [Tool] { bothTools }
-    func installed() -> [Tool] {
+    func installed() async -> [Tool] {
         installedAsks += 1
         return found
     }
@@ -921,6 +921,7 @@ private func account(_ label: String, signedIn: Bool, percent: Double) -> Accoun
 
     stub.found = bothTools
     let both = AppModel(watching: false, service: stub)
+    await both.refresh()
     #expect(both.notOffered == nil)
 
     // A tool with an account here is here, wherever its program is.
@@ -946,15 +947,23 @@ private func account(_ label: String, signedIn: Bool, percent: Double) -> Accoun
 }
 
 /// What the app found does not change while it runs, so it is asked once and not on every
-/// keystroke in the form that reads it.
+/// keystroke in the form that reads it, nor on every read.
+///
+/// Not when the model is made either: finding a tool can mean waiting on the person's login
+/// shell, and the model is made on the main thread.
 @MainActor
 @Test func whatIsInstalledIsAskedOnce() async {
     let stub = Stub(.success(status([])))
+    stub.found = bothTools
     let model = AppModel(watching: false, service: stub)
+    #expect(stub.installedAsks == 0)
+    #expect(model.addable == [claudeCode], "nothing is known to be here until a read asks")
     await model.refresh()
     for _ in 0..<3 { _ = model.addable }
     _ = model.services
+    await model.refresh()
     #expect(stub.installedAsks == 1)
+    #expect(model.addable == bothTools)
 }
 
 /// The form starts on the tool it was asked about, and otherwise on the first it offers.

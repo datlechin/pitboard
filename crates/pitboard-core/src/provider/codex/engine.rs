@@ -196,7 +196,7 @@ impl Provider for Codex {
     }
 
     fn program(&self, ctx: &Context) -> Option<std::path::PathBuf> {
-        crate::provider::find_program(ctx.codex_program())
+        crate::provider::program_of(ctx, ProviderId::Codex)
     }
 
     /// `codex login` with `CODEX_HOME` pointed at the private directory.
@@ -211,7 +211,7 @@ impl Provider for Codex {
     /// from a trusted project it is started in, and a project that set a keyring store
     /// would send the new login somewhere this could not read back.
     fn sign_in(&self, ctx: &Context, dir: &std::path::Path) -> std::process::Command {
-        let mut command = std::process::Command::new(ctx.codex_program());
+        let mut command = crate::provider::command(ctx, ProviderId::Codex);
         command.arg("login").env("CODEX_HOME", dir).current_dir(dir);
         command
     }
