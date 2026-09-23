@@ -324,3 +324,91 @@ fn abandoning_a_codex_switch_keeps_no_twin_of_the_live_login() {
     settle(&m.ctx, None).expect("purged on the next change");
     hold(&m, "after abandoning a Codex switch");
 }
+
+/// A codex still running from before the switch refreshes its token while the switch is
+/// under way. Codex takes no lock, so nothing kept it out; what matters is that the switch
+/// notices before writing over the file that now holds the only live copy of that chain.
+/// Nothing is installed, and the park, a copy of the chain the refresh just spent, is
+/// dropped rather than kept as though it worked.
+#[test]
+fn a_codex_refresh_during_a_switch_is_not_written_over() {
+    let m = codex_machine("refreshed-meanwhile");
+    let refreshed = codex_login("here", "here-refresh-2");
+    let writer = m.ctx.clone();
+    let settled = settle(&m.ctx, None).expect("nothing to recover").0;
+
+    let refused = crate::fault::meanwhile(
+        "switch.park_recorded",
+        move || {
+            let live = provider::of(ProviderId::Codex).live(&writer).unwrap();
+            store::write_raw(&live.chain, &live.service, &refreshed.to_string()).unwrap();
+        },
+        || switch(settled, &m.key("there")),
+    )
+    .expect_err("nothing is installed over a login that moved");
+
+    assert_eq!(refused.code(), "signed_in_account_changed");
+    assert_eq!(
+        m.live().unwrap()["tokens"]["refresh_token"],
+        "here-refresh-2",
+        "the refreshed login is still there"
+    );
+    let state = state::load(&m.ctx).expect("state");
+    assert!(
+        state.get(&m.key("here")).unwrap().parked.is_none(),
+        "the park copied a chain the refresh spent, so it is not offered as a login"
+    );
+    assert!(state.get(&m.key("there")).unwrap().parked.is_some());
+    settle(&m.ctx, None).expect("the next change purges");
+    hold(&m, "after a refresh during a Codex switch");
+}
+
+/// Somebody signs Codex in to another account while the switch is under way. The park of
+/// the outgoing account may now be its only login, so it is kept, and nothing is written
+/// over the account that is now live.
+#[test]
+fn another_sign_in_during_a_switch_keeps_the_outgoing_park() {
+    let m = codex_machine("signed-in-meanwhile");
+    let other = codex_login("other", "other-refresh");
+    let writer = m.ctx.clone();
+    let settled = settle(&m.ctx, None).expect("nothing to recover").0;
+
+    let refused = crate::fault::meanwhile(
+        "switch.park_recorded",
+        move || {
+            let live = provider::of(ProviderId::Codex).live(&writer).unwrap();
+            store::write_raw(&live.chain, &live.service, &other.to_string()).unwrap();
+        },
+        || switch(settled, &m.key("there")),
+    )
+    .expect_err("nothing is installed over a login that moved");
+
+    assert_eq!(refused.code(), "signed_in_account_changed");
+    assert_eq!(
+        m.live().unwrap()["tokens"]["refresh_token"],
+        "other-refresh"
+    );
+    let state = state::load(&m.ctx).expect("state");
+    assert!(
+        state.get(&m.key("here")).unwrap().parked.is_some(),
+        "`here` is no longer live, and its park may be the only login it has"
+    );
+}
+
+/// An interrupted switch is judged where it ran. Read from another `CODEX_HOME`, the live
+/// login there has nothing to do with the switch's two sides, and recovery would guess.
+#[test]
+fn an_interrupted_switch_is_recovered_only_where_it_ran() {
+    let m = codex_machine("slot-bound");
+    let settled = settle(&m.ctx, None).expect("nothing to recover").0;
+    let died = crate::fault::killing("switch.park_recorded", || switch(settled, &m.key("there")));
+    assert_eq!(died.unwrap_err(), "switch.park_recorded");
+
+    let elsewhere = m.ctx.clone().with_codex_home("/somewhere/else".into());
+    let refused = settle(&elsewhere, None).err().expect("refused elsewhere");
+    assert_eq!(refused.code(), "recovery_elsewhere");
+    assert!(refused.to_string().contains("CODEX_HOME"), "{refused}");
+
+    settle(&m.ctx, None).expect("recovered where it ran");
+    hold(&m, "after recovering where the switch ran");
+}

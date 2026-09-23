@@ -368,6 +368,7 @@ pub fn switch(settled: Settled, key: &Key) -> Result<(Outcome, Vec<Warning>)> {
             // Which side the live credential came from, answerable without asking anyone.
             from_fingerprint: tool.fingerprint(&before),
             to_fingerprint: held.refresh_fingerprint.clone(),
+            slot: Some(tool.slot(ctx)),
         },
     )?;
     fault::point("switch.journal_written");
@@ -403,6 +404,31 @@ pub fn switch(settled: Settled, key: &Key) -> Result<(Outcome, Vec<Warning>)> {
         state::save(ctx, &state)?;
         clear_journal(ctx);
         return Err(Error::ParkedCredentialMissing { label: from });
+    }
+
+    // The live login is read once more before it is replaced. A tool that takes no write
+    // lock, which is Codex, can have rewritten it since it was read under nothing at all:
+    // a session still running from before the switch refreshing its token, which spends
+    // the chain just parked and leaves the only live copy of it in the file this write is
+    // about to replace. Nothing is installed over a login that moved. Where the one there
+    // now is still the outgoing account's, the park is a spent copy of it and is dropped;
+    // where it is anybody else's, or cannot be told, the park may be the outgoing account's
+    // only login and is kept. The window left is the rename itself.
+    let now = store::read_raw(&live.chain, &live.service);
+    if !matches!(&now, Ok(Some(now)) if *now == before_raw) {
+        let still_outgoing = now
+            .ok()
+            .flatten()
+            .and_then(|raw| serde_json::from_str::<Value>(&raw).ok())
+            .and_then(|document| identify_document(ctx, key.provider, &document).ok())
+            .is_some_and(|found| found.account_uuid == outgoing.account_uuid);
+        if still_outgoing {
+            state.discard(&parked.service);
+        }
+        state::save(ctx, &state)?;
+        clear_journal(ctx);
+        purge(ctx, &mut state);
+        return Err(Error::SignedInAccountChanged);
     }
 
     if let Err(e) = install_with(

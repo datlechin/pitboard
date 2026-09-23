@@ -337,6 +337,95 @@ fn renewing_killed_between_the_write_and_the_record_leaves_nothing_unnamed() {
 
     recover(&m).expect("recovery");
     hold(&m, "renew.park_stored");
+
+    // Which chain survived is the whole point. Anthropic spent `there-refresh` when it
+    // answered; the copy written just before the kill is the only one that still works.
+    let kept = state::load(&m.ctx)
+        .expect("state")
+        .get(&crate::state::Key::new(
+            crate::provider::ProviderId::Claude,
+            "there",
+        ))
+        .and_then(|a| a.parked.clone())
+        .expect("`there` still holds a login");
+    assert_eq!(
+        kept.refresh_fingerprint,
+        crate::provider::claude::document::fingerprint_of(&json!({"refreshToken": "fresh"})),
+        "the fresh login is kept and the spent one dropped, not the other way round"
+    );
+    assert_eq!(m.mem.vault().services(), vec![kept.service]);
+}
+
+/// A renewal whose answer is written and whose record cannot be saved keeps what it wrote.
+/// The service has already spent the chain the record still names, so deleting the fresh
+/// copy, which this once did, left the account nothing that works. The next change gives
+/// it back.
+#[test]
+fn a_renewal_that_cannot_record_its_answer_keeps_it_for_the_next_run() {
+    use std::os::unix::fs::PermissionsExt;
+    let m = machine("renew-save-fails");
+    let key = crate::state::Key::new(crate::provider::ProviderId::Claude, "there");
+    let mut state = state::load(&m.ctx).expect("state");
+    let held = state.get(&key).unwrap().parked.clone().unwrap();
+    let lapsed = json!({
+        "accessToken": "access-there-refresh",
+        "refreshToken": "there-refresh",
+        "expiresAt": (NOW - 60) * 1000,
+        "refreshTokenExpiresAt": (NOW + 30 * 86_400) * 1000
+    });
+    m.mem.vault().plant(&held.service, &lapsed.to_string());
+    state.park(
+        &key,
+        park::describe(
+            crate::provider::ProviderId::Claude,
+            &held.service,
+            NOW,
+            &lapsed,
+        ),
+    );
+    state::save(&m.ctx, &state).expect("saved");
+    m.api.renews(
+        "there-refresh",
+        crate::api::Renewed {
+            access_token: "access-fresh".into(),
+            refresh_token: Some("fresh".into()),
+            expires_in: 3600,
+            refresh_token_expires_in: Some(30 * 86_400),
+            scopes: None,
+            at: None,
+        },
+    );
+
+    // pitboard's home goes read-only once the fresh login is in the vault, so the record
+    // of it cannot be written.
+    let home = crate::home::dir(&m.ctx);
+    let locked = home.clone();
+    let outcomes = fault::meanwhile(
+        "renew.park_stored",
+        move || {
+            std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o500)).unwrap();
+        },
+        || renew::renew_parked(&m.ctx),
+    );
+    std::fs::set_permissions(&home, std::fs::Permissions::from_mode(0o700)).unwrap();
+    assert!(
+        outcomes
+            .iter()
+            .any(|(_, r)| matches!(r, renew::Renewal::Failed(_))),
+        "the save failed, and says so"
+    );
+
+    recover(&m).expect("the next change");
+    let kept = state::load(&m.ctx)
+        .expect("state")
+        .get(&key)
+        .and_then(|a| a.parked.clone())
+        .expect("`there` still holds a login");
+    assert_eq!(
+        kept.refresh_fingerprint,
+        crate::provider::claude::document::fingerprint_of(&json!({"refreshToken": "fresh"})),
+    );
+    hold(&m, "after a renewal that could not be recorded");
 }
 
 /// Forgetting deletes the account before deleting its park. Killed between the two, the

@@ -108,6 +108,14 @@ impl ProviderId {
         }
     }
 
+    /// The environment variable that moves where the tool keeps its login.
+    pub fn home_variable(self) -> &'static str {
+        match self {
+            ProviderId::Claude => "CLAUDE_CONFIG_DIR",
+            ProviderId::Codex => "CODEX_HOME",
+        }
+    }
+
     /// What a person runs to sign in with the tool's own command. Claude Code signs in from
     /// inside the program it starts; Codex has a subcommand for it.
     pub fn login_command(self) -> &'static str {

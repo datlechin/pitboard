@@ -15,15 +15,45 @@
 //! In any build that is not a test this is an empty inline function. There is no feature to
 //! set wrongly and nothing to strip from a release: `cfg(test)` cannot be on in one.
 
-/// A durable step just finished. In a test that armed this name, the run dies here.
+/// A durable step just finished. In a test that armed this name, the run dies here; in one
+/// that hung something on it, that runs here first.
 #[cfg(test)]
 pub(crate) fn point(name: &'static str) {
+    let hung = MEANWHILE.with(|meanwhile| {
+        let mut meanwhile = meanwhile.borrow_mut();
+        match meanwhile.as_ref() {
+            Some((at, _)) if at == name => meanwhile.take().map(|(_, run)| run),
+            _ => None,
+        }
+    });
+    if let Some(run) = hung {
+        run();
+    }
     ARMED.with(|armed| {
         if armed.borrow().as_deref() == Some(name) {
             *armed.borrow_mut() = None;
             panic!("{KILLED}{name}");
         }
     });
+}
+
+/// Run `change`, and when it reaches `name`, run `elsewhere` there once, as if another
+/// program had written at exactly that moment.
+///
+/// A kill tests what is left when a run stops. This tests what a run does when the world
+/// moves under it: a tool that takes no lock can rewrite its own login between two steps
+/// of a switch, and the switch has to notice rather than write over it.
+#[cfg(test)]
+pub(crate) fn meanwhile<T>(
+    name: &'static str,
+    elsewhere: impl FnOnce() + 'static,
+    change: impl FnOnce() -> T,
+) -> T {
+    MEANWHILE
+        .with(|meanwhile| *meanwhile.borrow_mut() = Some((name.to_string(), Box::new(elsewhere))));
+    let outcome = change();
+    MEANWHILE.with(|meanwhile| *meanwhile.borrow_mut() = None);
+    outcome
 }
 
 #[cfg(not(test))]
@@ -34,8 +64,13 @@ pub(crate) fn point(_name: &'static str) {}
 const KILLED: &str = "pitboard fault: killed at ";
 
 #[cfg(test)]
+type Elsewhere = Box<dyn FnOnce()>;
+
+#[cfg(test)]
 thread_local! {
     static ARMED: std::cell::RefCell<Option<String>> = const { std::cell::RefCell::new(None) };
+    static MEANWHILE: std::cell::RefCell<Option<(String, Elsewhere)>> =
+        const { std::cell::RefCell::new(None) };
 }
 
 /// Run `change`, killing it at `name` if it gets there. `Ok` is what the change returned,

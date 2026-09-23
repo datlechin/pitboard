@@ -398,11 +398,8 @@ pub enum Error {
     ParkedLoginBelongsElsewhere { label: String, email: String },
 
     #[error(
-        "signed in as `{to}`, and the login was gone again before pitboard finished. {} \
-         Nothing was lost: both `{from}` and `{to}` are parked. Run `{}` and sign in to any \
-         enrolled account, then `pitboard use {to}`.",
-        why_it_did_not_hold(*tool),
-        tool.login_command()
+        "signed in as `{to}`, and the login was gone again before pitboard finished. {}",
+        after_it_did_not_hold(*tool, from, to)
     )]
     SwitchDidNotHold {
         tool: ProviderId,
@@ -444,6 +441,21 @@ pub enum Error {
         path: PathBuf,
         #[source]
         source: serde_json::Error,
+    },
+
+    #[error(
+        "an earlier switch of {} from `{from}` to `{to}` was interrupted while its login was \
+         at {slot}, and this run reads it from somewhere else, so it cannot tell what that \
+         switch did. Nothing was changed. Run pitboard with {} pointing where it did to \
+         finish it, or `pitboard abandon` to keep every login it names and move on.",
+        tool.name(),
+        tool.home_variable()
+    )]
+    RecoveryElsewhere {
+        tool: ProviderId,
+        from: String,
+        to: String,
+        slot: String,
     },
 
     #[error("could not read or write pitboard's recovery record at {path}: {source}")]
@@ -554,6 +566,7 @@ impl Error {
             IdentityUnverifiable { .. } => "identity_unverifiable",
             SignedInAccountChanged => "signed_in_account_changed",
             RecoveryUndetermined { .. } => "recovery_undetermined",
+            RecoveryElsewhere { .. } => "recovery_elsewhere",
             ProgramNotFound { tool } => match tool {
                 ProviderId::Claude => "claude_not_found",
                 ProviderId::Codex => "codex_not_found",
@@ -617,17 +630,26 @@ fn smaller(tool: ProviderId) -> &'static str {
     }
 }
 
-/// Which write took a switched-in login away again, as far as each tool is known to make one.
-fn why_it_did_not_hold(tool: ProviderId) -> &'static str {
+/// Which write took a switched-in login away again, as far as each tool is known to make
+/// one, and what that leaves.
+fn after_it_did_not_hold(tool: ProviderId, from: &str, to: &str) -> String {
     match tool {
-        ProviderId::Claude => {
+        ProviderId::Claude => format!(
             "Claude Code removes a login without taking the write lock when `/logout` has \
-             given up waiting, which is the one write pitboard cannot exclude."
-        }
-        ProviderId::Codex => {
-            "Codex takes no lock of any kind, so a codex session signing out or refreshing \
-             while the switch ran could rewrite its auth.json underneath it."
-        }
+             given up waiting, which is the one write pitboard cannot exclude. Nothing was \
+             lost: both `{from}` and `{to}` are parked. Run `claude` and sign in to any \
+             enrolled account, then `pitboard use {to}`."
+        ),
+        // Not "nothing was lost": the likeliest writer is a codex session refreshing the
+        // outgoing account, which spends the token in that account's park, and `codex
+        // login` would revoke whatever login is left in auth.json.
+        ProviderId::Codex => format!(
+            "Codex takes no lock, so a codex session still running from before the switch, \
+             refreshing or signing out, rewrote auth.json underneath it. `{to}` is still \
+             parked. `{from}`'s park may hold a token that refresh spent. Quit every running \
+             codex, then run `pitboard` to see what is signed in; do not run `codex login` \
+             or `codex logout` until you have, because either revokes the login they find."
+        ),
     }
 }
 

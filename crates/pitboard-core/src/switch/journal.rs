@@ -39,6 +39,14 @@ pub(super) struct Journal {
     pub(super) from_fingerprint: String,
     #[serde(default)]
     pub(super) to_fingerprint: String,
+    /// Where the tool's live login was when the switch started, as the tool names it.
+    ///
+    /// Which login is live depends on a home variable, and recovery judges an interrupted
+    /// switch by reading the live login. Read from another place, it would compare the
+    /// switch's two sides with a login that has nothing to do with them, and could decide
+    /// the switch landed when it never did. `None` on a record written before this was kept.
+    #[serde(default)]
+    pub(super) slot: Option<String>,
 }
 
 /// What a later run found an interrupted switch had done, now recorded in the state.
@@ -328,6 +336,18 @@ pub(super) fn reconcile(ctx: &Context, state: &mut State) -> Result<Option<Recov
     let journal = serde_json::from_str::<Journal>(&raw)
         .map_err(|source| Error::RecoveryRecordCorrupt { path, source })?;
 
+    if let Some(slot) = &journal.slot {
+        let here = crate::provider::of(journal.provider).slot(ctx);
+        if *slot != here {
+            return Err(Error::RecoveryElsewhere {
+                tool: journal.provider,
+                from: journal.from().typed(),
+                to: journal.to().typed(),
+                slot: slot.clone(),
+            });
+        }
+    }
+
     // The fingerprints settle it without a round trip whenever they can, which is what
     // makes an interrupted switch recoverable with no network at all.
     let by_fingerprint = live_owner_by_fingerprint(ctx, &journal);
@@ -381,6 +401,7 @@ mod tests {
             incoming_service: INCOMING.into(),
             from_fingerprint: "ffffffffffffffff".into(),
             to_fingerprint: "0000000000000000".into(),
+            slot: None,
         }
     }
 

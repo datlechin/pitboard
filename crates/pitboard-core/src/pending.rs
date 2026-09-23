@@ -152,7 +152,7 @@ fn resolve(
                     keep.push(service);
                 }
             }
-            Ok(Some(raw)) => match adopt(ctx, state, &service, &raw) {
+            Ok(Some(raw)) => match adopt(ctx, state, &service, &raw, written_here) {
                 Some(label) => out.given_back.push((label, service)),
                 None if written_here => {
                     // This pitboard wrote this name down, wrote a login into it, and
@@ -174,18 +174,42 @@ fn resolve(
 }
 
 /// Give an orphan back to the account whose name it carries, where that account is enrolled
-/// and holds nothing. Anything else is refused: an account that already holds a park has a
-/// login pitboard renews, and a second copy of one refresh chain is the state that ends a
-/// login for both holders.
-fn adopt(ctx: &Context, state: &mut State, service: &str, raw: &str) -> Option<String> {
+/// and holds nothing, or holds an older copy this one replaces.
+///
+/// The second case is what a renewal leaves when it is killed after writing the fresh login
+/// and before recording it: the service has already spent the older copy's refresh token,
+/// so the account holds a dead login and the orphan is its only live one. Keeping the older
+/// and deleting the newer, which is what happened, lost the login. Only a name this pitboard
+/// wrote down itself is trusted that far; a stranger replaces nothing.
+///
+/// Anything else is refused: an account that already holds a newer park has a login
+/// pitboard renews, and a second copy of one refresh chain is the state that ends a login
+/// for both holders.
+fn adopt(
+    ctx: &Context,
+    state: &mut State,
+    service: &str,
+    raw: &str,
+    written_here: bool,
+) -> Option<String> {
     let (uuid, at_millis) = park::parts_of(service)?;
     let oauth = serde_json::from_str::<serde_json::Value>(raw).ok()?;
-    let key = state
-        .owner_of_park(&uuid)
-        .filter(|a| a.parked.is_none())
-        .map(crate::state::Account::key)?;
+    let account = state.owner_of_park(&uuid)?;
+    let key = account.key();
     let park = park::describe(key.provider, service, at_millis / 1000, &oauth);
     if park.refresh_fingerprint.is_empty() || !park.restorable_at(ctx.now()) {
+        return None;
+    }
+    let replaces_an_older_copy = |held: &crate::state::Park| {
+        written_here
+            && held.refresh_fingerprint != park.refresh_fingerprint
+            && park.parked_at >= held.parked_at
+    };
+    if account
+        .parked
+        .as_ref()
+        .is_some_and(|held| !replaces_an_older_copy(held))
+    {
         return None;
     }
     // A copy of the login signed in now is not something to give back, for a tool whose
@@ -312,41 +336,79 @@ mod tests {
         let _ = std::fs::remove_dir_all(root);
     }
 
-    /// Two copies of one refresh chain is the state that ends a login for both holders, so
-    /// the copy nothing names loses.
-    #[test]
-    fn an_orphan_for_an_account_that_already_holds_one_is_deleted() {
-        let (ctx, mem, root) = machine("already-held");
-        let held = "pitboard-park-acc-1750000000000";
-        let orphan = "pitboard-park-acc-1760000000000";
-        mem.vault().plant(held, &oauth("held").to_string());
-        mem.vault().plant(orphan, &oauth("orphan").to_string());
-        reserve(&ctx, orphan).expect("reserved");
-
+    /// The account a name was written for, holding `held`, with `orphan` in the vault under
+    /// a name this pitboard wrote down and nothing recorded.
+    fn holding(
+        name: &str,
+        held: (&str, &str, i64),
+        orphan: (&str, &str),
+    ) -> (Context, State, PathBuf) {
+        let (ctx, mem, root) = machine(name);
+        mem.vault().plant(held.0, &oauth(held.1).to_string());
+        mem.vault().plant(orphan.0, &oauth(orphan.1).to_string());
+        reserve(&ctx, orphan.0).expect("reserved");
         let mut state = State::default();
         state.accounts.push(account("work", "acc"));
         state.park(
             &work(),
-            park::describe(ProviderId::Claude, held, NOW, &oauth("held")),
+            park::describe(ProviderId::Claude, held.0, held.2, &oauth(held.1)),
         );
+        (ctx, state, root)
+    }
+
+    fn parked(state: &State) -> Option<String> {
+        state
+            .get(&work())
+            .and_then(|a| a.parked.as_ref())
+            .map(|p| p.service.clone())
+    }
+
+    /// Two copies of one refresh chain is the state that ends a login for both holders, so
+    /// the copy nothing names loses.
+    #[test]
+    fn a_second_copy_of_the_chain_an_account_holds_is_deleted() {
+        let held = "pitboard-park-acc-1750000000000";
+        let orphan = "pitboard-park-acc-1760000000000";
+        let (ctx, mut state, root) = holding("same-chain", (held, "r", NOW), (orphan, "r"));
 
         assert_eq!(sweep(&ctx, &mut state).expect("swept").found(), 1);
-        assert!(state.names(held), "the recorded copy is untouched");
-        assert_eq!(
-            state
-                .get(&crate::state::Key::new(
-                    crate::provider::ProviderId::Claude,
-                    "work"
-                ))
-                .expect("account")
-                .parked
-                .as_ref()
-                .map(|p| p.service.as_str()),
-            Some(held),
-            "the recorded copy is the one pitboard renews and the one it keeps"
-        );
+        assert_eq!(parked(&state).as_deref(), Some(held));
         assert!(state.discarded.iter().any(|s| s == orphan));
         assert!(outstanding(&ctx).is_empty());
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    /// An orphan older than what the account holds is left over from before it, and the
+    /// recorded copy is the one pitboard renews.
+    #[test]
+    fn an_older_copy_than_the_one_an_account_holds_is_deleted() {
+        let held = "pitboard-park-acc-1760000000000";
+        let orphan = "pitboard-park-acc-1750000000000";
+        let (ctx, mut state, root) = holding("older", (held, "held", NOW), (orphan, "orphan"));
+
+        assert_eq!(sweep(&ctx, &mut state).expect("swept").found(), 1);
+        assert_eq!(parked(&state).as_deref(), Some(held));
+        assert!(state.discarded.iter().any(|s| s == orphan));
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    /// A newer copy this pitboard wrote and never recorded is what a renewal killed between
+    /// writing and recording leaves. The service spent the older copy's chain when it
+    /// answered, so the newer one is the account's only working login and replaces it.
+    #[test]
+    fn a_newer_copy_written_here_replaces_the_one_an_account_holds() {
+        let held = "pitboard-park-acc-1750000000000";
+        let orphan = "pitboard-park-acc-1760000000000";
+        let (ctx, mut state, root) =
+            holding("newer", (held, "spent", 1_750_000_000), (orphan, "fresh"));
+
+        let reclaimed = sweep(&ctx, &mut state).expect("swept");
+        assert_eq!(reclaimed.given_back.len(), 1);
+        assert_eq!(parked(&state).as_deref(), Some(orphan));
+        assert!(
+            state.discarded.iter().any(|s| s == held),
+            "the spent copy goes"
+        );
         let _ = std::fs::remove_dir_all(root);
     }
 

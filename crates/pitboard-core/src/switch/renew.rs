@@ -6,7 +6,7 @@ use super::{journal, purge, try_exclusive};
 use crate::context::Context;
 use crate::error::{Error, Result};
 use crate::state::{Key, Park, State};
-use crate::{park, state, store};
+use crate::{park, state};
 use serde_json::Value;
 
 /// Renewed this long before its access token expires, so a read just after still answers.
@@ -249,12 +249,11 @@ fn apply(
     };
     crate::fault::point("renew.park_stored");
     state.park(key, parked.clone());
-    if let Err(e) = state::save(ctx, state) {
-        // Nothing that survives names the copy just written. The record on disk still
-        // points at the spent one, which the next renewal will be refused and drop.
-        let _ = store::vault_delete(ctx, &parked.service);
-        return Err(e);
-    }
+    // A save that fails leaves the fresh copy where it is. Its name is on pitboard's own
+    // list of names it wrote, so the next command gives it back to the account in place of
+    // the spent one. Deleting it here, as this once did, threw away the only login the
+    // account had left: the service had already spent the one the record still names.
+    state::save(ctx, state)?;
     Ok(Renewal::Renewed)
 }
 
