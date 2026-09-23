@@ -61,10 +61,14 @@ pub const ASSUMPTIONS: &[Assumption] = &[
     Assumption {
         name: "codex_usage_endpoint",
         fact: "`GET https://chatgpt.com/backend-api/wham/usage` with `Authorization: Bearer` \
-               and `ChatGPT-Account-ID` returns `used_percent`, `window_minutes` and \
-               `resets_at` for a primary and a secondary window, plus credits and plan type, \
-               with no model request and no quota spent",
-        read_from: "the backend client's rate limit status call",
+               and `ChatGPT-Account-ID` answers with `plan_type` and a `rate_limit` holding \
+               `primary_window` and `secondary_window`, each `{used_percent, \
+               limit_window_seconds, reset_after_seconds, reset_at}` and either of them \
+               null. No model request and no quota spent",
+        read_from: "a live response from this endpoint, not from a description of it: a \
+                    parser written from the source had the windows one level up, the length \
+                    in minutes and the reset under another name, and returned nothing while \
+                    the request succeeded",
         verified_against: VERIFIED_AGAINST,
         depends: "provider::codex::api::usage, and every limit pitboard shows for a Codex \
                   account",

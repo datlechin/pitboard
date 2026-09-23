@@ -65,6 +65,37 @@ fn the_harness_can_park_a_login_find_it_and_take_it_away() {
     env.delete_park(&service);
 }
 
+/// No test may read a login the person running it is actually using.
+///
+/// The harness gives Claude Code a scratch config directory and a keychain slot hashed from
+/// it, and `guard_not_live` refuses the two names that could be real. Codex needed the same
+/// and did not have it: `status` reads every tool's live login, so the suite quietly started
+/// reading the developer's own signed-in Codex account and putting it in a snapshot.
+#[test]
+fn every_tool_is_pointed_at_a_scratch_home() {
+    let env = Env::new("isolation");
+    let command = env.command(&["status"]);
+    let named: Vec<(String, String)> = command
+        .get_envs()
+        .filter_map(|(k, v)| {
+            Some((
+                k.to_string_lossy().into_owned(),
+                v?.to_string_lossy().into_owned(),
+            ))
+        })
+        .collect();
+    for home in ["CLAUDE_CONFIG_DIR", "CODEX_HOME"] {
+        let set = named.iter().find(|(k, _)| k == home).unwrap_or_else(|| {
+            panic!("{home} is not pointed anywhere, so a test reads a real one")
+        });
+        assert!(
+            std::path::Path::new(&set.1).starts_with(&env.root),
+            "{home} is {} , which is outside this test's own directory",
+            set.1
+        );
+    }
+}
+
 use std::path::PathBuf;
 use std::process::Command;
 
@@ -176,10 +207,22 @@ impl Env {
         c.args(args)
             .env("CLAUDE_CONFIG_DIR", &self.root)
             .env_remove("CLAUDE_SECURESTORAGE_CONFIG_DIR")
+            // Every tool pitboard reads gets a scratch home of its own, empty unless a
+            // test puts something in it. Without this the suite reads whatever the person
+            // running it happens to be signed in to, which is both a flaky test and a real
+            // login no test may touch.
+            .env("CODEX_HOME", self.codex_home())
             .env("PITBOARD_HOME", self.root.join("pitboard"))
             .env("PITBOARD_API_BASE", self.server.url())
             .env("PATH", path);
         c
+    }
+
+    /// This test's own `CODEX_HOME`, created because Codex requires the directory to exist.
+    pub fn codex_home(&self) -> PathBuf {
+        let dir = self.root.join("codex");
+        let _ = std::fs::create_dir_all(&dir);
+        dir
     }
 
     pub fn run(&self, args: &[&str]) -> (String, String, i32) {

@@ -9,11 +9,10 @@ use crate::api::{self, ApiError, Owner};
 use crate::context::Context;
 use crate::error::Cause;
 use crate::provider::ProviderId;
-use crate::provider::claude::live as claude_live;
 use crate::provider::claude::paths as claude;
 use crate::state::{Park, State};
 use crate::usage::{Snapshot, Source};
-use crate::{budget, park, readings, store};
+use crate::{budget, park, readings};
 use serde_json::Value;
 
 /// Why a reading is not live.
@@ -152,20 +151,43 @@ pub struct Slot {
     pub default: bool,
 }
 
+/// What is true of one tool's live login.
+///
+/// Per tool, because there is no such thing as "the account signed in on this machine": a
+/// Claude Code login and a Codex login are different programs reading different stores, and
+/// neither signs the other out.
+#[derive(Default)]
+struct LiveLogin {
+    /// `None` means nobody is signed in to this tool, but only when [`Facts::asked`] is
+    /// true: unasked and absent are different things, and reading one as the other says the
+    /// account in use is gone.
+    signed_in: Option<Result<Owner, ApiError>>,
+    /// The account the tool's own local record names, where it keeps one. It can be behind
+    /// the login it describes, so it never decides a switch; it keeps the row that is
+    /// signed in from reading as though nobody is, when the service cannot be asked.
+    config_uuid: Option<String>,
+    usage: Option<Result<Snapshot, Stale>>,
+}
+
+impl LiveLogin {
+    fn usage(&self) -> Result<Snapshot, Stale> {
+        self.usage.clone().unwrap_or(Err(Stale::NothingSignedIn))
+    }
+}
+
 /// Everything gathered from the machine and the network, so assembling it touches neither.
 struct Facts {
-    /// `None` means nobody is signed in, but only when `asked` is true: unasked and absent
-    /// are different things, and reading one as the other says the account in use is gone.
-    signed_in: Option<Result<Owner, ApiError>>,
+    live: std::collections::BTreeMap<ProviderId, LiveLogin>,
     asked: bool,
-    /// The account Claude Code's own config names. It can be a day behind the login it
-    /// describes, so it never decides a switch; it only keeps the row that is signed in
-    /// from reading as though nobody is, when Anthropic cannot be asked.
-    config_uuid: Option<String>,
-    live_usage: Result<Snapshot, Stale>,
     /// One per enrolled account, in order.
     parked_usage: Vec<Result<Snapshot, Stale>>,
     claude_code_cache: Option<Snapshot>,
+}
+
+impl Facts {
+    fn live_for(&self, which: ProviderId) -> Option<&LiveLogin> {
+        self.live.get(&which)
+    }
 }
 
 /// A parked login holds the account's whole slice of the credential document, so the token
@@ -209,10 +231,16 @@ pub fn gather_offline(ctx: &Context, state: &State) -> Report {
     let config = claude::load_config(ctx).ok();
     let identity = config.as_ref().and_then(claude::identity);
     let facts = Facts {
-        signed_in: None,
+        live: std::iter::once((
+            ProviderId::Claude,
+            LiveLogin {
+                signed_in: None,
+                config_uuid: identity.as_ref().map(|id| id.account_uuid.clone()),
+                usage: Some(Err(Stale::NotAsked)),
+            },
+        ))
+        .collect(),
         asked: false,
-        config_uuid: identity.as_ref().map(|id| id.account_uuid.clone()),
-        live_usage: Err(Stale::NotAsked),
         parked_usage: state
             .accounts
             .iter()
@@ -251,7 +279,7 @@ pub fn gather_offline(ctx: &Context, state: &State) -> Report {
 type Asked = (Result<Snapshot, Stale>, Option<(String, budget::Outcome)>);
 
 /// A provider's failure as the usage path has always classified one.
-fn from_provider(error: crate::provider::ProviderError) -> ApiError {
+fn to_api(error: crate::provider::ProviderError) -> ApiError {
     use crate::provider::ProviderError as P;
     match error {
         P::Unauthorized => ApiError::Unauthorized,
@@ -292,7 +320,7 @@ fn ask_usage(
             ctx,
             &crate::provider::Credential::new(which, document.clone()),
         )
-        .map_err(from_provider);
+        .map_err(to_api);
     let learned = account_uuid.and_then(|uuid| {
         let outcome = match &answer {
             Ok(_) => budget::Outcome::Answered,
@@ -316,45 +344,87 @@ fn ask_usage(
 
 pub fn gather(ctx: &Context, state: &State, fresh: bool) -> Report {
     let now = ctx.now();
-    // The whole document, not a token out of it: what a usage call needs is not the same
-    // for every tool, and pulling one field out here would decide that for all of them.
-    let live_document = store::read(&claude_live::chain(ctx), &claude::live_service(ctx))
-        .ok()
-        .flatten()
-        .filter(|doc| access_token(&doc["claudeAiOauth"]).is_some());
+    // Each tool's live login, whole. Not a token out of it: what a usage call needs is not
+    // the same everywhere, and pulling one field out here would decide that for all of them.
+    let live_documents: Vec<(ProviderId, Option<Value>)> = ProviderId::ALL
+        .iter()
+        .map(|&which| {
+            let document = crate::provider::of(which)
+                .read_live(ctx)
+                .ok()
+                .flatten()
+                .map(|credential| credential.raw);
+            (which, document)
+        })
+        .collect();
     let parked_documents: Vec<Result<Value, Stale>> = state
         .accounts
         .iter()
         .map(|a| parked_document(ctx, &a.label, a.parked.as_ref(), now))
         .collect();
     let config = claude::load_config(ctx).ok();
-    let live_uuid = config
+    // Only Claude Code keeps a local record of who is signed in that can lag its own
+    // credential. Codex's login names its own account, so there is nothing to fall back to.
+    let claude_config_uuid = config
         .as_ref()
         .and_then(claude::identity)
         .map(|id| id.account_uuid);
     let remembered = readings::load(ctx);
 
-    let (signed_in, live_asked, parked_asked): (_, Asked, Vec<Asked>) =
+    let (live, parked_asked): (Vec<(ProviderId, LiveLogin, Option<_>)>, Vec<Asked>) =
         std::thread::scope(|scope| {
-            // Who owns the live login is asked whatever the budget says: it decides which
+            // Who owns each live login is asked whatever the budget says: it decides which
             // account a row belongs to, it is not a measurement, and a switch needs it.
-            let owner = scope.spawn(|| {
-                live_document
-                    .as_ref()
-                    .and_then(|doc| access_token(&doc["claudeAiOauth"]))
-                    .map(|t| api::owner(ctx, &t))
-            });
-            let live = scope.spawn(|| match live_document.as_ref() {
-                Some(document) => ask_usage(
-                    ctx,
-                    ProviderId::Claude,
-                    live_uuid.as_deref(),
-                    document,
-                    live_uuid.as_deref().and_then(|u| remembered.get(u)),
-                    fresh,
-                ),
-                None => (Err(Stale::NothingSignedIn), None),
-            });
+            let per_tool: Vec<_> = live_documents
+                .iter()
+                .map(|(which, document)| {
+                    let which = *which;
+                    let remembered = &remembered;
+                    let config_uuid = (which == ProviderId::Claude)
+                        .then(|| claude_config_uuid.clone())
+                        .flatten();
+                    scope.spawn(move || {
+                        let Some(document) = document else {
+                            return (
+                                which,
+                                LiveLogin {
+                                    signed_in: None,
+                                    config_uuid,
+                                    usage: None,
+                                },
+                                None,
+                            );
+                        };
+                        let credential = crate::provider::Credential::new(which, document.clone());
+                        let owner = crate::provider::of(which)
+                            .identify(ctx, &credential)
+                            .map(|found| Owner {
+                                account_uuid: found.account_id,
+                                email: found.email,
+                                organization_uuid: found.group.unwrap_or_default(),
+                            })
+                            .map_err(to_api);
+                        let uuid = owner.as_ref().ok().map(|o| o.account_uuid.clone());
+                        let (usage, learned) = ask_usage(
+                            ctx,
+                            which,
+                            uuid.as_deref(),
+                            document,
+                            uuid.as_deref().and_then(|u| remembered.get(u)),
+                            fresh,
+                        );
+                        (
+                            which,
+                            LiveLogin {
+                                signed_in: Some(owner),
+                                config_uuid,
+                                usage: Some(usage),
+                            },
+                            learned,
+                        )
+                    })
+                })
+                .collect();
             let parked: Vec<_> = parked_documents
                 .iter()
                 .zip(state.accounts.iter())
@@ -374,8 +444,13 @@ pub fn gather(ctx: &Context, state: &State, fresh: bool) -> Report {
                 })
                 .collect();
             (
-                owner.join().ok().flatten(),
-                live.join().unwrap_or((Err(Stale::Interrupted), None)),
+                per_tool
+                    .into_iter()
+                    .map(|h| {
+                        h.join()
+                            .unwrap_or((ProviderId::Claude, LiveLogin::default(), None))
+                    })
+                    .collect(),
                 parked
                     .into_iter()
                     .map(|h| h.join().unwrap_or((Err(Stale::Interrupted), None)))
@@ -386,23 +461,39 @@ pub fn gather(ctx: &Context, state: &State, fresh: bool) -> Report {
     // Once, from one thread. Every account's record lives in one file, so a thread each
     // reading it, changing one entry and writing it back would erase what the others
     // learned.
-    let learned: Vec<(String, budget::Outcome)> = std::iter::once(&live_asked)
-        .chain(parked_asked.iter())
-        .filter_map(|(_, learned)| learned.clone())
+    let learned: Vec<(String, budget::Outcome)> = live
+        .iter()
+        .filter_map(|(_, _, learned)| learned.clone())
+        .chain(
+            parked_asked
+                .iter()
+                .filter_map(|(_, learned)| learned.clone()),
+        )
         .collect();
     budget::record(ctx, &learned);
-    let (live_usage, parked_usage) = (
-        live_asked.0,
-        parked_asked.into_iter().map(|(usage, _)| usage).collect(),
-    );
 
+    let mut by_tool: std::collections::BTreeMap<ProviderId, LiveLogin> = live
+        .into_iter()
+        .map(|(which, login, _)| (which, login))
+        .collect();
+    // Taken out rather than cloned: an API error is not `Clone`, and the report wants the
+    // default tool's answer whole.
+    let signed_in_default = by_tool
+        .get_mut(&crate::label::DEFAULT)
+        .and_then(|login| login.signed_in.take());
+    if let Some(login) = by_tool.get_mut(&crate::label::DEFAULT) {
+        login.signed_in = match &signed_in_default {
+            Some(Ok(owner)) => Some(Ok(owner.clone())),
+            // The rows only need to know whether it answered, and with what account.
+            Some(Err(e)) => Some(Err(ApiError::Malformed(e.to_string()))),
+            None => None,
+        };
+    }
     let facts = Facts {
-        signed_in,
+        live: by_tool,
         asked: true,
-        live_usage,
-        parked_usage,
+        parked_usage: parked_asked.into_iter().map(|(usage, _)| usage).collect(),
         claude_code_cache: config.as_ref().and_then(crate::usage::from_config_cache),
-        config_uuid: live_uuid,
     };
     let rows = assemble(
         state,
@@ -432,7 +523,10 @@ pub fn gather(ctx: &Context, state: &State, fresh: bool) -> Report {
         slot: slot_of(ctx),
         now,
         rows,
-        signed_in: match facts.signed_in {
+        // The default tool's answer. Every tool's is in the rows, which is where a
+        // machine with more than one signed in has to be read from: there is no single
+        // fact called "the account signed in on this machine" any more.
+        signed_in: match signed_in_default {
             Some(Ok(owner)) => Ok(owner),
             Some(Err(e)) => Err(e.to_string()),
             None => Err("nothing is signed in".into()),
@@ -446,12 +540,18 @@ fn assemble(
     recall: impl Fn(&str) -> Option<Snapshot>,
     lasting: impl Fn(&str) -> crate::history::Runway,
 ) -> Vec<Row> {
-    let live_uuid = match (&facts.signed_in, facts.asked) {
-        (Some(Ok(owner)), _) => Some(owner.account_uuid.as_str()),
-        // Unreachable, or never asked. Anthropic decides who is signed in; without its
-        // answer, Claude Code's own config is the only one there is.
-        (Some(Err(_)), _) | (None, false) => facts.config_uuid.as_deref(),
-        (None, true) => None,
+    // Per tool, because an account is signed in to its own tool or to nothing. Comparing
+    // every account against one machine-wide answer would have marked a Codex account
+    // signed in because a Claude Code account with the same uuid was.
+    let live_uuid = |which: ProviderId| -> Option<&str> {
+        let live = facts.live_for(which)?;
+        match (&live.signed_in, facts.asked) {
+            (Some(Ok(owner)), _) => Some(owner.account_uuid.as_str()),
+            // Unreachable, or never asked. The service decides who is signed in; without
+            // its answer, the tool's own local record is the only one there is.
+            (Some(Err(_)), _) | (None, false) => live.config_uuid.as_deref(),
+            (None, true) => None,
+        }
     };
     // Claude Code's cache counts only when it was measured for the account in question.
     let cached_for = |uuid: &str| {
@@ -471,9 +571,13 @@ fn assemble(
         .zip(&facts.parked_usage)
         .map(|(account, parked)| {
             let uuid = account.account_uuid.as_str();
-            let signed_in = live_uuid == Some(uuid);
+            let which = account.provider();
+            let signed_in = live_uuid(which) == Some(uuid);
             let (usage, stale) = if signed_in {
-                reading(&facts.live_usage, cached_for(uuid).or_else(|| recall(uuid)))
+                let live = facts
+                    .live_for(which)
+                    .map_or(Err(Stale::NothingSignedIn), LiveLogin::usage);
+                reading(&live, cached_for(uuid).or_else(|| recall(uuid)))
             } else {
                 reading(parked, recall(uuid))
             };
@@ -490,10 +594,23 @@ fn assemble(
         })
         .collect();
 
-    if let Some(Ok(owner)) = &facts.signed_in
-        && !rows.iter().any(|r| r.signed_in)
-    {
-        let (usage, stale) = reading(&facts.live_usage, cached_for(&owner.account_uuid));
+    // A tool signed in to an account nothing has enrolled still gets a row, so somebody can
+    // see what is there and give it a name. One per tool, because each can have its own.
+    for which in ProviderId::ALL {
+        let Some(Ok(owner)) = facts
+            .live_for(*which)
+            .map(|l| &l.signed_in)
+            .and_then(Option::as_ref)
+        else {
+            continue;
+        };
+        if rows.iter().any(|r| r.account_uuid == owner.account_uuid) {
+            continue;
+        }
+        let live = facts
+            .live_for(*which)
+            .map_or(Err(Stale::NothingSignedIn), LiveLogin::usage);
+        let (usage, stale) = reading(&live, cached_for(&owner.account_uuid));
         rows.push(Row {
             label: None,
             email: owner.email.clone(),
@@ -579,11 +696,21 @@ mod tests {
         live: Result<Snapshot, Stale>,
         parked: Vec<Result<Snapshot, Stale>>,
     ) -> Facts {
+        only_claude(
+            LiveLogin {
+                signed_in: Some(Ok(owner(signed_in))),
+                config_uuid: None,
+                usage: Some(live),
+            },
+            parked,
+        )
+    }
+
+    /// The one-tool case every test here was written for, in the shape facts now take.
+    fn only_claude(live: LiveLogin, parked: Vec<Result<Snapshot, Stale>>) -> Facts {
         Facts {
-            signed_in: Some(Ok(owner(signed_in))),
+            live: std::iter::once((ProviderId::Claude, live)).collect(),
             asked: true,
-            config_uuid: None,
-            live_usage: live,
             parked_usage: parked,
             claude_code_cache: None,
         }
@@ -596,10 +723,16 @@ mod tests {
     fn an_unreachable_anthropic_leaves_the_signed_in_row_signed_in() {
         let state = state(&["alpha", "beta"]);
         let facts = Facts {
-            signed_in: Some(Err(ApiError::Network("offline".into()))),
+            live: std::iter::once((
+                ProviderId::Claude,
+                LiveLogin {
+                    signed_in: Some(Err(ApiError::Network("offline".into()))),
+                    config_uuid: Some("alpha-uuid".into()),
+                    usage: Some(Err(Stale::Unreachable)),
+                },
+            ))
+            .collect(),
             asked: true,
-            config_uuid: Some("alpha-uuid".into()),
-            live_usage: Err(Stale::Unreachable),
             parked_usage: vec![Err(Stale::Unreachable), Err(Stale::Unreachable)],
             claude_code_cache: None,
         };

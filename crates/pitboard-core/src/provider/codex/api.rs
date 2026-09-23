@@ -138,12 +138,18 @@ pub(crate) fn usage(
 
 /// OpenAI's answer in pitboard's own shape.
 ///
+/// Measured against the live endpoint rather than taken from a description of it. The
+/// windows are under `rate_limit`, the length is `limit_window_seconds` and the reset is
+/// `reset_at`; a reading of the source had all three somewhere else, and the parser built
+/// from it returned no windows at all while the request itself succeeded.
+///
 /// A window that will not normalise is dropped rather than drawn, the same rule the Claude
 /// Code side has always used: a number nobody can explain is worse than no number.
 fn snapshot(body: &Value, account_id: &str, now: i64) -> Snapshot {
-    let windows = ["primary", "secondary"]
+    let limits = &body["rate_limit"];
+    let windows = ["primary_window", "secondary_window"]
         .into_iter()
-        .filter_map(|which| window(body.get(which)?, which))
+        .filter_map(|which| window(limits.get(which)?, which))
         .collect();
     Snapshot {
         windows,
@@ -158,12 +164,14 @@ fn window(value: &Value, which: &str) -> Option<Window> {
     if !percent.is_finite() || percent < 0.0 {
         return None;
     }
-    let minutes = value.get("window_minutes").and_then(Value::as_i64);
+    let seconds = value.get("limit_window_seconds").and_then(Value::as_i64);
     Some(Window {
-        kind: kind(minutes, which),
+        kind: kind(seconds, which),
         scope: None,
         percent,
-        resets_at: value.get("resets_at").and_then(moment),
+        resets_at: value.get("reset_at").and_then(moment),
+        // OpenAI says which window a request is being judged against only by filling one
+        // in, so every window it sends is one that counts.
         is_active: true,
         severity: None,
     })
@@ -172,22 +180,26 @@ fn window(value: &Value, which: &str) -> Option<Window> {
 /// The same vocabulary the rest of pitboard already uses where the lengths match, so a
 /// five-hour window reads as one whichever tool it came from. Anything else is named by its
 /// own length rather than forced into a word that would be wrong.
-fn kind(minutes: Option<i64>, which: &str) -> String {
-    match minutes {
-        Some(300) => "five_hour".into(),
-        Some(10_080) => "seven_day".into(),
-        Some(m) if m % (60 * 24) == 0 => format!("{}_day", m / (60 * 24)),
-        Some(m) if m % 60 == 0 => format!("{}_hour", m / 60),
-        Some(m) => format!("{m}_minute"),
-        None => which.to_string(),
+fn kind(seconds: Option<i64>, which: &str) -> String {
+    const HOUR: i64 = 3600;
+    match seconds {
+        Some(18_000) => "five_hour".into(),
+        Some(604_800) => "seven_day".into(),
+        Some(s) if s % (HOUR * 24) == 0 => format!("{}_day", s / (HOUR * 24)),
+        Some(s) if s % HOUR == 0 => format!("{}_hour", s / HOUR),
+        Some(s) if s % 60 == 0 => format!("{}_minute", s / 60),
+        Some(s) => format!("{s}_second"),
+        // `primary_window` and `secondary_window` say which one it is and nothing about how
+        // long it runs, so that is what it is called rather than a guess.
+        None => which.trim_end_matches("_window").to_string(),
     }
 }
 
 /// Epoch seconds, however the answer put them.
 ///
-/// Measured only as a number on this machine's account. The string form is read too because
-/// the field is a timestamp and reading one shape and silently dropping the other would
-/// show a limit with no reset time and no reason.
+/// Measured as a number. The string form is read too because the field is a timestamp and
+/// reading one shape while silently dropping the other would show a limit with no reset
+/// time and no reason.
 fn moment(value: &Value) -> Option<i64> {
     if let Some(seconds) = value.as_i64() {
         // A value in milliseconds would be around a thousand times too large; nothing
@@ -207,13 +219,13 @@ mod tests {
 
     #[test]
     fn the_windows_keep_the_vocabulary_the_rest_of_pitboard_uses() {
-        assert_eq!(kind(Some(300), "primary"), "five_hour");
-        assert_eq!(kind(Some(10_080), "secondary"), "seven_day");
-        assert_eq!(kind(Some(1440), "primary"), "1_day");
-        assert_eq!(kind(Some(180), "primary"), "3_hour");
-        assert_eq!(kind(Some(90), "primary"), "90_minute");
+        assert_eq!(kind(Some(18_000), "primary_window"), "five_hour");
+        assert_eq!(kind(Some(604_800), "secondary_window"), "seven_day");
+        assert_eq!(kind(Some(86_400), "primary_window"), "1_day");
+        assert_eq!(kind(Some(10_800), "primary_window"), "3_hour");
+        assert_eq!(kind(Some(5_400), "primary_window"), "90_minute");
         assert_eq!(
-            kind(None, "primary"),
+            kind(None, "primary_window"),
             "primary",
             "a window with no length is named by which one it is, not by a guess"
         );
@@ -240,22 +252,66 @@ mod tests {
         }
     }
 
-    /// The shape OpenAI answers with, as measured, turned into the shape everything else
-    /// here already draws.
-    #[test]
-    fn an_answer_becomes_windows_the_rest_of_pitboard_can_draw() {
-        let body = serde_json::json!({
-            "limit_name": "gpt-5",
+    /// The answer this endpoint really sends, copied from a live response, with the
+    /// account's own identifiers replaced. The first parser was written from a description
+    /// of this and had the windows, the length field and the reset field all in the wrong
+    /// place; it returned no windows while the request succeeded, which is the quietest
+    /// possible way to be wrong.
+    fn measured() -> Value {
+        serde_json::json!({
+            "user_id": "user-x",
+            "account_id": "acc-1",
+            "email": "a@b.c",
             "plan_type": "pro",
-            "primary": {"used_percent": 12.5, "window_minutes": 300, "resets_at": 1_789_935_600i64},
-            "secondary": {"used_percent": 64.0, "window_minutes": 10_080, "resets_at": 1_790_000_000i64},
-        });
-        let snapshot = snapshot(&body, "acc-1", 1_789_900_000);
-        assert_eq!(snapshot.windows.len(), 2);
-        assert_eq!(snapshot.windows[0].kind, "five_hour");
-        assert!((snapshot.windows[0].percent - 12.5).abs() < f64::EPSILON);
-        assert_eq!(snapshot.windows[1].kind, "seven_day");
+            "rate_limit": {
+                "allowed": true,
+                "limit_reached": false,
+                "primary_window": {
+                    "used_percent": 45,
+                    "limit_window_seconds": 604_800,
+                    "reset_after_seconds": 492_401,
+                    "reset_at": 1_790_628_078i64
+                },
+                "secondary_window": null
+            },
+            "credits": {"has_credits": false, "unlimited": false, "balance": "0"},
+            "rate_limit_reached_type": null
+        })
+    }
+
+    #[test]
+    fn the_answer_this_endpoint_really_sends_becomes_a_window() {
+        let snapshot = snapshot(&measured(), "acc-1", 1_790_000_000);
+        assert_eq!(
+            snapshot.windows.len(),
+            1,
+            "one window is filled in, one is null"
+        );
+        let window = &snapshot.windows[0];
+        assert_eq!(window.kind, "seven_day");
+        assert!((window.percent - 45.0).abs() < f64::EPSILON);
+        assert_eq!(window.resets_at, Some(1_790_628_078));
         assert_eq!(snapshot.account_uuid.as_deref(), Some("acc-1"));
+        assert_eq!(snapshot.source, Source::Live);
+    }
+
+    #[test]
+    fn both_windows_are_read_when_both_are_filled_in() {
+        let mut body = measured();
+        body["rate_limit"]["secondary_window"] = serde_json::json!({
+            "used_percent": 12.5,
+            "limit_window_seconds": 18_000,
+            "reset_at": 1_790_100_000i64
+        });
+        let snapshot = snapshot(&body, "acc-1", 0);
+        assert_eq!(
+            snapshot
+                .windows
+                .iter()
+                .map(|w| w.kind.as_str())
+                .collect::<Vec<_>>(),
+            vec!["seven_day", "five_hour"]
+        );
     }
 
     /// A number nobody can explain is worse than no number, which is the rule the Claude
@@ -263,9 +319,22 @@ mod tests {
     #[test]
     fn a_window_that_will_not_normalise_is_dropped_rather_than_drawn() {
         let body = serde_json::json!({
-            "primary": {"used_percent": "quite a lot", "window_minutes": 300},
-            "secondary": {"used_percent": -1.0, "window_minutes": 10_080},
+            "rate_limit": {
+                "primary_window": {"used_percent": "quite a lot", "limit_window_seconds": 18_000},
+                "secondary_window": {"used_percent": -1.0, "limit_window_seconds": 604_800},
+            }
         });
         assert!(snapshot(&body, "acc-1", 0).windows.is_empty());
+    }
+
+    /// An answer with no rate limit block at all reads as no windows rather than panicking.
+    #[test]
+    fn an_answer_with_nothing_in_it_is_not_a_crash() {
+        for body in [
+            serde_json::json!({}),
+            serde_json::json!({"rate_limit": null}),
+        ] {
+            assert!(snapshot(&body, "acc-1", 0).windows.is_empty(), "{body}");
+        }
     }
 }

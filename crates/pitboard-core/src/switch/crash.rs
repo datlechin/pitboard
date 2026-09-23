@@ -20,6 +20,7 @@ use super::harness::{NOW, POINTS, document, hold, machine, owner, recover};
 use super::*;
 use crate::api::scripted::{ScriptedApi, Trouble};
 use crate::fault;
+use crate::provider::ProviderId;
 use crate::store::memory::Fault;
 use serde_json::json;
 use std::sync::Arc;
@@ -142,7 +143,9 @@ fn enrolling_killed_between_the_write_and_the_record_leaves_nothing_unnamed() {
 
         let settled = settle(&m.ctx).expect("nothing to recover").0;
         let login = enroll::planted(&m.ctx, document("third-refresh")).expect("a sign-in");
-        let died = fault::killing(point, || enroll(settled, "third", Some(login)));
+        let died = fault::killing(point, || {
+            enroll(settled, ProviderId::Claude, "third", Some(login))
+        });
         assert_eq!(died.unwrap_err(), point);
 
         recover(&m).unwrap_or_else(|e| panic!("{point}: recovery refused: {e}"));

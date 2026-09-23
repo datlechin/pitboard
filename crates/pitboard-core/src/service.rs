@@ -201,7 +201,7 @@ impl Pitboard {
     pub fn enroll_current(&self, typed: &str) -> Changing<Enrolled> {
         let chosen = self.chosen(typed)?;
         self.changing("enroll", &chosen.label, |settled| {
-            switch::enroll(settled, &chosen.label, None).map(|e| (e, Vec::new()))
+            switch::enroll(settled, chosen.provider, &chosen.label, None).map(|e| (e, Vec::new()))
         })
     }
 
@@ -264,7 +264,8 @@ impl Pitboard {
     pub fn enroll_signed_in(&self, typed: &str, login: SignIn) -> Changing<Enrolled> {
         let chosen = self.chosen(typed)?;
         self.changing("enroll", &chosen.label, |settled| {
-            switch::enroll(settled, &chosen.label, Some(login)).map(|e| (e, Vec::new()))
+            switch::enroll(settled, chosen.provider, &chosen.label, Some(login))
+                .map(|e| (e, Vec::new()))
         })
     }
 

@@ -245,16 +245,23 @@ enum Readable {
     Err(std::process::ChildStderr),
 }
 
-/// Enroll the account signed in now, or with `signed_in`, the one a sign-in just produced.
-pub fn enroll(settled: Settled, label: &str, signed_in: Option<SignIn>) -> Result<Enrolled> {
+/// Enroll the account signed in to `which` now, or with `signed_in`, the one a sign-in just
+/// produced.
+pub fn enroll(
+    settled: Settled,
+    which: ProviderId,
+    label: &str,
+    signed_in: Option<SignIn>,
+) -> Result<Enrolled> {
     let Settled {
         _exclusive,
         mut state,
         ctx,
     } = settled;
     match signed_in {
+        // A watched sign-in is Claude Code's own, and is the only one pitboard drives.
         Some(login) => park_signed_in(&ctx, label, &mut state, &login),
-        None => record_current(&ctx, label, &mut state),
+        None => record_current(&ctx, which, label, &mut state),
     }
 }
 
@@ -279,19 +286,37 @@ fn claim(state: &State, label: &str, owner: &Owner) -> Result<()> {
     Ok(())
 }
 
-fn record_current(ctx: &Context, label: &str, state: &mut State) -> Result<Enrolled> {
-    let live = store::read(&claude_live::chain(ctx), &claude::live_service(ctx))?
-        .ok_or_else(|| claude::nothing_signed_in(ctx))?;
-    let owner = identify_document(ctx, ProviderId::Claude, &live)?;
+fn record_current(
+    ctx: &Context,
+    which: ProviderId,
+    label: &str,
+    state: &mut State,
+) -> Result<Enrolled> {
+    let live = crate::provider::of(which)
+        .read_live(ctx)
+        .map_err(|e| Error::LiveCredentialShapeUnexpected {
+            detail: e.to_string(),
+        })?
+        .ok_or_else(|| nothing_signed_in(ctx, which))?
+        .raw;
+    let owner = identify_document(ctx, which, &live)?;
     claim(state, label, &owner)?;
     let existing = state.get(label);
     let parked = existing.and_then(|a| a.parked.clone());
     // Enrolling the account that is signed in is using it.
     let last_used_at = Some(ctx.now());
-    state.upsert(account(label, &owner, parked, last_used_at));
-    state.set_active(ProviderId::Claude, Some(label.to_string()));
+    state.upsert(account(which, label, &owner, parked, last_used_at, &live));
+    state.set_active(which, Some(label.to_string()));
     state::save(ctx, state)?;
     Ok(Enrolled::Current { email: owner.email })
+}
+
+/// Nothing is signed in to this tool, said in that tool's own words.
+fn nothing_signed_in(ctx: &Context, which: ProviderId) -> Error {
+    match which {
+        ProviderId::Claude => claude::nothing_signed_in(ctx),
+        ProviderId::Codex => Error::LiveCredentialAbsent,
+    }
 }
 
 fn park_signed_in(
@@ -311,7 +336,14 @@ fn park_signed_in(
     let previous = existing.and_then(|a| a.parked.clone());
     let renewed = existing.is_some();
     let last_used_at = existing.and_then(|a| a.last_used_at);
-    state.upsert(account(label, &owner, previous, last_used_at));
+    state.upsert(account(
+        ProviderId::Claude,
+        label,
+        &owner,
+        previous,
+        last_used_at,
+        &login.document,
+    ));
     state.park(label, fresh);
     // Unrecorded, the new login would be an item nothing refers to, never deleted.
     state::save(ctx, state).inspect_err(|_| {
@@ -326,16 +358,22 @@ fn park_signed_in(
     })
 }
 
-/// Only what Anthropic just confirmed. Leaving the rest out makes Claude Code fetch its own
-/// profile after a switch rather than trust a copy pitboard wrote.
-fn account(label: &str, owner: &Owner, parked: Option<Park>, last_used_at: Option<i64>) -> Account {
-    Account {
-        last_used_at,
-        label: label.to_string(),
-        account_uuid: owner.account_uuid.clone(),
-        email: owner.email.clone(),
-        parked,
-        detail: state::Detail::Claude {
+/// What pitboard records about a newly enrolled account.
+///
+/// For Claude Code, only what Anthropic just confirmed: leaving the rest out makes Claude
+/// Code fetch its own profile after a switch rather than trust a copy pitboard wrote. For
+/// Codex there is no such cache to correct, and what is kept instead is what its own login
+/// already said, which costs nothing to read and explains a limit somebody is surprised by.
+fn account(
+    which: ProviderId,
+    label: &str,
+    owner: &Owner,
+    parked: Option<Park>,
+    last_used_at: Option<i64>,
+    login: &Value,
+) -> Account {
+    let detail = match which {
+        ProviderId::Claude => state::Detail::Claude {
             organization_uuid: owner.organization_uuid.clone(),
             oauth_account: json!({
                 "accountUuid": owner.account_uuid,
@@ -343,5 +381,25 @@ fn account(label: &str, owner: &Owner, parked: Option<Park>, last_used_at: Optio
                 "organizationUuid": owner.organization_uuid,
             }),
         },
+        ProviderId::Codex => {
+            let claims = login["tokens"]["id_token"]
+                .as_str()
+                .and_then(crate::provider::jwt::claims)
+                .unwrap_or(Value::Null);
+            let openai = "https://api.openai.com/auth";
+            state::Detail::Codex {
+                workspace_id: Some(owner.organization_uuid.clone()).filter(|id| !id.is_empty()),
+                plan: crate::provider::jwt::claim(&claims, &[openai, "chatgpt_plan_type"])
+                    .map(str::to_owned),
+            }
+        }
+    };
+    Account {
+        last_used_at,
+        label: label.to_string(),
+        account_uuid: owner.account_uuid.clone(),
+        email: owner.email.clone(),
+        parked,
+        detail,
     }
 }
