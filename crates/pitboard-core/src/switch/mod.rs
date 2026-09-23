@@ -279,15 +279,21 @@ pub fn switch(settled: Settled, key: &Key) -> Result<(Outcome, Vec<Warning>)> {
             state.used(key, ctx.now());
             state::save(ctx, &state)?;
         }
-        return Ok((Outcome::AlreadyActive { label: key.typed() }, Vec::new()));
+        return Ok((
+            Outcome::AlreadyActive {
+                label: state.typed(key),
+            },
+            Vec::new(),
+        ));
     }
     let outgoing_key = state
         .by_uuid(key.provider, &outgoing.account_uuid)
         .map(Account::key)
         .ok_or_else(|| Error::LiveAccountNotEnrolled {
+            tool: key.provider,
             email: outgoing.email.clone(),
         })?;
-    let (from, to) = (outgoing_key.typed(), key.typed());
+    let (from, to) = (state.typed(&outgoing_key), state.typed(key));
     let held = target.parked.clone().ok_or_else(|| Error::NothingParked {
         tool: key.provider,
         label: to.clone(),
@@ -482,6 +488,7 @@ pub fn switch(settled: Settled, key: &Key) -> Result<(Outcome, Vec<Warning>)> {
         }
         Err(unreadable) => {
             return Err(Error::SwitchUnverified {
+                tool: key.provider,
                 from,
                 to,
                 detail: unreadable.to_string(),
@@ -565,7 +572,7 @@ fn prove_incoming(
     held: Park,
     incoming: Value,
 ) -> Result<(Park, Value)> {
-    let label = key.typed();
+    let label = state.typed(key);
     if held.askable_at(ctx.now()) {
         let credential = provider::Credential::new(key.provider, incoming.clone());
         match provider::of(key.provider).verify(ctx, &credential) {
@@ -673,6 +680,7 @@ fn install_with(
         // record of intent in place so a later run, with a store that answers, decides.
         Err(unreadable) => {
             return Err(Error::SwitchUnverified {
+                tool,
                 from: from.to_string(),
                 to: to.to_string(),
                 detail: format!("{failure}; {unreadable}"),

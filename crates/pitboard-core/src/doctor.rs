@@ -15,7 +15,7 @@ use crate::provider::claude::live as claude_live;
 use crate::provider::claude::paths as claude;
 use crate::provider::claude::slot;
 use crate::provider::codex::paths as codex;
-use crate::state::{Key, Park, State};
+use crate::state::{Park, State};
 use crate::{home, park, store, switch, time, usage};
 use serde_json::{Value, json};
 use std::path::PathBuf;
@@ -148,6 +148,9 @@ pub struct ParkFact {
     /// person: bare for Claude Code, `codex/work` for Codex.
     pub provider: ProviderId,
     pub label: String,
+    /// The name a command on this machine takes for it: qualified where another tool has an
+    /// account of the same name, since a bare one would then be ambiguous.
+    pub name: String,
     pub active: bool,
     /// When this account was last switched to, where that is recorded.
     pub last_used_at: Option<i64>,
@@ -157,9 +160,9 @@ pub struct ParkFact {
 }
 
 impl ParkFact {
-    /// The account's name as a person would type it back.
+    /// The account's name as a command here would take it.
     fn typed(&self) -> String {
-        Key::new(self.provider, self.label.clone()).typed()
+        self.name.clone()
     }
 }
 
@@ -182,6 +185,7 @@ fn park_facts(ctx: &Context, state: &State) -> Vec<ParkFact> {
         .map(|a| ParkFact {
             provider: a.provider(),
             label: a.label.clone(),
+            name: state.typed(&a.key()),
             last_used_at: a.last_used_at,
             // What the account's own tool says, when it says anything. pitboard's own
             // record of its last switch says nothing about a sign-in made elsewhere.
@@ -1651,6 +1655,7 @@ mod tests {
             provider: ProviderId::Claude,
             last_used_at: None,
             label: label.into(),
+            name: crate::state::Key::new(ProviderId::Claude, label).typed(),
             active: false,
             park: Some(Park {
                 service: format!("pitboard-park-{label}-1"),
@@ -1660,6 +1665,15 @@ mod tests {
                 refresh_expires_at,
             }),
             unreadable: None,
+        }
+    }
+
+    /// A Codex account's park, named as a command here would take it.
+    fn codex_parked(label: &str, refresh_expires_at: Option<i64>) -> ParkFact {
+        ParkFact {
+            provider: ProviderId::Codex,
+            name: crate::state::Key::new(ProviderId::Codex, label).typed(),
+            ..parked(label, refresh_expires_at)
         }
     }
 
@@ -1931,6 +1945,7 @@ mod tests {
         f.parks = vec![ParkFact {
             provider: ProviderId::Claude,
             label: "work".into(),
+            name: crate::state::Key::new(ProviderId::Claude, "work").typed(),
             active: false,
             last_used_at: Some(f.now - 31 * 86_400),
             park: Some(Park {
@@ -2039,6 +2054,7 @@ mod tests {
                 provider: ProviderId::Claude,
                 last_used_at: None,
                 label: "empty".into(),
+                name: crate::state::Key::new(ProviderId::Claude, "empty").typed(),
                 active: false,
                 park: None,
                 unreadable: None,
@@ -2047,6 +2063,7 @@ mod tests {
                 provider: ProviderId::Claude,
                 last_used_at: None,
                 label: "live".into(),
+                name: crate::state::Key::new(ProviderId::Claude, "live").typed(),
                 active: true,
                 park: None,
                 unreadable: None,
@@ -2093,10 +2110,12 @@ mod tests {
     #[test]
     fn advice_names_a_codex_account_the_way_it_is_typed() {
         let mut f = facts();
-        let mut codex = parked("work", Some(NOW - 1));
-        codex.provider = ProviderId::Codex;
+        let mut codex = codex_parked("work", Some(NOW - 1));
         codex.last_used_at = Some(NOW - 400 * 86_400);
+        // Both tools have a `work`, so a bare `work` would be refused as ambiguous, and the
+        // name gathered for Claude Code's is the qualified one.
         let mut claude = parked("work", Some(NOW - 1));
+        claude.name = "claude/work".into();
         claude.last_used_at = Some(NOW - 400 * 86_400);
         f.parks = vec![claude, codex];
         let checks = evaluate(&f);
@@ -2109,12 +2128,12 @@ mod tests {
             "{}",
             codex_park.advice
         );
-        let claude_park = named(&checks, "account work");
+        let claude_park = named(&checks, "account claude/work");
         assert!(
             claude_park
                 .advice
-                .contains("`pitboard enroll work --sign-in`"),
-            "Claude Code's reads as it always did: {}",
+                .contains("`pitboard enroll claude/work --sign-in`"),
+            "a name a command here takes, which a bare `work` is not: {}",
             claude_park.advice
         );
 
@@ -2127,11 +2146,8 @@ mod tests {
             dormant.iter().any(|c| c.name == "account codex/work"
                 && c.advice.contains("`pitboard forget codex/work`"))
         );
-        assert!(
-            dormant
-                .iter()
-                .any(|c| c.name == "account work" && c.advice.contains("`pitboard forget work`"))
-        );
+        assert!(dormant.iter().any(|c| c.name == "account claude/work"
+            && c.advice.contains("`pitboard forget claude/work`")));
     }
 
     /// Whether an account is the one signed in is its own tool's question. Asked of Claude
@@ -2385,8 +2401,7 @@ mod tests {
         };
 
         let mut f = facts();
-        let mut codex = parked("work", Some(NOW - 1));
-        codex.provider = ProviderId::Codex;
+        let mut codex = codex_parked("work", Some(NOW - 1));
         codex.last_used_at = Some(NOW - 400 * 86_400);
         f.parks = vec![parked("work", Some(NOW + 20 * 86_400)), codex];
         f.codex = CodexFacts {

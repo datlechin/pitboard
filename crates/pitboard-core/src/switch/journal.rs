@@ -318,8 +318,8 @@ pub(super) fn abandon(ctx: &Context, state: &mut State) -> Result<Option<Abandon
     state::save(ctx, state)?;
     clear_journal(ctx);
     Ok(Some(Abandoned {
-        from: journal.from().typed(),
-        to: journal.to().typed(),
+        from: state.typed(&journal.from()),
+        to: state.typed(&journal.to()),
         kept,
     }))
 }
@@ -341,8 +341,8 @@ pub(super) fn reconcile(ctx: &Context, state: &mut State) -> Result<Option<Recov
         if *slot != here {
             return Err(Error::RecoveryElsewhere {
                 tool: journal.provider,
-                from: journal.from().typed(),
-                to: journal.to().typed(),
+                from: state.typed(&journal.from()),
+                to: state.typed(&journal.to()),
                 slot: slot.clone(),
             });
         }
@@ -362,8 +362,8 @@ pub(super) fn reconcile(ctx: &Context, state: &mut State) -> Result<Option<Recov
     let Some(repair) = repair_for(state, &journal, &found) else {
         return Err(Error::RecoveryUndetermined {
             tool: journal.provider,
-            from: journal.from().typed(),
-            to: journal.to().typed(),
+            from: state.typed(&journal.from()),
+            to: state.typed(&journal.to()),
             detail: owner
                 .err()
                 .unwrap_or_else(|| "its parked login could not be read".into()),
@@ -375,8 +375,8 @@ pub(super) fn reconcile(ctx: &Context, state: &mut State) -> Result<Option<Recov
     clear_journal(ctx);
 
     Ok(Some(Recovered {
-        from: journal.from().typed(),
-        to: journal.to().typed(),
+        from: state.typed(&journal.from()),
+        to: state.typed(&journal.to()),
         finished,
     }))
 }

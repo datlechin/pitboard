@@ -746,3 +746,27 @@ fn what_each_accounts_limits_have_been_doing_is_kept() {
     assert_eq!(code, 0, "{err}");
     assert!(!readings.join(format!("{}.ndjson", env.uuid('b'))).exists());
 }
+
+/// A label written by 0.1.x could contain a slash. Every message about its lapsed login
+/// says to sign in to it again with `pitboard enroll <label> --sign-in`, and that has to
+/// work for such a label as it did before labels could name a tool.
+#[test]
+fn an_old_label_with_a_slash_can_be_signed_in_to_again() {
+    let mut env = two_accounts("old-slash-label");
+    env.edit_state(|state| {
+        for account in state["accounts"].as_array_mut().unwrap() {
+            if account["label"] == "beta" {
+                account["label"] = "team/beta".into();
+            }
+        }
+    });
+    let (b, p) = (env.uuid('b'), env.uuid('p'));
+    let (_, err, code) =
+        env.enroll_by_signing_in("team/beta", &b, "b@example.com", &p, "refresh-b2");
+    assert_eq!(code, 0, "{err}");
+    let renewed = accounts(&env)
+        .into_iter()
+        .find(|a| a["label"] == "team/beta")
+        .expect("still enrolled under its old label");
+    assert_eq!(renewed["provider"], "claude");
+}

@@ -50,7 +50,7 @@ enum Command {
     Enroll {
         /// A short name for this account, such as `personal` or `work`. `codex/work` names a
         /// Codex account; a bare name means Claude Code
-        #[arg(value_parser = new_label)]
+        #[arg(value_parser = label_to_enroll)]
         label: String,
         /// Sign in through the tool's own sign-in, without signing out of the account in
         /// use. For an enrolled label, this renews its parked login.
@@ -120,6 +120,17 @@ enum Command {
 /// `pitboard enroll codex/personal --sign-in` names both. A bare `personal` means the
 /// default tool, so every command written before there was more than one still means what
 /// it meant.
+/// What `enroll` takes: a new name, or an account's existing one, which a label written by
+/// 0.1.x may hold a slash in. Which of the two it is, the core decides against the state
+/// file, which this parser cannot see; what can be refused here is only what no label ever
+/// was.
+fn label_to_enroll(text: &str) -> Result<String, String> {
+    if text.is_empty() || text.chars().any(|c| c.is_whitespace() || c.is_control()) {
+        return Err("a label must be one word, such as `personal` or `work`".into());
+    }
+    Ok(text.to_string())
+}
+
 fn new_label(text: &str) -> Result<String, String> {
     if text.is_empty() || text.chars().any(|c| c.is_whitespace() || c.is_control()) {
         return Err("a label must be one word, such as `personal` or `work`".into());
@@ -312,29 +323,43 @@ fn statusline(pitboard: &Pitboard) -> Report {
 }
 
 fn enroll_signing_in(pitboard: &Pitboard, label: &str) -> Report {
-    let who = pitboard
-        .account(label)
-        .map_or_else(|| "the account to add".to_string(), |a| a.email);
-    // The label was checked when it was parsed, so it names a tool.
-    let tool = pitboard_core::label::choose(label)
-        .map(|chosen| chosen.provider)
-        .unwrap_or(pitboard_core::label::DEFAULT);
+    // The account this would sign in to again, of the tool the label is for: another
+    // tool's account of the same name is somebody else to sign in as.
+    let existing = pitboard.account_to_enroll(label);
+    let who = existing
+        .as_ref()
+        .map_or_else(|| "the account to add".to_string(), |a| a.email.clone());
+    let tool = existing.as_ref().map_or_else(
+        || {
+            pitboard_core::label::choose(label)
+                .map(|chosen| chosen.provider)
+                .unwrap_or(pitboard_core::label::DEFAULT)
+        },
+        pitboard_core::state::Account::provider,
+    );
     eprintln!(
         "Opening {}'s sign-in. Sign in as {who}; the account in use now stays signed in.",
         tool.name()
     );
     match pitboard.sign_in(label) {
-        Ok(login) => enrolled(label, pitboard.enroll_signed_in(label, login)),
+        Ok(login) => enrolled(pitboard, label, pitboard.enroll_signed_in(label, login)),
         Err(e) => Report::failed(Some("enroll"), e),
     }
 }
 
-fn enrolled(label: &str, outcome: Changing<Enrolled>) -> Report {
+fn enrolled(pitboard: &Pitboard, label: &str, outcome: Changing<Enrolled>) -> Report {
     let name = paint(BOLD, label);
-    let chosen = pitboard_core::label::choose(label).ok();
-    let provider = chosen
-        .as_ref()
-        .map_or(pitboard_core::label::DEFAULT, |c| c.provider);
+    // Asked after the change, so the account it names is the one just enrolled, and the
+    // name is one a command here takes: qualified where another tool shares the label.
+    let provider = pitboard.account_to_enroll(label).map_or_else(
+        || {
+            pitboard_core::label::choose(label)
+                .map(|chosen| chosen.provider)
+                .unwrap_or(pitboard_core::label::DEFAULT)
+        },
+        |account| account.provider(),
+    );
+    let to_use = pitboard.name_to_type(label);
     // Another account of the same tool, typed the way this one was.
     let another = pitboard_core::state::Key::new(provider, "<label>").typed();
     changed("enroll", outcome, |enrolled| {
@@ -348,8 +373,9 @@ fn enrolled(label: &str, outcome: Changing<Enrolled>) -> Report {
                 ("current", email, human)
             }
             Enrolled::SignedIn { email } => {
-                let human =
-                    format!("Enrolled {name} ({email}). Switch to it with: pitboard use {label}\n");
+                let human = format!(
+                    "Enrolled {name} ({email}). Switch to it with: pitboard use {to_use}\n"
+                );
                 ("signed_in", email, human)
             }
             Enrolled::Renewed { email } => {
@@ -761,7 +787,9 @@ fn main() -> ExitCode {
             label,
             sign_in: true,
         } => enroll_signing_in(&pitboard, &label),
-        Command::Enroll { label, .. } => enrolled(&label, pitboard.enroll_current(&label)),
+        Command::Enroll { label, .. } => {
+            enrolled(&pitboard, &label, pitboard.enroll_current(&label))
+        }
         Command::Use { label } => use_account(&pitboard, &label),
         Command::Forget { label, yes } => {
             // The way back is a browser sign-in for that account, which is the cost

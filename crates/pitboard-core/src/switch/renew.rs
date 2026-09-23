@@ -196,7 +196,7 @@ pub(super) fn renew_one(
         Renewal::Renewed => Ok(state.get(key).and_then(|a| a.parked.clone())),
         Renewal::Refused => Err(Error::ParkedLoginRefused {
             tool: key.provider,
-            label: key.typed(),
+            label: state.typed(key),
         }),
         Renewal::Deferred => Ok(None),
         Renewal::Failed(e) => Err(e),
@@ -240,7 +240,7 @@ fn apply(
             state.discard(&held.service);
             let _ = state::save(ctx, state);
             return Err(Error::RenewalFailed {
-                label: key.typed(),
+                label: state.typed(key),
                 // The service answered; it is this machine that could not keep the answer.
                 cause: None,
                 detail: e.to_string(),

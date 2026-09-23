@@ -2,6 +2,7 @@
 //! a stable code for programs to branch on, and an exit code.
 
 use crate::provider::ProviderId;
+use crate::state::Key;
 use std::path::PathBuf;
 
 /// The labels an account list holds, rendered for a message: " Enrolled: `a`, `b`." or
@@ -281,15 +282,21 @@ pub enum Error {
 
     #[error(
         "{email} is signed in but not enrolled, so it cannot be parked. \
-         Run `pitboard enroll <label>` for it first."
+         Run `pitboard enroll {}` for it first.",
+        Key::new(*tool, "<label>").typed()
     )]
-    LiveAccountNotEnrolled { email: String },
+    LiveAccountNotEnrolled { tool: ProviderId, email: String },
 
     #[error(
         "{email} is already enrolled as `{label}`. To add a different account, run \
-         `pitboard enroll <label> --sign-in`."
+         `pitboard enroll {} --sign-in`.",
+        Key::new(*tool, "<label>").typed()
     )]
-    AlreadyEnrolled { email: String, label: String },
+    AlreadyEnrolled {
+        tool: ProviderId,
+        email: String,
+        label: String,
+    },
 
     #[error("`{label}` already refers to {email}. Choose a different label.")]
     LabelTaken { label: String, email: String },
@@ -410,10 +417,12 @@ pub enum Error {
     #[error(
         "could not sign in as `{to}` ({detail}), and could not read the credential store \
          back to find out whether anything changed. Nothing has been deleted and both \
-         logins are still here. Unlock the keychain and run `pitboard` again; it finishes \
-         or undoes this before doing anything else."
+         logins are still here. {} and run `pitboard` again; it finishes or undoes this \
+         before doing anything else.",
+        make_readable(*tool)
     )]
     SwitchUnverified {
+        tool: ProviderId,
         from: String,
         to: String,
         detail: String,
@@ -620,6 +629,14 @@ impl Error {
 
 pub type Result<T> = std::result::Result<T, Error>;
 
+/// What makes a tool's live login readable again, where it could not be read.
+fn make_readable(tool: ProviderId) -> &'static str {
+    match tool {
+        ProviderId::Claude => "Unlock the keychain",
+        ProviderId::Codex => "Make Codex's auth.json readable to you again",
+    }
+}
+
 /// What makes a login smaller, where anything does.
 fn smaller(tool: ProviderId) -> &'static str {
     match tool {
@@ -736,6 +753,7 @@ mod tests {
             }
             .to_string(),
             Error::LiveAccountNotEnrolled {
+                tool: ProviderId::Claude,
                 email: "a@b.c".into(),
             }
             .to_string(),
@@ -795,5 +813,33 @@ mod tests {
         };
         assert_eq!(absent(ProviderId::Claude), "claude_program_missing");
         assert_eq!(absent(ProviderId::Codex), "codex_program_missing");
+    }
+
+    /// Advice to enrol names the tool the account is for: a bare name would enrol a Claude
+    /// Code account for a Codex login.
+    #[test]
+    fn enrolment_advice_keeps_the_tool() {
+        let codex = Error::LiveAccountNotEnrolled {
+            tool: ProviderId::Codex,
+            email: "a@b.c".into(),
+        }
+        .to_string();
+        assert!(codex.contains("pitboard enroll codex/<label>"), "{codex}");
+        let claude = Error::LiveAccountNotEnrolled {
+            tool: ProviderId::Claude,
+            email: "a@b.c".into(),
+        }
+        .to_string();
+        assert!(claude.contains("pitboard enroll <label>"), "{claude}");
+        let already = Error::AlreadyEnrolled {
+            tool: ProviderId::Codex,
+            email: "a@b.c".into(),
+            label: "codex/work".into(),
+        }
+        .to_string();
+        assert!(
+            already.contains("pitboard enroll codex/<label> --sign-in"),
+            "{already}"
+        );
     }
 }

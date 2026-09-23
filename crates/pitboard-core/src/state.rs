@@ -233,6 +233,20 @@ impl State {
         self.slot.insert(provider.code().to_string(), slot);
     }
 
+    /// The account's name as a command would take it here: bare for the tool a bare name
+    /// means, unless another tool has an account of the same name, in which case a bare
+    /// name would be refused as ambiguous and the tool is said.
+    ///
+    /// What every message that tells somebody what to type uses, so the command it names
+    /// is one that works on this machine.
+    pub fn typed(&self, key: &Key) -> String {
+        let shared = self
+            .accounts
+            .iter()
+            .any(|a| a.label == key.label && a.provider() != key.provider);
+        if shared { key.qualified() } else { key.typed() }
+    }
+
     /// Every label this tool has enrolled, for a message that would otherwise send someone
     /// to another command to find out.
     pub fn labels(&self, provider: ProviderId) -> crate::error::Enrolled {
@@ -1025,6 +1039,19 @@ mod tests {
         s.remove(&Key::new(ProviderId::Codex, "work"));
         assert_eq!(s.active_for(ProviderId::Codex), None);
         assert_eq!(s.active_for(ProviderId::Claude), Some("work"));
+    }
+
+    /// A bare name for an account whose label another tool shares would be refused as
+    /// ambiguous, so the name every message suggests is qualified exactly then.
+    #[test]
+    fn a_name_is_qualified_where_a_bare_one_would_be_ambiguous() {
+        let mut s = State::default();
+        s.upsert(account("work", None));
+        s.upsert(account("personal", None));
+        s.upsert(codex_account("work"));
+        assert_eq!(s.typed(&claude("work")), "claude/work");
+        assert_eq!(s.typed(&Key::new(ProviderId::Codex, "work")), "codex/work");
+        assert_eq!(s.typed(&claude("personal")), "personal");
     }
 
     #[test]

@@ -168,20 +168,21 @@ impl Pitboard {
     /// to one request per account per few minutes.
     pub fn status(&self, fresh: bool) -> Result<Done<status::Report>> {
         let mut warnings = Vec::new();
-        for (key, outcome) in switch::renew_parked(&self.ctx) {
+        let renewed = switch::renew_parked(&self.ctx);
+        // Unreadable is not the same as empty: reporting it as empty would say the enrolled
+        // logins are gone.
+        let state = state::load(&self.ctx)?;
+        for (key, outcome) in renewed {
             audit::record(&self.ctx, "renew", &key.typed(), outcome.code());
             match outcome {
                 Renewal::Refused => warnings.push(Warning::ParkedLoginRefused {
                     tool: key.provider,
-                    label: key.typed(),
+                    label: state.typed(&key),
                 }),
                 Renewal::Failed(e) => warnings.push(Warning::RenewalFailed(e)),
                 Renewal::Renewed | Renewal::Deferred => {}
             }
         }
-        // Unreadable is not the same as empty: reporting it as empty would say the enrolled
-        // logins are gone.
-        let state = state::load(&self.ctx)?;
         Ok(Done {
             value: status::gather(&self.ctx, &state, fresh),
             warnings,
@@ -256,15 +257,47 @@ impl Pitboard {
     /// still stuck to the front of it, which would enrol an account literally called
     /// `claude/work`.
     fn chosen(&self, verb: &str, typed: &str) -> std::result::Result<Key, Failed> {
+        self.enrolling(typed).map_err(|error| {
+            audit::record(&self.ctx, verb, typed, "label_unusable");
+            Failed {
+                error,
+                warnings: Vec::new(),
+            }
+        })
+    }
+
+    /// The account `pitboard enroll <typed>` is about: the one already enrolled under that
+    /// exact name, or a new one of the tool the name says.
+    ///
+    /// A label written by 0.1.x could contain a slash, which a new name cannot, and signing
+    /// in to such an account again is exactly what every message about a lapsed park tells
+    /// somebody to do. So an existing account is found by its whole name first.
+    fn enrolling(&self, typed: &str) -> Result<Key> {
+        if typed.contains(crate::label::SEPARATOR)
+            && let Ok(state) = state::load(&self.ctx)
+            && let Some(existing) = state.accounts.iter().find(|a| a.label == typed)
+        {
+            return Ok(existing.key());
+        }
         crate::label::choose(typed)
             .map(|chosen| Key::new(chosen.provider, chosen.label))
-            .map_err(|detail| {
-                audit::record(&self.ctx, verb, typed, "label_unusable");
-                Failed {
-                    error: Error::Usage(detail),
-                    warnings: Vec::new(),
-                }
-            })
+            .map_err(Error::Usage)
+    }
+
+    /// The enrolled account `pitboard enroll <typed>` would sign in to again, if it names
+    /// one, for saying whose login to sign in with before a browser opens.
+    pub fn account_to_enroll(&self, typed: &str) -> Option<Account> {
+        let key = self.enrolling(typed).ok()?;
+        state::load(&self.ctx).ok()?.get(&key).cloned()
+    }
+
+    /// What to type to name the account `pitboard enroll <typed>` is about, on this
+    /// machine: bare where that names it alone, qualified where another tool shares it.
+    pub fn name_to_type(&self, typed: &str) -> String {
+        let Ok(key) = self.enrolling(typed) else {
+            return typed.to_string();
+        };
+        state::load(&self.ctx).map_or_else(|_| key.typed(), |state| state.typed(&key))
     }
 
     /// The tool's own sign-in in a private directory, for the tool `typed` names. It takes
@@ -290,7 +323,7 @@ impl Pitboard {
     /// state file belongs to another machine, that the tool is not installed, or that the
     /// account could never be switched to afterwards.
     fn signing_in(&self, typed: &str) -> Result<crate::provider::ProviderId> {
-        let tool = crate::label::choose(typed).map_err(Error::Usage)?.provider;
+        let tool = self.enrolling(typed)?.provider;
         if tool == crate::provider::ProviderId::Claude && self.ctx.custom_oauth() {
             return Err(Error::CustomOauthEndpoint);
         }

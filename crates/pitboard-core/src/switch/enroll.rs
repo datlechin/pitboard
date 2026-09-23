@@ -299,6 +299,7 @@ fn claim(state: &State, key: &Key, owner: &Owner) -> Result<()> {
         && existing.label != key.label
     {
         return Err(Error::AlreadyEnrolled {
+            tool: key.provider,
             email: owner.email.clone(),
             label: existing.key().typed(),
         });
