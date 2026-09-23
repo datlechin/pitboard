@@ -2650,6 +2650,8 @@ mod tests {
         let installed = root.join("releases/0.154.0-aarch64-apple-darwin/bin/codex");
         std::fs::create_dir_all(installed.parent().unwrap()).unwrap();
         std::fs::write(&installed, "").unwrap();
+        // A program is what can be run, as the installer leaves it.
+        std::fs::set_permissions(&installed, std::fs::Permissions::from_mode(0o755)).unwrap();
         std::fs::create_dir_all(program.parent().unwrap()).unwrap();
         std::os::unix::fs::symlink(&installed, &program).unwrap();
         let found = codex_facts(&ctx, None);

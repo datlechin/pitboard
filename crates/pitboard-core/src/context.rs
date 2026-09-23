@@ -46,9 +46,9 @@ pub struct Context {
     /// The `codex` that runs a sign-in; a bare name is looked up on the search path.
     pub(crate) codex_program: PathBuf,
     /// Where a tool's program is looked for, in `PATH`'s form, and what its sign-in is given
-    /// as `PATH` after the program's own directory. `None` is this process's own `PATH`: an
-    /// app opened from Finder has almost nothing on it, so it passes the one the person's
-    /// login shell would have.
+    /// as `PATH`, behind the program's own directory where that is not on it. `None` is this
+    /// process's own `PATH`: an app opened from Finder has almost nothing on it, so it
+    /// passes the one the person's login shell would have.
     pub(crate) search_path: Option<std::ffi::OsString>,
     /// Where the time comes from. The machine's clock in every real context; a test puts
     /// its own here to reach the judgements that only happen at a particular moment.

@@ -230,8 +230,11 @@ All notable changes are recorded here. The format follows
   `PITBOARD_CLAUDE` or `PITBOARD_CODEX` and before the installers' places; a shell that
   does not answer within five seconds is stopped, and the app looks where it did before.
   Every sign-in, from the app and the command line, now starts the program by the path it
-  was found at, with that program's own directory first on its `PATH`, which is where npm
-  puts the `node` that installed it.
+  was found at: the first file on the `PATH` that can be run, in a directory named from the
+  root, so what is found is what starts. A program found where that `PATH` does not reach,
+  as the app finds one where its installer put it, has its own directory put first, which
+  is where npm puts the `node` that installed it; one found on the `PATH` runs with it as it
+  is, so it finds the `node` the terminal would.
 - Signing in again to the account in use puts its new login in use. `pitboard enroll
   <label> --sign-in` for the account signed in now parked the new login and left the tool
   on the old one, which is the login somebody signs in again to replace, and the next

@@ -467,21 +467,43 @@ pub(crate) trait Provider: Send + Sync + std::fmt::Debug {
     fn expiry(&self, slice: &Value) -> Expiry;
 }
 
-/// Where a program somebody named is: the path itself when it has a directory in it, or
-/// the first match on `search`, a list in `PATH`'s form, the way a shell would look.
+/// Where a program somebody named is: the path itself, made absolute, when it has a
+/// directory in it, or the first file on `search`, a list in `PATH`'s form, that can be run.
+///
+/// Found the way `execvp` finds one, which passes over a directory of that name and a file
+/// nobody may run, so what is found here is what starts. Only a directory named from the
+/// root is looked in: a relative one names a place relative to wherever pitboard was
+/// started, which says nothing about where a tool is installed, and a sign-in that runs
+/// from a directory of its own would read it as somewhere else again.
 pub(crate) fn find_program(
     named: &std::path::Path,
     search: &std::ffi::OsStr,
 ) -> Option<std::path::PathBuf> {
+    find_in(named, search, runnable)
+}
+
+/// `find_program` with the question of whether a file can be run handed in, so a test can
+/// see every place it looks.
+fn find_in(
+    named: &std::path::Path,
+    search: &std::ffi::OsStr,
+    mut runnable: impl FnMut(&std::path::Path) -> bool,
+) -> Option<std::path::PathBuf> {
     if named.components().count() > 1 {
-        return std::fs::metadata(named)
-            .is_ok()
-            .then(|| named.to_path_buf());
+        let named = std::path::absolute(named).ok()?;
+        return runnable(&named).then_some(named);
     }
     std::env::split_paths(search)
-        .filter(|dir| !dir.as_os_str().is_empty())
+        .filter(|dir| dir.is_absolute())
         .map(|dir| dir.join(named))
-        .find(|candidate| std::fs::metadata(candidate).is_ok())
+        .find(|candidate| runnable(candidate))
+}
+
+/// Whether `path` is a file somebody may run.
+fn runnable(path: &std::path::Path) -> bool {
+    use std::os::unix::fs::PermissionsExt;
+    std::fs::metadata(path)
+        .is_ok_and(|found| found.is_file() && found.permissions().mode() & 0o111 != 0)
 }
 
 /// Where `tool`'s own program is, looked for the way the context says to look.
@@ -489,14 +511,18 @@ pub(crate) fn program_of(ctx: &Context, tool: ProviderId) -> Option<std::path::P
     find_program(ctx.program_for(tool), &ctx.search_path())
 }
 
-/// A command that runs `tool`'s own program, by the path it was found at, with that
-/// program's own directory first on its `PATH`.
+/// A command that runs `tool`'s own program, by the path it was found at, with the search
+/// path as its `PATH`, and the program's own directory in front of it when it is not on it
+/// already.
 ///
 /// An npm install is a script that starts `#!/usr/bin/env node`, and npm puts it beside the
-/// `node` that installed it, under whatever prefix or version manager that was. So the
-/// program's own directory is where its interpreter is, even for an app whose `PATH` has
-/// neither. The directory as found, never the script it links to: npm links
-/// `<prefix>/bin/codex` to a file deep inside `lib/node_modules`, where no `node` is.
+/// `node` that installed it, under whatever prefix or version manager that was. So a
+/// program found somewhere the search path does not reach, where an app finds one its
+/// installer put there, finds its interpreter in its own directory, even for an app whose
+/// `PATH` has neither. The directory as found, never the script it links to: npm links
+/// `<prefix>/bin/codex` to a file deep inside `lib/node_modules`, where no `node` is. A
+/// program found on the search path runs with that path as it is, so `env` finds the `node`
+/// the person's own terminal would, and not an older one that happens to sit beside it.
 ///
 /// A program that was not found is left to the search path, where starting it fails the
 /// way a missing program does.
@@ -508,7 +534,10 @@ pub(crate) fn command(ctx: &Context, tool: ProviderId) -> std::process::Command 
         return command;
     };
     let mut path = std::ffi::OsString::new();
-    if let Some(dir) = program.parent().filter(|d| !d.as_os_str().is_empty()) {
+    if let Some(dir) = program
+        .parent()
+        .filter(|dir| !std::env::split_paths(&search).any(|entry| entry == *dir))
+    {
         path.push(dir);
         if !search.is_empty() {
             path.push(":");
@@ -615,11 +644,12 @@ mod tests {
     }
 
     /// A scratch directory standing in for an npm prefix's `bin`, with an empty file for
-    /// each tool's program. Nothing here is ever run.
+    /// each tool's program that anybody may run. Nothing here is ever run.
     struct Prefix(std::path::PathBuf);
 
     impl Prefix {
         fn new(name: &str) -> Prefix {
+            use std::os::unix::fs::PermissionsExt;
             let root = std::env::temp_dir().join(format!(
                 "pitboard-search-path-{name}-{}-{:?}",
                 std::process::id(),
@@ -629,13 +659,28 @@ mod tests {
             let bin = root.join("npm/bin");
             std::fs::create_dir_all(&bin).expect("a scratch prefix");
             for &tool in ProviderId::ALL {
-                std::fs::write(bin.join(tool.program()), "").expect("a program");
+                let program = bin.join(tool.program());
+                std::fs::write(&program, "").expect("a program");
+                std::fs::set_permissions(&program, std::fs::Permissions::from_mode(0o755))
+                    .expect("a program that can be run");
             }
             Prefix(root)
         }
 
         fn bin(&self) -> std::path::PathBuf {
             self.0.join("npm/bin")
+        }
+
+        /// A directory beside `bin` holding something named for each tool's program that
+        /// cannot be run: a directory of that name, or a file with no execute bit.
+        fn decoys(&self) -> (std::path::PathBuf, std::path::PathBuf) {
+            let (dirs, files) = (self.0.join("dirs"), self.0.join("files"));
+            for &tool in ProviderId::ALL {
+                std::fs::create_dir_all(dirs.join(tool.program())).expect("a directory");
+                std::fs::create_dir_all(&files).expect("a directory");
+                std::fs::write(files.join(tool.program()), "").expect("a file");
+            }
+            (dirs, files)
         }
     }
 
@@ -665,45 +710,92 @@ mod tests {
             None,
             "ls is on this process's PATH and not on the one given"
         );
+    }
+
+    /// Only a directory named from the root is looked in. An empty entry and a relative one
+    /// both name somewhere relative to wherever pitboard was started, and a sign-in that
+    /// runs from a directory of its own would start something else from there.
+    #[test]
+    fn only_a_directory_named_from_the_root_is_looked_in() {
+        let mut looked = Vec::new();
+        let found = find_in(
+            std::path::Path::new("codex"),
+            "::bin:./node_modules/.bin:/usr/bin:".as_ref(),
+            |candidate| {
+                looked.push(candidate.to_path_buf());
+                false
+            },
+        );
+        assert_eq!(found, None);
+        assert_eq!(looked, [std::path::PathBuf::from("/usr/bin/codex")]);
+    }
+
+    /// A directory named for the program, or a file of that name nobody may run, is passed
+    /// over the way `execvp` passes over it, so what is found is what a sign-in can start.
+    #[test]
+    fn what_cannot_be_run_is_passed_over() {
+        let prefix = Prefix::new("decoys");
+        let (dirs, files) = prefix.decoys();
+        let search = format!(
+            "{}:{}:{}",
+            dirs.display(),
+            files.display(),
+            prefix.bin().display()
+        );
         assert_eq!(
-            find_program(std::path::Path::new("codex"), "".as_ref()),
-            None,
-            "an empty search path finds nothing, and is not the current directory"
+            find_program(std::path::Path::new("codex"), search.as_ref()),
+            Some(prefix.bin().join("codex"))
+        );
+        for decoy in [dirs.join("codex"), files.join("codex")] {
+            assert_eq!(
+                find_program(&decoy, "".as_ref()),
+                None,
+                "{}",
+                decoy.display()
+            );
+        }
+    }
+
+    /// A program named with a directory relative to where pitboard was started is found as
+    /// that place, by its full path, so the sign-in that runs from a directory of its own
+    /// starts the same program.
+    #[test]
+    fn a_program_named_relative_to_here_is_found_by_its_full_path() {
+        let found =
+            find_in(std::path::Path::new("./bin/codex"), "".as_ref(), |_| true).expect("found");
+        assert!(found.is_absolute(), "{}", found.display());
+        assert_eq!(
+            found,
+            std::env::current_dir()
+                .expect("a working directory")
+                .join("bin/codex")
         );
     }
 
-    /// Every tool's sign-in runs the program found, by its full path, with the program's
-    /// own directory first on `PATH`. An npm install's script names `node` through `env`,
-    /// and `node` is beside it, in a directory an app opened from Finder does not have.
+    /// Every tool's sign-in runs the program found, by its full path. Found on the search
+    /// path, it runs with that path as it is: its directory is on it already, and putting it
+    /// first would only change which `node` an npm install's `env` finds from the one the
+    /// person's own terminal finds.
     #[test]
-    fn a_sign_in_runs_the_program_found_with_its_own_directory_first_on_path() {
+    fn a_sign_in_runs_the_program_found_with_the_search_path_as_it_is() {
         let prefix = Prefix::new("sign-in");
-        let search = "/nowhere/before";
-        let ctx = Context::new(std::path::PathBuf::from("/nowhere"))
-            .with_search_path(format!("{search}:{}", prefix.bin().display()));
+        let search = format!("/nowhere/before:{}", prefix.bin().display());
+        let ctx =
+            Context::new(std::path::PathBuf::from("/nowhere")).with_search_path(search.clone());
         let dir = std::path::Path::new("/tmp/pitboard-signin-scratch");
         for &tool in ProviderId::ALL {
             let command = of(tool).sign_in(&ctx, dir);
             let program = prefix.bin().join(tool.program());
             assert_eq!(command.get_program(), program.as_os_str(), "{tool}");
-            assert_eq!(
-                env_of(&command, "PATH"),
-                Some(
-                    format!(
-                        "{}:{search}:{}",
-                        prefix.bin().display(),
-                        prefix.bin().display()
-                    )
-                    .as_ref()
-                ),
-                "{tool}"
-            );
+            assert_eq!(env_of(&command, "PATH"), Some(search.as_ref()), "{tool}");
             assert_eq!(of(tool).program(&ctx), Some(program), "{tool}");
         }
     }
 
-    /// A program named outright is run from its own directory too, whatever the search
-    /// path holds, which is how an app that found it somewhere else starts it.
+    /// A program named outright where the search path does not reach is run with its own
+    /// directory first on `PATH`, which is how an app that found it where its installer
+    /// puts it starts it: an npm install's script names `node` through `env`, and `node` is
+    /// beside it. Named outright on the search path, it runs with that path as it is.
     #[test]
     fn a_program_named_outright_is_run_with_its_own_directory_on_path() {
         let prefix = Prefix::new("named");
@@ -724,6 +816,12 @@ mod tests {
                 Some(format!("{}:/usr/bin:/bin", prefix.bin().display()).as_ref()),
                 "{tool}"
             );
+        }
+        let on_it = format!("/usr/bin:{}/", prefix.bin().display());
+        let ctx = ctx.with_search_path(on_it.clone());
+        for &tool in ProviderId::ALL {
+            let command = of(tool).sign_in(&ctx, dir);
+            assert_eq!(env_of(&command, "PATH"), Some(on_it.as_ref()), "{tool}");
         }
     }
 

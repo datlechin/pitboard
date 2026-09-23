@@ -30,8 +30,8 @@ pub struct Settings {
     /// The `codex` that runs a sign-in, since `PATH` may not find it.
     pub codex_program: Option<String>,
     /// Where a tool's program is looked for, in `PATH`'s form, and what its sign-in is given
-    /// as `PATH` after the program's own directory: the person's login shell's, which an
-    /// app does not inherit. `None` is this process's own `PATH`.
+    /// as `PATH`, behind the program's own directory where that is not on it: the person's
+    /// login shell's, which an app does not inherit. `None` is this process's own `PATH`.
     #[uniffi(default)]
     pub search_path: Option<String>,
 }
