@@ -126,7 +126,9 @@ Other commands:
   every login. Only needed when recovery cannot reach Anthropic.
 - `pitboard repair` asks the keychain what parked logins are on this machine and accounts
   for every one: given back to the account it belongs to, or reported and left alone.
-  Only needed if pitboard's own files were lost or restored from a backup.
+  Only needed if pitboard's own files were lost or restored from a backup. A login it gives
+  back that this pitboard did not write may be another pitboard's, so `forget` and
+  `uninstall` leave it where it is.
 - `pitboard adopt` takes over a `~/.pitboard` that came from another computer, keeping the
   accounts and dropping the logins they came with. Each then needs one
   `pitboard enroll <label> --sign-in`.

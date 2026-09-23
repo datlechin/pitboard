@@ -12,6 +12,8 @@ mod adopt;
 #[cfg(test)]
 mod crash;
 mod enroll;
+#[cfg(test)]
+mod foreign;
 mod forget;
 #[cfg(test)]
 pub(crate) mod harness;
@@ -407,7 +409,7 @@ pub fn switch(settled: Settled, key: &Key) -> Result<(Outcome, Vec<Warning>)> {
     if tool.park_semantics() == provider::ParkSemantics::MoveOnly
         && store::vault_read(ctx, &parked.service)?.is_none()
     {
-        state.discard(&parked.service);
+        state.release(&parked.service);
         state::save(ctx, &state)?;
         clear_journal(ctx);
         return Err(Error::ParkedCredentialMissing { label: from });

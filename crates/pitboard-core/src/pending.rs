@@ -128,7 +128,9 @@ pub fn reclaim(ctx: &Context, state: &mut State) -> Result<Reclaimed> {
 /// this pitboard cannot account for is not evidence of an orphan: it may be another
 /// pitboard's parked login, and deleting it would end that account's session for someone
 /// who never ran this command. Giving a login back is additive and safe to do on a guess;
-/// deleting one is not, and is done only where being sure is possible.
+/// deleting one is not, and is done only where being sure is possible. A login given back
+/// that this pitboard did not write down is recorded as such, so letting it go later never
+/// deletes it either: only using it does.
 fn resolve(
     ctx: &Context,
     state: &mut State,
@@ -157,7 +159,7 @@ fn resolve(
                 None if written_here => {
                     // This pitboard wrote this name down, wrote a login into it, and
                     // nothing here recorded it. That is an orphan and nothing else can be.
-                    discard(ctx, state, &service);
+                    release(ctx, state, &service);
                     out.deleted.push(service);
                 }
                 None => out.strangers.push(service),
@@ -180,7 +182,10 @@ fn resolve(
 /// and before recording it: the service has already spent the older copy's refresh token,
 /// so the account holds a dead login and the orphan is its only live one. Keeping the older
 /// and deleting the newer, which is what happened, lost the login. Only a name this pitboard
-/// wrote down itself is trusted that far; a stranger replaces nothing.
+/// wrote down itself is trusted that far; a stranger replaces nothing. The older copy is
+/// released rather than discarded, because an enrolment killed at the same point leaves the
+/// same shape with an older copy nothing spent, and an older copy `repair` gave back may be
+/// another pitboard's.
 ///
 /// Anything else is refused: an account that already holds a newer park has a login
 /// pitboard renews, and a second copy of one refresh chain is the state that ends a login
@@ -217,7 +222,11 @@ fn adopt(
     if park::is_live_twin(ctx, key.provider, &oauth) {
         return None;
     }
-    state.park(&key, park);
+    if written_here {
+        state.park(&key, park);
+    } else {
+        state.park_foreign(&key, park);
+    }
     let label = key.typed();
     crate::audit::record(ctx, "reclaim", &label, "ok");
     Some(label)
@@ -225,9 +234,9 @@ fn adopt(
 
 /// List it for deletion the way every other unwanted park is listed, so a delete that fails
 /// is retried rather than forgotten.
-fn discard(ctx: &Context, state: &mut State, service: &str) {
+fn release(ctx: &Context, state: &mut State, service: &str) {
     debug_assert!(park::is_park_name(service), "only pitboard's own names");
-    state.discard(service);
+    state.release(service);
     crate::audit::record(ctx, "reclaim", service, "discarded");
 }
 
@@ -332,6 +341,7 @@ mod tests {
             park.parked_at, 1_760_000_000,
             "when it was parked is in its own name"
         );
+        assert!(state.foreign.is_empty(), "this pitboard wrote it");
         assert!(outstanding(&ctx).is_empty());
         let _ = std::fs::remove_dir_all(root);
     }
@@ -465,6 +475,11 @@ mod tests {
                 .as_ref()
                 .map(|p| p.service.as_str()),
             Some(service)
+        );
+        assert_eq!(
+            state.foreign,
+            vec![service.to_string()],
+            "nothing says this pitboard wrote it, so it may be another's"
         );
         let _ = std::fs::remove_dir_all(root);
     }

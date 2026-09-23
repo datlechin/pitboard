@@ -719,6 +719,13 @@ fn uninstall(pitboard: &Pitboard) -> Report {
             "Removed {} parked login(s). The login each tool is signed in with is untouched.\n",
             removed.parks
         );
+        if removed.left > 0 {
+            human.push_str(&format!(
+                "Left {} parked login(s) that `pitboard repair` found and this pitboard did \
+                 not write, because they may be another pitboard's.\n",
+                removed.left
+            ));
+        }
         if removed.pending > 0 {
             human.push_str(&format!(
                 "{} could not be deleted, so ~/.pitboard was kept; run `pitboard \
@@ -735,6 +742,7 @@ fn uninstall(pitboard: &Pitboard) -> Report {
             json!({
                 "parks_removed": removed.parks,
                 "parks_pending": removed.pending,
+                "parks_left": removed.left,
                 "home_removed": removed.home_removed,
             }),
             human,

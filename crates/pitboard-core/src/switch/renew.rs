@@ -213,7 +213,9 @@ fn apply(
 ) -> Result<Renewal> {
     let asked = asked?;
     if asked.refused {
-        state.discard(&held.service);
+        // Refused, not spent: nothing was taken from it. One `repair` gave back is left for
+        // the pitboard that wrote it, which will be refused the same way.
+        state.release(&held.service);
         state::save(ctx, state)?;
         return Ok(Renewal::Refused);
     }
@@ -248,6 +250,9 @@ fn apply(
         }
     };
     crate::fault::point("renew.park_stored");
+    // The renewal spent the copy it replaces, whoever wrote it, so that one is discarded
+    // rather than merely replaced.
+    state.discard(&held.service);
     state.park(key, parked.clone());
     // A save that fails leaves the fresh copy where it is. Its name is on pitboard's own
     // list of names it wrote, so the next command gives it back to the account in place of

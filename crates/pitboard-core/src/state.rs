@@ -196,6 +196,12 @@ pub struct State {
     /// and removed once deleted, so a delete that fails or is interrupted is retried.
     #[serde(default)]
     pub discarded: Vec<String>,
+    /// Parked items an account here holds that this home never wrote down: logins
+    /// `pitboard repair` found in the store and gave back. On macOS every `PITBOARD_HOME`
+    /// shares the login keychain, so each may be another pitboard's parked login, and
+    /// letting one go unused must leave it where it is. Removed once nothing here holds it.
+    #[serde(default)]
+    pub foreign: Vec<String>,
 }
 
 impl Default for State {
@@ -207,6 +213,7 @@ impl Default for State {
             active: BTreeMap::new(),
             slot: BTreeMap::new(),
             discarded: Vec::new(),
+            foreign: Vec::new(),
         }
     }
 }
@@ -298,7 +305,8 @@ impl State {
         self.accounts.iter_mut().find(|a| a.is(key))
     }
 
-    /// Hold `park` for the account, discarding whatever it replaces.
+    /// Hold `park` for the account, releasing whatever it replaces. A newer park does not
+    /// use the one before it, so that one is let go rather than consumed.
     pub fn park(&mut self, key: &Key, park: Park) {
         let service = park.service.clone();
         if let Some(previous) = self
@@ -306,19 +314,55 @@ impl State {
             .and_then(|account| account.parked.replace(park))
             && previous.service != service
         {
-            self.discard(&previous.service);
+            self.release(&previous.service);
         }
     }
 
-    /// Stop holding `service` and list it for deletion: it has been installed, or it copies a
-    /// login that is still signed in.
-    pub fn discard(&mut self, service: &str) {
-        for account in &mut self.accounts {
-            account.parked.take_if(|p| p.service == service);
+    /// Hold a park this home did not write, found in the store and given back. It is used
+    /// like any other, and deleted only once it has been.
+    pub fn park_foreign(&mut self, key: &Key, park: Park) {
+        let service = park.service.clone();
+        self.park(key, park);
+        if self.references(&service) && !self.is_foreign(&service) {
+            self.foreign.push(service);
         }
+    }
+
+    /// Whether an account here holds `service` without this home having written it.
+    pub fn is_foreign(&self, service: &str) -> bool {
+        self.foreign.iter().any(|listed| listed == service)
+    }
+
+    /// Stop holding `service` because it has been used up, and list it for deletion
+    /// whoever wrote it: it has been installed, a renewal has spent it, or it copies a login
+    /// that is still signed in. Nothing can use it again, and for a tool whose park may
+    /// never be a copy it must not stay beside the login it copies.
+    pub fn discard(&mut self, service: &str) {
+        self.let_go(service);
         if !self.discarded.iter().any(|listed| listed == service) {
             self.discarded.push(service.to_string());
         }
+    }
+
+    /// Stop holding `service` because nothing here wants it any more: a newer park replaced
+    /// it, or its account was dropped. Listed for deletion only when this home wrote it. One
+    /// `repair` gave back may be another pitboard's parked login, which this one never
+    /// used, and deleting it would end that account's session for somebody who never ran
+    /// the command that did it.
+    pub fn release(&mut self, service: &str) {
+        if self.is_foreign(service) {
+            self.let_go(service);
+        } else {
+            self.discard(service);
+        }
+    }
+
+    /// No account holds `service` afterwards, and nothing records who wrote it.
+    fn let_go(&mut self, service: &str) {
+        for account in &mut self.accounts {
+            account.parked.take_if(|p| p.service == service);
+        }
+        self.foreign.retain(|listed| listed != service);
     }
 
     pub fn references(&self, service: &str) -> bool {
@@ -366,12 +410,12 @@ impl State {
         Ok(account)
     }
 
-    /// Drop the account, listing its park for deletion.
+    /// Drop the account, releasing its park.
     pub fn remove(&mut self, key: &Key) -> Option<Account> {
         let index = self.accounts.iter().position(|a| a.is(key))?;
         let account = self.accounts.remove(index);
         if let Some(park) = &account.parked {
-            self.discard(&park.service);
+            self.release(&park.service);
         }
         if self.active_for(key.provider) == Some(key.label.as_str()) {
             self.set_active(key.provider, None);
@@ -931,6 +975,79 @@ mod tests {
         assert_eq!(s.remove(&claude("work")).unwrap().label, "work");
         assert!(s.accounts.is_empty());
         assert_eq!(s.discarded, ["p"]);
+    }
+
+    /// A park `repair` gave back may be another pitboard's. Replaced by a newer one, or
+    /// dropped with its account, it was never used here, so it is let go and not deleted.
+    #[test]
+    fn a_park_this_home_did_not_write_is_let_go_and_never_listed_for_deletion() {
+        let mut s = State::default();
+        s.upsert(account("work", None));
+        s.upsert(account("home", None));
+        s.park_foreign(&claude("work"), park("found"));
+        s.park_foreign(&claude("home"), park("also-found"));
+        assert_eq!(s.foreign, ["found", "also-found"]);
+
+        s.park(&claude("work"), park("ours"));
+        assert_eq!(
+            s.get(&claude("work"))
+                .unwrap()
+                .parked
+                .as_ref()
+                .unwrap()
+                .service,
+            "ours"
+        );
+        s.remove(&claude("home"));
+        s.release("ours");
+
+        assert_eq!(s.discarded, ["ours"], "only the park this home wrote");
+        assert!(s.foreign.is_empty(), "and nothing here holds the others");
+    }
+
+    /// Installed or renewed, a park has been used up whoever wrote it, and goes the way
+    /// every used park goes.
+    #[test]
+    fn a_park_this_home_did_not_write_is_listed_once_it_is_used() {
+        let mut s = State::default();
+        s.upsert(account("work", None));
+        s.park_foreign(&claude("work"), park("found"));
+        s.discard("found");
+        assert!(s.get(&claude("work")).unwrap().parked.is_none());
+        assert_eq!(s.discarded, ["found"]);
+        assert!(s.foreign.is_empty());
+    }
+
+    /// Schema 4 is new on this branch and gained the record of parks written elsewhere
+    /// after it was first written, so a file without it has to load as one holding none.
+    #[test]
+    fn a_state_file_from_before_foreign_parks_were_recorded_still_loads() {
+        let written = serde_json::json!({
+            "schema": SCHEMA,
+            "machine": machine_id(),
+            "accounts": [{
+                "label": "work", "account_uuid": "acc-1", "email": "a@b.c",
+                "provider": "codex", "workspace_id": null, "plan": "pro",
+                "parked": {
+                    "service": "pitboard-park-acc-1-1789935600123",
+                    "parked_at": 1_789_935_600,
+                    "refresh_fingerprint": "abcd",
+                    "access_expires_at": null,
+                    "refresh_expires_at": null
+                }
+            }],
+            "active": {}, "slot": {}, "discarded": []
+        });
+        let mut document = written.clone();
+        migrate(&mut document, std::path::Path::new("/tmp/state.json")).expect("current");
+        let mut state: State = serde_json::from_value(document).expect("still parses");
+        assert!(state.foreign.is_empty());
+        state.remove(&Key::new(ProviderId::Codex, "work"));
+        assert_eq!(
+            state.discarded,
+            ["pitboard-park-acc-1-1789935600123"],
+            "a park recorded before is this home's own, and goes as it always did"
+        );
     }
 
     #[test]

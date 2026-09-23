@@ -452,8 +452,8 @@ impl Pitboard {
         audit::read(&self.ctx, limit)
     }
 
-    /// Deletes every parked login and pitboard's own directory. Claude Code's login is
-    /// left alone: whoever is signed in stays signed in.
+    /// Deletes every parked login this pitboard wrote, and pitboard's own directory. Claude
+    /// Code's login is left alone: whoever is signed in stays signed in.
     pub fn uninstall(&self) -> Changing<switch::Removed> {
         self.changing("uninstall", "", None, |settled| {
             switch::uninstall(settled).map(|r| (r, Vec::new()))

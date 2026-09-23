@@ -11,6 +11,7 @@ expression: "serde_json :: json! ({ \"exit\" : code, \"envelope\" : value })"
     "data": {
       "parks_removed": 1,
       "parks_pending": 0,
+      "parks_left": 0,
       "home_removed": true
     },
     "warnings": [],

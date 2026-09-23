@@ -189,7 +189,7 @@ fn apply(state: &mut State, journal: &Journal, repair: Repair) {
             Some(key) => state.park(&key, park),
             // The account it belongs to is gone, so nothing will ever restore this copy.
             // Listing it is what gets it deleted rather than left in the keychain.
-            None => state.discard(&park.service),
+            None => state.release(&park.service),
         }
     }
     if repair.landed && state.get(&journal.to()).is_some() {

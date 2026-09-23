@@ -45,14 +45,19 @@ pub fn adopt(ctx: &Context) -> Result<Option<Adopted>> {
 
     let accounts: Vec<String> = state.accounts.iter().map(|a| a.key().typed()).collect();
     let mut logins_dropped = Vec::new();
-    for account in &mut state.accounts {
-        if let Some(park) = account.parked.take() {
+    let mut parks = Vec::new();
+    for account in &state.accounts {
+        if let Some(park) = &account.parked {
             logins_dropped.push(account.key().typed());
-            // Listed rather than deleted outright, so a delete that fails is retried. On a
-            // machine that did not receive the keychain there is nothing there to delete,
-            // and deleting what is not there succeeds.
-            state.discarded.push(park.service);
+            parks.push(park.service.clone());
         }
+    }
+    // Listed rather than deleted outright, so a delete that fails is retried. On a machine
+    // that did not receive the keychain there is nothing there to delete, and deleting what
+    // is not there succeeds. Released rather than discarded, because one `repair` gave back
+    // may be another pitboard's, and that keychain may have come across too.
+    for service in &parks {
+        state.release(service);
     }
     state.active.clear();
     state.slot.clear();
