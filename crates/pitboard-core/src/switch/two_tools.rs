@@ -297,3 +297,28 @@ fn a_codex_sign_in_is_parked_as_a_codex_account() {
     );
     hold(&m, "after a Codex sign-in");
 }
+
+/// Abandoning an interrupted Codex switch keeps nothing that copies the live login. Killed
+/// after parking `here` and before installing `there`, the park is `here`'s own refresh
+/// token beside the live one, which a sign-out would revoke in both places.
+#[test]
+fn abandoning_a_codex_switch_keeps_no_twin_of_the_live_login() {
+    let m = codex_machine("abandon-twin");
+    let settled = settle(&m.ctx, None).expect("nothing to recover").0;
+    let died = crate::fault::killing("switch.park_recorded", || switch(settled, &m.key("there")));
+    assert_eq!(died.unwrap_err(), "switch.park_recorded");
+
+    abandon(&m.ctx).expect("abandoned");
+
+    let state = state::load(&m.ctx).expect("state");
+    assert!(
+        state.get(&m.key("here")).unwrap().parked.is_none(),
+        "`here` is signed in, so a park of it is a twin"
+    );
+    assert!(
+        state.get(&m.key("there")).unwrap().parked.is_some(),
+        "and `there`'s park, the only copy of it, is kept"
+    );
+    settle(&m.ctx, None).expect("purged on the next change");
+    hold(&m, "after abandoning a Codex switch");
+}

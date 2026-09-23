@@ -428,6 +428,15 @@ pub(crate) fn load_any_machine(ctx: &Context) -> Result<(State, bool)> {
             source,
         })?;
     migrate(&mut document, &path)?;
+    // An account of a tool this build does not know was written by a newer pitboard, not
+    // damaged. Said as such, because the advice for a corrupt file is to delete it, and
+    // following that here would orphan every parked login in the vault.
+    if let Some(unknown) = unknown_tool(&document) {
+        return Err(Error::StateNamesUnknownTool {
+            path: path.clone(),
+            tool: unknown,
+        });
+    }
     let state: State = serde_json::from_value(document).map_err(|source| Error::StateCorrupt {
         path: path.clone(),
         source,
@@ -445,6 +454,17 @@ pub(crate) fn load_any_machine(ctx: &Context) -> Result<(State, bool)> {
         state.set_active(ProviderId::Claude, None);
     }
     Ok((state, here))
+}
+
+/// The first tool an account names that this build does not know, if any.
+fn unknown_tool(document: &Value) -> Option<String> {
+    document
+        .get("accounts")?
+        .as_array()?
+        .iter()
+        .filter_map(|account| account.get("provider")?.as_str())
+        .find(|code| ProviderId::parse(code).is_none())
+        .map(str::to_owned)
 }
 
 /// Brings an older file up to the current format in place.
@@ -694,6 +714,39 @@ mod tests {
             Some("personal"),
             "another provider's record is not this provider's to clear"
         );
+    }
+
+    /// A file naming a tool this build does not know came from a newer pitboard. Called
+    /// corrupt, its advice would be to delete it, which orphans every parked login.
+    #[test]
+    fn an_account_of_an_unknown_tool_asks_for_an_upgrade_not_a_deletion() {
+        let home = std::env::temp_dir().join(format!(
+            "pitboard-unknown-tool-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let _ = std::fs::remove_dir_all(&home);
+        std::fs::create_dir_all(&home).unwrap();
+        let ctx = Context::new(home.clone()).with_pitboard_home(home.clone());
+        std::fs::write(
+            home.join("state.json"),
+            serde_json::json!({
+                "schema": SCHEMA,
+                "machine": machine_id(),
+                "accounts": [{
+                    "label": "work", "account_uuid": "u", "email": "a@b.c",
+                    "parked": null, "provider": "somethingnew"
+                }],
+                "active": {}, "slot": {}, "discarded": []
+            })
+            .to_string(),
+        )
+        .unwrap();
+        let err = load(&ctx).unwrap_err();
+        assert_eq!(err.code(), "state_names_unknown_tool");
+        assert!(err.to_string().contains("somethingnew"), "{err}");
+        assert!(!err.to_string().contains("Delete"), "{err}");
+        let _ = std::fs::remove_dir_all(&home);
     }
 
     /// The other direction cannot work, and the message has to say which half to upgrade.

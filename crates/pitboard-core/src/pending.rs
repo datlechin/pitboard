@@ -188,6 +188,11 @@ fn adopt(ctx: &Context, state: &mut State, service: &str, raw: &str) -> Option<S
     if park.refresh_fingerprint.is_empty() || !park.restorable_at(ctx.now()) {
         return None;
     }
+    // A copy of the login signed in now is not something to give back, for a tool whose
+    // park may never be a copy.
+    if park::is_live_twin(ctx, key.provider, &oauth) {
+        return None;
+    }
     state.park(&key, park);
     let label = key.typed();
     crate::audit::record(ctx, "reclaim", &label, "ok");

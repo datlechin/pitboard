@@ -137,6 +137,27 @@ pub fn load(ctx: &Context, key: &Key, park: &Park) -> Result<Value> {
     Ok(value)
 }
 
+/// Whether this parked document is a second copy of the login signed in now, for a tool
+/// whose park may never be one.
+///
+/// Answered from the two refresh tokens' fingerprints, so it needs no network. For a tool
+/// whose own sign-out revokes what it finds, keeping such a copy is keeping a token the
+/// person's next sign-out would end in both places; it is discarded instead. For a tool
+/// that tolerates a copy this is never true, and what was always done still is.
+pub fn is_live_twin(ctx: &Context, provider: ProviderId, document: &Value) -> bool {
+    let tool = crate::provider::of(provider);
+    if tool.park_semantics() != crate::provider::ParkSemantics::MoveOnly {
+        return false;
+    }
+    let parked = tool.fingerprint(document);
+    !parked.is_empty()
+        && tool
+            .read_live(ctx)
+            .ok()
+            .flatten()
+            .is_some_and(|live| tool.fingerprint(&live.raw) == parked)
+}
+
 /// Delete every discarded item, keeping listed only those that resisted. Returns how many
 /// remain.
 pub fn purge(ctx: &Context, state: &mut State) -> usize {

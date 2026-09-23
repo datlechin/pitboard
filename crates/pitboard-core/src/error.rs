@@ -168,6 +168,13 @@ pub enum Error {
     StateVersionUnknown { path: PathBuf, found: u32 },
 
     #[error(
+        "{path} has an account for `{tool}`, a tool this pitboard does not know, so it was \
+         written by a newer one. The command line and the app update separately, so upgrade \
+         whichever is behind: `brew upgrade pitboard`, or the app's own Check for Updates."
+    )]
+    StateNamesUnknownTool { path: PathBuf, tool: String },
+
+    #[error(
         "{path} was written on another computer. Parked logins do not move between \
          machines, because two machines taking turns presenting one refresh token ends the \
          login for both. Run `pitboard adopt` to keep your accounts here and drop the \
@@ -508,6 +515,7 @@ impl Error {
             StateCorrupt { .. } => "state_corrupt",
             StateFromNewerVersion { .. } => "state_from_newer_version",
             StateVersionUnknown { .. } => "state_version_unknown",
+            StateNamesUnknownTool { .. } => "state_names_unknown_tool",
             StateWrongMachine { .. } => "state_wrong_machine",
             StateWriteFailed { .. } => "state_write_failed",
             ScheduleUnsupported => "schedule_unsupported",

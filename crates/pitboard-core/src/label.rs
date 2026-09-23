@@ -55,8 +55,25 @@ pub fn parse(typed: &str) -> Result<Spec<'_>> {
 }
 
 /// The one account this names.
+///
+/// A label written by 0.1.x could contain a slash, because nothing then separated a tool
+/// from a name. Such an account is still found by what it is called, whole: `team/a` finds
+/// the Claude Code account literally labelled `team/a` when no tool is called `team`, and
+/// when one is and has no such account. Otherwise the app, which passes the label it was
+/// given, could neither switch to it nor forget it.
 pub fn resolve<'a>(state: &'a State, typed: &str) -> Result<&'a Account> {
-    match parse(typed)? {
+    let literal = || state.accounts.iter().find(|a| a.label == typed);
+    let spec = match parse(typed) {
+        Ok(spec) => spec,
+        Err(unknown) => return literal().ok_or(unknown),
+    };
+    if let Spec::Qualified(provider, label) = spec
+        && state.get(&Key::new(provider, label)).is_none()
+        && let Some(account) = literal()
+    {
+        return Ok(account);
+    }
+    match spec {
         Spec::Qualified(provider, label) => {
             state
                 .get(&Key::new(provider, label))
@@ -268,6 +285,23 @@ mod tests {
         assert!(
             err.contains("claude/work") && err.contains("codex/personal"),
             "{err}"
+        );
+    }
+
+    /// A label from before there was a tool prefix is still found by its whole name.
+    #[test]
+    fn a_label_written_with_a_slash_before_prefixes_existed_is_still_found() {
+        let state = state(&[(ProviderId::Claude, "team/a"), (ProviderId::Codex, "a")]);
+        assert_eq!(resolve(&state, "team/a").unwrap().label, "team/a");
+        assert_eq!(
+            resolve(&state, "codex/a").unwrap().provider(),
+            ProviderId::Codex,
+            "a prefix that names a real account of that tool still wins"
+        );
+        assert_eq!(
+            resolve(&state, "codx/a").unwrap_err().code(),
+            "provider_unknown",
+            "and a mistyped prefix is still said to be one"
         );
     }
 

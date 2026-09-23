@@ -244,7 +244,7 @@ impl Pitboard {
 
     /// `typed` may name a tool, as in `claude/work`. A bare name means the default tool.
     pub fn enroll_current(&self, typed: &str) -> Changing<Enrolled> {
-        let key = self.chosen(typed)?;
+        let key = self.chosen("enroll", typed)?;
         self.changing("enroll", &key.typed(), Some(key.provider), |settled| {
             switch::enroll(settled, &key, None)
         })
@@ -255,11 +255,11 @@ impl Pitboard {
     /// Split here rather than deeper down so nothing below ever sees a name with a tool
     /// still stuck to the front of it, which would enrol an account literally called
     /// `claude/work`.
-    fn chosen(&self, typed: &str) -> std::result::Result<Key, Failed> {
+    fn chosen(&self, verb: &str, typed: &str) -> std::result::Result<Key, Failed> {
         crate::label::choose(typed)
             .map(|chosen| Key::new(chosen.provider, chosen.label))
             .map_err(|detail| {
-                audit::record(&self.ctx, "enroll", typed, "label_unusable");
+                audit::record(&self.ctx, verb, typed, "label_unusable");
                 Failed {
                     error: Error::Usage(detail),
                     warnings: Vec::new(),
@@ -318,7 +318,7 @@ impl Pitboard {
     }
 
     pub fn enroll_signed_in(&self, typed: &str, login: SignIn) -> Changing<Enrolled> {
-        let key = self.chosen(typed)?;
+        let key = self.chosen("enroll", typed)?;
         self.changing("enroll", &key.typed(), Some(key.provider), |settled| {
             switch::enroll(settled, &key, Some(login))
         })
@@ -417,7 +417,7 @@ impl Pitboard {
     /// the account already belongs to. Renaming cannot move an account between tools.
     pub fn rename(&self, from: &str, to: &str) -> Changing<String> {
         let from = self.named("rename", from)?;
-        let chosen = self.chosen(to)?;
+        let chosen = self.chosen("rename", to)?;
         // Only a prefix somebody actually typed can disagree: a bare new name stays inside
         // the account's own tool whatever tool a bare name would mean for a new account.
         if to.contains(crate::label::SEPARATOR) && chosen.provider != from.provider {

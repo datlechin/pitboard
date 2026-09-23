@@ -255,10 +255,15 @@ pub struct Abandoned {
 
 /// Throws away a record that cannot be finished, keeping every copy it names.
 ///
-/// Recovery needs Anthropic to say who owns the live login. Offline, or with a session
-/// Anthropic no longer accepts, it cannot, and every command that changes anything stops
-/// at that. This is the way out: nothing is deleted and nothing is installed, so the worst
-/// case is a copy that outlives its use, which `status` shows and `doctor` reports.
+/// Recovery needs the service to say who owns the live login. Offline, or with a session
+/// the service no longer accepts, it cannot, and every command that changes anything stops
+/// at that. This is the way out: nothing is installed and nothing that might be the only
+/// copy is deleted, so the worst case is a copy that outlives its use, which `status` shows
+/// and `doctor` reports.
+///
+/// One exception, for a tool whose park may never be a copy: a park whose refresh token is
+/// the live login's own is a second copy for certain, whoever owns it, and is dropped
+/// rather than kept.
 pub(super) fn abandon(ctx: &Context, state: &mut State) -> Result<Option<Abandoned>> {
     let path = journal_path(ctx);
     let raw = match std::fs::read_to_string(&path) {
@@ -273,6 +278,10 @@ pub(super) fn abandon(ctx: &Context, state: &mut State) -> Result<Option<Abandon
     // nothing holds a keychain item that no file names.
     let mut kept = 0;
     if let Some(Some(document)) = read_park(ctx, &journal.park_service)
+        && park::is_live_twin(ctx, journal.provider, &document)
+    {
+        state.discard(&journal.park_service);
+    } else if let Some(Some(document)) = read_park(ctx, &journal.park_service)
         && let Some(key) = state
             .by_uuid(journal.provider, &journal.from_uuid)
             .map(crate::state::Account::key)
@@ -288,7 +297,10 @@ pub(super) fn abandon(ctx: &Context, state: &mut State) -> Result<Option<Abandon
         );
         kept += 1;
     }
-    if state
+    let incoming = read_park(ctx, &journal.incoming_service).flatten();
+    if incoming.is_some_and(|document| park::is_live_twin(ctx, journal.provider, &document)) {
+        state.discard(&journal.incoming_service);
+    } else if state
         .by_uuid(journal.provider, &journal.to_uuid)
         .and_then(|a| a.parked.as_ref())
         .is_some()
