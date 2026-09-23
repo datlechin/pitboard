@@ -250,6 +250,21 @@ use std::os::unix::fs::OpenOptionsExt;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A Codex account id carries the person inside the ChatGPT account, and its history
+    /// has to be a file it can be kept in, or no Codex row ever says how long it lasts.
+    #[test]
+    fn a_real_codex_account_has_a_history() {
+        let ctx = Context::new(std::path::PathBuf::from("/nowhere"))
+            .with_pitboard_home(std::path::PathBuf::from("/nowhere/.pitboard"));
+        assert!(
+            path(
+                &ctx,
+                "8c3f0f86-0a7c-4d52-9b0e-1f2a3b4c5d6e_user-AbC123dEf456"
+            )
+            .is_some()
+        );
+    }
     use crate::time::{Clock, FixedClock};
     use crate::usage::{Source, Window};
     use std::sync::Arc;

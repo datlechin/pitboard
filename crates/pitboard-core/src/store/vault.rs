@@ -108,6 +108,27 @@ impl RawStore for FileVault {
 mod tests {
     use super::*;
 
+    /// A real Codex account id is the ChatGPT account and the person inside it, and a park
+    /// of one has to be a name this vault stores. Joined with a colon once, every Codex
+    /// park on Linux was refused, after a browser sign-in had already been finished.
+    #[test]
+    fn a_real_codex_park_name_is_one_the_vault_stores() {
+        let root = std::env::temp_dir().join(format!(
+            "pitboard-vault-codex-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let ctx = Context::new(root.clone()).with_pitboard_home(root.clone());
+        let vault = FileVault::new(&ctx);
+        let name = crate::park::service_name(
+            "8c3f0f86-0a7c-4d52-9b0e-1f2a3b4c5d6e_user-AbC123dEf456",
+            1_790_000_000_000,
+        );
+        assert!(vault.path(&name).is_ok(), "{name}");
+        assert!(crate::park::is_park_name(&name));
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
     /// SECURITY.md tells people that a parked login here is 0600 inside a 0700 directory,
     /// and that this is the whole of what keeps it from everyone else with an account on
     /// the machine. Nothing checked it. `atomic::Perms::Secret` and `home::create_private`

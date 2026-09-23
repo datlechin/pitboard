@@ -674,6 +674,7 @@ pub fn codex_login(account: &str, email: &str, refresh: &str) -> serde_json::Val
         "email": email,
         "https://api.openai.com/auth": {
             "chatgpt_account_id": account,
+            "chatgpt_user_id": format!("user-{account}"),
             "chatgpt_plan_type": "pro",
         },
     });

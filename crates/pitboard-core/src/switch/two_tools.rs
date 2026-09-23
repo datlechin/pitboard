@@ -6,7 +6,9 @@
 //! prove the switch asks the tool rather than assuming Claude Code's answers.
 
 use super::enroll;
-use super::harness::{NOW, codex_access, codex_account, codex_login, codex_machine, hold};
+use super::harness::{
+    NOW, codex_access, codex_account, codex_id, codex_login, codex_machine, hold,
+};
 use super::*;
 use crate::api::scripted::Trouble;
 use crate::provider::codex::api::Fresh;
@@ -30,7 +32,7 @@ fn a_codex_switch_moves_one_login_in_and_one_out() {
 
     let (outcome, _) = switch(settled, &m.key("there")).expect("switched");
 
-    assert_eq!(whose(&m).as_deref(), Some("there"));
+    assert_eq!(whose(&m), Some(codex_id("there")));
     let Outcome::Switched { adoption, .. } = outcome else {
         panic!("expected a switch, got {outcome:?}");
     };
@@ -120,7 +122,7 @@ fn a_park_openai_refuses_is_renewed_before_it_goes_live() {
     let live = m.live().expect("a live login");
     assert_eq!(live["tokens"]["refresh_token"], "there-renewed");
     assert_eq!(live["tokens"]["access_token"], fresh_access.as_str());
-    assert_eq!(whose(&m).as_deref(), Some("there"));
+    assert_eq!(whose(&m), Some(codex_id("there")));
     hold(&m, "after a renewed Codex switch");
 }
 
@@ -289,7 +291,7 @@ fn a_codex_sign_in_is_parked_as_a_codex_account() {
     let state = state::load(&m.ctx).expect("state");
     let third = state.get(&key).expect("enrolled");
     assert_eq!(third.provider(), ProviderId::Codex);
-    assert_eq!(third.account_uuid, "third");
+    assert_eq!(third.account_uuid, codex_id("third"));
     let parked = third.parked.clone().expect("parked");
     assert_eq!(
         parked.refresh_fingerprint,

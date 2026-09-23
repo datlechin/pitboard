@@ -8,6 +8,12 @@ mod common;
 
 use common::{Env, codex_login};
 
+/// The identity a Codex login's own claims give the account `account`: the ChatGPT account
+/// with the person inside it, as the harness's logins carry both.
+fn codex_id(account: &str) -> String {
+    format!("{account}_user-{account}")
+}
+
 fn envelope(out: &str) -> serde_json::Value {
     serde_json::from_str(out).unwrap_or_else(|e| panic!("not JSON ({e}): {out}"))
 }
@@ -53,7 +59,7 @@ fn the_codex_account_in_use_is_enrolled_from_its_own_login() {
     assert_eq!(data["enrolled"], "current");
 
     let work = account(&env, "codex", "work");
-    assert_eq!(work["account_uuid"], env.uuid('w'));
+    assert_eq!(work["account_uuid"], codex_id(&env.uuid('w')));
     assert!(
         work["parked"].is_null(),
         "a copy of a login still in use would be a twin"
@@ -74,7 +80,7 @@ fn a_second_codex_account_signs_in_privately_and_the_one_in_use_stays() {
         "the login in use is untouched"
     );
     let personal = account(&env, "codex", "personal");
-    assert_eq!(personal["account_uuid"], env.uuid('p'));
+    assert_eq!(personal["account_uuid"], codex_id(&env.uuid('p')));
     let parked = personal["parked"]["service"]
         .as_str()
         .expect("the new login is parked");
@@ -148,7 +154,7 @@ fn the_same_label_on_both_tools_is_two_accounts() {
     assert_eq!(account(&env, "claude", "work")["account_uuid"], a);
     assert_eq!(
         account(&env, "codex", "work")["account_uuid"],
-        env.uuid('w')
+        codex_id(&env.uuid('w'))
     );
 
     let (out, _, code) = env.run(&["--json", "use", "work"]);

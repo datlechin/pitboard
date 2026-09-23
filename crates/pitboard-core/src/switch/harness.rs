@@ -188,7 +188,11 @@ pub(super) fn codex_login(who: &str, refresh: &str) -> Value {
             "id_token": crate::provider::jwt::unsigned(&json!({
                 "email": format!("{who}@example.com"),
                 "exp": NOW + 3600,
-                OPENAI: {"chatgpt_account_id": who, "chatgpt_plan_type": "pro"},
+                OPENAI: {
+                    "chatgpt_account_id": who,
+                    "chatgpt_user_id": format!("user-{who}"),
+                    "chatgpt_plan_type": "pro",
+                },
             })),
             "access_token": codex_access(refresh),
             "refresh_token": refresh,
@@ -196,6 +200,12 @@ pub(super) fn codex_login(who: &str, refresh: &str) -> Value {
         },
         "last_refresh": "2025-10-09T08:00:00Z",
     })
+}
+
+/// The identity Codex's own claims give the account `who`: the ChatGPT account with the
+/// person inside it.
+pub(super) fn codex_id(who: &str) -> String {
+    format!("{who}_user-{who}")
 }
 
 /// The access token [`codex_login`] carries for this refresh token.
@@ -258,7 +268,7 @@ pub(super) fn codex_machine(name: &str) -> Machine {
     }
 
     std::fs::create_dir_all(machine.root.join(".pitboard")).expect("a pitboard home");
-    let parked_service = park::reserve(&machine.ctx, "there").expect("a free name");
+    let parked_service = park::reserve(&machine.ctx, &codex_id("there")).expect("a free name");
     let parked = park::store_at(
         &machine.ctx,
         ProviderId::Codex,
@@ -268,10 +278,12 @@ pub(super) fn codex_machine(name: &str) -> Machine {
     .expect("parked");
 
     let mut state = State::default();
-    state.accounts.push(codex_account("here", "here", None));
     state
         .accounts
-        .push(codex_account("there", "there", Some(parked)));
+        .push(codex_account("here", &codex_id("here"), None));
+    state
+        .accounts
+        .push(codex_account("there", &codex_id("there"), Some(parked)));
     state.set_active(ProviderId::Codex, Some("here".into()));
     state::save(&machine.ctx, &state).expect("saved");
     machine
