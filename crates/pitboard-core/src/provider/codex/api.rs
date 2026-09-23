@@ -224,6 +224,7 @@ fn window(value: &Value, which: &str) -> Option<Window> {
         // in, so every window it sends is one that counts.
         is_active: true,
         severity: None,
+        length_seconds: seconds.filter(|s| *s > 0),
     })
 }
 

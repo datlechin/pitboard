@@ -1,7 +1,7 @@
 //! Dropping an account and the credentials parked for it.
 
 use super::{Error, Result, Settled, purge};
-use crate::provider::claude::paths as claude;
+use crate::provider;
 use crate::service::Warning;
 use crate::state::{self, Key};
 
@@ -13,18 +13,17 @@ pub fn forget(settled: Settled, key: &Key) -> Result<(String, Vec<Warning>)> {
         ctx,
     } = settled;
     // Who is signed in is a fact about the machine. pitboard's record of its last switch
-    // is stale the moment someone signs in with Claude Code's own `/login`, and forgetting
-    // the account that is actually in use throws away the only record of it.
-    let live_uuid = claude::load_config(&ctx)
-        .ok()
-        .as_ref()
-        .and_then(claude::identity)
-        .map(|id| id.account_uuid);
+    // is stale the moment someone signs in with the tool's own login command, and
+    // forgetting the account that is actually in use throws away the only record of it.
+    // Asked of the tool's own files, so it answers offline: Claude Code's config, or a
+    // Codex login's own claims.
+    let live_uuid = provider::of(key.provider)
+        .recorded_identity(&ctx)
+        .map(|found| found.account_id);
     let signed_in = match (&live_uuid, state.get(key)) {
         (Some(uuid), Some(account)) => &account.account_uuid == uuid,
         // No live identity to compare against, so pitboard's own record of the last switch
-        // is all there is. Scoped to the provider the label belongs to: a Claude account
-        // being signed in says nothing about a Codex one.
+        // is all there is.
         _ => state.active_for(key.provider) == Some(key.label.as_str()),
     };
     if signed_in {

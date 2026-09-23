@@ -656,6 +656,7 @@ mod tests {
                 percent,
                 resets_at: Some(NOW + 3_600),
                 is_active: true,
+                length_seconds: None,
             }],
             observed_at: Some(NOW - 7_200),
             account_uuid: account.map(str::to_owned),

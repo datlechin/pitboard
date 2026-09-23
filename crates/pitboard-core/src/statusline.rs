@@ -130,6 +130,7 @@ fn session_snapshot(input: &Value, uuid: &str, now: i64) -> Option<Snapshot> {
             percent: w.get("used_percentage")?.as_f64()?,
             resets_at: w.get("resets_at").and_then(Value::as_i64),
             is_active: true,
+            length_seconds: crate::usage::anthropic_window_length(name),
         })
     };
     let windows: Vec<Window> = ["five_hour", "seven_day"]
@@ -207,6 +208,7 @@ mod tests {
             resets_at: Some(resets_at),
             is_active: false,
             severity: None,
+            length_seconds: None,
         };
         Snapshot {
             windows: vec![window("session", five), window("weekly_all", week)],

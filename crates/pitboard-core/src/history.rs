@@ -290,6 +290,7 @@ mod tests {
                 resets_at: Some(resets_at),
                 is_active: true,
                 severity: None,
+                length_seconds: None,
             }],
         }
     }

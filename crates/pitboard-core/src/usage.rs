@@ -16,6 +16,28 @@ pub struct Window {
     /// pitboard's own, and absent in a reading taken before pitboard read this field.
     #[serde(default)]
     pub severity: Option<String>,
+    /// How long the window runs, in seconds, where that is known.
+    ///
+    /// What makes a limit comparable to itself over time: a reset time alone cannot say
+    /// how long a window is, because the time left shrinks as the window runs out. Stated
+    /// outright by OpenAI, implied by the kind for Anthropic, and absent from a reading
+    /// taken before pitboard kept it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub length_seconds: Option<i64>,
+}
+
+/// How long one of Anthropic's windows runs, from its kind.
+///
+/// Anthropic names its windows rather than timing them: `session` and the older
+/// `five_hour` are the five-hour limit, and every `weekly_` kind, like the older
+/// `seven_day`, runs a week. A kind not listed here has no length pitboard can vouch for.
+pub fn anthropic_window_length(kind: &str) -> Option<i64> {
+    match kind {
+        "session" | "five_hour" => Some(5 * 3600),
+        "seven_day" => Some(7 * 86_400),
+        weekly if weekly.starts_with("weekly_") => Some(7 * 86_400),
+        _ => None,
+    }
 }
 
 /// Where a measurement came from, so a stale number is never shown as a live one.
@@ -64,6 +86,10 @@ fn window_from_limit(l: &Value) -> Option<Window> {
             .and_then(Value::as_str)
             .and_then(time::parse),
         is_active: l.get("is_active").and_then(Value::as_bool).unwrap_or(false),
+        length_seconds: l
+            .get("kind")
+            .and_then(Value::as_str)
+            .and_then(anthropic_window_length),
     })
 }
 
@@ -78,6 +104,7 @@ fn window_from_named(kind: &str, v: &Value) -> Option<Window> {
             .and_then(Value::as_str)
             .and_then(time::parse),
         is_active: false,
+        length_seconds: anthropic_window_length(kind),
     })
 }
 
