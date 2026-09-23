@@ -91,22 +91,79 @@ pub const ASSUMPTIONS: &[Assumption] = &[
         name: "codex_never_follows_a_switch",
         fact: "a running Codex caches its login in memory for the life of the process with no \
                expiry and no file watcher, and refuses a reload whose account id has changed, \
-               so a switch is invisible until it is started again",
+               so a switch is invisible until it is started again. A refresh already under \
+               way when the file changes writes its own account's tokens over whatever is \
+               there, keeping the account id it finds, which leaves one login naming two \
+               accounts",
         read_from: "the auth manager's cache and reload_if_account_id_matches",
         verified_against: VERIFIED_AGAINST,
         depends: "Adoption::RestartRequired for Codex, and what a switch tells the person",
-        probe: &["Skipping auth reload due to account id mismatch"],
+        probe: &[
+            "Skipping auth reload due to account id mismatch",
+            "since logged out or signed in to another account",
+        ],
         absent: &[],
     },
     Assumption {
-        name: "codex_home_isolates_both_backends",
-        fact: "`CODEX_HOME` moves the auth file, and the keyring backend's account is \
-               `cli|` plus the first sixteen hex characters of the SHA-256 of the canonical \
-               home, so a scratch home isolates a private sign-in whichever backend is in use",
-        read_from: "the home resolution and compute_store_key",
+        name: "codex_home_isolates_a_sign_in",
+        fact: "`CODEX_HOME` moves everything Codex keeps, and a home with no `config.toml` \
+               keeps its login in the file store, so a sign-in with `CODEX_HOME` set to an \
+               empty private directory writes `auth.json` there and nowhere else. An empty \
+               `CODEX_HOME` means unset and falls back to `~/.codex`, which is why the \
+               directory is always set and never empty",
+        read_from: "the home resolution and the packaged default store",
         verified_against: VERIFIED_AGAINST,
-        depends: "provider::codex::paths::keychain_account, and Isolation for Codex",
-        probe: &["CODEX_HOME", "Codex Auth"],
+        depends: "provider::codex::engine's sign_in and read_signin, and Isolation for Codex",
+        probe: &["CODEX_HOME", "cli_auth_credentials_store"],
+        absent: &[],
+    },
+    Assumption {
+        name: "codex_keychain_stores_are_its_own",
+        fact: "the `keyring` and `auto` stores keep the login in a keychain item `Codex Auth` \
+               that Codex creates through the Security framework, and `[features] \
+               secret_auth_storage` keeps it in `secrets/codex_auth.age` under a keychain key. \
+               Neither item trusts `/usr/bin/security`, so pitboard refuses those stores \
+               rather than put a permission prompt in front of every read",
+        read_from: "the keyring store, the secret auth storage feature and their key names",
+        verified_against: VERIFIED_AGAINST,
+        depends: "provider::codex::paths::backend and Codex::live's refusal",
+        probe: &["Codex Auth", "secret_auth_storage", "codex_auth.age"],
+        absent: &[],
+    },
+    Assumption {
+        name: "codex_identity_is_the_person",
+        fact: "`chatgpt_account_id` is the ChatGPT plan, which a Team or Business workspace \
+               shares between its members, and `chatgpt_user_id` under the same claim \
+               namespace is the person. The pair names one login's quota",
+        read_from: "the id token claims Codex reads, and the caches it keys on the same pair",
+        verified_against: VERIFIED_AGAINST,
+        depends: "provider::codex::engine::identify, and every account id pitboard records \
+                  for Codex",
+        probe: &["chatgpt_user_id", "chatgpt_account_id"],
+        absent: &[],
+    },
+    Assumption {
+        name: "codex_refusal_is_invalid_grant",
+        fact: "a refresh token that has been spent or revoked is refused with a 400 whose \
+               error is `invalid_grant`, or a 401. Any other 400 is a request the server did \
+               not like and is not a dead login",
+        read_from: "the refresh error classification",
+        verified_against: VERIFIED_AGAINST,
+        depends: "provider::codex::api's refused_for_good, which decides when a park is \
+                  dropped",
+        probe: &["invalid_grant"],
+        absent: &[],
+    },
+    Assumption {
+        name: "codex_login_is_driveable",
+        fact: "`codex login` revokes whatever login is stored in its home before signing in, \
+               opens the browser itself, prints the address to stderr for when it cannot, \
+               listens for the callback on a loopback port and reads nothing from stdin, so \
+               it runs piped in a private home with no terminal",
+        read_from: "the login command and its local server",
+        verified_against: VERIFIED_AGAINST,
+        depends: "provider::codex::engine::sign_in, and the watched sign-in the app runs",
+        probe: &["Starting local login server"],
         absent: &[],
     },
 ];
