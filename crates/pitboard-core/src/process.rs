@@ -1,14 +1,20 @@
 //! Running a helper program with a deadline. A helper that never answers must not hold
 //! pitboard's lock, or an app's worker, forever.
 
-use std::io::{self, Read, Write};
-use std::process::{Command, Output, Stdio};
-use std::thread;
-use std::time::{Duration, Instant};
+// Linux reads its process list from /proc and has no keychain to call, so there only the
+// tests run a helper.
+#[cfg(any(not(target_os = "linux"), test))]
+use std::{
+    io::{self, Read, Write},
+    process::{Command, Output, Stdio},
+    thread,
+    time::{Duration, Instant},
+};
 
 /// `command`'s output, with `input` on its stdin. Past `limit` the process is killed and the
 /// answer is `TimedOut`. Its output is drained on other threads, so a chatty helper cannot
 /// fill a pipe and stall.
+#[cfg(any(not(target_os = "linux"), test))]
 pub fn output_within(mut command: Command, input: &[u8], limit: Duration) -> io::Result<Output> {
     let mut child = command
         .stdin(Stdio::piped())
