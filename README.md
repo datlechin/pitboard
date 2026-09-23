@@ -1,6 +1,6 @@
 # pitboard
 
-Switch between your own Claude Code logins, and see how much each one has left.
+Switch between your own Claude Code and Codex logins, and see how much each one has left.
 [usepitboard.com](https://usepitboard.com)
 
 [![CI](https://github.com/datlechin/pitboard/actions/workflows/ci.yml/badge.svg)](https://github.com/datlechin/pitboard/actions/workflows/ci.yml)
@@ -9,16 +9,18 @@ Switch between your own Claude Code logins, and see how much each one has left.
 
 <img src=".github/media/panel.png" alt="The pitboard menu bar panel, listing three accounts with their five hour and weekly limits" width="380">
 
-If you have more than one Claude subscription, changing accounts normally means signing out
-and back in through a browser. pitboard keeps a copy of each login and puts the one you ask
-for where Claude Code reads it. Your history, sessions, settings and projects stay where
-they are. Only the account changes.
+If you have more than one Claude or ChatGPT subscription, changing accounts in Claude Code
+or OpenAI's Codex CLI normally means signing out and back in through a browser. pitboard
+keeps each login you are not using and puts the one you ask for where the tool reads it.
+Your history, sessions, settings and projects stay where they are. Only the account
+changes.
 
-Status: pre-release. macOS is tested. On Linux it builds and the tests pass, and how Claude
-Code stores its login there has been read out of the shipping build: there is no keyring
-backend outside macOS and Windows, so it is a plaintext file at mode 0600 and pitboard's
-parked copies are files beside it. What has not happened is a run on a Linux machine with a
-real signed-in Claude Code.
+Status: pre-release. macOS is tested. On Linux it builds and the tests pass, and how each
+tool stores its login there has been read out of its shipping build: Claude Code has no
+keyring backend outside macOS and Windows, so its login is a plaintext file at mode 0600,
+and Codex keeps its login in a file on every platform. pitboard's parked logins are files
+too, at mode 0600. What has not happened is a run on a Linux machine with a real signed-in
+Claude Code or Codex.
 
 ## Install
 
@@ -41,20 +43,30 @@ installed it.
 Add the account you are signed in as, then the others:
 
 ```sh
-pitboard enroll personal
-pitboard enroll work --sign-in
+pitboard enroll personal                # the Claude Code account signed in now
+pitboard enroll work --sign-in          # another Claude Code account
+pitboard enroll codex/personal          # the Codex account signed in now
+pitboard enroll codex/work --sign-in    # another Codex account
 ```
 
-`--sign-in` runs Claude Code's own sign-in in a separate directory, so the login you are
-using now stays put. Do not use `/login` to add an account. That replaces the login in use,
-and pitboard cannot keep a copy of a login it did not see leave.
+`--sign-in` runs the tool's own sign-in in a separate directory (for Codex, `codex login`
+with a private `CODEX_HOME`), so the login you are using now stays put. Do not add an
+account with Claude Code's `/login` or with `codex login`. Both replace the login in use,
+and pitboard cannot keep a login it did not see leave. `codex login` also revokes the login
+it replaces.
+
+A label belongs to a tool: `codex/work` is a Codex account, `claude/work` a Claude Code one.
+A bare name for a new account means Claude Code. After that, a bare `work` finds the account
+in any command as long as only one tool has an account called `work`; if two do, pitboard
+lists both and you type the one you mean.
 
 ## Daily use
 
 ```sh
-pitboard                  # who is signed in, and what each account has left
-pitboard use work         # switch
-pitboard status --offline # the last numbers measured, without asking Anthropic
+pitboard                  # who is signed in to each tool, and what each account has left
+pitboard use claude/work  # switch Claude Code
+pitboard use codex/work   # switch Codex
+pitboard status --offline # the last numbers measured, without asking anyone
 ```
 
 ```text
@@ -76,15 +88,18 @@ fills at the rate it has been filling, or until that limit resets, whichever com
 It says nothing at all until there is enough to go on, because a wrong answer here tells
 you to switch when you need not.
 
-Usage comes from Anthropic for all accounts at once. A number is asked for again once the
-tightest limit it describes could have moved by a percentage point, which for a five-hour
-window is three minutes, so running `pitboard` twice in a row costs one set of requests and
-the app and the command line share one between them. `pitboard status --fresh` asks anyway.
-If a parked login has expired, pitboard renews it first. If Anthropic cannot be reached, or
-asks for less traffic, you get the last numbers pitboard saw, and when it saw them.
+Usage comes from each tool's service, for all accounts at once: Anthropic for Claude Code,
+and OpenAI for Codex, through the same read Codex itself makes, which spends no quota. Each
+shows a five-hour and a weekly limit. A number is asked for again once the tightest limit
+it describes could have moved by a percentage point, which for a five-hour window is three
+minutes, so running `pitboard` twice in a row costs one set of requests and the app and the
+command line share one between them. `pitboard status --fresh` asks anyway. If a parked
+login has expired, pitboard renews it first. If the service cannot be reached, or asks for
+less traffic, you get the last numbers pitboard saw, and when it saw them.
 
 A Claude Code session that is already open picks up the switch within about 33 seconds. You
-do not have to restart it.
+do not have to restart it. A running `codex` does not pick it up at all: restart it (see
+[Codex](#codex)).
 
 Each account holds one parked login. Switching to an account uses that login up, and
 switching away parks a fresh one. A parked login is renewed whenever you run `pitboard`,
@@ -98,9 +113,11 @@ pitboard enroll work --sign-in
 
 Other commands:
 
-- `pitboard rename wrong right` fixes a label without signing in again.
-- `pitboard forget work` drops an account.
-- `pitboard doctor` checks everything pitboard depends on, including every parked login.
+- `pitboard rename wrong right` fixes a label without signing in again. A rename stays
+  inside its tool: `pitboard rename codex/work job` gives you `codex/job`.
+- `pitboard forget <label>` drops an account, as in `pitboard forget codex/old`.
+- `pitboard doctor` checks what pitboard depends on in Claude Code, and every parked login
+  of both tools.
 - `pitboard log` shows what pitboard has changed, and when.
 - `pitboard abandon` gives up on an interrupted switch that cannot be finished, keeping
   every login. Only needed when recovery cannot reach Anthropic.
@@ -116,6 +133,28 @@ Other commands:
   whether it is on and `pitboard schedule uninstall` takes it away.
 - `pitboard uninstall` deletes every parked login and pitboard's own files.
 
+## Codex
+
+Codex works like Claude Code in pitboard, except for these:
+
+- A running `codex` never notices a switch. Restart it. After a switch, pitboard says how
+  many `codex` sessions are still running on the old account.
+- Quit those sessions; do not type `/logout` in one. Signing out there revokes the old
+  account's login at OpenAI, and that is the login pitboard has just parked. The account
+  would then need a browser sign-in.
+- pitboard works with Codex's default store, the file `~/.codex/auth.json` (or
+  `$CODEX_HOME/auth.json`). If `config.toml` sets `cli_auth_credentials_store` to `keyring`
+  or `auto`, pitboard refuses and says why: those keychain items belong to Codex, and every
+  read by another program would bring up a macOS permission prompt. `ephemeral` keeps the
+  login in memory only, so there is nothing to park.
+- Only a ChatGPT sign-in can be switched. A Codex signed in with an API key has no account
+  login to park.
+- The account is read from the login's own ID token, with no request. Two people in one
+  ChatGPT Team or Business workspace are two accounts.
+- On macOS a Codex park is the whole `auth.json`, which is too big for `security`'s standard
+  input, so it goes on the argument line and pitboard says so. See the question about the
+  keychain below.
+
 ## Status line
 
 `pitboard statusline` prints one line with the account in use and what every account has
@@ -125,8 +164,9 @@ left:
 personal 59%·73%  work 12%·40%
 ```
 
-It reads what Claude Code passes on stdin plus pitboard's own files. It does not use the
-network and does not touch a login. Add it to `~/.claude/settings.json`:
+It reads what Claude Code passes on stdin plus pitboard's own files, and lists Claude Code
+accounts only, since Claude Code is what runs it. It does not use the network and does not
+touch a login. Add it to `~/.claude/settings.json`:
 
 ```json
 { "statusLine": { "type": "command", "command": "pitboard statusline" } }
@@ -156,12 +196,17 @@ cp -R apple/build/Pitboard.app /Applications/
 
 Every command that reports a result takes `--json` and prints the same envelope, including
 on failure and for a mistyped command line: `{v, command, ok, data, warnings, error}`.
-Error codes are stable. When a failure came from asking Anthropic, `error.cause` says what
-went wrong underneath and whether asking again is worth anything:
+Error codes are stable. When a failure came from asking Anthropic or OpenAI, `error.cause`
+says what went wrong underneath and whether asking again is worth anything:
 `{"code": "rate_limited", "worth_retrying": true}`. `completions` and `manpage` write a generated file to stdout, so
 they have no JSON form and refuse the flag rather than ignore it.
-Exit codes: 0 done, 1 not done, 2 command line wrong, 3 a login or Claude Code's files are
-in a state pitboard will not act on.
+Exit codes: 0 done, 1 not done, 2 command line wrong, 3 a login or a tool's files are in a
+state pitboard will not act on.
+
+`use` names the tool in `provider`, and says in `adoption` whether sessions already running
+follow on their own, `{"follows": "polling", "within_seconds": 33}`, or need a restart,
+`{"follows": "restart", "program": "codex"}`. For a tool that needs a restart,
+`adoption_ceiling_seconds` is null.
 
 Shell completions: `pitboard completions zsh` (or `bash`, `fish`, `elvish`, `powershell`).
 
@@ -174,7 +219,7 @@ These are rules, not gaps:
 - No switching by itself on any server signal.
 - No pooling or proxying of requests, and no `ANTHROPIC_BASE_URL` interception.
 - No failover when an account is on hold.
-- No renewing of the login you are signed in as. That is Claude Code's job. pitboard
+- No renewing of the login you are signed in as. That is the tool's own job. pitboard
   renews only a login it parked itself.
 - No export, import or sync of parked logins between machines.
 
@@ -195,32 +240,64 @@ None of these are pitboard's to fix, so they are listed plainly:
   hour, which a five-hour limit usually means has happened anyway.
 - Usage for a parked account is read with its parked login, so work done on other machines
   counts too.
+- A running `codex` keeps using the account it started with until you restart it.
+
+## What it talks to
+
+For Claude Code accounts, Anthropic:
+
+- `api.anthropic.com/api/oauth/profile`: which account a login belongs to.
+- `api.anthropic.com/api/oauth/usage`: what an account has left.
+- `platform.claude.com/v1/oauth/token`: renewing a login pitboard parked, with Claude Code's
+  own client id.
+
+For Codex accounts, OpenAI:
+
+- `chatgpt.com/backend-api/wham/usage`: what an account has left, and, before a switch,
+  whether OpenAI still accepts the login going in. It is the read Codex itself makes, and it
+  spends no quota.
+- `auth.openai.com/oauth/token`: renewing a login pitboard parked, with Codex's own public
+  client id.
+
+Which account a Codex login belongs to is read from the login itself, with no request.
+pitboard has no telemetry and no server of its own. A copy of the app from a release also
+checks `github.com/datlechin/pitboard` for updates.
 
 ## Questions people ask first
 
-**Where do my tokens go?** Nowhere except Anthropic. pitboard asks `api.anthropic.com` which
-account a login belongs to and what it has left, and renews a login it parked itself through
-the same endpoint Claude Code uses. There is no telemetry and no server of its own. Parked
-logins stay on the machine that made them, in the keychain on macOS.
+**Where do my tokens go?** Only to the service that issued them: Anthropic for Claude Code,
+OpenAI for Codex, at the addresses listed above. Parked logins stay on the machine that made
+them, in the keychain on macOS.
 
 **Is this allowed?** pitboard only moves logins you already hold, between its own store and
-the place Claude Code reads. It does not share an account between people, pool requests, or
-touch an account you do not own. Whether several subscriptions suit what you are doing is between you and
-Anthropic's terms.
+the place each tool reads. It does not share an account between people, pool requests, or
+touch an account you do not own. Whether several subscriptions suit what you are doing is
+between you and Anthropic's or OpenAI's terms.
 
 **What if it dies halfway through a switch?** It writes down what it is about to do before
 it does it, including a fingerprint of the login on each side. The next command reads which
 one is in place and finishes or undoes the switch from that, with no network needed. Only
-when the login in place is neither, which is what Claude Code refreshing a token in those
-few seconds looks like, does it need to ask Anthropic; and when it cannot ask, it changes
+when the login in place is neither, which is what the tool refreshing a token in those few
+seconds looks like, does it need to work out whose login it is. A Codex login names its own
+account. For Claude Code that means asking Anthropic, and when it cannot ask, it changes
 nothing and keeps the record for a later run. `pitboard doctor` reports the state, and
 `pitboard log` is the record of every change it has made.
 
-**My login is too big for the keychain, what now?** MCP server tokens live in the same
-keychain item as the login, and `security` reads only about two kilobytes of a command from
-standard input. Past that there is one route left, passing it as an argument, which is what
-Claude Code does for the same login on every token refresh, so pitboard does it too and
-says so. `PITBOARD_NO_ARGV=1` refuses the switch instead. `pitboard doctor` shows the size.
+**My login is too big for the keychain, what now?** On macOS, `security` reads only about
+two kilobytes of a command from standard input. A Claude Code login passes that when it
+holds MCP server tokens, and a Codex park always does, since it is the whole `auth.json`.
+Past that there is one route left, passing it as an argument, where another process running
+as you could read it while the call lasts. Claude Code does the same for its own login on
+every token refresh. pitboard does it and says so. `PITBOARD_NO_ARGV=1` refuses instead,
+which on macOS means no Codex account can be parked. `pitboard doctor` shows the size of
+the Claude Code login.
+
+**What about Gemini CLI?** Not supported. On 18 June 2026 Google stopped serving Gemini
+CLI's "Login with Google" for individual, Google AI Pro and Ultra accounts
+([notice](https://developers.google.com/gemini-code-assist/docs/deprecations/code-assist-individuals)).
+Only Code Assist Standard and Enterprise still sign in that way. Google's replacement,
+Antigravity CLI (`agy`), keeps its login in the operating system's keyring, and pitboard has
+not measured it yet.
 
 **Why trust the download?** The macOS app is signed with a Developer ID and notarised by
 Apple, and its update feed is signed too. Every release attests what it published: each
@@ -241,20 +318,29 @@ Or build it yourself: `cargo install pitboard`.
 
 ## How it works
 
-pitboard asks Anthropic which account a login belongs to instead of trusting Claude Code's
-config file, which can be a day behind the login it describes. It will not move a login it
-cannot identify.
+pitboard keeps the logins you are not using in its own store, the keychain on macOS and
+files in `~/.pitboard/vault/` on Linux, and puts the one you ask for where the tool reads
+it. It will not move a login it cannot identify.
 
-On macOS, Claude Code keeps its login in a keychain item that only `/usr/bin/security` is
+For Claude Code, pitboard asks Anthropic which account a login belongs to instead of
+trusting Claude Code's config file, which can be a day behind the login it describes. On
+macOS, Claude Code keeps its login in a keychain item that only `/usr/bin/security` is
 trusted to read. pitboard reads and writes it with the same tool. Calling the Security
 framework from another process changes that item's access list for good, and after that
 every read Claude Code makes takes one to three seconds instead of a few milliseconds.
 pitboard takes the same lock Claude Code takes around credential writes, and never writes
 Claude Code's plaintext fallback file for you.
 
+For Codex, the login is the file `~/.codex/auth.json`, and its ID token names the account,
+so pitboard reads whose it is from the file. `codex login` and `codex logout` revoke the
+stored refresh token at OpenAI, so a Codex login is moved, never copied: the outgoing one
+goes into pitboard's store and is read back before the incoming one is written. Codex takes
+no lock on that file, so pitboard reads it back after a switch rather than trusting its own
+write.
+
 See [SECURITY.md](SECURITY.md) for where your credentials live and what pitboard protects
 against.
 
 ## Licence
 
-Apache-2.0. Not affiliated with Anthropic. See [NOTICE](NOTICE).
+Apache-2.0. Not affiliated with Anthropic or OpenAI. See [NOTICE](NOTICE).

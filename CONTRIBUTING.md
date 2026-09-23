@@ -4,6 +4,10 @@
 
 - `crates/pitboard-core`: the engine. Parking, switching, recovery, the stores, usage. It
   reads no environment variable except in `Context::from_env`, and prints nothing.
+- `crates/pitboard-core/src/provider`: one module per tool, `claude` and `codex`, behind the
+  `Provider` trait in `mod.rs`: where the tool keeps its login, whose it is, how to renew it
+  and what it has left. Each module's `assumptions.rs` is that tool's register of facts.
+- `crates/pitboard-conformance`: reads a tool's register out of a build of that tool.
 - `crates/pitboard-ffi`: the core as UniFFI bindings, for the app. Records and enums only,
   every call synchronous.
 - `apple`: the Swift package. `PitboardKit` calls the bindings off the main thread,
@@ -48,11 +52,14 @@ difference with `cargo insta review`, and say in the change why the contract mov
    it, and look at the diff after. An empty or surprisingly small diff is the symptom.
 
 3. Never write to a keychain item that holds a real login. Tests name their items after
-   their own identity and call `common::guard_not_live` before the first write.
+   their own identity and call `common::guard_not_live` before the first write. A Codex
+   test points `CODEX_HOME` at a scratch directory, never at `~/.codex`, and nothing runs
+   `codex login` or `codex logout` against a real home: both revoke the login stored there.
 
-4. Measure Claude Code, do not guess at it. Its behaviour here is undocumented, so a claim
-   about it needs an experiment, and the experiment belongs in a test or the commit
-   message.
+4. Measure the tool, do not guess at it. Claude Code's behaviour here is undocumented,
+   Codex's moves with its source, and both ship several times a week. A claim about either
+   needs an experiment or a reading of a named build, and it belongs in a test, the tool's
+   register or the commit message.
 
 ## The site
 
@@ -68,6 +75,11 @@ core and update by different routes, so on one machine an older pitboard will me
 newer one wrote. Reading forwards is `state::migrate`: each bump adds an arm that rewrites
 the document and falls through to the next. Reading backwards is not possible and says
 which half to upgrade. A bump needs a test that loads a file the previous version wrote.
+
+The schema is 4: every account records its tool, and which account is signed in is kept
+per tool. A schema 3 file is brought forward on its first read, with nothing in the
+keychain or the vault touched. A file naming a tool this build does not know was written by
+a newer pitboard, and says so rather than reading as corrupt.
 
 ## Releasing
 
@@ -190,7 +202,8 @@ These decide the design, and each was measured rather than reasoned about:
 - `security -i` reads 4097 bytes of command line, no continuation. Its `-w` prompt reads 128.
 - Writing a keychain item in process, through the Security framework, makes every later
   read of that item by `security` take about a second instead of 0.01, for good.
-- A running Claude Code session picks up a swapped credential within about 33 seconds.
+- A running Claude Code session picks up a swapped credential within about 33 seconds. A
+  running Codex never does.
 
 Redo the first two on a scratch item before changing anything that depends on them.
 
@@ -223,7 +236,7 @@ coupling comes from:
   the noise. There is therefore no skew estimate anywhere: a renewal's expiries are
   anchored to the `Date` of the answer that carried them, which is the correction, and on a
   machine whose clock works there is nothing left to correct.
-- The facts in `pitboard-core::assumptions` carry the literals they are readable by, and
+- The facts in `provider/claude/assumptions.rs` carry the literals they are readable by, and
   `cargo run -p pitboard-conformance -- <a claude binary>` checks them. Measured across six
   builds: the set holds from 2.1.273 through 2.1.278 and correctly goes red on 2.1.124,
   which predates the credential write lock, two of the five account-scoped keys and the
@@ -249,6 +262,39 @@ coupling comes from:
   absence under `no_keyring_off_macos`, checked on every build by the conformance job:
   a fact resting on something not existing is wrong the moment it does, and nothing
   disappearing would ever say so.
+
+Read against codex-cli 0.154.0: the binary, its public source at tag `rust-v0.154.0`, and a
+real `auth.json` that build wrote. The register is `provider/codex/assumptions.rs`, still
+green on 0.156.1:
+
+- The login is `$CODEX_HOME/auth.json`, default `~/.codex/auth.json`, mode 0600. `file` is
+  the packaged default store; `keyring`, `auto` and `ephemeral` are the others. `keyring`
+  and `auto` use a keychain item, `Codex Auth`, that Codex makes through the Security
+  framework and that does not trust `/usr/bin/security`, which is why pitboard refuses them.
+- `codex login` and `codex logout` both POST the stored refresh token to
+  `https://auth.openai.com/oauth/revoke` before clearing it. This is why a Codex park is a
+  move and never a copy (`ParkSemantics::MoveOnly`).
+- A running Codex holds its login in memory for the life of the process, watches no file,
+  and refuses a reload whose account id has changed (`Adoption::RestartRequired`). A refresh
+  already under way when the file changes writes its own account's tokens under whatever
+  account id it finds there.
+- Codex writes `auth.json` with no lock of any kind, so there is none for pitboard to share.
+- The ID token names the account: `email`, and under `https://api.openai.com/auth`,
+  `chatgpt_account_id`, which a Team or Business workspace shares, and `chatgpt_user_id`,
+  the person. pitboard identifies an account by the pair, with no network call.
+- Renewal is `POST https://auth.openai.com/oauth/token` with a JSON body
+  `{client_id, grant_type, refresh_token}` and client id `app_EMoamEEZ73f0CkXaXp7hrann`.
+  Each token in the answer is written only if present. `last_refresh` must be there, as an
+  RFC 3339 string, or Codex reads the login as having no token data. A spent or revoked
+  refresh token answers 400 `invalid_grant`, or 401; any other 400 is not a dead login.
+- Usage is `GET https://chatgpt.com/backend-api/wham/usage` with `Authorization: Bearer` and
+  `ChatGPT-Account-ID`, no quota spent. Its shape was read from a live answer, not the
+  source: a parser written from the source found the windows in the wrong place and returned
+  nothing while the request succeeded.
+- `CODEX_HOME` moves everything Codex keeps, and an empty one means unset, so the private
+  sign-in always sets it to a directory that exists and is started from inside it.
+  `codex login` revokes what is stored in that home before signing in, opens the browser
+  itself, and reads nothing from stdin.
 
 Read on 2026-09-22, against Sparkle 2.10.0, Homebrew 7.0.6 and the tap as it then stood.
 These decide how a release is allowed to move:
@@ -290,6 +336,42 @@ These decide how a release is allowed to move:
   could install what it published, and `packaging/pitboard.rb` in this repository still said
   v0.1.2 while the tap served 0.2.0 and the workspace was at 0.2.0. Nothing anywhere
   compared the three.
+
+## A tool's register and the conformance run
+
+Each tool keeps its own register, `crates/pitboard-core/src/provider/<tool>/assumptions.rs`,
+dated against the build it was read from. `pitboard-conformance` reads the literals each
+fact is readable by out of a build and says which are still there:
+
+```sh
+cargo run -p pitboard-conformance -- <a claude binary>
+cargo run -p pitboard-conformance -- <a codex binary> --provider codex
+```
+
+Add `--json` for a report a program can read. It exits 1 when a fact has moved: a literal
+it needs is gone, or one it rules out has turned up. Use the native `codex` binary: the npm
+package `@openai/codex` is a wrapper, and the binary is under `vendor/` in its tagged
+platform version, such as `@openai/codex@<version>-linux-x64`, which is where
+`.github/workflows/conformance.yml` takes it from. That workflow checks the newest build of
+each tool against its own register twice a week, and can be run by hand for a given
+version.
+
+To add a fact, add an `Assumption` to that tool's register: what pitboard believes
+(`fact`), where in the tool it was read (`read_from`), the build (`verified_against`), and
+what in pitboard stops being true if it moves (`depends`). `probe` lists literals that must
+be in a build for the fact to still be readable there; `absent` lists literals whose
+arrival would disprove it. Pick literals specific to the fact: one already in the build for
+another reason proves nothing. A fact about behaviour with no literal to find gets an empty
+`probe`, and the run reports it as not readable rather than as holding. Run the checker
+against the build you read the fact from, and against an older build that predates it if
+you can, to see it go red. `cargo test` checks that every name is unique and that every
+fact says what it is, where it was read, which version, and what depends on it.
+
+Adding a tool takes three things: a register read out of a named build of it, a module
+under `provider/` that implements `Provider`, and a conformance job for it. `ProviderId`,
+`ALL` and the matches in `provider::of` and `assumptions::of` name every tool, so the
+compiler and the tests point at what a new one has to fill in. Nothing here promises a next
+tool.
 
 ## Dependencies
 
