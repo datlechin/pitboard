@@ -7,6 +7,7 @@
 //! with its age once that is worth knowing.
 
 use crate::context::Context;
+use crate::provider::ProviderId;
 use crate::provider::claude::paths as claude;
 use crate::state::State;
 use crate::usage::{Snapshot, Source, Window};
@@ -89,10 +90,13 @@ fn line(
     remembered: &HashMap<String, Snapshot>,
     now: i64,
 ) -> StatusLine {
-    let current = signed_in.and_then(|uuid| state.by_uuid(uuid));
+    // Claude Code runs this, so the line is about Claude Code's accounts. Another tool's
+    // account is not something this session could switch to.
+    let current = signed_in.and_then(|uuid| state.by_uuid(ProviderId::Claude, uuid));
     let others = state
         .accounts
         .iter()
+        .filter(|a| a.provider() == ProviderId::Claude)
         .filter(|a| current.is_none_or(|c| c.account_uuid != a.account_uuid))
         .map(|account| {
             let reading = remembered.get(&account.account_uuid);

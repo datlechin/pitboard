@@ -37,7 +37,7 @@ pub use uninstall::{Removed, uninstall};
 use crate::context::Context;
 use crate::error::{Error, Result};
 use crate::service::Warning;
-use crate::state::{Account, Park, State};
+use crate::state::{Account, Key, Park, State};
 use crate::{api, fault, home, lock, park, pending, state, store};
 use journal::{Journal, clear_journal, reconcile, write_journal};
 use serde_json::Value;
@@ -244,19 +244,20 @@ fn access_token(document: &Value) -> Result<String> {
         })
 }
 
-pub fn switch(settled: Settled, label: &str) -> Result<(Outcome, Vec<Warning>)> {
+pub fn switch(settled: Settled, key: &Key) -> Result<(Outcome, Vec<Warning>)> {
     let Settled {
         _exclusive,
         mut state,
         ctx,
     } = settled;
     let ctx = &ctx;
+    let label = &key.label;
     let target = state
-        .get(label)
+        .get(key)
         .cloned()
         .ok_or_else(|| Error::AccountUnknown {
-            label: label.to_string(),
-            enrolled: state.labels(),
+            label: key.typed(),
+            enrolled: state.labels(key.provider),
         })?;
 
     // Asked before taking Claude Code's lock so the round trip does not hold up its writes,
@@ -268,38 +269,31 @@ pub fn switch(settled: Settled, label: &str) -> Result<(Outcome, Vec<Warning>)> 
     let outgoing = identify_document(ctx, ProviderId::Claude, &live)?;
 
     if outgoing.account_uuid == target.account_uuid {
-        if state.active_for(ProviderId::Claude) != Some(label) {
-            state.set_active(ProviderId::Claude, Some(label.to_string()));
-            if let Some(account) = state.accounts.iter_mut().find(|a| a.label == label) {
-                account.last_used_at = Some(ctx.now());
-            }
+        if state.active_for(key.provider) != Some(label.as_str()) {
+            state.set_active(key.provider, Some(label.to_string()));
+            state.used(key, ctx.now());
             state::save(ctx, &state)?;
         }
-        return Ok((
-            Outcome::AlreadyActive {
-                label: label.to_string(),
-            },
-            Vec::new(),
-        ));
+        return Ok((Outcome::AlreadyActive { label: key.typed() }, Vec::new()));
     }
-    let outgoing_label = state
-        .by_uuid(&outgoing.account_uuid)
-        .map(|a| a.label.clone())
+    let outgoing_key = state
+        .by_uuid(key.provider, &outgoing.account_uuid)
+        .map(Account::key)
         .ok_or_else(|| Error::LiveAccountNotEnrolled {
             email: outgoing.email.clone(),
         })?;
-    let held = target.parked.clone().ok_or_else(|| Error::NothingParked {
-        label: label.to_string(),
-    })?;
+    let outgoing_label = outgoing_key.label.clone();
+    let held = target
+        .parked
+        .clone()
+        .ok_or_else(|| Error::NothingParked { label: key.typed() })?;
     if !held.restorable_at(ctx.now()) {
-        return Err(Error::ParkedLoginExpired {
-            label: label.to_string(),
-        });
+        return Err(Error::ParkedLoginExpired { label: key.typed() });
     }
-    let incoming = park::load(ctx, label, &held)?;
+    let incoming = park::load(ctx, key, &held)?;
     // Asked before Claude Code's lock is taken, like the outgoing question, so the round
     // trip does not hold up its writes.
-    let (held, incoming) = prove_incoming(ctx, &mut state, label, &target, held, incoming)?;
+    let (held, incoming) = prove_incoming(ctx, &mut state, key, &target, held, incoming)?;
 
     let storage = PathBuf::from(claude::storage_dir(ctx)).join(".storage-write");
     let guard = lock::acquire(&storage)?;
@@ -351,6 +345,7 @@ pub fn switch(settled: Settled, label: &str) -> Result<(Outcome, Vec<Warning>)> 
     write_journal(
         ctx,
         &Journal {
+            provider: key.provider,
             started_at: ctx.now(),
             from_label: outgoing_label.clone(),
             from_uuid: outgoing.account_uuid.clone(),
@@ -368,7 +363,8 @@ pub fn switch(settled: Settled, label: &str) -> Result<(Outcome, Vec<Warning>)> 
     // Until the incoming login is installed there is nothing for a later run to finish, so
     // a failure here takes the record of intent away with it. A copy that was written but
     // could not be recorded is deleted: nothing that survives would name it.
-    let parked = match park::store_at(ctx, &park_service, &tool.slice(&before).map_err(shape)?) {
+    let slice = tool.slice(&before).map_err(shape)?;
+    let parked = match park::store_at(ctx, key.provider, &park_service, &slice) {
         Ok(parked) => parked,
         Err(e) => {
             clear_journal(ctx);
@@ -376,7 +372,7 @@ pub fn switch(settled: Settled, label: &str) -> Result<(Outcome, Vec<Warning>)> 
         }
     };
     fault::point("switch.park_stored");
-    state.park(&outgoing_label, parked.clone());
+    state.park(&outgoing_key, parked.clone());
     if let Err(e) = state::save(ctx, &state) {
         let _ = store::vault_delete(ctx, &parked.service);
         clear_journal(ctx);
@@ -458,10 +454,8 @@ pub fn switch(settled: Settled, label: &str) -> Result<(Outcome, Vec<Warning>)> 
     }
 
     state.discard(&held.service);
-    state.set_active(ProviderId::Claude, Some(label.to_string()));
-    if let Some(account) = state.accounts.iter_mut().find(|a| a.label == label) {
-        account.last_used_at = Some(ctx.now());
-    }
+    state.set_active(key.provider, Some(label.to_string()));
+    state.used(key, ctx.now());
     state::save(ctx, &state)?;
     fault::point("switch.recorded");
     drop(guard);
@@ -510,24 +504,25 @@ pub fn switch(settled: Settled, label: &str) -> Result<(Outcome, Vec<Warning>)> 
 fn prove_incoming(
     ctx: &Context,
     state: &mut State,
-    label: &str,
+    key: &Key,
     target: &Account,
     held: Park,
     incoming: Value,
 ) -> Result<(Park, Value)> {
+    let label = key.typed();
     let usable = held.askable_at(ctx.now());
     if usable {
         let token = park::oauth_in(&incoming)["accessToken"]
             .as_str()
             .ok_or_else(|| Error::ParkedCredentialCorrupt {
-                label: label.to_string(),
+                label: label.clone(),
                 detail: "it has no access token".into(),
             })?;
         match api::owner(ctx, token) {
             Ok(owner) if owner.account_uuid == target.account_uuid => return Ok((held, incoming)),
             Ok(other) => {
                 return Err(Error::ParkedLoginBelongsElsewhere {
-                    label: label.to_string(),
+                    label,
                     email: other.email,
                 });
             }
@@ -544,13 +539,16 @@ fn prove_incoming(
     }
 
     // Lapsed, or refused as lapsed. Renew it and switch to what comes back.
-    let Some(fresh) = renew::renew_one(ctx, state, label, &held)? else {
+    let Some(fresh) = renew::renew_one(ctx, state, key, &held)? else {
         return Err(Error::IdentityUnverifiable {
             cause: crate::error::Cause::Unreachable,
-            detail: format!("`{label}`'s parked login needs renewing and Anthropic did not answer"),
+            detail: format!(
+                "`{label}`'s parked login needs renewing and {} did not answer",
+                key.provider.service()
+            ),
         });
     };
-    let document = park::load(ctx, label, &fresh)?;
+    let document = park::load(ctx, key, &fresh)?;
     Ok((fresh, document))
 }
 

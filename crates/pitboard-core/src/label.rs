@@ -11,7 +11,7 @@
 
 use crate::error::{Enrolled, Error, Result};
 use crate::provider::ProviderId;
-use crate::state::{Account, State};
+use crate::state::{Account, Key, State};
 
 /// The separator between a provider and a label. A label may not contain one.
 pub const SEPARATOR: char = '/';
@@ -59,17 +59,10 @@ pub fn resolve<'a>(state: &'a State, typed: &str) -> Result<&'a Account> {
     match parse(typed)? {
         Spec::Qualified(provider, label) => {
             state
-                .get_of(provider, label)
+                .get(&Key::new(provider, label))
                 .ok_or_else(|| Error::AccountUnknown {
                     label: typed.to_string(),
-                    enrolled: Enrolled(
-                        state
-                            .accounts
-                            .iter()
-                            .filter(|a| a.provider() == provider)
-                            .map(|a| a.label.clone())
-                            .collect(),
-                    ),
+                    enrolled: state.labels(provider),
                 })
         }
         Spec::Bare(label) => {
@@ -98,7 +91,7 @@ pub fn resolve<'a>(state: &'a State, typed: &str) -> Result<&'a Account> {
 
 /// `claude/work`, as a person would type it back.
 pub fn qualify(account: &Account) -> String {
-    format!("{}{SEPARATOR}{}", account.provider().code(), account.label)
+    account.key().qualified()
 }
 
 /// Every enrolled label, for a bare label that found nothing.
@@ -255,37 +248,44 @@ mod tests {
     /// have missed because it needed one.
     #[test]
     fn a_miss_lists_labels_qualified_once_two_tools_have_accounts() {
-        let mut state = state(&[(ProviderId::Claude, "work")]);
-        let mut other = account(ProviderId::Claude, "personal");
-        // Stand in for an account of another tool until there is a second variant.
-        other.account_uuid = "elsewhere".into();
-        state.accounts.push(other);
-        let one_tool = state
-            .accounts
-            .iter()
-            .all(|a| a.provider() == ProviderId::Claude);
-        assert!(one_tool, "still one tool, so still bare");
+        let one = state(&[
+            (ProviderId::Claude, "work"),
+            (ProviderId::Claude, "personal"),
+        ]);
         assert!(
-            !resolve(&state, "nobody")
+            !resolve(&one, "nobody")
                 .unwrap_err()
                 .to_string()
                 .contains("claude/"),
             "one tool stays bare"
+        );
+
+        let two = state(&[
+            (ProviderId::Claude, "work"),
+            (ProviderId::Codex, "personal"),
+        ]);
+        let err = resolve(&two, "nobody").unwrap_err().to_string();
+        assert!(
+            err.contains("claude/work") && err.contains("codex/personal"),
+            "{err}"
         );
     }
 
     /// pitboard picking one would switch an account the person did not name.
     #[test]
     fn a_bare_label_two_providers_share_is_refused_and_both_are_named() {
-        let mut state = state(&[(ProviderId::Claude, "work")]);
-        // A second account under the same label, which only a second provider can produce.
-        let mut twin = account(ProviderId::Claude, "work");
-        twin.account_uuid = "second".into();
-        state.accounts.push(twin);
+        let state = state(&[(ProviderId::Claude, "work"), (ProviderId::Codex, "work")]);
 
         let err = resolve(&state, "work").unwrap_err();
         assert_eq!(err.code(), "label_ambiguous");
         assert!(err.to_string().contains("claude/work"), "{err}");
+        assert!(err.to_string().contains("codex/work"), "{err}");
+
+        assert_eq!(
+            resolve(&state, "codex/work").unwrap().provider(),
+            ProviderId::Codex,
+            "and a prefix picks exactly the one it names"
+        );
     }
 
     #[test]

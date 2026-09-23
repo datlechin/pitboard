@@ -10,7 +10,7 @@ use crate::context::Context;
 use crate::error::Cause;
 use crate::provider::ProviderId;
 use crate::provider::claude::paths as claude;
-use crate::state::{Park, State};
+use crate::state::{Key, Park, State};
 use crate::usage::{Snapshot, Source};
 use crate::{budget, park, readings};
 use serde_json::Value;
@@ -192,27 +192,20 @@ impl Facts {
 
 /// A parked login holds the account's whole slice of the credential document, so the token
 /// is inside its OAuth block; a park from a version that kept less is that block.
-fn access_token(document: &Value) -> Option<String> {
-    park::oauth_in(document)
-        .get("accessToken")
-        .and_then(Value::as_str)
-        .map(str::to_owned)
-}
-
-/// The token to ask about a parked account with, or why there is none.
+/// The parked login to ask about an account with, or why there is none.
+///
+/// Whether the document holds what a usage call needs is the tool's own question, answered
+/// when it is asked: a Codex login keeps its token somewhere a Claude Code login does not.
 fn parked_document(
     ctx: &Context,
-    label: &str,
+    key: &Key,
     parked: Option<&Park>,
     now: i64,
 ) -> Result<Value, Stale> {
     match parked {
         None => Err(Stale::NothingParked),
         Some(p) if !p.askable_at(now) => Err(Stale::ParkedAccessExpired),
-        Some(p) => park::load(ctx, label, p)
-            .ok()
-            .filter(|document| access_token(document).is_some())
-            .ok_or(Stale::ParkUnreadable),
+        Some(p) => park::load(ctx, key, p).map_err(|_| Stale::ParkUnreadable),
     }
 }
 
@@ -297,6 +290,7 @@ fn ask_usage(
     which: ProviderId,
     account_uuid: Option<&str>,
     document: &Value,
+    signed_in: bool,
     remembered: Option<&Snapshot>,
     fresh: bool,
 ) -> Asked {
@@ -315,12 +309,22 @@ fn ask_usage(
     // Through the provider, because what a usage call needs is not the same everywhere:
     // Codex sends an account id header it reads out of the credential, and Gemini needs a
     // project id from a file the credential never mentions.
-    let answer = crate::provider::of(which)
-        .usage(
-            ctx,
-            &crate::provider::Credential::new(which, document.clone()),
+    let answer = crate::provider::of(which).usage(
+        ctx,
+        &crate::provider::Credential::new(which, document.clone()),
+    );
+    // A park that is not the shape its own tool keeps was damaged at rest, which is a fact
+    // about the vault and not about the service. Said as such rather than as an answer the
+    // service gave.
+    if !signed_in
+        && matches!(
+            answer,
+            Err(crate::provider::ProviderError::ShapeUnexpected { .. })
         )
-        .map_err(to_api);
+    {
+        return (Err(Stale::ParkUnreadable), None);
+    }
+    let answer = answer.map_err(to_api);
     let learned = account_uuid.and_then(|uuid| {
         let outcome = match &answer {
             Ok(_) => budget::Outcome::Answered,
@@ -336,10 +340,7 @@ fn ask_usage(
         };
         Some((uuid.to_string(), outcome))
     });
-    (
-        answer.map_err(|e| Stale::of(&e, account_uuid.is_none())),
-        learned,
-    )
+    (answer.map_err(|e| Stale::of(&e, signed_in)), learned)
 }
 
 pub fn gather(ctx: &Context, state: &State, fresh: bool) -> Report {
@@ -360,7 +361,7 @@ pub fn gather(ctx: &Context, state: &State, fresh: bool) -> Report {
     let parked_documents: Vec<Result<Value, Stale>> = state
         .accounts
         .iter()
-        .map(|a| parked_document(ctx, &a.label, a.parked.as_ref(), now))
+        .map(|a| parked_document(ctx, &a.key(), a.parked.as_ref(), now))
         .collect();
     let config = claude::load_config(ctx).ok();
     // Only Claude Code keeps a local record of who is signed in that can lag its own
@@ -410,6 +411,7 @@ pub fn gather(ctx: &Context, state: &State, fresh: bool) -> Report {
                             which,
                             uuid.as_deref(),
                             document,
+                            true,
                             uuid.as_deref().and_then(|u| remembered.get(u)),
                             fresh,
                         );
@@ -437,6 +439,7 @@ pub fn gather(ctx: &Context, state: &State, fresh: bool) -> Report {
                             account.provider(),
                             Some(&account.account_uuid),
                             document,
+                            false,
                             remembered.get(&account.account_uuid),
                             fresh,
                         ),
@@ -879,13 +882,57 @@ mod tests {
         assert!(personal.switchable(NOW));
     }
 
+    /// The login signed in has a session of its own tool's to renew, and a parked one does
+    /// not. The same refusal means different things on each side, and saying "parked" about
+    /// the login somebody is using sends them looking for a park that is not there.
+    #[test]
+    fn a_refused_token_is_an_expired_session_when_it_is_the_one_signed_in() {
+        let api = crate::api::scripted::ScriptedApi::new();
+        api.token_trouble("t", crate::api::scripted::Trouble::Unauthorized);
+        let ctx = Context::new(std::path::PathBuf::from("/nowhere"))
+            .with_pitboard_home(std::env::temp_dir().join("pitboard-status-refused"))
+            .with_scripted_api(api);
+        let login = serde_json::json!({"claudeAiOauth": {"accessToken": "t"}});
+        let ask = |signed_in| {
+            ask_usage(
+                &ctx,
+                ProviderId::Claude,
+                None,
+                &login,
+                signed_in,
+                None,
+                true,
+            )
+            .0
+        };
+        assert_eq!(ask(true).unwrap_err(), Stale::SessionExpired);
+        assert_eq!(ask(false).unwrap_err(), Stale::ParkedAccessExpired);
+    }
+
+    /// A parked Codex login keeps its token where a Claude Code login does not. Reading it
+    /// with Claude Code's layout called every Codex park unreadable; what is unreadable now
+    /// is decided by the tool the park belongs to.
+    #[test]
+    fn a_park_not_in_its_own_tools_shape_is_unreadable_rather_than_an_answer() {
+        let ctx = Context::new(std::path::PathBuf::from("/nowhere"));
+        let not_codex = serde_json::json!({"claudeAiOauth": {"accessToken": "t"}});
+        let (answer, learned) =
+            ask_usage(&ctx, ProviderId::Codex, None, &not_codex, false, None, true);
+        assert_eq!(answer.unwrap_err(), Stale::ParkUnreadable);
+        assert!(
+            learned.is_none(),
+            "nothing was asked, so there is nothing to learn"
+        );
+    }
+
     #[test]
     fn a_parked_login_past_its_access_expiry_is_not_asked() {
         let ctx = Context::from_env();
-        let token = parked_document(&ctx, "personal", Some(&parked(NOW + 86_400)), NOW);
+        let personal = Key::new(ProviderId::Claude, "personal");
+        let token = parked_document(&ctx, &personal, Some(&parked(NOW + 86_400)), NOW);
         assert_eq!(token, Err(Stale::ParkedAccessExpired));
         assert_eq!(
-            parked_document(&ctx, "personal", None, NOW),
+            parked_document(&ctx, &personal, None, NOW),
             Err(Stale::NothingParked)
         );
     }

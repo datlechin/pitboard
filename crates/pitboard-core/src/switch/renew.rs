@@ -5,8 +5,7 @@
 use super::{journal, purge, try_exclusive};
 use crate::context::Context;
 use crate::error::{Error, Result};
-use crate::provider::ProviderId;
-use crate::state::{Park, State};
+use crate::state::{Key, Park, State};
 use crate::{park, state, store};
 use serde_json::Value;
 
@@ -94,51 +93,50 @@ pub fn renew_due(ctx: &Context, due: Due) -> Vec<(String, Renewal)> {
         return Vec::new();
     };
     let now = ctx.now();
-    let due: Vec<(String, Park)> = state
+    let due: Vec<(Key, Park)> = state
         .accounts
         .iter()
         .filter_map(|a| {
             let held = a.parked.as_ref()?;
-            due.covers(held, now)
-                .then(|| (a.label.clone(), held.clone()))
+            due.covers(held, now).then(|| (a.key(), held.clone()))
         })
         .collect();
     // Each renewal is a round trip that can take as long as the request timeout, so they
     // are asked together. What comes back is then written one at a time: the state file is
     // one file, and the order of writes to it is not something to leave to chance.
-    let asked: Vec<(String, Park, Result<Asked>)> = std::thread::scope(|scope| {
+    let asked: Vec<(Key, Park, Result<Asked>)> = std::thread::scope(|scope| {
         let handles: Vec<_> = due
             .into_iter()
-            .map(|(label, held)| {
+            .map(|(key, held)| {
                 let ctx = &*ctx;
                 let handle = scope.spawn({
-                    let label = label.clone();
+                    let key = key.clone();
                     let held = held.clone();
-                    move || ask(ctx, &label, &held)
+                    move || ask(ctx, &key, &held)
                 });
-                (label, held, handle)
+                (key, held, handle)
             })
             .collect();
         handles
             .into_iter()
-            .map(|(label, held, handle)| {
+            .map(|(key, held, handle)| {
                 let answer = handle.join().unwrap_or_else(|_| {
                     Err(Error::RenewalFailed {
-                        label: label.clone(),
+                        label: key.typed(),
                         cause: None,
                         detail: "the renewal thread stopped".into(),
                     })
                 });
-                (label, held, answer)
+                (key, held, answer)
             })
             .collect()
     });
     let outcomes = asked
         .into_iter()
-        .map(|(label, held, answer)| {
+        .map(|(key, held, answer)| {
             let outcome =
-                apply(ctx, &mut state, &label, &held, answer).unwrap_or_else(Renewal::Failed);
-            (label, outcome)
+                apply(ctx, &mut state, &key, &held, answer).unwrap_or_else(Renewal::Failed);
+            (key.typed(), outcome)
         })
         .collect();
     purge(ctx, &mut state);
@@ -156,11 +154,10 @@ struct Asked {
 
 /// The part of a renewal that talks to Anthropic. Touches no shared state, so several run
 /// at once.
-fn ask(ctx: &Context, label: &str, held: &Park) -> Result<Asked> {
-    let document = park::load(ctx, label, held)?;
-    let which = ProviderId::Claude;
-    let tool = crate::provider::of(which);
-    let credential = crate::provider::Credential::new(which, document);
+fn ask(ctx: &Context, key: &Key, held: &Park) -> Result<Asked> {
+    let document = park::load(ctx, key, held)?;
+    let tool = crate::provider::of(key.provider);
+    let credential = crate::provider::Credential::new(key.provider, document);
     match tool.renew(ctx, &credential) {
         Ok(fresh) => Ok(Asked {
             renewed: Some(fresh.raw),
@@ -179,7 +176,7 @@ fn ask(ctx: &Context, label: &str, held: &Park) -> Result<Asked> {
             refused: false,
         }),
         Err(e) => Err(Error::RenewalFailed {
-            label: label.to_string(),
+            label: key.typed(),
             cause: Some(crate::error::Cause::of_provider(&e)),
             detail: e.to_string(),
         }),
@@ -192,14 +189,12 @@ fn ask(ctx: &Context, label: &str, held: &Park) -> Result<Asked> {
 pub(super) fn renew_one(
     ctx: &Context,
     state: &mut State,
-    label: &str,
+    key: &Key,
     held: &Park,
 ) -> Result<Option<Park>> {
-    match apply(ctx, state, label, held, ask(ctx, label, held))? {
-        Renewal::Renewed => Ok(state.get(label).and_then(|a| a.parked.clone())),
-        Renewal::Refused => Err(Error::ParkedLoginRefused {
-            label: label.to_string(),
-        }),
+    match apply(ctx, state, key, held, ask(ctx, key, held))? {
+        Renewal::Renewed => Ok(state.get(key).and_then(|a| a.parked.clone())),
+        Renewal::Refused => Err(Error::ParkedLoginRefused { label: key.typed() }),
         Renewal::Deferred => Ok(None),
         Renewal::Failed(e) => Err(e),
     }
@@ -209,7 +204,7 @@ pub(super) fn renew_one(
 fn apply(
     ctx: &Context,
     state: &mut State,
-    label: &str,
+    key: &Key,
     held: &Park,
     asked: Result<Asked>,
 ) -> Result<Renewal> {
@@ -226,11 +221,13 @@ fn apply(
     // The old refresh token may already be spent, so the answer is written at once, and a
     // second time under another name if the first write fails.
     let uuid = state
-        .get(label)
+        .get(key)
         .map(|a| a.account_uuid.clone())
         .unwrap_or_default();
-    let store =
-        || park::reserve(ctx, &uuid).and_then(|service| park::store_at(ctx, &service, &next));
+    let store = || {
+        park::reserve(ctx, &uuid)
+            .and_then(|service| park::store_at(ctx, key.provider, &service, &next))
+    };
     let parked = match store().or_else(|_| store()) {
         Ok(parked) => parked,
         Err(e) => {
@@ -240,15 +237,15 @@ fn apply(
             state.discard(&held.service);
             let _ = state::save(ctx, state);
             return Err(Error::RenewalFailed {
-                label: label.to_string(),
-                // Anthropic answered; it is this machine that could not keep the answer.
+                label: key.typed(),
+                // The service answered; it is this machine that could not keep the answer.
                 cause: None,
                 detail: e.to_string(),
             });
         }
     };
     crate::fault::point("renew.park_stored");
-    state.park(label, parked.clone());
+    state.park(key, parked.clone());
     if let Err(e) = state::save(ctx, state) {
         // Nothing that survives names the copy just written. The record on disk still
         // points at the spent one, which the next renewal will be refused and drop.
@@ -320,8 +317,13 @@ mod tests {
     /// One account holding one park, written the way a switch would have written it.
     fn with_park(m: &Machine, label: &str, refresh: &str, access_expires_at: i64) -> Park {
         let service = park::reserve(&m.ctx, "acc").expect("a free name");
-        let park =
-            park::store_at(&m.ctx, &service, &oauth(refresh, access_expires_at)).expect("parked");
+        let park = park::store_at(
+            &m.ctx,
+            crate::provider::ProviderId::Claude,
+            &service,
+            &oauth(refresh, access_expires_at),
+        )
+        .expect("parked");
         let mut state = State::default();
         state.accounts.push(Account {
             last_used_at: None,
@@ -382,7 +384,7 @@ mod tests {
 
         let park = state::load(&m.ctx)
             .expect("state")
-            .get("work")
+            .get(&Key::new(crate::provider::ProviderId::Claude, "work"))
             .expect("account")
             .parked
             .clone()
@@ -407,7 +409,7 @@ mod tests {
 
         let park = state::load(&m.ctx)
             .expect("state")
-            .get("work")
+            .get(&Key::new(crate::provider::ProviderId::Claude, "work"))
             .expect("account")
             .parked
             .clone()
@@ -440,7 +442,7 @@ mod tests {
         assert_eq!(m.api.asked(), vec![Question::Renew("old".into())]);
         let state = state::load(&m.ctx).expect("state");
         let now = state
-            .get("work")
+            .get(&Key::new(crate::provider::ProviderId::Claude, "work"))
             .expect("account")
             .parked
             .clone()
@@ -465,7 +467,13 @@ mod tests {
 
         assert_eq!(outcome(&outcomes, "work"), "parked_login_refused");
         let state = state::load(&m.ctx).expect("state");
-        assert!(state.get("work").expect("account").parked.is_none());
+        assert!(
+            state
+                .get(&Key::new(crate::provider::ProviderId::Claude, "work"))
+                .expect("account")
+                .parked
+                .is_none()
+        );
         assert!(m.mem.vault().services().is_empty());
     }
 
@@ -483,7 +491,10 @@ mod tests {
             assert_eq!(outcome(&outcomes, "work"), "renewal_deferred");
             let state = state::load(&m.ctx).expect("state");
             assert_eq!(
-                state.get("work").expect("account").parked,
+                state
+                    .get(&Key::new(crate::provider::ProviderId::Claude, "work"))
+                    .expect("account")
+                    .parked,
                 Some(before.clone()),
                 "{trouble:?} must not spend or drop anything"
             );
@@ -509,7 +520,11 @@ mod tests {
         assert_eq!(outcome(&outcomes, "work"), "renewal_failed");
         let state = state::load(&m.ctx).expect("state");
         assert!(
-            state.get("work").expect("account").parked.is_none(),
+            state
+                .get(&Key::new(crate::provider::ProviderId::Claude, "work"))
+                .expect("account")
+                .parked
+                .is_none(),
             "a park whose refresh token Anthropic has spent must not stay on offer"
         );
         assert!(

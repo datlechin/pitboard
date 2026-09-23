@@ -122,8 +122,13 @@ pub(super) fn machine(name: &str) -> Machine {
     // `there` holds a parked login, written the way a switch would have written it.
     std::fs::create_dir_all(root.join(".pitboard")).expect("a pitboard home");
     let parked_service = park::reserve(&ctx, "there").expect("a free name");
-    let parked =
-        park::store_at(&ctx, &parked_service, &oauth("there-refresh", 30)).expect("parked");
+    let parked = park::store_at(
+        &ctx,
+        crate::provider::ProviderId::Claude,
+        &parked_service,
+        &oauth("there-refresh", 30),
+    )
+    .expect("parked");
 
     let mut state = State::default();
     state.accounts.push(account("here", "here", None));

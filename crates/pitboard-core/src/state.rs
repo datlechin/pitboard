@@ -97,7 +97,63 @@ pub struct Account {
     pub detail: Detail,
 }
 
+/// One account, the way pitboard tells accounts apart: which tool, and what it is called
+/// there.
+///
+/// A label alone stopped being enough the day a second tool could have a `work` of its own.
+/// Everything that finds, changes or drops an account takes one of these, so no lookup can
+/// quietly land on the other tool's account of the same name.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct Key {
+    pub provider: ProviderId,
+    pub label: String,
+}
+
+impl Key {
+    pub fn new(provider: ProviderId, label: impl Into<String>) -> Key {
+        Key {
+            provider,
+            label: label.into(),
+        }
+    }
+
+    /// The name as somebody would type it back: bare for the tool a bare name means,
+    /// qualified for any other. Every message and the audit log use this, so a Claude Code
+    /// account reads exactly as it did before there was a second tool.
+    pub fn typed(&self) -> String {
+        if self.provider == crate::label::DEFAULT {
+            self.label.clone()
+        } else {
+            self.qualified()
+        }
+    }
+
+    /// `codex/work`, whichever tool it is.
+    pub fn qualified(&self) -> String {
+        format!(
+            "{}{}{}",
+            self.provider.code(),
+            crate::label::SEPARATOR,
+            self.label
+        )
+    }
+}
+
+impl std::fmt::Display for Key {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.typed())
+    }
+}
+
 impl Account {
+    pub fn key(&self) -> Key {
+        Key::new(self.provider(), self.label.clone())
+    }
+
+    pub fn is(&self, key: &Key) -> bool {
+        self.label == key.label && self.provider() == key.provider
+    }
+
     pub fn provider(&self) -> ProviderId {
         match self.detail {
             Detail::Claude { .. } => ProviderId::Claude,
@@ -178,10 +234,16 @@ impl State {
         self.slot.insert(provider.code().to_string(), slot);
     }
 
-    /// Every label enrolled, for a message that would otherwise send someone to another
-    /// command to find out.
-    pub fn labels(&self) -> crate::error::Enrolled {
-        crate::error::Enrolled(self.accounts.iter().map(|a| a.label.clone()).collect())
+    /// Every label this tool has enrolled, for a message that would otherwise send someone
+    /// to another command to find out.
+    pub fn labels(&self, provider: ProviderId) -> crate::error::Enrolled {
+        crate::error::Enrolled(
+            self.accounts
+                .iter()
+                .filter(|a| a.provider() == provider)
+                .map(|a| a.label.clone())
+                .collect(),
+        )
     }
 
     /// Whether anything in the state refers to this vault item: an account holding it, or
@@ -194,35 +256,40 @@ impl State {
             || self.discarded.iter().any(|s| s == service)
     }
 
-    /// The account with this label, whichever provider has it.
+    /// The account under this key.
     ///
-    /// Callers that took a label from a person should go through [`crate::label::resolve`]
-    /// instead, which knows what to do when two providers share one. This is for the code
-    /// that already holds a label it put there itself.
-    pub fn get(&self, label: &str) -> Option<&Account> {
-        self.accounts.iter().find(|a| a.label == label)
+    /// Callers that took a name from a person should go through [`crate::label::resolve`]
+    /// first, which knows what to do when two tools share a label.
+    pub fn get(&self, key: &Key) -> Option<&Account> {
+        self.accounts.iter().find(|a| a.is(key))
     }
 
-    /// This provider's account with this label.
-    pub fn get_of(&self, provider: ProviderId, label: &str) -> Option<&Account> {
+    /// This tool's account with this identity.
+    pub fn by_uuid(&self, provider: ProviderId, uuid: &str) -> Option<&Account> {
         self.accounts
             .iter()
-            .find(|a| a.label == label && a.provider() == provider)
+            .find(|a| a.provider() == provider && a.account_uuid == uuid)
     }
 
-    pub fn by_uuid(&self, uuid: &str) -> Option<&Account> {
+    /// The account a parked item was written for.
+    ///
+    /// A park's name carries the account's identity and not its tool, because names were
+    /// fixed before there was a second tool and every item already on a machine is filed
+    /// under one. The identities cannot collide in practice: Claude Code's and Codex's are
+    /// UUIDs, and Gemini's is Google's numeric subject.
+    pub fn owner_of_park(&self, uuid: &str) -> Option<&Account> {
         self.accounts.iter().find(|a| a.account_uuid == uuid)
     }
 
-    fn get_mut(&mut self, label: &str) -> Option<&mut Account> {
-        self.accounts.iter_mut().find(|a| a.label == label)
+    fn get_mut(&mut self, key: &Key) -> Option<&mut Account> {
+        self.accounts.iter_mut().find(|a| a.is(key))
     }
 
     /// Hold `park` for the account, discarding whatever it replaces.
-    pub fn park(&mut self, label: &str, park: Park) {
+    pub fn park(&mut self, key: &Key, park: Park) {
         let service = park.service.clone();
         if let Some(previous) = self
-            .get_mut(label)
+            .get_mut(key)
             .and_then(|account| account.parked.replace(park))
             && previous.service != service
         {
@@ -247,33 +314,39 @@ impl State {
             .any(|a| a.parked.as_ref().is_some_and(|p| p.service == service))
     }
 
+    /// Record that the account under `key` was just put to use.
+    pub fn used(&mut self, key: &Key, at: i64) {
+        if let Some(account) = self.get_mut(key) {
+            account.last_used_at = Some(at);
+        }
+    }
+
+    /// Add the account, or replace the one this tool already has under its label.
     pub fn upsert(&mut self, account: Account) {
-        match self.get_mut(&account.label) {
+        match self.get_mut(&account.key()) {
             Some(existing) => *existing = account,
             None => self.accounts.push(account),
         }
     }
 
-    /// Enroll the account under `from` as `to` instead. Only the label changes: parked
-    /// logins are named by account, not by label.
-    pub fn relabel(&mut self, from: &str, to: &str) -> Result<&Account> {
-        if from != to
-            && let Some(taken) = self.get(to)
+    /// Enroll the account under `from` as `to` instead, inside the same tool. Only the
+    /// label changes: parked logins are named by account, not by label.
+    pub fn relabel(&mut self, from: &Key, to: &str) -> Result<&Account> {
+        let target = Key::new(from.provider, to);
+        if from.label != to
+            && let Some(taken) = self.get(&target)
         {
             return Err(Error::LabelTaken {
-                label: to.to_string(),
+                label: target.typed(),
                 email: taken.email.clone(),
             });
         }
-        let provider = self.get(from).map(Account::provider);
-        if let Some(provider) = provider
-            && self.active_for(provider) == Some(from)
-        {
-            self.set_active(provider, Some(to.to_string()));
+        if self.active_for(from.provider) == Some(from.label.as_str()) {
+            self.set_active(from.provider, Some(to.to_string()));
         }
-        let enrolled = self.labels();
+        let enrolled = self.labels(from.provider);
         let account = self.get_mut(from).ok_or_else(|| Error::AccountUnknown {
-            label: from.to_string(),
+            label: from.typed(),
             enrolled,
         })?;
         account.label = to.to_string();
@@ -281,11 +354,14 @@ impl State {
     }
 
     /// Drop the account, listing its park for deletion.
-    pub fn remove(&mut self, label: &str) -> Option<Account> {
-        let index = self.accounts.iter().position(|a| a.label == label)?;
+    pub fn remove(&mut self, key: &Key) -> Option<Account> {
+        let index = self.accounts.iter().position(|a| a.is(key))?;
         let account = self.accounts.remove(index);
         if let Some(park) = &account.parked {
             self.discard(&park.service);
+        }
+        if self.active_for(key.provider) == Some(key.label.as_str()) {
+            self.set_active(key.provider, None);
         }
         Some(account)
     }
@@ -513,7 +589,7 @@ mod tests {
         let mut document = written.clone();
         migrate(&mut document, std::path::Path::new("/tmp/state.json")).expect("still current");
         let state: State = serde_json::from_value(document).expect("still parses");
-        assert_eq!(state.get("work").unwrap().email, "a@b.c");
+        assert_eq!(state.get(&claude("work")).unwrap().email, "a@b.c");
         assert_eq!(state.active_for(ProviderId::Claude), Some("work"));
     }
 
@@ -631,6 +707,10 @@ mod tests {
 
     use super::*;
 
+    fn claude(label: &str) -> Key {
+        Key::new(ProviderId::Claude, label)
+    }
+
     #[test]
     fn machine_id_is_stable_and_real() {
         let a = machine_id();
@@ -674,9 +754,14 @@ mod tests {
     fn a_new_park_discards_the_one_it_replaces() {
         let mut s = State::default();
         s.upsert(account("work", Some(park("old"))));
-        s.park("work", park("new"));
+        s.park(&claude("work"), park("new"));
         assert_eq!(
-            s.get("work").unwrap().parked.as_ref().unwrap().service,
+            s.get(&claude("work"))
+                .unwrap()
+                .parked
+                .as_ref()
+                .unwrap()
+                .service,
             "new"
         );
         assert_eq!(s.discarded, ["old"]);
@@ -688,10 +773,10 @@ mod tests {
         let mut s = State::default();
         s.upsert(account("work", Some(park("current"))));
         s.discard("something-else");
-        assert!(s.get("work").unwrap().parked.is_some());
+        assert!(s.get(&claude("work")).unwrap().parked.is_some());
         s.discard("current");
         s.discard("current");
-        assert!(s.get("work").unwrap().parked.is_none());
+        assert!(s.get(&claude("work")).unwrap().parked.is_none());
         assert_eq!(s.discarded, ["something-else", "current"]);
     }
 
@@ -703,11 +788,11 @@ mod tests {
         s.set_active(ProviderId::Claude, Some("wrong".into()));
 
         assert_eq!(
-            s.relabel("wrong", "right").unwrap().email,
+            s.relabel(&claude("wrong"), "right").unwrap().email,
             "wrong@example.com"
         );
-        assert!(s.get("wrong").is_none());
-        let renamed = s.get("right").unwrap();
+        assert!(s.get(&claude("wrong")).is_none());
+        let renamed = s.get(&claude("right")).unwrap();
         assert_eq!(renamed.account_uuid, "wrong-uuid");
         assert_eq!(renamed.parked.as_ref().unwrap().service, "p");
         assert_eq!(s.active_for(ProviderId::Claude), Some("right"));
@@ -720,9 +805,12 @@ mod tests {
         s.upsert(account("a", None));
         s.upsert(account("b", None));
         s.set_active(ProviderId::Claude, Some("a".into()));
-        assert!(matches!(s.relabel("a", "b"), Err(Error::LabelTaken { .. })));
         assert!(matches!(
-            s.relabel("nobody", "c"),
+            s.relabel(&claude("a"), "b"),
+            Err(Error::LabelTaken { .. })
+        ));
+        assert!(matches!(
+            s.relabel(&claude("nobody"), "c"),
             Err(Error::AccountUnknown { .. })
         ));
         assert_eq!(
@@ -730,14 +818,14 @@ mod tests {
             Some("a"),
             "a refused rename changes nothing"
         );
-        assert!(s.relabel("a", "a").is_ok());
+        assert!(s.relabel(&claude("a"), "a").is_ok());
     }
 
     #[test]
     fn removing_an_account_lists_its_park_for_deletion() {
         let mut s = State::default();
         s.upsert(account("work", Some(park("p"))));
-        assert_eq!(s.remove("work").unwrap().label, "work");
+        assert_eq!(s.remove(&claude("work")).unwrap().label, "work");
         assert!(s.accounts.is_empty());
         assert_eq!(s.discarded, ["p"]);
     }
@@ -767,6 +855,96 @@ mod tests {
             ..account("work", None)
         });
         assert_eq!(s.accounts.len(), 1);
-        assert_eq!(s.get("work").unwrap().email, "d@e.f");
+        assert_eq!(s.get(&claude("work")).unwrap().email, "d@e.f");
+    }
+
+    fn codex_account(label: &str) -> Account {
+        Account {
+            last_used_at: None,
+            label: label.into(),
+            account_uuid: format!("codex-{label}-uuid"),
+            email: format!("{label}@openai.example"),
+            detail: Detail::Codex {
+                workspace_id: None,
+                plan: None,
+            },
+            parked: None,
+        }
+    }
+
+    /// Two tools, one label. Every lookup used to take the label alone and return the
+    /// first match, so `pitboard use codex/work` could park and install Claude Code's
+    /// `work` instead, and enrolling Codex's `work` replaced Claude Code's outright.
+    #[test]
+    fn two_tools_can_each_have_an_account_of_the_same_name() {
+        let mut s = State::default();
+        s.upsert(account("work", Some(park("claude-park"))));
+        s.upsert(codex_account("work"));
+        assert_eq!(
+            s.accounts.len(),
+            2,
+            "the second is added, not a replacement"
+        );
+
+        let codex = Key::new(ProviderId::Codex, "work");
+        assert_eq!(s.get(&codex).unwrap().provider(), ProviderId::Codex);
+        assert_eq!(
+            s.get(&claude("work")).unwrap().provider(),
+            ProviderId::Claude
+        );
+
+        s.park(&codex, park("codex-park"));
+        assert_eq!(
+            s.get(&claude("work"))
+                .unwrap()
+                .parked
+                .as_ref()
+                .unwrap()
+                .service,
+            "claude-park",
+            "parking one tool's account leaves the other's alone"
+        );
+
+        s.remove(&codex);
+        assert!(s.get(&claude("work")).is_some(), "and so does dropping it");
+        assert_eq!(s.discarded, ["codex-park"]);
+    }
+
+    /// A label is unique within a tool, so renaming into a name only another tool uses is
+    /// not a clash.
+    #[test]
+    fn a_rename_clashes_only_within_its_own_tool() {
+        let mut s = State::default();
+        s.upsert(account("personal", None));
+        s.upsert(codex_account("work"));
+        assert!(s.relabel(&claude("personal"), "work").is_ok());
+        assert_eq!(
+            s.get(&claude("work")).unwrap().email,
+            "personal@example.com"
+        );
+    }
+
+    /// Forgetting the account a tool last switched to must not leave that tool's record
+    /// naming it: a later account enrolled under the same label would read as in use.
+    #[test]
+    fn removing_the_account_in_use_clears_that_tools_record_only() {
+        let mut s = State::default();
+        s.upsert(account("work", None));
+        s.upsert(codex_account("work"));
+        s.set_active(ProviderId::Claude, Some("work".into()));
+        s.set_active(ProviderId::Codex, Some("work".into()));
+        s.remove(&Key::new(ProviderId::Codex, "work"));
+        assert_eq!(s.active_for(ProviderId::Codex), None);
+        assert_eq!(s.active_for(ProviderId::Claude), Some("work"));
+    }
+
+    #[test]
+    fn a_key_reads_the_way_it_would_be_typed() {
+        assert_eq!(claude("work").to_string(), "work");
+        assert_eq!(
+            Key::new(ProviderId::Codex, "work").to_string(),
+            "codex/work"
+        );
+        assert_eq!(claude("work").qualified(), "claude/work");
     }
 }

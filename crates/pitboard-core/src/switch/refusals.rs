@@ -21,7 +21,11 @@ fn a_parked_login_anthropic_refuses_is_not_installed() {
     let live_before = m.mem.live().peek(&m.service);
 
     let settled = settle(&m.ctx).expect("nothing to recover").0;
-    let failed = switch(settled, "there").expect_err("a refused login is not a switch");
+    let failed = switch(
+        settled,
+        &crate::state::Key::new(crate::provider::ProviderId::Claude, "there"),
+    )
+    .expect_err("a refused login is not a switch");
     assert!(
         matches!(failed, Error::ParkedLoginRefused { .. }),
         "got {failed:?}"
@@ -34,10 +38,22 @@ fn a_parked_login_anthropic_refuses_is_not_installed() {
     );
     let state = state::load(&m.ctx).expect("state");
     assert!(
-        state.get("here").expect("account").parked.is_none(),
+        state
+            .get(&crate::state::Key::new(
+                crate::provider::ProviderId::Claude,
+                "here"
+            ))
+            .expect("account")
+            .parked
+            .is_none(),
         "and it was never parked, because nothing was taken away"
     );
-    let there = state.get("there").expect("account");
+    let there = state
+        .get(&crate::state::Key::new(
+            crate::provider::ProviderId::Claude,
+            "there",
+        ))
+        .expect("account");
     assert_eq!(there.email, "there@example.com", "the account is kept");
     assert!(there.parked.is_none(), "the copy that cannot work is not");
     assert!(
@@ -66,7 +82,11 @@ fn a_parked_login_that_belongs_to_another_account_is_refused() {
     let parked_before = m.mem.vault().services();
 
     let settled = settle(&m.ctx).expect("nothing to recover").0;
-    let failed = switch(settled, "there").expect_err("it is not that account's login");
+    let failed = switch(
+        settled,
+        &crate::state::Key::new(crate::provider::ProviderId::Claude, "there"),
+    )
+    .expect_err("it is not that account's login");
     assert!(
         matches!(failed, Error::ParkedLoginBelongsElsewhere { .. }),
         "got {failed:?}"
@@ -92,7 +112,11 @@ fn a_switch_will_not_install_a_login_it_could_not_ask_about() {
     let parked_before = m.mem.vault().services();
 
     let settled = settle(&m.ctx).expect("nothing to recover").0;
-    let failed = switch(settled, "there").expect_err("nobody could be asked");
+    let failed = switch(
+        settled,
+        &crate::state::Key::new(crate::provider::ProviderId::Claude, "there"),
+    )
+    .expect_err("nobody could be asked");
     assert!(
         matches!(
             failed,
@@ -112,7 +136,11 @@ fn a_switch_will_not_install_a_login_it_could_not_ask_about() {
 fn a_park_that_answers_for_its_own_account_is_installed() {
     let m = machine("proved");
     let settled = settle(&m.ctx).expect("nothing to recover").0;
-    let (outcome, _) = switch(settled, "there").expect("a switch");
+    let (outcome, _) = switch(
+        settled,
+        &crate::state::Key::new(crate::provider::ProviderId::Claude, "there"),
+    )
+    .expect("a switch");
     assert!(matches!(outcome, Outcome::Switched { .. }), "{outcome:?}");
 
     let asked = m.api.asked();
@@ -135,7 +163,11 @@ fn a_login_pitboard_cannot_find_is_not_the_same_as_nobody_being_signed_in() {
     // Claude Code's config still says who is signed in; the login is not in any store.
     m.mem.live().delete_everything();
     let settled = settle(&m.ctx).expect("nothing to recover").0;
-    let failed = switch(settled, "there").expect_err("there is nothing to move");
+    let failed = switch(
+        settled,
+        &crate::state::Key::new(crate::provider::ProviderId::Claude, "there"),
+    )
+    .expect_err("there is nothing to move");
     match &failed {
         Error::LiveCredentialElsewhere { email } => assert_eq!(email, "here@example.com"),
         other => panic!("got {other:?}"),
@@ -145,7 +177,11 @@ fn a_login_pitboard_cannot_find_is_not_the_same_as_nobody_being_signed_in() {
     // With nothing in the config either, nobody is signed in and that is all it says.
     std::fs::write(m.ctx_home().join(".claude.json"), "{}").expect("a config");
     let settled = settle(&m.ctx).expect("nothing to recover").0;
-    let failed = switch(settled, "there").expect_err("still nothing to move");
+    let failed = switch(
+        settled,
+        &crate::state::Key::new(crate::provider::ProviderId::Claude, "there"),
+    )
+    .expect_err("still nothing to move");
     assert!(
         matches!(failed, Error::LiveCredentialAbsent),
         "got {failed:?}"

@@ -12,7 +12,7 @@ use crate::context::Context;
 use crate::provider::ProviderId;
 use crate::provider::claude::live as claude_live;
 use crate::provider::claude::paths as claude;
-use crate::state::{Account, Park, State};
+use crate::state::{Account, Key, Park, State};
 use crate::{home, park, state, store};
 use serde_json::{Value, json};
 use std::fs::{File, OpenOptions, TryLockError};
@@ -247,12 +247,7 @@ enum Readable {
 
 /// Enroll the account signed in to `which` now, or with `signed_in`, the one a sign-in just
 /// produced.
-pub fn enroll(
-    settled: Settled,
-    which: ProviderId,
-    label: &str,
-    signed_in: Option<SignIn>,
-) -> Result<Enrolled> {
+pub fn enroll(settled: Settled, key: &Key, signed_in: Option<SignIn>) -> Result<Enrolled> {
     let Settled {
         _exclusive,
         mut state,
@@ -260,38 +255,36 @@ pub fn enroll(
     } = settled;
     match signed_in {
         // A watched sign-in is Claude Code's own, and is the only one pitboard drives.
-        Some(login) => park_signed_in(&ctx, label, &mut state, &login),
-        None => record_current(&ctx, which, label, &mut state),
+        Some(login) => park_signed_in(&ctx, key, &mut state, &login),
+        None => record_current(&ctx, key, &mut state),
     }
 }
 
-/// A label names one account for good: its own, or one not enrolled under another label.
-fn claim(state: &State, label: &str, owner: &Owner) -> Result<()> {
-    if let Some(taken) = state.get(label)
+/// A label names one account of its tool for good: its own, or one not enrolled under
+/// another label.
+fn claim(state: &State, key: &Key, owner: &Owner) -> Result<()> {
+    if let Some(taken) = state.get(key)
         && taken.account_uuid != owner.account_uuid
     {
         return Err(Error::LabelTaken {
-            label: label.to_string(),
+            label: key.typed(),
             email: taken.email.clone(),
         });
     }
-    if let Some(existing) = state.by_uuid(&owner.account_uuid)
-        && existing.label != label
+    if let Some(existing) = state.by_uuid(key.provider, &owner.account_uuid)
+        && existing.label != key.label
     {
         return Err(Error::AlreadyEnrolled {
             email: owner.email.clone(),
-            label: existing.label.clone(),
+            label: existing.key().typed(),
         });
     }
     Ok(())
 }
 
-fn record_current(
-    ctx: &Context,
-    which: ProviderId,
-    label: &str,
-    state: &mut State,
-) -> Result<Enrolled> {
+fn record_current(ctx: &Context, key: &Key, state: &mut State) -> Result<Enrolled> {
+    let which = key.provider;
+    let label = key.label.as_str();
     let live = crate::provider::of(which)
         .read_live(ctx)
         .map_err(|e| Error::LiveCredentialShapeUnexpected {
@@ -300,8 +293,8 @@ fn record_current(
         .ok_or_else(|| nothing_signed_in(ctx, which))?
         .raw;
     let owner = identify_document(ctx, which, &live)?;
-    claim(state, label, &owner)?;
-    let existing = state.get(label);
+    claim(state, key, &owner)?;
+    let existing = state.get(key);
     let parked = existing.and_then(|a| a.parked.clone());
     // Enrolling the account that is signed in is using it.
     let last_used_at = Some(ctx.now());
@@ -319,20 +312,16 @@ fn nothing_signed_in(ctx: &Context, which: ProviderId) -> Error {
     }
 }
 
-fn park_signed_in(
-    ctx: &Context,
-    label: &str,
-    state: &mut State,
-    login: &SignIn,
-) -> Result<Enrolled> {
+fn park_signed_in(ctx: &Context, key: &Key, state: &mut State, login: &SignIn) -> Result<Enrolled> {
+    let label = key.label.as_str();
     let owner = identify_document(ctx, ProviderId::Claude, &login.document)?;
-    claim(state, label, &owner)?;
+    claim(state, key, &owner)?;
     let service = park::reserve(ctx, &owner.account_uuid)?;
-    let fresh = park::store_at(ctx, &service, &slice_of(&login.document)?)?;
+    let fresh = park::store_at(ctx, key.provider, &service, &slice_of(&login.document)?)?;
     // The window the roadmap named: the login is in the vault and nothing on the machine
     // says so yet.
     crate::fault::point("enroll.park_stored");
-    let existing = state.get(label);
+    let existing = state.get(key);
     let previous = existing.and_then(|a| a.parked.clone());
     let renewed = existing.is_some();
     let last_used_at = existing.and_then(|a| a.last_used_at);
@@ -344,7 +333,7 @@ fn park_signed_in(
         last_used_at,
         &login.document,
     ));
-    state.park(label, fresh);
+    state.park(key, fresh);
     // Unrecorded, the new login would be an item nothing refers to, never deleted.
     state::save(ctx, state).inspect_err(|_| {
         let _ = store::vault_delete(ctx, &service);

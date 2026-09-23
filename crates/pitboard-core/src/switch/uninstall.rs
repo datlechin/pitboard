@@ -2,6 +2,7 @@
 
 use super::{Result, Settled, purge};
 use crate::context::Context;
+use crate::state::Account;
 use crate::{home, state};
 
 /// What was removed, for the report.
@@ -27,13 +28,8 @@ pub fn uninstall(settled: Settled) -> Result<Removed> {
         ctx,
     } = settled;
     let parks = state.accounts.iter().filter(|a| a.parked.is_some()).count();
-    for label in state
-        .accounts
-        .iter()
-        .map(|a| a.label.clone())
-        .collect::<Vec<_>>()
-    {
-        state.remove(&label);
+    for key in state.accounts.iter().map(Account::key).collect::<Vec<_>>() {
+        state.remove(&key);
     }
     state.active.clear();
     state::save(&ctx, &state)?;

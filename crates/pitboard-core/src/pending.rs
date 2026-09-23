@@ -180,15 +180,16 @@ fn resolve(
 fn adopt(ctx: &Context, state: &mut State, service: &str, raw: &str) -> Option<String> {
     let (uuid, at_millis) = park::parts_of(service)?;
     let oauth = serde_json::from_str::<serde_json::Value>(raw).ok()?;
-    let label = state
-        .by_uuid(&uuid)
+    let key = state
+        .owner_of_park(&uuid)
         .filter(|a| a.parked.is_none())
-        .map(|a| a.label.clone())?;
-    let park = park::describe(service, at_millis / 1000, &oauth);
+        .map(crate::state::Account::key)?;
+    let park = park::describe(key.provider, service, at_millis / 1000, &oauth);
     if park.refresh_fingerprint.is_empty() || !park.restorable_at(ctx.now()) {
         return None;
     }
-    state.park(&label, park);
+    state.park(&key, park);
+    let label = key.typed();
     crate::audit::record(ctx, "reclaim", &label, "ok");
     Some(label)
 }
@@ -215,12 +216,17 @@ pub fn outstanding(ctx: &Context) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::provider::ProviderId;
     use crate::store::memory::MemoryHost;
     use crate::time::{Clock, FixedClock};
     use serde_json::json;
     use std::sync::Arc;
 
     const NOW: i64 = 1_760_000_000;
+
+    fn work() -> crate::state::Key {
+        crate::state::Key::new(ProviderId::Claude, "work")
+    }
 
     fn machine(name: &str) -> (Context, Arc<MemoryHost>, PathBuf) {
         let root = std::env::temp_dir().join(format!(
@@ -284,7 +290,10 @@ mod tests {
         assert_eq!(sweep(&ctx, &mut state).expect("swept").found(), 1);
 
         let park = state
-            .get("work")
+            .get(&crate::state::Key::new(
+                crate::provider::ProviderId::Claude,
+                "work",
+            ))
             .expect("account")
             .parked
             .clone()
@@ -311,13 +320,19 @@ mod tests {
 
         let mut state = State::default();
         state.accounts.push(account("work", "acc"));
-        state.park("work", park::describe(held, NOW, &oauth("held")));
+        state.park(
+            &work(),
+            park::describe(ProviderId::Claude, held, NOW, &oauth("held")),
+        );
 
         assert_eq!(sweep(&ctx, &mut state).expect("swept").found(), 1);
         assert!(state.names(held), "the recorded copy is untouched");
         assert_eq!(
             state
-                .get("work")
+                .get(&crate::state::Key::new(
+                    crate::provider::ProviderId::Claude,
+                    "work"
+                ))
                 .expect("account")
                 .parked
                 .as_ref()
@@ -367,14 +382,17 @@ mod tests {
 
         // The cheap sweep cannot see it, because it only reads pitboard's own list.
         assert_eq!(sweep(&ctx, &mut state).expect("swept").found(), 0);
-        assert!(state.get("work").expect("account").parked.is_none());
+        assert!(state.get(&work()).expect("account").parked.is_none());
 
         let reclaimed = reclaim(&ctx, &mut state).expect("reclaimed");
         assert_eq!(reclaimed.given_back.len(), 1);
         assert_eq!(reclaimed.given_back[0].0, "work");
         assert_eq!(
             state
-                .get("work")
+                .get(&crate::state::Key::new(
+                    crate::provider::ProviderId::Claude,
+                    "work"
+                ))
                 .expect("account")
                 .parked
                 .as_ref()
@@ -441,7 +459,10 @@ mod tests {
 
         let mut state = State::default();
         state.accounts.push(account("work", "acc"));
-        state.park("work", park::describe(service, NOW, &oauth("r")));
+        state.park(
+            &work(),
+            park::describe(ProviderId::Claude, service, NOW, &oauth("r")),
+        );
 
         assert_eq!(sweep(&ctx, &mut state).expect("swept").found(), 0);
         assert!(outstanding(&ctx).is_empty());

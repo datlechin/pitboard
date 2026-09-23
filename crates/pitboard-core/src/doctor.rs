@@ -99,7 +99,7 @@ fn park_facts(ctx: &Context, state: &State, live_uuid: Option<&str>) -> Vec<Park
             },
             park: a.parked.clone(),
             unreadable: a.parked.as_ref().and_then(|p| {
-                park::load(ctx, &a.label, p).err().map(|e| match e {
+                park::load(ctx, &a.key(), p).err().map(|e| match e {
                     Error::ParkedCredentialMissing { .. } => "missing from the vault".into(),
                     Error::ParkedCredentialCorrupt { detail, .. } => detail,
                     other => other.to_string(),

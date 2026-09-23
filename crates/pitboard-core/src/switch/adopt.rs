@@ -127,7 +127,12 @@ mod tests {
                 organization_uuid: "org".into(),
                 oauth_account: json!({"accountUuid": "acc"}),
             },
-            parked: Some(crate::park::describe(service, NOW, &oauth())),
+            parked: Some(crate::park::describe(
+                crate::provider::ProviderId::Claude,
+                service,
+                NOW,
+                &oauth(),
+            )),
         });
         state.set_active(ProviderId::Claude, Some("work".into()));
         let raw = serde_json::to_string(&state).expect("serialisable");
@@ -155,7 +160,12 @@ mod tests {
         assert_eq!(adopted.logins_dropped, vec!["work".to_string()]);
 
         let state = state::load(&ctx).expect("now it is this machine's");
-        let account = state.get("work").expect("the account is kept");
+        let account = state
+            .get(&crate::state::Key::new(
+                crate::provider::ProviderId::Claude,
+                "work",
+            ))
+            .expect("the account is kept");
         assert_eq!(account.email, "me@example.com");
         assert_eq!(account.account_uuid, "acc");
         assert!(

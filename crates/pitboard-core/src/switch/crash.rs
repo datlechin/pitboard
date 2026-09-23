@@ -20,7 +20,6 @@ use super::harness::{NOW, POINTS, document, hold, machine, owner, recover};
 use super::*;
 use crate::api::scripted::{ScriptedApi, Trouble};
 use crate::fault;
-use crate::provider::ProviderId;
 use crate::store::memory::Fault;
 use serde_json::json;
 use std::sync::Arc;
@@ -33,7 +32,12 @@ fn a_switch_killed_at_any_step_recovers_to_something_whole() {
         let m = machine(&point.replace('.', "-"));
 
         let settled = settle(&m.ctx).expect("nothing to recover yet").0;
-        let died = fault::killing(point, || switch(settled, "there"));
+        let died = fault::killing(point, || {
+            switch(
+                settled,
+                &crate::state::Key::new(crate::provider::ProviderId::Claude, "there"),
+            )
+        });
         assert_eq!(
             died.unwrap_err(),
             point,
@@ -58,7 +62,12 @@ fn a_switch_killed_with_nobody_to_ask_is_recovered_from_the_record() {
         let m = machine(&format!("offline-{}", point.replace('.', "-")));
 
         let settled = settle(&m.ctx).expect("nothing to recover yet").0;
-        let died = fault::killing(point, || switch(settled, "there"));
+        let died = fault::killing(point, || {
+            switch(
+                settled,
+                &crate::state::Key::new(crate::provider::ProviderId::Claude, "there"),
+            )
+        });
         assert_eq!(died.unwrap_err(), point);
 
         // Anthropic goes away. A scripted api answers Unauthorized for tokens it does not
@@ -98,7 +107,12 @@ fn a_switch_killed_with_nobody_to_ask_is_recovered_from_the_record() {
 fn a_switch_whose_token_rotated_while_it_was_interrupted_still_needs_anthropic() {
     let m = machine("rotated-offline");
     let settled = settle(&m.ctx).expect("nothing to recover yet").0;
-    let died = fault::killing("switch.park_recorded", || switch(settled, "there"));
+    let died = fault::killing("switch.park_recorded", || {
+        switch(
+            settled,
+            &crate::state::Key::new(crate::provider::ProviderId::Claude, "there"),
+        )
+    });
     assert_eq!(died.unwrap_err(), "switch.park_recorded");
 
     // Claude Code refreshes the login it still believes is signed in, so the slot now holds
@@ -144,7 +158,11 @@ fn enrolling_killed_between_the_write_and_the_record_leaves_nothing_unnamed() {
         let settled = settle(&m.ctx).expect("nothing to recover").0;
         let login = enroll::planted(&m.ctx, document("third-refresh")).expect("a sign-in");
         let died = fault::killing(point, || {
-            enroll(settled, ProviderId::Claude, "third", Some(login))
+            enroll(
+                settled,
+                &crate::state::Key::new(crate::provider::ProviderId::Claude, "third"),
+                Some(login),
+            )
         });
         assert_eq!(died.unwrap_err(), point);
 
@@ -164,7 +182,11 @@ fn a_switch_whose_login_was_removed_again_does_not_report_a_switch() {
 
     let settled = settle(&m.ctx).expect("nothing to recover yet").0;
     m.mem.live().fault(&m.service, Fault::DeletedAfterWrite);
-    let failed = switch(settled, "there").expect_err("the login did not stay");
+    let failed = switch(
+        settled,
+        &crate::state::Key::new(crate::provider::ProviderId::Claude, "there"),
+    )
+    .expect_err("the login did not stay");
     assert!(
         matches!(failed, Error::SwitchDidNotHold { .. }),
         "got {failed:?}"
@@ -174,11 +196,25 @@ fn a_switch_whose_login_was_removed_again_does_not_report_a_switch() {
     // Both logins are still here: the one that was parked on the way out, and the one that
     // was being installed. Neither may be thrown away over a write that did not hold.
     assert!(
-        state.get("here").expect("account").parked.is_some(),
+        state
+            .get(&crate::state::Key::new(
+                crate::provider::ProviderId::Claude,
+                "here"
+            ))
+            .expect("account")
+            .parked
+            .is_some(),
         "the outgoing login was parked and stays parked"
     );
     assert!(
-        state.get("there").expect("account").parked.is_some(),
+        state
+            .get(&crate::state::Key::new(
+                crate::provider::ProviderId::Claude,
+                "there"
+            ))
+            .expect("account")
+            .parked
+            .is_some(),
         "the incoming login is not discarded over a switch that did not stand"
     );
     assert!(m.mem.vault().services().len() > parked_before.len());
@@ -202,7 +238,11 @@ fn a_switch_that_cannot_read_the_store_back_keeps_every_copy_and_its_record() {
     // switch makes before it writes still answer; the write and everything after it do not.
     let settled = settle(&m.ctx).expect("nothing to recover yet").0;
     m.mem.live().fault(&m.service, Fault::LocksOnWrite);
-    let failed = switch(settled, "there").expect_err("a keychain that locked partway");
+    let failed = switch(
+        settled,
+        &crate::state::Key::new(crate::provider::ProviderId::Claude, "there"),
+    )
+    .expect_err("a keychain that locked partway");
     assert!(
         matches!(failed, Error::SwitchUnverified { .. }),
         "got {failed:?}"
@@ -242,7 +282,10 @@ fn renewing_killed_between_the_write_and_the_record_leaves_nothing_unnamed() {
     // The parked login is due: its access token has lapsed.
     let mut state = state::load(&m.ctx).expect("state");
     let park = state
-        .get("there")
+        .get(&crate::state::Key::new(
+            crate::provider::ProviderId::Claude,
+            "there",
+        ))
         .expect("account")
         .parked
         .clone()
@@ -258,8 +301,9 @@ fn renewing_killed_between_the_write_and_the_record_leaves_nothing_unnamed() {
         .to_string(),
     );
     state.park(
-        "there",
+        &crate::state::Key::new(crate::provider::ProviderId::Claude, "there"),
         park::describe(
+            crate::provider::ProviderId::Claude,
             &park.service,
             NOW,
             &json!({
@@ -296,7 +340,12 @@ fn forgetting_killed_after_the_record_still_deletes_the_park() {
     let m = machine("forget-recorded");
     let settled = settle(&m.ctx).expect("nothing to recover").0;
 
-    let died = fault::killing("forget.recorded", || forget::forget(settled, "there"));
+    let died = fault::killing("forget.recorded", || {
+        forget::forget(
+            settled,
+            &crate::state::Key::new(crate::provider::ProviderId::Claude, "there"),
+        )
+    });
     assert_eq!(died.unwrap_err(), "forget.recorded");
 
     recover(&m).expect("recovery");

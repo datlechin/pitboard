@@ -6,7 +6,7 @@ use crate::context::Context;
 use crate::doctor::{self, Diagnosis};
 use crate::error::{Error, Result};
 use crate::provider::claude::paths as claude;
-use crate::state::{self, Account};
+use crate::state::{self, Account, Key};
 use crate::switch::{self, Enrolled, Outcome, Recovered, Renewal, Settled, SignIn};
 use crate::{audit, schedule, status, statusline};
 use std::fmt;
@@ -172,24 +172,24 @@ impl Pitboard {
     }
 
     pub fn switch_to(&self, typed: &str) -> Changing<Outcome> {
-        let label = self.named(typed)?;
-        self.changing("use", &label, |settled| switch::switch(settled, &label))
+        let key = self.named("use", typed)?;
+        self.changing("use", &key.typed(), |settled| switch::switch(settled, &key))
     }
 
-    /// Which account somebody meant, as a plain label the engine can look up.
+    /// Which account somebody meant, as the key the engine looks accounts up by.
     ///
     /// Resolving here rather than deeper down means every command takes `codex/work` and
     /// a bare `work` on the same terms, and the one place that decides what an ambiguous
     /// bare label does is the one place that knows every provider's accounts.
-    fn named(&self, typed: &str) -> std::result::Result<String, Failed> {
+    fn named(&self, verb: &str, typed: &str) -> std::result::Result<Key, Failed> {
         let state = state::load(&self.ctx).map_err(|error| Failed {
             error,
             warnings: Vec::new(),
         })?;
         crate::label::resolve(&state, typed)
-            .map(|account| account.label.clone())
+            .map(Account::key)
             .map_err(|error| {
-                audit::record(&self.ctx, "use", typed, error.code());
+                audit::record(&self.ctx, verb, typed, error.code());
                 Failed {
                     error,
                     warnings: Vec::new(),
@@ -199,9 +199,9 @@ impl Pitboard {
 
     /// `typed` may name a tool, as in `claude/work`. A bare name means the default tool.
     pub fn enroll_current(&self, typed: &str) -> Changing<Enrolled> {
-        let chosen = self.chosen(typed)?;
-        self.changing("enroll", &chosen.label, |settled| {
-            switch::enroll(settled, chosen.provider, &chosen.label, None).map(|e| (e, Vec::new()))
+        let key = self.chosen(typed)?;
+        self.changing("enroll", &key.typed(), |settled| {
+            switch::enroll(settled, &key, None).map(|e| (e, Vec::new()))
         })
     }
 
@@ -210,14 +210,16 @@ impl Pitboard {
     /// Split here rather than deeper down so nothing below ever sees a name with a tool
     /// still stuck to the front of it, which would enrol an account literally called
     /// `claude/work`.
-    fn chosen(&self, typed: &str) -> std::result::Result<crate::label::Chosen, Failed> {
-        crate::label::choose(typed).map_err(|detail| {
-            audit::record(&self.ctx, "enroll", typed, "label_unusable");
-            Failed {
-                error: Error::Usage(detail),
-                warnings: Vec::new(),
-            }
-        })
+    fn chosen(&self, typed: &str) -> std::result::Result<Key, Failed> {
+        crate::label::choose(typed)
+            .map(|chosen| Key::new(chosen.provider, chosen.label))
+            .map_err(|detail| {
+                audit::record(&self.ctx, "enroll", typed, "label_unusable");
+                Failed {
+                    error: Error::Usage(detail),
+                    warnings: Vec::new(),
+                }
+            })
     }
 
     /// Claude Code's own sign-in in a private directory. It takes no lock but its own, so a
@@ -262,17 +264,18 @@ impl Pitboard {
     }
 
     pub fn enroll_signed_in(&self, typed: &str, login: SignIn) -> Changing<Enrolled> {
-        let chosen = self.chosen(typed)?;
-        self.changing("enroll", &chosen.label, |settled| {
-            switch::enroll(settled, chosen.provider, &chosen.label, Some(login))
-                .map(|e| (e, Vec::new()))
+        let key = self.chosen(typed)?;
+        self.changing("enroll", &key.typed(), |settled| {
+            switch::enroll(settled, &key, Some(login)).map(|e| (e, Vec::new()))
         })
     }
 
     /// Returns the account's email.
     pub fn forget(&self, typed: &str) -> Changing<String> {
-        let label = self.named(typed)?;
-        self.changing("forget", &label, |settled| switch::forget(settled, &label))
+        let key = self.named("forget", typed)?;
+        self.changing("forget", &key.typed(), |settled| {
+            switch::forget(settled, &key)
+        })
     }
 
     /// Throws away a record of an interrupted switch that cannot be finished, keeping
@@ -359,8 +362,23 @@ impl Pitboard {
     /// `from` may be qualified; `to` is a plain name, and stays inside whichever provider
     /// the account already belongs to. Renaming cannot move an account between tools.
     pub fn rename(&self, from: &str, to: &str) -> Changing<String> {
-        let from = self.named(from)?;
-        let to = self.chosen(to)?.label;
+        let from = self.named("rename", from)?;
+        let chosen = self.chosen(to)?;
+        // Only a prefix somebody actually typed can disagree: a bare new name stays inside
+        // the account's own tool whatever tool a bare name would mean for a new account.
+        if to.contains(crate::label::SEPARATOR) && chosen.provider != from.provider {
+            let error = Error::Usage(format!(
+                "`{from}` is a {} account, and a rename cannot move it to {}. Sign in to that \
+                 tool and enrol the account there instead.",
+                from.provider, chosen.provider
+            ));
+            audit::record(&self.ctx, "rename", &from.typed(), error.code());
+            return Err(Failed {
+                error,
+                warnings: Vec::new(),
+            });
+        }
+        let to = chosen.label;
         self.changing("rename", &format!("{from} -> {to}"), |settled| {
             switch::rename(settled, &from, &to).map(|email| (email, Vec::new()))
         })

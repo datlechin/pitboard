@@ -3,10 +3,10 @@
 use super::{Error, Result, Settled, purge};
 use crate::provider::claude::paths as claude;
 use crate::service::Warning;
-use crate::state;
+use crate::state::{self, Key};
 
 /// Returns the account's email.
-pub fn forget(settled: Settled, label: &str) -> Result<(String, Vec<Warning>)> {
+pub fn forget(settled: Settled, key: &Key) -> Result<(String, Vec<Warning>)> {
     let Settled {
         _exclusive,
         mut state,
@@ -20,23 +20,19 @@ pub fn forget(settled: Settled, label: &str) -> Result<(String, Vec<Warning>)> {
         .as_ref()
         .and_then(claude::identity)
         .map(|id| id.account_uuid);
-    let signed_in = match (&live_uuid, state.get(label)) {
+    let signed_in = match (&live_uuid, state.get(key)) {
         (Some(uuid), Some(account)) => &account.account_uuid == uuid,
         // No live identity to compare against, so pitboard's own record of the last switch
         // is all there is. Scoped to the provider the label belongs to: a Claude account
         // being signed in says nothing about a Codex one.
-        _ => state
-            .get(label)
-            .is_some_and(|a| state.active_for(a.provider()) == Some(label)),
+        _ => state.active_for(key.provider) == Some(key.label.as_str()),
     };
     if signed_in {
-        return Err(Error::CannotForgetActiveAccount {
-            label: label.to_string(),
-        });
+        return Err(Error::CannotForgetActiveAccount { label: key.typed() });
     }
-    let enrolled = state.labels();
-    let account = state.remove(label).ok_or_else(|| Error::AccountUnknown {
-        label: label.to_string(),
+    let enrolled = state.labels(key.provider);
+    let account = state.remove(key).ok_or_else(|| Error::AccountUnknown {
+        label: key.typed(),
         enrolled,
     })?;
     state::save(&ctx, &state)?;

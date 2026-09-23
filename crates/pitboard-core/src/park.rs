@@ -3,7 +3,8 @@
 
 use crate::context::Context;
 use crate::error::{Error, Result};
-use crate::state::{Park, State};
+use crate::provider::ProviderId;
+use crate::state::{Key, Park, State};
 use crate::{api, store};
 use serde_json::{Value, json};
 
@@ -46,8 +47,13 @@ pub fn reserve(ctx: &Context, account_uuid: &str) -> Result<String> {
 }
 
 /// Write a login into a reserved name and prove it reads back.
-pub fn store_at(ctx: &Context, service: &str, document: &Value) -> Result<Park> {
-    let park = describe(service, ctx.now(), document);
+pub fn store_at(
+    ctx: &Context,
+    provider: ProviderId,
+    service: &str,
+    document: &Value,
+) -> Result<Park> {
+    let park = describe(provider, service, ctx.now(), document);
     if park.refresh_fingerprint.is_empty() {
         return Err(Error::LiveCredentialShapeUnexpected {
             detail: "it has no refresh token, so it could never be restored".into(),
@@ -59,10 +65,10 @@ pub fn store_at(ctx: &Context, service: &str, document: &Value) -> Result<Park> 
 }
 
 /// What the account index records about a login: nothing secret.
-pub fn describe(service: &str, parked_at: i64, document: &Value) -> Park {
+pub fn describe(provider: ProviderId, service: &str, parked_at: i64, document: &Value) -> Park {
     // Through the provider: where the dates are and what unit they are in is a fact about
     // the tool, and the three disagree on both.
-    let tool = crate::provider::of(crate::provider::ProviderId::Claude);
+    let tool = crate::provider::of(provider);
     let expiry = tool.expiry(document);
     Park {
         service: service.to_string(),
@@ -127,19 +133,22 @@ pub fn fingerprint_of(document: &Value) -> String {
         .unwrap_or_default()
 }
 
-/// Takes the label so a failure names the account, not an item the user has never seen.
-pub fn load(ctx: &Context, label: &str, park: &Park) -> Result<Value> {
+/// Takes the account so a failure names it, not an item the user has never seen, and so
+/// the fingerprint is read the way that account's tool lays its login out.
+pub fn load(ctx: &Context, key: &Key, park: &Park) -> Result<Value> {
+    let label = key.typed();
     let raw =
         store::vault_read(ctx, &park.service)?.ok_or_else(|| Error::ParkedCredentialMissing {
-            label: label.to_string(),
+            label: label.clone(),
         })?;
     let value: Value = serde_json::from_str(&raw).map_err(|e| Error::ParkedCredentialCorrupt {
-        label: label.to_string(),
+        label: label.clone(),
         detail: e.to_string(),
     })?;
-    if park.refresh_fingerprint.is_empty() || fingerprint_of(&value) != park.refresh_fingerprint {
+    let found = crate::provider::of(key.provider).fingerprint(&value);
+    if park.refresh_fingerprint.is_empty() || found != park.refresh_fingerprint {
         return Err(Error::ParkedCredentialCorrupt {
-            label: label.to_string(),
+            label,
             detail: "it does not match the fingerprint pitboard recorded".into(),
         });
     }
@@ -161,6 +170,10 @@ mod tests {
     use crate::store::memory::{Fault, MemoryHost};
     use crate::time::FixedClock;
     use std::sync::Arc;
+
+    fn work() -> Key {
+        Key::new(ProviderId::Claude, "work")
+    }
 
     fn oauth(token: &str) -> Value {
         json!({
@@ -204,10 +217,10 @@ mod tests {
     fn a_parked_login_reads_back_through_its_fingerprint() {
         let (ctx, mem, _scratch) = machine();
         let name = reserve(&ctx, "acc").expect("a free name");
-        let park = store_at(&ctx, &name, &oauth("r")).expect("stored");
+        let park = store_at(&ctx, ProviderId::Claude, &name, &oauth("r")).expect("stored");
 
         assert_eq!(mem.vault().services(), vec![name.clone()]);
-        assert_eq!(load(&ctx, "work", &park).expect("loads"), oauth("r"));
+        assert_eq!(load(&ctx, &work(), &park).expect("loads"), oauth("r"));
     }
 
     /// The distinction the whole store layer exists to keep. A park that is gone is gone and
@@ -217,11 +230,11 @@ mod tests {
     fn a_park_that_vanished_and_one_that_cannot_be_read_are_different_answers() {
         let (ctx, mem, _scratch) = machine();
         let name = reserve(&ctx, "acc").expect("a free name");
-        let park = store_at(&ctx, &name, &oauth("r")).expect("stored");
+        let park = store_at(&ctx, ProviderId::Claude, &name, &oauth("r")).expect("stored");
 
         mem.vault().fault(&name, Fault::Vanish);
         assert!(matches!(
-            load(&ctx, "work", &park),
+            load(&ctx, &work(), &park),
             Err(Error::ParkedCredentialMissing { .. })
         ));
 
@@ -229,7 +242,7 @@ mod tests {
             .fault(&name, Fault::Unreadable("the keychain is locked".into()));
         assert!(
             matches!(
-                load(&ctx, "work", &park),
+                load(&ctx, &work(), &park),
                 Err(Error::Store(crate::store::Error::Unreadable(_)))
             ),
             "a store that could not answer must never read as an absent login"
@@ -254,7 +267,12 @@ mod tests {
         let (ctx, mem, _scratch) = machine();
         let name = reserve(&ctx, "acc").expect("a free name");
         assert!(matches!(
-            store_at(&ctx, &name, &json!({"accessToken": "a"})),
+            store_at(
+                &ctx,
+                ProviderId::Claude,
+                &name,
+                &json!({"accessToken": "a"})
+            ),
             Err(Error::LiveCredentialShapeUnexpected { .. })
         ));
         assert!(mem.vault().services().is_empty());
@@ -263,6 +281,7 @@ mod tests {
     #[test]
     fn a_park_records_when_its_login_stops_working() {
         let park = describe(
+            ProviderId::Claude,
             "pitboard-park-x-1",
             50,
             &serde_json::json!({
@@ -342,6 +361,7 @@ mod tests {
     fn a_credential_with_no_refresh_token_is_refused_rather_than_parked() {
         let refused = store_at(
             &Context::from_env(),
+            ProviderId::Claude,
             "pitboard-park-test-no-refresh",
             &serde_json::json!({"accessToken": "a"}),
         );
