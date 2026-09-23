@@ -207,6 +207,9 @@ fn doctor() {
         ".envelope.data.environment.home" => "[path]",
         ".envelope.data.environment.credential_service" => "[slot]",
         ".envelope.data.environment.credential_store" => "[backend]",
+        ".envelope.data.environment.codex.home" => "[path]",
+        // Read off whichever `codex` is on this machine's PATH, so it is this machine's.
+        ".envelope.data.environment.codex.version" => "[version]",
         ".envelope.data.checks" => "[checks]",
     });
 }

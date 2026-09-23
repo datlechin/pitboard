@@ -1,14 +1,21 @@
 //! `pitboard doctor`: check, on this machine, that what pitboard relies on about Claude Code
 //! still holds, and say which assumption broke when one has. Gathering is kept apart from
 //! judging so every judgement can be tested.
+//!
+//! Codex has a section of its own, after everything about Claude Code, and only on a
+//! machine where Codex has been run or has accounts enrolled. Its checks are coded
+//! `codex_...` so a program can tell them from Claude Code's, which read exactly as they did
+//! before there was a second tool.
 
 use crate::context::Context;
 use crate::error::Error;
+use crate::provider::ProviderId;
 use crate::provider::claude::daemon;
 use crate::provider::claude::live as claude_live;
 use crate::provider::claude::paths as claude;
 use crate::provider::claude::slot;
-use crate::state::{Park, State};
+use crate::provider::codex::paths as codex;
+use crate::state::{Key, Park, State};
 use crate::{home, park, store, switch, time, usage};
 use serde_json::{Value, json};
 use std::path::PathBuf;
@@ -71,10 +78,52 @@ pub struct Facts {
     /// Each enrolled account's parked login, read back from the vault.
     pub parks: Vec<ParkFact>,
     pub interrupted: bool,
+    /// What is read about Codex here, for the section that is about it.
+    pub codex: CodexFacts,
     pub now: i64,
 }
 
+/// What is read about Codex CLI on this machine.
+///
+/// Read without running it and without touching a keychain item Codex created for itself:
+/// its home, its configuration, the one file it keeps its login in by default, and which
+/// `codex` processes are running.
+pub struct CodexFacts {
+    /// `CODEX_HOME`, or `~/.codex`.
+    pub home: PathBuf,
+    /// Whether that directory exists. It does once Codex has been run here, and not before.
+    pub present: bool,
+    /// How many Codex accounts pitboard has enrolled.
+    pub enrolled: usize,
+    /// Where Codex is configured to keep its login, in Codex's own words:
+    /// `cli_auth_credentials_store`'s `file`, `keyring`, `auto` or `ephemeral`.
+    pub backend: &'static str,
+    /// Where the default store keeps it.
+    pub auth_file: PathBuf,
+    /// That file's mode, where there is such a file.
+    pub auth_mode: Option<u32>,
+    /// Whose login the file holds, or why that could not be told. `Ok(None)` for no file,
+    /// and for a store pitboard does not read.
+    pub login: Result<Option<CodexLogin>, String>,
+    /// Which Codex is installed, read off disk.
+    pub version: Option<String>,
+    /// Every `codex` running as this user, by pid. `None` where that could not be asked.
+    pub running: Option<Vec<u32>>,
+}
+
+/// Whose a Codex login is, as its own ID token says. Nothing in here is a secret: the
+/// fingerprint is a handle on the refresh token, never the token.
+pub struct CodexLogin {
+    pub email: String,
+    pub account_id: String,
+    /// Empty where the login holds no refresh token.
+    pub fingerprint: String,
+}
+
 pub struct ParkFact {
+    /// Which tool the account belongs to, which is what decides how it is named back to a
+    /// person: bare for Claude Code, `codex/work` for Codex.
+    pub provider: ProviderId,
     pub label: String,
     pub active: bool,
     /// When this account was last switched to, where that is recorded.
@@ -84,16 +133,36 @@ pub struct ParkFact {
     pub unreadable: Option<String>,
 }
 
-fn park_facts(ctx: &Context, state: &State, live_uuid: Option<&str>) -> Vec<ParkFact> {
+impl ParkFact {
+    /// The account's name as a person would type it back.
+    fn typed(&self) -> String {
+        Key::new(self.provider, self.label.clone()).typed()
+    }
+}
+
+fn park_facts(ctx: &Context, state: &State) -> Vec<ParkFact> {
+    // Who each tool's own record says is signed in, asked once per tool and only of a tool
+    // that has accounts here. Offline for every tool: Claude Code's config, a Codex login's
+    // own claims. Deciding it from Claude Code's config alone read a signed-in Codex
+    // account as one with nothing parked to switch to.
+    let recorded: std::collections::BTreeMap<ProviderId, Option<String>> = ProviderId::ALL
+        .iter()
+        .filter(|&&which| state.accounts.iter().any(|a| a.provider() == which))
+        .map(|&which| {
+            let found = crate::provider::of(which).recorded_identity(ctx);
+            (which, found.map(|id| id.account_id))
+        })
+        .collect();
     state
         .accounts
         .iter()
         .map(|a| ParkFact {
+            provider: a.provider(),
             label: a.label.clone(),
             last_used_at: a.last_used_at,
-            // What Claude Code's config says, when it says anything. pitboard's own
+            // What the account's own tool says, when it says anything. pitboard's own
             // record of its last switch says nothing about a sign-in made elsewhere.
-            active: match live_uuid {
+            active: match recorded.get(&a.provider()).and_then(Option::as_deref) {
                 Some(uuid) => a.account_uuid == uuid,
                 None => state.active_for(a.provider()) == Some(a.label.as_str()),
             },
@@ -149,8 +218,9 @@ pub fn gather(ctx: &Context) -> Facts {
         asking_held: crate::budget::holds(ctx),
         parks: state
             .as_ref()
-            .map(|s| park_facts(ctx, s, identity.as_ref().map(|i| i.account_uuid.as_str())))
+            .map(|s| park_facts(ctx, s))
             .unwrap_or_default(),
+        codex: codex_facts(ctx, state.as_ref().ok()),
         state,
         interrupted: switch::interrupted(ctx),
         service,
@@ -219,6 +289,159 @@ fn loose_logins(ctx: &Context) -> Vec<(String, u32)> {
         }
     }
     loose
+}
+
+/// What is read about Codex here: its home, its configuration, the file it keeps its login
+/// in by default, what is installed and what is running.
+fn codex_facts(ctx: &Context, state: Option<&State>) -> CodexFacts {
+    let backend = codex::backend(ctx);
+    let auth_file = codex::auth_file(ctx);
+    let home = codex::home(ctx);
+    CodexFacts {
+        present: home.is_dir(),
+        enrolled: state.map_or(0, |s| {
+            s.accounts
+                .iter()
+                .filter(|a| a.provider() == ProviderId::Codex)
+                .count()
+        }),
+        backend: backend_name(backend),
+        auth_mode: mode_of(&auth_file),
+        // Read only from the default store. A keychain item Codex created for itself
+        // trusts the `codex` binary alone, and reading it would put a permission prompt in
+        // front of somebody who only asked for a diagnosis.
+        login: if backend == codex::Backend::File {
+            codex_login(ctx)
+        } else {
+            Ok(None)
+        },
+        version: codex_version(),
+        running: codex_processes(ctx),
+        auth_file,
+        home,
+    }
+}
+
+/// Codex's own word for where it keeps its login, as `cli_auth_credentials_store` spells
+/// it in `config.toml`.
+fn backend_name(backend: codex::Backend) -> &'static str {
+    match backend {
+        codex::Backend::File => "file",
+        codex::Backend::Keyring => "keyring",
+        codex::Backend::Either => "auto",
+        codex::Backend::Ephemeral => "ephemeral",
+        // A store this build has not named yet is one of Codex's keychain-backed ones:
+        // the file and memory are the only two that are not.
+        #[allow(unreachable_patterns)]
+        _ => "keyring",
+    }
+}
+
+/// Whose login Codex's file holds, from the login's own ID token and with no network call.
+fn codex_login(ctx: &Context) -> Result<Option<CodexLogin>, String> {
+    let tool = crate::provider::of(ProviderId::Codex);
+    let Some(credential) = tool.read_live(ctx).map_err(|e| e.to_string())? else {
+        return Ok(None);
+    };
+    // Whether it is one account's login at all, which is the question a park asks of it.
+    tool.slice(&credential.raw).map_err(|e| e.to_string())?;
+    let found = tool.identify(ctx, &credential).map_err(|e| e.to_string())?;
+    Ok(Some(CodexLogin {
+        email: found.email,
+        account_id: found.account_id,
+        fingerprint: tool.fingerprint(&credential.raw),
+    }))
+}
+
+/// Which Codex is installed, read off disk and never by running it.
+///
+/// Running `codex --version` would start the program this is trying to describe. Every
+/// way Codex is installed puts the version in the path the program resolves to: the
+/// standalone installer under `releases/0.154.0-<target>/bin/codex`, Homebrew under
+/// `Caskroom/codex/0.154.0/`, and npm beside a `package.json` naming `@openai/codex`.
+fn codex_version() -> Option<String> {
+    let program = std::env::var_os("PATH")?
+        .to_string_lossy()
+        .split(':')
+        .filter(|dir| !dir.is_empty())
+        .map(|dir| PathBuf::from(dir).join("codex"))
+        .find(|candidate| candidate.is_file())?;
+    let resolved = std::fs::canonicalize(program).ok()?;
+    for dir in resolved.ancestors().skip(1) {
+        if let Some(version) = dir
+            .file_name()
+            .and_then(|n| n.to_str())
+            .and_then(|name| name.split('-').next())
+            .filter(|leading| looks_like_a_version(leading))
+        {
+            return Some(version.to_string());
+        }
+        if let Some(version) = codex_package_version(&dir.join("package.json")) {
+            return Some(version);
+        }
+    }
+    None
+}
+
+fn looks_like_a_version(name: &str) -> bool {
+    let parts: Vec<&str> = name.split('.').collect();
+    parts.len() == 3
+        && parts
+            .iter()
+            .all(|p| !p.is_empty() && p.bytes().all(|b| b.is_ascii_digit()))
+}
+
+fn codex_package_version(path: &std::path::Path) -> Option<String> {
+    let json: Value = serde_json::from_str(&std::fs::read_to_string(path).ok()?).ok()?;
+    if json.get("name")?.as_str()? != "@openai/codex" {
+        return None;
+    }
+    Some(json.get("version")?.as_str()?.to_string())
+}
+
+/// Every `codex` running as this user, by pid.
+///
+/// Asked of `pgrep`, with a deadline, because macOS offers no way to list processes that
+/// does not mean either a helper or a system call pitboard does not otherwise make.
+#[cfg(target_os = "macos")]
+fn codex_processes(ctx: &Context) -> Option<Vec<u32>> {
+    let mut command = std::process::Command::new("/usr/bin/pgrep");
+    command.arg("-x");
+    if let Some(user) = ctx.user.as_deref().filter(|u| !u.is_empty()) {
+        command.args(["-u", user]);
+    }
+    command.arg("codex");
+    let out =
+        crate::process::output_within(command, b"", std::time::Duration::from_secs(2)).ok()?;
+    match out.status.code() {
+        // Found some, or found none: both answers.
+        Some(0 | 1) => Some(
+            String::from_utf8_lossy(&out.stdout)
+                .lines()
+                .filter_map(|line| line.trim().parse().ok())
+                .collect(),
+        ),
+        _ => None,
+    }
+}
+
+/// Every `codex` running as this user, by pid, read out of `/proc`.
+#[cfg(not(target_os = "macos"))]
+fn codex_processes(_ctx: &Context) -> Option<Vec<u32>> {
+    use std::os::unix::fs::MetadataExt;
+    let me = std::fs::metadata("/proc/self").ok()?.uid();
+    let mut found: Vec<u32> = std::fs::read_dir("/proc")
+        .ok()?
+        .flatten()
+        .filter_map(|entry| {
+            let pid: u32 = entry.file_name().to_str()?.parse().ok()?;
+            let owner = entry.metadata().ok()?.uid();
+            let name = std::fs::read_to_string(entry.path().join("comm")).ok()?;
+            (owner == me && name.trim() == "codex").then_some(pid)
+        })
+        .collect();
+    found.sort_unstable();
+    Some(found)
 }
 
 fn ok(code: &'static str, name: impl Into<String>, detail: impl Into<String>) -> Check {
@@ -564,6 +787,11 @@ pub fn evaluate(facts: &Facts) -> Vec<Check> {
             .iter()
             .filter_map(|p| judge_dormant(p, facts.now)),
     );
+    // Only where there is a Codex to say something about. A machine that has never run it
+    // reads exactly as it did before pitboard knew Codex existed.
+    if facts.codex.present || facts.codex.enrolled > 0 {
+        checks.extend(judge_codex(&facts.codex));
+    }
     checks
 }
 
@@ -589,7 +817,7 @@ fn judge_dormant(park: &ParkFact, now: i64) -> Option<Check> {
     }
     Some(warn(
         "dormant_account",
-        format!("account {}", park.label),
+        format!("account {}", park.typed()),
         format!(
             "not switched to for {}; pitboard has kept its login alive that whole time",
             time::span(dormant_for)
@@ -598,7 +826,7 @@ fn judge_dormant(park: &ParkFact, now: i64) -> Option<Check> {
             "Every `pitboard` renews it, so its refresh token is rotated and kept live on \
              this machine for as long as it stays enrolled. If you are not coming back to \
              it, `pitboard forget {}` deletes the login and the record.",
-            park.label
+            park.typed()
         ),
     ))
 }
@@ -658,8 +886,8 @@ fn judge_credential(facts: &Facts) -> Check {
 pub const RENEW_WITHIN: i64 = 3 * 86_400;
 
 fn judge_park(fact: &ParkFact, now: i64) -> Check {
-    let name = format!("account {}", fact.label);
-    let renew = format!("Run `pitboard enroll {} --sign-in`.", fact.label);
+    let name = format!("account {}", fact.typed());
+    let renew = format!("Run `pitboard enroll {} --sign-in`.", fact.typed());
     let Some(park) = &fact.park else {
         return if fact.active {
             ok(
@@ -885,6 +1113,160 @@ fn judge_daemon(facts: &Facts) -> Check {
     }
 }
 
+/// Codex's section: where it keeps its login, whether pitboard can read it, and what a
+/// switch cannot reach.
+///
+/// Every code starts `codex_`. A failure is kept for what stops pitboard handling an
+/// account it has enrolled; on a machine where Codex is installed and nobody enrolled an
+/// account of it, the same finding is a warning, because nothing pitboard does is broken
+/// by it.
+fn judge_codex(facts: &CodexFacts) -> Vec<Check> {
+    let mut checks = Vec::new();
+    let broken = |code, name: &str, detail: String, advice: String| {
+        if facts.enrolled > 0 {
+            fail(code, name, detail, advice)
+        } else {
+            warn(code, name, detail, advice)
+        }
+    };
+    let file = facts.backend == "file";
+    checks.push(match facts.backend {
+        "file" => ok(
+            "codex_backend",
+            "Codex login store",
+            format!("file  ·  {}", facts.auth_file.display()),
+        ),
+        "ephemeral" => broken(
+            "codex_backend",
+            "Codex login store",
+            "in memory only (cli_auth_credentials_store = \"ephemeral\")".into(),
+            format!(
+                "Codex keeps nothing at rest, so there is no login pitboard can park or \
+                 switch. Remove the setting from {} to use Codex's default file store.",
+                facts.home.join("config.toml").display()
+            ),
+        ),
+        other => warn(
+            "codex_backend",
+            "Codex login store",
+            format!("{other} (cli_auth_credentials_store in config.toml)"),
+            "pitboard reads only Codex's default file store, auth.json, and will not touch \
+             the keychain item Codex created for itself: every read of it would ask you for \
+             permission. Switching Codex accounts needs the file store.",
+        ),
+    });
+
+    // The file and what is in it are only worth a word where the file is the store: a
+    // keychain store deletes it on purpose.
+    if file {
+        checks.push(match facts.auth_mode {
+            None if facts.enrolled > 0 => warn(
+                "codex_auth_file",
+                "Codex login file",
+                format!(
+                    "{} is absent: nothing is signed in to Codex",
+                    facts.auth_file.display()
+                ),
+                "Sign in with `codex`, or put an enrolled account back with \
+                 `pitboard use codex/<label>`.",
+            ),
+            None => ok(
+                "codex_auth_file",
+                "Codex login file",
+                "absent; nothing is signed in to Codex",
+            ),
+            Some(mode) if mode & 0o077 != 0 => warn(
+                "codex_auth_file",
+                "Codex login file",
+                format!("{} is mode {mode:o}", facts.auth_file.display()),
+                format!(
+                    "It holds a usable login in plain text, and Codex sets 0600 only when it \
+                     creates the file, never on a later write: `chmod 600 {}`.",
+                    facts.auth_file.display()
+                ),
+            ),
+            Some(mode) => ok(
+                "codex_auth_file",
+                "Codex login file",
+                format!("{}  ·  mode {mode:o}", facts.auth_file.display()),
+            ),
+        });
+        match &facts.login {
+            Ok(Some(login)) => checks.push(ok(
+                "codex_login",
+                "Codex login",
+                format!(
+                    "{}  ·  account {}  ·  refresh {}",
+                    login.email,
+                    login.account_id,
+                    if login.fingerprint.is_empty() {
+                        "none"
+                    } else {
+                        login.fingerprint.as_str()
+                    }
+                ),
+            )),
+            // No file, which the check above has already said.
+            Ok(None) => {}
+            Err(why) => checks.push(broken(
+                "codex_login",
+                "Codex login",
+                format!("it cannot be read: {why}"),
+                "pitboard will not park or switch a Codex login it cannot read. Signing in \
+                 with `codex` again writes a fresh one."
+                    .into(),
+            )),
+        }
+    }
+
+    checks.push(judge_codex_version(facts));
+    checks.push(ok(
+        "codex_running",
+        "running Codex",
+        match facts.running.as_deref() {
+            None => "could not tell".to_string(),
+            Some([]) => "none".to_string(),
+            Some(pids) => format!(
+                "{} running (pid {}); each keeps using the account it started with until \
+                 it is restarted",
+                pids.len(),
+                some_of(pids)
+            ),
+        },
+    ));
+    checks
+}
+
+/// A few pids and how many more, because somebody with twenty sessions open needs to know
+/// there are twenty, not which twenty.
+fn some_of(pids: &[u32]) -> String {
+    const SHOWN: usize = 3;
+    let named: Vec<String> = pids.iter().take(SHOWN).map(u32::to_string).collect();
+    match pids.len().saturating_sub(SHOWN) {
+        0 => named.join(", "),
+        more => format!("{} and {more} more", named.join(", ")),
+    }
+}
+
+/// Which Codex is installed, against which one pitboard's facts were read. Stated rather
+/// than warned about, for the reason Claude Code's is.
+fn judge_codex_version(facts: &CodexFacts) -> Check {
+    let verified = crate::provider::codex::assumptions::VERIFIED_AGAINST;
+    ok(
+        "codex_version",
+        "Codex build",
+        match facts.version.as_deref() {
+            None => format!("not found here; pitboard's facts were read from {verified}"),
+            Some(installed) if installed == verified => {
+                format!("{installed}, which is what pitboard's facts were read from")
+            }
+            Some(installed) => {
+                format!("{installed} installed; pitboard's facts were read from {verified}")
+            }
+        },
+    )
+}
+
 /// The checks, and where Claude Code's files were found, for a program to read rather than
 /// parse out of the checks' wording.
 pub struct Diagnosis {
@@ -906,6 +1288,17 @@ pub fn run(ctx: &Context) -> Diagnosis {
             "credential_service": facts.service,
             "credential_store": facts.backend.as_ref().map_or("unreadable", |b| b.name()),
             "home": facts.home,
+            // Codex's, beside Claude Code's rather than among them, so nothing a program
+            // already reads here moves.
+            "codex": {
+                "home": facts.codex.home,
+                "present": facts.codex.present,
+                "backend": facts.codex.backend,
+                // Unknown for a store pitboard does not read, rather than a guess.
+                "login_present": (facts.codex.backend == "file")
+                    .then_some(facts.codex.auth_mode.is_some()),
+                "version": facts.codex.version,
+            },
         }),
     }
 }
@@ -941,7 +1334,22 @@ fn redaction_for(ctx: &Context, facts: &Facts) -> crate::redact::Sheet {
                         .map_or_else(String::new, |c| c.organization_uuid.to_string()),
                     "org",
                 );
+            // A Codex account's workspace names the organisation it belongs to.
+            if let crate::state::Detail::Codex {
+                workspace_id: Some(workspace),
+                ..
+            } = &account.detail
+            {
+                sheet = sheet.hide(workspace.clone(), "org");
+            }
         }
+    }
+    // Codex's live login, which need not be an account anybody enrolled.
+    if let Ok(Some(login)) = &facts.codex.login {
+        sheet = sheet
+            .hide(login.email.clone(), "email")
+            .hide(login.account_id.clone(), "account")
+            .hide(login.fingerprint.clone(), "login");
     }
     // A fingerprint is not a token, and it still identifies one login across reports.
     if let Ok(Some(doc)) = &facts.credential
@@ -1013,7 +1421,38 @@ mod tests {
             state: Ok(State::default()),
             parks: Vec::new(),
             interrupted: false,
+            codex: no_codex(),
             now: NOW,
+        }
+    }
+
+    /// A machine that has never run Codex.
+    fn no_codex() -> CodexFacts {
+        CodexFacts {
+            home: PathBuf::from("/home/x/.codex"),
+            present: false,
+            enrolled: 0,
+            backend: "file",
+            auth_file: PathBuf::from("/home/x/.codex/auth.json"),
+            auth_mode: None,
+            login: Ok(None),
+            version: None,
+            running: Some(Vec::new()),
+        }
+    }
+
+    /// A machine whose Codex is signed in, with its login where it should be.
+    fn with_codex() -> CodexFacts {
+        CodexFacts {
+            present: true,
+            auth_mode: Some(0o600),
+            login: Ok(Some(CodexLogin {
+                email: "w@example.com".into(),
+                account_id: "work-account".into(),
+                fingerprint: "0123456789abcdef".into(),
+            })),
+            version: Some(crate::provider::codex::assumptions::VERIFIED_AGAINST.into()),
+            ..no_codex()
         }
     }
 
@@ -1021,6 +1460,7 @@ mod tests {
 
     fn parked(label: &str, refresh_expires_at: Option<i64>) -> ParkFact {
         ParkFact {
+            provider: ProviderId::Claude,
             last_used_at: None,
             label: label.into(),
             active: false,
@@ -1299,6 +1739,7 @@ mod tests {
     fn an_account_nobody_has_come_back_to_is_said_out_loud() {
         let mut f = facts();
         f.parks = vec![ParkFact {
+            provider: ProviderId::Claude,
             label: "work".into(),
             active: false,
             last_used_at: Some(f.now - 31 * 86_400),
@@ -1405,6 +1846,7 @@ mod tests {
             parked("gone", Some(NOW - 1)),
             unusable,
             ParkFact {
+                provider: ProviderId::Claude,
                 last_used_at: None,
                 label: "empty".into(),
                 active: false,
@@ -1412,6 +1854,7 @@ mod tests {
                 unreadable: None,
             },
             ParkFact {
+                provider: ProviderId::Claude,
                 last_used_at: None,
                 label: "live".into(),
                 active: true,
@@ -1452,5 +1895,396 @@ mod tests {
         assert_eq!(check(&checks, "interrupted_switch").level, Level::Warn);
         assert_eq!(check(&checks, "discarded").level, Level::Warn);
         assert!(healthy(&checks), "neither stops pitboard working");
+    }
+
+    /// The advice has to be something a person can type and have it act on the right
+    /// account. `pitboard enroll work --sign-in` about a Codex account would enroll a
+    /// Claude Code one.
+    #[test]
+    fn advice_names_a_codex_account_the_way_it_is_typed() {
+        let mut f = facts();
+        let mut codex = parked("work", Some(NOW - 1));
+        codex.provider = ProviderId::Codex;
+        codex.last_used_at = Some(NOW - 400 * 86_400);
+        let mut claude = parked("work", Some(NOW - 1));
+        claude.last_used_at = Some(NOW - 400 * 86_400);
+        f.parks = vec![claude, codex];
+        let checks = evaluate(&f);
+
+        let codex_park = named(&checks, "account codex/work");
+        assert!(
+            codex_park
+                .advice
+                .contains("`pitboard enroll codex/work --sign-in`"),
+            "{}",
+            codex_park.advice
+        );
+        let claude_park = named(&checks, "account work");
+        assert!(
+            claude_park
+                .advice
+                .contains("`pitboard enroll work --sign-in`"),
+            "Claude Code's reads as it always did: {}",
+            claude_park.advice
+        );
+
+        let dormant: Vec<&Check> = checks
+            .iter()
+            .filter(|c| c.code == "dormant_account")
+            .collect();
+        assert_eq!(dormant.len(), 2);
+        assert!(
+            dormant.iter().any(|c| c.name == "account codex/work"
+                && c.advice.contains("`pitboard forget codex/work`"))
+        );
+        assert!(
+            dormant
+                .iter()
+                .any(|c| c.name == "account work" && c.advice.contains("`pitboard forget work`"))
+        );
+    }
+
+    /// Whether an account is the one signed in is its own tool's question. Asked of Claude
+    /// Code's config for every account, a signed-in Codex account read as one with nothing
+    /// parked to switch to, and the advice was to sign in again.
+    #[test]
+    fn an_account_is_active_by_its_own_tools_record() {
+        use crate::store::memory::MemoryHost;
+
+        let root = std::env::temp_dir().join(format!(
+            "pitboard-doctor-active-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).expect("a scratch home");
+        struct Scratch(std::path::PathBuf);
+        impl Drop for Scratch {
+            fn drop(&mut self) {
+                let _ = std::fs::remove_dir_all(&self.0);
+            }
+        }
+        let _guard = Scratch(root.clone());
+        let ctx = Context::new(root.clone())
+            .with_pitboard_home(root.join(".pitboard"))
+            .with_codex_home(root.join("codex").to_string_lossy().into())
+            .with_memory_stores(MemoryHost::new());
+        std::fs::write(
+            root.join(".claude.json"),
+            json!({"oauthAccount": {
+                "accountUuid": "alpha-uuid",
+                "emailAddress": "a@example.com",
+                "organizationUuid": "org",
+            }})
+            .to_string(),
+        )
+        .expect("a Claude Code config");
+
+        let account =
+            |label: &str, uuid: &str, detail: crate::state::Detail| crate::state::Account {
+                label: label.into(),
+                account_uuid: uuid.into(),
+                email: format!("{label}@example.com"),
+                parked: None,
+                last_used_at: None,
+                detail,
+            };
+        let claude = || crate::state::Detail::Claude {
+            organization_uuid: "org".into(),
+            oauth_account: json!({}),
+        };
+        let codex = || crate::state::Detail::Codex {
+            workspace_id: None,
+            plan: None,
+        };
+        let mut state = State {
+            accounts: vec![
+                account("alpha", "alpha-uuid", claude()),
+                account("work", "work-acc", codex()),
+                account("home", "home-acc", codex()),
+            ],
+            ..State::default()
+        };
+        state.set_active(ProviderId::Codex, Some("home".into()));
+        let active = |facts: &[ParkFact]| -> Vec<String> {
+            facts
+                .iter()
+                .filter(|p| p.active)
+                .map(ParkFact::typed)
+                .collect()
+        };
+
+        // Nothing signed in to Codex: pitboard's own record of its last switch stands in.
+        assert_eq!(active(&park_facts(&ctx, &state)), ["alpha", "codex/home"]);
+
+        // Codex's login names `work`, whatever pitboard last recorded.
+        let live = crate::provider::of(ProviderId::Codex)
+            .live(&ctx)
+            .expect("Codex keeps its login in a file here");
+        let login = json!({
+            "auth_mode": "chatgpt",
+            "tokens": {
+                "id_token": crate::provider::jwt::unsigned(&json!({
+                    "email": "work@example.com",
+                    "https://api.openai.com/auth": {"chatgpt_account_id": "work-acc"},
+                })),
+                "access_token": "a",
+                "refresh_token": "r",
+                "account_id": "work-acc",
+            },
+        });
+        store::write_raw(&live.chain, &live.service, &login.to_string()).expect("a login");
+        assert_eq!(active(&park_facts(&ctx, &state)), ["alpha", "codex/work"]);
+    }
+
+    /// A machine that has never run Codex reads exactly as it did before pitboard knew
+    /// Codex existed; one that has gets a section of its own, and nothing of Claude Code's
+    /// moves.
+    #[test]
+    fn codex_has_a_section_only_where_there_is_a_codex() {
+        let without = evaluate(&facts());
+        assert!(without.iter().all(|c| !c.code.starts_with("codex_")));
+
+        let mut f = facts();
+        f.codex = with_codex();
+        let with = evaluate(&f);
+        let claude = |checks: &[Check]| -> Vec<(String, String, String)> {
+            checks
+                .iter()
+                .filter(|c| !c.code.starts_with("codex_"))
+                .map(|c| (c.code.to_string(), c.detail.clone(), c.advice.clone()))
+                .collect()
+        };
+        assert_eq!(claude(&without), claude(&with), "Claude Code's checks move");
+        for code in [
+            "codex_backend",
+            "codex_auth_file",
+            "codex_login",
+            "codex_version",
+            "codex_running",
+        ] {
+            assert_eq!(check(&with, code).level, Level::Ok, "{code}");
+        }
+        assert!(healthy(&with));
+        let login = check(&with, "codex_login");
+        assert!(login.detail.contains("w@example.com"), "{}", login.detail);
+        assert!(
+            login.detail.contains("0123456789abcdef"),
+            "{}",
+            login.detail
+        );
+
+        // Accounts enrolled on a machine whose Codex home has gone still get the section.
+        f.codex = CodexFacts {
+            enrolled: 1,
+            ..no_codex()
+        };
+        let checks = evaluate(&f);
+        let file = check(&checks, "codex_auth_file");
+        assert_eq!(file.level, Level::Warn);
+        assert!(
+            file.advice.contains("pitboard use codex/"),
+            "{}",
+            file.advice
+        );
+    }
+
+    /// A keychain store is Codex's to use and pitboard's to leave alone, so it is said
+    /// rather than read; a store in memory holds nothing to switch, which is a failure only
+    /// for somebody who has Codex accounts enrolled.
+    #[test]
+    fn each_codex_store_is_judged_for_what_pitboard_can_do_with_it() {
+        let judged = |backend: &'static str, enrolled: usize| {
+            let codex = CodexFacts {
+                backend,
+                enrolled,
+                ..with_codex()
+            };
+            judge_codex(&codex)
+        };
+
+        for store in ["keyring", "auto"] {
+            let checks = judged(store, 1);
+            let found = check(&checks, "codex_backend");
+            assert_eq!(found.level, Level::Warn, "{store}");
+            assert!(found.detail.contains(store), "{}", found.detail);
+            assert!(found.advice.contains("will not touch"), "{}", found.advice);
+            assert!(
+                checks.iter().all(|c| c.code != "codex_login"),
+                "a keychain store is not read, so there is nothing to say about its login"
+            );
+        }
+
+        assert_eq!(
+            check(&judged("ephemeral", 1), "codex_backend").level,
+            Level::Fail,
+            "nothing at rest, for accounts pitboard is meant to switch"
+        );
+        assert_eq!(
+            check(&judged("ephemeral", 0), "codex_backend").level,
+            Level::Warn,
+            "nothing pitboard does is broken for somebody with no Codex accounts"
+        );
+    }
+
+    #[test]
+    fn a_codex_login_anybody_can_read_or_nobody_can_parse_is_said() {
+        let mut codex = with_codex();
+        codex.auth_mode = Some(0o644);
+        let checks = judge_codex(&codex);
+        let file = check(&checks, "codex_auth_file");
+        assert_eq!(file.level, Level::Warn);
+        assert!(file.detail.contains("mode 644"), "{}", file.detail);
+        assert!(file.advice.contains("chmod 600"), "{}", file.advice);
+
+        codex.auth_mode = Some(0o600);
+        codex.login = Err("its id token is not readable".into());
+        assert_eq!(
+            check(&judge_codex(&codex), "codex_login").level,
+            Level::Warn
+        );
+        codex.enrolled = 2;
+        let checks = judge_codex(&codex);
+        let login = check(&checks, "codex_login");
+        assert_eq!(login.level, Level::Fail);
+        assert!(login.detail.contains("not readable"), "{}", login.detail);
+    }
+
+    /// A running codex holds the account it started with for as long as it runs, which is
+    /// the one thing a switch cannot reach. Said, never warned about: running it is the
+    /// point of having it.
+    #[test]
+    fn running_codex_processes_are_reported_as_a_fact() {
+        let mut codex = with_codex();
+        codex.running = Some(vec![4321, 99]);
+        let checks = judge_codex(&codex);
+        let running = check(&checks, "codex_running");
+        assert_eq!(running.level, Level::Ok);
+        assert!(running.detail.contains("4321, 99"), "{}", running.detail);
+        assert!(running.detail.contains("restarted"), "{}", running.detail);
+
+        codex.running = Some((1..=23).collect());
+        let many = check(&judge_codex(&codex), "codex_running").detail.clone();
+        assert!(many.starts_with("23 running"), "{many}");
+        assert!(many.contains("1, 2, 3 and 20 more"), "{many}");
+
+        codex.running = None;
+        assert!(
+            check(&judge_codex(&codex), "codex_running")
+                .detail
+                .contains("could not tell")
+        );
+    }
+
+    #[test]
+    fn every_codex_failure_and_warning_tells_the_user_something() {
+        for backend in ["file", "keyring", "auto", "ephemeral"] {
+            let codex = CodexFacts {
+                backend,
+                enrolled: 1,
+                auth_mode: Some(0o666),
+                login: Err("unreadable".into()),
+                ..with_codex()
+            };
+            for c in judge_codex(&codex) {
+                assert!(c.code.starts_with("codex_"), "{}", c.code);
+                if c.level != Level::Ok {
+                    assert!(!c.advice.is_empty(), "{} has no advice", c.code);
+                }
+            }
+        }
+    }
+
+    /// What a pasted report must not carry, now that it can carry a Codex login too.
+    #[test]
+    fn a_codex_login_is_redacted_from_a_report() {
+        let mut f = facts();
+        f.codex = with_codex();
+        let ctx = Context::new(PathBuf::from("/home/x"));
+        let sheet = redaction_for(&ctx, &f);
+        let login = check(&evaluate(&f), "codex_login").detail.clone();
+        let hidden = sheet.over(&login);
+        for secret in ["w@example.com", "work-account", "0123456789abcdef"] {
+            assert!(login.contains(secret), "{login}");
+            assert!(!hidden.contains(secret), "{hidden}");
+        }
+    }
+
+    /// What the section is judged on, read off a real disk: a scratch Codex home with a
+    /// login in it, in the file Codex keeps it in.
+    #[test]
+    fn codex_facts_are_read_off_the_disk() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let root = std::env::temp_dir().join(format!(
+            "pitboard-doctor-codex-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let _ = std::fs::remove_dir_all(&root);
+        struct Scratch(std::path::PathBuf);
+        impl Drop for Scratch {
+            fn drop(&mut self) {
+                let _ = std::fs::remove_dir_all(&self.0);
+            }
+        }
+        let _guard = Scratch(root.clone());
+        let home = root.join("codex");
+        let ctx = Context::new(root.clone())
+            .with_pitboard_home(root.join(".pitboard"))
+            .with_codex_home(home.to_string_lossy().into());
+
+        let absent = codex_facts(&ctx, None);
+        assert!(!absent.present);
+        assert_eq!(absent.backend, "file");
+        assert_eq!(absent.auth_mode, None);
+        assert!(matches!(absent.login, Ok(None)));
+
+        std::fs::create_dir_all(&home).expect("a Codex home");
+        let auth = home.join("auth.json");
+        std::fs::write(
+            &auth,
+            json!({
+                "auth_mode": "chatgpt",
+                "tokens": {
+                    "id_token": crate::provider::jwt::unsigned(&json!({
+                        "email": "w@example.com",
+                        "https://api.openai.com/auth": {"chatgpt_account_id": "work-acc"},
+                    })),
+                    "access_token": "a",
+                    "refresh_token": "r",
+                    "account_id": "work-acc",
+                },
+            })
+            .to_string(),
+        )
+        .expect("a login");
+        std::fs::set_permissions(&auth, std::fs::Permissions::from_mode(0o644)).unwrap();
+        let found = codex_facts(&ctx, None);
+        assert!(found.present);
+        assert_eq!(found.auth_mode, Some(0o644));
+        let login = found.login.expect("readable").expect("there");
+        assert_eq!(login.email, "w@example.com");
+        assert_eq!(login.fingerprint.len(), 16);
+
+        std::fs::write(
+            home.join("config.toml"),
+            "cli_auth_credentials_store = \"ephemeral\"\n",
+        )
+        .expect("a config");
+        let ephemeral = codex_facts(&ctx, None);
+        assert_eq!(ephemeral.backend, "ephemeral");
+        assert!(
+            matches!(ephemeral.login, Ok(None)),
+            "a store pitboard does not handle is not read"
+        );
+    }
+
+    #[test]
+    fn a_version_is_read_out_of_the_path_codex_is_installed_at() {
+        assert!(looks_like_a_version("0.154.0"));
+        assert!(!looks_like_a_version("releases"));
+        assert!(!looks_like_a_version("0.154"));
+        assert!(!looks_like_a_version("v0.154.0"));
     }
 }
