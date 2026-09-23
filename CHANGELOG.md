@@ -222,6 +222,12 @@ All notable changes are recorded here. The format follows
 - An interrupted switch is recovered only where its tool's login was when it started. Read
   from another `CODEX_HOME` or `CLAUDE_CONFIG_DIR`, recovery compared the switch with a
   login that had nothing to do with it; it now stops with `recovery_elsewhere`.
+- A change refused over the name it was given still settles an interrupted switch, like
+  every other change. `pitboard use nosuchlabel` after an interrupted switch refused the
+  name and left the switch for a later run without a word about it; it now finishes or
+  undoes the switch, records that in `pitboard log`, and reports it beside the refusal, as
+  a warning in `--json`. With nothing interrupted, a mistyped name still takes no lock and
+  changes nothing.
 - Labels written by 0.1.x that contain a slash can be switched to, forgotten, renamed and
   signed in to again; they read as a tool prefix and were refused.
 - The floor between two questions about one account was the minute pitboard uses for a

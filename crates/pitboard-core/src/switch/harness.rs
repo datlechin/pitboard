@@ -1,9 +1,10 @@
 //! A machine to run changes against: two accounts of one tool, stores in memory, services
 //! that answer from a script, and a clock that stands still.
 //!
-//! Shared by the tests that kill a change partway ([`super::crash`]) and the tests that
-//! make one refuse ([`super::refusals`]), because both need the same starting shape: one
-//! account signed in, one parked and ready, and the tool's own files where the engine
+//! Shared by the tests that kill a change partway ([`super::crash`]), the tests that make
+//! one refuse ([`super::refusals`]), and the tests of what a change refused over its name
+//! still settles ([`crate::service`]), because all of them need the same starting shape:
+//! one account signed in, one parked and ready, and the tool's own files where the engine
 //! expects them. There is one for each tool, and the invariants in [`hold`] are asked of
 //! every one of them through the provider boundary, because what must be true after a
 //! crash is a fact about parking a login and not about any one tool's.
@@ -21,10 +22,10 @@ use serde_json::json;
 use std::collections::HashSet;
 use std::sync::Arc;
 
-pub(super) const NOW: i64 = 1_760_000_000;
+pub(crate) const NOW: i64 = 1_760_000_000;
 
 /// Every place a change can be killed, named the way the code names it.
-pub(super) const POINTS: [&str; 6] = [
+pub(crate) const POINTS: [&str; 6] = [
     "switch.journal_written",
     "switch.park_stored",
     "switch.park_recorded",
@@ -33,25 +34,25 @@ pub(super) const POINTS: [&str; 6] = [
     "switch.config_updated",
 ];
 
-pub(super) struct Machine {
-    pub(super) ctx: Context,
-    pub(super) mem: Arc<MemoryHost>,
-    pub(super) api: Arc<ScriptedApi>,
+pub(crate) struct Machine {
+    pub(crate) ctx: Context,
+    pub(crate) mem: Arc<MemoryHost>,
+    pub(crate) api: Arc<ScriptedApi>,
     root: PathBuf,
     /// The keychain item Claude Code's login is in, on a Claude Code machine.
-    pub(super) service: String,
+    pub(crate) service: String,
     /// Which tool's accounts this machine holds.
-    pub(super) which: ProviderId,
+    pub(crate) which: ProviderId,
 }
 
 impl Machine {
     /// Where the tool's own files are, for a test that needs to change one.
-    pub(super) fn ctx_home(&self) -> PathBuf {
+    pub(crate) fn ctx_home(&self) -> PathBuf {
         self.root.clone()
     }
 
     /// The live login, read the way the tool reads it.
-    pub(super) fn live(&self) -> Option<Value> {
+    pub(crate) fn live(&self) -> Option<Value> {
         crate::provider::of(self.which)
             .read_live(&self.ctx)
             .ok()
@@ -60,7 +61,7 @@ impl Machine {
     }
 
     /// Replace the live login, the way the tool itself would write it.
-    pub(super) fn sign_in(&self, document: &Value) {
+    pub(crate) fn sign_in(&self, document: &Value) {
         let live = crate::provider::of(self.which)
             .live(&self.ctx)
             .expect("a store to write to");
@@ -68,7 +69,7 @@ impl Machine {
             .expect("the live login is written");
     }
 
-    pub(super) fn key(&self, label: &str) -> Key {
+    pub(crate) fn key(&self, label: &str) -> Key {
         Key::new(self.which, label)
     }
 }
@@ -79,7 +80,7 @@ impl Drop for Machine {
     }
 }
 
-pub(super) fn oauth(refresh: &str, expires_in_days: i64) -> Value {
+pub(crate) fn oauth(refresh: &str, expires_in_days: i64) -> Value {
     json!({
         "accessToken": format!("access-{refresh}"),
         "refreshToken": refresh,
@@ -89,7 +90,7 @@ pub(super) fn oauth(refresh: &str, expires_in_days: i64) -> Value {
     })
 }
 
-pub(super) fn document(refresh: &str) -> Value {
+pub(crate) fn document(refresh: &str) -> Value {
     json!({
         "claudeAiOauth": oauth(refresh, 30),
         "organizationUuid": "org-of-the-outgoing-account",
@@ -97,7 +98,7 @@ pub(super) fn document(refresh: &str) -> Value {
     })
 }
 
-pub(super) fn owner(uuid: &str) -> Owner {
+pub(crate) fn owner(uuid: &str) -> Owner {
     Owner {
         account_uuid: uuid.into(),
         email: format!("{uuid}@example.com"),
@@ -107,7 +108,7 @@ pub(super) fn owner(uuid: &str) -> Owner {
 
 /// Two accounts: `here` is signed in, `there` is parked and ready. The shape every switch
 /// starts from.
-pub(super) fn machine(name: &str) -> Machine {
+pub(crate) fn machine(name: &str) -> Machine {
     let root = std::env::temp_dir().join(format!(
         "pitboard-crash-{name}-{}-{:?}",
         std::process::id(),
@@ -180,7 +181,7 @@ const OPENAI: &str = "https://api.openai.com/auth";
 ///
 /// The access token is unique to the refresh token so every login has its own, which is
 /// what the scripted usage answers are keyed by.
-pub(super) fn codex_login(who: &str, refresh: &str) -> Value {
+pub(crate) fn codex_login(who: &str, refresh: &str) -> Value {
     json!({
         "auth_mode": "chatgpt",
         "OPENAI_API_KEY": null,
@@ -204,16 +205,16 @@ pub(super) fn codex_login(who: &str, refresh: &str) -> Value {
 
 /// The identity Codex's own claims give the account `who`: the ChatGPT account with the
 /// person inside it.
-pub(super) fn codex_id(who: &str) -> String {
+pub(crate) fn codex_id(who: &str) -> String {
     format!("{who}_user-{who}")
 }
 
 /// The access token [`codex_login`] carries for this refresh token.
-pub(super) fn codex_access(refresh: &str) -> String {
+pub(crate) fn codex_access(refresh: &str) -> String {
     crate::provider::jwt::unsigned(&json!({"exp": NOW + 10 * 86_400, "for": refresh}))
 }
 
-pub(super) fn codex_account(label: &str, uuid: &str, parked: Option<Park>) -> Account {
+pub(crate) fn codex_account(label: &str, uuid: &str, parked: Option<Park>) -> Account {
     Account {
         last_used_at: None,
         label: label.into(),
@@ -229,7 +230,7 @@ pub(super) fn codex_account(label: &str, uuid: &str, parked: Option<Park>) -> Ac
 
 /// The same shape for Codex: `here` is signed in, `there` is parked and ready, and OpenAI
 /// answers for both.
-pub(super) fn codex_machine(name: &str) -> Machine {
+pub(crate) fn codex_machine(name: &str) -> Machine {
     let root = std::env::temp_dir().join(format!(
         "pitboard-crash-codex-{name}-{}-{:?}",
         std::process::id(),
@@ -289,7 +290,7 @@ pub(super) fn codex_machine(name: &str) -> Machine {
     machine
 }
 
-pub(super) fn account(label: &str, uuid: &str, parked: Option<Park>) -> Account {
+pub(crate) fn account(label: &str, uuid: &str, parked: Option<Park>) -> Account {
     Account {
         last_used_at: None,
         label: label.into(),
@@ -309,7 +310,7 @@ pub(super) fn account(label: &str, uuid: &str, parked: Option<Park>) -> Account 
 
 /// Everything that must be true after a killed change has been recovered, whatever the
 /// change was and wherever it died.
-pub(super) fn hold(m: &Machine, after: &str) {
+pub(crate) fn hold(m: &Machine, after: &str) {
     let state = state::load(&m.ctx)
         .unwrap_or_else(|e| panic!("{after}: the state file must still parse, got {e}"));
 
@@ -380,6 +381,6 @@ pub(super) fn hold(m: &Machine, after: &str) {
 }
 
 /// Recovery, run the way the next command runs it.
-pub(super) fn recover(m: &Machine) -> Result<()> {
+pub(crate) fn recover(m: &Machine) -> Result<()> {
     settle(&m.ctx, None).map(|_| ())
 }

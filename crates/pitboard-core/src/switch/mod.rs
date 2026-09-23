@@ -14,7 +14,7 @@ mod crash;
 mod enroll;
 mod forget;
 #[cfg(test)]
-mod harness;
+pub(crate) mod harness;
 mod journal;
 #[cfg(test)]
 mod refusals;
@@ -28,6 +28,7 @@ pub use crate::pending::Reclaimed;
 pub use adopt::{Adopted, adopt};
 pub use enroll::{Enrolled, Said, SignIn, WatchedSignIn, enroll, sign_in, sign_in_watched};
 pub use forget::forget;
+pub(crate) use journal::interrupted_tool;
 pub use journal::{Abandoned, Recovered, pending as interrupted};
 pub use rename::rename;
 pub use renew::{Due, Renewal, renew_due, renew_parked};

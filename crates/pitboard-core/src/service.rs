@@ -234,13 +234,7 @@ impl Pitboard {
         })?;
         crate::label::resolve(&state, typed)
             .map(Account::key)
-            .map_err(|error| {
-                audit::record(&self.ctx, verb, typed, error.code());
-                Failed {
-                    error,
-                    warnings: Vec::new(),
-                }
-            })
+            .map_err(|error| self.refused(verb, typed, error.code(), error))
     }
 
     /// `typed` may name a tool, as in `claude/work`. A bare name means the default tool.
@@ -257,13 +251,34 @@ impl Pitboard {
     /// still stuck to the front of it, which would enrol an account literally called
     /// `claude/work`.
     fn chosen(&self, verb: &str, typed: &str) -> std::result::Result<Key, Failed> {
-        self.enrolling(typed).map_err(|error| {
-            audit::record(&self.ctx, verb, typed, "label_unusable");
-            Failed {
-                error,
-                warnings: Vec::new(),
-            }
-        })
+        self.enrolling(typed)
+            .map_err(|error| self.refused(verb, typed, "label_unusable", error))
+    }
+
+    /// A change refused over the name it was given, which happens before it settles.
+    ///
+    /// A mistyped name takes no lock and writes nothing but its line in the audit log. But
+    /// every change settles an interrupted switch first, and one refused here would leave
+    /// that switch for whatever runs next and say nothing about it. So where a switch was
+    /// interrupted, this settles for the tool that switch was of, which a custom OAuth
+    /// endpoint allows or refuses exactly as it would a change to that tool, and reports what
+    /// it found beside the refusal. Only as far as it can: a recovery that cannot finish is
+    /// the next change's to report, and what this one reports is why it was refused.
+    fn refused(&self, verb: &str, subject: &str, code: &str, error: Error) -> Failed {
+        let recovered = if switch::interrupted(&self.ctx) {
+            switch::settle(&self.ctx, switch::interrupted_tool(&self.ctx))
+                .ok()
+                .and_then(|(_, recovered)| recovered)
+        } else {
+            None
+        };
+        let mut warnings = Vec::new();
+        if let Some(r) = recovered {
+            audit::record(&self.ctx, "recover", &r.to, r.code());
+            warnings.push(Warning::Recovered(r));
+        }
+        audit::record(&self.ctx, verb, subject, code);
+        Failed { error, warnings }
     }
 
     /// The account `pitboard enroll <typed>` is about: the one already enrolled under that
@@ -459,11 +474,7 @@ impl Pitboard {
                  tool and enrol the account there instead.",
                 from.provider, chosen.provider
             ));
-            audit::record(&self.ctx, "rename", &from.typed(), error.code());
-            return Err(Failed {
-                error,
-                warnings: Vec::new(),
-            });
+            return Err(self.refused("rename", &from.typed(), error.code(), error));
         }
         let to = chosen.label;
         self.changing(
@@ -547,5 +558,171 @@ impl Audited for switch::Removed {
         } else {
             "ok"
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::switch::harness::{Machine, codex_machine, hold, machine};
+    use std::collections::BTreeMap;
+
+    type Make = fn(&str) -> Machine;
+
+    /// A name is refused the same way whichever tool it is for.
+    const MACHINES: [(&str, Make); 2] = [("claude", machine), ("codex", codex_machine)];
+
+    type Refuse = fn(&Pitboard, ProviderId) -> Option<Failed>;
+
+    /// Every way a change is refused over the name it was given, with the code it is
+    /// refused with and the one the audit log records: a name nobody enrolled, a name no
+    /// account could have, and a new name that would move an account to another tool.
+    const REFUSALS: [(&str, &str, &str, Refuse); 3] = [
+        ("use", "account_unknown", "account_unknown", |p, _| {
+            p.switch_to("nobody").err()
+        }),
+        ("enroll", "usage", "label_unusable", |p, _| {
+            p.enroll_current("codx/work").err()
+        }),
+        ("rename", "usage", "usage", |p, tool| {
+            let other = if tool == ProviderId::Claude {
+                ProviderId::Codex
+            } else {
+                ProviderId::Claude
+            };
+            p.rename(
+                &Key::new(tool, "here").qualified(),
+                &Key::new(other, "moved").qualified(),
+            )
+            .err()
+        }),
+    ];
+
+    /// A switch from `here` to `there` killed after parking `here` and before installing
+    /// `there`, so its record is all that says it happened.
+    fn interrupted(make: Make, name: &str) -> Machine {
+        let m = make(name);
+        let settled = switch::settle(&m.ctx, None)
+            .expect("nothing to recover yet")
+            .0;
+        let died = crate::fault::killing("switch.park_recorded", || {
+            switch::switch(settled, &m.key("there"))
+        });
+        assert_eq!(died.unwrap_err(), "switch.park_recorded");
+        assert!(switch::interrupted(&m.ctx));
+        m
+    }
+
+    /// Every file in pitboard's own directory but the audit log.
+    fn files(m: &Machine) -> BTreeMap<String, Vec<u8>> {
+        std::fs::read_dir(crate::home::dir(&m.ctx))
+            .expect("a pitboard home")
+            .map(|entry| entry.expect("an entry").path())
+            .filter(|path| path.file_name() != Some("audit.log".as_ref()))
+            .map(|path| {
+                let body = std::fs::read(&path).unwrap_or_default();
+                (path.display().to_string(), body)
+            })
+            .collect()
+    }
+
+    /// The last two lines of the audit log, as verb and outcome.
+    fn last_audited(m: &Machine) -> Vec<(String, String)> {
+        audit::read(&m.ctx, 2)
+            .into_iter()
+            .map(|entry| (entry.verb, entry.outcome))
+            .collect()
+    }
+
+    /// Every other change settles an interrupted switch before anything else, and one
+    /// refused over its name did not, so the switch stayed unrecovered and the refusal was
+    /// all anybody was told. It is settled now, recorded the way any recovery is, and
+    /// reported beside the refusal.
+    #[test]
+    fn a_change_refused_over_its_name_still_recovers_an_interrupted_switch() {
+        for (tool, make) in MACHINES {
+            for (verb, code, audited, refuse) in REFUSALS {
+                let at = format!("{tool}, {verb}");
+                let m = interrupted(make, &format!("refused-{tool}-{verb}"));
+
+                let failed = refuse(&Pitboard::new(m.ctx.clone()), m.which)
+                    .unwrap_or_else(|| panic!("{at}: the name must still be refused"));
+
+                assert_eq!(failed.error.code(), code, "{at}: {}", failed.error);
+                let said: Vec<&str> = failed.warnings.iter().map(Warning::code).collect();
+                assert_eq!(said, ["interrupted_switch_undone"], "{at}");
+                assert!(!switch::interrupted(&m.ctx), "{at}: the record is resolved");
+                hold(&m, &at);
+                assert_eq!(
+                    last_audited(&m),
+                    [
+                        (
+                            "recover".to_string(),
+                            "interrupted_switch_undone".to_string()
+                        ),
+                        (verb.to_string(), audited.to_string()),
+                    ],
+                    "{at}"
+                );
+            }
+        }
+    }
+
+    /// A mistyped name with nothing to recover takes no lock and writes nothing but its
+    /// line in the audit log.
+    #[test]
+    fn a_change_refused_over_its_name_with_nothing_interrupted_changes_nothing() {
+        for (tool, make) in MACHINES {
+            for (verb, code, audited, refuse) in REFUSALS {
+                let at = format!("{tool}, {verb}");
+                let m = make(&format!("refused-quietly-{tool}-{verb}"));
+                let (before, parked, live) = (files(&m), m.mem.vault().services(), m.live());
+
+                let failed = refuse(&Pitboard::new(m.ctx.clone()), m.which)
+                    .unwrap_or_else(|| panic!("{at}: the name must still be refused"));
+
+                assert_eq!(failed.error.code(), code, "{at}: {}", failed.error);
+                assert!(failed.warnings.is_empty(), "{at}: {:?}", failed.warnings);
+                assert_eq!(files(&m), before, "{at}: not even the lock file is made");
+                assert_eq!(m.mem.vault().services(), parked, "{at}");
+                assert_eq!(m.live(), live, "{at}");
+                assert_eq!(
+                    last_audited(&m).last(),
+                    Some(&(verb.to_string(), audited.to_string())),
+                    "{at}"
+                );
+            }
+        }
+    }
+
+    /// The recovery settles for the tool whose switch was interrupted, not for no tool in
+    /// particular, so a custom Claude Code endpoint stops exactly what it stops for any
+    /// change: the recovery of a Claude Code switch, and not of a Codex one. What it stops
+    /// is left for a later run, and the refusal is reported as it always was.
+    #[test]
+    fn a_custom_claude_endpoint_stops_only_the_recovery_of_a_claude_code_switch() {
+        let codex = interrupted(codex_machine, "refused-custom-codex");
+        let mut ctx = codex.ctx.clone();
+        ctx.custom_oauth = true;
+        let failed = Pitboard::new(ctx).switch_to("nobody").expect_err("refused");
+        assert_eq!(failed.error.code(), "account_unknown");
+        let said: Vec<&str> = failed.warnings.iter().map(Warning::code).collect();
+        assert_eq!(said, ["interrupted_switch_undone"]);
+        assert!(!switch::interrupted(&codex.ctx));
+
+        let claude = interrupted(machine, "refused-custom-claude");
+        let mut ctx = claude.ctx.clone();
+        ctx.custom_oauth = true;
+        let failed = Pitboard::new(ctx).switch_to("nobody").expect_err("refused");
+        assert_eq!(
+            failed.error.code(),
+            "account_unknown",
+            "the refusal, not the recovery that could not run"
+        );
+        assert!(failed.warnings.is_empty(), "{:?}", failed.warnings);
+        assert!(
+            switch::interrupted(&claude.ctx),
+            "the record is kept for a run that can finish it"
+        );
     }
 }

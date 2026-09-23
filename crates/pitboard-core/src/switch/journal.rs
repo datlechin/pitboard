@@ -120,7 +120,7 @@ pub fn pending(ctx: &Context) -> bool {
 }
 
 /// Which tool's switch was interrupted, where one was and its record can be read.
-pub(super) fn interrupted_tool(ctx: &Context) -> Option<ProviderId> {
+pub(crate) fn interrupted_tool(ctx: &Context) -> Option<ProviderId> {
     let raw = std::fs::read_to_string(journal_path(ctx)).ok()?;
     serde_json::from_str::<Journal>(&raw)
         .ok()
