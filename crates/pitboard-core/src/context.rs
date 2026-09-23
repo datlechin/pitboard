@@ -40,6 +40,8 @@ pub struct Context {
     pub(crate) api_base: Option<String>,
     /// `CLAUDE_CODE_HOVER_REST`, which switches on Claude Code's successor credential backend.
     pub(crate) hover_rest: bool,
+    /// `CODEX_HOME`, which moves everything Codex keeps, including its keyring account.
+    pub(crate) codex_home: Option<String>,
     /// Where the time comes from. The machine's clock in every real context; a test puts
     /// its own here to reach the judgements that only happen at a particular moment.
     pub(crate) clock: Arc<dyn Clock>,
@@ -92,10 +94,21 @@ impl Context {
             claude_program: PathBuf::from("claude"),
             api_base: None,
             hover_rest: false,
+            codex_home: None,
             clock: Arc::new(SystemClock),
             host: crate::store::host(),
             api: Arc::new(Anthropic),
         }
+    }
+
+    /// Where Codex keeps its login. Empty means unset, as Codex reads it.
+    pub fn with_codex_home(mut self, dir: String) -> Context {
+        self.codex_home = Some(dir).filter(|d| !d.is_empty());
+        self
+    }
+
+    pub(crate) fn codex_home(&self) -> Option<&str> {
+        self.codex_home.as_deref()
     }
 
     pub fn with_pitboard_home(mut self, dir: PathBuf) -> Context {
@@ -184,6 +197,7 @@ impl Context {
             claude_program: PathBuf::from("claude"),
             api_base: var("PITBOARD_API_BASE"),
             hover_rest: var("CLAUDE_CODE_HOVER_REST").is_some_and(|v| v == "1" || v == "true"),
+            codex_home: var("CODEX_HOME").filter(|v| !v.is_empty()),
             clock: Arc::new(SystemClock),
             host: crate::store::host(),
             api: Arc::new(Anthropic),

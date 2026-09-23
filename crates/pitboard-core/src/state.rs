@@ -57,6 +57,15 @@ pub enum Detail {
         /// confirmed, so Claude Code fetches the rest of its profile itself.
         oauth_account: Value,
     },
+    Codex {
+        /// The ChatGPT workspace this account belongs to, where it belongs to one.
+        #[serde(default)]
+        workspace_id: Option<String>,
+        /// `plus`, `pro`, `team` and so on, read out of the login's own ID token. Kept
+        /// because it is free to know and explains a limit somebody is surprised by.
+        #[serde(default)]
+        plan: Option<String>,
+    },
 }
 
 /// Claude Code's own extras, for a caller that has already established it is holding a
@@ -92,6 +101,7 @@ impl Account {
     pub fn provider(&self) -> ProviderId {
         match self.detail {
             Detail::Claude { .. } => ProviderId::Claude,
+            Detail::Codex { .. } => ProviderId::Codex,
         }
     }
 
@@ -105,6 +115,7 @@ impl Account {
                 organization_uuid,
                 oauth_account,
             }),
+            Detail::Codex { .. } => None,
         }
     }
 }

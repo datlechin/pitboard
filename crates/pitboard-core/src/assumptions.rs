@@ -62,6 +62,7 @@ pub struct Assumption {
 pub fn of(provider: ProviderId) -> &'static [Assumption] {
     match provider {
         ProviderId::Claude => crate::provider::claude::assumptions::ASSUMPTIONS,
+        ProviderId::Codex => crate::provider::codex::assumptions::ASSUMPTIONS,
     }
 }
 
@@ -69,6 +70,7 @@ pub fn of(provider: ProviderId) -> &'static [Assumption] {
 pub fn verified_against(provider: ProviderId) -> &'static str {
     match provider {
         ProviderId::Claude => crate::provider::claude::assumptions::VERIFIED_AGAINST,
+        ProviderId::Codex => crate::provider::codex::assumptions::VERIFIED_AGAINST,
     }
 }
 

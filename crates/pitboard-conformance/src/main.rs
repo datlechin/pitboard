@@ -100,7 +100,8 @@ fn main() -> ExitCode {
         println!("{report}");
     } else {
         println!(
-            "{path}\npitboard's facts were read from Claude Code {}\n",
+            "{path}\npitboard's facts about {} were read from {}\n",
+            provider.code(),
             assumptions::verified_against(provider)
         );
         for (a, reading) in &readings {

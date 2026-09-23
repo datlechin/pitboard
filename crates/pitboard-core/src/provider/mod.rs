@@ -39,6 +39,7 @@
 //! implementations no-op is a sign it does not belong on a shared trait.
 
 pub(crate) mod claude;
+pub(crate) mod codex;
 pub(crate) mod jwt;
 
 use crate::context::Context;
@@ -57,6 +58,7 @@ use serde_json::Value;
 #[non_exhaustive]
 pub enum ProviderId {
     Claude,
+    Codex,
 }
 
 impl ProviderId {
@@ -65,7 +67,7 @@ impl ProviderId {
     /// Named rather than written out at each call site, because resolving a bare label has
     /// to look at all of them and a provider missing from one such list would simply never
     /// be found, with nothing failing to say so.
-    pub const ALL: &'static [ProviderId] = &[ProviderId::Claude];
+    pub const ALL: &'static [ProviderId] = &[ProviderId::Claude, ProviderId::Codex];
 
     /// The one spelling used in a label prefix, in the state file, in a park's name and in
     /// the audit log. Written once so those four cannot drift, and chosen from the command
@@ -74,6 +76,7 @@ impl ProviderId {
     pub fn code(self) -> &'static str {
         match self {
             ProviderId::Claude => "claude",
+            ProviderId::Codex => "codex",
         }
     }
 
@@ -85,12 +88,14 @@ impl ProviderId {
     pub fn service(self) -> &'static str {
         match self {
             ProviderId::Claude => "Anthropic",
+            ProviderId::Codex => "OpenAI",
         }
     }
 
     pub fn parse(code: &str) -> Option<ProviderId> {
         match code {
             "claude" => Some(ProviderId::Claude),
+            "codex" => Some(ProviderId::Codex),
             _ => None,
         }
     }
@@ -310,6 +315,7 @@ pub(crate) trait Provider: Send + Sync + std::fmt::Debug {
 pub(crate) fn of(provider: ProviderId) -> &'static dyn Provider {
     match provider {
         ProviderId::Claude => &claude::engine::Claude,
+        ProviderId::Codex => &codex::engine::Codex,
     }
 }
 
@@ -340,10 +346,10 @@ mod tests {
         // compiling, which is the point.
         for &id in ProviderId::ALL {
             match id {
-                ProviderId::Claude => {}
+                ProviderId::Claude | ProviderId::Codex => {}
             }
         }
-        assert_eq!(ProviderId::ALL.len(), 1, "add the new provider to ALL");
+        assert_eq!(ProviderId::ALL.len(), 2, "add the new provider to ALL");
     }
 
     /// A code is also what serde writes, so the two spellings must not drift.

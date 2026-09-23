@@ -189,6 +189,10 @@ mod tests {
                 organization_uuid: String::new(),
                 oauth_account: serde_json::Value::Null,
             },
+            ProviderId::Codex => Detail::Codex {
+                workspace_id: None,
+                plan: None,
+            },
         };
         Account {
             label: label.into(),
