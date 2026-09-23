@@ -12,5 +12,6 @@
 
 pub(crate) mod configfile;
 pub(crate) mod daemon;
+pub(crate) mod live;
 pub(crate) mod paths;
 pub(crate) mod slot;

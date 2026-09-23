@@ -12,7 +12,7 @@
 use super::{Backend, Error, Host, RawStore};
 use crate::context::Context;
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 /// What a store does instead of working.
@@ -256,22 +256,26 @@ impl RawStore for Arc<MemoryStore> {
     }
 }
 
-/// A machine with no keychain and no files: a live chain, a vault, and whatever Claude Code
-/// would have left behind for a private sign-in.
+/// A machine whose keychain and filesystem are both in memory.
+///
+/// It fakes the two things a real host offers and nothing above them, so the code under
+/// test is the real one. Before this it faked `read_signin` with a map keyed by directory,
+/// which meant no test ever ran Claude Code's own slot hashing on the sign-in path: the
+/// double answered the question the code was supposed to answer.
 #[derive(Debug)]
 pub struct MemoryHost {
-    live: Arc<MemoryStore>,
+    keychain: Arc<MemoryStore>,
     vault: Arc<MemoryStore>,
-    signins: Mutex<HashMap<PathBuf, String>>,
+    files: Mutex<HashMap<PathBuf, Arc<MemoryStore>>>,
 }
 
 impl Default for MemoryHost {
     fn default() -> MemoryHost {
         MemoryHost {
             // Keychain, because that is the chain the interesting rules are written for.
-            live: MemoryStore::of(Backend::Keychain),
+            keychain: MemoryStore::of(Backend::Keychain),
             vault: MemoryStore::of(Backend::Keychain),
-            signins: Mutex::new(HashMap::new()),
+            files: Mutex::new(HashMap::new()),
         }
     }
 }
@@ -281,49 +285,36 @@ impl MemoryHost {
         Arc::new(MemoryHost::default())
     }
 
-    /// Where Claude Code's live credential is.
+    /// The keychain, where a tool that uses one keeps its live credential.
     pub fn live(&self) -> &Arc<MemoryStore> {
-        &self.live
+        &self.keychain
     }
 
     /// Where pitboard's parked logins are.
     pub fn vault(&self) -> &Arc<MemoryStore> {
         &self.vault
     }
-
-    /// What a private sign-in left in `dir`, as if `claude` had run there.
-    pub fn plant_signin(&self, dir: &Path, contents: &str) {
-        self.signins
-            .lock()
-            .expect("a poisoned test platform is a failed test")
-            .insert(dir.to_path_buf(), contents.into());
-    }
 }
 
 impl Host for MemoryHost {
-    fn live_chain(&self, _ctx: &Context) -> Vec<Box<dyn RawStore>> {
-        vec![Box::new(Arc::clone(&self.live))]
+    fn foreign_keychain(&self, _ctx: &Context, _account: &str) -> Option<Box<dyn RawStore>> {
+        Some(Box::new(Arc::clone(&self.keychain)))
+    }
+
+    fn file(&self, path: PathBuf) -> Box<dyn RawStore> {
+        let mut files = self
+            .files
+            .lock()
+            .expect("a poisoned test host is a failed test");
+        Box::new(Arc::clone(
+            files
+                .entry(path)
+                .or_insert_with(|| MemoryStore::of(Backend::File)),
+        ))
     }
 
     fn vault(&self, _ctx: &Context) -> Box<dyn RawStore> {
         Box::new(Arc::clone(&self.vault))
-    }
-
-    fn read_signin(&self, _ctx: &Context, dir: &Path) -> Result<Option<String>, Error> {
-        Ok(self
-            .signins
-            .lock()
-            .expect("a poisoned test platform is a failed test")
-            .get(dir)
-            .cloned())
-    }
-
-    fn discard_signin(&self, _ctx: &Context, dir: &Path) -> Result<(), Error> {
-        self.signins
-            .lock()
-            .expect("a poisoned test platform is a failed test")
-            .remove(dir);
-        Ok(())
     }
 }
 

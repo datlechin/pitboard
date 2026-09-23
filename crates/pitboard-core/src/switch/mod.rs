@@ -7,6 +7,7 @@
 //! copy, never a missing one.
 
 use crate::provider::claude::configfile;
+use crate::provider::claude::live as claude_live;
 use crate::provider::claude::paths as claude;
 mod adopt;
 #[cfg(test)]
@@ -235,7 +236,8 @@ pub fn switch(settled: Settled, label: &str) -> Result<(Outcome, Vec<Warning>)> 
     // Asked before taking Claude Code's lock so the round trip does not hold up its writes,
     // then confirmed under the lock.
     let service = claude::live_service(ctx);
-    let live = store::read(ctx, &service)?.ok_or_else(|| claude::nothing_signed_in(ctx))?;
+    let live = store::read(&claude_live::chain(ctx), &service)?
+        .ok_or_else(|| claude::nothing_signed_in(ctx))?;
     let identified_with = access_token(&live)?;
     let outgoing = identify(ctx, &identified_with)?;
 
@@ -276,8 +278,8 @@ pub fn switch(settled: Settled, label: &str) -> Result<(Outcome, Vec<Warning>)> 
     let storage = PathBuf::from(claude::storage_dir(ctx)).join(".storage-write");
     let guard = lock::acquire(&storage)?;
 
-    let before_raw =
-        store::read_raw(ctx, &service)?.ok_or_else(|| claude::nothing_signed_in(ctx))?;
+    let before_raw = store::read_raw(&claude_live::chain(ctx), &service)?
+        .ok_or_else(|| claude::nothing_signed_in(ctx))?;
     let before: Value =
         serde_json::from_str(&before_raw).map_err(|e| Error::LiveCredentialShapeUnexpected {
             detail: e.to_string(),
@@ -296,7 +298,7 @@ pub fn switch(settled: Settled, label: &str) -> Result<(Outcome, Vec<Warning>)> 
     let next = splice(&before, &incoming)?;
     // Asked once. The answer is about the backend that would take this write, so a login
     // living in the fallback file is not told it has the keychain's ceiling.
-    let price = store::cost(ctx, &service, &next);
+    let price = store::cost(&claude_live::chain(ctx), &service, &next);
     if price.is_some_and(store::Cost::refused) {
         let price = price.expect("refused implies a ceiling");
         return Err(Error::CredentialTooLarge {
@@ -380,7 +382,7 @@ pub fn switch(settled: Settled, label: &str) -> Result<(Outcome, Vec<Warning>)> 
     // Checked before the incoming copy is discarded, so finding it did not hold leaves both
     // logins parked rather than neither.
     let lock_lost = guard.compromised();
-    match store::read_raw(ctx, &service) {
+    match store::read_raw(&claude_live::chain(ctx), &service) {
         Ok(Some(now)) if now.contains("\"claudeAiOauth\"") => {
             // Claude Code may have rotated the token it was just given, which keeps the
             // account and changes the bytes. A login being there at all is the fact.
@@ -549,8 +551,8 @@ fn install(
     to: &str,
 ) -> Result<()> {
     install_with(
-        |body| store::write_raw(ctx, service, body),
-        || store::read_raw(ctx, service),
+        |body| store::write_raw(&claude_live::chain(ctx), service, body),
+        || store::read_raw(&claude_live::chain(ctx), service),
         next,
         before_raw,
         from,

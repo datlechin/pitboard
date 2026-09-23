@@ -5,6 +5,7 @@
 use crate::context::Context;
 use crate::error::Error;
 use crate::provider::claude::daemon;
+use crate::provider::claude::live as claude_live;
 use crate::provider::claude::paths as claude;
 use crate::provider::claude::slot;
 use crate::state::{Park, State};
@@ -124,18 +125,18 @@ pub fn gather(ctx: &Context) -> Facts {
         account: slot::account_name(ctx),
         default_slot: claude::is_default_slot(ctx),
         storage_dir: claude::storage_dir(ctx),
-        backend: store::resolve(ctx, &service),
-        credential_file: store::credential_file(ctx),
-        credential_cost: store::read_raw(ctx, &service)
+        backend: store::resolve(&claude_live::chain(ctx), &service),
+        credential_file: claude_live::credential_file(ctx),
+        credential_cost: store::read_raw(&claude_live::chain(ctx), &service)
             .ok()
             .flatten()
-            .and_then(|raw| store::cost(ctx, &service, &raw)),
-        credential_parts: store::read(ctx, &service)
+            .and_then(|raw| store::cost(&claude_live::chain(ctx), &service, &raw)),
+        credential_parts: store::read(&claude_live::chain(ctx), &service)
             .ok()
             .flatten()
             .map(|doc| parts_of(&doc))
             .unwrap_or_default(),
-        credential: store::read(ctx, &service),
+        credential: store::read(&claude_live::chain(ctx), &service),
         home_mode: mode_of(&home),
         readable_by_others: loose_logins(ctx),
         home,
@@ -207,7 +208,7 @@ fn loose_logins(ctx: &Context) -> Vec<(String, u32)> {
             loose.push((path.display().to_string(), mode));
         }
     };
-    look(store::credential_file(ctx));
+    look(claude_live::credential_file(ctx));
     let vault = store::vault_dir(ctx);
     look(vault.clone());
     if let Ok(entries) = std::fs::read_dir(&vault) {

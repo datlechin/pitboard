@@ -7,6 +7,7 @@
 
 use super::{Error, Result, identify};
 use crate::context::Context;
+use crate::provider::claude::live as claude_live;
 use crate::provider::claude::paths as claude;
 use crate::state::{Park, State};
 use crate::{atomic, home, park, state, store};
@@ -161,7 +162,7 @@ fn read_park(ctx: &Context, service: &str) -> Option<Option<Value>> {
 }
 
 fn live_owner(ctx: &Context) -> std::result::Result<String, String> {
-    let live = store::read(ctx, &claude::live_service(ctx))
+    let live = store::read(&claude_live::chain(ctx), &claude::live_service(ctx))
         .map_err(|e| e.to_string())?
         .ok_or("nothing is signed in")?;
     let token = live["claudeAiOauth"]["accessToken"]
@@ -191,7 +192,7 @@ fn live_owner_by_fingerprint(ctx: &Context, journal: &Journal) -> Option<String>
     if journal.from_fingerprint == journal.to_fingerprint {
         return None;
     }
-    let live = store::read(ctx, &claude::live_service(ctx)).ok()??;
+    let live = store::read(&claude_live::chain(ctx), &claude::live_service(ctx)).ok()??;
     let found = park::fingerprint_of(&live["claudeAiOauth"]);
     if found.is_empty() {
         return None;

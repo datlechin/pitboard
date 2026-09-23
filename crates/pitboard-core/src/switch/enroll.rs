@@ -9,6 +9,7 @@
 use super::{Error, Result, Settled, access_token, identify, purge, slice_of};
 use crate::api::Owner;
 use crate::context::Context;
+use crate::provider::claude::live as claude_live;
 use crate::provider::claude::paths as claude;
 use crate::state::{Account, Park, State};
 use crate::{home, park, state, store};
@@ -39,7 +40,7 @@ pub struct SignIn {
 
 impl Drop for SignIn {
     fn drop(&mut self) {
-        let _ = store::discard_signin(&self.ctx, &self.dir);
+        let _ = claude_live::discard_signin(&self.ctx, &self.dir);
         let _ = std::fs::remove_dir_all(&self.dir);
     }
 }
@@ -81,7 +82,7 @@ fn reserve_signin(ctx: &Context) -> Result<SignIn> {
     // be sitting in the scratch slot with nothing naming it. The directory is always the
     // same one, so the slot is too, and this is the moment it can be cleared safely: the
     // lock above means no other sign-in is using it.
-    let _ = store::discard_signin(ctx, &dir);
+    let _ = claude_live::discard_signin(ctx, &dir);
     let _ = std::fs::remove_dir_all(&dir);
     home::create_private(&dir).map_err(|source| Error::HomeUnwritable {
         path: dir.clone(),
@@ -141,7 +142,7 @@ fn started(e: std::io::Error) -> Error {
 }
 
 fn signed_in_document(ctx: &Context, dir: &std::path::Path) -> Result<Value> {
-    let raw = store::read_signin(ctx, dir)?.ok_or(Error::SignInIncomplete)?;
+    let raw = claude_live::read_signin(ctx, dir)?.ok_or(Error::SignInIncomplete)?;
     serde_json::from_str(&raw).map_err(|e| Error::LiveCredentialShapeUnexpected {
         detail: e.to_string(),
     })
@@ -278,7 +279,7 @@ fn claim(state: &State, label: &str, owner: &Owner) -> Result<()> {
 }
 
 fn record_current(ctx: &Context, label: &str, state: &mut State) -> Result<Enrolled> {
-    let live = store::read(ctx, &claude::live_service(ctx))?
+    let live = store::read(&claude_live::chain(ctx), &claude::live_service(ctx))?
         .ok_or_else(|| claude::nothing_signed_in(ctx))?;
     let owner = identify(ctx, &access_token(&live)?)?;
     claim(state, label, &owner)?;

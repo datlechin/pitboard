@@ -8,6 +8,7 @@
 use crate::api::{self, ApiError, Owner};
 use crate::context::Context;
 use crate::error::Cause;
+use crate::provider::claude::live as claude_live;
 use crate::provider::claude::paths as claude;
 use crate::state::{Park, State};
 use crate::usage::{Snapshot, Source};
@@ -290,7 +291,7 @@ fn ask_usage(
 
 pub fn gather(ctx: &Context, state: &State, fresh: bool) -> Report {
     let now = ctx.now();
-    let live_token = store::read(ctx, &claude::live_service(ctx))
+    let live_token = store::read(&claude_live::chain(ctx), &claude::live_service(ctx))
         .ok()
         .flatten()
         .and_then(|doc| access_token(&doc["claudeAiOauth"]));
