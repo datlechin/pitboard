@@ -22,14 +22,33 @@
 //! ```
 
 use pitboard_core::assumptions::{self, Reading};
+use pitboard_core::provider::ProviderId;
 use std::process::ExitCode;
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let as_json = args.iter().any(|a| a == "--json");
-    let Some(path) = args.iter().find(|a| !a.starts_with("--")) else {
-        eprintln!("usage: pitboard-conformance <path to a claude binary> [--json]");
+    let Some(path) = args
+        .iter()
+        .skip_while(|a| *a != "--provider")
+        .nth(2)
+        .or_else(|| args.iter().find(|a| !a.starts_with("--")))
+    else {
+        eprintln!("usage: pitboard-conformance <path to a binary> [--provider claude] [--json]");
         return ExitCode::from(2);
+    };
+
+    // Which provider's register to check this build against. A build of one tool says
+    // nothing about another's facts, so the two are never mixed in one run.
+    let provider = match args.iter().position(|a| a == "--provider") {
+        Some(at) => match args.get(at + 1).and_then(|name| ProviderId::parse(name)) {
+            Some(provider) => provider,
+            None => {
+                eprintln!("--provider takes one of: claude");
+                return ExitCode::from(2);
+            }
+        },
+        None => ProviderId::Claude,
     };
 
     let bytes = match std::fs::read(path) {
@@ -41,7 +60,7 @@ fn main() -> ExitCode {
     };
     let strings = assumptions::printable_runs(&bytes, 6);
 
-    let readings: Vec<(&assumptions::Assumption, Reading)> = assumptions::ASSUMPTIONS
+    let readings: Vec<(&assumptions::Assumption, Reading)> = assumptions::of(provider)
         .iter()
         .map(|a| (a, assumptions::read_from_build(a, &strings)))
         .collect();
@@ -56,7 +75,7 @@ fn main() -> ExitCode {
     if as_json {
         let report = serde_json::json!({
             "build": path,
-            "verified_against": assumptions::VERIFIED_AGAINST,
+            "verified_against": assumptions::verified_against(provider),
             "assumptions": readings.iter().map(|(a, r)| serde_json::json!({
                 "name": a.name,
                 "reading": match r {
@@ -82,7 +101,7 @@ fn main() -> ExitCode {
     } else {
         println!(
             "{path}\npitboard's facts were read from Claude Code {}\n",
-            assumptions::VERIFIED_AGAINST
+            assumptions::verified_against(provider)
         );
         for (a, reading) in &readings {
             match reading {

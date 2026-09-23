@@ -821,7 +821,7 @@ fn judge_auth(facts: &Facts) -> Check {
 /// be noise on every machine. What is worth a warning is an assumption that has actually
 /// stopped holding, which is a probe's job and not a version number's.
 fn judge_claude_version(facts: &Facts) -> Check {
-    let verified = crate::assumptions::VERIFIED_AGAINST;
+    let verified = crate::provider::claude::assumptions::VERIFIED_AGAINST;
     match facts.claude_version.as_deref() {
         None => ok(
             "claude_version",
@@ -1002,7 +1002,7 @@ mod tests {
             hover_rest_env: false,
             daemon: None,
             pending_parks: Vec::new(),
-            claude_version: Some(crate::assumptions::VERIFIED_AGAINST.into()),
+            claude_version: Some(crate::provider::claude::assumptions::VERIFIED_AGAINST.into()),
             auth_overrides: Vec::new(),
             asking_held: Vec::new(),
             state: Ok(State::default()),

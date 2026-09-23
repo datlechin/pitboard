@@ -10,6 +10,7 @@
 //! None of it transfers to another tool: the next provider's equivalents have to be read
 //! out of its own build the same way.
 
+pub mod assumptions;
 pub(crate) mod configfile;
 pub(crate) mod daemon;
 pub(crate) mod live;
