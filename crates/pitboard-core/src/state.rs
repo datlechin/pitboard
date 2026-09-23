@@ -7,6 +7,7 @@
 
 use crate::context::Context;
 use crate::error::{Error, Result};
+use crate::provider::claude::paths as claude;
 use crate::{atomic, home};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -259,7 +260,7 @@ pub(crate) fn load_any_machine(ctx: &Context) -> Result<(State, bool)> {
     let mut state = state;
     // Which account is in use is a fact about one slot. Read from another, the record says
     // nothing, and pitboard asks Anthropic who is signed in anyway.
-    let slot = crate::claude::live_service(ctx);
+    let slot = claude::live_service(ctx);
     if state.slot.is_some() && state.slot.as_deref() != Some(slot.as_str()) {
         state.active = None;
     }
@@ -296,7 +297,7 @@ fn migrate(document: &mut serde_json::Value, path: &std::path::Path) -> Result<(
 pub(crate) fn save(ctx: &Context, state: &State) -> Result<()> {
     home::check_location(&home::dir(ctx))?;
     let mut state = state.clone();
-    state.slot = Some(crate::claude::live_service(ctx));
+    state.slot = Some(claude::live_service(ctx));
     let state = &state;
     let path = file(ctx);
     let write = |source| Error::StateWriteFailed {

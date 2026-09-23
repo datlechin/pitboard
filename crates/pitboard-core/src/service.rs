@@ -5,9 +5,10 @@
 use crate::context::Context;
 use crate::doctor::{self, Diagnosis};
 use crate::error::{Error, Result};
+use crate::provider::claude::paths as claude;
 use crate::state::{self, Account};
 use crate::switch::{self, Enrolled, Outcome, Recovered, Renewal, Settled, SignIn};
-use crate::{audit, claude, schedule, status, statusline};
+use crate::{audit, schedule, status, statusline};
 use std::fmt;
 
 /// Something to know about that did not stop the operation.

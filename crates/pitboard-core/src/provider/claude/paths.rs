@@ -2,7 +2,8 @@
 
 use crate::context::Context;
 use crate::error::{Error, Result};
-use crate::slot;
+use crate::provider::claude::daemon;
+use crate::provider::claude::slot;
 use serde_json::Value;
 use std::path::PathBuf;
 
@@ -75,7 +76,7 @@ pub fn installed_version(ctx: &Context) -> Option<String> {
     {
         return Some(version);
     }
-    crate::daemon::read(ctx).and_then(|d| d.version)
+    daemon::read(ctx).and_then(|d| d.version)
 }
 
 fn looks_like_a_version(name: &str) -> bool {

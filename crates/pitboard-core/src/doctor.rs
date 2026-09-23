@@ -4,8 +4,11 @@
 
 use crate::context::Context;
 use crate::error::Error;
+use crate::provider::claude::daemon;
+use crate::provider::claude::paths as claude;
+use crate::provider::claude::slot;
 use crate::state::{Park, State};
-use crate::{claude, home, park, slot, store, switch, time, usage};
+use crate::{home, park, store, switch, time, usage};
 use serde_json::{Value, json};
 use std::path::PathBuf;
 
@@ -53,7 +56,7 @@ pub struct Facts {
     /// `CLAUDE_CODE_HOVER_REST`, which switches on the successor credential backend.
     pub hover_rest_env: bool,
     /// Claude Code's supervisor daemon, where one has ever run for this slot.
-    pub daemon: Option<crate::daemon::Daemon>,
+    pub daemon: Option<daemon::Daemon>,
     /// Names pitboard wrote down before creating a park and has not resolved yet.
     pub pending_parks: Vec<String>,
     /// Which Claude Code is installed here, read off disk.
@@ -138,7 +141,7 @@ pub fn gather(ctx: &Context) -> Facts {
         home,
         machine_id_known: crate::state::machine_id() != "unknown",
         hover_rest_env: ctx.hover_rest,
-        daemon: crate::daemon::read(ctx),
+        daemon: daemon::read(ctx),
         pending_parks: crate::pending::outstanding(ctx),
         claude_version: claude::installed_version(ctx),
         auth_overrides: crate::settings::overrides(ctx),
@@ -1329,7 +1332,7 @@ mod tests {
         let checks = evaluate(&f);
         assert!(check(&checks, "claude_daemon").detail.contains("none"));
 
-        f.daemon = Some(crate::daemon::Daemon {
+        f.daemon = Some(daemon::Daemon {
             pid: 4321,
             version: Some("2.1.278".into()),
             started_at: Some(1_790_079_766_317),

@@ -9,6 +9,7 @@
 use super::*;
 use crate::api::scripted::ScriptedApi;
 use crate::api::{Api, Owner};
+use crate::provider::claude::paths as claude;
 
 use crate::state::Account;
 use crate::store::memory::MemoryHost;

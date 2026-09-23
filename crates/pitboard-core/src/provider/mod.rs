@@ -33,6 +33,8 @@
 //! line hook. A method most implementations no-op is a sign the method does not belong on a
 //! shared trait.
 
+pub(crate) mod claude;
+
 use crate::context::Context;
 use crate::usage;
 use serde_json::Value;

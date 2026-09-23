@@ -7,6 +7,7 @@
 //! with its age once that is worth knowing.
 
 use crate::context::Context;
+use crate::provider::claude::paths as claude;
 use crate::state::State;
 use crate::usage::{Snapshot, Source, Window};
 use serde_json::Value;
@@ -148,10 +149,10 @@ fn session_snapshot(input: &Value, uuid: &str, now: i64) -> Option<Snapshot> {
 pub fn read(ctx: &Context, input: &str) -> StatusLine {
     let input: Value = serde_json::from_str(input).unwrap_or(Value::Null);
     let state = crate::state::load(ctx).unwrap_or_default();
-    let signed_in = crate::claude::load_config(ctx)
+    let signed_in = claude::load_config(ctx)
         .ok()
         .as_ref()
-        .and_then(crate::claude::identity)
+        .and_then(claude::identity)
         .map(|id| id.account_uuid);
     let now = ctx.now();
     let remembered = crate::readings::load(ctx);

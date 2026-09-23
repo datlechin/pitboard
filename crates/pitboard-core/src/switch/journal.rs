@@ -7,8 +7,9 @@
 
 use super::{Error, Result, identify};
 use crate::context::Context;
+use crate::provider::claude::paths as claude;
 use crate::state::{Park, State};
-use crate::{atomic, claude, home, park, state, store};
+use crate::{atomic, home, park, state, store};
 use serde_json::Value;
 use std::path::PathBuf;
 

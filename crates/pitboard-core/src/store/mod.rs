@@ -1,5 +1,7 @@
 //! Reading and writing credentials, both Claude Code's live one and pitboard's parked ones.
 
+use crate::provider::claude::paths as claude;
+use crate::provider::claude::slot;
 mod file;
 #[cfg(target_os = "macos")]
 mod keychain;
@@ -9,7 +11,6 @@ pub mod memory;
 mod vault;
 
 use crate::context::Context;
-use crate::{claude, slot};
 
 use serde_json::Value;
 use std::path::PathBuf;

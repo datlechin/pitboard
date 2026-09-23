@@ -14,8 +14,8 @@
 //! can do is rotate the refresh token of whatever login is in the slot at the time, which
 //! is why a switch reads the slot back rather than trusting that its own write stood.
 
+use super::paths as claude;
 use crate::atomic;
-use crate::claude;
 use crate::context::Context;
 use serde_json::Value;
 use std::path::PathBuf;

@@ -1,6 +1,7 @@
 //! Dropping an account and the credentials parked for it.
 
 use super::{Error, Result, Settled, purge};
+use crate::provider::claude::paths as claude;
 use crate::service::Warning;
 use crate::state;
 
@@ -14,10 +15,10 @@ pub fn forget(settled: Settled, label: &str) -> Result<(String, Vec<Warning>)> {
     // Who is signed in is a fact about the machine. pitboard's record of its last switch
     // is stale the moment someone signs in with Claude Code's own `/login`, and forgetting
     // the account that is actually in use throws away the only record of it.
-    let live_uuid = crate::claude::load_config(&ctx)
+    let live_uuid = claude::load_config(&ctx)
         .ok()
         .as_ref()
-        .and_then(crate::claude::identity)
+        .and_then(claude::identity)
         .map(|id| id.account_uuid);
     let signed_in = match (&live_uuid, state.get(label)) {
         (Some(uuid), Some(account)) => &account.account_uuid == uuid,

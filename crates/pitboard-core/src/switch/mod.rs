@@ -6,6 +6,8 @@
 //! writes become durable before destructive ones, so a run that dies midway leaves a spare
 //! copy, never a missing one.
 
+use crate::provider::claude::configfile;
+use crate::provider::claude::paths as claude;
 mod adopt;
 #[cfg(test)]
 mod crash;
@@ -33,7 +35,7 @@ use crate::context::Context;
 use crate::error::{Error, Result};
 use crate::service::Warning;
 use crate::state::{Account, Park, State};
-use crate::{api, claude, configfile, fault, home, lock, park, pending, state, store};
+use crate::{api, fault, home, lock, park, pending, state, store};
 use journal::{Journal, clear_journal, reconcile, write_journal};
 use serde_json::Value;
 use std::os::unix::fs::OpenOptionsExt;

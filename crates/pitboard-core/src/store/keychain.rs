@@ -8,7 +8,8 @@
 
 use super::{Backend, Error, RawStore};
 use crate::context::Context;
-use crate::{process, slot};
+use crate::process;
+use crate::provider::claude::slot;
 use std::process::{Command, Output};
 use std::time::Duration;
 

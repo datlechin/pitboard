@@ -9,8 +9,9 @@
 use super::{Error, Result, Settled, access_token, identify, purge, slice_of};
 use crate::api::Owner;
 use crate::context::Context;
+use crate::provider::claude::paths as claude;
 use crate::state::{Account, Park, State};
-use crate::{claude, home, park, state, store};
+use crate::{home, park, state, store};
 use serde_json::{Value, json};
 use std::fs::{File, OpenOptions, TryLockError};
 use std::os::unix::fs::OpenOptionsExt;
