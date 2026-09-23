@@ -183,8 +183,20 @@ impl State {
             || self.discarded.iter().any(|s| s == service)
     }
 
+    /// The account with this label, whichever provider has it.
+    ///
+    /// Callers that took a label from a person should go through [`crate::label::resolve`]
+    /// instead, which knows what to do when two providers share one. This is for the code
+    /// that already holds a label it put there itself.
     pub fn get(&self, label: &str) -> Option<&Account> {
         self.accounts.iter().find(|a| a.label == label)
+    }
+
+    /// This provider's account with this label.
+    pub fn get_of(&self, provider: ProviderId, label: &str) -> Option<&Account> {
+        self.accounts
+            .iter()
+            .find(|a| a.label == label && a.provider() == provider)
     }
 
     pub fn by_uuid(&self, uuid: &str) -> Option<&Account> {

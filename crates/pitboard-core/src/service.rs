@@ -165,27 +165,67 @@ impl Pitboard {
         statusline::read(&self.ctx, session)
     }
 
-    /// The enrolled account under `label`, if any, read without taking the lock.
-    pub fn account(&self, label: &str) -> Option<Account> {
-        state::load(&self.ctx).ok()?.get(label).cloned()
+    /// The enrolled account under `typed`, if any, read without taking the lock.
+    pub fn account(&self, typed: &str) -> Option<Account> {
+        let state = state::load(&self.ctx).ok()?;
+        crate::label::resolve(&state, typed).ok().cloned()
     }
 
-    pub fn switch_to(&self, label: &str) -> Changing<Outcome> {
-        self.changing("use", label, |settled| switch::switch(settled, label))
+    pub fn switch_to(&self, typed: &str) -> Changing<Outcome> {
+        let label = self.named(typed)?;
+        self.changing("use", &label, |settled| switch::switch(settled, &label))
     }
 
-    pub fn enroll_current(&self, label: &str) -> Changing<Enrolled> {
-        self.changing("enroll", label, |settled| {
-            switch::enroll(settled, label, None).map(|e| (e, Vec::new()))
+    /// Which account somebody meant, as a plain label the engine can look up.
+    ///
+    /// Resolving here rather than deeper down means every command takes `codex/work` and
+    /// a bare `work` on the same terms, and the one place that decides what an ambiguous
+    /// bare label does is the one place that knows every provider's accounts.
+    fn named(&self, typed: &str) -> std::result::Result<String, Failed> {
+        let state = state::load(&self.ctx).map_err(|error| Failed {
+            error,
+            warnings: Vec::new(),
+        })?;
+        crate::label::resolve(&state, typed)
+            .map(|account| account.label.clone())
+            .map_err(|error| {
+                audit::record(&self.ctx, "use", typed, error.code());
+                Failed {
+                    error,
+                    warnings: Vec::new(),
+                }
+            })
+    }
+
+    /// `typed` may name a tool, as in `claude/work`. A bare name means the default tool.
+    pub fn enroll_current(&self, typed: &str) -> Changing<Enrolled> {
+        let chosen = self.chosen(typed)?;
+        self.changing("enroll", &chosen.label, |settled| {
+            switch::enroll(settled, &chosen.label, None).map(|e| (e, Vec::new()))
+        })
+    }
+
+    /// Which tool a new account is for, and what it is called there.
+    ///
+    /// Split here rather than deeper down so nothing below ever sees a name with a tool
+    /// still stuck to the front of it, which would enrol an account literally called
+    /// `claude/work`.
+    fn chosen(&self, typed: &str) -> std::result::Result<crate::label::Chosen, Failed> {
+        crate::label::choose(typed).map_err(|detail| {
+            audit::record(&self.ctx, "enroll", typed, "label_unusable");
+            Failed {
+                error: Error::Usage(detail),
+                warnings: Vec::new(),
+            }
         })
     }
 
     /// Claude Code's own sign-in in a private directory. It takes no lock but its own, so a
     /// person taking their time in a browser never holds up a switch.
-    pub fn sign_in(&self, label: &str) -> Result<SignIn> {
+    pub fn sign_in(&self, typed: &str) -> Result<SignIn> {
         self.before_signing_in()
             .and_then(|()| switch::sign_in(&self.ctx))
-            .inspect_err(|e| audit::record(&self.ctx, "enroll", label, e.code()))
+            .inspect_err(|e| audit::record(&self.ctx, "enroll", typed, e.code()))
     }
 
     /// The same sign-in with its output piped, for a front end that has no terminal to
@@ -211,15 +251,17 @@ impl Pitboard {
         Ok(())
     }
 
-    pub fn enroll_signed_in(&self, label: &str, login: SignIn) -> Changing<Enrolled> {
-        self.changing("enroll", label, |settled| {
-            switch::enroll(settled, label, Some(login)).map(|e| (e, Vec::new()))
+    pub fn enroll_signed_in(&self, typed: &str, login: SignIn) -> Changing<Enrolled> {
+        let chosen = self.chosen(typed)?;
+        self.changing("enroll", &chosen.label, |settled| {
+            switch::enroll(settled, &chosen.label, Some(login)).map(|e| (e, Vec::new()))
         })
     }
 
     /// Returns the account's email.
-    pub fn forget(&self, label: &str) -> Changing<String> {
-        self.changing("forget", label, |settled| switch::forget(settled, label))
+    pub fn forget(&self, typed: &str) -> Changing<String> {
+        let label = self.named(typed)?;
+        self.changing("forget", &label, |settled| switch::forget(settled, &label))
     }
 
     /// Throws away a record of an interrupted switch that cannot be finished, keeping
@@ -303,9 +345,13 @@ impl Pitboard {
     }
 
     /// Returns the account's email.
+    /// `from` may be qualified; `to` is a plain name, and stays inside whichever provider
+    /// the account already belongs to. Renaming cannot move an account between tools.
     pub fn rename(&self, from: &str, to: &str) -> Changing<String> {
+        let from = self.named(from)?;
+        let to = self.chosen(to)?.label;
         self.changing("rename", &format!("{from} -> {to}"), |settled| {
-            switch::rename(settled, from, to).map(|email| (email, Vec::new()))
+            switch::rename(settled, &from, &to).map(|email| (email, Vec::new()))
         })
     }
 

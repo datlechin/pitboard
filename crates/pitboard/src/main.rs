@@ -113,10 +113,16 @@ enum Command {
 }
 
 /// A label is typed on the command line from then on, so it cannot be empty or hold spaces.
+/// A name somebody is choosing for a new account, optionally saying which tool it is for.
+///
+/// `pitboard enroll gemini/personal --sign-in` names both. A bare `personal` means the
+/// default tool, so every command written before there was more than one still means what
+/// it meant.
 fn new_label(text: &str) -> Result<String, String> {
     if text.is_empty() || text.chars().any(|c| c.is_whitespace() || c.is_control()) {
         return Err("a label must be one word, such as `personal` or `work`".into());
     }
+    pitboard_core::label::choose(text)?;
     Ok(text.to_string())
 }
 

@@ -257,6 +257,18 @@ pub enum Error {
     #[error("`{label}` already refers to {email}. Choose a different label.")]
     LabelTaken { label: String, email: String },
 
+    #[error(
+        "`{typed}` is not a tool pitboard knows. It knows: {}.",
+        known.join(", ")
+    )]
+    ProviderUnknown { typed: String, known: Vec<String> },
+
+    #[error(
+        "`{label}` is enrolled for more than one tool: {}. Say which one.",
+        matches.iter().map(|m| format!("`{m}`")).collect::<Vec<_>>().join(", ")
+    )]
+    LabelAmbiguous { label: String, matches: Vec<String> },
+
     #[error("`{label}` is signed in; switch to another account before forgetting it.")]
     CannotForgetActiveAccount { label: String },
 
@@ -453,6 +465,8 @@ impl Error {
             LiveAccountNotEnrolled { .. } => "live_account_not_enrolled",
             AlreadyEnrolled { .. } => "already_enrolled",
             LabelTaken { .. } => "label_taken",
+            ProviderUnknown { .. } => "provider_unknown",
+            LabelAmbiguous { .. } => "label_ambiguous",
             CannotForgetActiveAccount { .. } => "cannot_forget_active_account",
             ParkSlotExhausted => "park_slot_exhausted",
             ParkedCredentialMissing { .. } => "parked_credential_missing",
