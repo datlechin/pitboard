@@ -129,11 +129,17 @@ pub(crate) trait RawStore: Send + Sync {
 }
 
 /// The machine pitboard is standing on, as one value rather than a set of `cfg` branches
-/// spread through the module. A platform answers where the live credential may be, where
+/// spread through the module. A host answers where the live credential may be, where
 /// pitboard's own parked ones go, and how a private sign-in's credential is read and
 /// discarded. It takes the context on every call because a context is built by a builder
 /// and can still change after it exists.
-pub(crate) trait Platform: Send + Sync + std::fmt::Debug {
+///
+/// It was called `Platform` until a second provider was on the way. The name said "which
+/// operating system", the body reached into Claude Code's own slot hashing, and once
+/// "provider" became a word this codebase uses, a reader meeting `Platform` could not tell
+/// which of the two axes it meant. The Claude Code half is on its way out of here; what
+/// stays behind this name is the machine, and only the machine.
+pub(crate) trait Host: Send + Sync + std::fmt::Debug {
     /// Backends that may hold Claude Code's live credential, in the order it looks.
     fn live_chain(&self, ctx: &Context) -> Vec<Box<dyn RawStore>>;
 
@@ -157,7 +163,7 @@ pub(crate) trait Platform: Send + Sync + std::fmt::Debug {
 pub(crate) struct MacOs;
 
 #[cfg(target_os = "macos")]
-impl Platform for MacOs {
+impl Host for MacOs {
     fn live_chain(&self, ctx: &Context) -> Vec<Box<dyn RawStore>> {
         vec![
             Box::new(keychain::Keychain::live(ctx)),
@@ -188,7 +194,7 @@ impl Platform for MacOs {
 pub(crate) struct PlainUnix;
 
 #[cfg(not(target_os = "macos"))]
-impl Platform for PlainUnix {
+impl Host for PlainUnix {
     fn live_chain(&self, ctx: &Context) -> Vec<Box<dyn RawStore>> {
         vec![Box::new(file::PlainFile::live(ctx))]
     }
@@ -214,8 +220,8 @@ impl Platform for PlainUnix {
     }
 }
 
-/// The platform of this build, which is what every real context uses.
-pub(crate) fn host() -> std::sync::Arc<dyn Platform> {
+/// The host this build is standing on, which is what every real context uses.
+pub(crate) fn host() -> std::sync::Arc<dyn Host> {
     #[cfg(target_os = "macos")]
     {
         std::sync::Arc::new(MacOs)
@@ -227,7 +233,7 @@ pub(crate) fn host() -> std::sync::Arc<dyn Platform> {
 }
 
 fn vault(ctx: &Context) -> Box<dyn RawStore> {
-    ctx.platform().vault(ctx)
+    ctx.host().vault(ctx)
 }
 
 /// Only "not found" means absent. A permission error or a loop in the path says nothing about
@@ -270,7 +276,7 @@ fn write_in(chain: &[&dyn RawStore], service: &str, contents: &str) -> Result<()
 /// Resolved on every call, never cached: Claude Code moves the credential between backends
 /// when a keychain write fails, so a remembered answer goes wrong without warning.
 fn with_live<T>(ctx: &Context, run: impl FnOnce(&[&dyn RawStore]) -> T) -> T {
-    let owned = ctx.platform().live_chain(ctx);
+    let owned = ctx.host().live_chain(ctx);
     let chain: Vec<&dyn RawStore> = owned.iter().map(Box::as_ref).collect();
     run(&chain)
 }
@@ -319,13 +325,13 @@ pub fn write_raw(ctx: &Context, service: &str, contents: &str) -> Result<(), Err
 /// The credential Claude Code keeps for a config directory: the hashed keychain slot on
 /// macOS, `.credentials.json` inside it elsewhere.
 pub fn read_signin(ctx: &Context, dir: &std::path::Path) -> Result<Option<String>, Error> {
-    ctx.platform().read_signin(ctx, dir)
+    ctx.host().read_signin(ctx, dir)
 }
 
 /// This deletes an item Claude Code created, so it refuses any name that could hold a real
 /// login.
 pub fn discard_signin(ctx: &Context, dir: &std::path::Path) -> Result<(), Error> {
-    ctx.platform().discard_signin(ctx, dir)
+    ctx.host().discard_signin(ctx, dir)
 }
 
 pub fn vault_read(ctx: &Context, service: &str) -> Result<Option<String>, Error> {
@@ -488,7 +494,7 @@ mod tests {
     fn the_live_chain_never_offers_a_keychain_off_macos() {
         let ctx = Context::from_env();
         let kinds: Vec<Backend> = ctx
-            .platform()
+            .host()
             .live_chain(&ctx)
             .iter()
             .map(|b| b.kind())

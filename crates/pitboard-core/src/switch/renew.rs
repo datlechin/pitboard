@@ -284,7 +284,7 @@ mod tests {
     use crate::api::Renewed;
     use crate::api::scripted::{Asked as Question, ScriptedApi, Trouble};
     use crate::state::Account;
-    use crate::store::memory::{Fault, MemoryPlatform};
+    use crate::store::memory::{Fault, MemoryHost};
     use crate::time::FixedClock;
     use serde_json::json;
     use std::sync::Arc;
@@ -293,7 +293,7 @@ mod tests {
 
     struct Machine {
         ctx: Context,
-        mem: Arc<MemoryPlatform>,
+        mem: Arc<MemoryHost>,
         api: Arc<ScriptedApi>,
         home: std::path::PathBuf,
     }
@@ -313,7 +313,7 @@ mod tests {
         ));
         let _ = std::fs::remove_dir_all(&home);
         std::fs::create_dir_all(&home).expect("a scratch home");
-        let mem = MemoryPlatform::new();
+        let mem = MemoryHost::new();
         let api = ScriptedApi::new();
         let ctx = Context::new(home.clone())
             .with_pitboard_home(home.clone())

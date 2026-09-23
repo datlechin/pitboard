@@ -9,7 +9,7 @@
 //! to keep, that a write reads its own result back and reports anything else, and otherwise
 //! does exactly what it is told.
 
-use super::{Backend, Error, Platform, RawStore};
+use super::{Backend, Error, Host, RawStore};
 use crate::context::Context;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -259,15 +259,15 @@ impl RawStore for Arc<MemoryStore> {
 /// A machine with no keychain and no files: a live chain, a vault, and whatever Claude Code
 /// would have left behind for a private sign-in.
 #[derive(Debug)]
-pub struct MemoryPlatform {
+pub struct MemoryHost {
     live: Arc<MemoryStore>,
     vault: Arc<MemoryStore>,
     signins: Mutex<HashMap<PathBuf, String>>,
 }
 
-impl Default for MemoryPlatform {
-    fn default() -> MemoryPlatform {
-        MemoryPlatform {
+impl Default for MemoryHost {
+    fn default() -> MemoryHost {
+        MemoryHost {
             // Keychain, because that is the chain the interesting rules are written for.
             live: MemoryStore::of(Backend::Keychain),
             vault: MemoryStore::of(Backend::Keychain),
@@ -276,9 +276,9 @@ impl Default for MemoryPlatform {
     }
 }
 
-impl MemoryPlatform {
-    pub fn new() -> Arc<MemoryPlatform> {
-        Arc::new(MemoryPlatform::default())
+impl MemoryHost {
+    pub fn new() -> Arc<MemoryHost> {
+        Arc::new(MemoryHost::default())
     }
 
     /// Where Claude Code's live credential is.
@@ -300,7 +300,7 @@ impl MemoryPlatform {
     }
 }
 
-impl Platform for MemoryPlatform {
+impl Host for MemoryHost {
     fn live_chain(&self, _ctx: &Context) -> Vec<Box<dyn RawStore>> {
         vec![Box::new(Arc::clone(&self.live))]
     }

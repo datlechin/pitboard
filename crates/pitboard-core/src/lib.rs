@@ -67,7 +67,7 @@ pub mod testing {
     pub use crate::api::scripted::{Answer, Asked, ScriptedApi, Trouble};
     pub use crate::claude::live_service;
     pub use crate::slot::{LIVE_SERVICE, dir_hash, service_for_dir};
-    pub use crate::store::memory::{Fault, MemoryPlatform, MemoryStore};
+    pub use crate::store::memory::{Fault, MemoryHost, MemoryStore};
     pub use crate::store::{vault_delete, vault_read, vault_write};
     pub use crate::time::{Clock, FixedClock};
 }

@@ -11,7 +11,7 @@ use crate::api::scripted::ScriptedApi;
 use crate::api::{Api, Owner};
 
 use crate::state::Account;
-use crate::store::memory::MemoryPlatform;
+use crate::store::memory::MemoryHost;
 use crate::time::{Clock, FixedClock};
 use serde_json::json;
 use std::collections::HashSet;
@@ -31,7 +31,7 @@ pub(super) const POINTS: [&str; 6] = [
 
 pub(super) struct Machine {
     pub(super) ctx: Context,
-    pub(super) mem: Arc<MemoryPlatform>,
+    pub(super) mem: Arc<MemoryHost>,
     pub(super) api: Arc<ScriptedApi>,
     root: PathBuf,
     pub(super) service: String,
@@ -87,7 +87,7 @@ pub(super) fn machine(name: &str) -> Machine {
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(&root).expect("a scratch home");
 
-    let mem = MemoryPlatform::new();
+    let mem = MemoryHost::new();
     let api = ScriptedApi::new();
     let ctx = Context::new(root.clone())
         .with_pitboard_home(root.join(".pitboard"))

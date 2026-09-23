@@ -215,21 +215,21 @@ pub fn outstanding(ctx: &Context) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::store::memory::MemoryPlatform;
+    use crate::store::memory::MemoryHost;
     use crate::time::{Clock, FixedClock};
     use serde_json::json;
     use std::sync::Arc;
 
     const NOW: i64 = 1_760_000_000;
 
-    fn machine(name: &str) -> (Context, Arc<MemoryPlatform>, PathBuf) {
+    fn machine(name: &str) -> (Context, Arc<MemoryHost>, PathBuf) {
         let root = std::env::temp_dir().join(format!(
             "pitboard-pending-{name}-{}-{:?}",
             std::process::id(),
             std::thread::current().id()
         ));
         let _ = std::fs::remove_dir_all(&root);
-        let mem = MemoryPlatform::new();
+        let mem = MemoryHost::new();
         let ctx = Context::new(root.clone())
             .with_pitboard_home(root.clone())
             .with_memory_stores(Arc::clone(&mem))

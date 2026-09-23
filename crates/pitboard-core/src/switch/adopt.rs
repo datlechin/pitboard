@@ -70,7 +70,7 @@ pub fn adopt(ctx: &Context) -> Result<Option<Adopted>> {
 mod tests {
     use super::*;
     use crate::state::{Account, State};
-    use crate::store::memory::MemoryPlatform;
+    use crate::store::memory::MemoryHost;
     use crate::time::{Clock, FixedClock};
     use serde_json::json;
     use std::sync::Arc;
@@ -84,14 +84,14 @@ mod tests {
         }
     }
 
-    fn machine(name: &str) -> (Context, Arc<MemoryPlatform>, Scratch) {
+    fn machine(name: &str) -> (Context, Arc<MemoryHost>, Scratch) {
         let root = std::env::temp_dir().join(format!(
             "pitboard-adopt-{name}-{}-{:?}",
             std::process::id(),
             std::thread::current().id()
         ));
         let _ = std::fs::remove_dir_all(&root);
-        let mem = MemoryPlatform::new();
+        let mem = MemoryHost::new();
         let ctx = Context::new(root.clone())
             .with_pitboard_home(root.clone())
             .with_memory_stores(Arc::clone(&mem))
@@ -110,7 +110,7 @@ mod tests {
     }
 
     /// A home that came from somewhere else, with a login in the keychain that came with it.
-    fn from_elsewhere(ctx: &Context, mem: &MemoryPlatform) -> String {
+    fn from_elsewhere(ctx: &Context, mem: &MemoryHost) -> String {
         let service = "pitboard-park-acc-1750000000000";
         mem.vault().plant(service, &oauth().to_string());
         let mut state = State {

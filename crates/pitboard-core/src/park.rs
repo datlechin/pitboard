@@ -157,7 +157,7 @@ pub fn purge(ctx: &Context, state: &mut State) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::store::memory::{Fault, MemoryPlatform};
+    use crate::store::memory::{Fault, MemoryHost};
     use crate::time::FixedClock;
     use std::sync::Arc;
 
@@ -172,14 +172,14 @@ mod tests {
 
     /// A machine whose stores are in memory, whose clock stands still, and whose home is a
     /// scratch directory: reserving a name writes it down before it is used.
-    fn machine() -> (Context, Arc<MemoryPlatform>, Scratch) {
+    fn machine() -> (Context, Arc<MemoryHost>, Scratch) {
         let root = std::env::temp_dir().join(format!(
             "pitboard-park-{}-{:?}",
             std::process::id(),
             std::thread::current().id()
         ));
         let _ = std::fs::remove_dir_all(&root);
-        let mem = MemoryPlatform::new();
+        let mem = MemoryHost::new();
         let clock = Arc::new(FixedClock::at(1_760_000_000));
         let ctx = Context::new(root.clone())
             .with_pitboard_home(root.clone())

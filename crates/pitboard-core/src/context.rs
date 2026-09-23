@@ -3,7 +3,7 @@
 //! itself: an app started from Finder does not see a shell's environment.
 
 use crate::api::{Anthropic, Api};
-use crate::store::Platform;
+use crate::store::Host;
 use crate::time::{Clock, SystemClock};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -43,8 +43,8 @@ pub struct Context {
     /// Where the time comes from. The machine's clock in every real context; a test puts
     /// its own here to reach the judgements that only happen at a particular moment.
     pub(crate) clock: Arc<dyn Clock>,
-    /// The machine's credential stores. This build's platform in every real context.
-    pub(crate) platform: Arc<dyn Platform>,
+    /// The machine's credential stores. This build's host in every real context.
+    pub(crate) host: Arc<dyn Host>,
     /// Who answers for Anthropic. The network in every real context.
     pub(crate) api: Arc<dyn Api>,
 }
@@ -66,8 +66,8 @@ impl Context {
     }
 
     /// The credential stores this context reaches.
-    pub(crate) fn platform(&self) -> &dyn Platform {
-        self.platform.as_ref()
+    pub(crate) fn host(&self) -> &dyn Host {
+        self.host.as_ref()
     }
 
     /// Who this context asks about a login.
@@ -93,7 +93,7 @@ impl Context {
             api_base: None,
             hover_rest: false,
             clock: Arc::new(SystemClock),
-            platform: crate::store::host(),
+            host: crate::store::host(),
             api: Arc::new(Anthropic),
         }
     }
@@ -185,7 +185,7 @@ impl Context {
             api_base: var("PITBOARD_API_BASE"),
             hover_rest: var("CLAUDE_CODE_HOVER_REST").is_some_and(|v| v == "1" || v == "true"),
             clock: Arc::new(SystemClock),
-            platform: crate::store::host(),
+            host: crate::store::host(),
             api: Arc::new(Anthropic),
         }
     }
@@ -202,11 +202,8 @@ impl Context {
     /// tests do this, which is why the trait behind it is not public.
     #[cfg(any(test, feature = "test-support"))]
     #[doc(hidden)]
-    pub fn with_memory_stores(
-        mut self,
-        memory: Arc<crate::store::memory::MemoryPlatform>,
-    ) -> Context {
-        self.platform = memory;
+    pub fn with_memory_stores(mut self, memory: Arc<crate::store::memory::MemoryHost>) -> Context {
+        self.host = memory;
         self
     }
 
