@@ -141,10 +141,10 @@ private struct Advanced: View {
             Section {
                 Text(
                     """
-                    Adding and dropping accounts is the command line's job, which is why the \
-                    cask installs it too. `pitboard enroll <label> --sign-in` adds one, \
-                    `pitboard forget <label>` drops one, and `pitboard repair` accounts for \
-                    any parked login pitboard's own records have lost track of.
+                    The panel adds and drops accounts. The command line, which the cask \
+                    installs too, also renames them with `pitboard rename`, and `pitboard \
+                    repair` accounts for any parked login pitboard's own records have lost \
+                    track of.
                     """
                 )
                 .font(.callout)

@@ -29,6 +29,15 @@ All notable changes are recorded here. The format follows
     token in the middle of one. The live login is read again just before it is replaced,
     and nothing is written over a login that moved; a login that ends up naming two
     accounts is refused rather than parked.
+- The menu bar app handles both tools. With accounts of both, the panel lists them under a
+  heading per tool, and the menu bar follows the signed-in account closest to running out.
+  When an account runs out, only another account of the same tool is offered. A Codex
+  switch has no countdown: the panel says running `codex` sessions keep the old account,
+  and how many pitboard found, and keeps saying so until that tool switches again rather
+  than until anything at all changes. "Add another account" asks which tool when more than
+  one is installed, and a Codex sign-in shows the address `codex login` printed. Cancelling
+  a sign-in no longer holds the app until the tool says something, which a Codex sign-in
+  never does before the browser is done.
 - Labels belong to a tool. `work` can be a Claude Code account and a Codex account at
   once, `codex/work` says which, and a bare `work` still means what it always did as long
   as it names one account; where it names two, pitboard lists both rather than picking.

@@ -197,8 +197,8 @@ quit them and start them again, and how many pitboard found running, if any. "Ad
 account" asks which tool the account is for when both are installed.
 
 It calls the same core as the command line rather than running `pitboard` for each answer.
-Adding and dropping accounts is still the command line's job, which is why the cask
-installs that too. Usage is read when you open the panel and every few minutes while the
+The panel adds and drops accounts itself. The cask installs the command line too, for
+renaming, `pitboard repair`, scripts and the status line. Usage is read when you open the panel and every few minutes while the
 app runs. "Open at login" is in the menu at the bottom right. A copy from a release keeps
 itself up to date. One you build yourself does not, because it carries no update key:
 
