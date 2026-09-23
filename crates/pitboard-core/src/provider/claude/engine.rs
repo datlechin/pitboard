@@ -88,6 +88,10 @@ impl Provider for Claude {
         ))
     }
 
+    fn slot(&self, ctx: &Context) -> String {
+        claude::live_service(ctx)
+    }
+
     /// The directory lock Claude Code's own protocol takes around every write to its
     /// credential. A write that did not take it could land between Claude Code's read and
     /// its write of a refreshed token, and one of the two logins would be lost.

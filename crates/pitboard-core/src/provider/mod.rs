@@ -360,6 +360,14 @@ pub(crate) trait Provider: Send + Sync + std::fmt::Debug {
     /// racing it there is how a refresh chain gets spent twice.
     fn renew(&self, ctx: &Context, credential: &Credential) -> Result<Credential, ProviderError>;
 
+    /// A name for where this tool's live login is on this machine right now.
+    ///
+    /// One state file serves every place a tool can keep its login, and a home variable
+    /// changes which one is live, so a record of which account was switched to in one
+    /// says nothing about another. Claude Code's is the keychain item its directory hashes
+    /// to; Codex's is the file its home puts the login in.
+    fn slot(&self, ctx: &Context) -> String;
+
     /// The lock this tool takes around its own writes to the live login, which pitboard
     /// must hold too while it writes there. `None` for a tool that takes none, where there
     /// is nothing to hold and nothing it could wait for.

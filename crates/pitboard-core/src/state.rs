@@ -8,7 +8,6 @@
 use crate::context::Context;
 use crate::error::{Error, Result};
 use crate::provider::ProviderId;
-use crate::provider::claude::paths as claude;
 use crate::{atomic, home};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -444,14 +443,17 @@ pub(crate) fn load_any_machine(ctx: &Context) -> Result<(State, bool)> {
     let here = state.machine == machine_id();
     let mut state = state;
     // Which account is in use is a fact about one slot. Read from another, the record says
-    // nothing, and pitboard asks the provider who is signed in anyway. Per provider, so a
-    // changed `CLAUDE_CONFIG_DIR` says nothing about Codex's record or Gemini's.
-    let slot = claude::live_service(ctx);
-    if state
-        .slot_for(ProviderId::Claude)
-        .is_some_and(|recorded| recorded != slot)
-    {
-        state.set_active(ProviderId::Claude, None);
+    // nothing, and pitboard asks the tool who is signed in anyway. Per tool, so a changed
+    // `CLAUDE_CONFIG_DIR` says nothing about Codex's record, nor `CODEX_HOME` about Claude
+    // Code's.
+    for &tool in ProviderId::ALL {
+        let slot = crate::provider::of(tool).slot(ctx);
+        if state
+            .slot_for(tool)
+            .is_some_and(|recorded| recorded != slot)
+        {
+            state.set_active(tool, None);
+        }
     }
     Ok((state, here))
 }
@@ -529,7 +531,9 @@ fn three_to_four(document: &mut serde_json::Value) {
 pub(crate) fn save(ctx: &Context, state: &State) -> Result<()> {
     home::check_location(&home::dir(ctx))?;
     let mut state = state.clone();
-    state.set_slot(ProviderId::Claude, claude::live_service(ctx));
+    for &tool in ProviderId::ALL {
+        state.set_slot(tool, crate::provider::of(tool).slot(ctx));
+    }
     let state = &state;
     let path = file(ctx);
     let write = |source| Error::StateWriteFailed {
@@ -578,6 +582,38 @@ mod tests {
             load(&elsewhere).unwrap().active_for(ProviderId::Claude),
             None,
             "another slot's record of what is in use is not this slot's"
+        );
+        let _ = std::fs::remove_dir_all(&home);
+    }
+
+    /// `CODEX_HOME` picks which `auth.json` is Codex's live login, the way
+    /// `CLAUDE_CONFIG_DIR` picks Claude Code's keychain item. A record made under one home
+    /// says nothing about another, and says nothing about Claude Code's at all.
+    #[test]
+    fn another_codex_home_is_another_codex_slot() {
+        let home = std::env::temp_dir().join(format!(
+            "pitboard-codex-slots-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let _ = std::fs::remove_dir_all(&home);
+        let here = Context::new(home.clone()).with_pitboard_home(home.clone());
+        let mut state = State::default();
+        state.set_active(ProviderId::Claude, Some("work".into()));
+        state.set_active(ProviderId::Codex, Some("work".into()));
+        save(&here, &state).expect("saved");
+
+        let moved = here.clone().with_codex_home("/somewhere/else".into());
+        let loaded = load(&moved).unwrap();
+        assert_eq!(loaded.active_for(ProviderId::Codex), None);
+        assert_eq!(
+            loaded.active_for(ProviderId::Claude),
+            Some("work"),
+            "Claude Code's slot did not move"
+        );
+        assert_eq!(
+            load(&here).unwrap().active_for(ProviderId::Codex),
+            Some("work")
         );
         let _ = std::fs::remove_dir_all(&home);
     }

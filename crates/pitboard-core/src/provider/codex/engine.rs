@@ -163,6 +163,10 @@ impl Provider for Codex {
         Ok(found)
     }
 
+    fn slot(&self, ctx: &Context) -> String {
+        paths::auth_file(ctx).to_string_lossy().into_owned()
+    }
+
     /// Codex writes its login with a plain truncating write and takes no lock of any kind,
     /// so there is none for pitboard to share.
     fn write_lock(&self, _ctx: &Context) -> Option<std::path::PathBuf> {
