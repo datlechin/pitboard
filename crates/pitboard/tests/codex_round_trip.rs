@@ -276,7 +276,7 @@ fn an_npm_installed_codex_signs_in_from_a_path_without_its_directory() {
     let pitboard = pitboard_core::service::Pitboard::new(ctx);
     let signing_in = pitboard
         .sign_in_watched("codex/personal")
-        .unwrap_or_else(|e| panic!("the sign-in did not start: {e}"));
+        .unwrap_or_else(|failed| panic!("the sign-in did not start: {}", failed.error));
     let said = signing_in.said();
     let login = signing_in
         .finish()

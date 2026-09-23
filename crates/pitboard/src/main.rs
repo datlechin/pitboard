@@ -173,6 +173,14 @@ impl Report {
             failure: None,
         }
     }
+
+    /// A change that failed, with what it found on the way.
+    fn refused(command: &'static str, failed: Failed) -> Report {
+        Report {
+            warnings: warnings(&failed.warnings),
+            ..Report::failed(Some(command), failed.error)
+        }
+    }
 }
 
 fn emit(report: Report, as_json: bool) -> ExitCode {
@@ -245,13 +253,7 @@ fn changed<T>(
                 ..Report::done(command, data, human)
             }
         }
-        Err(Failed {
-            error,
-            warnings: found,
-        }) => Report {
-            warnings: warnings(&found),
-            ..Report::failed(Some(command), error)
-        },
+        Err(failed) => Report::refused(command, failed),
     }
 }
 
@@ -343,7 +345,7 @@ fn enroll_signing_in(pitboard: &Pitboard, label: &str) -> Report {
     );
     match pitboard.sign_in(label) {
         Ok(login) => enrolled(pitboard, label, pitboard.enroll_signed_in(label, login)),
-        Err(e) => Report::failed(Some("enroll"), e),
+        Err(failed) => Report::refused("enroll", failed),
     }
 }
 

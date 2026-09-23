@@ -258,8 +258,9 @@ All notable changes are recorded here. The format follows
   every other change. `pitboard use nosuchlabel` after an interrupted switch refused the
   name and left the switch for a later run without a word about it; it now finishes or
   undoes the switch, records that in `pitboard log`, and reports it beside the refusal, as
-  a warning in `--json`. With nothing interrupted, a mistyped name still takes no lock and
-  changes nothing.
+  a warning in `--json`, and so does a name `enroll --sign-in` refuses before it opens a
+  browser, from the command line or the app. With nothing interrupted, a mistyped name
+  still takes no lock and changes nothing.
 - Labels written by 0.1.x that contain a slash can be switched to, forgotten, renamed and
   signed in to again; they read as a tool prefix and were refused.
 - The floor between two questions about one account was the minute pitboard uses for a

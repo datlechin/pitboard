@@ -340,27 +340,46 @@ impl Pitboard {
     /// The tool's own sign-in in a private directory, for the tool `typed` names. It takes
     /// no lock but its own, so a person taking their time in a browser never holds up a
     /// switch.
-    pub fn sign_in(&self, typed: &str) -> Result<SignIn> {
-        self.signing_in(typed)
-            .and_then(|tool| switch::sign_in(&self.ctx, tool))
-            .inspect_err(|e| audit::record(&self.ctx, "enroll", typed, e.code()))
+    pub fn sign_in(&self, typed: &str) -> std::result::Result<SignIn, Failed> {
+        let tool = self.signing_in(typed)?;
+        switch::sign_in(&self.ctx, tool).map_err(|error| self.not_started(typed, error))
     }
 
     /// The same sign-in with its output piped, for a front end that has no terminal to
     /// hand over. The caller shows what the tool says and can type a code back.
-    pub fn sign_in_watched(&self, typed: &str) -> Result<switch::WatchedSignIn> {
-        self.signing_in(typed)
-            .and_then(|tool| switch::sign_in_watched(&self.ctx, tool))
-            .inspect_err(|e| audit::record(&self.ctx, "enroll", typed, e.code()))
+    pub fn sign_in_watched(
+        &self,
+        typed: &str,
+    ) -> std::result::Result<switch::WatchedSignIn, Failed> {
+        let tool = self.signing_in(typed)?;
+        switch::sign_in_watched(&self.ctx, tool).map_err(|error| self.not_started(typed, error))
     }
 
     /// Which tool a sign-in is for, once everything that could refuse it has been asked.
     ///
-    /// Checked first, so a person does not sign in through a browser only to be told the
-    /// state file belongs to another machine, that the tool is not installed, or that the
-    /// account could never be switched to afterwards.
-    fn signing_in(&self, typed: &str) -> Result<crate::provider::ProviderId> {
-        let tool = self.enrolling(typed)?.provider;
+    /// A name no account could have is refused the way every change refuses one, settling
+    /// an interrupted switch on the way; anything else refused here is recorded and nothing
+    /// more, since nothing was about to change.
+    fn signing_in(&self, typed: &str) -> std::result::Result<crate::provider::ProviderId, Failed> {
+        let tool = self.chosen("enroll", typed)?.provider;
+        self.ready_to_sign_in(tool)
+            .map_err(|error| self.not_started(typed, error))?;
+        Ok(tool)
+    }
+
+    /// A sign-in that did not start, or did not finish, for a reason other than its name.
+    fn not_started(&self, typed: &str, error: Error) -> Failed {
+        audit::record(&self.ctx, "enroll", typed, error.code());
+        Failed {
+            error,
+            warnings: Vec::new(),
+        }
+    }
+
+    /// Checked before a sign-in starts, so a person does not sign in through a browser
+    /// only to be told the state file belongs to another machine, that the tool is not
+    /// installed, or that the account could never be switched to afterwards.
+    fn ready_to_sign_in(&self, tool: crate::provider::ProviderId) -> Result<()> {
         if tool == crate::provider::ProviderId::Claude && self.ctx.custom_oauth() {
             return Err(Error::CustomOauthEndpoint);
         }
@@ -384,7 +403,7 @@ impl Pitboard {
                 program: self.ctx.program_for(tool).display().to_string(),
             });
         }
-        Ok(tool)
+        Ok(())
     }
 
     pub fn enroll_signed_in(&self, typed: &str, login: SignIn) -> Changing<Enrolled> {
@@ -596,17 +615,26 @@ mod tests {
 
     type Refuse = fn(&Pitboard, ProviderId) -> Option<Failed>;
 
-    /// Every way a change is refused over the name it was given, with the code it is
-    /// refused with and the one the audit log records: a name nobody enrolled, a name no
-    /// account could have, and a new name that would move an account to another tool.
-    const REFUSALS: [(&str, &str, &str, Refuse); 3] = [
-        ("use", "account_unknown", "account_unknown", |p, _| {
-            p.switch_to("nobody").err()
-        }),
-        ("enroll", "usage", "label_unusable", |p, _| {
+    /// Every way a change is refused over the name it was given, with the verb the audit
+    /// log records it under, the code it is refused with and the one the log records: a
+    /// name nobody enrolled, a name no account could have, whether the account signed in
+    /// now is being enrolled or one is being signed in to, and a new name that would move
+    /// an account to another tool.
+    const REFUSALS: [(&str, &str, &str, &str, Refuse); 4] = [
+        (
+            "use",
+            "use",
+            "account_unknown",
+            "account_unknown",
+            |p, _| p.switch_to("nobody").err(),
+        ),
+        ("enroll", "enroll", "usage", "label_unusable", |p, _| {
             p.enroll_current("codx/work").err()
         }),
-        ("rename", "usage", "usage", |p, tool| {
+        ("sign-in", "enroll", "usage", "label_unusable", |p, _| {
+            p.sign_in("codx/work").err()
+        }),
+        ("rename", "rename", "usage", "usage", |p, tool| {
             let other = if tool == ProviderId::Claude {
                 ProviderId::Codex
             } else {
@@ -663,9 +691,9 @@ mod tests {
     #[test]
     fn a_change_refused_over_its_name_still_recovers_an_interrupted_switch() {
         for (tool, make) in MACHINES {
-            for (verb, code, audited, refuse) in REFUSALS {
-                let at = format!("{tool}, {verb}");
-                let m = interrupted(make, &format!("refused-{tool}-{verb}"));
+            for (change, verb, code, audited, refuse) in REFUSALS {
+                let at = format!("{tool}, {change}");
+                let m = interrupted(make, &format!("refused-{tool}-{change}"));
 
                 let failed = refuse(&Pitboard::new(m.ctx.clone()), m.which)
                     .unwrap_or_else(|| panic!("{at}: the name must still be refused"));
@@ -695,9 +723,9 @@ mod tests {
     #[test]
     fn a_change_refused_over_its_name_with_nothing_interrupted_changes_nothing() {
         for (tool, make) in MACHINES {
-            for (verb, code, audited, refuse) in REFUSALS {
-                let at = format!("{tool}, {verb}");
-                let m = make(&format!("refused-quietly-{tool}-{verb}"));
+            for (change, verb, code, audited, refuse) in REFUSALS {
+                let at = format!("{tool}, {change}");
+                let m = make(&format!("refused-quietly-{tool}-{change}"));
                 let (before, parked, live) = (files(&m), m.mem.vault().services(), m.live());
 
                 let failed = refuse(&Pitboard::new(m.ctx.clone()), m.which)
