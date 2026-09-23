@@ -1050,6 +1050,28 @@ private func account(_ label: String, signedIn: Bool, percent: Double) -> Accoun
     #expect(model.addable == bothTools)
 }
 
+/// Opening the form for another account asks again what is installed: the first answer may
+/// have come while the person's login shell was too slow to say, and the service asks it
+/// once more when that was so.
+@MainActor
+@Test func whatIsInstalledIsAskedAgainWhenTheFormForAnotherAccountOpens() async {
+    let stub = Stub(.success(status([])))
+    stub.found = [claudeCode]
+    let model = AppModel(watching: false, service: stub)
+    await model.refresh()
+    #expect(model.addable == [claudeCode])
+
+    stub.found = bothTools
+    model.naming = .another(nil)
+    #expect(await eventually { model.addable == bothTools })
+    #expect(stub.installedAsks == 2)
+
+    model.naming = nil
+    model.naming = .theOneInUse("claude")
+    await model.refresh()
+    #expect(stub.installedAsks == 2, "not for naming the account in use, nor for a read")
+}
+
 /// The form starts on the tool it was asked about, and otherwise on the first it offers.
 @MainActor
 @Test func theFormStartsOnTheToolItIsAbout() {

@@ -30,7 +30,15 @@ final class AppModel {
     /// Every check pitboard makes about this machine, once someone asks for them.
     private(set) var checks: [Check] = []
     /// A label being typed, when the panel is asking for one, and what it is for.
-    var naming: Naming?
+    var naming: Naming? {
+        didSet {
+            // The form for another account offers the tools found, and the first answer may
+            // have come while the login shell was too slow to say where they are.
+            if case .another = naming, oldValue == nil {
+                Task { await askWhatIsInstalled() }
+            }
+        }
+    }
     /// A sign-in in progress, and everything Claude Code has said about it.
     private(set) var signingIn: SigningIn?
     /// Everything that went wrong on the way, not only the first of them. A switch can warn
@@ -113,7 +121,7 @@ final class AppModel {
 
     private let notifier = Notifier()
     /// The codes of the tools whose program was found, once the first read has asked. Read
-    /// once: what an app can find does not change until it is started again, and asking
+    /// then and when the form for another account opens, and not on every read: asking
     /// crossed into the core on every keystroke in the form that reads it. Asked from a read
     /// rather than here, because finding them can mean waiting on the person's login shell.
     private var installed: Set<String> = []
@@ -138,7 +146,7 @@ final class AppModel {
     /// firing under a test is how a test stops telling the truth about what set what.
     init(
         watching: Bool = true,
-        service: any Core = PitboardService(settings: { .forCurrentUser() }),
+        service: any Core = PitboardService(asking: { Settings.forCurrentUserAsked() }),
         defaults: UserDefaults = .standard
     ) {
         self.service = service
@@ -294,7 +302,7 @@ final class AppModel {
     func refresh(ifOlderThan seconds: TimeInterval = 0, asked: Bool = false) async {
         if !askedWhatIsInstalled {
             askedWhatIsInstalled = true
-            installed = Set(await service.installed().map(\.code))
+            await askWhatIsInstalled()
         }
         if let updatedAt, Date().timeIntervalSince(updatedAt) < seconds { return }
         do {
@@ -324,6 +332,12 @@ final class AppModel {
             }
             stuck = Self.code(of: error) == "recovery_undetermined"
         }
+    }
+
+    /// Which tools the service found a program for. It asks the login shell once more where
+    /// that was too slow to answer before, so a later answer can find more than the first.
+    private func askWhatIsInstalled() async {
+        installed = Set(await service.installed().map(\.code))
     }
 
     /// What pitboard has changed, newest last. Read when something asks to see it.

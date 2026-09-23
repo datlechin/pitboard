@@ -53,7 +53,9 @@ public protocol Core: Sendable {
 /// out where each tool is installed can mean asking the person's login shell, and nothing
 /// on the main thread may wait for that.
 public final class PitboardService: Core, Sendable {
-    private let made: Once<Made>
+    private let made: Kept<Made>
+    /// How long after a login shell too slow to answer it is asked once more.
+    private let askAgainAfter: TimeInterval
     private let reads = DispatchQueue(label: "com.usepitboard.reads")
     private let changes = DispatchQueue(label: "com.usepitboard.changes")
 
@@ -66,20 +68,35 @@ public final class PitboardService: Core, Sendable {
     }
 
     /// `settings` is asked for once, on first use and off the main thread, so it may take
-    /// its time: `Settings.forCurrentUser` asks the person's login shell.
-    public init(settings: @escaping @Sendable () -> Settings) {
-        made = Once {
-            let settings = settings()
-            return Made(
-                core: Pitboard(settings: settings),
-                found: Set(
-                    [("claude", settings.claudeProgram), ("codex", settings.codexProgram)]
-                        .compactMap { code, program in program == nil ? nil : code }))
-        }
+    /// its time.
+    public convenience init(settings: @escaping @Sendable () -> Settings) {
+        self.init(asking: { (settings(), false) })
     }
 
     public convenience init(settings: Settings) {
         self.init { settings }
+    }
+
+    /// `settings` says as well whether the login shell it asked was too slow to answer, as
+    /// `Settings.forCurrentUserAsked` does. What it made then stands, and it is asked once
+    /// more when something next asks what is installed or starts a sign-in, `askAgainAfter`
+    /// seconds on: startup files are slowest while the machine is busy logging in, which is
+    /// when an app that opens at login first asks. Once more and no more, because a shell
+    /// that is always that slow would otherwise cost five seconds every time.
+    public init(
+        asking settings: @escaping @Sendable () -> (settings: Settings, late: Bool),
+        askAgainAfter: TimeInterval = 60
+    ) {
+        self.askAgainAfter = askAgainAfter
+        made = Kept {
+            let (settings, late) = settings()
+            let made = Made(
+                core: Pitboard(settings: settings),
+                found: Set(
+                    [("claude", settings.claudeProgram), ("codex", settings.codexProgram)]
+                        .compactMap { code, program in program == nil ? nil : code }))
+            return (made, late)
+        }
     }
 
     public func tools() -> [Tool] {
@@ -89,10 +106,10 @@ public final class PitboardService: Core, Sendable {
     public func installed() async -> [Tool] {
         // Not on `reads`, where a read may be waiting on the network: what is installed is
         // needed before the first read can say anything useful about it.
-        let made = self.made
+        let (made, after) = (self.made, askAgainAfter)
         let found = await withCheckedContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
-                continuation.resume(returning: made.value().found)
+                continuation.resume(returning: made.value(askingAgainAfter: after).found)
             }
         }
         return tools().filter { found.contains($0.code) }
@@ -168,9 +185,12 @@ public final class PitboardService: Core, Sendable {
         // Its own queue: this waits on a person in a browser, and a read or a change must
         // not queue behind that.
         try await withCheckedThrowingContinuation { continuation in
-            let made = self.made
+            let (made, after) = (self.made, askAgainAfter)
             DispatchQueue(label: "com.usepitboard.signin").async {
-                continuation.resume(with: Result { try made.value().core.signIn(label: label) })
+                continuation.resume(
+                    with: Result {
+                        try made.value(askingAgainAfter: after).core.signIn(label: label)
+                    })
             }
         }
     }
@@ -188,24 +208,47 @@ public final class PitboardService: Core, Sendable {
 
 /// A value made the first time it is asked for, by whichever thread asks first. Any other
 /// thread asking meanwhile waits for that one rather than making a second.
-private final class Once<Value: Sendable>: @unchecked Sendable {
-    // Unchecked because `made` is written after it is shared; every read and write of it
-    // holds `lock`.
+///
+/// One made from an answer that came too late is made once more when asked to, later, and
+/// kept in its place if that answers: a caller that asks meanwhile gets what was made first
+/// rather than waiting on the second ask.
+private final class Kept<Value: Sendable>: @unchecked Sendable {
+    // Unchecked because `made` and `askedAgain` are written after they are shared; every
+    // read and write of them holds `lock`.
     private let lock = NSLock()
-    private var made: Value?
-    private let make: @Sendable () -> Value
+    private var made: (value: Value, late: Bool, at: Date)?
+    private var askedAgain = false
+    private let make: @Sendable () -> (Value, late: Bool)
 
-    init(_ make: @escaping @Sendable () -> Value) {
+    init(_ make: @escaping @Sendable () -> (Value, late: Bool)) {
         self.make = make
     }
 
     func value() -> Value {
         lock.withLock {
-            if let made { return made }
-            let value = make()
-            made = value
+            if let made { return made.value }
+            let (value, late) = make()
+            made = (value, late, Date())
             return value
         }
+    }
+
+    /// The value, made once more first when what it was made from came too late and at
+    /// least `seconds` have passed since.
+    func value(askingAgainAfter seconds: TimeInterval) -> Value {
+        let first = value()
+        let due = lock.withLock {
+            guard let made, made.late, !askedAgain,
+                Date().timeIntervalSince(made.at) >= seconds
+            else { return false }
+            askedAgain = true
+            return true
+        }
+        guard due else { return value() }
+        let (again, late) = make()
+        guard !late else { return first }
+        lock.withLock { made = (again, false, Date()) }
+        return again
     }
 }
 
@@ -218,11 +261,19 @@ extension Settings {
     /// Asks the person's login shell for its `PATH`, which can take a second or more, so this
     /// is never called on the main thread: `PitboardService` asks for it on first use.
     public static func forCurrentUser() -> Settings {
+        forCurrentUserAsked().settings
+    }
+
+    /// `forCurrentUser`, and whether the login shell was too slow to answer, which asking
+    /// again later may not be.
+    public static func forCurrentUserAsked() -> (settings: Settings, late: Bool) {
         let environment = ProcessInfo.processInfo.environment
-        return forCurrentUser(
+        let asked = LoginShell.path(environment: environment)
+        let settings = forCurrentUser(
             environment: environment,
-            loginPath: LoginShell.path(environment: environment),
+            loginPath: asked.path,
             isExecutable: FileManager.default.isExecutableFile(atPath:))
+        return (settings, asked.late)
     }
 
     /// `forCurrentUser` with what it reads from the machine handed in, so a test can say
@@ -231,18 +282,20 @@ extension Settings {
     /// Each tool's program is looked for first where the variable naming it outright says,
     /// then on the login shell's `PATH`, where a version manager or an npm prefix puts it,
     /// and then where each tool's own installer puts it, which is all there is when the
-    /// shell could not be asked. The login shell's `PATH` is also where the core looks and
-    /// what a sign-in is given; without one, the core looks on this app's own, as it always
-    /// did.
+    /// shell could not be asked. The login shell's `PATH`, as far as it is looked in here,
+    /// is also where the core looks and what a sign-in is given; without one, the core looks
+    /// on this app's own, as it always did.
     static func forCurrentUser(
         environment: [String: String],
         loginPath: String?,
         isExecutable: (String) -> Bool
     ) -> Settings {
         let home = environment["HOME"] ?? FileManager.default.homeDirectoryForCurrentUser.path
-        // A relative entry would be looked for wherever this app happens to be running.
+        // A relative entry would be looked for wherever this app happens to be running, and
+        // looking inside a folder macOS guards asks the person whether pitboard may, for
+        // something it never needed to read.
         let shell = (loginPath ?? "").split(separator: ":").map(String.init)
-            .filter { $0.hasPrefix("/") }
+            .filter { $0.hasPrefix("/") && !guarded($0, home: home) }
         let places = shell + ["\(home)/.local/bin", "/opt/homebrew/bin", "/usr/local/bin"]
         func find(_ program: String, unless variable: String) -> String? {
             environment[variable]
@@ -257,7 +310,18 @@ extension Settings {
             claudeProgram: find("claude", unless: "PITBOARD_CLAUDE"),
             codexHome: environment["CODEX_HOME"],
             codexProgram: find("codex", unless: "PITBOARD_CODEX"),
-            searchPath: loginPath
+            searchPath: loginPath.map { _ in shell.joined(separator: ":") }
         )
+    }
+
+    /// Whether `entry` is inside a folder macOS asks the person about before an app may read
+    /// it. A program started from there would have the same question asked on its behalf.
+    static func guarded(_ entry: String, home: String) -> Bool {
+        [
+            "Desktop", "Documents", "Downloads", "Library/Mobile Documents",
+            "Library/CloudStorage",
+        ]
+        .map { "\(home)/\($0)" }
+        .contains { entry == $0 || entry.hasPrefix("\($0)/") }
     }
 }

@@ -91,6 +91,53 @@ private final class Asks: @unchecked Sendable {
     #expect(!asks.anyOnMain)
 }
 
+/// A login shell too slow to answer, which startup files are while the machine is busy
+/// logging in, is asked once more when something next asks what is installed, a while later,
+/// and what it answers then is what is used. Once more and no more: a shell that is always
+/// that slow would otherwise cost its patience on every ask.
+@Test func aLoginShellTooSlowToAnswerIsAskedOnceMoreLater() async throws {
+    let (slow, answered) = (try scratch(), try scratch(codex: "/nowhere/codex"))
+    let asks = Asks()
+    let service = PitboardService(
+        asking: {
+            asks.note()
+            return asks.count == 1 ? (slow, true) : (answered, false)
+        }, askAgainAfter: 0.2)
+
+    #expect(await service.installed().isEmpty, "what the first, late, ask found")
+    #expect(await service.installed().isEmpty, "and nothing more until the while is up")
+    #expect(asks.count == 1)
+    try await Task.sleep(for: .milliseconds(300))
+    #expect(await service.installed().map(\.code) == ["codex"])
+    #expect(asks.count == 2)
+    #expect(await service.installed().map(\.code) == ["codex"])
+    #expect(asks.count == 2, "asked once more, and no more")
+}
+
+/// Not before the while is up, and never when the shell answered or could not be asked.
+@Test func aLoginShellIsNotAskedAgainSoonerOrForNothing() async throws {
+    let settings = try scratch()
+    let soon = Asks()
+    let early = PitboardService(
+        asking: {
+            soon.note()
+            return (settings, true)
+        }, askAgainAfter: 3600)
+    _ = await early.installed()
+    _ = await early.installed()
+    #expect(soon.count == 1)
+
+    let answered = Asks()
+    let service = PitboardService(
+        asking: {
+            answered.note()
+            return (settings, false)
+        }, askAgainAfter: 0)
+    _ = await service.installed()
+    _ = await service.installed()
+    #expect(answered.count == 1)
+}
+
 @Test func doctorReportsEveryCheck() async throws {
     let diagnosis = await PitboardService(settings: try scratch()).doctor()
     #expect(!diagnosis.checks.isEmpty)

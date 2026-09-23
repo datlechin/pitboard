@@ -226,9 +226,13 @@ All notable changes are recorded here. The format follows
   offer one installed through nvm, volta, fnm, asdf, mise, pnpm, bun or a custom npm
   prefix. One it did find could not start if npm had installed it: an npm install is a
   script run by `node`, which was not on the app's `PATH` either. The app now asks the
-  person's login shell for its `PATH` once, off the main thread, and looks there after
-  `PITBOARD_CLAUDE` or `PITBOARD_CODEX` and before the installers' places; a shell that
-  does not answer within five seconds is stopped, and the app looks where it did before.
+  person's login shell for its `PATH`, off the main thread, which runs its startup files as
+  a terminal does, and looks there after `PITBOARD_CLAUDE` or `PITBOARD_CODEX` and before
+  the installers' places, passing over a folder macOS asks permission for, such as Documents
+  or iCloud Drive. A shell that does not answer within five seconds is stopped with
+  everything it started, and the app looks where it did before; it asks once more a minute
+  or more later, when the form for another account opens or a sign-in starts, because
+  startup files are slowest while the machine is still logging in.
   Every sign-in, from the app and the command line, now starts the program by the path it
   was found at: the first file on the `PATH` that can be run, in a directory named from the
   root, so what is found is what starts. A program found where that `PATH` does not reach,

@@ -5,16 +5,37 @@ import Foundation
 ///
 /// Finder starts an app with the system's directories and nothing else, and a tool installed
 /// through a version manager or an npm prefix is found only on the `PATH` a login shell builds
-/// from its startup files. So the app asks one, once, the way editors on macOS do: the
-/// person's shell, as a login shell and an interactive one, prints `PATH` between two markers,
-/// so that whatever its startup files print is not taken for the answer.
+/// from its startup files. So the app asks one, the way editors on macOS do: the person's
+/// shell, as a login shell and an interactive one, runs its startup files and prints `PATH`
+/// between two markers, so that whatever those print is not taken for the answer.
 enum LoginShell {
     /// How long the shell has to answer. Startup files that load a version manager take a
     /// second or so; past this the shell is stopped and the answer is unknown.
     static let patience: TimeInterval = 5
 
-    /// The login shell's `PATH`, or nil when it could not be asked or did not say.
-    static func path(environment: [String: String]) -> String? {
+    /// What running a shell came to.
+    enum Ran: Equatable {
+        /// It printed this, and exited by itself with success.
+        case said(String)
+        /// It could not be started, or exited with anything but success. Asking again
+        /// would get the same.
+        case failed
+        /// It had not finished in time, and was stopped with everything it started.
+        case late
+    }
+
+    /// What the login shell said about `PATH`.
+    struct Answer: Equatable {
+        /// Its `PATH`, or nil when it could not be asked or did not say.
+        var path: String?
+        /// It did not answer in time. Startup files are slowest while the machine is busy,
+        /// which is when an app that opens at login first asks, so this is not the last
+        /// word: a later ask may find what this one could not.
+        var late = false
+    }
+
+    /// The login shell's `PATH`, asked once.
+    static func path(environment: [String: String]) -> Answer {
         path(environment: environment, marker: "pitboard-path-\(UUID().uuidString)") {
             shell, arguments in
             run(shell, arguments, environment: environment, within: patience)
@@ -26,10 +47,14 @@ enum LoginShell {
     static func path(
         environment: [String: String],
         marker: String,
-        run: (_ shell: String, _ arguments: [String]) -> String?
-    ) -> String? {
-        guard let shell = shell(environment: environment) else { return nil }
-        return run(shell, arguments(marker: marker)).flatMap { path(in: $0, marker: marker) }
+        run: (_ shell: String, _ arguments: [String]) -> Ran
+    ) -> Answer {
+        guard let shell = shell(environment: environment) else { return Answer() }
+        switch run(shell, arguments(marker: marker)) {
+        case .said(let output): return Answer(path: path(in: output, marker: marker))
+        case .failed: return Answer()
+        case .late: return Answer(late: true)
+        }
     }
 
     /// What the shell is asked to run. `printenv` by its full path, because a startup file
@@ -60,7 +85,7 @@ enum LoginShell {
         return path.isEmpty ? nil : path
     }
 
-    /// What `shell` printed, run with `arguments` in `environment`. Nil when it could not
+    /// What `shell` printed, run with `arguments` in `environment`, unless it could not
     /// start, exited with anything but success, or had not finished within `limit`, when it
     /// is stopped along with everything it started.
     ///
@@ -72,9 +97,9 @@ enum LoginShell {
         _ arguments: [String],
         environment: [String: String],
         within limit: TimeInterval
-    ) -> String? {
+    ) -> Ran {
         var ends: [Int32] = [0, 0]
-        guard pipe(&ends) == 0 else { return nil }
+        guard pipe(&ends) == 0 else { return .failed }
         let (reading, writing) = (ends[0], ends[1])
         defer { close(reading) }
 
@@ -96,7 +121,7 @@ enum LoginShell {
         var pid: pid_t = 0
         let started = posix_spawn(&pid, shell, &actions, &attributes, argv, envp)
         close(writing)
-        guard started == 0 else { return nil }
+        guard started == 0 else { return .failed }
 
         let deadline = Date().addingTimeInterval(limit)
         var output = Data()
@@ -105,11 +130,11 @@ enum LoginShell {
         while true {
             let reaped = waitpid(pid, &status, WNOHANG)
             if reaped == pid { break }
-            if reaped < 0, errno != EINTR { return nil }
+            if reaped < 0, errno != EINTR { return .failed }
             let left = deadline.timeIntervalSinceNow
             guard left > 0 else {
                 stop(pid)
-                return nil
+                return .late
             }
             if ended {
                 usleep(10_000)
@@ -124,8 +149,8 @@ enum LoginShell {
             ended = !readSome(reading, into: &output)
         }
         // Exited, not killed, and with status zero.
-        guard status == 0 else { return nil }
-        return String(decoding: output, as: UTF8.self)
+        guard status == 0 else { return .failed }
+        return .said(String(decoding: output, as: UTF8.self))
     }
 
     /// Whether `descriptor` has something to read, or has ended, within `seconds`.
