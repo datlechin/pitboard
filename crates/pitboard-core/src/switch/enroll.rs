@@ -6,7 +6,7 @@
 //! and any other account is signed in inside a private directory, where the live slot is
 //! never touched and the vault is the new login's only holder.
 
-use super::{Error, Result, Settled, access_token, identify, purge, slice_of};
+use super::{Error, Result, Settled, identify_document, purge, slice_of};
 use crate::api::Owner;
 use crate::context::Context;
 use crate::provider::ProviderId;
@@ -282,7 +282,7 @@ fn claim(state: &State, label: &str, owner: &Owner) -> Result<()> {
 fn record_current(ctx: &Context, label: &str, state: &mut State) -> Result<Enrolled> {
     let live = store::read(&claude_live::chain(ctx), &claude::live_service(ctx))?
         .ok_or_else(|| claude::nothing_signed_in(ctx))?;
-    let owner = identify(ctx, &access_token(&live)?)?;
+    let owner = identify_document(ctx, ProviderId::Claude, &live)?;
     claim(state, label, &owner)?;
     let existing = state.get(label);
     let parked = existing.and_then(|a| a.parked.clone());
@@ -300,7 +300,7 @@ fn park_signed_in(
     state: &mut State,
     login: &SignIn,
 ) -> Result<Enrolled> {
-    let owner = identify(ctx, &access_token(&login.document)?)?;
+    let owner = identify_document(ctx, ProviderId::Claude, &login.document)?;
     claim(state, label, &owner)?;
     let service = park::reserve(ctx, &owner.account_uuid)?;
     let fresh = park::store_at(ctx, &service, &slice_of(&login.document)?)?;

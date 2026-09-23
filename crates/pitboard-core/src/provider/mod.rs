@@ -24,14 +24,19 @@
 //! value lets them branch on the fact instead of on the provider's name. Nothing anywhere
 //! should read `if provider == Claude`.
 //!
-//! What is not here: parking and restoring themselves. Every other step of a switch is
-//! either pitboard's own bookkeeping, which does not vary, or one tool's private mechanics,
-//! which nothing outside that tool's own module ever calls. A `park` method on this trait
-//! would have to either hide the difference between splicing a shared document and moving a
-//! whole file behind a flag, or have two bodies so different that the trait bought nothing.
-//! Also absent: Claude Code's config-file identity cache, its supervisor daemon, its status
-//! line hook. A method most implementations no-op is a sign the method does not belong on a
-//! shared trait.
+//! Four pure functions over a login document: which part of it belongs to the account,
+//! how to put another account's part in, a non-secret handle on its refresh token, and when
+//! it stops working. These are here because pitboard's own bookkeeping needs them and they
+//! are genuinely different per tool: Claude Code's login sits in a document the machine
+//! shares with unrelated keys, while Codex and Gemini keep one account per file. They were
+//! not in the first sketch of this trait, which is how it came to be a boundary nothing
+//! could actually park through.
+//!
+//! What is not here: a `park` method. Parking is pitboard's own bookkeeping, built out of
+//! the pieces above, and a method for it would have to hide the difference between splicing
+//! a shared document and replacing a whole file behind a flag. Also absent: Claude Code's
+//! config-file identity cache, its supervisor daemon, its status line hook. A method most
+//! implementations no-op is a sign it does not belong on a shared trait.
 
 pub(crate) mod claude;
 
@@ -68,6 +73,17 @@ impl ProviderId {
     pub fn code(self) -> &'static str {
         match self {
             ProviderId::Claude => "claude",
+        }
+    }
+
+    /// The service behind the tool, as a person would name it.
+    ///
+    /// Not the same as the tool: `claude` talks to Anthropic, `codex` to OpenAI. Messages
+    /// about a failed request name this, because "could not reach OpenAI" is something
+    /// somebody can act on and "could not reach the service" is not.
+    pub fn service(self) -> &'static str {
+        match self {
+            ProviderId::Claude => "Anthropic",
         }
     }
 
@@ -131,10 +147,13 @@ pub enum ProviderError {
     Unauthorized,
     #[error("the service asked for less traffic")]
     RateLimited { retry_after: Option<i64> },
-    #[error("could not reach the service: {0}")]
-    Network(String),
-    #[error("the service answered {status}")]
-    Unexpected { status: u16 },
+    #[error("could not reach {service}: {detail}")]
+    Network {
+        service: &'static str,
+        detail: String,
+    },
+    #[error("{service} answered {status}")]
+    Unexpected { service: &'static str, status: u16 },
     #[error("the answer was not understood: {0}")]
     Malformed(String),
     /// Refused for good: revoked, or already spent somewhere else.
@@ -196,12 +215,20 @@ pub enum Isolation {
     NotIsolated { reason: String },
 }
 
+/// When a login stops working, in epoch seconds. `None` where the tool does not say.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct Expiry {
+    /// Until then its usage can be asked without renewing it first.
+    pub access_expires_at: Option<i64>,
+    /// Until then it can be restored at all.
+    pub refresh_expires_at: Option<i64>,
+}
+
 /// One coding tool's login, as the rest of pitboard needs to touch it.
 ///
 /// Implementations live in `provider::<name>`. Nothing here knows about pitboard's state
 /// file, its lock, its journal or its audit log: those are pitboard's own bookkeeping and
 /// do not vary by tool.
-#[allow(dead_code, reason = "the first implementation lands in a later commit")]
 pub(crate) trait Provider: Send + Sync + std::fmt::Debug {
     fn id(&self) -> ProviderId;
 
@@ -252,6 +279,37 @@ pub(crate) trait Provider: Send + Sync + std::fmt::Debug {
     /// Takes the context because the answer is not a constant: it depends on which backend
     /// the tool is configured to use here.
     fn private_signin_isolation(&self, ctx: &Context) -> Isolation;
+
+    /// The part of a live document that belongs to the account signed in.
+    ///
+    /// For Claude Code that is a slice: its credential document also holds MCP tokens and
+    /// other keys that belong to the machine, and parking those would take them away from
+    /// whoever switches in. For a tool that keeps one account per file it is the whole
+    /// document.
+    fn slice(&self, live: &Value) -> Result<Value, ProviderError>;
+
+    /// `live` with `incoming` in place of whatever account was there, and nothing of the
+    /// outgoing account left behind.
+    fn splice(&self, live: &Value, incoming: &Value) -> Result<Value, ProviderError>;
+
+    /// A short, non-secret handle on the refresh token inside a slice.
+    ///
+    /// Two slices with the same handle hold the same refresh chain. It is what lets an
+    /// interrupted switch work out which side landed without asking anybody.
+    fn fingerprint(&self, slice: &Value) -> String;
+
+    /// When a slice stops being askable and stops being restorable.
+    fn expiry(&self, slice: &Value) -> Expiry;
+}
+
+/// The implementation for one tool.
+///
+/// An exhaustive match rather than a lookup, so a tool added to [`ProviderId`] and not to
+/// here stops compiling instead of being silently absent.
+pub(crate) fn of(provider: ProviderId) -> &'static dyn Provider {
+    match provider {
+        ProviderId::Claude => &claude::engine::Claude,
+    }
 }
 
 #[cfg(test)]
@@ -294,6 +352,37 @@ mod tests {
             let written = serde_json::to_value(id).expect("a provider id serialises");
             assert_eq!(written, serde_json::json!(id.code()), "{id}");
         }
+    }
+
+    /// A registry entry pointing at the wrong implementation would be silent: every
+    /// account of that tool would be handled by another tool's rules.
+    #[test]
+    fn every_implementation_agrees_about_which_tool_it_is() {
+        for &id in ProviderId::ALL {
+            assert_eq!(of(id).id(), id, "{id} is registered against another tool");
+        }
+    }
+
+    /// The three facts, asserted against what was measured, so a change to one is a change
+    /// to a test rather than a surprise on somebody's machine.
+    #[test]
+    fn claude_code_follows_a_switch_on_its_own_and_tolerates_a_copy() {
+        let claude = of(ProviderId::Claude);
+        assert_eq!(
+            claude.adoption(),
+            Adoption::PollingWithin(33),
+            "measured: a session serves its credential from a 30 second cache"
+        );
+        assert_eq!(
+            claude.park_semantics(),
+            ParkSemantics::CopyWhileLive,
+            "nothing of Claude Code's revokes for presenting either copy, and the live              document holds the machine's other keys"
+        );
+        assert_eq!(
+            claude.private_signin_isolation(&Context::from_env()),
+            Isolation::Isolated,
+            "CLAUDE_CONFIG_DIR picks the keychain item by hashing the directory, and there              is no second backend that escapes it"
+        );
     }
 
     /// A restart-required provider has no number of seconds to show, and a caller that

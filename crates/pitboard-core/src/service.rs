@@ -243,6 +243,16 @@ impl Pitboard {
             return Err(Error::CustomOauthEndpoint);
         }
         state::load(&self.ctx)?;
+        // A private sign-in works by pointing the tool's own login at a scratch directory
+        // through its home variable. Where that does not really isolate it, running one
+        // would write over the login somebody is using. Claude Code is always isolated;
+        // the check is here so the tool that is not gets refused rather than special-cased.
+        if let crate::provider::Isolation::NotIsolated { reason } =
+            crate::provider::of(crate::provider::ProviderId::Claude)
+                .private_signin_isolation(&self.ctx)
+        {
+            return Err(Error::SignInNotIsolated { reason });
+        }
         if claude::program(&self.ctx).is_none() {
             return Err(Error::ClaudeProgramMissing {
                 program: self.ctx.claude_program().display().to_string(),

@@ -461,10 +461,17 @@ impl Pitboard {
     pub fn switch_to(&self, label: String) -> Result<Switched, PitboardError> {
         changed(self.core.switch_to(&label), |outcome, warnings| Switched {
             outcome: match outcome {
-                switch::Outcome::Switched { from, to, .. } => Switch::Switched {
+                switch::Outcome::Switched {
+                    from, to, adoption, ..
+                } => Switch::Switched {
                     from,
                     to,
-                    adoption_ceiling_seconds: switch::ADOPTION_CEILING_SECONDS,
+                    // Zero where nothing follows on its own, which the app renders as an
+                    // instruction rather than as a countdown that would never end.
+                    adoption_ceiling_seconds: match adoption {
+                        pitboard_core::provider::Adoption::PollingWithin(seconds) => seconds,
+                        pitboard_core::provider::Adoption::RestartRequired { .. } => 0,
+                    },
                 },
                 switch::Outcome::AlreadyActive { label } => Switch::AlreadyActive { label },
             },

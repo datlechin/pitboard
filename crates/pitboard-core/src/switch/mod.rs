@@ -6,6 +6,7 @@
 //! writes become durable before destructive ones, so a run that dies midway leaves a spare
 //! copy, never a missing one.
 
+use crate::provider;
 use crate::provider::ProviderId;
 use crate::provider::claude::configfile;
 use crate::provider::claude::live as claude_live;
@@ -21,7 +22,7 @@ mod journal;
 #[cfg(test)]
 mod refusals;
 mod rename;
-mod renew;
+pub(crate) mod renew;
 mod uninstall;
 
 pub use crate::pending::Reclaimed;
@@ -55,6 +56,10 @@ pub enum Outcome {
         from: String,
         to: String,
         parked: Park,
+        /// When a session already running will be using the incoming login, as this tool
+        /// answers it. Carried rather than read from a constant, because the honest answer
+        /// for two of the three tools is that nothing follows until they are restarted.
+        adoption: provider::Adoption,
     },
     /// Not a failure: the state the caller asked for already holds.
     AlreadyActive { label: String },
@@ -72,7 +77,7 @@ pub enum Outcome {
 /// Measured on one real account: the slice is 524 bytes against 506 for the OAuth block
 /// alone, which is nothing against the 4032-byte ceiling. An account holding a device token
 /// has not been measured, and the write path handles an oversized login either way.
-fn slice_of(document: &Value) -> Result<Value> {
+pub(crate) fn slice_of(document: &Value) -> Result<Value> {
     let object = document
         .as_object()
         .ok_or_else(|| Error::LiveCredentialShapeUnexpected {
@@ -200,14 +205,34 @@ fn lock_file(ctx: &Context) -> Result<(std::fs::File, PathBuf)> {
 
 /// Who a live access token belongs to. When this cannot be answered, nothing moves: a login
 /// filed under a guessed account takes two accounts with it.
-fn identify(ctx: &Context, access_token: &str) -> Result<api::Owner> {
-    api::owner(ctx, access_token).map_err(|e| match e {
-        api::ApiError::Unauthorized => Error::SessionExpired,
-        other => Error::IdentityUnverifiable {
-            cause: crate::error::Cause::of(&other),
-            detail: other.to_string(),
-        },
-    })
+/// Whose login this document holds.
+///
+/// Through the provider, because the answer costs a network round trip for Claude Code and
+/// nothing at all for Codex, whose login carries a signed token naming the account. The
+/// caller wants the answer and should not have to know which.
+pub(super) fn identify_document(
+    ctx: &Context,
+    which: ProviderId,
+    document: &Value,
+) -> Result<api::Owner> {
+    let credential = provider::Credential::new(which, document.clone());
+    provider::of(which)
+        .identify(ctx, &credential)
+        .map(|found| api::Owner {
+            account_uuid: found.account_id,
+            email: found.email,
+            organization_uuid: found.group.unwrap_or_default(),
+        })
+        .map_err(|e| match e {
+            provider::ProviderError::Unauthorized => Error::SessionExpired,
+            provider::ProviderError::ShapeUnexpected { detail, .. } => {
+                Error::LiveCredentialShapeUnexpected { detail }
+            }
+            other => Error::IdentityUnverifiable {
+                cause: crate::error::Cause::of_provider(&other),
+                detail: other.to_string(),
+            },
+        })
 }
 
 fn access_token(document: &Value) -> Result<String> {
@@ -240,7 +265,7 @@ pub fn switch(settled: Settled, label: &str) -> Result<(Outcome, Vec<Warning>)> 
     let live = store::read(&claude_live::chain(ctx), &service)?
         .ok_or_else(|| claude::nothing_signed_in(ctx))?;
     let identified_with = access_token(&live)?;
-    let outgoing = identify(ctx, &identified_with)?;
+    let outgoing = identify_document(ctx, ProviderId::Claude, &live)?;
 
     if outgoing.account_uuid == target.account_uuid {
         if state.active_for(ProviderId::Claude) != Some(label) {
@@ -285,18 +310,22 @@ pub fn switch(settled: Settled, label: &str) -> Result<(Outcome, Vec<Warning>)> 
         serde_json::from_str(&before_raw).map_err(|e| Error::LiveCredentialShapeUnexpected {
             detail: e.to_string(),
         })?;
+    // Which tool's login this is, and therefore which rules apply to slicing it, putting
+    // another account's in, and reading a handle off its refresh token.
+    let tool = provider::of(target.provider());
     // A refresh keeps the account, so an unchanged access token needs no second round trip.
     // A sign-in between the two reads would not keep it.
     let now_token = access_token(&before)?;
     if now_token != identified_with
-        && identify(ctx, &now_token)?.account_uuid != outgoing.account_uuid
+        && identify_document(ctx, ProviderId::Claude, &before)?.account_uuid
+            != outgoing.account_uuid
     {
         return Err(Error::SignedInAccountChanged);
     }
 
     // Checked before anything is parked, so a switch that could never be written changes
     // nothing.
-    let next = splice(&before, &incoming)?;
+    let next = to_body(tool.splice(&before, &incoming).map_err(shape)?);
     // Asked once. The answer is about the backend that would take this write, so a login
     // living in the fallback file is not told it has the keychain's ceiling.
     let price = store::cost(&claude_live::chain(ctx), &service, &next);
@@ -330,7 +359,7 @@ pub fn switch(settled: Settled, label: &str) -> Result<(Outcome, Vec<Warning>)> 
             park_service: park_service.clone(),
             incoming_service: held.service.clone(),
             // Which side the live credential came from, answerable without asking anyone.
-            from_fingerprint: park::fingerprint_of(&before["claudeAiOauth"]),
+            from_fingerprint: tool.fingerprint(&before),
             to_fingerprint: held.refresh_fingerprint.clone(),
         },
     )?;
@@ -339,7 +368,7 @@ pub fn switch(settled: Settled, label: &str) -> Result<(Outcome, Vec<Warning>)> 
     // Until the incoming login is installed there is nothing for a later run to finish, so
     // a failure here takes the record of intent away with it. A copy that was written but
     // could not be recorded is deleted: nothing that survives would name it.
-    let parked = match park::store_at(ctx, &park_service, &slice_of(&before)?) {
+    let parked = match park::store_at(ctx, &park_service, &tool.slice(&before).map_err(shape)?) {
         Ok(parked) => parked,
         Err(e) => {
             clear_journal(ctx);
@@ -355,7 +384,30 @@ pub fn switch(settled: Settled, label: &str) -> Result<(Outcome, Vec<Warning>)> 
     }
     fault::point("switch.park_recorded");
 
-    if let Err(e) = install(ctx, &service, &next, &before_raw, &outgoing_label, label) {
+    // For a tool whose own sign-out revokes whatever it finds stored, there must never be
+    // two usable copies of one account's login at rest. The copy is read back before
+    // anything overwrites the original, so a park that did not survive the write is found
+    // here, while the login it copies is still where it was.
+    if tool.park_semantics() == provider::ParkSemantics::MoveOnly
+        && store::vault_read(ctx, &parked.service)?.is_none()
+    {
+        state.discard(&parked.service);
+        state::save(ctx, &state)?;
+        clear_journal(ctx);
+        return Err(Error::ParkedCredentialMissing {
+            label: outgoing_label,
+        });
+    }
+
+    if let Err(e) = install(
+        ctx,
+        target.provider(),
+        &service,
+        &next,
+        &before_raw,
+        &outgoing_label,
+        label,
+    ) {
         // Nobody could say what the slot holds. Keep every copy, and keep the record of
         // intent, so the next run with a store that answers finishes this or undoes it.
         // Everything below deletes something or forgets something, and neither is a thing
@@ -435,6 +487,7 @@ pub fn switch(settled: Settled, label: &str) -> Result<(Outcome, Vec<Warning>)> 
         .collect();
     Ok((
         Outcome::Switched {
+            adoption: tool.adoption(),
             from: outgoing_label,
             to: label.to_string(),
             parked,
@@ -523,7 +576,7 @@ const ACCOUNT_SCOPED: [&str; 4] = [
 /// The live document with the incoming login in place of the outgoing one, and nothing of
 /// the outgoing account left behind. Claude Code makes these keys again as it needs them,
 /// which is the state a logout and a fresh login would leave.
-fn splice(before: &Value, incoming: &Value) -> Result<String> {
+pub(crate) fn splice(before: &Value, incoming: &Value) -> Result<String> {
     let mut next = before.clone();
     let document = next
         .as_object_mut()
@@ -543,8 +596,26 @@ fn splice(before: &Value, incoming: &Value) -> Result<String> {
     Ok(serde_json::to_string(&next).expect("a credential document stays serialisable"))
 }
 
+/// A provider saying a login is not the shape it keeps.
+///
+/// Only the shape errors reach the switch this way. Anything about the network keeps the
+/// code the step it happened in gives it, because "could not reach Anthropic while proving
+/// who the incoming login belongs to" and "could not reach Anthropic for usage" are the
+/// same failure and not the same problem.
+fn shape(error: provider::ProviderError) -> Error {
+    Error::LiveCredentialShapeUnexpected {
+        detail: error.to_string(),
+    }
+}
+
+/// A spliced document as bytes to write.
+fn to_body(document: Value) -> String {
+    serde_json::to_string(&document).expect("a credential document stays serialisable")
+}
+
 fn install(
     ctx: &Context,
+    which: ProviderId,
     service: &str,
     next: &str,
     before_raw: &str,
@@ -552,7 +623,13 @@ fn install(
     to: &str,
 ) -> Result<()> {
     install_with(
-        |body| store::write_raw(&claude_live::chain(ctx), service, body),
+        |body| {
+            let document: Value =
+                serde_json::from_str(body).map_err(|e| store::Error::Malformed(e.to_string()))?;
+            let tool = provider::of(which);
+            tool.install_live(ctx, &provider::Credential::new(tool.id(), document))
+                .map_err(|e| store::Error::Write(e.to_string()))
+        },
         || store::read_raw(&claude_live::chain(ctx), service),
         next,
         before_raw,

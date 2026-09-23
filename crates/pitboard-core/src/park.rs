@@ -60,15 +60,16 @@ pub fn store_at(ctx: &Context, service: &str, document: &Value) -> Result<Park> 
 
 /// What the account index records about a login: nothing secret.
 pub fn describe(service: &str, parked_at: i64, document: &Value) -> Park {
-    let oauth = oauth_in(document);
-    // Claude Code records both expiries in epoch milliseconds.
-    let expiry = |key: &str| oauth.get(key).and_then(Value::as_i64).map(|ms| ms / 1000);
+    // Through the provider: where the dates are and what unit they are in is a fact about
+    // the tool, and the three disagree on both.
+    let tool = crate::provider::of(crate::provider::ProviderId::Claude);
+    let expiry = tool.expiry(document);
     Park {
         service: service.to_string(),
         parked_at,
-        refresh_fingerprint: fingerprint_of(oauth),
-        access_expires_at: expiry("expiresAt"),
-        refresh_expires_at: expiry("refreshTokenExpiresAt"),
+        refresh_fingerprint: tool.fingerprint(document),
+        access_expires_at: expiry.access_expires_at,
+        refresh_expires_at: expiry.refresh_expires_at,
     }
 }
 

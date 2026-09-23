@@ -5,7 +5,7 @@
 //! survives Claude Code rotating the token. When any fact cannot be read, recovery changes
 //! nothing and keeps the record.
 
-use super::{Error, Result, identify};
+use super::{Error, Result, identify_document};
 use crate::context::Context;
 use crate::provider::ProviderId;
 use crate::provider::claude::live as claude_live;
@@ -163,13 +163,12 @@ fn read_park(ctx: &Context, service: &str) -> Option<Option<Value>> {
 }
 
 fn live_owner(ctx: &Context) -> std::result::Result<String, String> {
-    let live = store::read(&claude_live::chain(ctx), &claude::live_service(ctx))
+    let live = crate::provider::of(ProviderId::Claude)
+        .read_live(ctx)
         .map_err(|e| e.to_string())?
-        .ok_or("nothing is signed in")?;
-    let token = live["claudeAiOauth"]["accessToken"]
-        .as_str()
-        .ok_or("the signed-in credential has no access token")?;
-    identify(ctx, token)
+        .ok_or("nothing is signed in")?
+        .raw;
+    identify_document(ctx, ProviderId::Claude, &live)
         .map(|owner| owner.account_uuid)
         .map_err(|e| e.to_string())
 }

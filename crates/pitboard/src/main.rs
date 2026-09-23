@@ -4,8 +4,9 @@ use clap::{CommandFactory, Parser, Subcommand};
 use pitboard_core::context::Context;
 use pitboard_core::doctor;
 use pitboard_core::error::Error;
+use pitboard_core::provider::Adoption;
 use pitboard_core::service::{Changing, Done, Failed, Pitboard, Warning};
-use pitboard_core::switch::{self, Enrolled, Outcome, Renewal};
+use pitboard_core::switch::{Enrolled, Outcome, Renewal};
 use serde_json::{Value, json};
 use std::io::{IsTerminal, Read, Write};
 use std::process::ExitCode;
@@ -356,22 +357,44 @@ fn use_account(pitboard: &Pitboard, label: &str) -> Report {
             json!({ "to": label, "changed": false }),
             format!("{} is already signed in.\n", paint(BOLD, &label)),
         ),
-        Outcome::Switched { from, to, parked } => (
-            json!({
-                "from": from,
-                "to": to,
-                "changed": true,
-                "parked_at": parked.parked_at,
-                "adoption_ceiling_seconds": switch::ADOPTION_CEILING_SECONDS,
-            }),
-            format!(
-                "Switched to {}; {} is parked.\n\
-                 Claude Code sessions already running follow within {} seconds.\n",
-                paint(BOLD, &to),
-                paint(BOLD, &from),
-                switch::ADOPTION_CEILING_SECONDS
-            ),
-        ),
+        Outcome::Switched {
+            from,
+            to,
+            parked,
+            adoption,
+        } => {
+            // The tool's own answer, not a constant. A number of seconds is only ever shown
+            // for a tool that really does follow on its own within them.
+            let (seconds, follows) = match adoption {
+                Adoption::PollingWithin(seconds) => (
+                    seconds,
+                    format!(
+                        "Claude Code sessions already running follow within {seconds} seconds.\n"
+                    ),
+                ),
+                Adoption::RestartRequired { program } => (
+                    0,
+                    format!(
+                        "Restart any running `{program}` for this to take effect. \
+                         It will not pick the switch up on its own.\n"
+                    ),
+                ),
+            };
+            (
+                json!({
+                    "from": from,
+                    "to": to,
+                    "changed": true,
+                    "parked_at": parked.parked_at,
+                    "adoption_ceiling_seconds": seconds,
+                }),
+                format!(
+                    "Switched to {}; {} is parked.\n{follows}",
+                    paint(BOLD, &to),
+                    paint(BOLD, &from),
+                ),
+            )
+        }
     })
 }
 

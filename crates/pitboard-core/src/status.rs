@@ -8,6 +8,7 @@
 use crate::api::{self, ApiError, Owner};
 use crate::context::Context;
 use crate::error::Cause;
+use crate::provider::ProviderId;
 use crate::provider::claude::live as claude_live;
 use crate::provider::claude::paths as claude;
 use crate::state::{Park, State};
@@ -177,18 +178,18 @@ fn access_token(document: &Value) -> Option<String> {
 }
 
 /// The token to ask about a parked account with, or why there is none.
-fn parked_token(
+fn parked_document(
     ctx: &Context,
     label: &str,
     parked: Option<&Park>,
     now: i64,
-) -> Result<String, Stale> {
+) -> Result<Value, Stale> {
     match parked {
         None => Err(Stale::NothingParked),
         Some(p) if !p.askable_at(now) => Err(Stale::ParkedAccessExpired),
         Some(p) => park::load(ctx, label, p)
             .ok()
-            .and_then(|oauth| access_token(&oauth))
+            .filter(|document| access_token(document).is_some())
             .ok_or(Stale::ParkUnreadable),
     }
 }
@@ -249,12 +250,25 @@ pub fn gather_offline(ctx: &Context, state: &State) -> Report {
 /// made it.
 type Asked = (Result<Snapshot, Stale>, Option<(String, budget::Outcome)>);
 
+/// A provider's failure as the usage path has always classified one.
+fn from_provider(error: crate::provider::ProviderError) -> ApiError {
+    use crate::provider::ProviderError as P;
+    match error {
+        P::Unauthorized => ApiError::Unauthorized,
+        P::RateLimited { retry_after } => ApiError::RateLimited { retry_after },
+        P::Network { detail, .. } => ApiError::Network(detail),
+        P::Unexpected { status, .. } => ApiError::Unexpected { status },
+        P::Malformed(detail) | P::ShapeUnexpected { detail, .. } => ApiError::Malformed(detail),
+        P::InvalidGrant => ApiError::InvalidGrant,
+    }
+}
+
 /// Ask about one account, or say why not.
 fn ask_usage(
     ctx: &Context,
+    which: ProviderId,
     account_uuid: Option<&str>,
-    token: &str,
-    signed_in: bool,
+    document: &Value,
     remembered: Option<&Snapshot>,
     fresh: bool,
 ) -> Asked {
@@ -270,7 +284,15 @@ fn ask_usage(
         };
         return (Err(stale), None);
     }
-    let answer = api::usage(ctx, token);
+    // Through the provider, because what a usage call needs is not the same everywhere:
+    // Codex sends an account id header it reads out of the credential, and Gemini needs a
+    // project id from a file the credential never mentions.
+    let answer = crate::provider::of(which)
+        .usage(
+            ctx,
+            &crate::provider::Credential::new(which, document.clone()),
+        )
+        .map_err(from_provider);
     let learned = account_uuid.and_then(|uuid| {
         let outcome = match &answer {
             Ok(_) => budget::Outcome::Answered,
@@ -286,19 +308,24 @@ fn ask_usage(
         };
         Some((uuid.to_string(), outcome))
     });
-    (answer.map_err(|e| Stale::of(&e, signed_in)), learned)
+    (
+        answer.map_err(|e| Stale::of(&e, account_uuid.is_none())),
+        learned,
+    )
 }
 
 pub fn gather(ctx: &Context, state: &State, fresh: bool) -> Report {
     let now = ctx.now();
-    let live_token = store::read(&claude_live::chain(ctx), &claude::live_service(ctx))
+    // The whole document, not a token out of it: what a usage call needs is not the same
+    // for every tool, and pulling one field out here would decide that for all of them.
+    let live_document = store::read(&claude_live::chain(ctx), &claude::live_service(ctx))
         .ok()
         .flatten()
-        .and_then(|doc| access_token(&doc["claudeAiOauth"]));
-    let parked_tokens: Vec<Result<String, Stale>> = state
+        .filter(|doc| access_token(&doc["claudeAiOauth"]).is_some());
+    let parked_documents: Vec<Result<Value, Stale>> = state
         .accounts
         .iter()
-        .map(|a| parked_token(ctx, &a.label, a.parked.as_ref(), now))
+        .map(|a| parked_document(ctx, &a.label, a.parked.as_ref(), now))
         .collect();
     let config = claude::load_config(ctx).ok();
     let live_uuid = config
@@ -311,30 +338,35 @@ pub fn gather(ctx: &Context, state: &State, fresh: bool) -> Report {
         std::thread::scope(|scope| {
             // Who owns the live login is asked whatever the budget says: it decides which
             // account a row belongs to, it is not a measurement, and a switch needs it.
-            let owner = scope.spawn(|| live_token.as_deref().map(|t| api::owner(ctx, t)));
-            let live = scope.spawn(|| match live_token.as_deref() {
-                Some(token) => ask_usage(
+            let owner = scope.spawn(|| {
+                live_document
+                    .as_ref()
+                    .and_then(|doc| access_token(&doc["claudeAiOauth"]))
+                    .map(|t| api::owner(ctx, &t))
+            });
+            let live = scope.spawn(|| match live_document.as_ref() {
+                Some(document) => ask_usage(
                     ctx,
+                    ProviderId::Claude,
                     live_uuid.as_deref(),
-                    token,
-                    true,
+                    document,
                     live_uuid.as_deref().and_then(|u| remembered.get(u)),
                     fresh,
                 ),
                 None => (Err(Stale::NothingSignedIn), None),
             });
-            let parked: Vec<_> = parked_tokens
+            let parked: Vec<_> = parked_documents
                 .iter()
                 .zip(state.accounts.iter())
                 .map(|(token, account)| {
                     let remembered = &remembered;
-                    scope.spawn(move || match token.as_deref() {
+                    scope.spawn(move || match token.as_ref() {
                         Err(stale) => (Err(*stale), None),
-                        Ok(token) => ask_usage(
+                        Ok(document) => ask_usage(
                             ctx,
+                            account.provider(),
                             Some(&account.account_uuid),
-                            token,
-                            false,
+                            document,
                             remembered.get(&account.account_uuid),
                             fresh,
                         ),
@@ -717,10 +749,10 @@ mod tests {
     #[test]
     fn a_parked_login_past_its_access_expiry_is_not_asked() {
         let ctx = Context::from_env();
-        let token = parked_token(&ctx, "personal", Some(&parked(NOW + 86_400)), NOW);
+        let token = parked_document(&ctx, "personal", Some(&parked(NOW + 86_400)), NOW);
         assert_eq!(token, Err(Stale::ParkedAccessExpired));
         assert_eq!(
-            parked_token(&ctx, "personal", None, NOW),
+            parked_document(&ctx, "personal", None, NOW),
             Err(Stale::NothingParked)
         );
     }

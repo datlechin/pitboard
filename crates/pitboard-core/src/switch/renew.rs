@@ -3,9 +3,9 @@
 //! chain. The login signed in is Claude Code's, and is never renewed here.
 
 use super::{journal, purge, try_exclusive};
-use crate::api::{self, ApiError};
 use crate::context::Context;
 use crate::error::{Error, Result};
+use crate::provider::ProviderId;
 use crate::state::{Park, State};
 use crate::{park, state, store};
 use serde_json::Value;
@@ -14,7 +14,7 @@ use serde_json::Value;
 const AHEAD_SECONDS: i64 = 120;
 
 /// What Claude Code asks for when a login records no scopes of its own.
-const DEFAULT_SCOPES: [&str; 6] = [
+pub(crate) const DEFAULT_SCOPES: [&str; 6] = [
     "user:profile",
     "user:inference",
     "user:sessions:claude_code",
@@ -147,10 +147,10 @@ pub fn renew_due(ctx: &Context, due: Due) -> Vec<(String, Renewal)> {
 
 /// What one round trip produced, before anything is written down.
 struct Asked {
-    /// The parked document as it was, whole, which the fresh tokens are folded into.
-    oauth: Value,
-    fresh: Option<api::Renewed>,
-    /// Anthropic refuses this login for good.
+    /// The parked document with fresh tokens already folded in, the way the tool that owns
+    /// it stores its own after renewing, so it reads the same once restored.
+    renewed: Option<Value>,
+    /// The service refuses this login for good.
     refused: bool,
 }
 
@@ -158,39 +158,29 @@ struct Asked {
 /// at once.
 fn ask(ctx: &Context, label: &str, held: &Park) -> Result<Asked> {
     let document = park::load(ctx, label, held)?;
-    let oauth = park::oauth_in(&document).clone();
-    let refresh = oauth["refreshToken"].as_str().unwrap_or_default();
-    let mut scopes: Vec<String> = oauth["scopes"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .filter_map(Value::as_str)
-        .map(str::to_owned)
-        .collect();
-    if scopes.is_empty() {
-        scopes = DEFAULT_SCOPES.map(str::to_owned).to_vec();
-    }
-    let client_id = oauth["clientId"].as_str();
-    match api::renew(ctx, refresh, &scopes, client_id) {
+    let which = ProviderId::Claude;
+    let tool = crate::provider::of(which);
+    let credential = crate::provider::Credential::new(which, document);
+    match tool.renew(ctx, &credential) {
         Ok(fresh) => Ok(Asked {
-            oauth: document,
-            fresh: Some(fresh),
+            renewed: Some(fresh.raw),
             refused: false,
         }),
-        Err(ApiError::InvalidGrant) => Ok(Asked {
-            oauth: document,
-            fresh: None,
+        Err(crate::provider::ProviderError::InvalidGrant) => Ok(Asked {
+            renewed: None,
             refused: true,
         }),
         // Unreachable or asked to slow down: nothing is written and the next run tries.
-        Err(ApiError::Network(_) | ApiError::RateLimited { .. }) => Ok(Asked {
-            oauth: document,
-            fresh: None,
+        Err(
+            crate::provider::ProviderError::Network { .. }
+            | crate::provider::ProviderError::RateLimited { .. },
+        ) => Ok(Asked {
+            renewed: None,
             refused: false,
         }),
         Err(e) => Err(Error::RenewalFailed {
             label: label.to_string(),
-            cause: Some(crate::error::Cause::of(&e)),
+            cause: Some(crate::error::Cause::of_provider(&e)),
             detail: e.to_string(),
         }),
     }
@@ -229,22 +219,12 @@ fn apply(
         state::save(ctx, state)?;
         return Ok(Renewal::Refused);
     }
-    let Some(fresh) = asked.fresh else {
+    let Some(next) = asked.renewed else {
         return Ok(Renewal::Deferred);
     };
 
     // The old refresh token may already be spent, so the answer is written at once, and a
     // second time under another name if the first write fails.
-    // Anchored to the clock of the answer that carried these lifetimes, where it gave one.
-    // `expires_in` and `refresh_token_expires_in` are relative, so whatever they are added
-    // to decides when the login expires: added to a machine running ahead, a freshly
-    // renewed park reads as already lapsed and every status renews it again, rotating the
-    // refresh chain on a loop; added to one running behind, a lapsed park looks restorable
-    // and a switch installs a login that cannot work.
-    let anchor = fresh
-        .at
-        .map_or_else(|| ctx.now_millis(), |seconds| seconds * 1000);
-    let next = park::renewed(&asked.oauth, &fresh, anchor);
     let uuid = state
         .get(label)
         .map(|a| a.account_uuid.clone())

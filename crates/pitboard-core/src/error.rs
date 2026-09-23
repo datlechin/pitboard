@@ -58,6 +58,19 @@ impl Cause {
         }
     }
 
+    /// The same question asked of a provider rather than of Anthropic directly.
+    pub fn of_provider(error: &crate::provider::ProviderError) -> Cause {
+        use crate::provider::ProviderError as P;
+        match error {
+            P::Unauthorized => Cause::TokenExpired,
+            P::RateLimited { .. } => Cause::RateLimited,
+            P::Network { .. } => Cause::Unreachable,
+            P::Unexpected { .. } => Cause::ServerError,
+            P::Malformed(_) | P::ShapeUnexpected { .. } => Cause::AnswerNotUnderstood,
+            P::InvalidGrant => Cause::LoginRefused,
+        }
+    }
+
     /// Stable, for a program to branch on; the same as its JSON form.
     pub fn code(self) -> &'static str {
         match self {
@@ -416,6 +429,15 @@ pub enum Error {
     #[error("the sign-in did not finish, so nothing was enrolled.")]
     SignInIncomplete,
 
+    /// Signing in to a second account works by pointing the tool's own login at a scratch
+    /// directory. Where that does not isolate it from the live login, running one would
+    /// write over the account somebody is using, so pitboard will not.
+    #[error(
+        "pitboard will not sign in to a second account on this machine: {reason} Signing \
+         in would write over the login you are using."
+    )]
+    SignInNotIsolated { reason: String },
+
     #[error(
         "another `pitboard enroll --sign-in` is already waiting for its sign-in. Finish or \
          cancel that one first."
@@ -485,6 +507,7 @@ impl Error {
             RecoveryUndetermined { .. } => "recovery_undetermined",
             ClaudeNotFound => "claude_not_found",
             SignInIncomplete => "sign_in_incomplete",
+            SignInNotIsolated { .. } => "sign_in_not_isolated",
             RenewalFailed { .. } => "renewal_failed",
             SignInInProgress => "sign_in_in_progress",
             Usage(_) => "usage",
