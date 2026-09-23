@@ -84,7 +84,7 @@ fn every_tool_is_pointed_at_a_scratch_home() {
             ))
         })
         .collect();
-    for home in ["CLAUDE_CONFIG_DIR", "CODEX_HOME"] {
+    for home in ["CLAUDE_CONFIG_DIR", "CODEX_HOME", "PITBOARD_HOME"] {
         let set = named.iter().find(|(k, _)| k == home).unwrap_or_else(|| {
             panic!("{home} is not pointed anywhere, so a test reads a real one")
         });
@@ -94,6 +94,20 @@ fn every_tool_is_pointed_at_a_scratch_home() {
             set.1
         );
     }
+    // Set at all, even empty, this pins Claude Code's default slot whatever
+    // CLAUDE_CONFIG_DIR says, which is the real login. It has to be taken away, not left to
+    // whatever the person running the tests exported.
+    let removed: Vec<String> = command
+        .get_envs()
+        .filter(|(_, v)| v.is_none())
+        .map(|(k, _)| k.to_string_lossy().into_owned())
+        .collect();
+    assert!(
+        removed
+            .iter()
+            .any(|k| k == "CLAUDE_SECURESTORAGE_CONFIG_DIR"),
+        "CLAUDE_SECURESTORAGE_CONFIG_DIR is inherited, so a test can read the real slot"
+    );
 }
 
 use std::path::PathBuf;

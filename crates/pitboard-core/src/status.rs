@@ -325,13 +325,31 @@ fn slot_of(ctx: &Context) -> Slot {
 /// enough to say who is in use; never good enough to move a login. It used to read Claude
 /// Code's alone, so a signed-in Codex account read as parked whenever the app had no
 /// network.
+/// Which tools a report is about: the one a bare name means, which is what pitboard was
+/// before there was a second, and every other tool somebody has enrolled an account of.
+///
+/// A tool is opted into by enrolling one of its accounts. Until then pitboard reads nothing
+/// of it and asks its service nothing: somebody who uses pitboard for Claude Code and also
+/// has Codex installed has not asked for their Codex login to be read, or sent to OpenAI on
+/// every refresh of a menu bar.
+fn in_use(state: &State) -> Vec<ProviderId> {
+    ProviderId::ALL
+        .iter()
+        .copied()
+        .filter(|&which| {
+            which == crate::label::DEFAULT || state.accounts.iter().any(|a| a.provider() == which)
+        })
+        .collect()
+}
+
 pub fn gather_offline(ctx: &Context, state: &State) -> Report {
-    let recorded: BTreeMap<ProviderId, crate::provider::Identity> = ProviderId::ALL
+    let tools = in_use(state);
+    let recorded: BTreeMap<ProviderId, crate::provider::Identity> = tools
         .iter()
         .filter_map(|&which| Some((which, crate::provider::of(which).recorded_identity(ctx)?)))
         .collect();
     let facts = Facts {
-        live: ProviderId::ALL
+        live: tools
             .iter()
             .map(|&which| {
                 let login = LiveLogin {
@@ -603,9 +621,9 @@ pub fn gather(ctx: &Context, state: &State, fresh: bool) -> Report {
     // Each tool's live login, whole, or why it could not be read. Not a token out of it:
     // what a usage call needs is not the same everywhere, and pulling one field out here
     // would decide that for all of them.
-    let live_documents: Vec<(ProviderId, Result<Option<Value>, ProviderError>)> = ProviderId::ALL
-        .iter()
-        .map(|&which| {
+    let live_documents: Vec<(ProviderId, Result<Option<Value>, ProviderError>)> = in_use(state)
+        .into_iter()
+        .map(|which| {
             let read = crate::provider::of(which)
                 .read_live(ctx)
                 .map(|found| found.map(|credential| credential.raw));
@@ -1801,6 +1819,31 @@ mod tests {
         assert_eq!(said.stale, Some(Stale::LoginUnusable));
         assert!(said.email.is_empty() && said.account_uuid.is_empty());
         assert_eq!(api.calls(), 0);
+    }
+
+    /// Somebody who uses pitboard for Claude Code and also has Codex signed in has not
+    /// asked for their Codex login to be read or sent anywhere. Until a Codex account is
+    /// enrolled, status says nothing about Codex and asks OpenAI nothing.
+    #[test]
+    fn a_tool_with_nothing_enrolled_is_neither_read_nor_asked() {
+        let home = scratch("not-opted-in");
+        let (ctx, _mem, api) = machine(&home.0, None);
+        plant_codex(&ctx, &codex_login("acc-B", "acc-B"));
+        let s = State::default();
+
+        let report = gather(&ctx, &s, true);
+        assert!(
+            report.rows.iter().all(|r| r.provider != ProviderId::Codex),
+            "no Codex row for a machine that enrolled no Codex account"
+        );
+        assert!(
+            api.asked()
+                .iter()
+                .all(|asked| !matches!(asked, crate::api::scripted::Asked::Usage(t) if t.contains("acc-B"))),
+            "and nothing was asked about it"
+        );
+        let offline = gather_offline(&ctx, &s);
+        assert!(offline.rows.iter().all(|r| r.provider != ProviderId::Codex));
     }
 
     /// Codex writes its login with a plain truncating write, so a read can catch it half

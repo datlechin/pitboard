@@ -64,6 +64,27 @@ pub fn output_within(mut command: Command, input: &[u8], limit: Duration) -> io:
 /// Read from `ps`, which both platforms pitboard runs on ship with the same flags, rather
 /// than from `/proc` on one and `sysctl` on the other. What is compared is the executable's
 /// own name, so a script or a shell that merely mentions the program is not counted.
+#[cfg(target_os = "linux")]
+pub fn running(program: &str) -> Option<usize> {
+    // Linux says it in /proc, which every Linux has, where `/bin/ps` is not on every one:
+    // a slim container or NixOS has none, and the warning this feeds would quietly vanish.
+    let mut names = String::new();
+    for entry in std::fs::read_dir("/proc").ok()?.flatten() {
+        if entry
+            .file_name()
+            .to_string_lossy()
+            .bytes()
+            .all(|b| b.is_ascii_digit())
+            && let Ok(comm) = std::fs::read_to_string(entry.path().join("comm"))
+        {
+            names.push_str(comm.trim());
+            names.push('\n');
+        }
+    }
+    Some(count_named(&names, program))
+}
+
+#[cfg(not(target_os = "linux"))]
 pub fn running(program: &str) -> Option<usize> {
     let mut ps = Command::new("/bin/ps");
     ps.args(["-A", "-o", "comm="]);
@@ -103,11 +124,20 @@ mod tests {
         assert_eq!(count_named(listing, "gemini"), 0);
     }
 
-    /// The list is readable on every machine these tests run on, and this test is one of
-    /// the processes in it.
+    /// The list is readable on every machine these tests run on, and this test's own
+    /// process is in it, found by its own name.
     #[test]
     fn the_process_list_can_be_read() {
-        assert!(running("definitely-not-a-program-name").is_some());
+        assert_eq!(running("definitely-not-a-program-name"), Some(0));
+        let me = std::env::current_exe().expect("this test's own binary");
+        let name = me.file_name().unwrap().to_string_lossy().into_owned();
+        // Linux keeps fifteen characters of a process's name, and test binaries are longer.
+        let name: String = if cfg!(target_os = "linux") {
+            name.chars().take(15).collect()
+        } else {
+            name
+        };
+        assert!(running(&name).is_some_and(|n| n >= 1), "{name} is running");
     }
 
     #[test]
