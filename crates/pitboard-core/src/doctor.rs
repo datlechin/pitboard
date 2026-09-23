@@ -95,7 +95,7 @@ fn park_facts(ctx: &Context, state: &State, live_uuid: Option<&str>) -> Vec<Park
             // record of its last switch says nothing about a sign-in made elsewhere.
             active: match live_uuid {
                 Some(uuid) => a.account_uuid == uuid,
-                None => state.active.as_deref() == Some(a.label.as_str()),
+                None => state.active_for(a.provider()) == Some(a.label.as_str()),
             },
             park: a.parked.clone(),
             unreadable: a.parked.as_ref().and_then(|p| {
@@ -935,7 +935,12 @@ fn redaction_for(ctx: &Context, facts: &Facts) -> crate::redact::Sheet {
             sheet = sheet
                 .hide(account.email.clone(), "email")
                 .hide(account.account_uuid.clone(), "account")
-                .hide(account.organization_uuid.clone(), "org");
+                .hide(
+                    account
+                        .claude()
+                        .map_or_else(String::new, |c| c.organization_uuid.to_string()),
+                    "org",
+                );
         }
     }
     // A fingerprint is not a token, and it still identifies one login across reports.

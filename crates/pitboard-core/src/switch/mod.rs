@@ -6,6 +6,7 @@
 //! writes become durable before destructive ones, so a run that dies midway leaves a spare
 //! copy, never a missing one.
 
+use crate::provider::ProviderId;
 use crate::provider::claude::configfile;
 use crate::provider::claude::live as claude_live;
 use crate::provider::claude::paths as claude;
@@ -242,8 +243,8 @@ pub fn switch(settled: Settled, label: &str) -> Result<(Outcome, Vec<Warning>)> 
     let outgoing = identify(ctx, &identified_with)?;
 
     if outgoing.account_uuid == target.account_uuid {
-        if state.active.as_deref() != Some(label) {
-            state.active = Some(label.to_string());
+        if state.active_for(ProviderId::Claude) != Some(label) {
+            state.set_active(ProviderId::Claude, Some(label.to_string()));
             if let Some(account) = state.accounts.iter_mut().find(|a| a.label == label) {
                 account.last_used_at = Some(ctx.now());
             }
@@ -405,7 +406,7 @@ pub fn switch(settled: Settled, label: &str) -> Result<(Outcome, Vec<Warning>)> 
     }
 
     state.discard(&held.service);
-    state.active = Some(label.to_string());
+    state.set_active(ProviderId::Claude, Some(label.to_string()));
     if let Some(account) = state.accounts.iter_mut().find(|a| a.label == label) {
         account.last_used_at = Some(ctx.now());
     }
@@ -623,7 +624,7 @@ fn update_config(
     configfile::update(ctx, &path, |config| {
         configfile::splice_identity(
             config,
-            &target.oauth_account,
+            target.claude().map_or(&Value::Null, |c| c.oauth_account),
             &[outgoing_account, outgoing_org],
         )
     })

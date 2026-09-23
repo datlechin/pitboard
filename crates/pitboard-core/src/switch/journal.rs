@@ -7,6 +7,7 @@
 
 use super::{Error, Result, identify};
 use crate::context::Context;
+use crate::provider::ProviderId;
 use crate::provider::claude::live as claude_live;
 use crate::provider::claude::paths as claude;
 use crate::state::{Park, State};
@@ -149,7 +150,7 @@ fn apply(state: &mut State, journal: &Journal, repair: Repair) {
         }
     }
     if repair.landed && state.get(&journal.to_label).is_some() {
-        state.active = Some(journal.to_label.clone());
+        state.set_active(ProviderId::Claude, Some(journal.to_label.clone()));
         state.discard(&journal.incoming_service);
     }
 }
@@ -351,8 +352,10 @@ mod tests {
             label: label.into(),
             account_uuid: format!("{label}-uuid"),
             email: format!("{label}@example.com"),
-            organization_uuid: format!("{label}-org"),
-            oauth_account: serde_json::json!({}),
+            detail: state::Detail::Claude {
+                organization_uuid: format!("{label}-org"),
+                oauth_account: serde_json::json!({}),
+            },
             parked: parked.map(|s| Park {
                 service: s.into(),
                 parked_at: 1_699_000_000,
@@ -422,7 +425,7 @@ mod tests {
         assert!(repair.landed);
 
         apply(&mut s, &journal(), repair);
-        assert_eq!(s.active.as_deref(), Some("to"));
+        assert_eq!(s.active_for(ProviderId::Claude), Some("to"));
         assert_eq!(
             s.get("from").unwrap().parked.as_ref().unwrap().service,
             PARK
@@ -477,7 +480,8 @@ mod tests {
             "a park must never be filed under whatever account happens to hold a label"
         );
         assert_eq!(
-            s.active, None,
+            s.active_for(ProviderId::Claude),
+            None,
             "a destination that is gone is not made active"
         );
     }

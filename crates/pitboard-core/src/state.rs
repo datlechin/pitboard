@@ -7,13 +7,15 @@
 
 use crate::context::Context;
 use crate::error::{Error, Result};
+use crate::provider::ProviderId;
 use crate::provider::claude::paths as claude;
 use crate::{atomic, home};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 
-const SCHEMA: u32 = 3;
+const SCHEMA: u32 = 4;
 
 /// A login held for an account while another is signed in. There is at most one per
 /// account: once installed it is Claude Code's again, and Claude Code rotates it from then
@@ -39,15 +41,36 @@ impl Park {
     }
 }
 
+/// What one provider keeps about an account that the others have no equivalent of.
+///
+/// A tagged enum rather than a pile of optional fields, so no code reading a Codex account
+/// ever has to decide what an absent Claude organisation means for it. `provider` is the
+/// tag, and the variant's own fields sit beside `label` and `email` in the file, which is
+/// why a schema 3 account needs nothing moved to become a schema 4 one.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(tag = "provider", rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum Detail {
+    Claude {
+        organization_uuid: String,
+        /// Written into Claude Code's config on switching here. Only what Anthropic
+        /// confirmed, so Claude Code fetches the rest of its profile itself.
+        oauth_account: Value,
+    },
+}
+
+/// Claude Code's own extras, for a caller that has already established it is holding a
+/// Claude account.
+pub struct ClaudeDetail<'a> {
+    pub organization_uuid: &'a str,
+    pub oauth_account: &'a Value,
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Account {
     pub label: String,
     pub account_uuid: String,
     pub email: String,
-    pub organization_uuid: String,
-    /// Written into Claude Code's config on switching here. Only what Anthropic confirmed,
-    /// so Claude Code fetches the rest of its profile itself.
-    pub oauth_account: Value,
     pub parked: Option<Park>,
     /// When this account was last switched to, in epoch seconds.
     ///
@@ -60,6 +83,30 @@ pub struct Account {
     /// been switched to.
     #[serde(default)]
     pub last_used_at: Option<i64>,
+    /// Which tool's login this is, and whatever only that tool keeps.
+    #[serde(flatten)]
+    pub detail: Detail,
+}
+
+impl Account {
+    pub fn provider(&self) -> ProviderId {
+        match self.detail {
+            Detail::Claude { .. } => ProviderId::Claude,
+        }
+    }
+
+    /// Claude Code's extras, or `None` when this account belongs to another tool.
+    pub fn claude(&self) -> Option<ClaudeDetail<'_>> {
+        match &self.detail {
+            Detail::Claude {
+                organization_uuid,
+                oauth_account,
+            } => Some(ClaudeDetail {
+                organization_uuid,
+                oauth_account,
+            }),
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -67,12 +114,18 @@ pub struct State {
     pub schema: u32,
     pub machine: String,
     pub accounts: Vec<Account>,
-    pub active: Option<String>,
-    /// The credential slot `active` was recorded for. One state file serves every slot a
-    /// machine uses, and CLAUDE_CONFIG_DIR changes which keychain item is the live one, so
-    /// a record made in one slot says nothing about another.
+    /// Which account is signed in, per provider.
+    ///
+    /// One string until schema 4, which stopped being true the moment a machine could have
+    /// a Claude Code login and a Codex login at the same time. They are different programs
+    /// reading different stores; neither signs the other out.
     #[serde(default)]
-    pub slot: Option<String>,
+    pub active: BTreeMap<String, String>,
+    /// The credential slot each provider's `active` was recorded for. One state file serves
+    /// every slot a machine uses, and a tool's own home variable changes which store is the
+    /// live one, so a record made in one slot says nothing about another.
+    #[serde(default)]
+    pub slot: BTreeMap<String, String>,
     /// Parked items no account refers to any more. Listed in the same save that drops them
     /// and removed once deleted, so a delete that fails or is interrupted is retried.
     #[serde(default)]
@@ -85,14 +138,35 @@ impl Default for State {
             schema: SCHEMA,
             machine: machine_id(),
             accounts: Vec::new(),
-            active: None,
-            slot: None,
+            active: BTreeMap::new(),
+            slot: BTreeMap::new(),
             discarded: Vec::new(),
         }
     }
 }
 
 impl State {
+    /// Which account is signed in for this provider, as pitboard last recorded it.
+    pub fn active_for(&self, provider: ProviderId) -> Option<&str> {
+        self.active.get(provider.code()).map(String::as_str)
+    }
+
+    pub fn set_active(&mut self, provider: ProviderId, label: Option<String>) {
+        match label {
+            Some(label) => self.active.insert(provider.code().to_string(), label),
+            None => self.active.remove(provider.code()),
+        };
+    }
+
+    /// The credential slot this provider's `active` was recorded for.
+    pub fn slot_for(&self, provider: ProviderId) -> Option<&str> {
+        self.slot.get(provider.code()).map(String::as_str)
+    }
+
+    pub fn set_slot(&mut self, provider: ProviderId, slot: String) {
+        self.slot.insert(provider.code().to_string(), slot);
+    }
+
     /// Every label enrolled, for a message that would otherwise send someone to another
     /// command to find out.
     pub fn labels(&self) -> crate::error::Enrolled {
@@ -168,8 +242,11 @@ impl State {
                 email: taken.email.clone(),
             });
         }
-        if self.active.as_deref() == Some(from) {
-            self.active = Some(to.to_string());
+        let provider = self.get(from).map(Account::provider);
+        if let Some(provider) = provider
+            && self.active_for(provider) == Some(from)
+        {
+            self.set_active(provider, Some(to.to_string()));
         }
         let enrolled = self.labels();
         let account = self.get_mut(from).ok_or_else(|| Error::AccountUnknown {
@@ -259,10 +336,14 @@ pub(crate) fn load_any_machine(ctx: &Context) -> Result<(State, bool)> {
     let here = state.machine == machine_id();
     let mut state = state;
     // Which account is in use is a fact about one slot. Read from another, the record says
-    // nothing, and pitboard asks Anthropic who is signed in anyway.
+    // nothing, and pitboard asks the provider who is signed in anyway. Per provider, so a
+    // changed `CLAUDE_CONFIG_DIR` says nothing about Codex's record or Gemini's.
     let slot = claude::live_service(ctx);
-    if state.slot.is_some() && state.slot.as_deref() != Some(slot.as_str()) {
-        state.active = None;
+    if state
+        .slot_for(ProviderId::Claude)
+        .is_some_and(|recorded| recorded != slot)
+    {
+        state.set_active(ProviderId::Claude, None);
     }
     Ok((state, here))
 }
@@ -281,8 +362,12 @@ fn migrate(document: &mut serde_json::Value, path: &std::path::Path) -> Result<(
         .unwrap_or_default() as u32;
     match found {
         SCHEMA => Ok(()),
+        3 => {
+            three_to_four(document);
+            Ok(())
+        }
         // Nothing released wrote 1 or 2: the schema reached 3 before the first release.
-        0..SCHEMA => Err(Error::StateVersionUnknown {
+        0..3 => Err(Error::StateVersionUnknown {
             path: path.to_path_buf(),
             found,
         }),
@@ -294,10 +379,38 @@ fn migrate(document: &mut serde_json::Value, path: &std::path::Path) -> Result<(
     }
 }
 
+/// Schema 3 was Claude Code and nothing else, so every account in one is a Claude account
+/// and the two singular records are Claude's.
+///
+/// Deliberately the smallest transform there could be. Nothing is nested and nothing is
+/// renamed, because `Detail` is flattened and tagged: a schema 3 account already has
+/// `organization_uuid` and `oauth_account` as siblings of `label`, which is exactly where
+/// schema 4 reads them. All that is missing is the tag. No keychain item and no vault file
+/// is touched, so a bug here is recoverable by fixing the code and reading again, never by
+/// somebody signing in from scratch.
+fn three_to_four(document: &mut serde_json::Value) {
+    let claude = serde_json::Value::from(ProviderId::Claude.code());
+    if let Some(accounts) = document.get_mut("accounts").and_then(Value::as_array_mut) {
+        for account in accounts {
+            if let Some(fields) = account.as_object_mut() {
+                fields.insert("provider".into(), claude.clone());
+            }
+        }
+    }
+    for singular in ["active", "slot"] {
+        let was = document.get(singular).cloned().unwrap_or(Value::Null);
+        document[singular] = match was {
+            Value::String(label) => serde_json::json!({ ProviderId::Claude.code(): label }),
+            _ => serde_json::json!({}),
+        };
+    }
+    document["schema"] = serde_json::json!(SCHEMA);
+}
+
 pub(crate) fn save(ctx: &Context, state: &State) -> Result<()> {
     home::check_location(&home::dir(ctx))?;
     let mut state = state.clone();
-    state.slot = Some(claude::live_service(ctx));
+    state.set_slot(ProviderId::Claude, claude::live_service(ctx));
     let state = &state;
     let path = file(ctx);
     let write = |source| Error::StateWriteFailed {
@@ -329,16 +442,21 @@ mod tests {
             label: "work".into(),
             account_uuid: "acc".into(),
             email: "a@b.c".into(),
-            organization_uuid: "org".into(),
-            oauth_account: serde_json::json!({}),
+            detail: Detail::Claude {
+                organization_uuid: "org".into(),
+                oauth_account: serde_json::json!({}),
+            },
             parked: None,
         });
-        state.active = Some("work".into());
+        state.set_active(ProviderId::Claude, Some("work".into()));
         save(&here, &state).expect("saved");
 
-        assert_eq!(load(&here).unwrap().active.as_deref(), Some("work"));
         assert_eq!(
-            load(&elsewhere).unwrap().active,
+            load(&here).unwrap().active_for(ProviderId::Claude),
+            Some("work")
+        );
+        assert_eq!(
+            load(&elsewhere).unwrap().active_for(ProviderId::Claude),
             None,
             "another slot's record of what is in use is not this slot's"
         );
@@ -373,7 +491,110 @@ mod tests {
         migrate(&mut document, std::path::Path::new("/tmp/state.json")).expect("still current");
         let state: State = serde_json::from_value(document).expect("still parses");
         assert_eq!(state.get("work").unwrap().email, "a@b.c");
-        assert_eq!(state.active.as_deref(), Some("work"));
+        assert_eq!(state.active_for(ProviderId::Claude), Some("work"));
+    }
+
+    /// Migrating a file that is already current must change nothing.
+    ///
+    /// `three_to_four` rewrites `active` and `slot` in place, and a version check that
+    /// slipped would wrap an already-wrapped map into `{"claude": {"claude": "work"}}` and
+    /// lose which account is in use, silently, on every load after that.
+    #[test]
+    fn migrating_a_current_file_is_a_no_op() {
+        let mut once = serde_json::json!({
+            "schema": 3,
+            "machine": machine_id(),
+            "accounts": [{
+                "label": "work", "account_uuid": "acc-1", "email": "a@b.c",
+                "organization_uuid": "org-1", "oauth_account": {}, "parked": null
+            }],
+            "active": "work",
+            "slot": "Claude Code-credentials",
+            "discarded": []
+        });
+        migrate(&mut once, std::path::Path::new("/tmp/state.json")).expect("3 to 4");
+        let mut twice = once.clone();
+        migrate(&mut twice, std::path::Path::new("/tmp/state.json")).expect("4 is current");
+        assert_eq!(once, twice, "a second migration must change nothing");
+        assert_eq!(once["active"], serde_json::json!({"claude": "work"}));
+        assert_eq!(
+            once["slot"],
+            serde_json::json!({"claude": "Claude Code-credentials"})
+        );
+        assert_eq!(once["accounts"][0]["provider"], "claude");
+    }
+
+    /// Schema 3 had no `active` at all when nothing had been switched to, and a migration
+    /// that turned that into a one-entry map naming nothing would claim a switch happened.
+    #[test]
+    fn a_file_that_never_switched_migrates_to_no_active_account() {
+        let mut document = serde_json::json!({
+            "schema": 3, "machine": machine_id(), "accounts": [], "discarded": []
+        });
+        migrate(&mut document, std::path::Path::new("/tmp/state.json")).expect("3 to 4");
+        let state: State = serde_json::from_value(document).expect("parses");
+        assert_eq!(state.active_for(ProviderId::Claude), None);
+        assert!(state.active.is_empty() && state.slot.is_empty());
+    }
+
+    /// `Detail` is flattened and tagged, which is the whole reason the migration has
+    /// nothing to move. If it ever stopped sitting beside `label` in the file, every
+    /// account already written would stop loading.
+    #[test]
+    fn a_providers_own_fields_sit_beside_the_shared_ones() {
+        let account = Account {
+            label: "work".into(),
+            account_uuid: "acc".into(),
+            email: "a@b.c".into(),
+            parked: None,
+            last_used_at: None,
+            detail: Detail::Claude {
+                organization_uuid: "org".into(),
+                oauth_account: serde_json::json!({"emailAddress": "a@b.c"}),
+            },
+        };
+        let written = serde_json::to_value(&account).expect("writes");
+        assert_eq!(written["provider"], "claude");
+        assert_eq!(written["organization_uuid"], "org");
+        assert_eq!(written["label"], "work");
+        assert!(
+            written.get("detail").is_none(),
+            "flattened, so there is no nested object: {written}"
+        );
+        let back: Account = serde_json::from_value(written).expect("reads back");
+        assert_eq!(back.provider(), ProviderId::Claude);
+        assert_eq!(back.claude().unwrap().organization_uuid, "org");
+    }
+
+    /// Two tools are two programs reading two stores. A `CLAUDE_CONFIG_DIR` that changed
+    /// says nothing about which Codex account is signed in, and clearing both would tell
+    /// somebody their other switch never happened.
+    #[test]
+    fn a_changed_slot_clears_only_that_providers_record() {
+        let mut state = State::default();
+        state.set_active(ProviderId::Claude, Some("work".into()));
+        state.set_slot(ProviderId::Claude, "some-other-slot".into());
+        state
+            .active
+            .insert("pretend-other-provider".into(), "personal".into());
+
+        // What `load_any_machine` does when the slot it reads is not the one recorded.
+        if state
+            .slot_for(ProviderId::Claude)
+            .is_some_and(|recorded| recorded != "Claude Code-credentials")
+        {
+            state.set_active(ProviderId::Claude, None);
+        }
+
+        assert_eq!(state.active_for(ProviderId::Claude), None);
+        assert_eq!(
+            state
+                .active
+                .get("pretend-other-provider")
+                .map(String::as_str),
+            Some("personal"),
+            "another provider's record is not this provider's to clear"
+        );
     }
 
     /// The other direction cannot work, and the message has to say which half to upgrade.
@@ -418,8 +639,10 @@ mod tests {
             label: label.into(),
             account_uuid: format!("{label}-uuid"),
             email: format!("{label}@example.com"),
-            organization_uuid: "o".into(),
-            oauth_account: serde_json::json!({}),
+            detail: Detail::Claude {
+                organization_uuid: "o".into(),
+                oauth_account: serde_json::json!({}),
+            },
             parked,
         }
     }
@@ -454,7 +677,7 @@ mod tests {
         let mut s = State::default();
         s.upsert(account("wrong", Some(park("p"))));
         s.upsert(account("other", None));
-        s.active = Some("wrong".into());
+        s.set_active(ProviderId::Claude, Some("wrong".into()));
 
         assert_eq!(
             s.relabel("wrong", "right").unwrap().email,
@@ -464,7 +687,7 @@ mod tests {
         let renamed = s.get("right").unwrap();
         assert_eq!(renamed.account_uuid, "wrong-uuid");
         assert_eq!(renamed.parked.as_ref().unwrap().service, "p");
-        assert_eq!(s.active.as_deref(), Some("right"));
+        assert_eq!(s.active_for(ProviderId::Claude), Some("right"));
         assert!(s.discarded.is_empty(), "nothing is deleted by a rename");
     }
 
@@ -473,14 +696,14 @@ mod tests {
         let mut s = State::default();
         s.upsert(account("a", None));
         s.upsert(account("b", None));
-        s.active = Some("a".into());
+        s.set_active(ProviderId::Claude, Some("a".into()));
         assert!(matches!(s.relabel("a", "b"), Err(Error::LabelTaken { .. })));
         assert!(matches!(
             s.relabel("nobody", "c"),
             Err(Error::AccountUnknown { .. })
         ));
         assert_eq!(
-            s.active.as_deref(),
+            s.active_for(ProviderId::Claude),
             Some("a"),
             "a refused rename changes nothing"
         );

@@ -53,8 +53,8 @@ pub fn adopt(ctx: &Context) -> Result<Option<Adopted>> {
             state.discarded.push(park.service);
         }
     }
-    state.active = None;
-    state.slot = None;
+    state.active.clear();
+    state.slot.clear();
     state.machine = state::machine_id();
     state::save(ctx, &state)?;
     purge(ctx, &mut state);
@@ -69,6 +69,7 @@ pub fn adopt(ctx: &Context) -> Result<Option<Adopted>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::provider::ProviderId;
     use crate::state::{Account, State};
     use crate::store::memory::MemoryHost;
     use crate::time::{Clock, FixedClock};
@@ -122,11 +123,13 @@ mod tests {
             label: "work".into(),
             account_uuid: "acc".into(),
             email: "me@example.com".into(),
-            organization_uuid: "org".into(),
-            oauth_account: json!({"accountUuid": "acc"}),
+            detail: state::Detail::Claude {
+                organization_uuid: "org".into(),
+                oauth_account: json!({"accountUuid": "acc"}),
+            },
             parked: Some(crate::park::describe(service, NOW, &oauth())),
         });
-        state.active = Some("work".into());
+        state.set_active(ProviderId::Claude, Some("work".into()));
         let raw = serde_json::to_string(&state).expect("serialisable");
         std::fs::write(crate::home::dir(ctx).join("state.json"), raw).expect("written");
         service.to_string()
@@ -164,7 +167,7 @@ mod tests {
             "and the copy that came with it is deleted rather than left to be presented"
         );
         assert!(
-            state.active.is_none(),
+            state.active.is_empty(),
             "who was signed in was true elsewhere"
         );
     }
@@ -178,8 +181,10 @@ mod tests {
             label: "work".into(),
             account_uuid: "acc".into(),
             email: "me@example.com".into(),
-            organization_uuid: "org".into(),
-            oauth_account: json!({}),
+            detail: state::Detail::Claude {
+                organization_uuid: "org".into(),
+                oauth_account: json!({}),
+            },
             parked: None,
         });
         state::save(&ctx, &state).expect("saved");

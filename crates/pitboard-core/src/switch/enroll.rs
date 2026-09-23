@@ -9,6 +9,7 @@
 use super::{Error, Result, Settled, access_token, identify, purge, slice_of};
 use crate::api::Owner;
 use crate::context::Context;
+use crate::provider::ProviderId;
 use crate::provider::claude::live as claude_live;
 use crate::provider::claude::paths as claude;
 use crate::state::{Account, Park, State};
@@ -288,7 +289,7 @@ fn record_current(ctx: &Context, label: &str, state: &mut State) -> Result<Enrol
     // Enrolling the account that is signed in is using it.
     let last_used_at = Some(ctx.now());
     state.upsert(account(label, &owner, parked, last_used_at));
-    state.active = Some(label.to_string());
+    state.set_active(ProviderId::Claude, Some(label.to_string()));
     state::save(ctx, state)?;
     Ok(Enrolled::Current { email: owner.email })
 }
@@ -333,12 +334,14 @@ fn account(label: &str, owner: &Owner, parked: Option<Park>, last_used_at: Optio
         label: label.to_string(),
         account_uuid: owner.account_uuid.clone(),
         email: owner.email.clone(),
-        organization_uuid: owner.organization_uuid.clone(),
-        oauth_account: json!({
-            "accountUuid": owner.account_uuid,
-            "emailAddress": owner.email,
-            "organizationUuid": owner.organization_uuid,
-        }),
         parked,
+        detail: state::Detail::Claude {
+            organization_uuid: owner.organization_uuid.clone(),
+            oauth_account: json!({
+                "accountUuid": owner.account_uuid,
+                "emailAddress": owner.email,
+                "organizationUuid": owner.organization_uuid,
+            }),
+        },
     }
 }

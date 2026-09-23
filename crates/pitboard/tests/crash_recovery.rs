@@ -119,7 +119,7 @@ fn forgetting_waits_for_an_interrupted_switch_to_be_settled() {
         envelope["warnings"][0]["code"], "interrupted_switch_finished",
         "what recovery found belongs in the envelope, even when the command then fails"
     );
-    assert_eq!(env.state()["active"], "beta");
+    assert_eq!(env.state()["active"]["claude"], "beta");
     assert!(!env.root.join("pitboard/journal.json").exists());
     env.delete_park(&orphan);
 }

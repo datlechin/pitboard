@@ -35,7 +35,7 @@ pub fn uninstall(settled: Settled) -> Result<Removed> {
     {
         state.remove(&label);
     }
-    state.active = None;
+    state.active.clear();
     state::save(&ctx, &state)?;
     let pending = purge(&ctx, &mut state);
     // The sweep in settle has already resolved every outstanding name, so what is left

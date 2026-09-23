@@ -9,6 +9,7 @@
 use super::*;
 use crate::api::scripted::ScriptedApi;
 use crate::api::{Api, Owner};
+use crate::provider::ProviderId;
 use crate::provider::claude::paths as claude;
 
 use crate::state::Account;
@@ -127,7 +128,7 @@ pub(super) fn machine(name: &str) -> Machine {
     let mut state = State::default();
     state.accounts.push(account("here", "here", None));
     state.accounts.push(account("there", "there", Some(parked)));
-    state.active = Some("here".into());
+    state.set_active(ProviderId::Claude, Some("here".into()));
     state::save(&ctx, &state).expect("saved");
 
     Machine {
@@ -145,13 +146,15 @@ pub(super) fn account(label: &str, uuid: &str, parked: Option<Park>) -> Account 
         label: label.into(),
         account_uuid: uuid.into(),
         email: format!("{uuid}@example.com"),
-        organization_uuid: format!("org-{uuid}"),
-        oauth_account: json!({
-            "accountUuid": uuid,
-            "emailAddress": format!("{uuid}@example.com"),
-            "organizationUuid": format!("org-{uuid}"),
-        }),
         parked,
+        detail: crate::state::Detail::Claude {
+            organization_uuid: format!("org-{uuid}"),
+            oauth_account: json!({
+                "accountUuid": uuid,
+                "emailAddress": format!("{uuid}@example.com"),
+                "organizationUuid": format!("org-{uuid}"),
+            }),
+        },
     }
 }
 

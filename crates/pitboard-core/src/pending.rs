@@ -253,8 +253,10 @@ mod tests {
             label: label.into(),
             account_uuid: uuid.into(),
             email: format!("{uuid}@example.com"),
-            organization_uuid: "org".into(),
-            oauth_account: json!({}),
+            detail: crate::state::Detail::Claude {
+                organization_uuid: "org".into(),
+                oauth_account: json!({}),
+            },
             parked: None,
         }
     }

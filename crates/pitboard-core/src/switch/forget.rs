@@ -22,7 +22,12 @@ pub fn forget(settled: Settled, label: &str) -> Result<(String, Vec<Warning>)> {
         .map(|id| id.account_uuid);
     let signed_in = match (&live_uuid, state.get(label)) {
         (Some(uuid), Some(account)) => &account.account_uuid == uuid,
-        _ => state.active.as_deref() == Some(label),
+        // No live identity to compare against, so pitboard's own record of the last switch
+        // is all there is. Scoped to the provider the label belongs to: a Claude account
+        // being signed in says nothing about a Codex one.
+        _ => state
+            .get(label)
+            .is_some_and(|a| state.active_for(a.provider()) == Some(label)),
     };
     if signed_in {
         return Err(Error::CannotForgetActiveAccount {

@@ -348,8 +348,10 @@ mod tests {
             label: label.into(),
             account_uuid: "acc".into(),
             email: "me@example.com".into(),
-            organization_uuid: "org".into(),
-            oauth_account: json!({}),
+            detail: state::Detail::Claude {
+                organization_uuid: "org".into(),
+                oauth_account: json!({}),
+            },
             parked: Some(park.clone()),
         });
         state::save(&m.ctx, &state).expect("saved");
