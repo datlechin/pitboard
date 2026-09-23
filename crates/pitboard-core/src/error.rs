@@ -453,6 +453,21 @@ pub enum Error {
         detail: String,
         /// Whether the new login was parked instead, which keeps the one copy of it.
         parked: bool,
+        /// What writing it and parking it warned about, which is still true of a change
+        /// that failed afterwards. Taken out by the service and reported beside the error.
+        warnings: Vec<crate::service::Warning>,
+    },
+
+    #[error(
+        "the new login for `{label}` could not be put in use ({detail}), so it was not \
+         kept, and {} keeps the login it has. Run `pitboard enroll {label} --sign-in` to \
+         sign in again.",
+        tool.name()
+    )]
+    SignInNotKept {
+        tool: ProviderId,
+        label: String,
+        detail: String,
     },
 
     #[error(
@@ -584,6 +599,7 @@ impl Error {
             SwitchUnverified { .. } => "switch_unverified",
             SwitchCorrupted { .. } => "switch_corrupted",
             SignInNotInstalled { .. } => "sign_in_not_installed",
+            SignInNotKept { .. } => "sign_in_not_kept",
             RecoveryFailed { .. } => "recovery_failed",
             RecoveryRecordCorrupt { .. } => "recovery_record_corrupt",
             SessionExpired { .. } => "session_expired",
@@ -617,6 +633,15 @@ impl Error {
             RenewalFailed { cause, .. } => *cause,
             SessionExpired { .. } => Some(Cause::TokenExpired),
             _ => None,
+        }
+    }
+
+    /// Warnings a failed change carries in itself, for the caller to report beside it. Only
+    /// a failure that happened after something worth warning about was done carries any.
+    pub(crate) fn take_warnings(&mut self) -> Vec<crate::service::Warning> {
+        match self {
+            Error::SignInNotInstalled { warnings, .. } => std::mem::take(warnings),
+            _ => Vec::new(),
         }
     }
 
@@ -727,6 +752,16 @@ mod tests {
                 label: "x".into(),
                 email: "e".into(),
             },
+            Error::SwitchRolledBack {
+                from: "x".into(),
+                to: "y".into(),
+                detail: "d".into(),
+            },
+            Error::SignInNotKept {
+                tool: ProviderId::Codex,
+                label: "x".into(),
+                detail: "d".into(),
+            },
         ];
         let mut codes: Vec<&str> = samples.iter().map(Error::code).collect();
         codes.sort_unstable();
@@ -788,6 +823,12 @@ mod tests {
             Error::LiveAccountNotEnrolled {
                 tool: ProviderId::Claude,
                 email: "a@b.c".into(),
+            }
+            .to_string(),
+            Error::SignInNotKept {
+                tool: ProviderId::Codex,
+                label: "codex/work".into(),
+                detail: "the keychain is locked".into(),
             }
             .to_string(),
         ];

@@ -50,10 +50,10 @@ pitboard enroll codex/work --sign-in    # another Codex account
 ```
 
 `--sign-in` runs the tool's own sign-in in a separate directory (for Codex, `codex login`
-with a private `CODEX_HOME`), so the login you are using now stays put. Do not add an
-account with Claude Code's `/login` or with `codex login`. Both replace the login in use,
-and pitboard cannot keep a login it did not see leave. `codex login` also revokes the login
-it replaces.
+with a private `CODEX_HOME`), so the login you are using now stays put, unless you sign in
+to that same account: then the new login takes its place. Do not add an account with Claude
+Code's `/login` or with `codex login`. Both replace the login in use, and pitboard cannot
+keep a login it did not see leave. `codex login` also revokes the login it replaces.
 
 A label belongs to a tool: `codex/work` is a Codex account, `claude/work` a Claude Code one.
 A bare name for a new account means Claude Code. In `use`, `forget` and `rename` a bare
@@ -116,7 +116,9 @@ For a Codex account, name the tool: `pitboard enroll codex/work --sign-in`.
 
 Signing in again to the account you are using puts the new login in use in place of the old
 one, the way the tool's own sign-in would, and parks nothing. A running `codex` keeps the old
-login until you restart it.
+login until you restart it. If pitboard cannot tell whose login the tool is using, because
+the service does not answer or the login cannot be read, it parks the new login instead of
+writing over one it cannot name, and says so.
 
 Other commands:
 

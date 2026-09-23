@@ -21,6 +21,8 @@ private final class Stub: Core, @unchecked Sendable {
     private(set) var installedAsks = 0
     var enrolling: Result<Enrolled, Error> = .success(
         Enrolled(email: "a@b.c", enrolled: .current, warnings: []))
+    /// What a sign-in that cannot start warns about beside its refusal.
+    var signInWarnings: [Warning] = []
 
     init(_ answer: Result<Status, Error>) {
         self.answer = answer
@@ -75,7 +77,7 @@ private final class Stub: Core, @unchecked Sendable {
             throw PitboardError.Failed(
                 code: "claude_program_missing", cause: nil,
                 message: "`claude` is not on this machine",
-                warnings: [])
+                warnings: signInWarnings)
         }
         return session
     }
@@ -534,7 +536,8 @@ private func account(_ label: String, signedIn: Bool, percent: Double) -> Accoun
             + "`codex/work`'s old login.")
     let stub = Stub(.success(status([account("work", of: "codex", signedIn: true)])))
     let session = ScriptedSignIn(saying: ["https://auth.openai.com/oauth\n"], takesACode: false)
-    session.enrolls = Enrolled(email: "w@example.com", enrolled: .inUse, warnings: [oldLogin])
+    session.enrolls = Enrolled(
+        email: "w@example.com", enrolled: .inUse(again: true), warnings: [oldLogin])
     stub.session = session
     let model = AppModel(watching: false, service: stub)
 
@@ -546,6 +549,87 @@ private func account(_ label: String, signedIn: Bool, percent: Double) -> Accoun
     #expect(last.notice == nil, "nothing switched away from anything")
     #expect(model.warnings(after: last) == [oldLogin])
     #expect(model.problem == nil)
+}
+
+/// A browser often signs in to the session it already has, so the account signed in now
+/// can be enrolled by a sign-in under a new name. It says it was enrolled, not signed in to
+/// again.
+@MainActor
+@Test func aFirstSignInToTheAccountInUseSaysItWasEnrolled() async throws {
+    let stub = Stub(.success(status([account("work", of: "codex", signedIn: true)])))
+    let session = ScriptedSignIn(saying: [], takesACode: false)
+    session.enrolls = Enrolled(
+        email: "w@example.com", enrolled: .inUse(again: false), warnings: [])
+    stub.session = session
+    let model = AppModel(watching: false, service: stub)
+
+    await model.signIn("work", for: "codex")
+
+    #expect(
+        try #require(model.lastSwitches.first).said
+            == "Enrolled work, the account signed in now. Its new login is the one in use.")
+}
+
+/// The tool did not switch, so what its last switch said about sessions still using the
+/// account it left is still true, and stays: the restart it asked for, and the warning not
+/// to sign out inside one. The sign-in's own count of the same sessions, naming this
+/// account's old login, would contradict it and is not added.
+@MainActor
+@Test func aSignInToTheAccountInUseKeepsWhatTheLastSwitchSaid() async throws {
+    let stub = Stub(
+        .success(status([account("work", of: "codex", signedIn: true), account("personal")])))
+    stub.switched = switched(
+        "codex", from: "codex/personal", to: "codex/work", warnings: [stillRunning])
+    let oldLogin = Warning(code: "sessions_keep_old_login", message: "2 sessions")
+    let parked = Warning(code: "written_on_the_command_line", message: "on the argument line")
+    let session = ScriptedSignIn(saying: [], takesACode: false)
+    session.enrolls = Enrolled(
+        email: "w@example.com", enrolled: .inUse(again: true), warnings: [oldLogin, parked])
+    stub.session = session
+    let model = AppModel(watching: false, service: stub)
+
+    await model.use("codex/work")
+    await model.signIn("work", for: "codex")
+
+    #expect(model.lastSwitches.count == 1)
+    let last = try #require(model.lastSwitches.first)
+    #expect(last.restart == AppModel.Restart(program: "codex", from: "personal"))
+    #expect(last.said == "Signed in to work again. Its new login is the one in use now.")
+    #expect(last.warnings == [stillRunning, parked])
+}
+
+/// A sign-in that parked its login rather than put it in use says why, after the read that
+/// follows it, which would otherwise put the warning away.
+@MainActor
+@Test func aSignInThatWasParkedSaysWhatItWarnedAbout() async {
+    let untold = Warning(
+        code: "sign_in_parked_not_in_use", message: "Codex goes on with the login it has")
+    let stub = Stub(.success(status([account("work", of: "codex", signedIn: true)])))
+    let session = ScriptedSignIn(saying: [], takesACode: false)
+    session.enrolls = Enrolled(email: "w@example.com", enrolled: .renewed, warnings: [untold])
+    stub.session = session
+    let model = AppModel(watching: false, service: stub)
+
+    await model.signIn("work", for: "codex")
+
+    #expect(model.warnings == [untold])
+    #expect(model.lastSwitches.isEmpty)
+}
+
+/// A sign-in refused before it started says what that refusal found on the way, such as a
+/// switch interrupted earlier and finished now, not only why it was refused.
+@MainActor
+@Test func aRefusedSignInSaysWhatItFoundOnTheWay() async {
+    let recovered = Warning(
+        code: "interrupted_switch_undone", message: "an earlier switch was interrupted")
+    let stub = Stub(.success(status([])))
+    stub.signInWarnings = [recovered]
+    let model = AppModel(watching: false, service: stub)
+
+    await model.signIn("work", for: "claude")
+
+    #expect(model.problem == "`claude` is not on this machine")
+    #expect(model.warnings == [recovered])
 }
 
 /// A sign-in of another account adds a row and says nothing more.

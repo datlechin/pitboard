@@ -31,9 +31,10 @@ pub enum Enrolled {
     SignedIn { email: String },
     /// An enrolled account signed in to again: its parked login is now the new one.
     Renewed { email: String },
-    /// The account signed in now, signed in to again: its new login is the one in use now,
-    /// and nothing was parked.
-    InUse { email: String },
+    /// The account signed in now, signed in to: its new login is the one in use now, and
+    /// nothing was parked. `again` when it was enrolled already, and not when this enrolled
+    /// it, which a browser that signs in to the session it already has makes likely.
+    InUse { email: String, again: bool },
 }
 
 /// A login a tool stored for pitboard in a private directory, not yet enrolled. Dropping it
@@ -376,26 +377,69 @@ fn from_sign_in(
     let owner = identify_document(ctx, login.provider, &login.document)?;
     claim(state, key, &owner)?;
     match signed_in_now(ctx, key.provider, &owner) {
-        Some((live, first)) => install_signed_in(ctx, key, state, login, &owner, &live, &first),
-        None => park_signed_in(ctx, key, state, login, &owner),
+        InUse::Theirs(live, first) => {
+            install_signed_in(ctx, key, state, login, &owner, &live, &first)
+        }
+        InUse::NotTheirs => park_signed_in(ctx, key, state, login, &owner),
+        InUse::Untold(why) => {
+            // Somebody signing in to the account pitboard last saw in use most likely wants
+            // its broken login replaced, and parking is not that, so it is said.
+            let last_in_use = state.active_for(key.provider) == Some(key.label.as_str());
+            let (enrolled, mut warnings) = park_signed_in(ctx, key, state, login, &owner)?;
+            if last_in_use {
+                warnings.push(Warning::SignInParkedNotInUse {
+                    tool: key.provider,
+                    label: state.typed(key),
+                    why: untold(&why),
+                });
+            }
+            Ok((enrolled, warnings))
+        }
     }
 }
 
-/// Where the tool's live login is and what it held, when that is `owner`'s login.
+/// Whose the tool's live login is, as far as a sign-in to `owner`'s account needs to know.
 ///
-/// Read the way a switch reads it. Anything short of knowing it is `owner`'s is `None`: a
-/// login that cannot be read, one whose account cannot be told, another account's, or
-/// nobody's. Writing over a login whose account is not known could lose that account's
-/// only login, so a new one is parked beside it instead.
-fn signed_in_now(
-    ctx: &Context,
-    which: ProviderId,
-    owner: &Owner,
-) -> Option<(provider::LiveStore, Value)> {
-    let live = super::live_store(ctx, which).ok()?;
-    let (_, first) = super::read_live(ctx, which, &live).ok()?;
-    let found = identify_document(ctx, which, &first).ok()?;
-    (found.account_uuid == owner.account_uuid).then_some((live, first))
+/// Read the way a switch reads it. Writing over a login whose account is not known could
+/// lose that account's only login, so only a login known to be `owner`'s is written over.
+enum InUse {
+    /// `owner`'s: where it is, and what it held.
+    Theirs(provider::LiveStore, Value),
+    /// Another account's, or nobody's.
+    NotTheirs,
+    /// It could not be read, or its account could not be told, for this reason.
+    Untold(Error),
+}
+
+fn signed_in_now(ctx: &Context, which: ProviderId, owner: &Owner) -> InUse {
+    let read = super::live_store(ctx, which)
+        .and_then(|live| super::read_live(ctx, which, &live).map(|(_, first)| (live, first)));
+    let (live, first) = match read {
+        Ok(read) => read,
+        Err(Error::LiveCredentialAbsent { .. }) => return InUse::NotTheirs,
+        Err(other) => return InUse::Untold(other),
+    };
+    match identify_document(ctx, which, &first) {
+        Ok(found) if found.account_uuid == owner.account_uuid => InUse::Theirs(live, first),
+        Ok(_) => InUse::NotTheirs,
+        Err(e) => InUse::Untold(e),
+    }
+}
+
+/// Why the login in use could not be told, in a few words. The warning it goes into says
+/// what to do, and an error's own advice would be about something else.
+fn untold(error: &Error) -> String {
+    match error {
+        Error::SessionExpired { tool } => format!("{} refused its access token", tool.service()),
+        Error::IdentityUnverifiable { detail, .. }
+        | Error::LiveCredentialShapeUnexpected { detail, .. } => detail.clone(),
+        Error::LiveStoreUnsupported { reason, .. } => reason.clone(),
+        Error::LiveCredentialElsewhere { email } => {
+            format!("its config names {email}, and pitboard cannot find that login")
+        }
+        Error::Store(e) => e.to_string(),
+        other => other.code().replace('_', " "),
+    }
 }
 
 /// Put the new login of the account signed in now in place of its old one, under the rules
@@ -413,6 +457,13 @@ fn install_signed_in(
 ) -> Result<(Enrolled, Vec<Warning>)> {
     let which = key.provider;
     let name = state.typed(key);
+    // Said as a sign-in's failure rather than a switch's: the new login goes with the
+    // sign-in, so nothing was lost is not true of it, and the way on is signing in again.
+    let not_kept = |detail: String| Error::SignInNotKept {
+        tool: which,
+        label: name.clone(),
+        detail,
+    };
     let slice = provider::of(which)
         .slice(&login.document)
         .map_err(|e| super::shape(which, e))?;
@@ -422,8 +473,17 @@ fn install_signed_in(
         next,
         on_the_command_line,
         ..
-    } = super::ready(ctx, which, live, first, &owner.account_uuid, &slice, &name)?;
+    } = super::ready(ctx, which, live, first, &owner.account_uuid, &slice, &name).map_err(|e| {
+        match e {
+            Error::SignedInAccountChanged => not_kept(format!(
+                "{} was signed in to another account meanwhile",
+                which.name()
+            )),
+            other => other,
+        }
+    })?;
 
+    let written = on_the_command_line.into_iter().collect::<Vec<_>>();
     match super::install_with(
         which,
         |body| store::write_raw(&live.chain, &live.service, body),
@@ -435,9 +495,11 @@ fn install_signed_in(
     ) {
         Ok(()) => {}
         // The old login is where it was, and the new one goes with the sign-in.
-        Err(e @ Error::SwitchRolledBack { .. }) => return Err(e),
+        Err(Error::SwitchRolledBack { detail, .. }) => return Err(not_kept(detail)),
         Err(Error::SwitchUnverified { detail, .. } | Error::SwitchCorrupted { detail, .. }) => {
-            return Err(not_installed(ctx, key, state, login, owner, detail));
+            return Err(not_installed(
+                ctx, key, state, login, owner, detail, written,
+            ));
         }
         Err(other) => return Err(other),
     }
@@ -451,9 +513,12 @@ fn install_signed_in(
         Err(unreadable) => Some(unreadable.to_string()),
     };
     if let Some(detail) = lost {
-        return Err(not_installed(ctx, key, state, login, owner, detail));
+        return Err(not_installed(
+            ctx, key, state, login, owner, detail, written,
+        ));
     }
 
+    let again = state.get(key).is_some();
     let parked = state.get(key).and_then(|a| a.parked.clone());
     state.upsert(account(
         which,
@@ -477,7 +542,7 @@ fn install_signed_in(
             label: name.clone(),
         }
     });
-    let warnings = on_the_command_line
+    let warnings = written
         .into_iter()
         .chain(still_running)
         .chain(lock_lost.then_some(Warning::LockCompromised { tool: which }))
@@ -485,6 +550,7 @@ fn install_signed_in(
     Ok((
         Enrolled::InUse {
             email: owner.email.clone(),
+            again,
         },
         warnings,
     ))
@@ -495,6 +561,9 @@ fn install_signed_in(
 /// is parked, as a sign-in of any other account would be, before the failure is reported.
 /// Where the write landed and could not be read back, the slot holds the new login as well:
 /// no renewal spends that copy, and the next change that can read the slot drops it.
+///
+/// What writing it warned about is carried on the error with what parking it warns about,
+/// because both happened whatever became of them.
 fn not_installed(
     ctx: &Context,
     key: &Key,
@@ -502,13 +571,21 @@ fn not_installed(
     login: &SignIn,
     owner: &Owner,
     detail: String,
+    mut warnings: Vec<Warning>,
 ) -> Error {
-    let parked = park_signed_in(ctx, key, state, login, owner).is_ok();
+    let parked = match park_signed_in(ctx, key, state, login, owner) {
+        Ok((_, parking)) => {
+            warnings.extend(parking);
+            true
+        }
+        Err(_) => false,
+    };
     Error::SignInNotInstalled {
         tool: key.provider,
         label: state.typed(key),
         detail,
         parked,
+        warnings,
     }
 }
 
@@ -660,7 +737,10 @@ mod tests {
                 .unwrap_or_else(|e| panic!("{tool}: {e}"));
 
             assert!(
-                matches!(enrolled, Enrolled::InUse { ref email } if email == "here@example.com"),
+                matches!(
+                    enrolled,
+                    Enrolled::InUse { ref email, again: true } if email == "here@example.com"
+                ),
                 "{tool}: {enrolled:?}"
             );
             assert!(
@@ -785,8 +865,9 @@ mod tests {
         for (case, m) in cases {
             let live = m.live();
 
-            let (enrolled, _) = enrolled_as(&m, "here", signed_in(&m, "here", "here-refresh-2"))
-                .unwrap_or_else(|e| panic!("{case}: {e}"));
+            let (enrolled, warnings) =
+                enrolled_as(&m, "here", signed_in(&m, "here", "here-refresh-2"))
+                    .unwrap_or_else(|e| panic!("{case}: {e}"));
 
             assert!(
                 matches!(enrolled, Enrolled::Renewed { .. }),
@@ -798,6 +879,65 @@ mod tests {
                 Some(store::fingerprint("here-refresh-2")),
                 "{case}: the new login is parked"
             );
+            // `here` is the account pitboard last saw in use, so the person most likely
+            // meant to replace its login, and is told that did not happen and why.
+            let said = warnings
+                .iter()
+                .find(|w| w.code() == "sign_in_parked_not_in_use")
+                .unwrap_or_else(|| panic!("{case}: {warnings:?}"))
+                .to_string();
+            assert!(
+                said.contains("parked the new login for `"),
+                "{case}: {said}"
+            );
+            assert!(
+                said.contains("goes on with the login it has"),
+                "{case}: {said}"
+            );
+            assert!(said.contains("sign in to `"), "{case}: {said}");
+        }
+    }
+
+    /// Only the account pitboard last saw in use is warned about. Signing in again to a
+    /// parked account renews its park whoever is signed in, as it always did.
+    #[test]
+    fn a_sign_in_to_a_parked_account_is_not_warned_about_the_login_in_use() {
+        let m = machine("untold-parked");
+        m.api
+            .token_trouble("access-here-refresh", Trouble::Unauthorized);
+
+        let (enrolled, warnings) =
+            enrolled_as(&m, "there", signed_in(&m, "there", "there-refresh-2"))
+                .unwrap_or_else(|e| panic!("{e}"));
+
+        assert!(matches!(enrolled, Enrolled::Renewed { .. }), "{enrolled:?}");
+        assert!(warnings.is_empty(), "{warnings:?}");
+    }
+
+    /// A browser often signs in to the session it already has, so a sign-in under a new
+    /// label can be the account signed in now before anything enrolled it. It is enrolled
+    /// with its new login in use, and says it was enrolled rather than signed in again.
+    #[test]
+    fn a_first_sign_in_to_the_account_in_use_enrols_it_with_the_new_login_in_use() {
+        for (tool, make) in MACHINES {
+            let m = make("first-in-use");
+            let mut state = state::load(&m.ctx).expect("state");
+            state.accounts.retain(|a| a.label != "here");
+            state.set_active(m.which, None);
+            state::save(&m.ctx, &state).expect("saved");
+
+            let (enrolled, _) =
+                enrolled_as(&m, "personal", signed_in(&m, "here", "here-refresh-2"))
+                    .unwrap_or_else(|e| panic!("{tool}: {e}"));
+
+            assert!(
+                matches!(enrolled, Enrolled::InUse { again: false, .. }),
+                "{tool}: {enrolled:?}"
+            );
+            assert!(in_use(&m, "here-refresh-2"), "{tool}");
+            let state = state::load(&m.ctx).expect("state");
+            assert_eq!(state.active_for(m.which), Some("personal"), "{tool}");
+            hold(&m, &format!("{tool}, after enrolling the account in use"));
         }
     }
 
@@ -810,8 +950,9 @@ mod tests {
             let key = m.key("here");
             let login = signed_in(&m, "here", "here-refresh-2");
             let owner = identify_document(&m.ctx, m.which, &login.document).expect("whose");
-            let (live, first) =
-                signed_in_now(&m.ctx, m.which, &owner).expect("`here` is signed in");
+            let InUse::Theirs(live, first) = signed_in_now(&m.ctx, m.which, &owner) else {
+                panic!("{tool}: `here` is signed in");
+            };
 
             m.sign_in(&login_of(&m, "other", "other-refresh"));
             let vault = m.mem.vault().services();
@@ -821,7 +962,13 @@ mod tests {
                 install_signed_in(&m.ctx, &key, &mut state, &login, &owner, &live, &first)
                     .expect_err("refused");
 
-            assert_eq!(refused.code(), "signed_in_account_changed", "{tool}");
+            assert_eq!(refused.code(), "sign_in_not_kept", "{tool}: {refused}");
+            assert!(
+                refused
+                    .to_string()
+                    .contains("was signed in to another account meanwhile"),
+                "{tool}: {refused}"
+            );
             assert!(in_use(&m, "other-refresh"), "{tool}: the other login stays");
             assert_eq!(m.mem.vault().services(), vault, "{tool}");
             assert_eq!(
@@ -833,7 +980,8 @@ mod tests {
     }
 
     /// A write that fails and changes nothing leaves the old login in use, and the new one
-    /// goes with the sign-in: nothing was lost, and signing in again is the way on.
+    /// goes with the sign-in. That is said as a sign-in's failure: the new login was not
+    /// kept, and signing in again is the way on.
     #[test]
     fn a_new_login_that_cannot_be_written_leaves_the_old_one_in_use() {
         for (tool, make) in MACHINES {
@@ -844,7 +992,14 @@ mod tests {
 
             let failed = enrolled_as(&m, "here", login).expect_err("the write failed");
 
-            assert_eq!(failed.code(), "switch_rolled_back", "{tool}: {failed}");
+            assert_eq!(failed.code(), "sign_in_not_kept", "{tool}: {failed}");
+            let said = failed.to_string();
+            assert!(said.contains("was not kept"), "{tool}: {said}");
+            assert!(
+                said.contains(&format!("pitboard enroll {} --sign-in", m.key("here"))),
+                "{tool}: {said}"
+            );
+            assert!(!said.contains("nothing was lost"), "{tool}: {said}");
             assert!(in_use(&m, "here-refresh"), "{tool}");
             assert_eq!(m.mem.vault().services(), vault, "{tool}");
         }

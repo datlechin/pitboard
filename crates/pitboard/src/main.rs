@@ -53,7 +53,8 @@ enum Command {
         #[arg(value_parser = label_to_enroll)]
         label: String,
         /// Sign in through the tool's own sign-in, without signing out of the account in
-        /// use. For an enrolled label, this renews its parked login.
+        /// use. For the account in use, this puts its new login in use; for another enrolled
+        /// label, it renews its parked login.
         #[arg(long)]
         sign_in: bool,
     },
@@ -384,10 +385,18 @@ fn enrolled(pitboard: &Pitboard, label: &str, outcome: Changing<Enrolled>) -> Re
                 let human = format!("Renewed {name} ({email}): its parked login is a fresh one.\n");
                 ("renewed", email, human)
             }
-            Enrolled::InUse { email } => {
-                let human = format!(
-                    "Signed in to {name} ({email}) again. Its new login is the one in use now.\n"
-                );
+            Enrolled::InUse { email, again } => {
+                let human = if again {
+                    format!(
+                        "Signed in to {name} ({email}) again. Its new login is the one in use \
+                         now.\n"
+                    )
+                } else {
+                    format!(
+                        "Enrolled {name} ({email}), the account signed in now. Its new login is \
+                         the one in use.\n"
+                    )
+                };
                 ("in_use", email, human)
             }
         };

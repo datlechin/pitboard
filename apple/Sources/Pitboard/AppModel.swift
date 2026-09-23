@@ -413,13 +413,17 @@ final class AppModel {
             updatedAt = nil
             await refresh()
         } catch {
-            // Nothing moved here either, so what the last switch said stands. The failure is
-            // said the way any failure is, with its warnings first and nothing the last read
-            // found dropped to make room for them.
-            problem = Self.saying(error)
-            let failed = Self.warnings(of: error)
-            warnings = failed + warnings.filter { !failed.contains($0) }
+            // Nothing moved here either, so what the last switch said stands.
+            sayFailed(error)
         }
+    }
+
+    /// A change that failed, said the way any failure is: with its warnings first, and
+    /// nothing the last read found dropped to make room for them.
+    private func sayFailed(_ error: Error) {
+        problem = Self.saying(error)
+        let failed = Self.warnings(of: error)
+        warnings = failed + warnings.filter { !failed.contains($0) }
     }
 
     /// In place of what the same tool's last switch said, or after the others.
@@ -565,7 +569,7 @@ final class AppModel {
         } catch {
             guard signingIn === shown else { return }
             signingIn = nil
-            problem = Self.saying(error)
+            sayFailed(error)
         }
     }
 
@@ -587,30 +591,43 @@ final class AppModel {
                 try session.finish()
             }.value
             signingIn = nil
-            enrolled(done, as: shown.label, for: provider)
+            let said = enrolled(done, as: shown.label, for: provider)
             updatedAt = nil
             await refresh()
+            // Said after the read that follows, which would otherwise put it away.
+            warnings += said.filter { !warnings.contains($0) }
         } catch {
             signingIn = nil
-            problem = Self.saying(error)
+            sayFailed(error)
         }
     }
 
-    /// What a finished sign-in says beyond the row it adds. Signing in again to the account
-    /// in use puts its new login in use at once, and what that means for sessions already
-    /// running is kept the way a switch's is.
-    private func enrolled(_ done: Enrolled, as name: String, for provider: String) {
-        switch done.enrolled {
-        case .current, .signedIn, .renewed:
-            break
-        case .inUse:
-            remember(
-                LastSwitch(
-                    provider: provider,
-                    to: provider == defaultProvider ? name : qualified(name, for: provider),
-                    said: "Signed in to \(name) again. Its new login is the one in use now.",
-                    warnings: done.warnings))
+    /// What a finished sign-in says beyond the row it adds, and what it warned about that is
+    /// to be shown beside the read that follows.
+    ///
+    /// Signing in to the account in use puts its new login in use at once, and what that
+    /// means for sessions already running is kept the way a switch's is. The tool did not
+    /// switch, so what its last switch said stays true and stays with it; a count of the same
+    /// sessions naming this account's old login, beside one naming the account the switch
+    /// left, would contradict it.
+    private func enrolled(
+        _ done: Enrolled, as name: String, for provider: String
+    ) -> [Warning] {
+        guard case .inUse(let again) = done.enrolled else { return done.warnings }
+        let to = provider == defaultProvider ? name : qualified(name, for: provider)
+        var said =
+            lastSwitches.first { $0.provider == provider && $0.to == to }
+            ?? LastSwitch(provider: provider, to: to)
+        said.said =
+            again
+            ? "Signed in to \(name) again. Its new login is the one in use now."
+            : "Enrolled \(name), the account signed in now. Its new login is the one in use."
+        let counted = said.warnings.contains { $0.code == "sessions_still_running" }
+        said.warnings += done.warnings.filter {
+            !said.warnings.contains($0) && !(counted && $0.code == "sessions_keep_old_login")
         }
+        remember(said)
+        return []
     }
 
     /// Types the fallback code back, for a browser that could not reach the callback. Off

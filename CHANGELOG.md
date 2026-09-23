@@ -239,15 +239,20 @@ All notable changes are recorded here. The format follows
   outgoing account is read from its ID token without asking OpenAI, the login kept could be
   one whose refresh chain was already revoked. The new login now goes in place of the old
   under the same lock, checks and read-back as a switch, nothing is parked, and `--json`
-  says `in_use`. Where pitboard cannot tell that the login in use is that account's, the new
-  one is parked as before, because writing over a login nobody can name could lose it. A
-  running `codex` keeps the old login and can write it back when it refreshes, so the
-  sessions are counted and warned about, with the new code `sessions_keep_old_login`. A new
-  login pitboard could not confirm is in use, where the old one may be gone too, is parked
-  rather than lost, with the new code `sign_in_not_installed`. Where it was in use after
-  all, that parked copy holds the refresh token the tool is using: no renewal spends it,
-  and the next change or renewal that can read the tool's login drops it. The menu bar app
-  says the new login is the one in use, and keeps the warning like a switch's.
+  says `in_use`; a label this enrols for the first time says it was enrolled. Where pitboard
+  cannot tell that the login in use is that account's, the new one is parked as before,
+  because writing over a login nobody can name could lose it, and when that is the account
+  pitboard last saw in use it says so and why, with the new code
+  `sign_in_parked_not_in_use`. A running `codex` keeps the old login and can write it back
+  when it refreshes, so the sessions are counted and warned about, with the new code
+  `sessions_keep_old_login`. A new login that could not be written was not kept, and says to
+  sign in again, with the new code `sign_in_not_kept`. A new login pitboard could not
+  confirm is in use, where the old one may be gone too, is parked rather than lost, with the
+  new code `sign_in_not_installed`, and still says what writing and parking it warned about.
+  Where it was in use after all, that parked copy holds the refresh token the tool is using:
+  no renewal spends it, and the next change or renewal that can read the tool's login drops
+  it. The menu bar app says the new login is the one in use, keeps what that tool's last
+  switch said beside it, and shows what a sign-in of any account warned about.
 - A renewal killed after writing the fresh login and before recording it could lose the
   login: the next change deleted the fresh copy as unrecorded and kept the old one, whose
   refresh token the service had already spent. A copy pitboard wrote down itself now

@@ -53,6 +53,8 @@ pub struct MemoryStore {
     blanket: Mutex<Option<Fault>>,
     /// Services whose `LocksOnWrite` has fired.
     locked: Mutex<std::collections::HashSet<String>>,
+    /// How many bytes a write can take the cheap way, where the store has a ceiling.
+    ceiling: Mutex<Option<usize>>,
 }
 
 impl MemoryStore {
@@ -64,7 +66,17 @@ impl MemoryStore {
             faults: Mutex::new(HashMap::new()),
             blanket: Mutex::new(None),
             locked: Mutex::new(std::collections::HashSet::new()),
+            ceiling: Mutex::new(None),
         })
+    }
+
+    /// From now on a write costs what it would in a keychain whose `security` reads `limit`
+    /// bytes from its standard input, with the argument line allowed above that.
+    pub fn takes_on_stdin(&self, limit: usize) {
+        *self
+            .ceiling
+            .lock()
+            .expect("a poisoned test store is a failed test") = Some(limit);
     }
 
     /// Put something there without a write, to set a machine up.
@@ -262,6 +274,18 @@ impl RawStore for Arc<MemoryStore> {
                 .filter(|s| crate::park::is_park_name(s))
                 .collect(),
         ))
+    }
+
+    fn cost(&self, _service: &str, contents: &str) -> Option<super::Cost> {
+        let limit = *self
+            .ceiling
+            .lock()
+            .expect("a poisoned test store is a failed test");
+        limit.map(|limit| super::Cost {
+            needs: contents.len(),
+            limit,
+            second_route: true,
+        })
     }
 }
 

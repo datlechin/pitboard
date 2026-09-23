@@ -58,6 +58,13 @@ pub enum Warning {
         count: usize,
         label: String,
     },
+    /// A sign-in to the account pitboard last recorded in use was parked rather than put in
+    /// use, because nobody could say whose login the tool has in use, for `why`.
+    SignInParkedNotInUse {
+        tool: ProviderId,
+        label: String,
+        why: String,
+    },
 }
 
 impl Warning {
@@ -73,6 +80,7 @@ impl Warning {
             Warning::WrittenOnTheCommandLine { .. } => "written_on_the_command_line",
             Warning::SessionsStillRunning { .. } => "sessions_still_running",
             Warning::SessionsKeepTheOldLogin { .. } => "sessions_keep_old_login",
+            Warning::SignInParkedNotInUse { .. } => "sign_in_parked_not_in_use",
         }
     }
 }
@@ -151,6 +159,15 @@ impl fmt::Display for Warning {
                 if *count == 1 { "" } else { "s" },
                 if *count == 1 { "is" } else { "are" },
                 if *count == 1 { "it" } else { "them" },
+            ),
+            Warning::SignInParkedNotInUse { tool, label, why } => write!(
+                f,
+                "{} goes on with the login it has: pitboard could not tell whose it is \
+                 ({why}), so it parked the new login for `{label}` rather than write over \
+                 that one. If that login no longer works, run `{}` and sign in to `{label}` \
+                 there.",
+                tool.name(),
+                tool.login_command()
             ),
         }
     }
@@ -564,8 +581,9 @@ impl Pitboard {
                 warnings.extend(more);
                 Ok(Done { value, warnings })
             }
-            Err(error) => {
+            Err(mut error) => {
                 audit::record(&self.ctx, verb, subject, error.code());
+                warnings.extend(error.take_warnings());
                 Err(Failed { error, warnings })
             }
         }
@@ -742,6 +760,27 @@ mod tests {
                     "{at}"
                 );
             }
+        }
+    }
+
+    /// A new login that did not hold after it was written is parked rather than lost, and
+    /// parking a login too big for `security`'s standard input puts it on the argument line.
+    /// The change then fails, and that is still said beside the failure.
+    #[test]
+    fn a_new_login_parked_after_it_did_not_hold_says_how_it_was_parked() {
+        for (tool, make) in MACHINES {
+            let m = make(&format!("not-installed-said-{tool}"));
+            m.mem.vault().takes_on_stdin(64);
+            let login = crate::switch::harness::signed_in(&m, "here", "here-refresh-2");
+            m.fault_live(crate::store::memory::Fault::DeletedAfterWrite);
+
+            let failed = Pitboard::new(m.ctx.clone())
+                .enroll_signed_in(&m.key("here").typed(), login)
+                .expect_err("it did not hold");
+
+            assert_eq!(failed.error.code(), "sign_in_not_installed", "{tool}");
+            let said: Vec<&str> = failed.warnings.iter().map(Warning::code).collect();
+            assert_eq!(said, ["written_on_the_command_line"], "{tool}");
         }
     }
 

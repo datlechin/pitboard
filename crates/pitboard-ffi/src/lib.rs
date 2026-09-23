@@ -336,8 +336,9 @@ pub enum EnrolledAs {
     SignedIn,
     /// An enrolled account's parked login, renewed.
     Renewed,
-    /// The account signed in now, signed in to again: its new login is the one in use now.
-    InUse,
+    /// The account signed in now, signed in to: its new login is the one in use now.
+    /// `again` when it was enrolled already, and not when this sign-in enrolled it.
+    InUse { again: bool },
 }
 
 #[derive(uniffi::Record)]
@@ -352,7 +353,7 @@ fn enrolled(enrolled: switch::Enrolled, warnings: Vec<Warning>) -> Enrolled {
         switch::Enrolled::Current { email } => (email, EnrolledAs::Current),
         switch::Enrolled::SignedIn { email } => (email, EnrolledAs::SignedIn),
         switch::Enrolled::Renewed { email } => (email, EnrolledAs::Renewed),
-        switch::Enrolled::InUse { email } => (email, EnrolledAs::InUse),
+        switch::Enrolled::InUse { email, again } => (email, EnrolledAs::InUse { again }),
     };
     Enrolled {
         email,
