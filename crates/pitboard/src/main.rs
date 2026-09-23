@@ -117,7 +117,7 @@ enum Command {
 /// A label is typed on the command line from then on, so it cannot be empty or hold spaces.
 /// A name somebody is choosing for a new account, optionally saying which tool it is for.
 ///
-/// `pitboard enroll gemini/personal --sign-in` names both. A bare `personal` means the
+/// `pitboard enroll codex/personal --sign-in` names both. A bare `personal` means the
 /// default tool, so every command written before there was more than one still means what
 /// it meant.
 fn new_label(text: &str) -> Result<String, String> {

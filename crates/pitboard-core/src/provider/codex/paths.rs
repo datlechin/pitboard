@@ -44,8 +44,9 @@ pub(crate) enum Backend {
 /// What `$CODEX_HOME/config.toml` says about where the login is kept.
 ///
 /// Read from that one file, which is where a person sets it. A store pinned by
-/// `/etc/codex/requirements.toml` or a managed profile is not read, and is dated in the
-/// register as a known gap.
+/// `/etc/codex/requirements.toml`, a managed profile or a trusted project's own config is
+/// not read. Guessed wrong, the file pitboard reads is one Codex has emptied, so a switch
+/// or an enrolment finds nobody signed in and stops, rather than writing anywhere.
 pub(crate) fn backend(ctx: &Context) -> Backend {
     std::fs::read_to_string(home(ctx).join("config.toml"))
         .map_or(Backend::File, |config| backend_in(&config))

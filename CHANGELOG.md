@@ -13,7 +13,7 @@ All notable changes are recorded here. The format follows
   it; and `pitboard` shows each Codex account's five-hour and weekly limits from the same
   usage read Codex itself makes, which spends no quota. Everything pitboard does for Codex
   was read out of codex-cli 0.154.0 and is dated in a register of its own, checked against
-  every new build by the weekly conformance run and still green on 0.156.1.
+  every new build by the conformance run twice a week, and still green on 0.156.1.
   Codex is not Claude Code, and pitboard says where they differ rather than hiding it:
   - A running `codex` never notices a switch, so a switch says to restart it instead of
     counting down, and names how many sessions are still using the outgoing account.

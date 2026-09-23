@@ -137,7 +137,7 @@ fn qualified(state: &State) -> Enrolled {
 
 /// A name somebody is choosing for a new account, with the tool it is for.
 ///
-/// `pitboard enroll gemini/personal --sign-in` says both at once. A bare name means the
+/// `pitboard enroll codex/personal --sign-in` says both at once. A bare name means the
 /// default tool, which keeps every command anybody has typed before working unchanged.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Chosen {
