@@ -268,6 +268,10 @@ pub struct MemoryHost {
     vault: Arc<MemoryStore>,
     files: Mutex<HashMap<PathBuf, Arc<MemoryStore>>>,
     running: Mutex<HashMap<String, usize>>,
+    /// Whether every home parks in `vault`, the way every home on macOS parks in the login
+    /// keychain. So by default, because that is where the rules about another pitboard's
+    /// parks are needed.
+    shared_vault: std::sync::atomic::AtomicBool,
 }
 
 impl Default for MemoryHost {
@@ -278,6 +282,7 @@ impl Default for MemoryHost {
             vault: MemoryStore::of(Backend::Keychain),
             files: Mutex::new(HashMap::new()),
             running: Mutex::new(HashMap::new()),
+            shared_vault: std::sync::atomic::AtomicBool::new(true),
         }
     }
 }
@@ -308,6 +313,13 @@ impl MemoryHost {
         )
     }
 
+    /// From now on the vault belongs to one home alone, the way pitboard's vault of files
+    /// does off macOS.
+    pub fn vault_of_its_own(&self) {
+        self.shared_vault
+            .store(false, std::sync::atomic::Ordering::SeqCst);
+    }
+
     /// Say that `count` processes are running `program`.
     pub fn runs(&self, program: &str, count: usize) {
         self.running
@@ -328,6 +340,10 @@ impl Host for MemoryHost {
 
     fn vault(&self, _ctx: &Context) -> Box<dyn RawStore> {
         Box::new(Arc::clone(&self.vault))
+    }
+
+    fn vault_is_shared(&self) -> bool {
+        self.shared_vault.load(std::sync::atomic::Ordering::SeqCst)
     }
 
     /// What a test said is running, and nothing on the machine running the tests.

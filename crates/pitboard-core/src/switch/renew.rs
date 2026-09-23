@@ -222,6 +222,16 @@ fn apply(
     let Some(next) = asked.renewed else {
         return Ok(Renewal::Deferred);
     };
+    // A copy `repair` gave back is left for the pitboard that wrote it only while it is
+    // unused, and the service has just spent it. Saved as used before the answer is
+    // written, so a run killed between writing the answer and recording it leaves a spent
+    // copy the next change deletes, rather than one it lets go for a pitboard that would
+    // present a spent token. A save that fails here must not stop the answer being written:
+    // that is the account's only working login now.
+    if state.is_foreign(&held.service) {
+        state.used_here(&held.service);
+        let _ = state::save(ctx, state);
+    }
 
     // The old refresh token may already be spent, so the answer is written at once, and a
     // second time under another name if the first write fails.

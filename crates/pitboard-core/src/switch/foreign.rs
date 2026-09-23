@@ -6,6 +6,8 @@
 //! home's to delete, so the next switch away from its account, a forget or an uninstall
 //! deleted another pitboard's parked login. Now only using one deletes it. Every case runs
 //! for both tools, because who wrote a park is a fact about the store and not about a tool.
+//! Off macOS the vault is a directory inside the home, which no other pitboard parks in, so
+//! there a park `repair` finds is this pitboard's own.
 
 use super::harness::{
     Machine, NOW, account, codex_access, codex_account, codex_id, codex_login, codex_machine,
@@ -220,6 +222,36 @@ fn a_park_repair_gave_back_is_deleted_once_a_switch_installs_it() {
     }
 }
 
+/// The service answers a renewal of the login on `refresh` with one on `renewed`.
+fn renews(m: &Machine, refresh: &str, renewed: &str) {
+    match m.which {
+        ProviderId::Claude => {
+            m.api.renews(
+                refresh,
+                crate::api::Renewed {
+                    access_token: format!("access-{renewed}"),
+                    refresh_token: Some(renewed.into()),
+                    expires_in: 3600,
+                    refresh_token_expires_in: Some(30 * 86_400),
+                    scopes: None,
+                    at: None,
+                },
+            );
+        }
+        ProviderId::Codex => {
+            m.api.codex_renews(
+                refresh,
+                crate::provider::codex::api::Fresh {
+                    id_token: None,
+                    access_token: Some(codex_access(renewed)),
+                    refresh_token: Some(renewed.into()),
+                    at: Some(NOW),
+                },
+            );
+        }
+    }
+}
+
 /// A renewal spends the refresh token it presents, so the copy it renewed is used up
 /// whoever wrote it, and what it writes is this pitboard's own.
 #[test]
@@ -228,32 +260,7 @@ fn a_park_repair_gave_back_is_deleted_once_a_renewal_spends_it() {
         let m = make("foreign-renewed");
         enrol_away(&m);
         let (_, recorded) = parked_elsewhere(&m, "away", &lapsed(&m, "away", "away-elsewhere"));
-        match m.which {
-            ProviderId::Claude => {
-                m.api.renews(
-                    "away-elsewhere",
-                    crate::api::Renewed {
-                        access_token: "access-away-renewed".into(),
-                        refresh_token: Some("away-renewed".into()),
-                        expires_in: 3600,
-                        refresh_token_expires_in: Some(30 * 86_400),
-                        scopes: None,
-                        at: None,
-                    },
-                );
-            }
-            ProviderId::Codex => {
-                m.api.codex_renews(
-                    "away-elsewhere",
-                    crate::provider::codex::api::Fresh {
-                        id_token: None,
-                        access_token: Some(codex_access("away-renewed")),
-                        refresh_token: Some("away-renewed".into()),
-                        at: Some(NOW),
-                    },
-                );
-            }
-        }
+        renews(&m, "away-elsewhere", "away-renewed");
         assert_eq!(repair_here(&m).given_back.len(), 1);
 
         let renewed = renew_due(&m.ctx, Due::ToBeAsked);
@@ -269,6 +276,43 @@ fn a_park_repair_gave_back_is_deleted_once_a_renewal_spends_it() {
             "{:?}: spent here, so deleted here",
             m.which
         );
+    }
+}
+
+/// Killed after the service answered and before the answer was recorded, a renewal leaves
+/// the fresh copy for the next change to give back in place of the one it spent. That one
+/// was saved as used before the answer was written, so giving the fresh one back deletes it
+/// rather than letting it go for a pitboard that would present a spent token.
+#[test]
+fn a_park_repair_gave_back_is_deleted_once_a_killed_renewal_spends_it() {
+    for make in MACHINES {
+        let m = make("foreign-renewal-killed");
+        enrol_away(&m);
+        let (_, recorded) = parked_elsewhere(&m, "away", &lapsed(&m, "away", "away-elsewhere"));
+        renews(&m, "away-elsewhere", "away-renewed");
+        assert_eq!(repair_here(&m).given_back.len(), 1);
+
+        let died = crate::fault::killing("renew.park_stored", || renew_due(&m.ctx, Due::ToBeAsked));
+        assert_eq!(died.unwrap_err(), "renew.park_stored", "{:?}", m.which);
+        settle(&m.ctx, None).expect("the next change gives the fresh copy back");
+
+        let state = state::load(&m.ctx).expect("state");
+        assert_eq!(
+            state
+                .get(&m.key("away"))
+                .and_then(|a| a.parked.as_ref())
+                .map(|p| p.refresh_fingerprint.clone()),
+            Some(store::fingerprint("away-renewed")),
+            "{:?}",
+            m.which
+        );
+        assert!(state.foreign.is_empty());
+        assert!(
+            m.mem.vault().peek(&recorded.service).is_none(),
+            "{:?}: spent here, so deleted here",
+            m.which
+        );
+        super::harness::hold(&m, &format!("{:?}, after a killed renewal", m.which));
     }
 }
 
@@ -330,5 +374,52 @@ fn a_park_this_pitboard_wrote_down_and_lost_is_still_deleted_when_replaced() {
             "{:?}: its own, so deleted",
             m.which
         );
+    }
+}
+
+/// A park written into this vault and then lost from this home's records, as a state file
+/// restored from a backup leaves it. Only its account names it.
+fn lost(m: &Machine, who: &str, document: &Value) -> Park {
+    let service = park::service_name(&id(m, who), (NOW - 60) * 1000);
+    park::store_at(&m.ctx, m.which, &service, document).expect("parked")
+}
+
+/// Off macOS the vault is a directory inside pitboard's own, which no other pitboard parks
+/// in. A park `repair` finds there is this pitboard's even when nothing here wrote its name
+/// down, so it is deleted like any other once it is let go, and `uninstall` leaves nothing
+/// behind and does not say it did.
+#[test]
+fn a_park_found_in_a_vault_of_this_homes_own_is_this_pitboards() {
+    for make in MACHINES {
+        let m = make("found-replaced");
+        m.mem.vault_of_its_own();
+        let found = lost(&m, "here", &login(&m, "here", "here-lost"));
+        assert_eq!(repair_here(&m).given_back.len(), 1);
+        assert!(state::load(&m.ctx).expect("state").foreign.is_empty());
+
+        let settled = settle(&m.ctx, None).expect("nothing to recover").0;
+        switch(settled, &m.key("there")).expect("switched");
+        assert!(
+            m.mem.vault().peek(&found.service).is_none(),
+            "{:?}: replaced, and this pitboard's, so deleted",
+            m.which
+        );
+        super::harness::hold(&m, &format!("{:?}, after the switch away", m.which));
+
+        let m = make("found-uninstalled");
+        m.mem.vault_of_its_own();
+        enrol_away(&m);
+        lost(&m, "away", &login(&m, "away", "away-lost"));
+        assert_eq!(repair_here(&m).given_back.len(), 1);
+
+        let removed =
+            uninstall(settle(&m.ctx, None).expect("nothing to recover").0).expect("uninstalled");
+        assert_eq!(
+            removed.parks, 2,
+            "{:?}: `there`'s and the one found",
+            m.which
+        );
+        assert_eq!(removed.left, 0, "{:?}", m.which);
+        assert!(m.mem.vault().services().is_empty(), "{:?}", m.which);
     }
 }

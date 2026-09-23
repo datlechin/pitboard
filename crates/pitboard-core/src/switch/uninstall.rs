@@ -13,7 +13,8 @@ pub struct Removed {
     pub pending: usize,
     /// Parked logins left where they are because this pitboard did not write them:
     /// `repair` gave them back from a store every pitboard on the machine shares, so each
-    /// may be another pitboard's.
+    /// may be another pitboard's. Always none where the vault is inside pitboard's own
+    /// directory.
     pub left: usize,
     /// Whether ~/.pitboard itself is gone.
     pub home_removed: bool,

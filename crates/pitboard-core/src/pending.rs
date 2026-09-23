@@ -128,9 +128,9 @@ pub fn reclaim(ctx: &Context, state: &mut State) -> Result<Reclaimed> {
 /// this pitboard cannot account for is not evidence of an orphan: it may be another
 /// pitboard's parked login, and deleting it would end that account's session for someone
 /// who never ran this command. Giving a login back is additive and safe to do on a guess;
-/// deleting one is not, and is done only where being sure is possible. A login given back
-/// that this pitboard did not write down is recorded as such, so letting it go later never
-/// deletes it either: only using it does.
+/// deleting one is not, and is done only where being sure is possible. Where the vault is
+/// shared that way, a login given back that this pitboard did not write down is recorded
+/// as such, so letting it go later never deletes it either: only using it does.
 fn resolve(
     ctx: &Context,
     state: &mut State,
@@ -222,7 +222,9 @@ fn adopt(
     if park::is_live_twin(ctx, key.provider, &oauth) {
         return None;
     }
-    if written_here {
+    // A vault of files lives inside this home, so whatever is in it is this pitboard's
+    // whether or not it was written down, and is deleted like any other once let go.
+    if written_here || !store::vault_is_shared(ctx) {
         state.park(&key, park);
     } else {
         state.park_foreign(&key, park);

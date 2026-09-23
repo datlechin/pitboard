@@ -154,6 +154,12 @@ pub(crate) trait Host: Send + Sync + std::fmt::Debug {
     /// directory of files where there is not. This one really is a fact about the machine.
     fn vault(&self, ctx: &Context) -> Box<dyn RawStore>;
 
+    /// Whether every `PITBOARD_HOME` on this machine parks its logins in the one vault. A
+    /// keychain belongs to the whole login session, so a park in it that one home cannot
+    /// account for may be another home's; a vault of files lives inside its home, and
+    /// nothing in it can be anybody else's.
+    fn vault_is_shared(&self) -> bool;
+
     /// How many processes are running `program` on this machine, where that can be told.
     fn running(&self, program: &str) -> Option<usize> {
         crate::process::running(program)
@@ -194,6 +200,10 @@ impl Host for MacOs {
     fn vault(&self, ctx: &Context) -> Box<dyn RawStore> {
         Box::new(keychain::Keychain::vault(ctx))
     }
+
+    fn vault_is_shared(&self) -> bool {
+        true
+    }
 }
 
 /// Everywhere else: files, and pitboard's own file vault.
@@ -213,6 +223,10 @@ impl Host for PlainUnix {
 
     fn vault(&self, ctx: &Context) -> Box<dyn RawStore> {
         Box::new(vault::FileVault::new(ctx))
+    }
+
+    fn vault_is_shared(&self) -> bool {
+        false
     }
 }
 
@@ -352,6 +366,11 @@ pub fn vault_delete(ctx: &Context, service: &str) -> Result<(), Error> {
 /// pitboard's own index. `None` where the store cannot be enumerated.
 pub fn vault_list(ctx: &Context) -> Result<Option<Vec<String>>, Error> {
     vault(ctx).list()
+}
+
+/// Whether another `PITBOARD_HOME` could have parked a login where this one parks its own.
+pub fn vault_is_shared(ctx: &Context) -> bool {
+    ctx.host().vault_is_shared()
 }
 
 /// What writing the live credential would cost, asked of the backend that would take the

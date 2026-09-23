@@ -89,7 +89,7 @@ enum Command {
         #[arg(short = 'n', long, default_value_t = 20)]
         lines: usize,
     },
-    /// Delete every parked login and pitboard's own files
+    /// Delete every parked login this pitboard wrote, and pitboard's own files
     Uninstall {
         /// Do not ask first
         #[arg(short = 'y', long)]
@@ -841,8 +841,9 @@ fn main() -> ExitCode {
                 && std::io::stderr().is_terminal()
             {
                 eprint!(
-                    "Delete every parked login and ~/.pitboard? The account you are signed \
-                     in to stays signed in; the others need a browser sign-in again. [y/N] "
+                    "Delete every parked login this pitboard wrote, and ~/.pitboard? The \
+                     account you are signed in to stays signed in; the others need a browser \
+                     sign-in again. [y/N] "
                 );
                 let _ = std::io::stderr().flush();
                 let mut answer = String::new();

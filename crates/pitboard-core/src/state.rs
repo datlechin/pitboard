@@ -200,6 +200,8 @@ pub struct State {
     /// `pitboard repair` found in the store and gave back. On macOS every `PITBOARD_HOME`
     /// shares the login keychain, so each may be another pitboard's parked login, and
     /// letting one go unused must leave it where it is. Removed once nothing here holds it.
+    /// Always empty where the vault is a directory inside this home, which nobody else
+    /// parks in.
     #[serde(default)]
     pub foreign: Vec<String>,
 }
@@ -331,6 +333,12 @@ impl State {
     /// Whether an account here holds `service` without this home having written it.
     pub fn is_foreign(&self, service: &str) -> bool {
         self.foreign.iter().any(|listed| listed == service)
+    }
+
+    /// Take `service` as this home's own from now on, because this home has used it: a
+    /// renewal presented its refresh token. Letting it go afterwards deletes it.
+    pub fn used_here(&mut self, service: &str) {
+        self.foreign.retain(|listed| listed != service);
     }
 
     /// Stop holding `service` because it has been used up, and list it for deletion

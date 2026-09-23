@@ -34,9 +34,9 @@ of compiling it. On Linux, the
 [latest release](https://github.com/datlechin/pitboard/releases/latest) carries static
 binaries for x86_64 and aarch64; the app is a signed and notarised download there too.
 
-Removing it: `pitboard uninstall` deletes every parked login and pitboard's own files,
-leaving the account you are signed in to signed in. Then remove the binary with whatever
-installed it.
+Removing it: `pitboard uninstall` deletes every parked login it wrote and pitboard's own
+files, leaving the account you are signed in to signed in. Then remove the binary with
+whatever installed it.
 
 ## Set up
 
@@ -130,8 +130,8 @@ Other commands:
   every login. Only needed when recovery cannot reach Anthropic.
 - `pitboard repair` asks the keychain what parked logins are on this machine and accounts
   for every one: given back to the account it belongs to, or reported and left alone.
-  Only needed if pitboard's own files were lost or restored from a backup. A login it gives
-  back that this pitboard did not write may be another pitboard's, so `forget` and
+  Only needed if pitboard's own files were lost or restored from a backup. On macOS a login
+  it gives back that this pitboard did not write may be another pitboard's, so `forget` and
   `uninstall` leave it where it is.
 - `pitboard adopt` takes over a `~/.pitboard` that came from another computer, keeping the
   accounts and dropping the logins they came with. Each then needs one
@@ -140,7 +140,9 @@ Other commands:
 - `pitboard schedule install` asks this computer's own scheduler to run that daily, so
   parked logins stay alive while you are away. Opt-in; `pitboard schedule status` says
   whether it is on and `pitboard schedule uninstall` takes it away.
-- `pitboard uninstall` deletes every parked login and pitboard's own files.
+- `pitboard uninstall` deletes every parked login it wrote and pitboard's own files. On
+  macOS it leaves one that `pitboard repair` gave back and this pitboard did not write, and
+  says how many it left.
 
 ## Codex
 

@@ -70,11 +70,14 @@ All notable changes are recorded here. The format follows
   belong to one `PITBOARD_HOME`, so a parked login it cannot account for is evidence of
   another pitboard rather than of an orphan, and deleting it would end that account's
   session for somebody who never ran the command. Giving one back is additive and safe on a
-  guess; deleting one is not, so a login given back that this pitboard never wrote down is
-  deleted only once pitboard has used it, by switching to it or renewing it. Parking over
-  it, `forget` and `uninstall` leave it where it is, and `uninstall` says how many it left,
-  as `parks_left` in `--json`. Measured first: `security dump-keychain` without `-d` never
-  prompts, takes 0.06 seconds, emits no secret of any item, and does not slow later reads.
+  guess; deleting one is not, so on macOS a login given back that this pitboard never wrote
+  down is deleted only once pitboard has used it, by switching to it or renewing it, even
+  when the renewal is stopped before it records what it got back. Parking over it, `forget`
+  and `uninstall` leave it where it is, and `uninstall` says how many it left, as
+  `parks_left` in `--json`. Elsewhere the vault is a directory inside pitboard's own, which
+  no other pitboard parks in, so whatever `repair` finds there is this one's. Measured
+  first: `security dump-keychain` without `-d` never prompts, takes 0.06 seconds, emits no
+  secret of any item, and does not slow later reads.
 - A crash matrix: every durable step of a switch, an enrolment, a renewal and a forget,
   killed where it stands, recovered, and checked against what must be true afterwards
   rather than against a particular outcome. Every case runs recovery twice, because a
