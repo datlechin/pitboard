@@ -230,6 +230,30 @@ pub struct Expiry {
     pub refresh_expires_at: Option<i64>,
 }
 
+/// Where one tool keeps its live login: the backends it reads, in the order it reads them,
+/// and the name the login is filed under in each.
+///
+/// Every tool pitboard knows keeps its login this way: Claude Code in a keychain item with
+/// a file behind it, Codex in a file or a keychain item depending on its configuration,
+/// Gemini in a file. Handing the switch the store itself, rather than a pair of read and
+/// write methods, is what lets one switch ask the questions a store answers the same way
+/// for every tool: what is there byte for byte, what a write would cost, whether it held.
+pub(crate) struct LiveStore {
+    pub(crate) chain: crate::store::Live,
+    pub(crate) service: String,
+}
+
+/// A store that could not be read, as the provider boundary reports it.
+pub(crate) fn store_error(error: crate::store::Error) -> ProviderError {
+    match error {
+        crate::store::Error::Malformed(detail) => ProviderError::Malformed(detail),
+        other => ProviderError::Network {
+            service: "this machine's credential store",
+            detail: other.to_string(),
+        },
+    }
+}
+
 /// One coding tool's login, as the rest of pitboard needs to touch it.
 ///
 /// Implementations live in `provider::<name>`. Nothing here knows about pitboard's state
@@ -238,22 +262,46 @@ pub struct Expiry {
 pub(crate) trait Provider: Send + Sync + std::fmt::Debug {
     fn id(&self) -> ProviderId;
 
+    /// Where this tool's live login is kept on this machine, right now.
+    ///
+    /// Resolved on every call and never cached: which backend holds the login depends on
+    /// the tool's own configuration and home variables, and either can change between two
+    /// commands. An error means this tool keeps nothing at rest here that pitboard could
+    /// park, which is not the same as nothing being signed in.
+    fn live(&self, ctx: &Context) -> Result<LiveStore, ProviderError>;
+
     /// The credential this tool would authenticate with right now.
     ///
     /// `Ok(None)` means nothing is signed in, which is an answer. A store that could not be
     /// read is an error and must never collapse into `None`: reading one as the other tells
     /// somebody their login is gone when it is merely unreadable.
-    fn read_live(&self, ctx: &Context) -> Result<Option<Credential>, ProviderError>;
+    fn read_live(&self, ctx: &Context) -> Result<Option<Credential>, ProviderError> {
+        let live = self.live(ctx)?;
+        crate::store::read(&live.chain, &live.service)
+            .map(|found| found.map(|raw| Credential::new(self.id(), raw)))
+            .map_err(store_error)
+    }
 
     /// Whose credential this is.
     fn identify(&self, ctx: &Context, credential: &Credential) -> Result<Identity, ProviderError>;
+
+    /// Whose credential this is, confirmed by the service still accepting it.
+    ///
+    /// The same answer as [`Provider::identify`] where that already asks the service, which
+    /// it does for Claude Code. A tool whose login names its own account can say whose it
+    /// is without anybody's agreement, and that is not enough before installing it: a login
+    /// the service has stopped accepting would be switched to, read back, found present,
+    /// and fail the next time the person ran the tool, with nothing parked to go back to.
+    fn verify(&self, ctx: &Context, credential: &Credential) -> Result<Identity, ProviderError> {
+        self.identify(ctx, credential)
+    }
 
     /// What this credential has left, normalised into pitboard's own shape.
     ///
     /// Takes the whole credential and the context, not an access token, because what a
     /// usage call needs is not the same everywhere: Codex sends an account id header it
-    /// reads out of the credential, and Gemini needs a project id from a file the
-    /// credential never mentions.
+    /// reads out of the credential, and Gemini needs a project id the credential never
+    /// mentions.
     fn usage(
         &self,
         ctx: &Context,
@@ -266,13 +314,32 @@ pub(crate) trait Provider: Send + Sync + std::fmt::Debug {
     /// racing it there is how a refresh chain gets spent twice.
     fn renew(&self, ctx: &Context, credential: &Credential) -> Result<Credential, ProviderError>;
 
-    /// Make this credential the live one, and prove it landed.
+    /// The lock this tool takes around its own writes to the live login, which pitboard
+    /// must hold too while it writes there. `None` for a tool that takes none, where there
+    /// is nothing to hold and nothing it could wait for.
+    fn write_lock(&self, ctx: &Context) -> Option<std::path::PathBuf>;
+
+    /// Who this tool itself says is signed in, read from its own files without asking
+    /// anybody.
     ///
-    /// What "make live" means underneath is the implementation's business: splicing one
-    /// account's keys into a document the machine shares for Claude Code, replacing a whole
-    /// file for Codex and Gemini. What the caller is promised is that a successful return
-    /// means the store was read back and holds what was written.
-    fn install_live(&self, ctx: &Context, credential: &Credential) -> Result<(), ProviderError>;
+    /// A cache for a tool that keeps one apart from its login, and can lag it; the login's
+    /// own claims for a tool whose login names its account. Good enough to decide which of
+    /// two messages to show and whether an account may be forgotten, never good enough to
+    /// file a login under.
+    fn recorded_identity(&self, ctx: &Context) -> Option<Identity>;
+
+    /// Correct whatever this tool caches about who is signed in, now that `incoming`'s
+    /// login is live in place of `outgoing`'s.
+    ///
+    /// Runs after the login has moved and cannot undo it, so a failure here is reported
+    /// and never rolled back: the tool would otherwise name an account whose login is no
+    /// longer there.
+    fn after_switch(
+        &self,
+        ctx: &Context,
+        incoming: &crate::state::Account,
+        outgoing: &Identity,
+    ) -> Result<(), crate::error::Error>;
 
     /// When a running session follows a switch. A fact about the tool, not a setting.
     fn adoption(&self) -> Adoption;

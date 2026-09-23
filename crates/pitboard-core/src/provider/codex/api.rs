@@ -49,7 +49,8 @@ fn unexpected(status: u16) -> ProviderError {
 /// The body is JSON rather than form-encoded, which is what Codex sends and is not what its
 /// own authorisation-code exchange sends. Getting that wrong is a 400 with nothing useful
 /// in it.
-pub(crate) struct Fresh {
+#[derive(Debug, Clone)]
+pub struct Fresh {
     pub id_token: Option<String>,
     pub access_token: Option<String>,
     pub refresh_token: Option<String>,
@@ -57,7 +58,56 @@ pub(crate) struct Fresh {
     pub at: Option<i64>,
 }
 
+/// What pitboard asks OpenAI, as a seam, for the same reason Anthropic's is one: a loopback
+/// server proves the parsing, and cannot produce on demand the timeouts, 429s and refused
+/// refresh tokens the engine has to be right about.
+pub(crate) trait OpenAi: Send + Sync + std::fmt::Debug {
+    fn usage(
+        &self,
+        ctx: &Context,
+        access_token: &str,
+        account_id: &str,
+        now: i64,
+    ) -> Result<Snapshot, ProviderError>;
+
+    fn renew(&self, ctx: &Context, refresh_token: &str) -> Result<Fresh, ProviderError>;
+}
+
+/// OpenAI, over the network. What every real context uses.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct Network;
+
+impl OpenAi for Network {
+    fn usage(
+        &self,
+        ctx: &Context,
+        access_token: &str,
+        account_id: &str,
+        now: i64,
+    ) -> Result<Snapshot, ProviderError> {
+        ask_usage(ctx, access_token, account_id, now)
+    }
+
+    fn renew(&self, ctx: &Context, refresh_token: &str) -> Result<Fresh, ProviderError> {
+        ask_renew(ctx, refresh_token)
+    }
+}
+
+/// Ask OpenAI through this context.
 pub(crate) fn renew(ctx: &Context, refresh_token: &str) -> Result<Fresh, ProviderError> {
+    ctx.openai().renew(ctx, refresh_token)
+}
+
+pub(crate) fn usage(
+    ctx: &Context,
+    access_token: &str,
+    account_id: &str,
+    now: i64,
+) -> Result<Snapshot, ProviderError> {
+    ctx.openai().usage(ctx, access_token, account_id, now)
+}
+
+fn ask_renew(ctx: &Context, refresh_token: &str) -> Result<Fresh, ProviderError> {
     let body = serde_json::json!({
         "client_id": CLIENT_ID,
         "grant_type": "refresh_token",
@@ -106,7 +156,7 @@ pub(crate) fn renew(ctx: &Context, refresh_token: &str) -> Result<Fresh, Provide
 /// A standalone GET: no model request, no quota spent. `ChatGPT-Account-ID` is required and
 /// comes out of the login document, which is why usage takes the whole credential rather
 /// than a bare token.
-pub(crate) fn usage(
+fn ask_usage(
     ctx: &Context,
     access_token: &str,
     account_id: &str,

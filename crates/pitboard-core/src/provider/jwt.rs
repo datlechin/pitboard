@@ -73,35 +73,44 @@ fn base64url(text: &str) -> Option<Vec<u8>> {
     ((held & ((1u32 << bits) - 1)) == 0).then_some(out)
 }
 
+/// Unpadded base64url, the inverse of what [`claims`] decodes.
+#[cfg(test)]
+fn part(bytes: &[u8]) -> String {
+    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+    let mut out = String::new();
+    for chunk in bytes.chunks(3) {
+        let mut held = 0u32;
+        for (at, byte) in chunk.iter().enumerate() {
+            held |= u32::from(*byte) << (16 - 8 * at);
+        }
+        let sextets = chunk.len().saturating_mul(8).div_ceil(6);
+        for at in 0..sextets {
+            let index = (held >> (18 - 6 * at)) & 0x3f;
+            out.push(char::from(ALPHABET[index as usize]));
+        }
+    }
+    out
+}
+
+/// A token in the shape a real one has, with a signature nothing checks. For tests that
+/// need a login whose claims name an account, which is every test of a tool that reads its
+/// identity out of the login.
+#[cfg(test)]
+pub(crate) fn unsigned(payload: &Value) -> String {
+    format!(
+        "{}.{}.{}",
+        part(br#"{"alg":"RS256"}"#),
+        part(payload.to_string().as_bytes()),
+        part(b"not a real signature")
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn part(bytes: &[u8]) -> String {
-        const ALPHABET: &[u8; 64] =
-            b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
-        let mut out = String::new();
-        for chunk in bytes.chunks(3) {
-            let mut held = 0u32;
-            for (at, byte) in chunk.iter().enumerate() {
-                held |= u32::from(*byte) << (16 - 8 * at);
-            }
-            let sextets = chunk.len().saturating_mul(8).div_ceil(6);
-            for at in 0..sextets {
-                let index = (held >> (18 - 6 * at)) & 0x3f;
-                out.push(char::from(ALPHABET[index as usize]));
-            }
-        }
-        out
-    }
-
     fn token(payload: &Value) -> String {
-        format!(
-            "{}.{}.{}",
-            part(br#"{"alg":"RS256"}"#),
-            part(payload.to_string().as_bytes()),
-            part(b"not a real signature")
-        )
+        unsigned(payload)
     }
 
     #[test]

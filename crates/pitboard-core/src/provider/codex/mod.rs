@@ -7,7 +7,7 @@
 //!
 //! Read from codex-cli 0.154.0, and dated in [`assumptions`].
 
-pub(crate) mod api;
+pub mod api;
 pub mod assumptions;
 pub(crate) mod engine;
 pub(crate) mod paths;

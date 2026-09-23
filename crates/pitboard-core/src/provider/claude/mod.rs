@@ -13,6 +13,7 @@
 pub mod assumptions;
 pub(crate) mod configfile;
 pub(crate) mod daemon;
+pub(crate) mod document;
 pub(crate) mod engine;
 pub(crate) mod live;
 pub(crate) mod paths;

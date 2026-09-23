@@ -8,9 +8,6 @@
 
 use crate::provider;
 use crate::provider::ProviderId;
-use crate::provider::claude::configfile;
-use crate::provider::claude::live as claude_live;
-use crate::provider::claude::paths as claude;
 mod adopt;
 #[cfg(test)]
 mod crash;
@@ -23,6 +20,8 @@ mod journal;
 mod refusals;
 mod rename;
 pub(crate) mod renew;
+#[cfg(test)]
+mod two_tools;
 mod uninstall;
 
 pub use crate::pending::Reclaimed;
@@ -63,40 +62,6 @@ pub enum Outcome {
     },
     /// Not a failure: the state the caller asked for already holds.
     AlreadyActive { label: String },
-}
-
-/// The account's whole slice of a credential document: `claudeAiOauth` and whatever else of
-/// [`ACCOUNT_SCOPED`] is there.
-///
-/// This is what gets parked. Parking the OAuth block alone meant a switch away deleted the
-/// rest of the account's keys and a switch back could not put them there, so an account
-/// came back to Claude Code slightly less than it left. Whether that costs a device
-/// re-verification is not something pitboard has measured, and it is not claimed anywhere;
-/// what is claimed is that restoring an account restores what was there.
-///
-/// Measured on one real account: the slice is 524 bytes against 506 for the OAuth block
-/// alone, which is nothing against the 4032-byte ceiling. An account holding a device token
-/// has not been measured, and the write path handles an oversized login either way.
-pub(crate) fn slice_of(document: &Value) -> Result<Value> {
-    let object = document
-        .as_object()
-        .ok_or_else(|| Error::LiveCredentialShapeUnexpected {
-            detail: "it is not a JSON object".into(),
-        })?;
-    let oauth =
-        object
-            .get("claudeAiOauth")
-            .ok_or_else(|| Error::LiveCredentialShapeUnexpected {
-                detail: "it has no claudeAiOauth block".into(),
-            })?;
-    let mut slice = serde_json::Map::new();
-    slice.insert("claudeAiOauth".into(), oauth.clone());
-    for key in ACCOUNT_SCOPED {
-        if let Some(value) = object.get(key) {
-            slice.insert(key.into(), value.clone());
-        }
-    }
-    Ok(Value::Object(slice))
 }
 
 /// pitboard's state, held exclusively, with any interrupted switch already finished. Every
@@ -203,9 +168,8 @@ fn lock_file(ctx: &Context) -> Result<(std::fs::File, PathBuf)> {
     Ok((file, path))
 }
 
-/// Who a live access token belongs to. When this cannot be answered, nothing moves: a login
+/// Whose login this document holds. When this cannot be answered, nothing moves: a login
 /// filed under a guessed account takes two accounts with it.
-/// Whose login this document holds.
 ///
 /// Through the provider, because the answer costs a network round trip for Claude Code and
 /// nothing at all for Codex, whose login carries a signed token naming the account. The
@@ -235,13 +199,37 @@ pub(super) fn identify_document(
         })
 }
 
-fn access_token(document: &Value) -> Result<String> {
-    document["claudeAiOauth"]["accessToken"]
-        .as_str()
-        .map(str::to_owned)
-        .ok_or_else(|| Error::LiveCredentialShapeUnexpected {
-            detail: "it has no access token".into(),
-        })
+/// Nothing is signed in to this tool, said the way the tool's own files explain it.
+///
+/// Nothing in any store pitboard reads, and the tool's own record naming somebody as signed
+/// in, are two different situations. The second means pitboard is looking in the wrong
+/// place, and writing a login there would put it where nobody reads.
+pub(super) fn nothing_signed_in(ctx: &Context, which: ProviderId) -> Error {
+    match provider::of(which).recorded_identity(ctx) {
+        Some(found) => Error::LiveCredentialElsewhere { email: found.email },
+        None => Error::LiveCredentialAbsent,
+    }
+}
+
+/// Where this tool's live login is, or why pitboard cannot act on it here.
+pub(super) fn live_store(ctx: &Context, which: ProviderId) -> Result<provider::LiveStore> {
+    provider::of(which).live(ctx).map_err(shape)
+}
+
+/// The live login as it is stored, byte for byte, and as a document.
+///
+/// The bytes are kept because a failed write is judged by whether they changed, and a
+/// document read back through a parser would compare equal to one whose bytes had moved.
+fn read_live(
+    ctx: &Context,
+    which: ProviderId,
+    live: &provider::LiveStore,
+) -> Result<(String, Value)> {
+    let raw = store::read_raw(&live.chain, &live.service)?
+        .ok_or_else(|| nothing_signed_in(ctx, which))?;
+    let document = serde_json::from_str(&raw)
+        .map_err(|e| Error::Store(store::Error::Malformed(e.to_string())))?;
+    Ok((raw, document))
 }
 
 pub fn switch(settled: Settled, key: &Key) -> Result<(Outcome, Vec<Warning>)> {
@@ -252,6 +240,7 @@ pub fn switch(settled: Settled, key: &Key) -> Result<(Outcome, Vec<Warning>)> {
     } = settled;
     let ctx = &ctx;
     let label = &key.label;
+    let tool = provider::of(key.provider);
     let target = state
         .get(key)
         .cloned()
@@ -259,14 +248,12 @@ pub fn switch(settled: Settled, key: &Key) -> Result<(Outcome, Vec<Warning>)> {
             label: key.typed(),
             enrolled: state.labels(key.provider),
         })?;
+    let live = live_store(ctx, key.provider)?;
 
-    // Asked before taking Claude Code's lock so the round trip does not hold up its writes,
+    // Asked before taking the tool's own lock so a round trip does not hold up its writes,
     // then confirmed under the lock.
-    let service = claude::live_service(ctx);
-    let live = store::read(&claude_live::chain(ctx), &service)?
-        .ok_or_else(|| claude::nothing_signed_in(ctx))?;
-    let identified_with = access_token(&live)?;
-    let outgoing = identify_document(ctx, ProviderId::Claude, &live)?;
+    let (_, first) = read_live(ctx, key.provider, &live)?;
+    let outgoing = identify_document(ctx, key.provider, &first)?;
 
     if outgoing.account_uuid == target.account_uuid {
         if state.active_for(key.provider) != Some(label.as_str()) {
@@ -282,37 +269,28 @@ pub fn switch(settled: Settled, key: &Key) -> Result<(Outcome, Vec<Warning>)> {
         .ok_or_else(|| Error::LiveAccountNotEnrolled {
             email: outgoing.email.clone(),
         })?;
-    let outgoing_label = outgoing_key.label.clone();
+    let (from, to) = (outgoing_key.typed(), key.typed());
     let held = target
         .parked
         .clone()
-        .ok_or_else(|| Error::NothingParked { label: key.typed() })?;
+        .ok_or_else(|| Error::NothingParked { label: to.clone() })?;
     if !held.restorable_at(ctx.now()) {
-        return Err(Error::ParkedLoginExpired { label: key.typed() });
+        return Err(Error::ParkedLoginExpired { label: to.clone() });
     }
     let incoming = park::load(ctx, key, &held)?;
-    // Asked before Claude Code's lock is taken, like the outgoing question, so the round
-    // trip does not hold up its writes.
+    // Asked before the tool's lock is taken, like the outgoing question, so the round trip
+    // does not hold up its writes.
     let (held, incoming) = prove_incoming(ctx, &mut state, key, &target, held, incoming)?;
 
-    let storage = PathBuf::from(claude::storage_dir(ctx)).join(".storage-write");
-    let guard = lock::acquire(&storage)?;
-
-    let before_raw = store::read_raw(&claude_live::chain(ctx), &service)?
-        .ok_or_else(|| claude::nothing_signed_in(ctx))?;
-    let before: Value =
-        serde_json::from_str(&before_raw).map_err(|e| Error::LiveCredentialShapeUnexpected {
-            detail: e.to_string(),
-        })?;
-    // Which tool's login this is, and therefore which rules apply to slicing it, putting
-    // another account's in, and reading a handle off its refresh token.
-    let tool = provider::of(target.provider());
-    // A refresh keeps the account, so an unchanged access token needs no second round trip.
-    // A sign-in between the two reads would not keep it.
-    let now_token = access_token(&before)?;
-    if now_token != identified_with
-        && identify_document(ctx, ProviderId::Claude, &before)?.account_uuid
-            != outgoing.account_uuid
+    let guard = tool
+        .write_lock(ctx)
+        .map(|dir| lock::acquire(&dir))
+        .transpose()?;
+    let (before_raw, before) = read_live(ctx, key.provider, &live)?;
+    // A refresh keeps the account, so an unchanged share of the document needs no second
+    // question. A sign-in between the two reads would not keep it.
+    if tool.slice(&before).ok() != tool.slice(&first).ok()
+        && identify_document(ctx, key.provider, &before)?.account_uuid != outgoing.account_uuid
     {
         return Err(Error::SignedInAccountChanged);
     }
@@ -321,12 +299,12 @@ pub fn switch(settled: Settled, key: &Key) -> Result<(Outcome, Vec<Warning>)> {
     // nothing.
     let next = to_body(tool.splice(&before, &incoming).map_err(shape)?);
     // Asked once. The answer is about the backend that would take this write, so a login
-    // living in the fallback file is not told it has the keychain's ceiling.
-    let price = store::cost(&claude_live::chain(ctx), &service, &next);
+    // living in a fallback file is not told it has the keychain's ceiling.
+    let price = store::cost(&live.chain, &live.service, &next);
     if price.is_some_and(store::Cost::refused) {
         let price = price.expect("refused implies a ceiling");
         return Err(Error::CredentialTooLarge {
-            label: label.to_string(),
+            label: to,
             bytes: price.needs,
             limit: price.limit,
         });
@@ -347,7 +325,7 @@ pub fn switch(settled: Settled, key: &Key) -> Result<(Outcome, Vec<Warning>)> {
         &Journal {
             provider: key.provider,
             started_at: ctx.now(),
-            from_label: outgoing_label.clone(),
+            from_label: outgoing_key.label.clone(),
             from_uuid: outgoing.account_uuid.clone(),
             to_label: label.to_string(),
             to_uuid: target.account_uuid.clone(),
@@ -390,19 +368,16 @@ pub fn switch(settled: Settled, key: &Key) -> Result<(Outcome, Vec<Warning>)> {
         state.discard(&parked.service);
         state::save(ctx, &state)?;
         clear_journal(ctx);
-        return Err(Error::ParkedCredentialMissing {
-            label: outgoing_label,
-        });
+        return Err(Error::ParkedCredentialMissing { label: from });
     }
 
-    if let Err(e) = install(
-        ctx,
-        target.provider(),
-        &service,
+    if let Err(e) = install_with(
+        |body| store::write_raw(&live.chain, &live.service, body),
+        || store::read_raw(&live.chain, &live.service),
         &next,
         &before_raw,
-        &outgoing_label,
-        label,
+        &from,
+        &to,
     ) {
         // Nobody could say what the slot holds. Keep every copy, and keep the record of
         // intent, so the next run with a store that answers finishes this or undoes it.
@@ -421,33 +396,29 @@ pub fn switch(settled: Settled, key: &Key) -> Result<(Outcome, Vec<Warning>)> {
     }
     fault::point("switch.installed");
 
-    // The write landed. That is not the same as it having held. Measured in 2.1.278, a
-    // `/logout` that has given up waiting deletes the credential with no lock held at all,
-    // which is the one Claude Code write this lock does not exclude; and a lock that aged
-    // out while the machine slept lets Claude Code reclaim it and write underneath. Both
-    // cost one keychain read to notice here, at 0.016 seconds against the two network round
-    // trips this command has already made, and cost a browser sign-in to discover later.
+    // The write landed. That is not the same as it having held. Measured in Claude Code
+    // 2.1.278, a `/logout` that has given up waiting deletes the credential with no lock
+    // held at all, which is the one write its lock does not exclude; and a lock that aged
+    // out while the machine slept lets the tool reclaim it and write underneath. Both cost
+    // one read to notice here, and cost a browser sign-in to discover later.
     //
     // Checked before the incoming copy is discarded, so finding it did not hold leaves both
-    // logins parked rather than neither.
-    let lock_lost = guard.compromised();
-    match store::read_raw(&claude_live::chain(ctx), &service) {
-        Ok(Some(now)) if now.contains("\"claudeAiOauth\"") => {
-            // Claude Code may have rotated the token it was just given, which keeps the
-            // account and changes the bytes. A login being there at all is the fact.
-            let _ = now;
-        }
+    // logins parked rather than neither. The tool may have rotated the token it was just
+    // given, which keeps the account and changes the bytes: a login of its shape being
+    // there at all is the fact.
+    let lock_lost = guard.as_ref().is_some_and(lock::Guard::compromised);
+    match store::read_raw(&live.chain, &live.service) {
+        Ok(Some(now))
+            if serde_json::from_str::<Value>(&now)
+                .is_ok_and(|document| tool.slice(&document).is_ok()) => {}
         Ok(_) => {
             clear_journal(ctx);
-            return Err(Error::SwitchDidNotHold {
-                from: outgoing_label,
-                to: label.to_string(),
-            });
+            return Err(Error::SwitchDidNotHold { from, to });
         }
         Err(unreadable) => {
             return Err(Error::SwitchUnverified {
-                from: outgoing_label,
-                to: label.to_string(),
+                from,
+                to,
                 detail: unreadable.to_string(),
             });
         }
@@ -460,15 +431,17 @@ pub fn switch(settled: Settled, key: &Key) -> Result<(Outcome, Vec<Warning>)> {
     fault::point("switch.recorded");
     drop(guard);
 
-    // Claude Code does not correct a stale config on its own; the next switch rewrites it.
-    let config_warning = update_config(
-        ctx,
-        &target,
-        &outgoing.account_uuid,
-        &outgoing.organization_uuid,
-    )
-    .err()
-    .map(Warning::ConfigNotUpdated);
+    // The tool does not correct what it caches about who is signed in on its own; the next
+    // switch rewrites it.
+    let outgoing_identity = provider::Identity {
+        account_id: outgoing.account_uuid.clone(),
+        email: outgoing.email.clone(),
+        group: Some(outgoing.organization_uuid.clone()).filter(|g| !g.is_empty()),
+    };
+    let cache_warning = tool
+        .after_switch(ctx, &target, &outgoing_identity)
+        .err()
+        .map(Warning::ConfigNotUpdated);
     fault::point("switch.config_updated");
     let parks_pending = purge(ctx, &mut state);
     clear_journal(ctx);
@@ -476,27 +449,27 @@ pub fn switch(settled: Settled, key: &Key) -> Result<(Outcome, Vec<Warning>)> {
     let warnings = on_the_command_line
         .into_iter()
         .chain(lock_lost.then_some(Warning::LockCompromised))
-        .chain(config_warning)
+        .chain(cache_warning)
         .chain((parks_pending > 0).then_some(Warning::ParksPendingRemoval(parks_pending)))
         .collect();
     Ok((
         Outcome::Switched {
             adoption: tool.adoption(),
-            from: outgoing_label,
-            to: label.to_string(),
+            from,
+            to,
             parked,
         },
         warnings,
     ))
 }
 
-/// Ask Anthropic about the login going in, not only about the one coming out.
+/// Ask the service about the login going in, not only about the one coming out.
 ///
 /// A switch used to ask twice about the login it was throwing away and never once about
 /// the one it was installing. If that account's refresh chain had been revoked, signed out
-/// elsewhere or refused by Anthropic, the switch installed it, read it back, found a login
+/// elsewhere or refused by the service, the switch installed it, read it back, found a login
 /// there and reported success; the person discovered they were signed out the next time
-/// they ran `claude`, with no login to go back to on either side.
+/// they ran the tool, with no login to go back to on either side.
 ///
 /// A lapsed park is renewed rather than refused, which is the whole point of parking one.
 /// That is a write, so it happens here, before anything is parked, while both copies are
@@ -510,28 +483,25 @@ fn prove_incoming(
     incoming: Value,
 ) -> Result<(Park, Value)> {
     let label = key.typed();
-    let usable = held.askable_at(ctx.now());
-    if usable {
-        let token = park::oauth_in(&incoming)["accessToken"]
-            .as_str()
-            .ok_or_else(|| Error::ParkedCredentialCorrupt {
-                label: label.clone(),
-                detail: "it has no access token".into(),
-            })?;
-        match api::owner(ctx, token) {
-            Ok(owner) if owner.account_uuid == target.account_uuid => return Ok((held, incoming)),
+    if held.askable_at(ctx.now()) {
+        let credential = provider::Credential::new(key.provider, incoming.clone());
+        match provider::of(key.provider).verify(ctx, &credential) {
+            Ok(found) if found.account_id == target.account_uuid => return Ok((held, incoming)),
             Ok(other) => {
                 return Err(Error::ParkedLoginBelongsElsewhere {
                     label,
                     email: other.email,
                 });
             }
-            // The access token has lapsed earlier than the recorded expiry said it
-            // would. Renewing settles it either way.
-            Err(api::ApiError::Unauthorized) => {}
+            // The access token has lapsed earlier than the recorded expiry said it would.
+            // Renewing settles it either way.
+            Err(provider::ProviderError::Unauthorized) => {}
+            Err(provider::ProviderError::ShapeUnexpected { detail, .. }) => {
+                return Err(Error::ParkedCredentialCorrupt { label, detail });
+            }
             Err(e) => {
                 return Err(Error::IdentityUnverifiable {
-                    cause: crate::error::Cause::of(&e),
+                    cause: crate::error::Cause::of_provider(&e),
                     detail: e.to_string(),
                 });
             }
@@ -559,81 +529,26 @@ fn only_copy_left(failure: &Error) -> bool {
     matches!(failure, Error::SwitchCorrupted { .. })
 }
 
-/// Keys that belong to the account rather than to the machine. Claude Code deletes all of
-/// them along with the login on logout, so leaving one behind would hand the incoming
-/// account the outgoing account's device token or its second OAuth block. Measured in
-/// 2.1.278: `delete i.claudeAiOauth, delete i.organizationUuid, delete i.trustedDeviceToken,
-/// delete i.enterpriseGateway, delete i.designOauth`.
-const ACCOUNT_SCOPED: [&str; 4] = [
-    "organizationUuid",
-    "trustedDeviceToken",
-    "enterpriseGateway",
-    "designOauth",
-];
-
-/// The live document with the incoming login in place of the outgoing one, and nothing of
-/// the outgoing account left behind. Claude Code makes these keys again as it needs them,
-/// which is the state a logout and a fresh login would leave.
-pub(crate) fn splice(before: &Value, incoming: &Value) -> Result<String> {
-    let mut next = before.clone();
-    let document = next
-        .as_object_mut()
-        .ok_or_else(|| Error::LiveCredentialShapeUnexpected {
-            detail: "it is not a JSON object".into(),
-        })?;
-    document.insert("claudeAiOauth".into(), park::oauth_in(incoming).clone());
-    // The outgoing account's keys go, and the incoming account's take their place where the
-    // park holds them. A park from a version that kept only the OAuth block holds none, and
-    // then this is exactly what it always did.
-    for key in ACCOUNT_SCOPED {
-        match incoming.get(key) {
-            Some(value) => document.insert(key.into(), value.clone()),
-            None => document.remove(key),
-        };
-    }
-    Ok(serde_json::to_string(&next).expect("a credential document stays serialisable"))
-}
-
 /// A provider saying a login is not the shape it keeps.
 ///
 /// Only the shape errors reach the switch this way. Anything about the network keeps the
 /// code the step it happened in gives it, because "could not reach Anthropic while proving
 /// who the incoming login belongs to" and "could not reach Anthropic for usage" are the
 /// same failure and not the same problem.
-fn shape(error: provider::ProviderError) -> Error {
-    Error::LiveCredentialShapeUnexpected {
-        detail: error.to_string(),
+pub(super) fn shape(error: provider::ProviderError) -> Error {
+    match error {
+        provider::ProviderError::ShapeUnexpected { detail, .. } => {
+            Error::LiveCredentialShapeUnexpected { detail }
+        }
+        other => Error::LiveCredentialShapeUnexpected {
+            detail: other.to_string(),
+        },
     }
 }
 
 /// A spliced document as bytes to write.
 fn to_body(document: Value) -> String {
     serde_json::to_string(&document).expect("a credential document stays serialisable")
-}
-
-fn install(
-    ctx: &Context,
-    which: ProviderId,
-    service: &str,
-    next: &str,
-    before_raw: &str,
-    from: &str,
-    to: &str,
-) -> Result<()> {
-    install_with(
-        |body| {
-            let document: Value =
-                serde_json::from_str(body).map_err(|e| store::Error::Malformed(e.to_string()))?;
-            let tool = provider::of(which);
-            tool.install_live(ctx, &provider::Credential::new(tool.id(), document))
-                .map_err(|e| store::Error::Write(e.to_string()))
-        },
-        || store::read_raw(&claude_live::chain(ctx), service),
-        next,
-        before_raw,
-        from,
-        to,
-    )
 }
 
 /// Write the new login, and if that fails, leave the old one in place.
@@ -686,131 +601,9 @@ fn install_with(
     }
 }
 
-/// Record the new identity in Claude Code's config. Runs after the login is in place, so
-/// the config never names an account before its login is live.
-fn update_config(
-    ctx: &Context,
-    target: &Account,
-    outgoing_account: &str,
-    outgoing_org: &str,
-) -> Result<()> {
-    let path = claude::config_file(ctx);
-    configfile::backup(ctx, &path)?;
-    configfile::update(ctx, &path, |config| {
-        configfile::splice_identity(
-            config,
-            target.claude().map_or(&Value::Null, |c| c.oauth_account),
-            &[outgoing_account, outgoing_org],
-        )
-    })
-    .map(|_| ())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    /// Claude Code deletes these along with the login on logout, so they belong to the
-    /// account. Left behind, the incoming account would present the outgoing account's
-    /// device token, and hold its second OAuth block.
-    /// What gets parked is the account's whole slice, so a switch back restores what was
-    /// there rather than the OAuth block and a set of missing keys.
-    #[test]
-    fn what_is_parked_is_everything_that_belongs_to_the_account() {
-        let live = serde_json::json!({
-            "claudeAiOauth": {"refreshToken": "a"},
-            "organizationUuid": "org-a",
-            "trustedDeviceToken": "device-of-a",
-            "enterpriseGateway": {"url": "https://gateway.example"},
-            "designOauth": {"refreshToken": "design-of-a"},
-            "mcpOAuth": {"a-server": "token"},
-            "somethingOfThisMachine": true,
-        });
-        let slice = slice_of(&live).expect("it has an oauth block");
-        assert_eq!(
-            slice,
-            serde_json::json!({
-                "claudeAiOauth": {"refreshToken": "a"},
-                "organizationUuid": "org-a",
-                "trustedDeviceToken": "device-of-a",
-                "enterpriseGateway": {"url": "https://gateway.example"},
-                "designOauth": {"refreshToken": "design-of-a"},
-            }),
-            "everything the account owns, and nothing the machine or another server owns"
-        );
-    }
-
-    /// Restoring puts the incoming account's keys where the outgoing account's were, and
-    /// takes away any the incoming account does not have.
-    #[test]
-    fn restoring_a_slice_replaces_the_outgoing_accounts_keys_rather_than_only_removing_them() {
-        let before = serde_json::json!({
-            "claudeAiOauth": {"refreshToken": "a"},
-            "organizationUuid": "org-a",
-            "trustedDeviceToken": "device-of-a",
-            "designOauth": {"refreshToken": "design-of-a"},
-            "mcpOAuth": {"a-server": "token"},
-        });
-        let incoming = serde_json::json!({
-            "claudeAiOauth": {"refreshToken": "b"},
-            "organizationUuid": "org-b",
-            "trustedDeviceToken": "device-of-b",
-        });
-        let after: Value =
-            serde_json::from_str(&splice(&before, &incoming).expect("spliced")).expect("json");
-
-        assert_eq!(after["claudeAiOauth"]["refreshToken"], "b");
-        assert_eq!(after["organizationUuid"], "org-b");
-        assert_eq!(after["trustedDeviceToken"], "device-of-b");
-        assert!(
-            after.get("designOauth").is_none(),
-            "a key the incoming account does not have must not be left holding the \
-             outgoing account's value"
-        );
-        assert_eq!(
-            after["mcpOAuth"]["a-server"], "token",
-            "and what belongs to neither account stays"
-        );
-    }
-
-    /// A park written by a version that kept only the OAuth block still restores, and still
-    /// clears the outgoing account's keys, which is exactly what it always did.
-    #[test]
-    fn a_park_from_before_the_slice_still_restores() {
-        let before = serde_json::json!({
-            "claudeAiOauth": {"refreshToken": "a"},
-            "organizationUuid": "org-a",
-            "trustedDeviceToken": "device-of-a",
-        });
-        let legacy = serde_json::json!({"refreshToken": "b", "accessToken": "b-access"});
-        let after: Value =
-            serde_json::from_str(&splice(&before, &legacy).expect("spliced")).expect("json");
-
-        assert_eq!(after["claudeAiOauth"]["refreshToken"], "b");
-        assert!(after.get("organizationUuid").is_none());
-        assert!(after.get("trustedDeviceToken").is_none());
-    }
-
-    #[test]
-    fn a_switch_leaves_nothing_of_the_outgoing_account() {
-        let before = serde_json::json!({
-            "claudeAiOauth": {"refreshToken": "old"},
-            "organizationUuid": "org-a",
-            "trustedDeviceToken": "device-of-a",
-            "enterpriseGateway": {"url": "https://gateway.example"},
-            "designOauth": {"refreshToken": "design-of-a"},
-            "somethingOfThisMachine": true,
-        });
-        let after: Value = serde_json::from_str(
-            &splice(&before, &serde_json::json!({"refreshToken": "new"})).expect("spliced"),
-        )
-        .expect("valid JSON");
-        assert_eq!(after["claudeAiOauth"]["refreshToken"], "new");
-        assert_eq!(after["somethingOfThisMachine"], true);
-        for key in ACCOUNT_SCOPED {
-            assert!(after.get(key).is_none(), "{key} was left behind");
-        }
-    }
 
     use std::cell::RefCell;
 
@@ -931,11 +724,5 @@ mod tests {
             detail: detail.clone(),
         }));
         assert!(only_copy_left(&Error::SwitchCorrupted { from, to, detail }));
-    }
-
-    #[test]
-    fn a_credential_without_claude_ai_oauth_is_refused() {
-        assert!(slice_of(&serde_json::json!({"slackTag": {}})).is_err());
-        assert!(slice_of(&serde_json::json!({"claudeAiOauth": {"accessToken": "a"}})).is_ok());
     }
 }

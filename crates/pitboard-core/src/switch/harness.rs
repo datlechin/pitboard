@@ -1,14 +1,16 @@
-//! A machine to run changes against: two accounts, stores in memory, an Anthropic that
-//! answers from a script, and a clock that stands still.
+//! A machine to run changes against: two accounts of one tool, stores in memory, services
+//! that answer from a script, and a clock that stands still.
 //!
 //! Shared by the tests that kill a change partway ([`super::crash`]) and the tests that
 //! make one refuse ([`super::refusals`]), because both need the same starting shape: one
-//! account signed in, one parked and ready, and Claude Code's own files where the engine
-//! expects them.
+//! account signed in, one parked and ready, and the tool's own files where the engine
+//! expects them. There is one for each tool, and the invariants in [`hold`] are asked of
+//! every one of them through the provider boundary, because what must be true after a
+//! crash is a fact about parking a login and not about any one tool's.
 
 use super::*;
+use crate::api::Owner;
 use crate::api::scripted::ScriptedApi;
-use crate::api::{Api, Owner};
 use crate::provider::ProviderId;
 use crate::provider::claude::paths as claude;
 
@@ -36,13 +38,38 @@ pub(super) struct Machine {
     pub(super) mem: Arc<MemoryHost>,
     pub(super) api: Arc<ScriptedApi>,
     root: PathBuf,
+    /// The keychain item Claude Code's login is in, on a Claude Code machine.
     pub(super) service: String,
+    /// Which tool's accounts this machine holds.
+    pub(super) which: ProviderId,
 }
 
 impl Machine {
-    /// Where Claude Code's own files are, for a test that needs to change one.
+    /// Where the tool's own files are, for a test that needs to change one.
     pub(super) fn ctx_home(&self) -> PathBuf {
         self.root.clone()
+    }
+
+    /// The live login, read the way the tool reads it.
+    pub(super) fn live(&self) -> Option<Value> {
+        crate::provider::of(self.which)
+            .read_live(&self.ctx)
+            .ok()
+            .flatten()
+            .map(|credential| credential.raw)
+    }
+
+    /// Replace the live login, the way the tool itself would write it.
+    pub(super) fn sign_in(&self, document: &Value) {
+        let live = crate::provider::of(self.which)
+            .live(&self.ctx)
+            .expect("a store to write to");
+        store::write_raw(&live.chain, &live.service, &document.to_string())
+            .expect("the live login is written");
+    }
+
+    pub(super) fn key(&self, label: &str) -> Key {
+        Key::new(self.which, label)
     }
 }
 
@@ -142,7 +169,112 @@ pub(super) fn machine(name: &str) -> Machine {
         api,
         root,
         service,
+        which: ProviderId::Claude,
     }
+}
+
+/// Where OpenAI puts its own claims in a standard token.
+const OPENAI: &str = "https://api.openai.com/auth";
+
+/// A Codex login as `codex login` writes one, for the account `who`.
+///
+/// The access token is unique to the refresh token so every login has its own, which is
+/// what the scripted usage answers are keyed by.
+pub(super) fn codex_login(who: &str, refresh: &str) -> Value {
+    json!({
+        "auth_mode": "chatgpt",
+        "OPENAI_API_KEY": null,
+        "tokens": {
+            "id_token": crate::provider::jwt::unsigned(&json!({
+                "email": format!("{who}@example.com"),
+                "exp": NOW + 3600,
+                OPENAI: {"chatgpt_account_id": who, "chatgpt_plan_type": "pro"},
+            })),
+            "access_token": codex_access(refresh),
+            "refresh_token": refresh,
+            "account_id": who,
+        },
+        "last_refresh": "2025-10-09T08:00:00Z",
+    })
+}
+
+/// The access token [`codex_login`] carries for this refresh token.
+pub(super) fn codex_access(refresh: &str) -> String {
+    crate::provider::jwt::unsigned(&json!({"exp": NOW + 10 * 86_400, "for": refresh}))
+}
+
+pub(super) fn codex_account(label: &str, uuid: &str, parked: Option<Park>) -> Account {
+    Account {
+        last_used_at: None,
+        label: label.into(),
+        account_uuid: uuid.into(),
+        email: format!("{uuid}@example.com"),
+        parked,
+        detail: crate::state::Detail::Codex {
+            workspace_id: None,
+            plan: Some("pro".into()),
+        },
+    }
+}
+
+/// The same shape for Codex: `here` is signed in, `there` is parked and ready, and OpenAI
+/// answers for both.
+pub(super) fn codex_machine(name: &str) -> Machine {
+    let root = std::env::temp_dir().join(format!(
+        "pitboard-crash-codex-{name}-{}-{:?}",
+        std::process::id(),
+        std::thread::current().id()
+    ));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(root.join(".codex")).expect("a scratch codex home");
+
+    let mem = MemoryHost::new();
+    let api = ScriptedApi::new();
+    let ctx = Context::new(root.clone())
+        .with_pitboard_home(root.join(".pitboard"))
+        .with_codex_home(root.join(".codex").to_string_lossy().into_owned())
+        .with_memory_stores(Arc::clone(&mem))
+        .with_scripted_api(Arc::clone(&api))
+        .with_clock(Arc::new(FixedClock::at(NOW)) as Arc<dyn Clock>);
+    let machine = Machine {
+        ctx,
+        mem,
+        api,
+        root,
+        service: String::new(),
+        which: ProviderId::Codex,
+    };
+    machine.sign_in(&codex_login("here", "here-refresh"));
+    for refresh in ["here-refresh", "there-refresh"] {
+        machine.api.using(
+            &codex_access(refresh),
+            crate::usage::Snapshot {
+                windows: Vec::new(),
+                observed_at: Some(NOW),
+                account_uuid: None,
+                source: crate::usage::Source::Live,
+            },
+        );
+    }
+
+    std::fs::create_dir_all(machine.root.join(".pitboard")).expect("a pitboard home");
+    let parked_service = park::reserve(&machine.ctx, "there").expect("a free name");
+    let parked = park::store_at(
+        &machine.ctx,
+        ProviderId::Codex,
+        &parked_service,
+        &codex_login("there", "there-refresh"),
+    )
+    .expect("parked");
+
+    let mut state = State::default();
+    state.accounts.push(codex_account("here", "here", None));
+    state
+        .accounts
+        .push(codex_account("there", "there", Some(parked)));
+    state.set_active(ProviderId::Codex, Some("here".into()));
+    state::save(&machine.ctx, &state).expect("saved");
+    machine
 }
 
 pub(super) fn account(label: &str, uuid: &str, parked: Option<Park>) -> Account {
@@ -187,20 +319,19 @@ pub(super) fn hold(m: &Machine, after: &str) {
     }
 
     // One refresh token, one place. A token in two places is a token one holder will rotate
-    // past, which ends the login for the other.
+    // past, which ends the login for the other; for a tool whose sign-out revokes what it
+    // finds, it is a token the person's own next sign-out kills in both.
+    let tool = crate::provider::of(m.which);
     let mut seen: HashSet<String> = HashSet::new();
     let mut fingerprints = Vec::new();
     for service in m.mem.vault().services() {
         let raw = m.mem.vault().peek(&service).expect("just listed");
         let value: Value = serde_json::from_str(&raw).expect("a park is JSON");
-        fingerprints.push((service, park::fingerprint_of(&value)));
+        fingerprints.push((service, tool.fingerprint(&value)));
     }
-    if let Some(raw) = m.mem.live().peek(&m.service) {
-        let value: Value = serde_json::from_str(&raw).expect("the live credential is JSON");
-        fingerprints.push((
-            "the live slot".into(),
-            park::fingerprint_of(&value["claudeAiOauth"]),
-        ));
+    let live = m.live();
+    if let Some(document) = &live {
+        fingerprints.push(("the live slot".into(), tool.fingerprint(document)));
     }
     for (place, fingerprint) in fingerprints {
         assert!(
@@ -211,18 +342,12 @@ pub(super) fn hold(m: &Machine, after: &str) {
 
     // Every account can still be got back to. Signed in, or holding a login that can be
     // restored, or holding nothing and saying so, but never holding one that has expired.
-    let live_uuid = m
-        .mem
-        .live()
-        .peek(&m.service)
-        .and_then(|raw| serde_json::from_str::<Value>(&raw).ok())
-        .and_then(|doc| {
-            doc["claudeAiOauth"]["accessToken"]
-                .as_str()
-                .map(str::to_owned)
+    let live_uuid = live
+        .and_then(|document| {
+            tool.identify(&m.ctx, &crate::provider::Credential::new(m.which, document))
+                .ok()
         })
-        .and_then(|token| m.api.owner(&m.ctx, &token).ok())
-        .map(|o| o.account_uuid);
+        .map(|found| found.account_id);
     for a in &state.accounts {
         if Some(&a.account_uuid) == live_uuid.as_ref() {
             continue;

@@ -947,7 +947,7 @@ fn redaction_for(ctx: &Context, facts: &Facts) -> crate::redact::Sheet {
     if let Ok(Some(doc)) = &facts.credential
         && let Some(fingerprint) = doc
             .get("claudeAiOauth")
-            .map(crate::park::fingerprint_of)
+            .map(crate::provider::claude::document::fingerprint_of)
             .filter(|f| !f.is_empty())
     {
         sheet = sheet.hide(fingerprint, "login");

@@ -16,7 +16,7 @@
 //! a machine that cannot be fixed by running the command again, which is the only
 //! instruction a person is ever given.
 
-use super::harness::{NOW, POINTS, document, hold, machine, owner, recover};
+use super::harness::{NOW, POINTS, codex_machine, document, hold, machine, owner, recover};
 use super::*;
 use crate::api::scripted::{ScriptedApi, Trouble};
 use crate::fault;
@@ -26,29 +26,34 @@ use std::sync::Arc;
 
 /// Kill a switch at every durable step, recover, and check. Then recover again, because a
 /// recovery that only works once leaves a machine nobody can fix.
+///
+/// For every tool, through the same invariants: what must be true after a crash is a fact
+/// about parking a login, and a tool whose park may never be a copy is exactly the one
+/// where getting it wrong costs most.
 #[test]
 fn a_switch_killed_at_any_step_recovers_to_something_whole() {
-    for point in POINTS {
-        let m = machine(&point.replace('.', "-"));
+    type Make = fn(&str) -> super::harness::Machine;
+    let machines: [(&str, Make); 2] = [("claude", machine), ("codex", codex_machine)];
+    for (tool, make) in machines {
+        for point in POINTS {
+            let m = make(&point.replace('.', "-"));
 
-        let settled = settle(&m.ctx).expect("nothing to recover yet").0;
-        let died = fault::killing(point, || {
-            switch(
-                settled,
-                &crate::state::Key::new(crate::provider::ProviderId::Claude, "there"),
-            )
-        });
-        assert_eq!(
-            died.unwrap_err(),
-            point,
-            "the switch must reach {point} on this machine, or the case proves nothing"
-        );
+            let settled = settle(&m.ctx).expect("nothing to recover yet").0;
+            let died = fault::killing(point, || switch(settled, &m.key("there")));
+            assert_eq!(
+                died.unwrap_err(),
+                point,
+                "{tool}: the switch must reach {point} on this machine, or the case proves \
+                 nothing"
+            );
 
-        recover(&m).unwrap_or_else(|e| panic!("{point}: recovery refused: {e}"));
-        hold(&m, point);
+            let at = format!("{tool}, {point}");
+            recover(&m).unwrap_or_else(|e| panic!("{at}: recovery refused: {e}"));
+            hold(&m, &at);
 
-        recover(&m).unwrap_or_else(|e| panic!("{point}: the second recovery refused: {e}"));
-        hold(&m, &format!("{point}, recovered twice"));
+            recover(&m).unwrap_or_else(|e| panic!("{at}: the second recovery refused: {e}"));
+            hold(&m, &format!("{at}, recovered twice"));
+        }
     }
 }
 

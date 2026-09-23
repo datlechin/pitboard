@@ -5,8 +5,8 @@ use crate::context::Context;
 use crate::error::{Error, Result};
 use crate::provider::ProviderId;
 use crate::state::{Key, Park, State};
-use crate::{api, store};
-use serde_json::{Value, json};
+use crate::store;
+use serde_json::Value;
 
 const PREFIX: &str = "pitboard-park-";
 
@@ -79,60 +79,6 @@ pub fn describe(provider: ProviderId, service: &str, parked_at: i64, document: &
     }
 }
 
-/// The parked login with fresh tokens, stored as Claude Code stores its own after renewing,
-/// so it reads the same to Claude Code once restored. With no refresh-token lifetime in the
-/// answer Claude Code keeps the date it already had (`refreshTokenExpiresAt ?? previous`,
-/// measured in 2.1.278); dropping it instead would make a lapsed park look immortal, and
-/// pitboard would keep offering and renewing it forever.
-pub fn renewed(document: &Value, fresh: &api::Renewed, now_millis: i64) -> Value {
-    let mut next = document.clone();
-    // Whatever else the slice holds is kept; only the tokens move.
-    let oauth = match next.get_mut("claudeAiOauth") {
-        Some(block) => block,
-        None => &mut next,
-    };
-    let Some(fields) = oauth.as_object_mut() else {
-        return next;
-    };
-    fields.insert("accessToken".into(), json!(fresh.access_token));
-    if let Some(refresh) = &fresh.refresh_token {
-        fields.insert("refreshToken".into(), json!(refresh));
-    }
-    fields.insert(
-        "expiresAt".into(),
-        json!(now_millis + fresh.expires_in * 1000),
-    );
-    if let Some(seconds) = fresh.refresh_token_expires_in {
-        fields.insert(
-            "refreshTokenExpiresAt".into(),
-            json!(now_millis + seconds * 1000),
-        );
-    }
-    if let Some(scopes) = &fresh.scopes {
-        fields.insert("scopes".into(), json!(scopes));
-    }
-    next
-}
-
-/// The OAuth block inside a parked login.
-///
-/// A park holds the account's whole slice of Claude Code's credential document, which is
-/// `claudeAiOauth` plus whatever else of [`crate::switch::ACCOUNT_SCOPED`] was there. A
-/// park written before that held the OAuth block alone, so a document with no
-/// `claudeAiOauth` key is one of those and is the block itself. Reading either shape is
-/// what lets a park from an older pitboard still be restored.
-pub fn oauth_in(document: &Value) -> &Value {
-    document.get("claudeAiOauth").unwrap_or(document)
-}
-
-pub fn fingerprint_of(document: &Value) -> String {
-    oauth_in(document)
-        .get("refreshToken")
-        .and_then(Value::as_str)
-        .map(store::fingerprint)
-        .unwrap_or_default()
-}
-
 /// Takes the account so a failure names it, not an item the user has never seen, and so
 /// the fingerprint is read the way that account's tool lays its login out.
 pub fn load(ctx: &Context, key: &Key, park: &Park) -> Result<Value> {
@@ -169,6 +115,7 @@ mod tests {
     use super::*;
     use crate::store::memory::{Fault, MemoryHost};
     use crate::time::FixedClock;
+    use serde_json::json;
     use std::sync::Arc;
 
     fn work() -> Key {
@@ -294,53 +241,10 @@ mod tests {
         assert_eq!(park.refresh_expires_at, Some(1_792_000_000));
         assert_eq!(
             park.refresh_fingerprint,
-            fingerprint_of(&serde_json::json!({"refreshToken": "r"}))
+            crate::provider::claude::document::fingerprint_of(&serde_json::json!({
+                "refreshToken": "r"
+            }))
         );
-    }
-
-    #[test]
-    fn a_renewed_login_is_stored_as_claude_code_stores_its_own() {
-        let parked = json!({
-            "accessToken": "a1", "refreshToken": "r1", "expiresAt": 1,
-            "refreshTokenExpiresAt": 2, "scopes": ["user:inference"],
-            "subscriptionType": "max", "rateLimitTier": "default_claude_max_20x"
-        });
-        let fresh = api::Renewed {
-            access_token: "a2".into(),
-            refresh_token: Some("r2".into()),
-            expires_in: 60,
-            refresh_token_expires_in: Some(120),
-            scopes: None,
-            at: None,
-        };
-        let next = renewed(&parked, &fresh, 1_000_000);
-        assert_eq!(next["accessToken"], "a2");
-        assert_eq!(next["refreshToken"], "r2");
-        assert_eq!(next["expiresAt"], 1_060_000);
-        assert_eq!(next["refreshTokenExpiresAt"], 1_120_000);
-        assert_eq!(
-            next["scopes"],
-            json!(["user:inference"]),
-            "kept when not answered"
-        );
-        assert_eq!(
-            next["subscriptionType"], "max",
-            "what renewal does not touch stays"
-        );
-
-        let kept = api::Renewed {
-            refresh_token: None,
-            refresh_token_expires_in: None,
-            ..fresh
-        };
-        let next = renewed(&parked, &kept, 1_000_000);
-        assert_eq!(
-            next["refreshToken"], "r1",
-            "the server kept the refresh token"
-        );
-        // Claude Code keeps the date it had. Dropping it would make a park that is about to
-        // lapse look as though it never expires.
-        assert_eq!(next["refreshTokenExpiresAt"], 2);
     }
 
     #[test]
@@ -366,10 +270,5 @@ mod tests {
             &serde_json::json!({"accessToken": "a"}),
         );
         assert!(refused.is_err());
-    }
-
-    #[test]
-    fn a_credential_with_no_refresh_token_fingerprints_to_nothing_rather_than_panicking() {
-        assert_eq!(fingerprint_of(&serde_json::json!({"accessToken": "a"})), "");
     }
 }

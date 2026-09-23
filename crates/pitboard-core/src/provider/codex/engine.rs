@@ -6,8 +6,8 @@
 use super::{api, paths};
 use crate::context::Context;
 use crate::provider::{
-    Adoption, Credential, Expiry, Identity, Isolation, ParkSemantics, Provider, ProviderError,
-    ProviderId, jwt,
+    Adoption, Credential, Expiry, Identity, Isolation, LiveStore, ParkSemantics, Provider,
+    ProviderError, ProviderId, jwt,
 };
 use crate::store::{self, Live, RawStore};
 use crate::usage::Snapshot;
@@ -41,7 +41,7 @@ impl Provider for Codex {
         ProviderId::Codex
     }
 
-    fn read_live(&self, ctx: &Context) -> Result<Option<Credential>, ProviderError> {
+    fn live(&self, ctx: &Context) -> Result<LiveStore, ProviderError> {
         if paths::backend(ctx) == paths::Backend::Ephemeral {
             return Err(ProviderError::ShapeUnexpected {
                 provider: ProviderId::Codex,
@@ -51,12 +51,10 @@ impl Provider for Codex {
                     .into(),
             });
         }
-        store::read(&chain(ctx), paths::KEYCHAIN_SERVICE)
-            .map(|found| found.map(|raw| Credential::new(ProviderId::Codex, raw)))
-            .map_err(|e| ProviderError::Network {
-                service: "this machine's credential store",
-                detail: e.to_string(),
-            })
+        Ok(LiveStore {
+            chain: chain(ctx),
+            service: paths::KEYCHAIN_SERVICE.to_string(),
+        })
     }
 
     /// Read out of the login itself, with no network call at all.
@@ -140,15 +138,36 @@ impl Provider for Codex {
         Ok(Credential::new(ProviderId::Codex, next))
     }
 
-    fn install_live(&self, ctx: &Context, credential: &Credential) -> Result<(), ProviderError> {
-        let body = serde_json::to_string(&credential.raw)
-            .expect("a credential document stays serialisable");
-        store::write_raw(&chain(ctx), paths::KEYCHAIN_SERVICE, &body).map_err(|e| {
-            ProviderError::Network {
-                service: "this machine's credential store",
-                detail: e.to_string(),
-            }
-        })
+    /// The ID token names the account whether or not OpenAI still accepts the login, so
+    /// that is asked separately, with the cheapest request that answers it: the same usage
+    /// read `status` makes, which spends no quota.
+    fn verify(&self, ctx: &Context, credential: &Credential) -> Result<Identity, ProviderError> {
+        let found = self.identify(ctx, credential)?;
+        self.usage(ctx, credential)?;
+        Ok(found)
+    }
+
+    /// Codex writes its login with a plain truncating write and takes no lock of any kind,
+    /// so there is none for pitboard to share.
+    fn write_lock(&self, _ctx: &Context) -> Option<std::path::PathBuf> {
+        None
+    }
+
+    /// The login is its own record: its ID token names the account, and Codex keeps no
+    /// other file saying who is signed in.
+    fn recorded_identity(&self, ctx: &Context) -> Option<Identity> {
+        let live = self.read_live(ctx).ok()??;
+        self.identify(ctx, &live).ok()
+    }
+
+    /// Nothing to correct: Codex caches no identity apart from the login itself.
+    fn after_switch(
+        &self,
+        _ctx: &Context,
+        _incoming: &crate::state::Account,
+        _outgoing: &Identity,
+    ) -> Result<(), crate::error::Error> {
+        Ok(())
     }
 
     /// Nothing follows on its own.
@@ -237,31 +256,7 @@ mod tests {
     use super::*;
 
     fn token(payload: &Value) -> String {
-        // The same encoder the jwt tests use, kept local so this file needs nothing of
-        // theirs.
-        const ALPHABET: &[u8; 64] =
-            b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
-        let part = |bytes: &[u8]| {
-            let mut out = String::new();
-            for chunk in bytes.chunks(3) {
-                let mut held = 0u32;
-                for (at, byte) in chunk.iter().enumerate() {
-                    held |= u32::from(*byte) << (16 - 8 * at);
-                }
-                for at in 0..chunk.len().saturating_mul(8).div_ceil(6) {
-                    out.push(char::from(
-                        ALPHABET[((held >> (18 - 6 * at)) & 0x3f) as usize],
-                    ));
-                }
-            }
-            out
-        };
-        format!(
-            "{}.{}.{}",
-            part(b"{}"),
-            part(payload.to_string().as_bytes()),
-            part(b"sig")
-        )
+        jwt::unsigned(payload)
     }
 
     fn login() -> Value {

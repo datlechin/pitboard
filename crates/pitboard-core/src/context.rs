@@ -3,6 +3,7 @@
 //! itself: an app started from Finder does not see a shell's environment.
 
 use crate::api::{Anthropic, Api};
+use crate::provider::codex::api::{Network as OpenAiNetwork, OpenAi};
 use crate::store::Host;
 use crate::time::{Clock, SystemClock};
 use std::path::PathBuf;
@@ -49,6 +50,8 @@ pub struct Context {
     pub(crate) host: Arc<dyn Host>,
     /// Who answers for Anthropic. The network in every real context.
     pub(crate) api: Arc<dyn Api>,
+    /// Who answers for OpenAI. The network in every real context.
+    pub(crate) openai: Arc<dyn OpenAi>,
 }
 
 impl Context {
@@ -73,6 +76,10 @@ impl Context {
     }
 
     /// Who this context asks about a login.
+    pub(crate) fn openai(&self) -> &dyn OpenAi {
+        self.openai.as_ref()
+    }
+
     pub(crate) fn api(&self) -> &dyn Api {
         self.api.as_ref()
     }
@@ -98,6 +105,7 @@ impl Context {
             clock: Arc::new(SystemClock),
             host: crate::store::host(),
             api: Arc::new(Anthropic),
+            openai: Arc::new(OpenAiNetwork),
         }
     }
 
@@ -201,14 +209,18 @@ impl Context {
             clock: Arc::new(SystemClock),
             host: crate::store::host(),
             api: Arc::new(Anthropic),
+            openai: Arc::new(OpenAiNetwork),
         }
     }
 
-    /// Answer for Anthropic from a script, where a test can produce a 429 or a refusal.
+    /// Answer for every service from a script, where a test can produce a 429 or a
+    /// refusal. One script for all of them, so a test that forgets to script a tool's
+    /// service gets a refusal rather than a request to the real one.
     #[cfg(any(test, feature = "test-support"))]
     #[doc(hidden)]
     pub fn with_scripted_api(mut self, api: Arc<crate::api::scripted::ScriptedApi>) -> Context {
-        self.api = api;
+        self.api = api.clone();
+        self.openai = api;
         self
     }
 
