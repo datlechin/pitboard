@@ -1,7 +1,7 @@
 # Security
 
-pitboard handles OAuth refresh tokens that grant full access to a paid account: Claude
-Code's and Codex's. This file says where they live, what pitboard defends against, and what
+pitboard handles the OAuth refresh tokens of Claude Code and Codex, which grant full access
+to a paid account. This file says where they live, what pitboard defends against, and what
 it does not.
 
 ## Where your credentials are
@@ -18,8 +18,8 @@ the slice is 524 bytes against 506 for the OAuth block alone; an account holding
 token has not been measured. Whether restoring a device token spares a re-verification is
 also not measured, and is not claimed. They are
 read and written only through `/usr/bin/security`, the one application the item's access
-list trusts. No token is passed on a command line, where `ps` could see it; it goes to `security` on
-standard input.
+list trusts. A token goes to `security` on standard input rather than on a command line,
+where `ps` could see it, unless the login is too large for that (see below).
 
 Codex keeps its login in a file, `~/.codex/auth.json` (or `$CODEX_HOME/auth.json`), at mode
 0600, on macOS as everywhere else. pitboard reads and writes that file and no other store of
@@ -29,15 +29,14 @@ obtained at sign-in. It goes into a `pitboard-park-` keychain item like a Claude
 
 Codex can instead be set to keep its login in the keychain: `cli_auth_credentials_store` set
 to `keyring` or `auto` in its `config.toml`, with or without the `secret_auth_storage`
-feature. pitboard refuses to work with that setup rather than read it. Those items are
-Codex's own, made through the Security framework and trusting only `codex`, so every read
-by another program would bring up a permission prompt, and choosing Always Allow would
-change Codex's item. `ephemeral`, which keeps the login in memory only, is refused too:
-there is nothing at rest to park.
+feature. pitboard refuses that setup. Those items are Codex's own, made through the
+Security framework and trusting only `codex`, so every read by another program would bring
+up a permission prompt, and choosing Always Allow would change Codex's item. `ephemeral`,
+which keeps the login in memory only, is refused too: there is nothing at rest to park.
 
 A login larger than about two kilobytes cannot go through standard input. MCP server tokens
-make a Claude Code login that large, and every Codex park is larger, being the whole
-`auth.json` at over four kilobytes. `security` reads at most 4097 bytes of command from
+make a Claude Code login that large, and every Codex park is larger: it is the whole
+`auth.json`, over four kilobytes. `security` reads at most 4097 bytes of command from
 standard input, with no line continuation, and its interactive prompt takes 128 bytes.
 Measured on macOS 26 on 22 September 2026, along with the two alternatives:
 
@@ -52,12 +51,15 @@ making Claude Code permanently slower to save an exposure of a few milliseconds.
 cannot be undone without `security set-key-partition-list`, which asks for the keychain
 password.
 
-So pitboard does what Claude Code itself does for the same login on every token refresh: it
-passes it as an argument, and says so in the warnings of that switch or enrolment, and in
-`doctor` for a Claude Code login. Codex writes its own login to a file, so for a Codex park
-the exposure is pitboard's alone, and it comes with every Codex switch, enrolment and
-renewal on macOS. `PITBOARD_NO_ARGV=1` refuses the write instead, for anyone who would
-rather have neither; on macOS that means no Codex account can be parked.
+So pitboard passes it as an argument and says so in the warnings of that switch or
+`--sign-in` enrolment, and in `doctor` for a Claude Code login. A renewal of a parked login
+writes the same way without a warning. For a Claude Code login this is what Claude Code
+itself does on every token refresh. Codex writes its login to a file, so for a Codex park
+the exposure is pitboard's alone, on every Codex switch, `--sign-in` enrolment and renewal
+on macOS. `PITBOARD_NO_ARGV=1` refuses the write instead, for anyone who would rather have
+neither; on macOS that means no Codex account can be parked. Set it before parking any
+Codex account: with Codex parks already in the keychain, the next renewal exchanges the
+refresh token and then cannot store the result, and that account's parked login is lost.
 
 ### Linux
 
@@ -81,8 +83,8 @@ Every Claude Code switch copies Claude Code's config file to
 newest are kept. That copy holds whatever Claude Code keeps in its config, which includes
 the signed-in email address, the account and organization identifiers, and the path of
 every project you have used it in. It holds no token. `pitboard uninstall` removes it along
-with everything else pitboard wrote. A Codex switch changes nothing of Codex's but
-`auth.json`, so it makes no such copy.
+with everything else pitboard wrote. A Codex switch changes only `auth.json`, so it makes
+no such copy.
 
 The audit log is one tab-separated line per change: the time, which front end asked, the
 verb, the label, and how it ended. Labels, codes and times only.
@@ -104,14 +106,16 @@ own client id, the request Claude Code makes to renew its own login.
 
 For a Codex account, pitboard makes one read-only request,
 `GET https://chatgpt.com/backend-api/wham/usage`, carrying the access token and the ChatGPT
-account id. It is the usage read Codex itself makes, and spends no quota. pitboard makes it
-for the numbers `pitboard status` shows, and before a switch installs a Codex login, to
-learn that OpenAI still accepts it. Which account a Codex login belongs to is read from its
+account id. It is the usage read Codex itself makes, and spends no quota. pitboard uses it
+for the numbers `pitboard status` shows, and to check that OpenAI still accepts a Codex
+login before a switch installs it. Which account a Codex login belongs to is read from its
 own ID token with no request. The token's signature is not checked: it came from Codex on
-your own disk, which is the same trust as reading any other file there. pitboard sends a
-refresh token in one case only: renewing a parked login whose access token has expired,
-through `https://auth.openai.com/oauth/token` with Codex's own public client id,
-`app_EMoamEEZ73f0CkXaXp7hrann`, the request Codex makes to renew its own login.
+your own disk, which is the same trust as reading any other file there.
+
+pitboard sends a Codex refresh token in one case only: renewing a parked login whose
+access token has expired, through `https://auth.openai.com/oauth/token` with Codex's own
+public client id, `app_EMoamEEZ73f0CkXaXp7hrann`, the request Codex makes to renew its own
+login.
 
 A parked login is held by pitboard alone, so renewing it puts no second holder on its
 refresh chain. The new tokens replace the parked copy before the old one is deleted, and all
@@ -140,12 +144,13 @@ IP address.
   behind are removed on the next write to the same directory.
 - pitboard renews a parked login for as long as its account is enrolled, so an account you
   enrol once and never come back to keeps a live, continuously rotated refresh token on the
-  machine. `pitboard doctor` says so once an account has been left for longer than a refresh
-  token's own life, and `pitboard forget <label>` deletes the login and the record. Deleting
-  is not revoking: a token pitboard deletes stays valid at Anthropic or OpenAI until it
-  expires on its own. For Anthropic, whether the endpoint pitboard uses accepts a
-  revocation, and whether one would end only the chain pitboard holds or the whole grant,
-  has not been measured, so pitboard does not try. It does not revoke a Codex login either.
+  machine. `pitboard doctor` says so once an account has not been switched to for thirty
+  days, a Claude Code refresh token's life (Codex states none), and `pitboard forget
+  <label>` deletes the login and the record. Deleting is not revoking: a token pitboard
+  deletes stays valid at Anthropic or OpenAI until it expires on its own. For Anthropic,
+  whether the endpoint pitboard uses accepts a revocation, and whether one would end only
+  the chain pitboard holds or the whole grant, has not been measured, so pitboard does not
+  try. It does not revoke a Codex login either.
 - Copies nothing names: every name pitboard is about to write a login into is written down
   before the login is, so a run killed between the two leaves a name the next command
   resolves rather than a login nothing on the machine can see. An item whose account is
@@ -167,15 +172,15 @@ IP address.
   waiting deletes the credential with nothing held. pitboard cannot exclude that, so it
   reads the slot back after a switch rather than trusting that its own write stood.
 - Two usable copies of one Codex login: `codex login` and `codex logout` send the stored
-  refresh token to OpenAI to be revoked before clearing it, so a copy kept beside the live
-  login is one the person's own next sign-in or sign-out ends in both places. A Codex park
-  is therefore never a copy: the outgoing login is moved into the vault and read back
+  refresh token to OpenAI to be revoked before clearing it, so if pitboard kept a copy
+  beside the live login, your next sign-in or sign-out would end both. A Codex park is
+  therefore never a copy: the outgoing login is moved into pitboard's store and read back
   before the incoming one is written, and recovery, `abandon` and `repair` keep no park
   that copies the login signed in now.
 - Writing alongside a running Codex: Codex takes no lock on `auth.json`, so there is none to
-  share, and pitboard reads the file back after a switch. A `codex` that was running before
-  a switch and refreshes its token during one writes its own account's tokens under the
-  new account's id. A login whose tokens and account id name different accounts is refused,
+  share, and pitboard reads the file back after a switch. A `codex` whose token refresh is
+  under way when the switch happens writes its old account's tokens under the new
+  account's id. A login whose tokens and account id name different accounts is refused,
   never parked or taken as proof that a switch held.
 - A state directory inside a cloud-synced folder: refused, because a parked login belongs
   to exactly one machine.
@@ -200,8 +205,9 @@ IP address.
   describes.
 - Signing out inside a `codex` that was running before a switch. It still holds the
   outgoing account's tokens in memory, so `/logout` there revokes the login pitboard has
-  just parked. After a Codex switch pitboard says how many `codex` sessions are still
-  running and to quit them instead, which is all it can do.
+  just parked. After a Codex switch made on the command line, pitboard counts the running
+  `codex` processes and says to quit them rather than sign out; the menu bar app does not
+  yet say so.
 - Anyone who can already read your files. Where there is no keychain, a parked login is a
   file and a mode bit is the whole of what keeps it private. `pitboard doctor` checks the
   modes and fails when one is wrong, which is all it can do.

@@ -4,9 +4,10 @@
 
 - `crates/pitboard-core`: the engine. Parking, switching, recovery, the stores, usage. It
   reads no environment variable except in `Context::from_env`, and prints nothing.
-- `crates/pitboard-core/src/provider`: one module per tool, `claude` and `codex`, behind the
-  `Provider` trait in `mod.rs`: where the tool keeps its login, whose it is, how to renew it
-  and what it has left. Each module's `assumptions.rs` is that tool's register of facts.
+- `crates/pitboard-core/src/provider`: one module per tool, `claude` and `codex`, each
+  implementing the `Provider` trait in `mod.rs` (where the tool keeps its login, whose it
+  is, how to renew it, what it has left). Each module's `assumptions.rs` is that tool's
+  register of facts.
 - `crates/pitboard-conformance`: reads a tool's register out of a build of that tool.
 - `crates/pitboard-ffi`: the core as UniFFI bindings, for the app. Records and enums only,
   every call synchronous.
@@ -53,8 +54,10 @@ difference with `cargo insta review`, and say in the change why the contract mov
 
 3. Never write to a keychain item that holds a real login. Tests name their items after
    their own identity and call `common::guard_not_live` before the first write. A Codex
-   test points `CODEX_HOME` at a scratch directory, never at `~/.codex`, and nothing runs
-   `codex login` or `codex logout` against a real home: both revoke the login stored there.
+   test that writes points `CODEX_HOME` at a scratch directory and never writes to
+   `~/.codex` (the one ignored test that reads a real `auth.json` only reads it), and
+   nothing runs `codex login` or `codex logout` against a real home: both revoke the login
+   stored there.
 
 4. Measure the tool, do not guess at it. Claude Code's behaviour here is undocumented,
    Codex's moves with its source, and both ship several times a week. A claim about either
@@ -76,10 +79,10 @@ newer one wrote. Reading forwards is `state::migrate`: each bump adds an arm tha
 the document and falls through to the next. Reading backwards is not possible and says
 which half to upgrade. A bump needs a test that loads a file the previous version wrote.
 
-The schema is 4: every account records its tool, and which account is signed in is kept
-per tool. A schema 3 file is brought forward on its first read, with nothing in the
-keychain or the vault touched. A file naming a tool this build does not know was written by
-a newer pitboard, and says so rather than reading as corrupt.
+Schema 4 records each account's tool and keeps which account is signed in per tool. A
+schema 3 file is brought forward on its first read, with nothing in the keychain or the
+vault touched. A file naming a tool this build does not know is reported as written by a
+newer pitboard, not as corrupt.
 
 ## Releasing
 
@@ -286,15 +289,17 @@ green on 0.156.1:
   `{client_id, grant_type, refresh_token}` and client id `app_EMoamEEZ73f0CkXaXp7hrann`.
   Each token in the answer is written only if present. `last_refresh` must be there, as an
   RFC 3339 string, or Codex reads the login as having no token data. A spent or revoked
-  refresh token answers 400 `invalid_grant`, or 401; any other 400 is not a dead login.
+  refresh token answers 400 `invalid_grant` (or one of the older `refresh_token_expired`,
+  `refresh_token_reused`, `refresh_token_invalidated`), or 401; any other 400 is not a dead
+  login.
 - Usage is `GET https://chatgpt.com/backend-api/wham/usage` with `Authorization: Bearer` and
   `ChatGPT-Account-ID`, no quota spent. Its shape was read from a live answer, not the
   source: a parser written from the source found the windows in the wrong place and returned
   nothing while the request succeeded.
 - `CODEX_HOME` moves everything Codex keeps, and an empty one means unset, so the private
-  sign-in always sets it to a directory that exists and is started from inside it.
-  `codex login` revokes what is stored in that home before signing in, opens the browser
-  itself, and reads nothing from stdin.
+  sign-in always sets it to a directory that exists and runs `codex login` from inside that
+  directory. `codex login` revokes what is stored in that home before signing in, opens the
+  browser itself, and reads nothing from stdin.
 
 Read on 2026-09-22, against Sparkle 2.10.0, Homebrew 7.0.6 and the tap as it then stood.
 These decide how a release is allowed to move:
@@ -349,10 +354,10 @@ cargo run -p pitboard-conformance -- <a codex binary> --provider codex
 ```
 
 Add `--json` for a report a program can read. It exits 1 when a fact has moved: a literal
-it needs is gone, or one it rules out has turned up. Use the native `codex` binary: the npm
-package `@openai/codex` is a wrapper, and the binary is under `vendor/` in its tagged
-platform version, such as `@openai/codex@<version>-linux-x64`, which is where
-`.github/workflows/conformance.yml` takes it from. That workflow checks the newest build of
+it needs is gone, or one it rules out has turned up. Point it at the native `codex` binary,
+not the npm wrapper `@openai/codex`. The binary is under `vendor/` in the platform package,
+such as `@openai/codex@<version>-linux-x64`, which is where
+`.github/workflows/conformance.yml` gets it. That workflow checks the newest build of
 each tool against its own register twice a week, and can be run by hand for a given
 version.
 
@@ -369,9 +374,8 @@ fact says what it is, where it was read, which version, and what depends on it.
 
 Adding a tool takes three things: a register read out of a named build of it, a module
 under `provider/` that implements `Provider`, and a conformance job for it. `ProviderId`,
-`ALL` and the matches in `provider::of` and `assumptions::of` name every tool, so the
-compiler and the tests point at what a new one has to fill in. Nothing here promises a next
-tool.
+`ProviderId::ALL` and the matches in `provider::of` and `assumptions::of` name every tool,
+so the compiler and the tests point at what a new one has to fill in.
 
 ## Dependencies
 
