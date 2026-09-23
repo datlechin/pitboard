@@ -11,7 +11,8 @@ All notable changes are recorded here. The format follows
   call; `pitboard enroll codex/work --sign-in` runs `codex login` in a private
   `CODEX_HOME` so the account in use stays signed in; `pitboard use codex/work` switches
   it; and `pitboard` shows each Codex account's five-hour and weekly limits from the same
-  usage read Codex itself makes, which spends no quota. Everything pitboard does for Codex
+  usage read Codex itself makes, which spends no quota. Until a Codex account is enrolled,
+  pitboard reads nothing of Codex's and asks OpenAI nothing. Everything pitboard does for Codex
   was read out of codex-cli 0.154.0 and is dated in a register of its own, checked against
   every new build by the conformance run twice a week, and still green on 0.156.1.
   Codex is not Claude Code, and pitboard says where they differ rather than hiding it:

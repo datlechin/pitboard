@@ -138,6 +138,9 @@ Other commands:
 
 ## Codex
 
+pitboard leaves Codex alone until you enrol a Codex account. Before that, `pitboard` shows
+no Codex row, reads nothing of Codex's and asks OpenAI nothing.
+
 Codex works like Claude Code in pitboard, except for these:
 
 - A running `codex` never notices a switch. Restart it. After a switch on the command line,

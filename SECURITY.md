@@ -104,7 +104,8 @@ shows. It sends a refresh token in one case only: renewing a parked login whose 
 token has expired, through `https://platform.claude.com/v1/oauth/token` with Claude Code's
 own client id, the request Claude Code makes to renew its own login.
 
-For a Codex account, pitboard makes one read-only request,
+pitboard reads nothing of Codex's, and sends OpenAI nothing, until a Codex account is
+enrolled. For a Codex account, pitboard makes one read-only request,
 `GET https://chatgpt.com/backend-api/wham/usage`, carrying the access token and the ChatGPT
 account id. It is the usage read Codex itself makes, and spends no quota. pitboard uses it
 for the numbers `pitboard status` shows, and to check that OpenAI still accepts a Codex
