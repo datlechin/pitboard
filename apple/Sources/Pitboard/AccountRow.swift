@@ -12,7 +12,16 @@ struct AccountRow: View {
                     .fill(account.signedIn ? Color.green : Color.secondary.opacity(0.4))
                     .frame(width: 7, height: 7)
                     .accessibilityHidden(true)
-                Text(account.label ?? "unenrolled").fontWeight(.medium)
+                if account.unplaced {
+                    // Not an account anybody can name, so not "unenrolled": what is wrong
+                    // with the login is the only thing there is to say about it.
+                    Text(account.staleExplanation ?? "a login pitboard cannot use")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                } else {
+                    Text(account.label ?? "unenrolled").fontWeight(.medium)
+                }
                 if let email = account.email.isEmpty ? nil : account.email {
                     Text(email)
                         .font(.caption)
@@ -28,14 +37,26 @@ struct AccountRow: View {
                 _, window in
                 Limit(window: window)
             }
-            if let note = account.staleExplanation ?? parkedNote {
+            if let note = account.unplaced ? nil : account.staleExplanation ?? parkedNote {
                 Text(note).font(.caption2).foregroundStyle(.secondary)
             }
         }
         // One account, read as one thing with a button in it, rather than six separate
         // stops on the way past.
         .accessibilityElement(children: .contain)
-        .accessibilityLabel(account.label ?? "unenrolled, \(account.email)")
+        .accessibilityLabel(spokenName)
+    }
+
+    /// Once more than one tool is shown, the row says which it is for: VoiceOver reads a
+    /// row on its own, apart from the heading above it, and two tools can each have a
+    /// `work`.
+    private var spokenName: String {
+        let name =
+            account.unplaced
+            ? account.staleExplanation ?? "a login pitboard cannot use"
+            : account.label ?? "unenrolled, \(account.email)"
+        guard model.showsTools, let tool = model.tool(account.provider) else { return name }
+        return "\(name), \(tool.name)"
     }
 
     /// When the login held for this account stops being usable. The command line says the
@@ -54,15 +75,17 @@ struct AccountRow: View {
     @ViewBuilder private var standing: some View {
         if account.signedIn {
             Text("signed in").font(.caption).foregroundStyle(.secondary)
-        } else if model.switching == account.label {
+        } else if let qualified = account.qualified, model.switching == qualified {
             ProgressView().controlSize(.small)
-        } else if account.switchable, let label = account.label {
-            Button("Use") { Task { await model.use(label) } }
+        } else if account.switchable, let label = account.label,
+            let qualified = account.qualified
+        {
+            Button("Use") { Task { await model.use(qualified) } }
                 .buttonStyle(.link)
                 .disabled(model.switching != nil)
                 .accessibilityLabel("Switch to \(label)")
-        } else if let label = account.label {
-            Text("sign in again: pitboard enroll \(label) --sign-in")
+        } else if let name = typed(account) {
+            Text("sign in again: pitboard enroll \(name) --sign-in")
                 .font(.caption2)
                 .foregroundStyle(.orange)
         }
@@ -96,15 +119,8 @@ struct Limit: View {
         .accessibilityLabel(spoken)
     }
 
-    private var name: String {
-        let base =
-            switch window.kind {
-            case "session", "five_hour": "5h"
-            case "weekly_all", "seven_day", "weekly_scoped": "week"
-            default: window.kind
-            }
-        return window.scope.map { "\(base) · \($0)" } ?? base
-    }
+    /// From the window's length, so a Codex account's limits read the way Claude Code's do.
+    private var name: String { windowShortName(window) }
 
     /// "resets in 3h", as the command line says it. Blank once the moment has passed: the
     /// next reading is what says whether it actually reset.
@@ -131,6 +147,3 @@ struct Limit: View {
         }
     }
 }
-
-/// Asks for the name to record the account in use under. Anything else about adding an
-/// account needs a browser, which the command line drives.

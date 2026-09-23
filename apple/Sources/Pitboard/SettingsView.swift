@@ -49,7 +49,7 @@ private struct General: View {
                     hands that to your computer's own scheduler.
 
                     It renews your own parked logins and does nothing else: it never \
-                    switches account and never asks Anthropic for usage.
+                    switches account and never asks \(model.services) for usage.
                     """
                 )
                 .font(.caption)
