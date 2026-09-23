@@ -490,11 +490,11 @@ fn install_signed_in(
     ))
 }
 
-/// A new login that could not be put in use, where the tool may be left without the old
-/// one too. The new one is the one copy of the account's login known to be good, so it is
-/// parked, as a sign-in of any other account would be, before the failure is reported.
-/// Where the slot could not be read back it may hold the new login as well, and the next
-/// switch away parks over this copy.
+/// A new login that could not be confirmed in use, where the tool may be left without the
+/// old one too. The new one is the one copy of the account's login known to be good, so it
+/// is parked, as a sign-in of any other account would be, before the failure is reported.
+/// Where the write landed and could not be read back, the slot holds the new login as well:
+/// no renewal spends that copy, and the next change that can read the slot drops it.
 fn not_installed(
     ctx: &Context,
     key: &Key,
@@ -615,10 +615,12 @@ mod tests {
     use crate::api::scripted::Trouble;
     use crate::store::memory::Fault;
     use crate::switch::harness::{
-        Machine, NOW, codex_id, codex_login, codex_machine, hold, login_of, machine, oauth,
+        Machine, NOW, codex_id, codex_login, codex_machine, hold, login_of, machine, oauth, renews,
         signed_in,
     };
-    use crate::switch::{Outcome, settle, switch};
+    use crate::switch::{Due, Outcome, renew_due, settle, switch};
+    use crate::time::FixedClock;
+    use std::sync::Arc;
     use std::time::{Duration, Instant};
 
     type Make = fn(&str) -> Machine;
@@ -865,7 +867,7 @@ mod tests {
                 "{tool}: {failed:?}"
             );
             assert!(
-                failed.to_string().contains("parked instead"),
+                failed.to_string().contains("parked, so it is not lost"),
                 "{tool}: {failed}"
             );
             assert_eq!(
@@ -874,6 +876,69 @@ mod tests {
                 "{tool}"
             );
             hold(&m, &format!("{tool}, after a new login that did not hold"));
+        }
+    }
+
+    /// The new login was written and could not be read back: the store locked as it took
+    /// the write, or at the read that follows. The slot holds the new login, and it is parked
+    /// as well, one refresh token in two places that nothing records. A renewal of the copy
+    /// would spend the token the tool is using, so none is made: the next renewal once the
+    /// slot can be read drops the copy instead, and so does the next change.
+    #[test]
+    fn a_new_login_that_could_not_be_read_back_is_not_kept_beside_itself() {
+        for (tool, make) in MACHINES {
+            for locked in ["by the write", "after it"] {
+                for next in ["renewal", "change"] {
+                    let at = format!("{tool}, locked {locked}, then a {next}");
+                    let m = make(&format!("unread-{}-{next}", locked.replace(' ', "-")));
+                    let login = signed_in(&m, "here", "here-refresh-2");
+                    let (store, service) = m.live_store();
+                    let failed = if locked == "by the write" {
+                        store.fault(&service, Fault::LocksAfterWrite);
+                        enrolled_as(&m, "here", login)
+                    } else {
+                        crate::fault::meanwhile(
+                            "enroll.installed",
+                            move || store.fault(&service, Fault::Unreadable("locked".into())),
+                            || enrolled_as(&m, "here", login),
+                        )
+                    }
+                    .expect_err("it could not be read back");
+                    assert!(
+                        matches!(failed, Error::SignInNotInstalled { parked: true, .. }),
+                        "{at}: {failed:?}"
+                    );
+                    assert_eq!(
+                        park_of(&m, "here").map(|p| p.refresh_fingerprint),
+                        Some(store::fingerprint("here-refresh-2")),
+                        "{at}: parked as well"
+                    );
+
+                    m.live_store().0.heal_all();
+                    match next {
+                        "renewal" => {
+                            // Late enough that the copy's access token has lapsed, which is
+                            // when a renewal would take it.
+                            let later = m
+                                .ctx
+                                .clone()
+                                .with_clock(Arc::new(FixedClock::at(NOW + 11 * 86_400)));
+                            renews(&m, "here-refresh-2", "here-refresh-3");
+                            let renewed = renew_due(&later, Due::ToBeAsked);
+                            assert!(
+                                renewed.iter().all(|(key, _)| key.label != "here"),
+                                "{at}: {renewed:?}"
+                            );
+                        }
+                        _ => {
+                            settle(&m.ctx, None).expect("the next change");
+                        }
+                    }
+                    assert!(in_use(&m, "here-refresh-2"), "{at}");
+                    assert!(park_of(&m, "here").is_none(), "{at}: the copy is dropped");
+                    hold(&m, &at);
+                }
+            }
         }
     }
 

@@ -243,9 +243,11 @@ All notable changes are recorded here. The format follows
   one is parked as before, because writing over a login nobody can name could lose it. A
   running `codex` keeps the old login and can write it back when it refreshes, so the
   sessions are counted and warned about, with the new code `sessions_keep_old_login`. A new
-  login that could not be put in use, where the old one may be gone too, is parked rather
-  than lost, with the new code `sign_in_not_installed`. The menu bar app says the new login
-  is the one in use, and keeps the warning like a switch's.
+  login pitboard could not confirm is in use, where the old one may be gone too, is parked
+  rather than lost, with the new code `sign_in_not_installed`. Where it was in use after
+  all, that parked copy holds the refresh token the tool is using: no renewal spends it,
+  and the next change or renewal that can read the tool's login drops it. The menu bar app
+  says the new login is the one in use, and keeps the warning like a switch's.
 - A renewal killed after writing the fresh login and before recording it could lose the
   login: the next change deleted the fresh copy as unrecorded and kept the old one, whose
   refresh token the service had already spent. A copy pitboard wrote down itself now

@@ -114,6 +114,7 @@ pub fn settle(ctx: &Context, tool: Option<ProviderId>) -> Result<(Settled, Optio
     let recovered = reconcile(ctx, &mut state)?;
     // After the journal has had its say, so a switch's own park is already accounted for.
     pending::sweep(ctx, &mut state)?;
+    drop_live_twins(ctx, &mut state)?;
     purge(ctx, &mut state);
     Ok((
         Settled {
@@ -138,6 +139,21 @@ pub fn repair(settled: Settled) -> Result<pending::Reclaimed> {
     let reclaimed = pending::reclaim(&ctx, &mut state)?;
     purge(&ctx, &mut state);
     Ok(reclaimed)
+}
+
+/// Drop every park that is a copy of the login its tool has in use now, and say so in the
+/// state before anything deletes it. The journal records the one copy a switch makes on
+/// purpose; this finds the one nothing records, which a new login leaves when it was put in
+/// use and could not be read back, and was parked as well.
+fn drop_live_twins(ctx: &Context, state: &mut State) -> Result<()> {
+    let twins = park::live_twins(ctx, state);
+    if twins.is_empty() {
+        return Ok(());
+    }
+    for service in &twins {
+        state.discard(service);
+    }
+    state::save(ctx, state)
 }
 
 /// Delete what no account refers to any more. A failed save only leaves deleted names

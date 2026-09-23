@@ -442,8 +442,8 @@ pub enum Error {
     },
 
     #[error(
-        "signed in to `{label}` again, and its new login could not be put in place of the \
-         one in use ({detail}), so {} may have no login for it now. {}",
+        "signed in to `{label}` again, and pitboard could not confirm that its new login \
+         took the place of the one in use ({detail}), so {} may have no login for it now. {}",
         tool.name(),
         not_in_use(*tool, label, *parked)
     )]
@@ -690,9 +690,9 @@ fn after_it_did_not_hold(tool: ProviderId, from: &str, to: &str) -> String {
 fn not_in_use(tool: ProviderId, label: &str, parked: bool) -> String {
     if parked {
         format!(
-            "The new login is parked instead. Run `pitboard` to see what is signed in; if \
-             nothing is, run `{}` and sign in to any enrolled account, then `pitboard use \
-             {label}`.",
+            "The new login is parked, so it is not lost. Run `pitboard` to see what is \
+             signed in; if nothing is, run `{}` and sign in to any enrolled account, then \
+             `pitboard use {label}`.",
             tool.login_command()
         )
     } else {

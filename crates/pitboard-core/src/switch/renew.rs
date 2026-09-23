@@ -93,19 +93,30 @@ pub fn renew_due(ctx: &Context, due: Due) -> Vec<(Key, Renewal)> {
         return Vec::new();
     };
     let now = ctx.now();
-    let due: Vec<(Key, Park)> = state
-        .accounts
-        .iter()
-        .filter_map(|a| {
-            let held = a.parked.as_ref()?;
-            due.covers(held, now).then(|| (a.key(), held.clone()))
-        })
-        .collect();
+    let covered = |state: &State| -> Vec<(Key, Park)> {
+        state
+            .accounts
+            .iter()
+            .filter_map(|a| {
+                let held = a.parked.as_ref()?;
+                due.covers(held, now).then(|| (a.key(), held.clone()))
+            })
+            .collect()
+    };
+    let mut to_renew = covered(&state);
+    // A park that copies the login in use holds the refresh token its tool is about to
+    // present, and renewing it would spend that token under the tool. It is dropped instead,
+    // as the next change would drop it. Looked for only when something is due, because
+    // finding one reads each tool's login.
+    if !to_renew.is_empty() {
+        let _ = super::drop_live_twins(ctx, &mut state);
+        to_renew = covered(&state);
+    }
     // Each renewal is a round trip that can take as long as the request timeout, so they
     // are asked together. What comes back is then written one at a time: the state file is
     // one file, and the order of writes to it is not something to leave to chance.
     let asked: Vec<(Key, Park, Result<Asked>)> = std::thread::scope(|scope| {
-        let handles: Vec<_> = due
+        let handles: Vec<_> = to_renew
             .into_iter()
             .map(|(key, held)| {
                 let ctx = &*ctx;

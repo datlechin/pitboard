@@ -77,16 +77,23 @@ impl Machine {
     /// From now on the live login's store misbehaves this way: the keychain item for Claude
     /// Code, the `auth.json` file for Codex.
     pub(crate) fn fault_live(&self, fault: crate::store::memory::Fault) {
+        let (store, service) = self.live_store();
+        store.fault(&service, fault);
+    }
+
+    /// The store the live login is in, and its name there, for a test that has to fault it
+    /// from inside a change.
+    pub(crate) fn live_store(&self) -> (Arc<crate::store::memory::MemoryStore>, String) {
         let live = crate::provider::of(self.which)
             .live(&self.ctx)
-            .expect("a store to fault");
-        match self.which {
-            ProviderId::Claude => self.mem.live().fault(&live.service, fault),
+            .expect("a live store");
+        let store = match self.which {
+            ProviderId::Claude => Arc::clone(self.mem.live()),
             ProviderId::Codex => self
                 .mem
-                .file_at(crate::provider::codex::paths::auth_file(&self.ctx))
-                .fault(&live.service, fault),
-        }
+                .file_at(crate::provider::codex::paths::auth_file(&self.ctx)),
+        };
+        (store, live.service)
     }
 }
 
@@ -321,6 +328,36 @@ pub(crate) fn login_of(m: &Machine, who: &str, refresh: &str) -> Value {
 /// A sign-in the tool finished as `who`, left where a finished one leaves its login.
 pub(crate) fn signed_in(m: &Machine, who: &str, refresh: &str) -> enroll::SignIn {
     enroll::planted(&m.ctx, m.which, login_of(m, who, refresh)).expect("a sign-in")
+}
+
+/// The service answers a renewal of the login on `refresh` with one on `renewed`.
+pub(crate) fn renews(m: &Machine, refresh: &str, renewed: &str) {
+    match m.which {
+        ProviderId::Claude => {
+            m.api.renews(
+                refresh,
+                crate::api::Renewed {
+                    access_token: format!("access-{renewed}"),
+                    refresh_token: Some(renewed.into()),
+                    expires_in: 3600,
+                    refresh_token_expires_in: Some(30 * 86_400),
+                    scopes: None,
+                    at: None,
+                },
+            );
+        }
+        ProviderId::Codex => {
+            m.api.codex_renews(
+                refresh,
+                crate::provider::codex::api::Fresh {
+                    id_token: None,
+                    access_token: Some(codex_access(renewed)),
+                    refresh_token: Some(renewed.into()),
+                    at: Some(NOW),
+                },
+            );
+        }
+    }
 }
 
 pub(crate) fn account(label: &str, uuid: &str, parked: Option<Park>) -> Account {

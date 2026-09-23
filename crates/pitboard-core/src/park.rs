@@ -150,12 +150,48 @@ pub fn is_live_twin(ctx: &Context, provider: ProviderId, document: &Value) -> bo
         return false;
     }
     let parked = tool.fingerprint(document);
-    !parked.is_empty()
-        && tool
-            .read_live(ctx)
-            .ok()
-            .flatten()
-            .is_some_and(|live| tool.fingerprint(&live.raw) == parked)
+    !parked.is_empty() && live_fingerprint(ctx, provider).is_some_and(|live| live == parked)
+}
+
+/// The fingerprint of the refresh token the tool has in use now, where there is one and it
+/// can be read.
+fn live_fingerprint(ctx: &Context, provider: ProviderId) -> Option<String> {
+    let tool = crate::provider::of(provider);
+    let live = tool.read_live(ctx).ok().flatten()?;
+    Some(tool.fingerprint(&live.raw)).filter(|found| !found.is_empty())
+}
+
+/// Every park an account holds that is a copy of the login its tool has in use now.
+///
+/// For every tool, where `is_live_twin` asks only for a tool whose park may never be a
+/// copy: whatever a tool does about copies, a copy of the login in use is one refresh token
+/// in two places, and renewing it spends the token the tool itself is about to present. One
+/// is left when a new login was put in use and could not be read back, so it was parked as
+/// well. A tool no account holds a park of is not read at all, and neither is Claude Code's
+/// login under a custom OAuth endpoint, which is somewhere pitboard does not act on.
+pub fn live_twins(ctx: &Context, state: &State) -> Vec<String> {
+    let mut twins = Vec::new();
+    for &provider in ProviderId::ALL {
+        let held: Vec<&crate::state::Park> = state
+            .accounts
+            .iter()
+            .filter(|a| a.provider() == provider)
+            .filter_map(|a| a.parked.as_ref())
+            .collect();
+        if held.is_empty() || (provider == ProviderId::Claude && crate::settings::custom_oauth(ctx))
+        {
+            continue;
+        }
+        let Some(live) = live_fingerprint(ctx, provider) else {
+            continue;
+        };
+        twins.extend(
+            held.into_iter()
+                .filter(|park| park.refresh_fingerprint == live)
+                .map(|park| park.service.clone()),
+        );
+    }
+    twins
 }
 
 /// Delete every discarded item, keeping listed only those that resisted. Returns how many

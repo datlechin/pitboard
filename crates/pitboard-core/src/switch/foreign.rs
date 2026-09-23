@@ -11,7 +11,7 @@
 
 use super::harness::{
     Machine, NOW, account, codex_access, codex_account, codex_id, codex_login, codex_machine,
-    machine, oauth, owner,
+    machine, oauth, owner, renews,
 };
 use super::*;
 use crate::api::scripted::Trouble;
@@ -219,36 +219,6 @@ fn a_park_repair_gave_back_is_deleted_once_a_switch_installs_it() {
             "{:?}: used here, so deleted here",
             m.which
         );
-    }
-}
-
-/// The service answers a renewal of the login on `refresh` with one on `renewed`.
-fn renews(m: &Machine, refresh: &str, renewed: &str) {
-    match m.which {
-        ProviderId::Claude => {
-            m.api.renews(
-                refresh,
-                crate::api::Renewed {
-                    access_token: format!("access-{renewed}"),
-                    refresh_token: Some(renewed.into()),
-                    expires_in: 3600,
-                    refresh_token_expires_in: Some(30 * 86_400),
-                    scopes: None,
-                    at: None,
-                },
-            );
-        }
-        ProviderId::Codex => {
-            m.api.codex_renews(
-                refresh,
-                crate::provider::codex::api::Fresh {
-                    id_token: None,
-                    access_token: Some(codex_access(renewed)),
-                    refresh_token: Some(renewed.into()),
-                    at: Some(NOW),
-                },
-            );
-        }
     }
 }
 

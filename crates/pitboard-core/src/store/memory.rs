@@ -37,6 +37,10 @@ pub enum Fault {
     /// Code's `/logout` deletes the credential with no lock held once it has given up
     /// waiting, which is the one write pitboard cannot exclude.
     DeletedAfterWrite,
+    /// The write lands and the store locks before the write can read it back, so the write
+    /// says it could not tell, and so does every read after it. The same screen lock as
+    /// `LocksOnWrite`, a moment later.
+    LocksAfterWrite,
 }
 
 /// One store. Plant, peek and enumerate without going through the store's own rules, so a
@@ -215,6 +219,11 @@ impl RawStore for Arc<MemoryStore> {
             Some(Fault::LocksOnWrite) => {
                 self.lock_now(service);
                 return Err(Error::Write("the keychain is locked".into()));
+            }
+            Some(Fault::LocksAfterWrite) => {
+                self.plant(service, contents);
+                self.lock_now(service);
+                return Err(Error::Unreadable("the keychain is locked".into()));
             }
             Some(Fault::CorruptWrite(instead)) => self.plant(service, &instead),
             Some(Fault::DeletedAfterWrite) => {
