@@ -80,6 +80,10 @@ pub struct Facts {
     pub interrupted: bool,
     /// What is read about Codex here, for the section that is about it.
     pub codex: CodexFacts,
+    /// Whether Claude Code is on this machine at all: installed, run once, signed in, or
+    /// holding enrolled accounts. A machine that uses only Codex is not told Claude Code is
+    /// broken.
+    pub claude_present: bool,
     pub now: i64,
 }
 
@@ -240,6 +244,15 @@ pub fn gather(ctx: &Context) -> Facts {
             .map(|s| park_facts(ctx, s))
             .unwrap_or_default(),
         codex: codex_facts(ctx, state.as_ref().ok()),
+        claude_present: claude::config_file(ctx).exists()
+            || claude::program(ctx).is_some()
+            || store::read_raw(&claude_live::chain(ctx), &service)
+                .is_ok_and(|found| found.is_some())
+            || state.as_ref().is_ok_and(|s| {
+                s.accounts
+                    .iter()
+                    .any(|a| a.provider() == ProviderId::Claude)
+            }),
         state,
         interrupted: switch::interrupted(ctx),
         service,
@@ -512,6 +525,11 @@ fn fail(
 
 pub fn evaluate(facts: &Facts) -> Vec<Check> {
     let mut checks = Vec::new();
+    // Claude Code's own checks, where there is a Claude Code, or where there is no other
+    // tool either: a new machine is told what to do first, as it always was. A machine
+    // that uses only Codex is not told to run a program it does not use.
+    let codex_here = facts.codex.present || facts.codex.enrolled > 0;
+    let claude_here = facts.claude_present || !codex_here;
 
     if cfg!(target_os = "macos") {
         checks.push(match &facts.security_tool {
@@ -822,11 +840,30 @@ pub fn evaluate(facts: &Facts) -> Vec<Check> {
     );
     // Only where there is a Codex to say something about. A machine that has never run it
     // reads exactly as it did before pitboard knew Codex existed.
-    if facts.codex.present || facts.codex.enrolled > 0 || !codex_parks.is_empty() {
+    if codex_here || !codex_parks.is_empty() {
         checks.extend(judge_codex(&facts.codex, &codex_parks, facts.now));
+    }
+    if !claude_here {
+        checks.retain(|check| !CLAUDE_CODES_OWN.contains(&check.code));
     }
     checks
 }
+
+/// The checks that are about Claude Code's own files and settings, rather than about
+/// pitboard or the machine. Named once, so a new one is added here or is always shown.
+const CLAUDE_CODES_OWN: &[&str] = &[
+    "config_file",
+    "identity",
+    "slot",
+    "credential_size",
+    "credential_store",
+    "credential",
+    "usage_cache",
+    "storage_v5",
+    "daemon",
+    "claude_version",
+    "auth",
+];
 
 /// The code an account's check goes under: Claude Code's as it always was, and every other
 /// tool's in that tool's own namespace, so `codex_` is enough to find everything about
@@ -881,11 +918,21 @@ fn judge_credential(facts: &Facts) -> Check {
                 .as_object()
                 .map(|o| o.keys().map(String::as_str).collect())
                 .unwrap_or_default();
+            // What `/logout` leaves: the account's keys gone, the machine's still there. That
+            // is nobody signed in, which the switch and enrolment already read it as.
+            if doc.get("claudeAiOauth").is_none() {
+                return warn(
+                    "credential",
+                    "credential",
+                    format!("signed out; the document keeps only {keys:?}"),
+                    "Nothing is signed in for this slot.",
+                );
+            }
             let Some(oauth) = doc.get("claudeAiOauth").and_then(Value::as_object) else {
                 return fail(
                     "credential",
                     "credential",
-                    format!("the document has no claudeAiOauth; its keys are {keys:?}"),
+                    format!("claudeAiOauth is not an object; the keys are {keys:?}"),
                     "The credential's shape changed. Do not switch accounts until this is understood.",
                 );
             };
@@ -1028,8 +1075,48 @@ fn biggest(parts: &[(String, usize)]) -> String {
 /// means Anthropic asked for less traffic or could not be reached, and a person watching a
 /// number not move deserves to know which.
 fn judge_asking(facts: &Facts) -> Check {
+    // Which services pitboard asks, named by the tools that have accounts here, and which
+    // of them are being held back: a hold is a service's answer, so blaming the wrong one
+    // sends somebody to look at a service that is answering normally.
+    let tool_of = |uuid: &str| {
+        facts
+            .state
+            .as_ref()
+            .ok()
+            .and_then(|s| s.owner_of_park(uuid))
+            .map(crate::state::Account::provider)
+    };
+    let services = |tools: &mut Vec<ProviderId>| {
+        tools.sort();
+        tools.dedup();
+        if tools.is_empty() {
+            tools.push(ProviderId::Claude);
+        }
+        tools
+            .iter()
+            .map(|t| t.service())
+            .collect::<Vec<_>>()
+            .join(" and ")
+    };
+    let mut asked: Vec<ProviderId> = facts
+        .state
+        .as_ref()
+        .map(|s| {
+            s.accounts
+                .iter()
+                .map(crate::state::Account::provider)
+                .collect()
+        })
+        .unwrap_or_default();
+    let name = format!("asking {}", services(&mut asked));
+    let mut holding: Vec<ProviderId> = facts
+        .asking_held
+        .iter()
+        .filter_map(|(uuid, _)| tool_of(uuid))
+        .collect();
+    let holders = services(&mut holding);
     match facts.asking_held.len() {
-        0 => ok("asking", "asking Anthropic", "nothing is being held back"),
+        0 => ok("asking", name, "nothing is being held back"),
         n => {
             let longest = facts
                 .asking_held
@@ -1039,14 +1126,16 @@ fn judge_asking(facts: &Facts) -> Check {
                 .unwrap_or_default();
             warn(
                 "asking",
-                "asking Anthropic",
+                name,
                 format!(
                     "{n} account(s) not being asked about for up to {}",
                     time::span(longest)
                 ),
-                "Anthropic asked for less traffic, or could not be reached. The numbers \
-                 shown are the last ones measured until then; `pitboard status --fresh` \
-                 does not override a wait Anthropic asked for.",
+                format!(
+                    "{holders} asked for less traffic, or could not be reached. The numbers \
+                     shown are the last ones measured until then; `pitboard status --fresh` \
+                     does not override a wait {holders} asked for."
+                ),
             )
         }
     }
@@ -1513,6 +1602,7 @@ mod tests {
             parks: Vec::new(),
             interrupted: false,
             codex: no_codex(),
+            claude_present: true,
             now: NOW,
         }
     }
@@ -1655,10 +1745,12 @@ mod tests {
         assert!(!healthy(&checks));
     }
 
+    /// A document whose `claudeAiOauth` is there and is not an object is a shape that
+    /// moved, which nothing should be written into until it is understood.
     #[test]
-    fn a_credential_without_claude_ai_oauth_is_a_failure_not_a_warning() {
+    fn a_credential_whose_login_is_not_an_object_is_a_failure() {
         let mut f = facts();
-        f.credential = Ok(Some(json!({"slackTag": {}})));
+        f.credential = Ok(Some(json!({"claudeAiOauth": "something else"})));
         let checks = evaluate(&f);
         assert_eq!(check(&checks, "credential").level, Level::Fail);
         assert!(!healthy(&checks));
@@ -2641,5 +2733,48 @@ mod tests {
         assert!(!looks_like_a_version("releases"));
         assert!(!looks_like_a_version("0.154"));
         assert!(!looks_like_a_version("v0.154.0"));
+    }
+
+    /// A machine that uses only Codex is not told Claude Code is broken, nor to run a
+    /// program it does not use. Everything about pitboard itself is still checked.
+    #[test]
+    fn a_machine_with_only_codex_is_not_judged_on_claude_code() {
+        let mut facts = facts();
+        facts.claude_present = false;
+        facts.config = Err(crate::error::Error::ClaudeConfigMissing {
+            path: PathBuf::from("/nowhere/.claude.json"),
+        });
+        facts.codex.present = true;
+        let checks = evaluate(&facts);
+        for own in CLAUDE_CODES_OWN {
+            assert!(
+                checks.iter().all(|c| c.code != *own),
+                "{own} is about Claude Code, which is not here"
+            );
+        }
+        assert!(
+            checks.iter().any(|c| c.code == "state"),
+            "pitboard's own still is"
+        );
+        assert!(checks.iter().any(|c| c.code.starts_with("codex_")));
+    }
+
+    /// With neither tool present, a new machine is told what to do first, as it always was.
+    #[test]
+    fn a_machine_with_neither_tool_still_hears_about_claude_code() {
+        let mut facts = facts();
+        facts.claude_present = false;
+        let checks = evaluate(&facts);
+        assert!(checks.iter().any(|c| c.code == "config_file"));
+    }
+
+    /// What `/logout` leaves is nobody signed in, not a login whose shape moved.
+    #[test]
+    fn a_signed_out_credential_is_said_to_be_one() {
+        let mut facts = facts();
+        facts.credential = Ok(Some(serde_json::json!({"mcpOAuth": {"server": {}}})));
+        let check = judge_credential(&facts);
+        assert!(matches!(check.level, Level::Warn), "{}", check.detail);
+        assert!(check.detail.contains("signed out"), "{}", check.detail);
     }
 }
