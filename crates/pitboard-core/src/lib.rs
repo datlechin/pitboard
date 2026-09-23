@@ -52,7 +52,6 @@ pub(crate) mod home;
 pub(crate) mod lock;
 pub(crate) mod park;
 pub(crate) mod pending;
-#[cfg(target_os = "macos")]
 pub(crate) mod process;
 pub(crate) mod readings;
 pub(crate) mod store;

@@ -77,12 +77,12 @@ impl Due {
 /// Renew every parked login whose access token has expired or is about to. Nothing is done
 /// while another pitboard run holds the lock or a switch waits to be finished: a renewal
 /// replaces the refresh token, and nothing may install the old copy meanwhile.
-pub fn renew_parked(ctx: &Context) -> Vec<(String, Renewal)> {
+pub fn renew_parked(ctx: &Context) -> Vec<(Key, Renewal)> {
     renew_due(ctx, Due::ToBeAsked)
 }
 
 /// The same, for whichever reason.
-pub fn renew_due(ctx: &Context, due: Due) -> Vec<(String, Renewal)> {
+pub fn renew_due(ctx: &Context, due: Due) -> Vec<(Key, Renewal)> {
     let Some(_exclusive) = try_exclusive(ctx) else {
         return Vec::new();
     };
@@ -136,7 +136,7 @@ pub fn renew_due(ctx: &Context, due: Due) -> Vec<(String, Renewal)> {
         .map(|(key, held, answer)| {
             let outcome =
                 apply(ctx, &mut state, &key, &held, answer).unwrap_or_else(Renewal::Failed);
-            (key.typed(), outcome)
+            (key, outcome)
         })
         .collect();
     purge(ctx, &mut state);
@@ -163,7 +163,7 @@ fn ask(ctx: &Context, key: &Key, held: &Park) -> Result<Asked> {
             renewed: Some(fresh.raw),
             refused: false,
         }),
-        Err(crate::provider::ProviderError::InvalidGrant) => Ok(Asked {
+        Err(crate::provider::ProviderError::InvalidGrant { .. }) => Ok(Asked {
             renewed: None,
             refused: true,
         }),
@@ -194,7 +194,10 @@ pub(super) fn renew_one(
 ) -> Result<Option<Park>> {
     match apply(ctx, state, key, held, ask(ctx, key, held))? {
         Renewal::Renewed => Ok(state.get(key).and_then(|a| a.parked.clone())),
-        Renewal::Refused => Err(Error::ParkedLoginRefused { label: key.typed() }),
+        Renewal::Refused => Err(Error::ParkedLoginRefused {
+            tool: key.provider,
+            label: key.typed(),
+        }),
         Renewal::Deferred => Ok(None),
         Renewal::Failed(e) => Err(e),
     }
@@ -351,10 +354,10 @@ mod tests {
         }
     }
 
-    fn outcome(outcomes: &[(String, Renewal)], label: &str) -> String {
+    fn outcome(outcomes: &[(Key, Renewal)], label: &str) -> String {
         outcomes
             .iter()
-            .find(|(l, _)| l == label)
+            .find(|(key, _)| key.label == label)
             .map(|(_, r)| r.code().to_string())
             .unwrap_or_else(|| "not attempted".into())
     }

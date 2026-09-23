@@ -1,6 +1,7 @@
 //! Every way pitboard can fail. Each variant has a message naming the cause and an action,
 //! a stable code for programs to branch on, and an exit code.
 
+use crate::provider::ProviderId;
 use std::path::PathBuf;
 
 /// The labels an account list holds, rendered for a message: " Enrolled: `a`, `b`." or
@@ -66,8 +67,11 @@ impl Cause {
             P::RateLimited { .. } => Cause::RateLimited,
             P::Network { .. } => Cause::Unreachable,
             P::Unexpected { .. } => Cause::ServerError,
-            P::Malformed(_) | P::ShapeUnexpected { .. } => Cause::AnswerNotUnderstood,
-            P::InvalidGrant => Cause::LoginRefused,
+            P::Malformed { .. }
+            | P::ShapeUnexpected { .. }
+            | P::Unsupported { .. }
+            | P::NoLogin { .. } => Cause::AnswerNotUnderstood,
+            P::InvalidGrant { .. } => Cause::LoginRefused,
         }
     }
 
@@ -105,20 +109,23 @@ pub enum Error {
     #[error(
         "the login for `{label}` needs {bytes} bytes and `security` reads {limit} from \
          stdin, so it can only be written on the argument line, which PITBOARD_NO_ARGV \
-         forbids. Unset it, or sign out of MCP servers you no longer use to make the login \
-         smaller."
+         forbids. {}",
+        smaller(*tool)
     )]
     CredentialTooLarge {
+        tool: ProviderId,
         label: String,
         bytes: usize,
         limit: usize,
     },
 
     #[error(
-        "`{program}` is not on this machine, and pitboard signs in with Claude Code's own \
-         sign-in. Install Claude Code, or point pitboard at it."
+        "`{program}` is not on this machine, and pitboard signs in with {}'s own sign-in. \
+         Install {}, or point pitboard at it.",
+        tool.name(),
+        tool.name()
     )]
-    ClaudeProgramMissing { program: String },
+    ProgramMissing { tool: ProviderId, program: String },
 
     #[error(
         "CLAUDE_CODE_CUSTOM_OAUTH_URL is set, so Claude Code keeps its login under a \
@@ -214,8 +221,12 @@ pub enum Error {
         source: serde_json::Error,
     },
 
-    #[error("nothing is signed in right now. Run `claude`, sign in, then try again.")]
-    LiveCredentialAbsent,
+    #[error(
+        "nothing is signed in to {} right now. Run `{}`, sign in, then try again.",
+        tool.name(),
+        tool.login_command()
+    )]
+    LiveCredentialAbsent { tool: ProviderId },
 
     #[error(
         "Claude Code's config says {email} is signed in, but pitboard cannot find that \
@@ -227,10 +238,15 @@ pub enum Error {
     LiveCredentialElsewhere { email: String },
 
     #[error(
-        "the signed-in credential is not shaped like a Claude Code login ({detail}). \
-         Run `pitboard doctor` before switching again."
+        "the signed-in credential is not shaped like a {} login ({detail}). \
+         Run `pitboard doctor` before switching again.",
+        tool.name()
     )]
-    LiveCredentialShapeUnexpected { detail: String },
+    LiveCredentialShapeUnexpected { tool: ProviderId, detail: String },
+
+    /// The tool is configured to keep its login somewhere pitboard does not handle.
+    #[error("{reason}.")]
+    LiveStoreUnsupported { tool: ProviderId, reason: String },
 
     #[error(
         "no account is enrolled as `{label}`.{enrolled} Run `pitboard enroll {label} \
@@ -244,10 +260,11 @@ pub enum Error {
 
     #[error(
         "`{label}` has no parked login to switch to: the last one went back into use and \
-         Claude Code has moved on from it. Run `pitboard enroll {label} --sign-in` to sign \
-         in to it again."
+         {} has moved on from it. Run `pitboard enroll {label} --sign-in` to sign in to it \
+         again.",
+        tool.name()
     )]
-    NothingParked { label: String },
+    NothingParked { tool: ProviderId, label: String },
 
     #[error(
         "the parked login for `{label}` has expired. Run `pitboard enroll {label} --sign-in` \
@@ -315,26 +332,35 @@ pub enum Error {
     ConfigWriteFailed { path: PathBuf, detail: String },
 
     #[error(
-        "Claude Code's session has expired, so pitboard cannot confirm which account is \
-         signed in. Run `claude` once so it refreshes, then try again."
+        "{}'s session has expired, so pitboard cannot confirm which account is signed in. \
+         Run `{}` once so it refreshes, then try again.",
+        tool.name(),
+        tool.program()
     )]
-    SessionExpired,
+    SessionExpired { tool: ProviderId },
 
     #[error(
-        "pitboard could not confirm with Anthropic which account is signed in ({detail}), \
-         and will not move a login it cannot identify. Check the connection and try again."
+        "pitboard could not confirm with {} which account is signed in ({detail}), and will \
+         not move a login it cannot identify. Check the connection and try again.",
+        tool.service()
     )]
-    IdentityUnverifiable { cause: Cause, detail: String },
+    IdentityUnverifiable {
+        tool: ProviderId,
+        cause: Cause,
+        detail: String,
+    },
 
     #[error("the signed-in account changed while switching. Nothing was moved; try again.")]
     SignedInAccountChanged,
 
     #[error(
         "an earlier switch from `{from}` to `{to}` was interrupted, and pitboard cannot yet \
-         tell whether it finished ({detail}). Nothing was changed. Run `claude` once so its \
-         session is current, then try again."
+         tell whether it finished ({detail}). Nothing was changed. Run `{}` once so its \
+         session is current, then try again.",
+        tool.program()
     )]
     RecoveryUndetermined {
+        tool: ProviderId,
         from: String,
         to: String,
         detail: String,
@@ -350,11 +376,12 @@ pub enum Error {
     },
 
     #[error(
-        "Anthropic no longer accepts `{label}`'s parked login, so pitboard did not move \
-         anything. The copy has been dropped; sign in to that account again with \
-         `pitboard enroll {label} --sign-in`."
+        "{} no longer accepts `{label}`'s parked login, so pitboard did not move anything. \
+         The copy has been dropped; sign in to that account again with \
+         `pitboard enroll {label} --sign-in`.",
+        tool.service()
     )]
-    ParkedLoginRefused { label: String },
+    ParkedLoginRefused { tool: ProviderId, label: String },
 
     #[error(
         "`{label}`'s parked login belongs to {email}, not to the account pitboard has \
@@ -364,13 +391,17 @@ pub enum Error {
     ParkedLoginBelongsElsewhere { label: String, email: String },
 
     #[error(
-        "signed in as `{to}`, and the login was gone again before pitboard finished. \
-         Claude Code removes a login without taking the write lock when `/logout` has given \
-         up waiting, which is the one write pitboard cannot exclude. Nothing was lost: both \
-         `{from}` and `{to}` are parked. Run `claude` and sign in to any enrolled account, \
-         then `pitboard use {to}`."
+        "signed in as `{to}`, and the login was gone again before pitboard finished. {} \
+         Nothing was lost: both `{from}` and `{to}` are parked. Run `{}` and sign in to any \
+         enrolled account, then `pitboard use {to}`.",
+        why_it_did_not_hold(*tool),
+        tool.login_command()
     )]
-    SwitchDidNotHold { from: String, to: String },
+    SwitchDidNotHold {
+        tool: ProviderId,
+        from: String,
+        to: String,
+    },
 
     #[error(
         "could not sign in as `{to}` ({detail}), and could not read the credential store \
@@ -386,10 +417,12 @@ pub enum Error {
 
     #[error(
         "could not sign in as `{to}`, and could not put `{from}` back either ({detail}). \
-         `{from}`'s login is still parked: run `claude` and sign in to any enrolled account, \
-         then `pitboard use {from}`."
+         `{from}`'s login is still parked: run `{}` and sign in to any enrolled account, \
+         then `pitboard use {from}`.",
+        tool.login_command()
     )]
     SwitchCorrupted {
+        tool: ProviderId,
         from: String,
         to: String,
         detail: String,
@@ -413,8 +446,12 @@ pub enum Error {
         source: std::io::Error,
     },
 
-    #[error("`claude` was not found on PATH. Install Claude Code, run it once, then try again.")]
-    ClaudeNotFound,
+    #[error(
+        "`{}` was not found on PATH. Install {}, run it once, then try again.",
+        tool.program(),
+        tool.name()
+    )]
+    ProgramNotFound { tool: ProviderId },
 
     #[error(
         "could not renew the parked login for `{label}` ({detail}); its last reading is shown \
@@ -461,7 +498,10 @@ impl Error {
         use Error::*;
         match self {
             StateOnSyncedDrive { .. } => "state_on_synced_drive",
-            ClaudeProgramMissing { .. } => "claude_program_missing",
+            ProgramMissing { tool, .. } => match tool {
+                ProviderId::Claude => "claude_program_missing",
+                ProviderId::Codex => "codex_program_missing",
+            },
             CredentialTooLarge { .. } => "credential_too_large",
             CustomOauthEndpoint => "custom_oauth_endpoint",
             StateUnreadable { .. } => "state_unreadable",
@@ -476,7 +516,8 @@ impl Error {
             ClaudeConfigMissing { .. } => "claude_config_missing",
             ClaudeConfigUnreadable { .. } => "claude_config_unreadable",
             ClaudeConfigNotJson { .. } => "claude_config_not_json",
-            LiveCredentialAbsent => "live_credential_absent",
+            LiveCredentialAbsent { .. } => "live_credential_absent",
+            LiveStoreUnsupported { .. } => "live_store_unsupported",
             LiveCredentialElsewhere { .. } => "live_credential_elsewhere",
             LiveCredentialShapeUnexpected { .. } => "live_credential_shape_unexpected",
             AccountUnknown { .. } => "account_unknown",
@@ -501,11 +542,14 @@ impl Error {
             SwitchCorrupted { .. } => "switch_corrupted",
             RecoveryFailed { .. } => "recovery_failed",
             RecoveryRecordCorrupt { .. } => "recovery_record_corrupt",
-            SessionExpired => "session_expired",
+            SessionExpired { .. } => "session_expired",
             IdentityUnverifiable { .. } => "identity_unverifiable",
             SignedInAccountChanged => "signed_in_account_changed",
             RecoveryUndetermined { .. } => "recovery_undetermined",
-            ClaudeNotFound => "claude_not_found",
+            ProgramNotFound { tool } => match tool {
+                ProviderId::Claude => "claude_not_found",
+                ProviderId::Codex => "codex_not_found",
+            },
             SignInIncomplete => "sign_in_incomplete",
             SignInNotIsolated { .. } => "sign_in_not_isolated",
             RenewalFailed { .. } => "renewal_failed",
@@ -526,7 +570,7 @@ impl Error {
         match self {
             IdentityUnverifiable { cause, .. } => Some(*cause),
             RenewalFailed { cause, .. } => *cause,
-            SessionExpired => Some(Cause::TokenExpired),
+            SessionExpired { .. } => Some(Cause::TokenExpired),
             _ => None,
         }
     }
@@ -537,6 +581,7 @@ impl Error {
             // A login or Claude Code's files in a state pitboard will not act on, which is
             // what exit 3 means: not a failure of the attempt, a refusal to attempt.
             LiveCredentialShapeUnexpected { .. }
+            | LiveStoreUnsupported { .. }
             | ClaudeConfigNotJson { .. }
             | SwitchCorrupted { .. }
             | SwitchUnverified { .. }
@@ -554,6 +599,30 @@ impl Error {
 
 pub type Result<T> = std::result::Result<T, Error>;
 
+/// What makes a login smaller, where anything does.
+fn smaller(tool: ProviderId) -> &'static str {
+    match tool {
+        ProviderId::Claude => {
+            "Unset it, or sign out of MCP servers you no longer use to make the login smaller."
+        }
+        ProviderId::Codex => "Unset it to let pitboard write it.",
+    }
+}
+
+/// Which write took a switched-in login away again, as far as each tool is known to make one.
+fn why_it_did_not_hold(tool: ProviderId) -> &'static str {
+    match tool {
+        ProviderId::Claude => {
+            "Claude Code removes a login without taking the write lock when `/logout` has \
+             given up waiting, which is the one write pitboard cannot exclude."
+        }
+        ProviderId::Codex => {
+            "Codex takes no lock of any kind, so a codex session signing out or refreshing \
+             while the switch ran could rewrite its auth.json underneath it."
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -561,13 +630,18 @@ mod tests {
     #[test]
     fn codes_are_unique_so_a_caller_can_branch_on_them() {
         let samples = [
-            Error::LiveCredentialAbsent,
+            Error::LiveCredentialAbsent {
+                tool: ProviderId::Claude,
+            },
             Error::ParkSlotExhausted,
             Error::AccountUnknown {
                 label: "x".into(),
                 enrolled: Enrolled::default(),
             },
-            Error::NothingParked { label: "x".into() },
+            Error::NothingParked {
+                tool: ProviderId::Claude,
+                label: "x".into(),
+            },
             Error::ParkedLoginExpired { label: "x".into() },
             Error::LabelTaken {
                 label: "x".into(),
@@ -584,7 +658,11 @@ mod tests {
     #[test]
     fn a_broken_assumption_exits_differently_from_a_bad_request() {
         assert_eq!(
-            Error::LiveCredentialShapeUnexpected { detail: "x".into() }.exit_code(),
+            Error::LiveCredentialShapeUnexpected {
+                tool: ProviderId::Claude,
+                detail: "x".into()
+            }
+            .exit_code(),
             3
         );
         assert_eq!(
@@ -601,13 +679,21 @@ mod tests {
     fn every_message_tells_the_user_something_to_do() {
         // A message that only states a fact leaves the user stuck.
         let actionable = [
-            Error::LiveCredentialAbsent.to_string(),
+            Error::LiveCredentialAbsent {
+                tool: ProviderId::Claude,
+            }
+            .to_string(),
+            Error::LiveCredentialAbsent {
+                tool: ProviderId::Codex,
+            }
+            .to_string(),
             Error::AccountUnknown {
                 label: "work".into(),
                 enrolled: Enrolled(vec!["personal".into()]),
             }
             .to_string(),
             Error::NothingParked {
+                tool: ProviderId::Claude,
                 label: "work".into(),
             }
             .to_string(),
@@ -630,5 +716,54 @@ mod tests {
                 "no action offered: {message}"
             );
         }
+    }
+
+    /// Codex's messages name Codex and the command that signs in to it; Claude Code's name
+    /// Claude Code. A message about the wrong tool sends somebody to run the wrong program.
+    #[test]
+    fn a_message_names_the_tool_it_is_about() {
+        let codex = Error::LiveCredentialAbsent {
+            tool: ProviderId::Codex,
+        }
+        .to_string();
+        assert!(
+            codex.contains("Codex") && codex.contains("`codex login`"),
+            "{codex}"
+        );
+        assert!(!codex.contains("Claude"), "{codex}");
+
+        let unverifiable = Error::IdentityUnverifiable {
+            tool: ProviderId::Codex,
+            cause: Cause::Unreachable,
+            detail: "offline".into(),
+        }
+        .to_string();
+        assert!(unverifiable.contains("OpenAI"), "{unverifiable}");
+
+        let claude = Error::IdentityUnverifiable {
+            tool: ProviderId::Claude,
+            cause: Cause::Unreachable,
+            detail: "offline".into(),
+        }
+        .to_string();
+        assert!(claude.contains("confirm with Anthropic"), "{claude}");
+    }
+
+    /// The codes of the two tools' missing programs stay distinct, and Claude Code's keep
+    /// the names they were released under.
+    #[test]
+    fn a_missing_program_keeps_its_released_code() {
+        let missing = |tool| Error::ProgramNotFound { tool }.code();
+        assert_eq!(missing(ProviderId::Claude), "claude_not_found");
+        assert_eq!(missing(ProviderId::Codex), "codex_not_found");
+        let absent = |tool| {
+            Error::ProgramMissing {
+                tool,
+                program: "x".into(),
+            }
+            .code()
+        };
+        assert_eq!(absent(ProviderId::Claude), "claude_program_missing");
+        assert_eq!(absent(ProviderId::Codex), "codex_program_missing");
     }
 }

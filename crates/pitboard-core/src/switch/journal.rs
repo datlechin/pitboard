@@ -111,6 +111,14 @@ pub fn pending(ctx: &Context) -> bool {
     journal_path(ctx).exists()
 }
 
+/// Which tool's switch was interrupted, where one was and its record can be read.
+pub(super) fn interrupted_tool(ctx: &Context) -> Option<ProviderId> {
+    let raw = std::fs::read_to_string(journal_path(ctx)).ok()?;
+    serde_json::from_str::<Journal>(&raw)
+        .ok()
+        .map(|journal| journal.provider)
+}
+
 /// The switch reached a state the account index fully describes.
 pub(super) fn clear_journal(ctx: &Context) {
     let _ = std::fs::remove_file(journal_path(ctx));
@@ -321,6 +329,7 @@ pub(super) fn reconcile(ctx: &Context, state: &mut State) -> Result<Option<Recov
     };
     let Some(repair) = repair_for(state, &journal, &found) else {
         return Err(Error::RecoveryUndetermined {
+            tool: journal.provider,
             from: journal.from().typed(),
             to: journal.to().typed(),
             detail: owner

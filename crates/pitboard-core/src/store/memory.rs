@@ -267,6 +267,7 @@ pub struct MemoryHost {
     keychain: Arc<MemoryStore>,
     vault: Arc<MemoryStore>,
     files: Mutex<HashMap<PathBuf, Arc<MemoryStore>>>,
+    running: Mutex<HashMap<String, usize>>,
 }
 
 impl Default for MemoryHost {
@@ -276,6 +277,7 @@ impl Default for MemoryHost {
             keychain: MemoryStore::of(Backend::Keychain),
             vault: MemoryStore::of(Backend::Keychain),
             files: Mutex::new(HashMap::new()),
+            running: Mutex::new(HashMap::new()),
         }
     }
 }
@@ -293,6 +295,14 @@ impl MemoryHost {
     /// Where pitboard's parked logins are.
     pub fn vault(&self) -> &Arc<MemoryStore> {
         &self.vault
+    }
+
+    /// Say that `count` processes are running `program`.
+    pub fn runs(&self, program: &str, count: usize) {
+        self.running
+            .lock()
+            .expect("a poisoned test host is a failed test")
+            .insert(program.to_string(), count);
     }
 }
 
@@ -315,6 +325,18 @@ impl Host for MemoryHost {
 
     fn vault(&self, _ctx: &Context) -> Box<dyn RawStore> {
         Box::new(Arc::clone(&self.vault))
+    }
+
+    /// What a test said is running, and nothing on the machine running the tests.
+    fn running(&self, program: &str) -> Option<usize> {
+        Some(
+            self.running
+                .lock()
+                .expect("a poisoned test host is a failed test")
+                .get(program)
+                .copied()
+                .unwrap_or(0),
+        )
     }
 }
 

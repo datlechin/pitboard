@@ -92,6 +92,31 @@ impl ProviderId {
         }
     }
 
+    /// The tool, as its own documentation names it.
+    pub fn name(self) -> &'static str {
+        match self {
+            ProviderId::Claude => "Claude Code",
+            ProviderId::Codex => "Codex",
+        }
+    }
+
+    /// The command a person types to run the tool.
+    pub fn program(self) -> &'static str {
+        match self {
+            ProviderId::Claude => "claude",
+            ProviderId::Codex => "codex",
+        }
+    }
+
+    /// What a person runs to sign in with the tool's own command. Claude Code signs in from
+    /// inside the program it starts; Codex has a subcommand for it.
+    pub fn login_command(self) -> &'static str {
+        match self {
+            ProviderId::Claude => "claude",
+            ProviderId::Codex => "codex login",
+        }
+    }
+
     pub fn parse(code: &str) -> Option<ProviderId> {
         match code {
             "claude" => Some(ProviderId::Claude),
@@ -151,8 +176,12 @@ pub struct Identity {
 pub enum ProviderError {
     #[error("the session has expired")]
     Unauthorized,
-    #[error("the service asked for less traffic")]
-    RateLimited { retry_after: Option<i64> },
+    /// `retry_after` is what the service said to wait, in seconds, where it said anything.
+    #[error("{service} is rate limiting this request")]
+    RateLimited {
+        service: &'static str,
+        retry_after: Option<i64>,
+    },
     #[error("could not reach {service}: {detail}")]
     Network {
         service: &'static str,
@@ -160,17 +189,30 @@ pub enum ProviderError {
     },
     #[error("{service} answered {status}")]
     Unexpected { service: &'static str, status: u16 },
-    #[error("the answer was not understood: {0}")]
-    Malformed(String),
+    #[error("{service}'s answer was not understood: {detail}")]
+    Malformed {
+        service: &'static str,
+        detail: String,
+    },
     /// Refused for good: revoked, or already spent somewhere else.
-    #[error("this login is no longer accepted")]
-    InvalidGrant,
+    #[error("{service} no longer accepts this login")]
+    InvalidGrant { service: &'static str },
     /// The credential is not the shape this provider stores.
     #[error("the stored login is not the shape {provider} keeps: {detail}")]
     ShapeUnexpected {
         provider: ProviderId,
         detail: String,
     },
+    /// The tool is configured to keep its login somewhere pitboard does not handle.
+    #[error("{reason}")]
+    Unsupported {
+        provider: ProviderId,
+        reason: String,
+    },
+    /// The document holds no account's login at all, which is what signing out leaves in a
+    /// document the machine also keeps other things in. Not a malformed login: none.
+    #[error("nothing is signed in")]
+    NoLogin { provider: ProviderId },
 }
 
 /// When a session that is already running picks a switch up.
@@ -245,10 +287,14 @@ pub(crate) struct LiveStore {
 
 /// A store that could not be read, as the provider boundary reports it.
 pub(crate) fn store_error(error: crate::store::Error) -> ProviderError {
+    const STORE: &str = "this machine's credential store";
     match error {
-        crate::store::Error::Malformed(detail) => ProviderError::Malformed(detail),
+        crate::store::Error::Malformed(detail) => ProviderError::Malformed {
+            service: STORE,
+            detail,
+        },
         other => ProviderError::Network {
-            service: "this machine's credential store",
+            service: STORE,
             detail: other.to_string(),
         },
     }
@@ -341,6 +387,36 @@ pub(crate) trait Provider: Send + Sync + std::fmt::Debug {
         outgoing: &Identity,
     ) -> Result<(), crate::error::Error>;
 
+    /// The tool's own program, where it is installed. A private sign-in runs it, so its
+    /// absence is worth saying before anybody opens a browser.
+    fn program(&self, ctx: &Context) -> Option<std::path::PathBuf>;
+
+    /// The tool's own sign-in, pointed at `dir` so the live login is never touched.
+    ///
+    /// `dir` exists and is private when this is called, and it is where the tool writes the
+    /// new login: every tool pitboard handles lets a home variable move its whole store,
+    /// which is the only reason a second account can be signed in without signing the first
+    /// one out. Whether that really isolates the live login is
+    /// [`Provider::private_signin_isolation`]'s question, asked first.
+    fn sign_in(&self, ctx: &Context, dir: &std::path::Path) -> std::process::Command;
+
+    /// The login a sign-in left in `dir`, as the tool stored it.
+    fn read_signin(
+        &self,
+        ctx: &Context,
+        dir: &std::path::Path,
+    ) -> Result<Option<String>, crate::store::Error>;
+
+    /// Take away whatever a sign-in into `dir` left outside it. The directory itself is the
+    /// caller's to remove.
+    fn discard_signin(&self, ctx: &Context, dir: &std::path::Path);
+
+    /// Names of whatever on this machine makes the tool sign in with something other than
+    /// the login pitboard moves: an environment variable or a setting holding a key of its
+    /// own. Read from files as well as this process's environment, so the app, which has no
+    /// shell environment at all, gets the same answer as the command line.
+    fn overridden_by(&self, ctx: &Context) -> Vec<String>;
+
     /// When a running session follows a switch. A fact about the tool, not a setting.
     fn adoption(&self) -> Adoption;
 
@@ -373,6 +449,22 @@ pub(crate) trait Provider: Send + Sync + std::fmt::Debug {
 
     /// When a slice stops being askable and stops being restorable.
     fn expiry(&self, slice: &Value) -> Expiry;
+}
+
+/// Where a program somebody named is: the path itself when it has a directory in it, or
+/// the first match on `PATH` the way a shell would look.
+pub(crate) fn find_program(named: &std::path::Path) -> Option<std::path::PathBuf> {
+    if named.components().count() > 1 {
+        return std::fs::metadata(named)
+            .is_ok()
+            .then(|| named.to_path_buf());
+    }
+    std::env::var_os("PATH")?
+        .to_string_lossy()
+        .split(':')
+        .filter(|dir| !dir.is_empty())
+        .map(|dir| std::path::PathBuf::from(dir).join(named))
+        .find(|candidate| std::fs::metadata(candidate).is_ok())
 }
 
 /// The implementation for one tool.

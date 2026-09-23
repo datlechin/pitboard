@@ -495,10 +495,11 @@ impl Pitboard {
         })
     }
 
-    /// Starts Claude Code's own sign-in for a new account, watched rather than inherited.
-    /// The caller shows what it says, can paste the fallback code, and finishes it.
+    /// Starts the tool's own sign-in for a new account, watched rather than inherited. The
+    /// label may name the tool, as in `codex/work`; a bare one means Claude Code. The caller
+    /// shows what the tool says, can paste a fallback code, and finishes it.
     pub fn sign_in(self: Arc<Self>, label: String) -> Result<Arc<SignIn>, PitboardError> {
-        let watched = self.core.sign_in_watched()?;
+        let watched = self.core.sign_in_watched(&label)?;
         Ok(Arc::new(SignIn {
             watched: Mutex::new(Some(watched)),
             label,
@@ -584,8 +585,8 @@ impl Pitboard {
         self.core
             .renew()
             .into_iter()
-            .map(|(label, outcome)| Renewed {
-                label,
+            .map(|(key, outcome)| Renewed {
+                label: key.typed(),
                 outcome: outcome.code().to_string(),
             })
             .collect()

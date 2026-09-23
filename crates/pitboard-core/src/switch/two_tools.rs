@@ -5,6 +5,7 @@
 //! be a copy, it takes no write lock and caches no identity. These are the cases that
 //! prove the switch asks the tool rather than assuming Claude Code's answers.
 
+use super::enroll;
 use super::harness::{NOW, codex_access, codex_account, codex_login, codex_machine, hold};
 use super::*;
 use crate::api::scripted::Trouble;
@@ -25,7 +26,7 @@ fn whose(m: &super::harness::Machine) -> Option<String> {
 #[test]
 fn a_codex_switch_moves_one_login_in_and_one_out() {
     let m = codex_machine("moves");
-    let settled = settle(&m.ctx).expect("nothing to recover").0;
+    let settled = settle(&m.ctx, None).expect("nothing to recover").0;
 
     let (outcome, _) = switch(settled, &m.key("there")).expect("switched");
 
@@ -65,7 +66,7 @@ fn a_codex_switch_leaves_claude_code_alone() {
         .live()
         .plant(&claude, "{\"claudeAiOauth\":{\"refreshToken\":\"c\"}}");
 
-    let settled = settle(&m.ctx).expect("nothing to recover").0;
+    let settled = settle(&m.ctx, None).expect("nothing to recover").0;
     switch(settled, &m.key("there")).expect("switched");
 
     assert_eq!(
@@ -83,7 +84,7 @@ fn the_same_label_on_two_tools_is_two_accounts() {
     state.upsert(super::harness::account("there", "claude-there", None));
     state::save(&m.ctx, &state).expect("saved");
 
-    let settled = settle(&m.ctx).expect("nothing to recover").0;
+    let settled = settle(&m.ctx, None).expect("nothing to recover").0;
     switch(settled, &m.key("there")).expect("switched");
 
     let state = state::load(&m.ctx).expect("state");
@@ -113,7 +114,7 @@ fn a_park_openai_refuses_is_renewed_before_it_goes_live() {
         },
     );
 
-    let settled = settle(&m.ctx).expect("nothing to recover").0;
+    let settled = settle(&m.ctx, None).expect("nothing to recover").0;
     switch(settled, &m.key("there")).expect("switched");
 
     let live = m.live().expect("a live login");
@@ -134,7 +135,7 @@ fn a_park_openai_will_not_renew_moves_nothing() {
         .codex_renew_trouble("there-refresh", Trouble::InvalidGrant);
     let before = m.live();
 
-    let settled = settle(&m.ctx).expect("nothing to recover").0;
+    let settled = settle(&m.ctx, None).expect("nothing to recover").0;
     let refused = switch(settled, &m.key("there")).expect_err("refused");
 
     assert_eq!(refused.code(), "parked_login_refused");
@@ -168,7 +169,7 @@ fn a_park_that_does_not_stick_leaves_the_live_login_in_place() {
         .fault_all(crate::store::memory::Fault::DeletedAfterWrite);
     let before = m.live();
 
-    let settled = settle(&m.ctx).expect("nothing to recover").0;
+    let settled = settle(&m.ctx, None).expect("nothing to recover").0;
     assert!(switch(settled, &m.key("there")).is_err());
 
     assert_eq!(m.live(), before, "`here` must still be signed in");
@@ -187,4 +188,112 @@ fn a_codex_account_is_a_codex_account() {
         provider::of(ProviderId::Codex).fingerprint(&login),
         store::fingerprint("r")
     );
+}
+
+/// A tool that never follows a switch goes on using the outgoing account in every session
+/// already running, and signing out inside one would revoke the login just parked. Both are
+/// said, with how many sessions there are.
+#[test]
+fn running_codex_sessions_are_counted_and_warned_about() {
+    let m = codex_machine("sessions");
+    m.mem.runs("codex", 2);
+
+    let settled = settle(&m.ctx, Some(ProviderId::Codex))
+        .expect("nothing to recover")
+        .0;
+    let (_, warnings) = switch(settled, &m.key("there")).expect("switched");
+
+    let said = warnings
+        .iter()
+        .find(|w| w.code() == "sessions_still_running")
+        .expect("warned");
+    let text = said.to_string();
+    assert!(text.contains("2 `codex` sessions"), "{text}");
+    assert!(
+        text.contains("`codex/here`"),
+        "names the account they still use: {text}"
+    );
+    assert!(
+        text.contains("signing out"),
+        "and the one thing not to do: {text}"
+    );
+}
+
+/// Nothing running is nothing to say.
+#[test]
+fn no_running_session_is_no_warning() {
+    let m = codex_machine("no-sessions");
+    let settled = settle(&m.ctx, Some(ProviderId::Codex))
+        .expect("nothing to recover")
+        .0;
+    let (_, warnings) = switch(settled, &m.key("there")).expect("switched");
+    assert!(
+        warnings
+            .iter()
+            .all(|w| w.code() != "sessions_still_running"),
+        "{warnings:?}"
+    );
+}
+
+/// `CLAUDE_CODE_CUSTOM_OAUTH_URL` moves Claude Code's login and nothing of Codex's, so it
+/// refuses changes to Claude Code and lets a Codex switch through.
+#[test]
+fn a_custom_claude_endpoint_does_not_stop_a_codex_switch() {
+    let m = codex_machine("custom-oauth");
+    let mut ctx = m.ctx.clone();
+    ctx.custom_oauth = true;
+    assert!(settle(&ctx, Some(ProviderId::Codex)).is_ok());
+    assert_eq!(
+        settle(&ctx, Some(ProviderId::Claude))
+            .err()
+            .map(|e| e.code()),
+        Some("custom_oauth_endpoint")
+    );
+    assert_eq!(
+        settle(&ctx, None).err().map(|e| e.code()),
+        Some("custom_oauth_endpoint"),
+        "a change that could touch every tool's accounts is Claude Code's business too"
+    );
+}
+
+/// A sign-in run for one tool cannot be enrolled as another's account.
+#[test]
+fn a_sign_in_is_enrolled_only_under_its_own_tool() {
+    let m = codex_machine("wrong-tool");
+    let login = super::enroll::planted(
+        &m.ctx,
+        ProviderId::Codex,
+        codex_login("third", "third-refresh"),
+    )
+    .expect("a sign-in");
+    let settled = settle(&m.ctx, None).expect("nothing to recover").0;
+    let refused =
+        enroll(settled, &Key::new(ProviderId::Claude, "third"), Some(login)).expect_err("refused");
+    assert_eq!(refused.code(), "usage");
+}
+
+/// A Codex sign-in, planted the way `codex login` leaves one, is parked as a Codex account.
+#[test]
+fn a_codex_sign_in_is_parked_as_a_codex_account() {
+    let m = codex_machine("sign-in");
+    let login = super::enroll::planted(
+        &m.ctx,
+        ProviderId::Codex,
+        codex_login("third", "third-refresh"),
+    )
+    .expect("a sign-in");
+    let settled = settle(&m.ctx, None).expect("nothing to recover").0;
+    let key = m.key("third");
+    enroll(settled, &key, Some(login)).expect("enrolled");
+
+    let state = state::load(&m.ctx).expect("state");
+    let third = state.get(&key).expect("enrolled");
+    assert_eq!(third.provider(), ProviderId::Codex);
+    assert_eq!(third.account_uuid, "third");
+    let parked = third.parked.clone().expect("parked");
+    assert_eq!(
+        parked.refresh_fingerprint,
+        store::fingerprint("third-refresh")
+    );
+    hold(&m, "after a Codex sign-in");
 }

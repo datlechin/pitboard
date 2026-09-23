@@ -46,6 +46,41 @@ pub fn reserve(ctx: &Context, account_uuid: &str) -> Result<String> {
     Err(Error::ParkSlotExhausted)
 }
 
+/// Whether a login can be parked at all on this machine, and how.
+///
+/// On macOS a park goes into the keychain through `security`, whose stdin takes 4032 bytes.
+/// A Claude Code slice is a few hundred, but a Codex login is its whole `auth.json`, over
+/// four kilobytes before it is hex-encoded, so every Codex park is past the ceiling. Above
+/// it the write goes on the argument line, which is said, or is refused where
+/// `PITBOARD_NO_ARGV` forbids that, before anything has moved rather than halfway through.
+pub fn price(
+    ctx: &Context,
+    provider: ProviderId,
+    label: &str,
+    service: &str,
+    document: &Value,
+) -> Result<Option<crate::service::Warning>> {
+    let body = serde_json::to_string(document).expect("a credential slice is always serialisable");
+    let Some(price) = store::vault_cost(ctx, service, &body) else {
+        return Ok(None);
+    };
+    if price.refused() {
+        return Err(Error::CredentialTooLarge {
+            tool: provider,
+            label: label.to_string(),
+            bytes: price.needs,
+            limit: price.limit,
+        });
+    }
+    Ok(price
+        .on_the_second_route()
+        .then_some(crate::service::Warning::WrittenOnTheCommandLine {
+            tool: provider,
+            bytes: price.needs,
+            limit: price.limit,
+        }))
+}
+
 /// Write a login into a reserved name and prove it reads back.
 pub fn store_at(
     ctx: &Context,
@@ -56,6 +91,7 @@ pub fn store_at(
     let park = describe(provider, service, ctx.now(), document);
     if park.refresh_fingerprint.is_empty() {
         return Err(Error::LiveCredentialShapeUnexpected {
+            tool: provider,
             detail: "it has no refresh token, so it could never be restored".into(),
         });
     }

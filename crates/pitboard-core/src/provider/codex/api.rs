@@ -37,6 +37,13 @@ fn network(detail: String) -> ProviderError {
     }
 }
 
+fn malformed(detail: String) -> ProviderError {
+    ProviderError::Malformed {
+        service: ProviderId::Codex.service(),
+        detail,
+    }
+}
+
 fn unexpected(status: u16) -> ProviderError {
     ProviderError::Unexpected {
         service: ProviderId::Codex.service(),
@@ -127,8 +134,7 @@ fn ask_renew(ctx: &Context, refresh_token: &str) -> Result<Fresh, ProviderError>
         .map_err(|e| network(e.to_string()))?;
     match status {
         200 => {
-            let body: Value =
-                serde_json::from_str(&text).map_err(|e| ProviderError::Malformed(e.to_string()))?;
+            let body: Value = serde_json::from_str(&text).map_err(|e| malformed(e.to_string()))?;
             let string = |key: &str| body.get(key).and_then(Value::as_str).map(str::to_owned);
             let fresh = Fresh {
                 id_token: string("id_token"),
@@ -137,17 +143,48 @@ fn ask_renew(ctx: &Context, refresh_token: &str) -> Result<Fresh, ProviderError>
                 at,
             };
             if fresh.access_token.is_none() {
-                return Err(ProviderError::Malformed(
-                    "the answer carried no access token".into(),
-                ));
+                return Err(malformed("the answer carried no access token".into()));
             }
             Ok(fresh)
         }
-        // A refresh token that has been spent, revoked, or signed out from elsewhere. The
-        // body names which; the distinction does not change what pitboard can do about it.
-        400 | 401 => Err(ProviderError::InvalidGrant),
-        429 => Err(ProviderError::RateLimited { retry_after: wait }),
+        429 => Err(ProviderError::RateLimited {
+            service: ProviderId::Codex.service(),
+            retry_after: wait,
+        }),
+        other if refused_for_good(other, &text) => Err(ProviderError::InvalidGrant {
+            service: ProviderId::Codex.service(),
+        }),
         other => Err(unexpected(other)),
+    }
+}
+
+/// Whether a failed exchange means the refresh chain is finished, read the way Codex reads
+/// it.
+///
+/// A 401 always does. A 400 does only when it says so: `invalid_grant`, which is how the
+/// current server reports a token that was spent or revoked, or one of the older codes that
+/// named which (`refresh_token_expired`, `refresh_token_reused`,
+/// `refresh_token_invalidated`). Any other 400 is a request the server did not like, and
+/// reading that as a dead login would drop a park that works. The code can be the `error`
+/// string, `error.code`, or a top-level `code`.
+fn refused_for_good(status: u16, body: &str) -> bool {
+    if status == 401 {
+        return true;
+    }
+    let Ok(body) = serde_json::from_str::<Value>(body) else {
+        return false;
+    };
+    let code = body
+        .get("error")
+        .and_then(Value::as_str)
+        .or_else(|| body.pointer("/error/code").and_then(Value::as_str))
+        .or_else(|| body.get("code").and_then(Value::as_str));
+    match code {
+        Some("refresh_token_expired" | "refresh_token_reused" | "refresh_token_invalidated") => {
+            true
+        }
+        Some("invalid_grant") => status == 400,
+        _ => false,
     }
 }
 
@@ -174,12 +211,12 @@ fn ask_usage(
                 .body_mut()
                 .read_to_string()
                 .map_err(|e| network(e.to_string()))?;
-            let body: Value =
-                serde_json::from_str(&text).map_err(|e| ProviderError::Malformed(e.to_string()))?;
+            let body: Value = serde_json::from_str(&text).map_err(|e| malformed(e.to_string()))?;
             Ok(snapshot(&body, account_id, now))
         }
         401 | 403 => Err(ProviderError::Unauthorized),
         429 => Err(ProviderError::RateLimited {
+            service: ProviderId::Codex.service(),
             retry_after: retry_after(response.headers()),
         }),
         other => Err(unexpected(other)),
@@ -267,6 +304,28 @@ fn moment(value: &Value) -> Option<i64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Only a refusal that says the chain is finished drops a park. A 400 for a malformed
+    /// request used to read as a dead login, which would throw away one that works.
+    #[test]
+    fn only_a_finished_chain_is_refused_for_good() {
+        assert!(refused_for_good(401, ""));
+        assert!(refused_for_good(400, r#"{"error":"invalid_grant"}"#));
+        for code in [
+            "refresh_token_expired",
+            "refresh_token_reused",
+            "refresh_token_invalidated",
+        ] {
+            assert!(refused_for_good(
+                400,
+                &format!(r#"{{"error":{{"code":"{code}"}}}}"#)
+            ));
+            assert!(refused_for_good(400, &format!(r#"{{"code":"{code}"}}"#)));
+        }
+        assert!(!refused_for_good(400, r#"{"error":"invalid_request"}"#));
+        assert!(!refused_for_good(400, "not json"));
+        assert!(!refused_for_good(403, r#"{"error":"invalid_grant"}"#));
+    }
 
     #[test]
     fn the_windows_keep_the_vocabulary_the_rest_of_pitboard_uses() {

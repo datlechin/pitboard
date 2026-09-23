@@ -128,6 +128,45 @@ impl Provider for Claude {
         .map(|_| ())
     }
 
+    fn program(&self, ctx: &Context) -> Option<PathBuf> {
+        claude::program(ctx)
+    }
+
+    /// Measured in 2.1.278: `claude auth login` opens the browser itself and finishes
+    /// through a loopback callback, printing progress with `stdout.write` and reading stdin
+    /// only as the fallback for a pasted code. So it needs no terminal: pipes are enough.
+    /// `CLAUDE_SECURESTORAGE_CONFIG_DIR` is taken away because it would pin the credential
+    /// slot back to a real one whatever `CLAUDE_CONFIG_DIR` says.
+    fn sign_in(&self, ctx: &Context, dir: &std::path::Path) -> std::process::Command {
+        let mut command = std::process::Command::new(&ctx.claude_program);
+        command
+            .args(["auth", "login"])
+            .env("CLAUDE_CONFIG_DIR", dir)
+            .env_remove("CLAUDE_SECURESTORAGE_CONFIG_DIR");
+        command
+    }
+
+    fn read_signin(
+        &self,
+        ctx: &Context,
+        dir: &std::path::Path,
+    ) -> Result<Option<String>, crate::store::Error> {
+        live::read_signin(ctx, dir)
+    }
+
+    /// The keychain item Claude Code made for the private directory, which outlives the
+    /// directory unless it is deleted by name.
+    fn discard_signin(&self, ctx: &Context, dir: &std::path::Path) {
+        let _ = live::discard_signin(ctx, dir);
+    }
+
+    fn overridden_by(&self, ctx: &Context) -> Vec<String> {
+        crate::settings::overrides(ctx)
+            .iter()
+            .map(ToString::to_string)
+            .collect()
+    }
+
     fn adoption(&self) -> Adoption {
         Adoption::PollingWithin(ADOPTION_SECONDS)
     }
@@ -146,7 +185,14 @@ impl Provider for Claude {
         Isolation::Isolated
     }
 
+    /// A document with no `claudeAiOauth` is what `/logout` leaves: it deletes the account's
+    /// keys and keeps the machine's, such as MCP tokens. That is nobody signed in.
     fn slice(&self, live: &Value) -> Result<Value, ProviderError> {
+        if live.is_object() && live.get("claudeAiOauth").is_none() {
+            return Err(ProviderError::NoLogin {
+                provider: ProviderId::Claude,
+            });
+        }
         document::slice(live).map_err(|detail| ProviderError::ShapeUnexpected {
             provider: ProviderId::Claude,
             detail,
@@ -195,7 +241,10 @@ fn from_owner(owner: api::Owner) -> Identity {
 fn from_api(error: ApiError) -> ProviderError {
     match error {
         ApiError::Unauthorized => ProviderError::Unauthorized,
-        ApiError::RateLimited { retry_after } => ProviderError::RateLimited { retry_after },
+        ApiError::RateLimited { retry_after } => ProviderError::RateLimited {
+            service: ProviderId::Claude.service(),
+            retry_after,
+        },
         ApiError::Network(detail) => ProviderError::Network {
             service: ProviderId::Claude.service(),
             detail,
@@ -204,7 +253,12 @@ fn from_api(error: ApiError) -> ProviderError {
             service: ProviderId::Claude.service(),
             status,
         },
-        ApiError::Malformed(detail) => ProviderError::Malformed(detail),
-        ApiError::InvalidGrant => ProviderError::InvalidGrant,
+        ApiError::Malformed(detail) => ProviderError::Malformed {
+            service: ProviderId::Claude.service(),
+            detail,
+        },
+        ApiError::InvalidGrant => ProviderError::InvalidGrant {
+            service: ProviderId::Claude.service(),
+        },
     }
 }

@@ -52,6 +52,8 @@ pub const ADOPTION_CEILING_SECONDS: u32 = 33;
 #[derive(Debug)]
 pub enum Outcome {
     Switched {
+        /// Which tool's login moved.
+        provider: ProviderId,
         from: String,
         to: String,
         parked: Park,
@@ -75,23 +77,35 @@ pub struct Settled {
 /// Throws away a record of an interrupted switch that cannot be finished, keeping every
 /// copy it names. Takes pitboard's own lock but never Claude Code's: it installs nothing.
 pub fn abandon(ctx: &Context) -> Result<Option<Abandoned>> {
-    if crate::settings::custom_oauth(ctx) {
-        return Err(Error::CustomOauthEndpoint);
-    }
+    refuse_custom_oauth(ctx, None)?;
     let _exclusive = exclusive(ctx)?;
     let mut state = state::load(ctx)?;
     journal::abandon(ctx, &mut state)
 }
 
-/// What recovery found is returned apart from the `Settled`, so it can be reported whether
-/// or not the command that follows succeeds.
-pub fn settle(ctx: &Context) -> Result<(Settled, Option<Recovered>)> {
-    // Under a custom OAuth endpoint the live login is in "Claude Code-custom-oauth-
-    // credentials", not the item pitboard reads. Acting would park nothing and restore
-    // into an item nobody reads, so pitboard does not act at all.
-    if crate::settings::custom_oauth(ctx) {
+/// Under a custom OAuth endpoint Claude Code's live login is in "Claude Code-custom-oauth-
+/// credentials", not the item pitboard reads. Acting on it would park nothing and restore
+/// into an item nobody reads, so pitboard does not act on Claude Code at all: not a change
+/// to one of its accounts, not a change that could touch every tool's, and not the
+/// recovery of an interrupted Claude Code switch. A change to another tool's account goes
+/// ahead; its login is somewhere this setting does not move.
+fn refuse_custom_oauth(ctx: &Context, tool: Option<ProviderId>) -> Result<()> {
+    if !crate::settings::custom_oauth(ctx) {
+        return Ok(());
+    }
+    let claude = Some(ProviderId::Claude);
+    if tool.is_none() || tool == claude || journal::interrupted_tool(ctx) == claude {
         return Err(Error::CustomOauthEndpoint);
     }
+    Ok(())
+}
+
+/// What recovery found is returned apart from the `Settled`, so it can be reported whether
+/// or not the command that follows succeeds.
+///
+/// `tool` is the tool the change that follows is about, where it is about one.
+pub fn settle(ctx: &Context, tool: Option<ProviderId>) -> Result<(Settled, Option<Recovered>)> {
+    refuse_custom_oauth(ctx, tool)?;
     let exclusive = exclusive(ctx)?;
     let mut state = state::load(ctx)?;
     let recovered = reconcile(ctx, &mut state)?;
@@ -188,11 +202,11 @@ pub(super) fn identify_document(
             organization_uuid: found.group.unwrap_or_default(),
         })
         .map_err(|e| match e {
-            provider::ProviderError::Unauthorized => Error::SessionExpired,
-            provider::ProviderError::ShapeUnexpected { detail, .. } => {
-                Error::LiveCredentialShapeUnexpected { detail }
-            }
+            provider::ProviderError::Unauthorized => Error::SessionExpired { tool: which },
+            other @ (provider::ProviderError::ShapeUnexpected { .. }
+            | provider::ProviderError::Unsupported { .. }) => shape(which, other),
             other => Error::IdentityUnverifiable {
+                tool: which,
                 cause: crate::error::Cause::of_provider(&other),
                 detail: other.to_string(),
             },
@@ -207,13 +221,13 @@ pub(super) fn identify_document(
 pub(super) fn nothing_signed_in(ctx: &Context, which: ProviderId) -> Error {
     match provider::of(which).recorded_identity(ctx) {
         Some(found) => Error::LiveCredentialElsewhere { email: found.email },
-        None => Error::LiveCredentialAbsent,
+        None => Error::LiveCredentialAbsent { tool: which },
     }
 }
 
 /// Where this tool's live login is, or why pitboard cannot act on it here.
 pub(super) fn live_store(ctx: &Context, which: ProviderId) -> Result<provider::LiveStore> {
-    provider::of(which).live(ctx).map_err(shape)
+    provider::of(which).live(ctx).map_err(|e| shape(which, e))
 }
 
 /// The live login as it is stored, byte for byte, and as a document.
@@ -229,7 +243,11 @@ fn read_live(
         .ok_or_else(|| nothing_signed_in(ctx, which))?;
     let document = serde_json::from_str(&raw)
         .map_err(|e| Error::Store(store::Error::Malformed(e.to_string())))?;
-    Ok((raw, document))
+    match provider::of(which).slice(&document) {
+        Err(provider::ProviderError::NoLogin { .. }) => Err(nothing_signed_in(ctx, which)),
+        Err(other) => Err(shape(which, other)),
+        Ok(_) => Ok((raw, document)),
+    }
 }
 
 pub fn switch(settled: Settled, key: &Key) -> Result<(Outcome, Vec<Warning>)> {
@@ -270,10 +288,10 @@ pub fn switch(settled: Settled, key: &Key) -> Result<(Outcome, Vec<Warning>)> {
             email: outgoing.email.clone(),
         })?;
     let (from, to) = (outgoing_key.typed(), key.typed());
-    let held = target
-        .parked
-        .clone()
-        .ok_or_else(|| Error::NothingParked { label: to.clone() })?;
+    let held = target.parked.clone().ok_or_else(|| Error::NothingParked {
+        tool: key.provider,
+        label: to.clone(),
+    })?;
     if !held.restorable_at(ctx.now()) {
         return Err(Error::ParkedLoginExpired { label: to.clone() });
     }
@@ -297,13 +315,17 @@ pub fn switch(settled: Settled, key: &Key) -> Result<(Outcome, Vec<Warning>)> {
 
     // Checked before anything is parked, so a switch that could never be written changes
     // nothing.
-    let next = to_body(tool.splice(&before, &incoming).map_err(shape)?);
+    let next = to_body(
+        tool.splice(&before, &incoming)
+            .map_err(|e| shape(key.provider, e))?,
+    );
     // Asked once. The answer is about the backend that would take this write, so a login
     // living in a fallback file is not told it has the keychain's ceiling.
     let price = store::cost(&live.chain, &live.service, &next);
     if price.is_some_and(store::Cost::refused) {
         let price = price.expect("refused implies a ceiling");
         return Err(Error::CredentialTooLarge {
+            tool: key.provider,
             label: to,
             bytes: price.needs,
             limit: price.limit,
@@ -315,10 +337,22 @@ pub fn switch(settled: Settled, key: &Key) -> Result<(Outcome, Vec<Warning>)> {
         price
             .filter(|p| p.on_the_second_route())
             .map(|p| Warning::WrittenOnTheCommandLine {
+                tool: key.provider,
                 bytes: p.needs,
                 limit: p.limit,
             });
 
+    // The outgoing login's park has a ceiling of its own on a machine whose vault is the
+    // keychain, and it is asked about now, while refusing still changes nothing. The name
+    // is the one `reserve` is about to make, give or take the millisecond, which is all
+    // the price depends on.
+    let parking = park::price(
+        ctx,
+        key.provider,
+        &from,
+        &park::service_name(&outgoing.account_uuid, ctx.now_millis()),
+        &tool.slice(&before).map_err(|e| shape(key.provider, e))?,
+    )?;
     let park_service = park::reserve(ctx, &outgoing.account_uuid)?;
     write_journal(
         ctx,
@@ -341,7 +375,7 @@ pub fn switch(settled: Settled, key: &Key) -> Result<(Outcome, Vec<Warning>)> {
     // Until the incoming login is installed there is nothing for a later run to finish, so
     // a failure here takes the record of intent away with it. A copy that was written but
     // could not be recorded is deleted: nothing that survives would name it.
-    let slice = tool.slice(&before).map_err(shape)?;
+    let slice = tool.slice(&before).map_err(|e| shape(key.provider, e))?;
     let parked = match park::store_at(ctx, key.provider, &park_service, &slice) {
         Ok(parked) => parked,
         Err(e) => {
@@ -372,6 +406,7 @@ pub fn switch(settled: Settled, key: &Key) -> Result<(Outcome, Vec<Warning>)> {
     }
 
     if let Err(e) = install_with(
+        key.provider,
         |body| store::write_raw(&live.chain, &live.service, body),
         || store::read_raw(&live.chain, &live.service),
         &next,
@@ -413,7 +448,11 @@ pub fn switch(settled: Settled, key: &Key) -> Result<(Outcome, Vec<Warning>)> {
                 .is_ok_and(|document| tool.slice(&document).is_ok()) => {}
         Ok(_) => {
             clear_journal(ctx);
-            return Err(Error::SwitchDidNotHold { from, to });
+            return Err(Error::SwitchDidNotHold {
+                tool: key.provider,
+                from,
+                to,
+            });
         }
         Err(unreadable) => {
             return Err(Error::SwitchUnverified {
@@ -446,14 +485,32 @@ pub fn switch(settled: Settled, key: &Key) -> Result<(Outcome, Vec<Warning>)> {
     let parks_pending = purge(ctx, &mut state);
     clear_journal(ctx);
 
+    // A tool that never follows a switch on its own goes on using the outgoing account in
+    // every session already running. Said with a count, because "restart it" means nothing
+    // to somebody who does not know one is open, and with the one thing not to do in it.
+    let still_running = match tool.adoption() {
+        provider::Adoption::RestartRequired { program } => ctx
+            .host()
+            .running(program)
+            .filter(|count| *count > 0)
+            .map(|count| Warning::SessionsStillRunning {
+                program,
+                count,
+                from: from.clone(),
+            }),
+        provider::Adoption::PollingWithin(_) => None,
+    };
     let warnings = on_the_command_line
         .into_iter()
-        .chain(lock_lost.then_some(Warning::LockCompromised))
+        .chain(parking)
+        .chain(still_running)
+        .chain(lock_lost.then_some(Warning::LockCompromised { tool: key.provider }))
         .chain(cache_warning)
         .chain((parks_pending > 0).then_some(Warning::ParksPendingRemoval(parks_pending)))
         .collect();
     Ok((
         Outcome::Switched {
+            provider: key.provider,
             adoption: tool.adoption(),
             from,
             to,
@@ -501,6 +558,7 @@ fn prove_incoming(
             }
             Err(e) => {
                 return Err(Error::IdentityUnverifiable {
+                    tool: key.provider,
                     cause: crate::error::Cause::of_provider(&e),
                     detail: e.to_string(),
                 });
@@ -511,6 +569,7 @@ fn prove_incoming(
     // Lapsed, or refused as lapsed. Renew it and switch to what comes back.
     let Some(fresh) = renew::renew_one(ctx, state, key, &held)? else {
         return Err(Error::IdentityUnverifiable {
+            tool: key.provider,
             cause: crate::error::Cause::Unreachable,
             detail: format!(
                 "`{label}`'s parked login needs renewing and {} did not answer",
@@ -535,12 +594,16 @@ fn only_copy_left(failure: &Error) -> bool {
 /// code the step it happened in gives it, because "could not reach Anthropic while proving
 /// who the incoming login belongs to" and "could not reach Anthropic for usage" are the
 /// same failure and not the same problem.
-pub(super) fn shape(error: provider::ProviderError) -> Error {
+pub(super) fn shape(tool: ProviderId, error: provider::ProviderError) -> Error {
     match error {
         provider::ProviderError::ShapeUnexpected { detail, .. } => {
-            Error::LiveCredentialShapeUnexpected { detail }
+            Error::LiveCredentialShapeUnexpected { tool, detail }
+        }
+        provider::ProviderError::Unsupported { reason, .. } => {
+            Error::LiveStoreUnsupported { tool, reason }
         }
         other => Error::LiveCredentialShapeUnexpected {
+            tool,
             detail: other.to_string(),
         },
     }
@@ -561,6 +624,7 @@ fn to_body(document: Value) -> String {
 /// told pitboard could not put their login back and they should sign in again. Nothing had
 /// been written and their login had never moved.
 fn install_with(
+    tool: ProviderId,
     write: impl Fn(&str) -> std::result::Result<(), store::Error>,
     read: impl Fn() -> std::result::Result<Option<String>, store::Error>,
     next: &str,
@@ -594,6 +658,7 @@ fn install_with(
     match write(before_raw) {
         Ok(()) => Err(rolled_back(failure.to_string())),
         Err(rollback) => Err(Error::SwitchCorrupted {
+            tool,
             from: from.to_string(),
             to: to.to_string(),
             detail: format!("{failure}; {rollback}"),
@@ -615,6 +680,7 @@ mod tests {
     fn a_successful_write_needs_no_rollback() {
         let written = RefCell::new(Vec::new());
         let result = install_with(
+            ProviderId::Claude,
             |b| {
                 written.borrow_mut().push(b.to_string());
                 Ok(())
@@ -632,6 +698,7 @@ mod tests {
     #[test]
     fn a_failed_write_that_changed_nothing_is_not_reported_as_a_lost_login() {
         let result = install_with(
+            ProviderId::Claude,
             |_| Err(failing("keychain locked")),
             || Ok(Some("old".into())),
             "new",
@@ -649,6 +716,7 @@ mod tests {
     fn a_half_write_is_rolled_back() {
         let slot = RefCell::new("old".to_string());
         let result = install_with(
+            ProviderId::Claude,
             |b| {
                 if b == "new" {
                     *slot.borrow_mut() = "garbled".into();
@@ -681,6 +749,7 @@ mod tests {
     fn a_store_that_cannot_be_read_back_is_not_a_lost_login() {
         let writes = RefCell::new(0);
         let result = install_with(
+            ProviderId::Claude,
             |_| {
                 *writes.borrow_mut() += 1;
                 Err(failing("the keychain is locked"))
@@ -705,6 +774,7 @@ mod tests {
     #[test]
     fn only_a_failed_rollback_after_a_change_is_reported_as_corruption() {
         let result = install_with(
+            ProviderId::Claude,
             |_| Err(failing("disk full")),
             || Ok(Some("garbled".into())),
             "new",
@@ -723,6 +793,11 @@ mod tests {
             to: to.clone(),
             detail: detail.clone(),
         }));
-        assert!(only_copy_left(&Error::SwitchCorrupted { from, to, detail }));
+        assert!(only_copy_left(&Error::SwitchCorrupted {
+            tool: ProviderId::Claude,
+            from,
+            to,
+            detail
+        }));
     }
 }

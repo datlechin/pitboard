@@ -276,11 +276,14 @@ fn to_api(error: crate::provider::ProviderError) -> ApiError {
     use crate::provider::ProviderError as P;
     match error {
         P::Unauthorized => ApiError::Unauthorized,
-        P::RateLimited { retry_after } => ApiError::RateLimited { retry_after },
+        P::RateLimited { retry_after, .. } => ApiError::RateLimited { retry_after },
         P::Network { detail, .. } => ApiError::Network(detail),
         P::Unexpected { status, .. } => ApiError::Unexpected { status },
-        P::Malformed(detail) | P::ShapeUnexpected { detail, .. } => ApiError::Malformed(detail),
-        P::InvalidGrant => ApiError::InvalidGrant,
+        P::Malformed { detail, .. }
+        | P::ShapeUnexpected { detail, .. }
+        | P::Unsupported { reason: detail, .. } => ApiError::Malformed(detail),
+        P::NoLogin { .. } => ApiError::Malformed("nothing is signed in".into()),
+        P::InvalidGrant { .. } => ApiError::InvalidGrant,
     }
 }
 

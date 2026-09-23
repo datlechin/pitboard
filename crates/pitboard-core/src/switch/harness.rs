@@ -369,5 +369,5 @@ pub(super) fn hold(m: &Machine, after: &str) {
 
 /// Recovery, run the way the next command runs it.
 pub(super) fn recover(m: &Machine) -> Result<()> {
-    settle(&m.ctx).map(|_| ())
+    settle(&m.ctx, None).map(|_| ())
 }

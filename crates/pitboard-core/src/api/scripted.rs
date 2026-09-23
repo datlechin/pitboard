@@ -208,8 +208,12 @@ fn from_trouble(trouble: Trouble) -> ProviderError {
     let service = crate::provider::ProviderId::Codex.service();
     match trouble {
         Trouble::Unauthorized => ProviderError::Unauthorized,
-        Trouble::RateLimited => ProviderError::RateLimited { retry_after: None },
+        Trouble::RateLimited => ProviderError::RateLimited {
+            service,
+            retry_after: None,
+        },
         Trouble::RateLimitedFor(seconds) => ProviderError::RateLimited {
+            service,
             retry_after: Some(seconds),
         },
         Trouble::Offline => ProviderError::Network {
@@ -217,7 +221,7 @@ fn from_trouble(trouble: Trouble) -> ProviderError {
             detail: "no route to host".into(),
         },
         Trouble::Server(status) => ProviderError::Unexpected { service, status },
-        Trouble::InvalidGrant => ProviderError::InvalidGrant,
+        Trouble::InvalidGrant => ProviderError::InvalidGrant { service },
     }
 }
 
@@ -241,12 +245,13 @@ impl OpenAi for ScriptedApi {
     }
 
     fn renew(&self, _ctx: &Context, refresh_token: &str) -> Result<Fresh, ProviderError> {
+        let service = crate::provider::ProviderId::Codex.service();
         let mut script = self.script();
         script.asked.push(Asked::Renew(refresh_token.into()));
         match script.codex_renewals.get(refresh_token) {
             Some(Answer::Give(fresh)) => Ok(fresh.clone()),
             Some(Answer::Fail(trouble)) => Err(from_trouble(*trouble)),
-            None => Err(ProviderError::InvalidGrant),
+            None => Err(ProviderError::InvalidGrant { service }),
         }
     }
 }

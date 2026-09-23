@@ -27,9 +27,10 @@ use crate::{audit, state};
 /// What taking over found.
 #[derive(Debug, PartialEq, Eq)]
 pub struct Adopted {
-    /// The accounts kept, in the order they were enrolled.
+    /// The accounts kept, in the order they were enrolled, named the way they are typed:
+    /// bare for Claude Code, `codex/work` for another tool.
     pub accounts: Vec<String>,
-    /// Accounts that arrived holding a parked login, now dropped.
+    /// Accounts that arrived holding a parked login, now dropped, named the same way.
     pub logins_dropped: Vec<String>,
 }
 
@@ -42,11 +43,11 @@ pub fn adopt(ctx: &Context) -> Result<Option<Adopted>> {
         return Ok(None);
     }
 
-    let accounts: Vec<String> = state.accounts.iter().map(|a| a.label.clone()).collect();
+    let accounts: Vec<String> = state.accounts.iter().map(|a| a.key().typed()).collect();
     let mut logins_dropped = Vec::new();
     for account in &mut state.accounts {
         if let Some(park) = account.parked.take() {
-            logins_dropped.push(account.label.clone());
+            logins_dropped.push(account.key().typed());
             // Listed rather than deleted outright, so a delete that fails is retried. On a
             // machine that did not receive the keychain there is nothing there to delete,
             // and deleting what is not there succeeds.

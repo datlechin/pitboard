@@ -1,24 +1,24 @@
 //! Bringing an account under pitboard's care.
 //!
 //! A parked copy is only safe if the live slot is replaced the moment it is taken; otherwise
-//! Claude Code keeps rotating the same token and the copy goes stale. So the account signed
-//! in now is recorded but not parked. Its first switch parks it at exactly that moment,
-//! and any other account is signed in inside a private directory, where the live slot is
-//! never touched and the vault is the new login's only holder.
+//! the tool keeps rotating the same token and the copy goes stale, and for a tool whose
+//! sign-out revokes what it finds, a copy left beside the live login is one the person's
+//! own next sign-out would end. So the account signed in now is recorded but not parked.
+//! Its first switch parks it at exactly that moment, and any other account is signed in
+//! inside a private directory, where the live slot is never touched and the vault is the
+//! new login's only holder.
 
-use super::{Error, Result, Settled, identify_document, purge};
+use super::{Error, Result, Settled, identify_document, nothing_signed_in, purge};
 use crate::api::Owner;
 use crate::context::Context;
-use crate::provider::ProviderId;
-use crate::provider::claude::live as claude_live;
-use crate::provider::claude::paths as claude;
+use crate::provider::{self, ProviderId};
+use crate::service::Warning;
 use crate::state::{Account, Key, Park, State};
 use crate::{home, park, state, store};
 use serde_json::{Value, json};
 use std::fs::{File, OpenOptions, TryLockError};
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::PathBuf;
-use std::process::Command;
 
 #[derive(Debug)]
 pub enum Enrolled {
@@ -30,28 +30,36 @@ pub enum Enrolled {
     Renewed { email: String },
 }
 
-/// A login Claude Code stored for pitboard in a private directory, not yet enrolled. Dropping
-/// it deletes that directory and the credential Claude Code kept for it.
+/// A login a tool stored for pitboard in a private directory, not yet enrolled. Dropping it
+/// deletes that directory and whatever the tool kept for it elsewhere.
 pub struct SignIn {
+    provider: ProviderId,
     dir: PathBuf,
     document: Value,
     ctx: Context,
     _one_at_a_time: File,
 }
 
+impl SignIn {
+    /// Which tool this login is for.
+    pub fn provider(&self) -> ProviderId {
+        self.provider
+    }
+}
+
 impl Drop for SignIn {
     fn drop(&mut self) {
-        let _ = claude_live::discard_signin(&self.ctx, &self.dir);
+        provider::of(self.provider).discard_signin(&self.ctx, &self.dir);
         let _ = std::fs::remove_dir_all(&self.dir);
     }
 }
 
-/// Run Claude Code's own sign-in in a private directory, where the live login is never
-/// touched. It waits on a person in a browser, so it takes no lock but its own: a switch
-/// meanwhile goes ahead, and a second sign-in is refused rather than queued.
-/// Takes the one-sign-in-at-a-time lock and prepares the private directory Claude Code will
+/// Takes the one-sign-in-at-a-time lock and prepares the private directory the tool will
 /// sign in to. Both the inherited and the watched sign-in start here.
-fn reserve_signin(ctx: &Context) -> Result<SignIn> {
+///
+/// A sign-in waits on a person in a browser, so it takes no lock but its own: a switch
+/// meanwhile goes ahead, and a second sign-in is refused rather than queued.
+fn reserve_signin(ctx: &Context, which: ProviderId) -> Result<SignIn> {
     let home = home::ensure(ctx).map_err(|source| Error::HomeUnwritable {
         path: home::dir(ctx),
         source,
@@ -82,14 +90,18 @@ fn reserve_signin(ctx: &Context) -> Result<SignIn> {
     // A sign-in that was killed rather than finished never ran its cleanup, so a login can
     // be sitting in the scratch slot with nothing naming it. The directory is always the
     // same one, so the slot is too, and this is the moment it can be cleared safely: the
-    // lock above means no other sign-in is using it.
-    let _ = claude_live::discard_signin(ctx, &dir);
+    // lock above means no other sign-in is using it. Every tool's leftovers, because the
+    // one that was killed need not be the one starting now.
+    for &tool in ProviderId::ALL {
+        provider::of(tool).discard_signin(ctx, &dir);
+    }
     let _ = std::fs::remove_dir_all(&dir);
     home::create_private(&dir).map_err(|source| Error::HomeUnwritable {
         path: dir.clone(),
         source,
     })?;
     Ok(SignIn {
+        provider: which,
         dir,
         document: Value::Null,
         ctx: ctx.clone(),
@@ -98,59 +110,53 @@ fn reserve_signin(ctx: &Context) -> Result<SignIn> {
 }
 
 /// A sign-in that never ran. The crash matrix needs the state a finished sign-in leaves,
-/// and running Claude Code's own login inside a test is neither possible nor wanted.
+/// and running a tool's own login inside a test is neither possible nor wanted.
 #[cfg(test)]
-pub(super) fn planted(ctx: &Context, document: Value) -> Result<SignIn> {
-    let mut pending = reserve_signin(ctx)?;
+pub(super) fn planted(ctx: &Context, which: ProviderId, document: Value) -> Result<SignIn> {
+    let mut pending = reserve_signin(ctx, which)?;
     pending.document = document;
     Ok(pending)
 }
 
-pub fn sign_in(ctx: &Context) -> Result<SignIn> {
-    let mut pending = reserve_signin(ctx)?;
-    // pitboard never sees the sign-in; it reads the login Claude Code stores once it is done.
-    // What Claude Code prints goes to stderr, so `--json` output stays one JSON line.
-    let finished = login(ctx, &pending.dir)
+/// Run the tool's own sign-in in a private directory, where the live login is never
+/// touched, and read back the login it stored there.
+pub fn sign_in(ctx: &Context, which: ProviderId) -> Result<SignIn> {
+    let mut pending = reserve_signin(ctx, which)?;
+    // pitboard never sees the sign-in; it reads the login the tool stores once it is done.
+    // What the tool prints goes to stderr, so `--json` output stays one JSON line.
+    let finished = provider::of(which)
+        .sign_in(ctx, &pending.dir)
         .stdout(std::io::stderr())
         .status()
-        .map_err(started)?
+        .map_err(|e| started(which, e))?
         .success();
     if !finished {
         return Err(Error::SignInIncomplete);
     }
-    pending.document = signed_in_document(ctx, &pending.dir)?;
+    pending.document = signed_in_document(ctx, which, &pending.dir)?;
     Ok(pending)
 }
 
-/// Claude Code's own sign-in, pointed at a private directory so the live login is never
-/// touched. Measured in 2.1.278: it opens the browser itself and finishes through a
-/// loopback callback, printing progress with `stdout.write` and reading stdin only as the
-/// fallback for a pasted code. So it needs no terminal: pipes are enough.
-fn login(ctx: &Context, dir: &std::path::Path) -> Command {
-    let mut command = Command::new(&ctx.claude_program);
-    command
-        .args(["auth", "login"])
-        .env("CLAUDE_CONFIG_DIR", dir)
-        .env_remove("CLAUDE_SECURESTORAGE_CONFIG_DIR");
-    command
-}
-
-fn started(e: std::io::Error) -> Error {
+fn started(which: ProviderId, e: std::io::Error) -> Error {
     match e.kind() {
-        std::io::ErrorKind::NotFound => Error::ClaudeNotFound,
+        std::io::ErrorKind::NotFound => Error::ProgramNotFound { tool: which },
         _ => Error::SignInIncomplete,
     }
 }
 
-fn signed_in_document(ctx: &Context, dir: &std::path::Path) -> Result<Value> {
-    let raw = claude_live::read_signin(ctx, dir)?.ok_or(Error::SignInIncomplete)?;
+fn signed_in_document(ctx: &Context, which: ProviderId, dir: &std::path::Path) -> Result<Value> {
+    let raw = provider::of(which)
+        .read_signin(ctx, dir)?
+        .ok_or(Error::SignInIncomplete)?;
     serde_json::from_str(&raw).map_err(|e| Error::LiveCredentialShapeUnexpected {
+        tool: which,
         detail: e.to_string(),
     })
 }
 
 /// The same sign-in, watched rather than inherited: an app has no terminal to hand over, so
-/// it reads what Claude Code prints and can type the fallback code back.
+/// it reads what the tool prints and can type a fallback code back where the tool asks for
+/// one.
 pub struct WatchedSignIn {
     child: std::process::Child,
     said: std::sync::mpsc::Receiver<String>,
@@ -158,14 +164,14 @@ pub struct WatchedSignIn {
 }
 
 impl WatchedSignIn {
-    /// The next thing Claude Code said, or `None` once it has finished saying anything.
+    /// The next thing the tool said, or `None` once it has finished saying anything.
     /// Blocks, so a caller reads it on a thread of its own.
     pub fn next_line(&self) -> Option<String> {
         self.said.recv().ok()
     }
 
-    /// Types a line back, for the code Claude Code asks to be pasted when the browser
-    /// cannot reach its callback.
+    /// Types a line back, for a code the tool asks to be pasted when the browser cannot
+    /// reach its callback.
     pub fn paste(&mut self, line: &str) -> Result<()> {
         use std::io::Write;
         let stdin = self.child.stdin.as_mut().ok_or(Error::SignInIncomplete)?;
@@ -184,7 +190,8 @@ impl WatchedSignIn {
             return Err(Error::SignInIncomplete);
         }
         let mut pending = self.pending;
-        pending.document = signed_in_document(&pending.ctx.clone(), &pending.dir.clone())?;
+        pending.document =
+            signed_in_document(&pending.ctx.clone(), pending.provider, &pending.dir.clone())?;
         Ok(pending)
     }
 
@@ -196,17 +203,19 @@ impl WatchedSignIn {
 }
 
 /// Starts the sign-in with its output piped, for a caller that will show it.
-pub fn sign_in_watched(ctx: &Context) -> Result<WatchedSignIn> {
-    let pending = reserve_signin(ctx)?;
-    let mut child = login(ctx, &pending.dir)
+pub fn sign_in_watched(ctx: &Context, which: ProviderId) -> Result<WatchedSignIn> {
+    let pending = reserve_signin(ctx, which)?;
+    let mut child = provider::of(which)
+        .sign_in(ctx, &pending.dir)
         .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .spawn()
-        .map_err(started)?;
+        .map_err(|e| started(which, e))?;
     let (say, said) = std::sync::mpsc::channel();
     // Claude Code writes the browser URL and the paste prompt without a newline after them,
     // so this reads by chunk rather than by line and lets the caller decide what to show.
+    // Codex writes its address to stderr, which is read the same way.
     for stream in [
         child.stdout.take().map(Readable::Out),
         child.stderr.take().map(Readable::Err),
@@ -247,16 +256,26 @@ enum Readable {
 
 /// Enroll the account signed in to `which` now, or with `signed_in`, the one a sign-in just
 /// produced.
-pub fn enroll(settled: Settled, key: &Key, signed_in: Option<SignIn>) -> Result<Enrolled> {
+pub fn enroll(
+    settled: Settled,
+    key: &Key,
+    signed_in: Option<SignIn>,
+) -> Result<(Enrolled, Vec<Warning>)> {
     let Settled {
         _exclusive,
         mut state,
         ctx,
     } = settled;
     match signed_in {
-        // A watched sign-in is Claude Code's own, and is the only one pitboard drives.
+        // A sign-in was run for one tool; filing its login under another would be an
+        // account of the wrong tool under the name somebody chose.
+        Some(login) if login.provider != key.provider => Err(Error::Usage(format!(
+            "that sign-in was {}'s, and `{key}` is a {} account",
+            login.provider.name(),
+            key.provider.name()
+        ))),
         Some(login) => park_signed_in(&ctx, key, &mut state, &login),
-        None => record_current(&ctx, key, &mut state),
+        None => record_current(&ctx, key, &mut state).map(|e| (e, Vec::new())),
     }
 }
 
@@ -285,13 +304,18 @@ fn claim(state: &State, key: &Key, owner: &Owner) -> Result<()> {
 fn record_current(ctx: &Context, key: &Key, state: &mut State) -> Result<Enrolled> {
     let which = key.provider;
     let label = key.label.as_str();
-    let live = crate::provider::of(which)
-        .read_live(ctx)
-        .map_err(|e| Error::LiveCredentialShapeUnexpected {
-            detail: e.to_string(),
-        })?
-        .ok_or_else(|| nothing_signed_in(ctx, which))?
-        .raw;
+    // Through the store itself rather than the provider's reading of it, so a locked
+    // keychain says so in the store's own words instead of reading as a strange login.
+    let store = super::live_store(ctx, which)?;
+    let live =
+        store::read(&store.chain, &store.service)?.ok_or_else(|| nothing_signed_in(ctx, which))?;
+    // A document with no account in it is nobody signed in: Claude Code's after a
+    // `/logout` still holds the machine's MCP tokens.
+    match provider::of(which).slice(&live) {
+        Err(provider::ProviderError::NoLogin { .. }) => return Err(nothing_signed_in(ctx, which)),
+        Err(other) => return Err(super::shape(which, other)),
+        Ok(_) => {}
+    }
     let owner = identify_document(ctx, which, &live)?;
     claim(state, key, &owner)?;
     let existing = state.get(key);
@@ -304,22 +328,26 @@ fn record_current(ctx: &Context, key: &Key, state: &mut State) -> Result<Enrolle
     Ok(Enrolled::Current { email: owner.email })
 }
 
-/// Nothing is signed in to this tool, said in that tool's own words.
-fn nothing_signed_in(ctx: &Context, which: ProviderId) -> Error {
-    match which {
-        ProviderId::Claude => claude::nothing_signed_in(ctx),
-        ProviderId::Codex => Error::LiveCredentialAbsent,
-    }
-}
-
-fn park_signed_in(ctx: &Context, key: &Key, state: &mut State, login: &SignIn) -> Result<Enrolled> {
+fn park_signed_in(
+    ctx: &Context,
+    key: &Key,
+    state: &mut State,
+    login: &SignIn,
+) -> Result<(Enrolled, Vec<Warning>)> {
     let label = key.label.as_str();
-    let owner = identify_document(ctx, ProviderId::Claude, &login.document)?;
+    let owner = identify_document(ctx, login.provider, &login.document)?;
     claim(state, key, &owner)?;
-    let service = park::reserve(ctx, &owner.account_uuid)?;
-    let slice = crate::provider::of(key.provider)
+    let slice = provider::of(login.provider)
         .slice(&login.document)
-        .map_err(super::shape)?;
+        .map_err(|e| super::shape(login.provider, e))?;
+    let parking = park::price(
+        ctx,
+        login.provider,
+        &key.typed(),
+        &park::service_name(&owner.account_uuid, ctx.now_millis()),
+        &slice,
+    )?;
+    let service = park::reserve(ctx, &owner.account_uuid)?;
     let fresh = park::store_at(ctx, key.provider, &service, &slice)?;
     // The window the roadmap named: the login is in the vault and nothing on the machine
     // says so yet.
@@ -329,7 +357,7 @@ fn park_signed_in(ctx: &Context, key: &Key, state: &mut State, login: &SignIn) -
     let renewed = existing.is_some();
     let last_used_at = existing.and_then(|a| a.last_used_at);
     state.upsert(account(
-        ProviderId::Claude,
+        login.provider,
         label,
         &owner,
         previous,
@@ -343,11 +371,12 @@ fn park_signed_in(ctx: &Context, key: &Key, state: &mut State, login: &SignIn) -
     })?;
     crate::fault::point("enroll.park_recorded");
     purge(ctx, state);
-    Ok(if renewed {
+    let enrolled = if renewed {
         Enrolled::Renewed { email: owner.email }
     } else {
         Enrolled::SignedIn { email: owner.email }
-    })
+    };
+    Ok((enrolled, parking.into_iter().collect()))
 }
 
 /// What pitboard records about a newly enrolled account.

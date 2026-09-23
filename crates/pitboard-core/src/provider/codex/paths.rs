@@ -9,9 +9,6 @@ use std::path::PathBuf;
 /// The file Codex keeps its login in, inside [`home`].
 pub(crate) const AUTH_FILE: &str = "auth.json";
 
-/// The keychain service its optional keyring backend uses.
-pub(crate) const KEYCHAIN_SERVICE: &str = "Codex Auth";
-
 /// `CODEX_HOME`, or `~/.codex`.
 ///
 /// Codex requires the directory to exist already and canonicalises it, so a scratch home
@@ -27,20 +24,6 @@ pub(crate) fn auth_file(ctx: &Context) -> PathBuf {
     home(ctx).join(AUTH_FILE)
 }
 
-/// The keychain account its keyring backend files items under: `cli|` and the first sixteen
-/// hex characters of the SHA-256 of the canonical home.
-///
-/// Derived from the home, which is what makes `CODEX_HOME` isolate the keyring backend as
-/// well as the file one. Gemini's equivalent does not, which is why Gemini gets a refusal
-/// where Codex does not need one.
-pub(crate) fn keychain_account(ctx: &Context) -> String {
-    use sha2::{Digest, Sha256};
-    let dir = home(ctx);
-    let canonical = std::fs::canonicalize(&dir).unwrap_or(dir);
-    let digest = hex::encode(Sha256::digest(canonical.to_string_lossy().as_bytes()));
-    format!("cli|{}", &digest[..16])
-}
-
 /// Which store this machine's Codex is configured to keep its login in.
 ///
 /// The shipped default is `file`, and it is a packaged default rather than a line in
@@ -53,31 +36,74 @@ pub(crate) enum Backend {
     Either,
     /// In memory for the life of one process. Nothing pitboard can park.
     Ephemeral,
+    /// `[features] secret_auth_storage` with a keyring store: an encrypted file whose key
+    /// is in the keychain.
+    Secrets,
 }
 
+/// What `$CODEX_HOME/config.toml` says about where the login is kept.
+///
+/// Read from that one file, which is where a person sets it. A store pinned by
+/// `/etc/codex/requirements.toml` or a managed profile is not read, and is dated in the
+/// register as a known gap.
 pub(crate) fn backend(ctx: &Context) -> Backend {
-    let Ok(config) = std::fs::read_to_string(home(ctx).join("config.toml")) else {
-        return Backend::File;
-    };
-    // A whole TOML parser for one string would be a dependency for one line. The setting is
-    // a top-level key whose value is one of four bare words, so the line is read directly
-    // and anything unrecognised falls back to the shipped default.
+    std::fs::read_to_string(home(ctx).join("config.toml"))
+        .map_or(Backend::File, |config| backend_in(&config))
+}
+
+/// The store a `config.toml` names.
+///
+/// A whole TOML parser for two keys would be a dependency for two lines. What is read is
+/// the top-level `cli_auth_credentials_store`, whose value is one of four bare words, and
+/// `secret_auth_storage` inside `[features]`. A line inside any other table is not the
+/// setting, whatever it is called, and a trailing comment is not part of a value.
+fn backend_in(config: &str) -> Backend {
+    let mut table = String::new();
+    let mut store = Backend::File;
+    let mut secrets = false;
     for line in config.lines() {
         let line = line.trim();
-        let Some(value) = line.strip_prefix("cli_auth_credentials_store") else {
+        if let Some(header) = line.strip_prefix('[') {
+            table = header
+                .split(']')
+                .next()
+                .unwrap_or_default()
+                .trim()
+                .to_string();
+            continue;
+        }
+        let Some((key, value)) = line.split_once('=') else {
             continue;
         };
-        let Some(value) = value.trim_start().strip_prefix('=') else {
-            continue;
-        };
-        return match value.trim().trim_matches(['"', '\'']) {
-            "keyring" => Backend::Keyring,
-            "auto" => Backend::Either,
-            "ephemeral" => Backend::Ephemeral,
-            _ => Backend::File,
-        };
+        let (key, value) = (key.trim(), bare(value));
+        match (table.as_str(), key) {
+            ("", "cli_auth_credentials_store") => {
+                store = match value {
+                    "keyring" => Backend::Keyring,
+                    "auto" => Backend::Either,
+                    "ephemeral" => Backend::Ephemeral,
+                    _ => Backend::File,
+                };
+            }
+            ("features", "secret_auth_storage") => secrets = value == "true",
+            _ => {}
+        }
     }
-    Backend::File
+    match store {
+        Backend::Keyring | Backend::Either if secrets => Backend::Secrets,
+        other => other,
+    }
+}
+
+/// A TOML value with its quotes and any trailing comment taken off.
+fn bare(value: &str) -> &str {
+    let value = value.trim();
+    for quote in ['"', '\''] {
+        if let Some(rest) = value.strip_prefix(quote) {
+            return rest.split(quote).next().unwrap_or_default();
+        }
+    }
+    value.split('#').next().unwrap_or_default().trim()
 }
 
 #[cfg(test)]
@@ -130,25 +156,37 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    /// The account is derived from the home, which is what makes `CODEX_HOME` isolate the
-    /// keyring backend too. If it stopped, a private sign-in would write over the live one.
+    /// A trailing comment is not part of the value. Read as part of it, a keyring store
+    /// looked like the default file, and pitboard would read a file Codex had deleted.
     #[test]
-    fn the_keychain_account_follows_the_home() {
-        let one = scratch("acct-one");
-        let two = scratch("acct-two");
-        std::fs::create_dir_all(&one).unwrap();
-        std::fs::create_dir_all(&two).unwrap();
-        let account = |dir: &std::path::Path| {
-            keychain_account(
-                &Context::new(PathBuf::from("/nowhere"))
-                    .with_codex_home(dir.to_string_lossy().into()),
-            )
-        };
-        assert_ne!(account(&one), account(&two));
-        assert_eq!(account(&one), account(&one), "and is stable");
-        assert!(account(&one).starts_with("cli|"));
-        assert_eq!(account(&one).len(), 4 + 16);
-        let _ = std::fs::remove_dir_all(&one);
-        let _ = std::fs::remove_dir_all(&two);
+    fn a_comment_after_the_value_is_not_the_value() {
+        assert_eq!(
+            backend_in("cli_auth_credentials_store = \"keyring\"  # on this mac\n"),
+            Backend::Keyring
+        );
+        assert_eq!(
+            backend_in("cli_auth_credentials_store = keyring # bare\n"),
+            Backend::Keyring
+        );
+    }
+
+    /// A key of the same name inside another table is not the setting.
+    #[test]
+    fn only_the_top_level_key_is_the_setting() {
+        let config = "[profiles.work]\ncli_auth_credentials_store = \"keyring\"\n";
+        assert_eq!(backend_in(config), Backend::File);
+        let config =
+            "cli_auth_credentials_store = \"keyring\"\n[features]\nsecret_auth_storage = true\n";
+        assert_eq!(
+            backend_in(config),
+            Backend::Secrets,
+            "an encrypted file whose key is in the keychain is a store of its own"
+        );
+        let config = "[features]\nsecret_auth_storage = true\n";
+        assert_eq!(
+            backend_in(config),
+            Backend::File,
+            "the feature only changes a keyring store"
+        );
     }
 }

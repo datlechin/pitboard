@@ -153,6 +153,11 @@ pub(crate) trait Host: Send + Sync + std::fmt::Debug {
     /// Where pitboard's own parked logins go: the keychain where there is one, a private
     /// directory of files where there is not. This one really is a fact about the machine.
     fn vault(&self, ctx: &Context) -> Box<dyn RawStore>;
+
+    /// How many processes are running `program` on this machine, where that can be told.
+    fn running(&self, program: &str) -> Option<usize> {
+        crate::process::running(program)
+    }
 }
 
 /// The keychain account pitboard stores its own items under.
@@ -332,6 +337,11 @@ pub fn vault_read(ctx: &Context, service: &str) -> Result<Option<String>, Error>
 
 pub fn vault_write(ctx: &Context, service: &str, contents: &str) -> Result<(), Error> {
     vault(ctx).write(service, contents)
+}
+
+/// What writing `contents` into the vault would cost against its ceiling, where it has one.
+pub fn vault_cost(ctx: &Context, service: &str, contents: &str) -> Option<Cost> {
+    vault(ctx).cost(service, contents)
 }
 
 pub fn vault_delete(ctx: &Context, service: &str) -> Result<(), Error> {

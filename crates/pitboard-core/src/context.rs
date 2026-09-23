@@ -43,6 +43,8 @@ pub struct Context {
     pub(crate) hover_rest: bool,
     /// `CODEX_HOME`, which moves everything Codex keeps, including its keyring account.
     pub(crate) codex_home: Option<String>,
+    /// The `codex` that runs a sign-in; a bare name is looked up on `PATH`.
+    pub(crate) codex_program: PathBuf,
     /// Where the time comes from. The machine's clock in every real context; a test puts
     /// its own here to reach the judgements that only happen at a particular moment.
     pub(crate) clock: Arc<dyn Clock>,
@@ -102,6 +104,7 @@ impl Context {
             api_base: None,
             hover_rest: false,
             codex_home: None,
+            codex_program: PathBuf::from("codex"),
             clock: Arc::new(SystemClock),
             host: crate::store::host(),
             api: Arc::new(Anthropic),
@@ -181,6 +184,25 @@ impl Context {
         self
     }
 
+    /// The same for `codex`.
+    pub fn with_codex_program(mut self, program: PathBuf) -> Context {
+        self.codex_program = program;
+        self
+    }
+
+    /// The `codex` pitboard would run to sign someone in.
+    pub fn codex_program(&self) -> &std::path::Path {
+        &self.codex_program
+    }
+
+    /// The program named for this tool, found or not.
+    pub fn program_for(&self, tool: crate::provider::ProviderId) -> &std::path::Path {
+        match tool {
+            crate::provider::ProviderId::Claude => &self.claude_program,
+            crate::provider::ProviderId::Codex => &self.codex_program,
+        }
+    }
+
     pub fn from_env() -> Context {
         let var = |name: &str| std::env::var(name).ok();
         let home = std::env::var_os("HOME")
@@ -206,6 +228,7 @@ impl Context {
             api_base: var("PITBOARD_API_BASE"),
             hover_rest: var("CLAUDE_CODE_HOVER_REST").is_some_and(|v| v == "1" || v == "true"),
             codex_home: var("CODEX_HOME").filter(|v| !v.is_empty()),
+            codex_program: PathBuf::from("codex"),
             clock: Arc::new(SystemClock),
             host: crate::store::host(),
             api: Arc::new(Anthropic),

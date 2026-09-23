@@ -9,7 +9,7 @@ use crate::provider::{
     Adoption, Credential, Expiry, Identity, Isolation, LiveStore, ParkSemantics, Provider,
     ProviderError, ProviderId, jwt,
 };
-use crate::store::{self, Live, RawStore};
+use crate::store::{self, Live};
 use crate::usage::Snapshot;
 use serde_json::Value;
 
@@ -19,21 +19,16 @@ const OPENAI: &str = "https://api.openai.com/auth";
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct Codex;
 
-/// Where Codex looks for its login, in the order it looks.
+/// Where Codex keeps its login, when pitboard can act on it.
 ///
-/// The shipped default is the file, and this machine's Codex uses it. With the keyring
-/// backend configured the item comes first, filed under an account derived from
-/// `CODEX_HOME`, which is what makes that home isolate the keyring as well as the file.
+/// Only the default store: the file. Codex's keyring store files the login in a keychain
+/// item that Codex created through the Security framework, whose access list trusts the
+/// `codex` binary alone, so every read pitboard made would put a keychain prompt in front
+/// of the person, from `status` as much as from a switch. Pressing Always Allow would
+/// change Codex's own item. The honest answer is to say pitboard does not handle that
+/// store, rather than to prompt on every refresh of a menu bar.
 fn chain(ctx: &Context) -> Live {
-    let host = ctx.host();
-    let mut backends: Vec<Box<dyn RawStore>> = Vec::new();
-    if paths::backend(ctx) != paths::Backend::File
-        && let Some(keychain) = host.foreign_keychain(ctx, &paths::keychain_account(ctx))
-    {
-        backends.push(keychain);
-    }
-    backends.push(host.file(paths::auth_file(ctx)));
-    Live::of(backends)
+    Live::of(vec![ctx.host().file(paths::auth_file(ctx))])
 }
 
 impl Provider for Codex {
@@ -42,19 +37,32 @@ impl Provider for Codex {
     }
 
     fn live(&self, ctx: &Context) -> Result<LiveStore, ProviderError> {
-        if paths::backend(ctx) == paths::Backend::Ephemeral {
-            return Err(ProviderError::ShapeUnexpected {
+        let unsupported = |reason: &str| {
+            Err(ProviderError::Unsupported {
                 provider: ProviderId::Codex,
-                detail: "this machine's Codex keeps its login in memory only \
-                         (cli_auth_credentials_store = \"ephemeral\"), so there is nothing \
-                         at rest to park"
-                    .into(),
-            });
+                reason: reason.to_string(),
+            })
+        };
+        match paths::backend(ctx) {
+            paths::Backend::File => Ok(LiveStore {
+                chain: chain(ctx),
+                // One file, so there is only one name in it.
+                service: paths::AUTH_FILE.to_string(),
+            }),
+            paths::Backend::Ephemeral => unsupported(
+                "this machine's Codex keeps its login in memory only \
+                 (cli_auth_credentials_store = \"ephemeral\"), so there is nothing at rest \
+                 to park or switch",
+            ),
+            paths::Backend::Keyring | paths::Backend::Either | paths::Backend::Secrets => {
+                unsupported(
+                    "this machine's Codex keeps its login in the keychain \
+                     (cli_auth_credentials_store in config.toml). pitboard handles Codex's \
+                     default store, the auth.json file, and does not read an item Codex \
+                     created for itself, because every read would ask you for permission",
+                )
+            }
         }
-        Ok(LiveStore {
-            chain: chain(ctx),
-            service: paths::KEYCHAIN_SERVICE.to_string(),
-        })
     }
 
     /// Read out of the login itself, with no network call at all.
@@ -71,16 +79,24 @@ impl Provider for Codex {
             .as_str()
             .ok_or_else(|| shape("it has no tokens.id_token"))?;
         let claims = jwt::claims(token).ok_or_else(|| shape("its id token is not readable"))?;
-        let account_id = jwt::claim(&claims, &[OPENAI, "chatgpt_account_id"])
+        let chatgpt = jwt::claim(&claims, &[OPENAI, "chatgpt_account_id"])
             .or_else(|| credential.raw["tokens"]["account_id"].as_str())
             .ok_or_else(|| shape("its id token names no account"))?;
+        // The ChatGPT account is the plan, and a Team or Business plan is shared: two people
+        // in one workspace carry the same one. The person is the user id inside it, and one
+        // person with a personal plan and a workspace has the same user id in both. Only the
+        // pair names one login's quota, so the pair is the identity.
+        let person = jwt::claim(&claims, &[OPENAI, "chatgpt_user_id"])
+            .or_else(|| jwt::claim(&claims, &[OPENAI, "user_id"]));
         Ok(Identity {
-            account_id: account_id.to_string(),
+            account_id: match person {
+                Some(person) => format!("{chatgpt}:{person}"),
+                None => chatgpt.to_string(),
+            },
             email: jwt::claim(&claims, &["email"])
                 .unwrap_or_default()
                 .to_string(),
-            // The workspace an account belongs to, where it belongs to one.
-            group: jwt::claim(&claims, &[OPENAI, "chatgpt_workspace_id"]).map(str::to_owned),
+            group: Some(chatgpt.to_string()),
         })
     }
 
@@ -170,6 +186,48 @@ impl Provider for Codex {
         Ok(())
     }
 
+    fn program(&self, ctx: &Context) -> Option<std::path::PathBuf> {
+        crate::provider::find_program(ctx.codex_program())
+    }
+
+    /// `codex login` with `CODEX_HOME` pointed at the private directory.
+    ///
+    /// Read from 0.154.0. It revokes whatever login is stored in the home it is given
+    /// before it signs in, which in an empty directory is nothing; run against the real
+    /// home it would end the account in use, which is why the directory is always set and
+    /// never empty. It opens the browser itself, prints the address to stderr for when it
+    /// cannot, listens for the callback on a loopback port, and reads nothing from stdin.
+    ///
+    /// Started from inside the directory, because Codex also reads `.codex/config.toml`
+    /// from a trusted project it is started in, and a project that set a keyring store
+    /// would send the new login somewhere this could not read back.
+    fn sign_in(&self, ctx: &Context, dir: &std::path::Path) -> std::process::Command {
+        let mut command = std::process::Command::new(ctx.codex_program());
+        command.arg("login").env("CODEX_HOME", dir).current_dir(dir);
+        command
+    }
+
+    fn read_signin(
+        &self,
+        ctx: &Context,
+        dir: &std::path::Path,
+    ) -> Result<Option<String>, crate::store::Error> {
+        let private = ctx
+            .clone()
+            .with_codex_home(dir.to_string_lossy().into_owned());
+        store::read_raw(&chain(&private), paths::AUTH_FILE)
+    }
+
+    /// Everything a sign-in writes goes inside its home, so the directory is all there is.
+    fn discard_signin(&self, _ctx: &Context, _dir: &std::path::Path) {}
+
+    /// Nothing measured yet. Codex reads an API key from its own login document, which moves
+    /// with the account, and whether an environment key takes precedence over a ChatGPT
+    /// login in 0.154.0 has not been read closely enough to warn about.
+    fn overridden_by(&self, _ctx: &Context) -> Vec<String> {
+        Vec::new()
+    }
+
     /// Nothing follows on its own.
     ///
     /// A running Codex holds its login in memory for the life of the process, watches no
@@ -209,11 +267,45 @@ impl Provider for Codex {
     /// that account's. Keeping the whole document also means nothing pitboard does not
     /// recognise is ever dropped.
     fn slice(&self, live: &Value) -> Result<Value, ProviderError> {
-        if !live.is_object() {
-            return Err(ProviderError::ShapeUnexpected {
+        let shape = |detail: &str| {
+            Err(ProviderError::ShapeUnexpected {
                 provider: ProviderId::Codex,
-                detail: "it is not a JSON object".into(),
+                detail: detail.to_string(),
+            })
+        };
+        if !live.is_object() {
+            return shape("it is not a JSON object");
+        }
+        // Signed in with an API key rather than a ChatGPT account: there is no account and
+        // no refresh chain, so nothing to park, renew or switch.
+        if !live["tokens"].is_object() {
+            return Err(ProviderError::Unsupported {
+                provider: ProviderId::Codex,
+                reason: "Codex is signed in with an API key rather than a ChatGPT account, \
+                         so there is no account login to park or switch"
+                    .into(),
             });
+        }
+        // A login whose tokens belong to one account and whose account id names another is
+        // not one account's login. Codex leaves exactly that when a session still running
+        // from before a switch refreshes during one: it re-reads the file, keeps the account
+        // id it finds and writes its own account's tokens over the rest. Parking it, or
+        // taking it as proof a switch held, would file one account's tokens under the other.
+        let stored = live["tokens"]["account_id"].as_str();
+        let claimed = live["tokens"]["id_token"]
+            .as_str()
+            .and_then(jwt::claims)
+            .and_then(|claims| {
+                jwt::claim(&claims, &[OPENAI, "chatgpt_account_id"]).map(str::to_owned)
+            });
+        if let (Some(stored), Some(claimed)) = (stored, claimed)
+            && stored != claimed
+        {
+            return shape(
+                "its tokens belong to one ChatGPT account and its account id names another, \
+                 which is what a codex still running from before a switch leaves when it \
+                 refreshes in the middle of one",
+            );
         }
         Ok(live.clone())
     }
@@ -335,6 +427,105 @@ mod tests {
             "",
             "a document with no refresh token has no handle, rather than a made up one"
         );
+    }
+
+    /// Two people in one Business workspace carry the same ChatGPT account id. Identified
+    /// by it alone, the second would be refused as already enrolled and their readings
+    /// merged; the person inside the workspace is what tells them apart.
+    #[test]
+    fn two_people_in_one_workspace_are_two_accounts() {
+        let person = |user: &str| {
+            let mut login = login();
+            login["tokens"]["id_token"] = Value::from(token(&serde_json::json!({
+                "email": format!("{user}@b.c"),
+                OPENAI: {"chatgpt_account_id": "team", "chatgpt_user_id": user},
+            })));
+            login["tokens"]["account_id"] = Value::from("team");
+            Codex
+                .identify(
+                    &Context::new(std::path::PathBuf::from("/nowhere")),
+                    &Credential::new(ProviderId::Codex, login),
+                )
+                .expect("identified")
+        };
+        let (one, two) = (person("user-1"), person("user-2"));
+        assert_ne!(one.account_id, two.account_id);
+        assert_eq!(one.group.as_deref(), Some("team"));
+        assert_eq!(one.account_id, "team:user-1");
+    }
+
+    /// A login whose tokens name one account and whose account id names another is what a
+    /// stale codex leaves when it refreshes during a switch. It is not one account's login.
+    #[test]
+    fn a_login_mixing_two_accounts_is_not_an_accounts_share() {
+        let mut mixed = login();
+        mixed["tokens"]["account_id"] = Value::from("someone-else");
+        let refused = Codex.slice(&mixed).expect_err("refused");
+        assert!(refused.to_string().contains("two") || refused.to_string().contains("another"));
+        assert!(Codex.slice(&login()).is_ok());
+    }
+
+    /// The sign-in runs Codex's own login against the private directory, from inside it,
+    /// and never against the real home: `codex login` revokes whatever it finds stored in
+    /// the home it is given before it signs in.
+    #[test]
+    fn a_sign_in_is_codex_login_in_the_private_directory() {
+        let dir = std::path::Path::new("/tmp/pitboard-signin-scratch");
+        let ctx = Context::new(std::path::PathBuf::from("/nowhere"))
+            .with_codex_program(std::path::PathBuf::from("/opt/codex/bin/codex"));
+        let command = Codex.sign_in(&ctx, dir);
+        assert_eq!(command.get_program(), "/opt/codex/bin/codex");
+        assert_eq!(command.get_args().collect::<Vec<_>>(), ["login"]);
+        assert_eq!(command.get_current_dir(), Some(dir));
+        let home = command
+            .get_envs()
+            .find(|(name, _)| *name == "CODEX_HOME")
+            .and_then(|(_, value)| value);
+        assert_eq!(home, Some(dir.as_os_str()), "always set, never empty");
+    }
+
+    /// What a sign-in left is read from the private directory's own `auth.json`, whatever
+    /// `CODEX_HOME` this process has.
+    #[test]
+    fn a_sign_in_is_read_back_from_the_private_directory() {
+        let dir = std::env::temp_dir().join(format!(
+            "pitboard-codex-readback-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        std::fs::create_dir_all(&dir).expect("a scratch home");
+        std::fs::write(dir.join("auth.json"), login().to_string()).expect("a login");
+        let ctx = Context::new(std::path::PathBuf::from("/nowhere"))
+            .with_codex_home("/somewhere/else".into());
+        let read = Codex.read_signin(&ctx, &dir).expect("readable");
+        assert_eq!(
+            read.map(|raw| serde_json::from_str::<Value>(&raw).unwrap()),
+            Some(login())
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A keychain store is refused with a reason rather than read: every read of an item
+    /// Codex made for itself would put a permission prompt in front of the person.
+    #[test]
+    fn a_keychain_store_is_refused_with_a_reason_and_never_read() {
+        let dir = std::env::temp_dir().join(format!(
+            "pitboard-codex-keyring-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        std::fs::create_dir_all(&dir).expect("a scratch home");
+        std::fs::write(
+            dir.join("config.toml"),
+            "cli_auth_credentials_store = \"keyring\"\n",
+        )
+        .expect("a config");
+        let ctx = Context::new(std::path::PathBuf::from("/nowhere"))
+            .with_codex_home(dir.to_string_lossy().into_owned());
+        let refused = Codex.live(&ctx).err().expect("refused");
+        assert!(matches!(refused, ProviderError::Unsupported { .. }));
+        assert!(refused.to_string().contains("keychain"), "{refused}");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// The two facts that make Codex different from Claude Code, asserted so a change to
