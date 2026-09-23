@@ -18,6 +18,7 @@ private final class Stub: Core, @unchecked Sendable {
     var session: SignIn?
     /// The tools whose program the app found.
     var found: [Tool] = [claudeCode]
+    private(set) var installedAsks = 0
     var enrolling: Result<Enrolled, Error> = .success(
         Enrolled(email: "a@b.c", enrolled: .current, warnings: []))
 
@@ -79,31 +80,100 @@ private final class Stub: Core, @unchecked Sendable {
         return session
     }
     func tools() -> [Tool] { bothTools }
-    func installed() -> [Tool] { found }
+    func installed() -> [Tool] {
+        installedAsks += 1
+        return found
+    }
 }
 
 /// A sign-in that says what it is given to say and then enrols, without a tool behind it.
+///
+/// `waits` holds it after its last line, the way a tool that has printed its address waits
+/// on the browser, until it is cancelled or `done` is signalled.
 private final class ScriptedSignIn: SignIn, @unchecked Sendable {
     private var lines: [String]
     private let code: Bool
+    private let waits: Bool
+    let done = DispatchSemaphore(value: 0)
     private(set) var pasted: [String] = []
+    /// Whether each was called on the main thread, which is the app's to keep free.
+    private(set) var pastedOnMain: Bool?
+    private(set) var cancelledOnMain: Bool?
+    private(set) var finished = false
 
-    init(saying lines: [String], takesACode code: Bool) {
+    init(saying lines: [String], takesACode code: Bool, waits: Bool = false) {
         self.lines = lines
         self.code = code
+        self.waits = waits
         super.init(noHandle: NoHandle())
     }
 
     required init(unsafeFromHandle handle: UInt64) { fatalError("not from the core") }
 
     override func takesACode() -> Bool { code }
-    override func nextLine() -> String? { lines.isEmpty ? nil : lines.removeFirst() }
-    override func paste(line: String) throws { pasted.append(line) }
-    override func finish() throws -> Enrolled {
-        Enrolled(email: "a@b.c", enrolled: .signedIn, warnings: [])
+    override func nextLine() -> String? {
+        guard lines.isEmpty else { return lines.removeFirst() }
+        if waits { done.wait() }
+        return nil
     }
-    override func cancel() {}
+    override func paste(line: String) throws {
+        pastedOnMain = Thread.isMainThread
+        pasted.append(line)
+    }
+    override func finish() throws -> Enrolled {
+        finished = true
+        return Enrolled(email: "a@b.c", enrolled: .signedIn, warnings: [])
+    }
+    override func cancel() {
+        cancelledOnMain = Thread.isMainThread
+        done.signal()
+    }
 }
+
+/// Asks again every few milliseconds, for as long as a test can reasonably wait, for
+/// something that happens on another thread.
+@MainActor
+private func eventually(_ condition: @MainActor () -> Bool) async -> Bool {
+    for _ in 0..<500 {
+        if condition() { return true }
+        try? await Task.sleep(for: .milliseconds(10))
+    }
+    return condition()
+}
+
+/// Defaults held in memory, so what a test declines is not what the next one reads, and
+/// nothing is written to the Mac running the tests.
+private final class MemoryDefaults: UserDefaults, @unchecked Sendable {
+    private var values: [String: Any] = [:]
+
+    override func object(forKey key: String) -> Any? { values[key] }
+    override func set(_ value: Any?, forKey key: String) { values[key] = value }
+    override func set(_ value: Bool, forKey key: String) { values[key] = value }
+    override func removeObject(forKey key: String) { values[key] = nil }
+    override func stringArray(forKey key: String) -> [String]? { values[key] as? [String] }
+    override func bool(forKey key: String) -> Bool { values[key] as? Bool ?? false }
+}
+
+/// A switch of `provider`'s tool, as the core reports one: `from` and `to` typed the way
+/// the core types them, bare for Claude Code and with the tool for any other.
+private func switched(
+    _ provider: String, from: String, to: String, warnings: [Warning] = []
+) -> Result<Switched, Error> {
+    let adoption: Adoption =
+        provider == "codex" ? .restart(program: "codex") : .follows(withinSeconds: 33)
+    return .success(
+        Switched(
+            outcome: .switched(provider: provider, from: from, to: to, adoption: adoption),
+            warnings: warnings))
+}
+
+private let stillRunning = Warning(
+    code: "sessions_still_running",
+    message:
+        "2 `codex` sessions started before this switch are still running and still using "
+        + "`codex/personal`. Quit them and start again to use the new account. Quit rather "
+        + "than signing out inside one: signing out there revokes `codex/personal`'s login, "
+        + "which pitboard has just parked.")
 
 private func account(_ label: String, signedIn: Bool, percent: Double) -> Account {
     account(label, signedIn: signedIn, [window("session", percent, resets: nil)])
@@ -152,97 +222,218 @@ private func account(_ label: String, signedIn: Bool, percent: Double) -> Accoun
     await model.use("work")
     #expect(stub.switchedTo == ["work"])
     #expect(model.problem == "nothing parked")
-    #expect(model.adopted == nil)
+    #expect(model.lastSwitches.isEmpty)
 }
 
 /// After a switch the panel counts down to when open sessions follow.
 @MainActor
 @Test func aSwitchRecordsWhenOpenSessionsFollow() async {
-    let stub = Stub(.success(Status(now: 0, accounts: [], warnings: [])))
-    stub.switched = .success(
-        Switched(
-            outcome: .switched(
-                provider: "claude", from: "personal", to: "work",
-                adoption: .follows(withinSeconds: 33)),
-            warnings: []))
+    let stub = Stub(.success(status([account("work", signedIn: true), account("personal")])))
+    stub.switched = switched("claude", from: "personal", to: "work")
     let model = AppModel(watching: false, service: stub)
     await model.use("claude/work")
-    let left = model.adopted?.timeIntervalSinceNow ?? 0
+    let left = model.lastSwitches.first?.adopted?.timeIntervalSinceNow ?? 0
     #expect(left > 30 && left <= 33)
-    #expect(model.restart == nil)
+    #expect(model.lastSwitches.first?.restart == nil)
 }
 
 /// A running `codex` never picks a switch up, so a countdown there would promise something
-/// that does not happen. The panel says what does instead, and keeps the core's own warning
-/// about the sessions it counted, which the read after the switch would otherwise replace.
+/// that does not happen. When the core counted the sessions still running, its warning says
+/// so, with the count and with what not to do in them, and it outlives the read after the
+/// switch, which would otherwise replace it. The app's own sentence would only say the same
+/// thing again.
 @MainActor
-@Test func aSwitchThatNeedsARestartSaysSoAndCountsNothingDown() async {
-    let stub = Stub(.success(status([])))
-    let running = Warning(
-        code: "sessions_still_running",
-        message: "2 `codex` sessions started before this switch are still running")
-    stub.switched = .success(
-        Switched(
-            outcome: .switched(
-                provider: "codex", from: "personal", to: "work",
-                adoption: .restart(program: "codex")),
-            warnings: [running]))
+@Test func aSwitchThatNeedsARestartSaysSoAndCountsNothingDown() async throws {
+    let stub = Stub(
+        .success(status([account("work", of: "codex", signedIn: true), account("personal")])))
+    stub.switched = switched(
+        "codex", from: "codex/personal", to: "codex/work", warnings: [stillRunning])
     let model = AppModel(watching: false, service: stub)
 
     await model.use("codex/work")
 
-    #expect(model.adopted == nil, "no countdown")
+    let last = try #require(model.lastSwitches.first)
+    #expect(last.adopted == nil, "no countdown")
     #expect(
-        model.restart == AppModel.Restart(provider: "codex", program: "codex", from: "personal")
-    )
-    #expect(
-        restartNotice(program: "codex", from: "personal")
-            == "Running codex sessions keep using personal until they are quit and started again."
-    )
-    #expect(model.afterSwitch == [running], "the switch's warning outlives the read after it")
+        last.restart == AppModel.Restart(program: "codex", from: "personal"),
+        "the core types the account with its tool; the sentence names the tool already")
+    #expect(last.notice == nil, "said once, by the core's warning")
+    #expect(model.warnings(after: last) == [stillRunning])
 
-    model.forgetSwitch()
-    #expect(model.restart == nil)
-    #expect(model.afterSwitch.isEmpty)
+    model.forgetSwitch(of: "codex")
+    #expect(model.lastSwitches.isEmpty)
+}
+
+/// When the core could not count any sessions, the app's sentence is all there is, and it
+/// is said of any session rather than of ones that may not exist.
+@MainActor
+@Test func aRestartIsExplainedWhenNoSessionsWereCounted() async {
+    let stub = Stub(.success(status([account("work", of: "codex", signedIn: true)])))
+    stub.switched = switched("codex", from: "codex/personal", to: "codex/work")
+    let model = AppModel(watching: false, service: stub)
+    await model.use("codex/work")
+    #expect(
+        model.lastSwitches.first?.notice
+            == "Any codex session started before this switch keeps using personal until it is "
+            + "quit and started again.")
 }
 
 /// A warning the read after a switch also carries is shown once, not twice.
 @MainActor
-@Test func aSwitchWarningTheReadRepeatsIsSaidOnce() async {
+@Test func aSwitchWarningTheReadRepeatsIsSaidOnce() async throws {
     let overridden = Warning(code: "auth_overridden", message: "ANTHROPIC_API_KEY is set")
-    let stub = Stub(.success(status([], warnings: [overridden])))
-    stub.switched = .success(
-        Switched(
-            outcome: .switched(
-                provider: "claude", from: "a", to: "b", adoption: .follows(withinSeconds: 5)),
-            warnings: [overridden]))
+    let stub = Stub(.success(status([account("b", signedIn: true)], warnings: [overridden])))
+    stub.switched = switched("claude", from: "a", to: "b", warnings: [overridden])
     let model = AppModel(watching: false, service: stub)
     await model.use("claude/b")
     #expect(model.warnings == [overridden])
-    #expect(model.afterSwitch.isEmpty)
+    #expect(model.warnings(after: try #require(model.lastSwitches.first)).isEmpty)
 }
 
-/// Each switch says what it means and nothing about the one before: a countdown from a
-/// Claude Code switch next to a Codex restart notice would read as contradicting it.
+/// A switch replaces what its own tool's last switch said, and nothing another tool's said:
+/// a Claude Code switch says nothing about Codex sessions still using the account Codex
+/// just parked, and used to put away the warning not to sign out inside one.
 @MainActor
-@Test func aSwitchReplacesWhatTheLastOneSaid() async {
-    let stub = Stub(.success(status([])))
-    stub.switched = .success(
-        Switched(
-            outcome: .switched(
-                provider: "codex", from: "a", to: "b", adoption: .restart(program: "codex")),
-            warnings: [Warning(code: "sessions_still_running", message: "1 still running")]))
+@Test func eachToolKeepsWhatItsOwnLastSwitchSaid() async {
+    let stub = Stub(
+        .success(
+            status([account("b", signedIn: true), account("b", of: "codex", signedIn: true)]))
+    )
+    stub.switched = switched("codex", from: "codex/a", to: "codex/b", warnings: [stillRunning])
     let model = AppModel(watching: false, service: stub)
     await model.use("codex/b")
-    stub.switched = .success(
-        Switched(
-            outcome: .switched(
-                provider: "claude", from: "a", to: "b", adoption: .follows(withinSeconds: 33)),
-            warnings: []))
+
+    stub.switched = switched("claude", from: "a", to: "b")
     await model.use("claude/b")
-    #expect(model.restart == nil)
-    #expect(model.afterSwitch.isEmpty)
-    #expect(model.adopted != nil)
+    #expect(model.lastSwitches.map(\.provider) == ["codex", "claude"])
+    #expect(model.lastSwitches.first?.warnings == [stillRunning])
+    #expect(model.lastSwitches.last?.adopted != nil)
+
+    stub.answer = .success(
+        status([account("b", signedIn: true), account("c", of: "codex", signedIn: true)]))
+    stub.switched = switched("codex", from: "codex/b", to: "codex/c")
+    await model.use("codex/c")
+    #expect(model.lastSwitches.map(\.to) == ["codex/c", "b"])
+    #expect(
+        model.lastSwitches.first?.warnings == [], "the last Codex switch, not the one before")
+}
+
+/// Whatever else writes the account index leaves the sessions a switch described as they
+/// were: a read that renews a lapsed parked login, a scheduled renewal, an enrolment. Only a
+/// switch made somewhere else, which leaves another account signed in, puts it away.
+@MainActor
+@Test func onlyASwitchMadeElsewherePutsAwayWhatASwitchSaid() async {
+    let after = status([
+        account("mine", signedIn: true), account("personal", of: "codex"),
+        account("work", of: "codex", signedIn: true),
+    ])
+    let stub = Stub(.success(after))
+    stub.switched = switched(
+        "codex", from: "codex/personal", to: "codex/work", warnings: [stillRunning])
+    let model = AppModel(watching: false, service: stub)
+    await model.use("codex/work")
+
+    stub.offline = .success(after)
+    stub.changed = 99
+    await model.noticeOtherChangesForTesting()
+    #expect(model.lastSwitches.map(\.to) == ["codex/work"], "written, and nothing switched")
+
+    // Claude Code switched in a terminal: Codex's sessions are where they were.
+    stub.offline = .success(
+        status([
+            account("mine"), account("theirs", signedIn: true),
+            account("personal", of: "codex"),
+            account("work", of: "codex", signedIn: true),
+        ]))
+    stub.changed = 100
+    await model.noticeOtherChangesForTesting()
+    #expect(model.lastSwitches.map(\.to) == ["codex/work"])
+
+    // Codex switched back in a terminal: what this switch said is no longer true.
+    stub.offline = .success(
+        status([
+            account("mine", signedIn: true), account("personal", of: "codex", signedIn: true),
+            account("work", of: "codex"),
+        ]))
+    stub.changed = 101
+    await model.noticeOtherChangesForTesting()
+    #expect(model.lastSwitches.isEmpty)
+}
+
+/// A read that fails after a switch leaves the change unrecorded, so the poll finds it.
+/// That is the app's own switch, and taking it for somebody else's put away what it said
+/// within two seconds of it being said.
+@MainActor
+@Test func aFailedReadAfterASwitchDoesNotPutAwayWhatItSaid() async {
+    let before = status([
+        account("personal", of: "codex", signedIn: true), account("work", of: "codex"),
+    ])
+    let after = status([
+        account("personal", of: "codex"), account("work", of: "codex", signedIn: true),
+    ])
+    let stub = Stub(.success(before))
+    let model = AppModel(watching: false, service: stub)
+    await model.refresh()
+
+    stub.answer = .failure(
+        PitboardError.Failed(
+            code: "unreachable", cause: nil, message: "OpenAI could not be reached",
+            warnings: []))
+    stub.offline = .success(after)
+    stub.switched = switched(
+        "codex", from: "codex/personal", to: "codex/work", warnings: [stillRunning])
+    await model.use("codex/work")
+    stub.changed = 7
+    await model.noticeOtherChangesForTesting()
+
+    #expect(model.lastSwitches.first?.warnings == [stillRunning])
+    #expect(model.status == after, "and the panel shows the switch")
+}
+
+/// A switch that failed moved nothing, so what the last one said is still true, and the
+/// failure is said as a failure with everything it warned about.
+@MainActor
+@Test func aFailedSwitchLeavesWhatTheLastSwitchSaid() async throws {
+    let stub = Stub(
+        .success(
+            status([
+                account("work", signedIn: true), account("work", of: "codex", signedIn: true),
+            ]))
+    )
+    stub.switched = switched(
+        "codex", from: "codex/personal", to: "codex/work", warnings: [stillRunning])
+    let model = AppModel(watching: false, service: stub)
+    await model.use("codex/work")
+    let before = try #require(model.lastSwitches.first)
+
+    let overridden = Warning(code: "auth_overridden", message: "ANTHROPIC_API_KEY is set")
+    stub.switched = .failure(
+        PitboardError.Failed(
+            code: "parked_login_expired", cause: nil,
+            message: "spare's parked login has expired",
+            warnings: [overridden]))
+    await model.use("claude/spare")
+
+    #expect(model.lastSwitches == [before])
+    #expect(model.problem == "spare's parked login has expired")
+    #expect(model.otherWarnings == [overridden])
+}
+
+/// A switch to the account already in use moves nothing, so a notification pressed after
+/// the switch it advised was made elsewhere leaves what that switch said.
+@MainActor
+@Test func aSwitchToTheAccountInUseLeavesWhatTheLastOneSaid() async throws {
+    let stub = Stub(.success(status([account("work", of: "codex", signedIn: true)])))
+    stub.switched = switched(
+        "codex", from: "codex/personal", to: "codex/work", warnings: [stillRunning])
+    let model = AppModel(watching: false, service: stub)
+    await model.use("codex/work")
+    let before = try #require(model.lastSwitches.first)
+
+    stub.switched = .success(
+        Switched(outcome: .alreadyActive(label: "codex/work"), warnings: []))
+    await model.use("codex/work")
+    #expect(model.lastSwitches == [before])
 }
 
 @MainActor
@@ -315,16 +506,67 @@ private func account(_ label: String, signedIn: Bool, percent: Double) -> Accoun
 }
 
 /// Codex's sign-in prints an address and reads nothing, so the tool is named in the label
-/// the core is given and no code is ever asked for, whatever the tool prints.
+/// the core is given, and the sign-in finishes and enrols.
 @MainActor
-@Test func aCodexSignInIsForCodexAndTakesNoCode() async {
+@Test func aCodexSignInIsForCodex() async {
     let stub = Stub(.success(status([])))
-    stub.session = ScriptedSignIn(
-        saying: ["Paste code here if prompted\n"], takesACode: false)
+    let session = ScriptedSignIn(saying: ["https://auth.openai.com/oauth\n"], takesACode: false)
+    stub.session = session
     let model = AppModel(watching: false, service: stub)
     await model.signIn("work", for: "codex")
     #expect(stub.signedIn == ["codex/work"])
+    #expect(session.finished)
     #expect(model.signingIn == nil, "finished and enrolled")
+    #expect(model.problem == nil)
+}
+
+/// A code field is offered only by a sign-in whose tool reads one, whatever the tool prints,
+/// and what is typed goes to the tool off the main thread.
+@MainActor
+@Test func aCodeIsAskedForOnlyWhereTheToolTakesOne() async throws {
+    for (provider, takes) in [("claude", true), ("codex", false)] {
+        let stub = Stub(.success(status([])))
+        let session = ScriptedSignIn(
+            saying: ["Paste code here if prompted > "], takesACode: takes, waits: true)
+        stub.session = session
+        let model = AppModel(watching: false, service: stub)
+        let running = Task { await model.signIn("work", for: provider) }
+
+        #expect(await eventually { model.signingIn?.said.contains("Paste code") == true })
+        #expect(model.signingIn?.takesACode == takes)
+        #expect(model.signingIn?.wantsCode == takes)
+        if takes {
+            model.paste("abc")
+            #expect(model.signingIn?.wantsCode == false, "asked once")
+            #expect(await eventually { session.pasted == ["abc"] })
+            #expect(session.pastedOnMain == false)
+        }
+
+        session.done.signal()
+        await running.value
+    }
+}
+
+/// Cancel stops the tool off the main thread: stopping waits for the tool, and a Codex
+/// sign-in waiting on the browser held the whole app while it did. What the stopped tool
+/// leaves behind is not a failure to report, and nothing is enrolled.
+@MainActor
+@Test func aCancelledSignInStopsTheToolAndReportsNothing() async {
+    let stub = Stub(.success(status([])))
+    let session = ScriptedSignIn(
+        saying: ["https://auth.openai.com/oauth/authorize?state=x\n"], takesACode: false,
+        waits: true)
+    stub.session = session
+    let model = AppModel(watching: false, service: stub)
+    let running = Task { await model.signIn("work", for: "codex") }
+    #expect(await eventually { model.signingIn?.url != nil })
+
+    model.cancelSignIn()
+    #expect(model.signingIn == nil)
+    await running.value
+
+    #expect(session.cancelledOnMain == false)
+    #expect(!session.finished)
     #expect(model.problem == nil)
 }
 
@@ -340,7 +582,8 @@ private func account(_ label: String, signedIn: Bool, percent: Double) -> Accoun
     #expect(
         codexSaid.url?.absoluteString
             == "https://auth.openai.com/oauth/authorize?response_type=code&state=x")
-    #expect(!codexSaid.wantsCode)
+    codexSaid.add("Paste code here if prompted > ")
+    #expect(!codexSaid.wantsCode, "Codex reads nothing, whatever it prints")
 
     let claudeSaid = SigningIn(label: "work", tool: "Claude Code")
     claudeSaid.takesACode = true
@@ -534,6 +777,9 @@ private func account(_ label: String, signedIn: Bool, percent: Double) -> Accoun
     await model.refresh()
     #expect(model.warnings.map(\.code) == ["overriding_env"])
     #expect(model.problem == "Anthropic could not be reached")
+    #expect(
+        model.otherWarnings.map(\.code) == ["overriding_env"],
+        "the problem is not one of them, so none is left unsaid")
 }
 
 // MARK: - More than one tool
@@ -617,23 +863,113 @@ private func account(_ label: String, signedIn: Bool, percent: Double) -> Accoun
     #expect(model.name(of: codexWork!) == "work (Codex)")
 }
 
-/// Only tools the app found a program for are offered for a new account, and every tool is
-/// when it found none: a program elsewhere on the PATH is still a program.
+/// Only tools the app found a program for are offered for a new account, and the form says
+/// which were left out rather than leaving them out without a word.
 @MainActor
 @Test func aNewAccountIsOfferedForToolsThatAreHere() async {
     let stub = Stub(.success(status([])))
     let model = AppModel(watching: false, service: stub)
     await model.refresh()
     #expect(model.addable == [claudeCode])
+    #expect(
+        model.notOffered == "Codex is not offered: pitboard did not find codex on this Mac.")
 
-    stub.found = []
-    #expect(model.addable == bothTools)
+    stub.found = [codex]
+    let codexOnly = AppModel(watching: false, service: stub)
+    await codexOnly.refresh()
+    #expect(codexOnly.addable == [codex])
+    #expect(codexOnly.provider(for: .another(nil)) == "codex")
+
+    stub.found = bothTools
+    let both = AppModel(watching: false, service: stub)
+    #expect(both.notOffered == nil)
 
     // A tool with an account here is here, wherever its program is.
     stub.answer = .success(status([account("work", of: "codex", signedIn: true)]))
     stub.found = [claudeCode]
+    let known = AppModel(watching: false, service: stub)
+    await known.refresh()
+    #expect(known.addable == bothTools)
+}
+
+/// A machine where the app found neither program reads as one with Claude Code alone, as it
+/// always did: whatever it did not find where it looks is not on the PATH of an app opened
+/// from Finder either, so offering every tool offered sign-ins that could not start.
+@MainActor
+@Test func nothingFoundOffersClaudeCodeAlone() async {
+    let stub = Stub(.success(status([])))
+    stub.found = []
+    let model = AppModel(watching: false, service: stub)
     await model.refresh()
-    #expect(model.addable == bothTools)
+    #expect(model.addable == [claudeCode])
+    #expect(model.services == "Anthropic")
+    #expect(model.provider(for: .another(nil)) == "claude")
+}
+
+/// What the app found does not change while it runs, so it is asked once and not on every
+/// keystroke in the form that reads it.
+@MainActor
+@Test func whatIsInstalledIsAskedOnce() async {
+    let stub = Stub(.success(status([])))
+    let model = AppModel(watching: false, service: stub)
+    await model.refresh()
+    for _ in 0..<3 { _ = model.addable }
+    _ = model.services
+    #expect(stub.installedAsks == 1)
+}
+
+/// The form starts on the tool it was asked about, and otherwise on the first it offers.
+@MainActor
+@Test func theFormStartsOnTheToolItIsAbout() {
+    let model = AppModel(watching: false, service: Stub(.success(status([]))))
+    #expect(model.provider(for: .another(nil)) == "claude")
+    #expect(model.provider(for: .another("codex")) == "codex")
+    #expect(model.provider(for: .theOneInUse("codex")) == "codex")
+}
+
+/// Keeping one Claude Code account on purpose says nothing about Codex. The prompt for a
+/// second account is declined per tool, and a declined one does not stand in front of the
+/// next tool's.
+@MainActor
+@Test func aSecondAccountIsDeclinedPerTool() async {
+    let stub = Stub(
+        .success(
+            status([
+                account("work", signedIn: true), account("job", of: "codex", signedIn: true),
+            ])
+        ))
+    let defaults = MemoryDefaults(suiteName: nil)!
+    let model = AppModel(watching: false, service: stub, defaults: defaults)
+    await model.refresh()
+    #expect(model.footing == .onlyOne(provider: "claude", label: "work"))
+
+    model.declineSecondAccount(for: "claude")
+    #expect(model.footing == .onlyOne(provider: "codex", label: "job"))
+
+    let later = AppModel(watching: false, service: stub, defaults: defaults)
+    await later.refresh()
+    #expect(later.footing == .onlyOne(provider: "codex", label: "job"), "and it is remembered")
+    later.declineSecondAccount(for: "codex")
+    #expect(later.footing == .ready)
+}
+
+/// "Not now" said before there was a second tool was said about Claude Code, the only tool
+/// there was, and does not hide the prompt for a first Codex account.
+@MainActor
+@Test func aNudgeDeclinedBeforeCodexWasAboutClaudeCode() async {
+    let stub = Stub(
+        .success(
+            status([
+                account("work", signedIn: true), account("job", of: "codex", signedIn: true),
+            ])
+        ))
+    let defaults = MemoryDefaults(suiteName: nil)!
+    defaults.set(true, forKey: "hideSecondAccountNudge")
+    let model = AppModel(watching: false, service: stub, defaults: defaults)
+    await model.refresh()
+    #expect(model.footing == .onlyOne(provider: "codex", label: "job"))
+    #expect(model.secondAccountDeclined == ["claude"])
+    #expect(defaults.object(forKey: "hideSecondAccountNudge") == nil, "moved, not kept twice")
 }
 
 /// The words for who is asked follow the tools shown, so a machine with Claude Code alone
@@ -651,4 +987,24 @@ private func account(_ label: String, signedIn: Bool, percent: Double) -> Accoun
     await model.refresh()
     #expect(model.services == "Anthropic or OpenAI")
     #expect(model.showsTools)
+}
+
+/// The menu bar follows whichever account is closest to running out, and two tools can
+/// each have a `work`, so once there is more than one tool VoiceOver says which.
+@MainActor
+@Test func theMenuBarSaysWhichToolItIsAboutOnceThereAreTwo() async {
+    let stub = Stub(.success(status([account("work", signedIn: true, percent: 42)])))
+    let model = AppModel(watching: false, service: stub)
+    #expect(model.spokenTitle == "pitboard")
+    await model.refresh()
+    #expect(model.spokenTitle == "pitboard, work 42%")
+
+    stub.answer = .success(
+        status([
+            account("work", signedIn: true, percent: 60),
+            account(
+                "work", of: "codex", signedIn: true, [window("five_hour", 80, resets: nil)]),
+        ]))
+    await model.refresh()
+    #expect(model.spokenTitle == "pitboard, work 80%, Codex")
 }

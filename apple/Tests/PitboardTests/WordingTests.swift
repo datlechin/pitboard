@@ -62,3 +62,34 @@ private func renewed(_ outcome: String) -> Renewed {
     #expect(windowShortName(window("session", 1)) == "5h")
     #expect(windowShortName(window("weekly_scoped", 1, scope: "Fable")) == "week · Fable")
 }
+
+/// VoiceOver reads the column's "30m" as thirty meters and "5h" as letters, so a limit is
+/// said in words: its name as a sentence says it, what it has used, and when it resets.
+@Test func aLimitIsSpokenInWordsAndNotInItsColumnsShorthand() {
+    #expect(
+        spokenLimit(window("five_hour", 42, length: 18_000), resettingIn: 3 * 3600)
+            == "5-hour limit, 42 percent used, resets in 3 hours")
+    #expect(
+        spokenLimit(window("30_minute", 12, length: 1800), resettingIn: nil)
+            == "30-minute limit, 12 percent used")
+    #expect(
+        spokenLimit(window("weekly_scoped", 98, scope: "Fable"), resettingIn: 0)
+            == "weekly Fable limit, 98 percent used",
+        "a reset already passed is not said, as the column does not show it")
+}
+
+/// A label as the core types it, taken apart: bare means Claude Code.
+@Test func aTypedLabelIsTakenApart() {
+    #expect(split("codex/work") == ("codex", "work"))
+    #expect(split("work") == ("claude", "work"))
+}
+
+/// A row is headed by its label, by "unenrolled" before it has one, and for a login no
+/// account can be named for, by what is wrong with it.
+@Test func aRowIsHeadedTheSameWayEverywhere() {
+    #expect(account("work").heading == "work")
+    #expect(account(nil, signedIn: true, uuid: "u").heading == "unenrolled")
+    #expect(
+        unplaced(of: "codex").heading
+            == "Codex's login could not be read; run `pitboard doctor`")
+}

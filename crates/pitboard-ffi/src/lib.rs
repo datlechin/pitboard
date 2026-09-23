@@ -434,6 +434,10 @@ fn changed<T, R>(
 #[derive(uniffi::Object)]
 pub struct SignIn {
     watched: Mutex<Option<switch::WatchedSignIn>>,
+    /// Apart from `watched`: reading waits on the tool, and Codex says nothing between its
+    /// address and the browser coming back, so a read that held `watched` kept a cancel or
+    /// a paste waiting until then, and the app's main thread with it.
+    said: switch::Said,
     label: String,
     provider: pitboard_core::provider::ProviderId,
     core: Arc<Pitboard>,
@@ -455,8 +459,7 @@ impl SignIn {
     /// The next thing the tool said, or nothing once it has stopped saying anything.
     /// Blocks, so call it off the main thread.
     pub fn next_line(&self) -> Option<String> {
-        let held = self.watched.lock().ok()?;
-        held.as_ref()?.next_line()
+        self.said.next()
     }
 
     /// Types the code back, for when the browser could not reach the callback.
@@ -605,6 +608,7 @@ impl Pitboard {
         let watched = self.core.sign_in_watched(&label)?;
         let provider = watched.provider();
         Ok(Arc::new(SignIn {
+            said: watched.said(),
             watched: Mutex::new(Some(watched)),
             label,
             provider,

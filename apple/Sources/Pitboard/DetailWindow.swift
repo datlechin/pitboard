@@ -61,7 +61,7 @@ private struct Accounts: View {
                     GroupBox {
                         VStack(alignment: .leading, spacing: 8) {
                             HStack {
-                                Text(heading(of: account))
+                                Text(account.heading)
                                     .font(.headline)
                                 if model.showsTools, let tool = model.tool(account.provider) {
                                     Text(tool.name)
@@ -79,6 +79,8 @@ private struct Accounts: View {
                                 Spacer()
                                 if account.switchable, let qualified = account.qualified {
                                     Button("Use") { Task { await model.use(qualified) } }
+                                        .accessibilityLabel(
+                                            "Switch to \(model.name(of: account))")
                                 }
                             }
                             if !account.email.isEmpty {
@@ -103,13 +105,6 @@ private struct Accounts: View {
             .scenePadding()
         }
         .task { await model.refresh(ifOlderThan: AppModel.staleAfter) }
-    }
-
-    /// A login that belongs to no account pitboard can name has no label and no email, and
-    /// what is wrong with it is what there is to say.
-    private func heading(of account: Account) -> String {
-        if account.unplaced { return account.staleExplanation ?? "a login pitboard cannot use" }
-        return account.label ?? account.email
     }
 }
 

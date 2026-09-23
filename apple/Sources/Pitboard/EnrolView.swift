@@ -7,8 +7,17 @@ struct NameIt: View {
     let asking: AppModel.Naming
     @State private var typed = ""
     /// The tool a new account is for, as a `Tool`'s code.
-    @State private var provider = ""
+    @State private var provider: String
     @FocusState private var focused: Bool
+
+    /// The tool is chosen before the first frame, not after it: a segmented picker drawn
+    /// with a selection none of its segments has logs that it is invalid, and can draw with
+    /// nothing selected.
+    init(model: AppModel, asking: AppModel.Naming) {
+        self.model = model
+        self.asking = asking
+        _provider = State(initialValue: model.provider(for: asking))
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -39,17 +48,20 @@ struct NameIt: View {
                 .font(.caption2)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+                // Said rather than left out without a word, which read as pitboard not
+                // handling the tool at all.
+                if let missing = model.notOffered {
+                    Text(missing)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
         }
         .onAppear { focused = true }
         // Again whenever the question changes under a form already showing: a card's button
         // pressed while the form is open asks about a different tool.
-        .onChange(of: asking, initial: true) {
-            switch asking {
-            case .theOneInUse(let code): provider = code
-            case .another(let code): provider = code ?? model.addable.first?.code ?? "claude"
-            }
-        }
+        .onChange(of: asking) { provider = model.provider(for: asking) }
     }
 
     private var isNew: Bool {
@@ -81,9 +93,13 @@ struct SigningInView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack {
+            HStack(alignment: .firstTextBaseline) {
                 ProgressView().controlSize(.small)
-                Text("Signing in to \(signingIn.tool) as \(signingIn.label)…").font(.callout)
+                // Wraps rather than truncates: what a long label loses is the name being
+                // signed in.
+                Text("Signing in to \(signingIn.tool) as \(signingIn.label)…")
+                    .font(.callout)
+                    .fixedSize(horizontal: false, vertical: true)
                 Spacer()
                 Button("Cancel") { model.cancelSignIn() }
             }

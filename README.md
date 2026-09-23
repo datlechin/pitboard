@@ -143,9 +143,9 @@ no Codex row, reads nothing of Codex's and asks OpenAI nothing.
 
 Codex works like Claude Code in pitboard, except for these:
 
-- A running `codex` never notices a switch. Restart it. After a switch on the command line,
-  pitboard counts the `codex` processes running and tells you to quit them. The menu bar
-  app does not say this yet, so restart `codex` yourself after switching there.
+- A running `codex` never notices a switch. Restart it. After a switch, on the command line
+  or in the menu bar app, pitboard counts the `codex` processes running and tells you to
+  quit them.
 - Quit those sessions; do not type `/logout` in one. Signing out there revokes the old
   account's login at OpenAI, and that is the login pitboard has just parked. The account
   would then need a browser sign-in.

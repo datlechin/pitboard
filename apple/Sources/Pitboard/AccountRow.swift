@@ -15,12 +15,12 @@ struct AccountRow: View {
                 if account.unplaced {
                     // Not an account anybody can name, so not "unenrolled": what is wrong
                     // with the login is the only thing there is to say about it.
-                    Text(account.staleExplanation ?? "a login pitboard cannot use")
+                    Text(account.heading)
                         .font(.callout)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 } else {
-                    Text(account.label ?? "unenrolled").fontWeight(.medium)
+                    Text(account.heading).fontWeight(.medium)
                 }
                 if let email = account.email.isEmpty ? nil : account.email {
                     Text(email)
@@ -51,12 +51,12 @@ struct AccountRow: View {
     /// row on its own, apart from the heading above it, and two tools can each have a
     /// `work`.
     private var spokenName: String {
-        let name =
-            account.unplaced
-            ? account.staleExplanation ?? "a login pitboard cannot use"
-            : account.label ?? "unenrolled, \(account.email)"
-        guard model.showsTools, let tool = model.tool(account.provider) else { return name }
-        return "\(name), \(tool.name)"
+        let tool = model.tool(account.provider)?.name ?? account.provider
+        // Only what the row is: its first line, read next, says what is wrong with it, and
+        // naming the row with that sentence read it twice.
+        if account.unplaced { return "\(tool) login pitboard cannot use" }
+        let name = account.label ?? "unenrolled, \(account.email)"
+        return model.showsTools ? "\(name), \(tool)" : name
     }
 
     /// When the login held for this account stops being usable. The command line says the
@@ -77,13 +77,13 @@ struct AccountRow: View {
             Text("signed in").font(.caption).foregroundStyle(.secondary)
         } else if let qualified = account.qualified, model.switching == qualified {
             ProgressView().controlSize(.small)
-        } else if account.switchable, let label = account.label,
-            let qualified = account.qualified
-        {
+        } else if account.switchable, let qualified = account.qualified {
+            // Named with its tool once there is more than one: a list of buttons and a
+            // spoken command have no row around them to say which `work` is meant.
             Button("Use") { Task { await model.use(qualified) } }
                 .buttonStyle(.link)
                 .disabled(model.switching != nil)
-                .accessibilityLabel("Switch to \(label)")
+                .accessibilityLabel("Switch to \(model.name(of: account))")
         } else if let name = typed(account) {
             Text("sign in again: pitboard enroll \(name) --sign-in")
                 .font(.caption2)
@@ -135,8 +135,11 @@ struct Limit: View {
     }
 
     private var spoken: String {
-        let used = "\(name), \(Int(window.percent.rounded())) percent used"
-        return resets.map { "\(used), resets \($0)" } ?? used
+        spokenLimit(
+            window,
+            resettingIn: window.resetsAt.map {
+                Date(timeIntervalSince1970: TimeInterval($0)).timeIntervalSinceNow
+            })
     }
 
     private var colour: Color {

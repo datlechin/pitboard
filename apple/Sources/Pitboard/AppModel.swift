@@ -23,15 +23,10 @@ final class AppModel {
     /// most. Shown in the panel whether or not notifications are allowed, so the advice does
     /// not depend on a permission.
     private(set) var advice: [Advice] = []
-    /// When sessions that were already open will have picked up the last switch.
-    private(set) var adopted: Date?
-    /// The last switch was to a tool whose running sessions never pick one up, so there is
-    /// no countdown to show: they keep the old account until they are started again.
-    private(set) var restart: Restart?
-    /// What the last switch warned about. Kept apart from `warnings`, which the read that
-    /// follows every switch replaces: these are about the switch, and stay true until the
-    /// person has done something about them.
-    private(set) var switchWarnings: [Warning] = []
+    /// What each tool's last switch said that is still true, one per tool at most. Kept
+    /// apart from `warnings`, which the read that follows every switch replaces: these are
+    /// about the switch, and stay true until the person has done something about them.
+    private(set) var lastSwitches: [LastSwitch] = []
     /// Every check pitboard makes about this machine, once someone asks for them.
     private(set) var checks: [Check] = []
     /// A label being typed, when the panel is asking for one, and what it is for.
@@ -64,12 +59,43 @@ final class AppModel {
         case another(String?)
     }
 
+    /// What a tool's last switch said that the read after it does not say again.
+    ///
+    /// One per tool. A switch of one tool says nothing about another's sessions, and a
+    /// Claude Code switch used to put away the warning not to sign out inside a Codex
+    /// session still using the account Codex had just parked.
+    struct LastSwitch: Equatable {
+        /// The tool, as a `Tool`'s code.
+        let provider: String
+        /// The account switched to, as the core types it. While its tool still has it signed
+        /// in, what the switch said is still true, whatever else has written the account
+        /// index since: a renewal, an enrolment, a read that renewed a lapsed login.
+        let to: String
+        /// When sessions already open will have picked it up, for a tool that follows a
+        /// switch by itself.
+        var adopted: Date?
+        /// For a tool whose running sessions never pick a switch up.
+        var restart: Restart?
+        var warnings: [Warning] = []
+
+        /// What a switch means for a tool's running sessions, said only when the core did
+        /// not count them. When it did, its own warning says the same with the count and
+        /// with what not to do in them, and the same fact twice is once too many in a
+        /// glance.
+        var notice: String? {
+            guard let restart,
+                !warnings.contains(where: { $0.code == "sessions_still_running" })
+            else { return nil }
+            return restartNotice(program: restart.program, from: restart.from)
+        }
+    }
+
     /// A tool's running sessions keep the account they started with.
     struct Restart: Equatable {
-        /// The tool, as a `Tool`'s code, and the command a person quits and starts again.
-        let provider: String
+        /// The command a person quits and starts again.
         let program: String
-        /// The account they keep using.
+        /// The account they keep using, by its label alone: the notice names the tool
+        /// already, by its program.
         let from: String
     }
 
@@ -80,6 +106,14 @@ final class AppModel {
     private static let refreshEvery: Duration = .seconds(300)
 
     private let notifier = Notifier()
+    /// The codes of the tools whose program was found. Read once: what an app can find does
+    /// not change until it is started again, and asking crossed into the core on every
+    /// keystroke in the form that reads it.
+    private let installed: Set<String>
+    /// The tools somebody said "Not now" to a second account for, by code.
+    private(set) var secondAccountDeclined: Set<String> = []
+    private let defaults: UserDefaults
+    private static let declinedKey = "secondAccountDeclined"
 
     /// How often to ask whether anything on this machine has changed. One stat of one
     /// file, so it costs nothing to ask often; before it, a switch typed in a terminal
@@ -95,10 +129,21 @@ final class AppModel {
     /// firing under a test is how a test stops telling the truth about what set what.
     init(
         watching: Bool = true,
-        service: any Core = PitboardService(settings: .forCurrentUser())
+        service: any Core = PitboardService(settings: .forCurrentUser()),
+        defaults: UserDefaults = .standard
     ) {
         self.service = service
         tools = service.tools()
+        installed = Set(service.installed().map(\.code))
+        self.defaults = defaults
+        var declined = Set(defaults.stringArray(forKey: Self.declinedKey) ?? [])
+        // Said before there was a second tool, so about the only tool there was.
+        if defaults.bool(forKey: "hideSecondAccountNudge") {
+            declined.insert("claude")
+            defaults.set(declined.sorted(), forKey: Self.declinedKey)
+            defaults.removeObject(forKey: "hideSecondAccountNudge")
+        }
+        secondAccountDeclined = declined
         notifier.start()
         notifier.onSwitch = { [weak self] label in
             Task { await self?.use(label) }
@@ -148,9 +193,7 @@ final class AppModel {
             return
         }
         status = read
-        // A switch made somewhere else is not the one this app is counting down for, or the
-        // one whose warnings it is showing.
-        forgetSwitch()
+        forgetSwitchesUndone(by: read)
     }
 
     /// The account in use and its tightest limit, as the menu bar reads it.
@@ -167,13 +210,35 @@ final class AppModel {
     func tool(_ code: String) -> Tool? { tools.first { $0.code == code } }
 
     /// The tools a new account can be added for: each whose program was found or that
-    /// already has an account here. Every tool when that is none of them, since a program
-    /// somewhere on the `PATH` is still a program and the sign-in will say if it is not.
+    /// already has an account here, and Claude Code, the tool a bare label means, when that
+    /// is none of them.
+    ///
+    /// Not every tool then. A program the app did not find where it looks is almost never
+    /// on the `PATH` of an app opened from Finder either, so that offered sign-ins that could
+    /// not start, and it asked somebody who only ever had Claude Code about Codex too.
     var addable: [Tool] {
-        let found = Set(service.installed().map(\.code))
         let known = Set(status?.accounts.map(\.provider) ?? [])
-        let some = tools.filter { found.contains($0.code) || known.contains($0.code) }
-        return some.isEmpty ? tools : some
+        let some = tools.filter { installed.contains($0.code) || known.contains($0.code) }
+        return some.isEmpty ? tools.filter { $0.code == defaultProvider } : some
+    }
+
+    /// Why a tool is missing from the form for a new account, rather than leaving it out
+    /// without a word. Nil when every tool is offered.
+    var notOffered: String? {
+        let missing = tools.filter { !addable.contains($0) }
+        guard !missing.isEmpty else { return nil }
+        let names = missing.map(\.name).joined(separator: " and ")
+        let programs = missing.map(\.program).joined(separator: " or ")
+        return "\(names) \(missing.count == 1 ? "is" : "are") not offered: pitboard did not "
+            + "find \(programs) on this Mac."
+    }
+
+    /// The tool a form asking `asking` starts on.
+    func provider(for asking: Naming) -> String {
+        switch asking {
+        case .theOneInUse(let code): code
+        case .another(let code): code ?? addable.first?.code ?? defaultProvider
+        }
     }
 
     /// Who is asked about the accounts shown, as a sentence names them: "Anthropic", or
@@ -192,6 +257,23 @@ final class AppModel {
         return "\(label) (\(tool(account.provider)?.name ?? account.provider))"
     }
 
+    /// The menu bar as VoiceOver says it. Once more than one tool is shown it names the tool
+    /// too: the bar follows whichever account is closest to running out, and two tools can
+    /// each have a `work`.
+    var spokenTitle: String {
+        guard !title.isEmpty else { return "pitboard" }
+        guard showsTools, let account = titled(status?.accounts ?? [], order: tools),
+            let tool = tool(account.provider)
+        else { return "pitboard, \(title)" }
+        return "pitboard, \(title), \(tool.name)"
+    }
+
+    /// The warnings shown under `problem`: every one but the one it already says. A failure's
+    /// message is not one of its warnings, and dropping the first of them hid one that was.
+    var otherWarnings: [Warning] {
+        warnings.filter { $0.message != problem }
+    }
+
     var updated: String {
         guard let updatedAt else { return "not read yet" }
         let ago = Int(Date().timeIntervalSince(updatedAt))
@@ -205,6 +287,7 @@ final class AppModel {
         do {
             let read = try await service.status(fresh: asked)
             status = read
+            forgetSwitchesUndone(by: read)
             warnings = read.warnings
             problem = read.warnings.first?.message
             stuck = read.warnings.contains { $0.code == "recovery_undetermined" }
@@ -292,36 +375,71 @@ final class AppModel {
         defer { switching = nil }
         do {
             let done = try await service.switchTo(qualified)
-            forgetSwitch()
-            switchWarnings = done.warnings
-            if case .switched(let provider, let from, _, let adoption) = done.outcome {
+            switch done.outcome {
+            case .switched(let provider, let from, let to, let adoption):
+                var said = LastSwitch(provider: provider, to: to, warnings: done.warnings)
                 switch adoption {
                 case .follows(let within):
-                    adopted = Date().addingTimeInterval(TimeInterval(within))
+                    said.adopted = Date().addingTimeInterval(TimeInterval(within))
                 case .restart(let program):
-                    restart = Restart(provider: provider, program: program, from: from)
+                    said.restart = Restart(program: program, from: split(from).label)
                 }
+                remember(said)
+            case .alreadyActive(let label):
+                // Nothing moved, so what this tool's last switch said still stands, and
+                // anything this one warned about is said beside it.
+                guard !done.warnings.isEmpty else { break }
+                let provider = split(qualified).provider
+                var said =
+                    lastSwitches.first { $0.provider == provider && $0.to == label }
+                    ?? LastSwitch(provider: provider, to: label)
+                said.warnings += done.warnings.filter { !said.warnings.contains($0) }
+                remember(said)
             }
             advice = []
             updatedAt = nil
             await refresh()
         } catch {
+            // Nothing moved here either, so what the last switch said stands. The failure is
+            // said the way any failure is, with its warnings first and nothing the last read
+            // found dropped to make room for them.
             problem = Self.saying(error)
-            switchWarnings = Self.warnings(of: error)
+            let failed = Self.warnings(of: error)
+            warnings = failed + warnings.filter { !failed.contains($0) }
         }
     }
 
-    /// The last switch's warnings that the read after it did not already show, so nothing
-    /// is said twice.
-    var afterSwitch: [Warning] {
-        switchWarnings.filter { !warnings.contains($0) }
+    /// In place of what the same tool's last switch said, or after the others.
+    private func remember(_ said: LastSwitch) {
+        if let at = lastSwitches.firstIndex(where: { $0.provider == said.provider }) {
+            lastSwitches[at] = said
+        } else {
+            lastSwitches.append(said)
+        }
     }
 
-    /// Puts away what the last switch said, once somebody has read it.
-    func forgetSwitch() {
-        adopted = nil
-        restart = nil
-        switchWarnings = []
+    /// What `last` warned about that the read after it did not already show, so nothing is
+    /// said twice.
+    func warnings(after last: LastSwitch) -> [Warning] {
+        last.warnings.filter { !warnings.contains($0) }
+    }
+
+    /// Puts away what a tool's last switch said, once somebody has read it.
+    func forgetSwitch(of provider: String) {
+        lastSwitches.removeAll { $0.provider == provider }
+    }
+
+    /// Puts away what a switch said once its tool no longer has the account it switched to
+    /// signed in: a switch made somewhere else, or a sign-out. Anything else that writes the
+    /// account index leaves the sessions it describes exactly as they were, and taking every
+    /// write for a switch put away the one warning that keeps somebody from revoking the
+    /// login a Codex switch had just parked.
+    private func forgetSwitchesUndone(by read: Status) {
+        lastSwitches.removeAll { last in
+            !read.accounts.contains {
+                $0.provider == last.provider && $0.signedIn && typed($0) == last.to
+            }
+        }
     }
 
     /// Logins signed in to a tool and not enrolled: the ones the app can name by itself.
@@ -350,8 +468,9 @@ final class AppModel {
         /// Somebody is signed in to a tool and pitboard has not been told what to call them.
         /// Their login cannot be parked until it has a name. The tool's code, and the email.
         case unnamed(provider: String, email: String)
-        /// A tool has one account, so there is nothing yet to switch to in it. The tool's
-        /// code, and the account's label.
+        /// A tool has one account, so there is nothing yet to switch to in it, and nobody
+        /// has said they keep it that way on purpose. The tool's code, and the account's
+        /// label.
         case onlyOne(provider: String, label: String)
         /// Set up, or too early to say.
         case ready
@@ -379,7 +498,8 @@ final class AppModel {
             return .unnamed(provider: login.provider, email: login.email)
         }
         // Per tool: an account can only be switched to another account of its own tool.
-        for provider in inOrder(accounts.map(\.provider), by: tools) {
+        for provider in inOrder(accounts.map(\.provider), by: tools)
+        where !secondAccountDeclined.contains(provider) {
             let enrolled = accounts.filter { $0.provider == provider && $0.label != nil }
             if enrolled.count == 1, let only = enrolled.first, only.signedIn,
                 let label = only.label
@@ -388,6 +508,14 @@ final class AppModel {
             }
         }
         return .ready
+    }
+
+    /// Somebody keeps one account of `provider`'s tool on purpose. Per tool: that says
+    /// nothing about another tool, and one flag for every tool hid the prompt for a tool
+    /// nobody had been asked about.
+    func declineSecondAccount(for provider: String) {
+        secondAccountDeclined.insert(provider)
+        defaults.set(secondAccountDeclined.sorted(), forKey: Self.declinedKey)
     }
 
     /// Records the login signed in now to `provider`'s tool under a name, with the tool's
@@ -409,28 +537,38 @@ final class AppModel {
     /// which is what the code field is for; Codex's prints an address and reads nothing.
     func signIn(_ name: String, for provider: String) async {
         naming = nil
-        signingIn = SigningIn(label: name, tool: tool(provider)?.name ?? provider)
+        let shown = SigningIn(label: name, tool: tool(provider)?.name ?? provider)
+        signingIn = shown
         do {
             let session = try await service.signIn(qualified(name, for: provider))
-            signingIn?.takesACode = session.takesACode()
-            signingIn?.session = session
-            await watch(session)
+            // Cancelled while it was starting: stop what started rather than watch it.
+            guard signingIn === shown else {
+                Task.detached(priority: .userInitiated) { session.cancel() }
+                return
+            }
+            shown.takesACode = session.takesACode()
+            shown.session = session
+            await watch(session, shown: shown)
         } catch {
+            guard signingIn === shown else { return }
             signingIn = nil
             problem = Self.saying(error)
         }
     }
 
     /// Reads what the tool says until it stops, then records what it signed in to.
-    private func watch(_ session: SignIn) async {
+    private func watch(_ session: SignIn, shown: SigningIn) async {
         while let said = await Task.detached(
             priority: .utility,
             operation: {
                 session.nextLine()
             }
         ).value {
-            signingIn?.add(said)
+            shown.add(said)
         }
+        // Cancelled. The tool was stopped because somebody asked, so the sign-in that is
+        // "no longer running" is not something that went wrong, and nothing is enrolled.
+        guard signingIn === shown else { return }
         do {
             _ = try await Task.detached(priority: .utility) { try session.finish() }.value
             signingIn = nil
@@ -442,16 +580,21 @@ final class AppModel {
         }
     }
 
-    /// Types the fallback code back, for a browser that could not reach the callback.
+    /// Types the fallback code back, for a browser that could not reach the callback. Off
+    /// the main thread, like everything that waits on the tool.
     func paste(_ code: String) {
-        guard let session = signingIn?.session else { return }
-        try? session.paste(line: code)
-        signingIn?.pasted = true
+        guard let shown = signingIn, let session = shown.session else { return }
+        shown.pasted = true
+        Task.detached(priority: .userInitiated) { try? session.paste(line: code) }
     }
 
+    /// Stops the sign-in, off the main thread: stopping waits for the tool to exit, and a
+    /// Codex sign-in waiting on the browser once kept the whole app waiting with it.
     func cancelSignIn() {
-        signingIn?.session?.cancel()
+        let session = signingIn?.session
         signingIn = nil
+        guard let session else { return }
+        Task.detached(priority: .userInitiated) { session.cancel() }
     }
 
     /// Drops the account `qualified` names, and the login parked for it.

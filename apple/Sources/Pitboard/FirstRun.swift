@@ -11,12 +11,13 @@ import SwiftUI
 ///
 /// One state at a time, and never more than one thing to press. Each is the actual next
 /// step, not a tour.
+///
+/// The `.onlyOne` nudge is true but not urgent: somebody may keep one account on purpose and
+/// watch its limits, so it can be declined, for its tool alone. The two blocking states are
+/// not dismissible, because dismissing them would leave an app that does nothing and says
+/// nothing.
 struct FirstRun: View {
     let model: AppModel
-    /// The `.onlyOne` nudge is true but not urgent: somebody may keep one account on
-    /// purpose and watch its limits. The two blocking states are not dismissible, because
-    /// dismissing them would leave an app that does nothing and says nothing.
-    @AppStorage("hideSecondAccountNudge") private var hidden = false
 
     var body: some View {
         switch model.footing {
@@ -61,20 +62,18 @@ struct FirstRun: View {
                     .keyboardShortcut(.defaultAction)
             }
         case .onlyOne(let provider, let label):
-            if !hidden {
-                Card(
-                    symbol: "arrow.left.arrow.right",
-                    title: "Add a second \(tool(provider))account",
-                    detail:
-                        "\(label) is the only \(tool(provider))account pitboard knows, so there "
-                        + "is nothing to switch to. Adding another signs in to it and parks "
-                        + "this one."
-                ) {
-                    Button("Add another account…") { model.naming = .another(provider) }
-                        .buttonStyle(.borderedProminent)
-                        .keyboardShortcut(.defaultAction)
-                    Button("Not now") { hidden = true }
-                }
+            Card(
+                symbol: "arrow.left.arrow.right",
+                title: "Add a second \(tool(provider))account",
+                detail:
+                    "\(label) is the only \(tool(provider))account pitboard knows, so there "
+                    + "is nothing to switch to. Adding another signs in to it and parks "
+                    + "this one."
+            ) {
+                Button("Add another account…") { model.naming = .another(provider) }
+                    .buttonStyle(.borderedProminent)
+                    .keyboardShortcut(.defaultAction)
+                Button("Not now") { model.declineSecondAccount(for: provider) }
             }
         case .ready:
             EmptyView()

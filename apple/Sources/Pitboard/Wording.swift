@@ -76,13 +76,31 @@ func windowShortName(_ window: Limits) -> String {
     return window.scope.map { "\(base) · \($0)" } ?? base
 }
 
-/// What a switch means for sessions of a tool that never picks one up by itself. `from`
-/// is empty when nothing was signed in before, and then there is no old account to name.
-func restartNotice(program: String, from: String) -> String {
-    let old = from.isEmpty ? "the account they started with" : from
-    return
-        "Running \(program) sessions keep using \(old) until they are quit and started again."
+/// A limit as VoiceOver says it: "5-hour limit, 42 percent used, resets in 3 hours". The
+/// column beside the bar says "5h" and "in 30m", which is read letter by letter or as a
+/// unit: "m" is read as "meters".
+func spokenLimit(_ window: Limits, resettingIn seconds: TimeInterval?) -> String {
+    let name = window.scope.map { "\(windowName(window)) \($0)" } ?? windowName(window)
+    let used = "\(name) limit, \(Int(window.percent.rounded())) percent used"
+    guard let seconds, seconds > 0 else { return used }
+    let span = Duration.seconds(max(60, Int64(seconds))).formatted(
+        .units(allowed: [.days, .hours, .minutes], width: .wide, maximumUnitCount: 2))
+    return "\(used), resets in \(span)"
 }
+
+/// What a switch means for sessions of a tool that never picks one up by itself. Said of
+/// any session and not of running ones, since the core counts those itself when it can,
+/// and a notice left in the panel should not claim sessions that may not exist. `from` is
+/// empty when nothing was signed in before, and then there is no old account to name.
+func restartNotice(program: String, from: String) -> String {
+    let old = from.isEmpty ? "the account it started with" : from
+    return
+        "Any \(program) session started before this switch keeps using \(old) until it is "
+        + "quit and started again."
+}
+
+/// The tool a bare label means, as the core reads one.
+let defaultProvider = "claude"
 
 /// A name typed for a new account, with the tool it is for, as the core takes it. The
 /// picker is what says which tool, so a slash typed into the name is the core's to refuse
@@ -91,8 +109,27 @@ func qualified(_ name: String, for provider: String) -> String {
     "\(provider)/\(name)"
 }
 
+/// A label as the core types it, taken apart: `codex/work` is Codex's `work`, and a bare
+/// `work` is Claude Code's.
+func split(_ typed: String) -> (provider: String, label: String) {
+    let parts = typed.split(separator: "/", maxSplits: 1)
+    guard parts.count == 2 else { return (defaultProvider, typed) }
+    return (String(parts[0]), String(parts[1]))
+}
+
 /// A label as somebody types it at the command line: bare for Claude Code, which is what a
 /// bare label has always meant, and with its tool for any other.
 func typed(_ account: Account) -> String? {
-    account.provider == "claude" ? account.label : account.qualified
+    account.provider == defaultProvider ? account.label : account.qualified
+}
+
+extension Account {
+    /// What a row is headed with: its label, "unenrolled" for a login nobody has named yet,
+    /// and for a login with no account pitboard can name, what is wrong with it, which is
+    /// all there is to say about it. The panel and the window both say it, so it is written
+    /// once.
+    var heading: String {
+        if unplaced { return staleExplanation ?? "a login pitboard cannot use" }
+        return label ?? "unenrolled"
+    }
 }

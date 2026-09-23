@@ -18,17 +18,8 @@ struct MenuView: View {
                     .font(.callout)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            if let adopted = model.adopted, adopted > Date() {
-                Text(
-                    "Sessions already open follow in ",
-                    comment: "followed by a countdown"
-                )
-                .font(.caption).foregroundStyle(.secondary)
-                    + Text(timerInterval: Date()...adopted, countsDown: true)
-                    .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
-            }
-            if model.restart != nil || !model.afterSwitch.isEmpty {
-                AfterSwitch(model: model)
+            ForEach(model.lastSwitches, id: \.provider) { last in
+                AfterSwitch(model: model, last: last)
             }
             if updater.available, let version = updater.waiting {
                 HStack {
@@ -47,7 +38,7 @@ struct MenuView: View {
             // Every warning, not only the first. A switch can warn about an overriding
             // environment variable and a config that did not update at once, and showing
             // one of them is how somebody fixes the wrong thing.
-            ForEach(model.warnings.dropFirst(), id: \.code) { warning in
+            ForEach(model.otherWarnings, id: \.code) { warning in
                 Label(warning.message, systemImage: "exclamationmark.triangle")
                     .font(.callout)
                     .foregroundStyle(.orange)
@@ -194,34 +185,56 @@ struct Footer: View {
     }
 }
 
-/// What the last switch means for sessions already running, and what it warned about.
+/// What a tool's last switch means for sessions already running, and what it warned about.
 ///
 /// A tool whose running sessions never pick a switch up gets a plain sentence where a
 /// countdown would otherwise be, and the switch's own warnings are kept here after the read
 /// that follows it: that read replaces the panel's warnings, and these are about the switch.
 private struct AfterSwitch: View {
     let model: AppModel
+    let last: AppModel.LastSwitch
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline) {
-            VStack(alignment: .leading, spacing: 6) {
-                if let restart = model.restart {
-                    Text(restartNotice(program: restart.program, from: restart.from))
-                        .font(.callout)
-                        .fixedSize(horizontal: false, vertical: true)
+        if let adopted = last.adopted, adopted > Date() {
+            Text(following)
+                .font(.caption).foregroundStyle(.secondary)
+                + Text(timerInterval: Date()...adopted, countsDown: true)
+                .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+        }
+        let warned = model.warnings(after: last)
+        if last.notice != nil || !warned.isEmpty {
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 6) {
+                    if let notice = last.notice {
+                        Text(notice)
+                            .font(.callout)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    ForEach(warned, id: \.code) { warning in
+                        Label(warning.message, systemImage: "exclamationmark.triangle")
+                            .font(.callout)
+                            .foregroundStyle(.orange)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
-                ForEach(model.afterSwitch, id: \.code) { warning in
-                    Label(warning.message, systemImage: "exclamationmark.triangle")
-                        .font(.callout)
-                        .foregroundStyle(.orange)
-                        .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 0)
+                Button("Dismiss", systemImage: "xmark") {
+                    model.forgetSwitch(of: last.provider)
                 }
-            }
-            Spacer(minLength: 0)
-            Button("Dismiss", systemImage: "xmark") { model.forgetSwitch() }
                 .labelStyle(.iconOnly)
                 .buttonStyle(.borderless)
                 .help("Dismiss")
+            }
         }
+    }
+
+    /// Followed by the countdown. Names the tool once more than one is shown, since each
+    /// tool's last switch is said on its own and a countdown beside a Codex notice would
+    /// otherwise read as contradicting it.
+    private var following: String {
+        guard model.showsTools, let tool = model.tool(last.provider) else {
+            return "Sessions already open follow in "
+        }
+        return "\(tool.name) sessions already open follow in "
     }
 }

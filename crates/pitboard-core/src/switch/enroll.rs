@@ -159,8 +159,25 @@ fn signed_in_document(ctx: &Context, which: ProviderId, dir: &std::path::Path) -
 /// one.
 pub struct WatchedSignIn {
     child: std::process::Child,
-    said: std::sync::mpsc::Receiver<String>,
+    said: Said,
     pending: SignIn,
+}
+
+/// What a watched sign-in's tool says, read apart from the sign-in itself.
+///
+/// Reading waits until the tool says something, and Codex prints its address and then
+/// nothing until the browser is done. A reader that held the sign-in while it waited held
+/// up a paste or a cancel for as long, so what it says is its own handle, and stopping the
+/// tool is what ends the reading.
+#[derive(Clone)]
+pub struct Said(std::sync::Arc<std::sync::Mutex<std::sync::mpsc::Receiver<String>>>);
+
+impl Said {
+    /// The next thing the tool said, or `None` once it has finished saying anything.
+    /// Blocks, so a caller reads it on a thread of its own.
+    pub fn next(&self) -> Option<String> {
+        self.0.lock().ok()?.recv().ok()
+    }
 }
 
 impl WatchedSignIn {
@@ -169,10 +186,10 @@ impl WatchedSignIn {
         self.pending.provider
     }
 
-    /// The next thing the tool said, or `None` once it has finished saying anything.
-    /// Blocks, so a caller reads it on a thread of its own.
-    pub fn next_line(&self) -> Option<String> {
-        self.said.recv().ok()
+    /// What the tool says, for a reader on a thread of its own that must not hold up a
+    /// paste or a cancel while it waits.
+    pub fn said(&self) -> Said {
+        self.said.clone()
     }
 
     /// Types a line back, for a code the tool asks to be pasted when the browser cannot
@@ -210,13 +227,17 @@ impl WatchedSignIn {
 /// Starts the sign-in with its output piped, for a caller that will show it.
 pub fn sign_in_watched(ctx: &Context, which: ProviderId) -> Result<WatchedSignIn> {
     let pending = reserve_signin(ctx, which)?;
-    let mut child = provider::of(which)
-        .sign_in(ctx, &pending.dir)
+    let command = provider::of(which).sign_in(ctx, &pending.dir);
+    watch(command, pending).map_err(|e| started(which, e))
+}
+
+/// Runs `command` with its output piped, as the sign-in `pending` reserved.
+fn watch(mut command: std::process::Command, pending: SignIn) -> std::io::Result<WatchedSignIn> {
+    let mut child = command
         .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
-        .spawn()
-        .map_err(|e| started(which, e))?;
+        .spawn()?;
     let (say, said) = std::sync::mpsc::channel();
     // Claude Code writes the browser URL and the paste prompt without a newline after them,
     // so this reads by chunk rather than by line and lets the caller decide what to show.
@@ -249,7 +270,7 @@ pub fn sign_in_watched(ctx: &Context, which: ProviderId) -> Result<WatchedSignIn
     }
     Ok(WatchedSignIn {
         child,
-        said,
+        said: Said(std::sync::Arc::new(std::sync::Mutex::new(said))),
         pending,
     })
 }
@@ -428,5 +449,37 @@ fn account(
         email: owner.email.clone(),
         parked,
         detail,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::switch::harness::codex_machine;
+    use std::time::{Duration, Instant};
+
+    /// Codex prints its address and then nothing until the browser is done, so somebody
+    /// pressing Cancel nearly always finds a reader waiting. The cancel must not wait with
+    /// it, and stopping the tool must end the reading rather than leave it waiting forever.
+    #[test]
+    fn a_cancel_does_not_wait_on_a_tool_that_says_nothing() {
+        let m = codex_machine("cancel");
+        let pending = reserve_signin(&m.ctx, ProviderId::Codex).expect("reserved");
+        let mut silent = std::process::Command::new("sleep");
+        silent.arg("30");
+        let watched = watch(silent, pending).expect("started");
+        let said = watched.said();
+        let reader = std::thread::spawn(move || said.next());
+        std::thread::sleep(Duration::from_millis(100));
+
+        let asked = Instant::now();
+        watched.cancel();
+        assert_eq!(reader.join().expect("the reader"), None);
+        assert!(
+            asked.elapsed() < Duration::from_secs(10),
+            "the cancel waited on the tool"
+        );
+        reserve_signin(&m.ctx, ProviderId::Codex)
+            .expect("a cancelled sign-in lets the next one start");
     }
 }
