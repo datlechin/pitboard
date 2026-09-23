@@ -460,6 +460,46 @@ chmod 600 "$CLAUDE_CONFIG_DIR/.credentials.json""#
         std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).unwrap();
     }
 
+    /// Sign Codex in with an API key rather than an account, the way `codex login
+    /// --with-api-key` leaves it. The key is made up.
+    pub fn sign_in_codex_with_an_api_key(&self) {
+        use std::os::unix::fs::PermissionsExt;
+        let login = serde_json::json!({
+            "auth_mode": "apikey",
+            "OPENAI_API_KEY": "sk-not-a-real-key",
+        });
+        let path = self.codex_home().join("auth.json");
+        std::fs::write(&path, login.to_string()).unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).unwrap();
+    }
+
+    /// Put a `codex` of this test's own first on `PATH`, laid out the way Codex's standalone
+    /// installer lays one out, so whatever reads which Codex is installed reads this one.
+    ///
+    /// The `PATH` a test runs with ends with the real one, and the real standalone install
+    /// lives inside the developer's own `~/.codex`, which no test may go near. Running it
+    /// fails loudly: nothing that only asks which version it is ever runs it.
+    pub fn install_fake_codex(&self, version: &str) {
+        use std::os::unix::fs::PermissionsExt;
+        let installed = self
+            .root
+            .join("codex-install/releases")
+            .join(format!("{version}-test-target"))
+            .join("bin/codex");
+        std::fs::create_dir_all(installed.parent().unwrap()).unwrap();
+        std::fs::write(
+            &installed,
+            "#!/bin/sh\necho 'a test stand-in for codex, not meant to run' >&2\nexit 64\n",
+        )
+        .unwrap();
+        std::fs::set_permissions(&installed, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let bin = self.root.join("bin");
+        std::fs::create_dir_all(&bin).unwrap();
+        let link = bin.join("codex");
+        let _ = std::fs::remove_file(&link);
+        std::os::unix::fs::symlink(&installed, &link).unwrap();
+    }
+
     /// Make the fake OpenAI answer what a Codex login has left: a five-hour window and a
     /// weekly one, in the shape its usage endpoint answers with.
     pub fn codex_usage(&mut self, five_hour: f64, weekly: f64) {

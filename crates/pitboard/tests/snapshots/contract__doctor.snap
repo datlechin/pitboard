@@ -20,7 +20,7 @@ expression: "serde_json::json!({ \"exit\": code, \"envelope\": value })"
           "present": true,
           "backend": "file",
           "login_present": false,
-          "version": "[version]"
+          "version": "0.154.0"
         }
       },
       "checks": "[checks]"

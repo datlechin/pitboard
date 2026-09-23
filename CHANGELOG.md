@@ -287,6 +287,20 @@ All notable changes are recorded here. The format follows
   already running follow on their own within a number of seconds or need restarting;
   `adoption_ceiling_seconds` is null for a tool that needs restarting. Enrolments and
   renewals gain `provider`. All additive.
+- In `--json`, every `status` account gains `provider` and `qualified`, its name with the
+  tool spelled out (`codex/work`), null for a login nothing has enrolled. Two stale codes
+  are new: `login_unreadable`, for a tool's login that is there and could not be read, and
+  `login_unusable`, for one that was read and is no account pitboard can park or switch,
+  such as an API key. Where no record pins such a login on an account, it gets a row of
+  its own with no label, email or account id, and only for a tool with accounts enrolled.
+  `doctor` gains `environment.codex` (`home`, `present`, `backend`, `login_present`,
+  `version`) and a section about Codex whose codes all start `codex_`: `codex_backend`,
+  `codex_auth_file`, `codex_login`, `codex_version`, `codex_running`, and for a Codex
+  account `codex_parked_login` and `codex_dormant_account`. What somebody chose is not a
+  fault: a keychain store fails only where it puts enrolled Codex accounts out of reach,
+  an API key login is a warning only where there are Codex accounts to switch to, and
+  either is otherwise stated without a warning. All additive: Claude Code's rows, checks
+  and codes are what they were.
 - `CLAUDE_CODE_CUSTOM_OAUTH_URL` refuses changes to Claude Code accounts, and no longer
   stops a change to a Codex one.
 - `pitboard-core` is reorganised around a provider boundary, and much of what it exposed

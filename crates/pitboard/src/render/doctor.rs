@@ -136,4 +136,27 @@ mod tests {
             "what comes before it is what a machine without Codex shows: {text}"
         );
     }
+
+    /// A Codex account's checks are Codex's: under its heading, and in its column, so a
+    /// long `codex/...` name cannot push Claude Code's details along.
+    #[test]
+    fn a_codex_account_is_listed_under_codex() {
+        let plain = |checks: &[Check]| anstream::adapter::strip_str(&human(checks)).to_string();
+        let mut backend = check(Level::Ok);
+        backend.code = "codex_backend";
+        backend.name = "Codex login store".into();
+        let mut account = check(Level::Ok);
+        account.code = "codex_parked_login";
+        account.name = "account codex/a-rather-long-label".into();
+        let before = plain(&[check(Level::Ok)]);
+        let text = plain(&[check(Level::Ok), backend, account]);
+        let lines: Vec<&str> = text.lines().collect();
+        let heading = lines.iter().position(|l| *l == "Codex").expect(&text);
+        let at = lines
+            .iter()
+            .position(|l| l.contains("codex/a-rather-long-label"))
+            .unwrap();
+        assert!(at > heading, "{text}");
+        assert_eq!(lines[0], before.lines().next().unwrap(), "{text}");
+    }
 }

@@ -162,6 +162,7 @@ fn usage_error() {
 #[test]
 fn doctor() {
     let env = two_accounts("contract-doctor");
+    env.install_fake_codex("0.154.0");
     let (value, code) = json(&env, &["doctor"]);
 
     let printed = value.to_string();
@@ -208,8 +209,6 @@ fn doctor() {
         ".envelope.data.environment.credential_service" => "[slot]",
         ".envelope.data.environment.credential_store" => "[backend]",
         ".envelope.data.environment.codex.home" => "[path]",
-        // Read off whichever `codex` is on this machine's PATH, so it is this machine's.
-        ".envelope.data.environment.codex.version" => "[version]",
         ".envelope.data.checks" => "[checks]",
     });
 }
@@ -245,6 +244,7 @@ fn status_with_codex() {
 #[test]
 fn doctor_with_codex() {
     let mut env = two_accounts("contract-doctor-codex");
+    env.install_fake_codex("0.154.0");
     let work = env.uuid('w');
     env.sign_in_codex(&work, "w@example.com", "codex-refresh-w");
     env.codex_usage(25.0, 60.0);
@@ -284,7 +284,69 @@ fn doctor_with_codex() {
         .find(|c| c["name"] == "account codex/work")
         .expect("the Codex account, named the way it is typed");
     assert_eq!(account["level"], "ok", "it is the one signed in: {account}");
+    assert_eq!(
+        account["code"], "codex_parked_login",
+        "everything about Codex is found by its prefix"
+    );
+    assert_eq!(
+        codex["version"], "0.154.0",
+        "the test's own codex, never this machine's"
+    );
 
     let (text, _, _) = env.run(&["doctor"]);
-    assert!(text.lines().any(|l| l == "Codex"), "{text}");
+    let lines: Vec<&str> = text.lines().collect();
+    let heading = lines.iter().position(|l| *l == "Codex").expect(&text);
+    let at = lines
+        .iter()
+        .position(|l| l.contains("account codex/work"))
+        .expect(&text);
+    assert!(at > heading, "listed under Codex: {text}");
+}
+
+/// Codex signed in with an API key, on a machine with a Codex account enrolled. Something
+/// is signed in and it is no account: `status` says so rather than that nobody is, and
+/// `doctor` says it is a choice rather than a broken login, so a script reading its exit
+/// code is not told to stop switching accounts.
+#[test]
+fn codex_signed_in_with_an_api_key() {
+    let mut env = two_accounts("contract-codex-api-key");
+    env.install_fake_codex("0.154.0");
+    let work = env.uuid('w');
+    env.sign_in_codex(&work, "w@example.com", "codex-refresh-w");
+    env.codex_usage(25.0, 60.0);
+    let (_, err, code) = env.run(&["enroll", "codex/work"]);
+    assert_eq!(code, 0, "enroll codex/work: {err}");
+    env.sign_in_codex_with_an_api_key();
+
+    let (value, code) = json(&env, &["status"]);
+    assert_eq!(code, 0, "{value}");
+    let accounts = value["data"]["accounts"].as_array().unwrap();
+    let codex: Vec<&Value> = accounts
+        .iter()
+        .filter(|a| a["provider"] == "codex")
+        .collect();
+    assert!(
+        codex.iter().all(|a| a["signed_in"] == false),
+        "no Codex account is signed in: {value}"
+    );
+    let said = codex
+        .iter()
+        .find(|a| a["label"].is_null())
+        .expect("a row for the login on no account");
+    assert_eq!(said["stale"], "login_unusable", "{said}");
+    assert!(said["qualified"].is_null(), "{said}");
+    assert!(
+        !value.to_string().contains("sk-not-a-real-key"),
+        "the key itself is never shown"
+    );
+
+    let (value, code) = json(&env, &["doctor"]);
+    assert_eq!(code, 0, "a choice is not a failure: {value}");
+    let login = value["data"]["checks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["code"] == "codex_login")
+        .expect("a codex_login check");
+    assert_eq!(login["level"], "warn", "{login}");
 }

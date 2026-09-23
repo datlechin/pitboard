@@ -63,15 +63,18 @@ fn tool_name(which: ProviderId) -> &'static str {
     }
 }
 
-/// A login that could not be read, which pitboard cannot pin on any account.
-fn unreadable(row: &Row) -> bool {
-    row.label.is_none() && row.stale == Some(Stale::LoginUnreadable)
-}
-
 /// Whether the account can be switched to, and what to do when it cannot.
 fn standing(row: &Row, now: i64) -> String {
-    if unreadable(row) {
-        return paint(WARN, "login could not be read");
+    // A login pitboard could not pin on any account: nothing to type at it but `doctor`,
+    // which the line under it says.
+    if row.unplaced() {
+        return paint(
+            WARN,
+            match row.stale {
+                Some(Stale::LoginUnusable) => "login cannot be switched",
+                _ => "login could not be read",
+            },
+        );
     }
     if row.signed_in {
         return match row.label {
@@ -246,25 +249,39 @@ pub fn human(report: &Report) -> String {
         }
         blocks.push(block);
     }
-    let mut out = blocks.join("\n");
     // Said only when it is not the default, so the ordinary answer is unchanged. Where it
     // is not, "who is signed in" is a fact about this slot and not about the machine, and
     // a report that does not say which slot it means is answering a question nobody asked.
-    if !report.slot.default {
-        out.push_str(&format!(
-            "\n{}\n",
-            paint(
-                DIM,
-                format!("for the credential slot {}", report.slot.service)
-            )
-        ));
+    //
+    // The slot is Claude Code's keychain item, so it goes where Claude Code's accounts end
+    // and says nothing under another tool's. Printed after everything, it read as though it
+    // qualified the Codex accounts above it. With Claude Code alone, where its accounts end
+    // is the end, which is where it always was.
+    let claude_ends = report
+        .rows
+        .iter()
+        .rposition(|r| r.provider == ProviderId::Claude);
+    if !report.slot.default
+        && let Some(last) = claude_ends
+    {
+        blocks.insert(
+            last + 1,
+            format!(
+                "{}\n",
+                paint(
+                    DIM,
+                    format!("for the credential slot {}", report.slot.service)
+                )
+            ),
+        );
     }
-    out
+    blocks.join("\n")
 }
 
-/// The email to show, or what stands in for one on a login nobody could read.
+/// The email to show, or what stands in for one on a login pitboard could not pin on any
+/// account.
 fn email(row: &Row) -> String {
-    if unreadable(row) {
+    if row.unplaced() {
         "account unknown".into()
     } else {
         row.email.clone()
@@ -623,6 +640,66 @@ mod tests {
             text.contains("Codex's login could not be read; run `pitboard doctor`"),
             "{text}"
         );
+    }
+
+    /// A login that was read and is not one account's, such as an API key, says it cannot
+    /// be switched rather than that it could not be read, and offers nothing to type.
+    #[test]
+    fn a_login_that_cannot_be_used_says_so() {
+        let mut unusable = codex(None, false);
+        unusable.email = String::new();
+        unusable.account_uuid = String::new();
+        unusable.usage = None;
+        unusable.stale = Some(Stale::LoginUnusable);
+        let text = plain(&human(&report(vec![codex(Some("work"), false), unusable])));
+        let line = text
+            .lines()
+            .find(|l| l.contains("account unknown"))
+            .expect(&text);
+        assert!(line.contains("login cannot be switched"), "{line}");
+        assert!(!line.contains("pitboard enroll"), "{line}");
+        assert!(
+            text.contains(
+                "Codex's login is not one pitboard can park or switch; run `pitboard doctor`"
+            ),
+            "{text}"
+        );
+    }
+
+    /// The slot is Claude Code's keychain item. Printed after everything, it sat under the
+    /// last Codex account and read as though it were about it.
+    #[test]
+    fn the_credential_slot_is_said_under_claude_codes_accounts() {
+        let mut both = report(vec![
+            row(Some("work"), true),
+            row(Some("personal"), false),
+            codex(Some("work"), true),
+        ]);
+        both.slot.default = false;
+        let text = plain(&human(&both));
+        let lines: Vec<&str> = text.lines().collect();
+        let slot = lines
+            .iter()
+            .position(|l| l.starts_with("for the credential slot"))
+            .expect(&text);
+        let heading = lines.iter().position(|l| *l == "Codex").expect(&text);
+        let personal = lines
+            .iter()
+            .position(|l| l.contains("personal@example.com"))
+            .unwrap();
+        assert!(personal < slot && slot < heading, "{text}");
+        assert!(
+            !lines[heading..]
+                .iter()
+                .any(|l| l.contains("credential slot")),
+            "{text}"
+        );
+
+        // With no Claude Code account on screen there is nothing for it to be about.
+        let mut codex_only = report(vec![codex(Some("work"), true)]);
+        codex_only.slot.default = false;
+        let text = plain(&human(&codex_only));
+        assert!(!text.contains("credential slot"), "{text}");
     }
 
     #[test]
