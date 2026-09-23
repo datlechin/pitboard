@@ -24,13 +24,18 @@ All notable changes are recorded here. The format follows
   - Codex's keychain stores are items Codex made for itself, which every read by another
     program would put a permission prompt in front of, so pitboard handles Codex's
     default store, the `auth.json` file, and refuses the others with a reason.
+  - Codex takes no lock, so a session still running from before a switch can refresh its
+    token in the middle of one. The live login is read again just before it is replaced,
+    and nothing is written over a login that moved; a login that ends up naming two
+    accounts is refused rather than parked.
 - Labels belong to a tool. `work` can be a Claude Code account and a Codex account at
   once, `codex/work` says which, and a bare `work` still means what it always did as long
   as it names one account; where it names two, pitboard lists both rather than picking.
   A bare name for a new account means Claude Code, so every command written before there
   was a second tool does what it did. New codes: `provider_unknown`, `label_ambiguous`,
   `sign_in_not_isolated`, `live_store_unsupported`, `state_names_unknown_tool`,
-  `sessions_still_running`, `codex_program_missing` and `codex_not_found`.
+  `recovery_elsewhere`, `sessions_still_running`, `codex_program_missing` and
+  `codex_not_found`.
 - No parked login goes unnamed. Every name pitboard is about to write a login into is
   written down first, and the next command resolves any that nothing refers to: given back
   to the account whose name it carries when that account holds nothing, deleted when nobody
@@ -199,6 +204,16 @@ All notable changes are recorded here. The format follows
   question for Anthropic, and still changes nothing when Anthropic cannot be reached.
 
 ### Fixed
+- A renewal killed after writing the fresh login and before recording it could lose the
+  login: the next change deleted the fresh copy as unrecorded and kept the old one, whose
+  refresh token the service had already spent. A copy pitboard wrote down itself now
+  replaces an older copy of a different chain. A renewal whose record cannot be saved keeps
+  what it wrote for the next run instead of deleting it.
+- An interrupted switch is recovered only where its tool's login was when it started. Read
+  from another `CODEX_HOME` or `CLAUDE_CONFIG_DIR`, recovery compared the switch with a
+  login that had nothing to do with it; it now stops with `recovery_elsewhere`.
+- Labels written by 0.1.x that contain a slash can be switched to, forgotten, renamed and
+  signed in to again; they read as a tool prefix and were refused.
 - The floor between two questions about one account was the minute pitboard uses for a
   window it cannot time, not the three minutes it promises. It worked a window's length out
   from its kind and knew `five_hour` and `seven_day`, and Anthropic has been answering
@@ -281,8 +296,16 @@ All notable changes are recorded here. The format follows
   app is behind, rather than calling it corrupt.
 - Messages name the tool they are about. An error that used to say "Claude Code",
   "Anthropic" or `claude` whatever the account now names that account's tool, its service
-  and the command that signs in to it; for a Claude Code account it says what it said
-  before, and codes are unchanged.
+  and the command that signs in to it. Codes are unchanged. A few Claude Code messages
+  gained the tool's name where a second tool made them ambiguous: "nothing is signed in
+  right now" reads "nothing is signed in to Claude Code right now". A name a message tells
+  somebody to type is qualified, `claude/work`, where another tool has an account of the
+  same name and a bare one would be refused as ambiguous.
+- A Claude Code credential with no account in it, which is what `/logout` leaves beside
+  the machine's MCP tokens, is nobody signed in. `use` and `enroll` answered
+  `live_credential_shape_unexpected` with exit 3 and now answer `live_credential_absent`
+  with exit 1, or `live_credential_elsewhere` where Claude Code's config still names
+  somebody, and `doctor` warns rather than fails.
 - In `--json`, `use` gains `provider` and an `adoption` object saying whether sessions
   already running follow on their own within a number of seconds or need restarting;
   `adoption_ceiling_seconds` is null for a tool that needs restarting. Enrolments and
