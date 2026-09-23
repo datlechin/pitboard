@@ -431,33 +431,42 @@ chmod 600 "$CLAUDE_CONFIG_DIR/.credentials.json""#
     /// test's own `CODEX_HOME`, mode 0600, whose ID token names the account. The token is
     /// signed by nothing, and nothing in pitboard checks a signature: it reads the claims.
     pub fn sign_in_codex(&self, account: &str, email: &str, refresh: &str) {
-        let claims = serde_json::json!({
-            "email": email,
-            "https://api.openai.com/auth": {
-                "chatgpt_account_id": account,
-                "chatgpt_plan_type": "pro",
-            },
-        });
-        let login = serde_json::json!({
-            "auth_mode": "chatgpt",
-            "OPENAI_API_KEY": null,
-            "tokens": {
-                "id_token": format!(
-                    "{}.{}.{}",
-                    base64url(br#"{"alg":"RS256"}"#),
-                    base64url(claims.to_string().as_bytes()),
-                    base64url(b"not a real signature"),
-                ),
-                "access_token": format!("codex-access-{refresh}"),
-                "refresh_token": refresh,
-                "account_id": account,
-            },
-            "last_refresh": "2026-09-15T05:05:11Z",
-        });
+        let login = codex_login(account, email, refresh);
         use std::os::unix::fs::PermissionsExt;
         let path = self.codex_home().join("auth.json");
         std::fs::write(&path, login.to_string()).unwrap();
         std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).unwrap();
+    }
+
+    /// Stand in for `codex login`: signs `login` into whichever `CODEX_HOME` it is run with,
+    /// the private directory pitboard makes for a sign-in, and does nothing else. Every
+    /// test that runs a Codex sign-in installs this first, because the harness keeps the
+    /// real `PATH` behind its own `bin`, and the real `codex login` must never run here.
+    pub fn install_fake_codex_login(&self, login: &serde_json::Value) {
+        use std::os::unix::fs::PermissionsExt;
+        let bin = self.root.join("bin");
+        std::fs::create_dir_all(&bin).unwrap();
+        let script = bin.join("codex");
+        let _ = std::fs::remove_file(&script);
+        std::fs::write(
+            &script,
+            format!(
+                "#!/bin/sh\n\
+                 [ \"$1\" = login ] || exit 64\n\
+                 [ -n \"$CODEX_HOME\" ] || exit 65\n\
+                 cat > \"$CODEX_HOME/auth.json\" <<'LOGIN'\n{login}\nLOGIN\n\
+                 chmod 600 \"$CODEX_HOME/auth.json\"\n\
+                 echo 'Successfully logged in' >&2\n"
+            ),
+        )
+        .unwrap();
+        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
+
+    /// The live Codex login, as this test's `CODEX_HOME` holds it.
+    pub fn codex_live(&self) -> serde_json::Value {
+        let raw = std::fs::read_to_string(self.codex_home().join("auth.json")).unwrap();
+        serde_json::from_str(&raw).unwrap()
     }
 
     /// Sign Codex in with an API key rather than an account, the way `codex login
@@ -656,6 +665,34 @@ impl Drop for Env {
         }
         let _ = std::fs::remove_dir_all(&self.root);
     }
+}
+
+/// A Codex login the way `codex login` writes one, for `account`: an ID token naming it,
+/// signed by nothing, and nothing in pitboard checks a signature: it reads the claims.
+pub fn codex_login(account: &str, email: &str, refresh: &str) -> serde_json::Value {
+    let claims = serde_json::json!({
+        "email": email,
+        "https://api.openai.com/auth": {
+            "chatgpt_account_id": account,
+            "chatgpt_plan_type": "pro",
+        },
+    });
+    serde_json::json!({
+        "auth_mode": "chatgpt",
+        "OPENAI_API_KEY": null,
+        "tokens": {
+            "id_token": format!(
+                "{}.{}.{}",
+                base64url(br#"{"alg":"RS256"}"#),
+                base64url(claims.to_string().as_bytes()),
+                base64url(b"not a real signature"),
+            ),
+            "access_token": format!("codex-access-{refresh}"),
+            "refresh_token": refresh,
+            "account_id": account,
+        },
+        "last_refresh": "2026-09-15T05:05:11Z",
+    })
 }
 
 /// Unpadded base64url, which is how every part of a JWT is written.
