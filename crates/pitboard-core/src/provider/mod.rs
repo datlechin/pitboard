@@ -39,6 +39,7 @@
 //! implementations no-op is a sign it does not belong on a shared trait.
 
 pub(crate) mod claude;
+pub(crate) mod jwt;
 
 use crate::context::Context;
 use crate::usage;
