@@ -309,47 +309,21 @@ pub fn switch(settled: Settled, key: &Key) -> Result<(Outcome, Vec<Warning>)> {
     // does not hold up its writes.
     let (held, incoming) = prove_incoming(ctx, &mut state, key, &target, held, incoming)?;
 
-    let guard = tool
-        .write_lock(ctx)
-        .map(|dir| lock::acquire(&dir))
-        .transpose()?;
-    let (before_raw, before) = read_live(ctx, key.provider, &live)?;
-    // A refresh keeps the account, so an unchanged share of the document needs no second
-    // question. A sign-in between the two reads would not keep it.
-    if tool.slice(&before).ok() != tool.slice(&first).ok()
-        && identify_document(ctx, key.provider, &before)?.account_uuid != outgoing.account_uuid
-    {
-        return Err(Error::SignedInAccountChanged);
-    }
-
-    // Checked before anything is parked, so a switch that could never be written changes
-    // nothing.
-    let next = to_body(
-        tool.splice(&before, &incoming)
-            .map_err(|e| shape(key.provider, e))?,
-    );
-    // Asked once. The answer is about the backend that would take this write, so a login
-    // living in a fallback file is not told it has the keychain's ceiling.
-    let price = store::cost(&live.chain, &live.service, &next);
-    if price.is_some_and(store::Cost::refused) {
-        let price = price.expect("refused implies a ceiling");
-        return Err(Error::CredentialTooLarge {
-            tool: key.provider,
-            label: to,
-            bytes: price.needs,
-            limit: price.limit,
-        });
-    }
-    // Said once per switch rather than hidden: the same bytes are visible to `ps` for the
-    // length of one `security` call, which is the only way to write a login this size.
-    let on_the_command_line =
-        price
-            .filter(|p| p.on_the_second_route())
-            .map(|p| Warning::WrittenOnTheCommandLine {
-                tool: key.provider,
-                bytes: p.needs,
-                limit: p.limit,
-            });
+    let Readied {
+        guard,
+        before_raw,
+        before,
+        next,
+        on_the_command_line,
+    } = ready(
+        ctx,
+        key.provider,
+        &live,
+        &first,
+        &outgoing.account_uuid,
+        &incoming,
+        &to,
+    )?;
 
     // The outgoing login's park has a ceiling of its own on a machine whose vault is the
     // keychain, and it is asked about now, while refusing still changes nothing. The name
@@ -473,15 +447,11 @@ pub fn switch(settled: Settled, key: &Key) -> Result<(Outcome, Vec<Warning>)> {
     // one read to notice here, and cost a browser sign-in to discover later.
     //
     // Checked before the incoming copy is discarded, so finding it did not hold leaves both
-    // logins parked rather than neither. The tool may have rotated the token it was just
-    // given, which keeps the account and changes the bytes: a login of its shape being
-    // there at all is the fact.
+    // logins parked rather than neither.
     let lock_lost = guard.as_ref().is_some_and(lock::Guard::compromised);
-    match store::read_raw(&live.chain, &live.service) {
-        Ok(Some(now))
-            if serde_json::from_str::<Value>(&now)
-                .is_ok_and(|document| tool.slice(&document).is_ok()) => {}
-        Ok(_) => {
+    match holds(key.provider, &live) {
+        Ok(true) => {}
+        Ok(false) => {
             clear_journal(ctx);
             return Err(Error::SwitchDidNotHold {
                 tool: key.provider,
@@ -524,18 +494,12 @@ pub fn switch(settled: Settled, key: &Key) -> Result<(Outcome, Vec<Warning>)> {
     // A tool that never follows a switch on its own goes on using the outgoing account in
     // every session already running. Said with a count, because "restart it" means nothing
     // to somebody who does not know one is open, and with the one thing not to do in it.
-    let still_running = match tool.adoption() {
-        provider::Adoption::RestartRequired { program } => ctx
-            .host()
-            .running(program)
-            .filter(|count| *count > 0)
-            .map(|count| Warning::SessionsStillRunning {
-                program,
-                count,
-                from: from.clone(),
-            }),
-        provider::Adoption::PollingWithin(_) => None,
-    };
+    let still_running =
+        running_sessions(ctx, key.provider).map(|(program, count)| Warning::SessionsStillRunning {
+            program,
+            count,
+            from: from.clone(),
+        });
     let warnings = on_the_command_line
         .into_iter()
         .chain(parking)
@@ -554,6 +518,108 @@ pub fn switch(settled: Settled, key: &Key) -> Result<(Outcome, Vec<Warning>)> {
         },
         warnings,
     ))
+}
+
+/// A write to a tool's live login, made ready under the tool's own lock.
+struct Readied {
+    /// The tool's write lock, held until the caller has recorded what it wrote.
+    guard: Option<lock::Guard>,
+    /// The login there now, byte for byte and as a document.
+    before_raw: String,
+    before: Value,
+    /// What goes in its place.
+    next: String,
+    on_the_command_line: Option<Warning>,
+}
+
+/// Takes the tool's write lock and readies `incoming` to go in place of the login read
+/// earlier as `first`, which was `signed_in`'s. `label` is the account `incoming` is.
+///
+/// Refuses, having written nothing, when somebody else is signed in by now, or when what
+/// would be written could never be.
+fn ready(
+    ctx: &Context,
+    which: ProviderId,
+    live: &provider::LiveStore,
+    first: &Value,
+    signed_in: &str,
+    incoming: &Value,
+    label: &str,
+) -> Result<Readied> {
+    let tool = provider::of(which);
+    let guard = tool
+        .write_lock(ctx)
+        .map(|dir| lock::acquire(&dir))
+        .transpose()?;
+    let (before_raw, before) = read_live(ctx, which, live)?;
+    // A refresh keeps the account, so an unchanged share of the document needs no second
+    // question. A sign-in between the two reads would not keep it.
+    if tool.slice(&before).ok() != tool.slice(first).ok()
+        && identify_document(ctx, which, &before)?.account_uuid != signed_in
+    {
+        return Err(Error::SignedInAccountChanged);
+    }
+
+    // Checked before anything is parked or written, so a change that could never be written
+    // changes nothing.
+    let next = to_body(
+        tool.splice(&before, incoming)
+            .map_err(|e| shape(which, e))?,
+    );
+    // Asked once. The answer is about the backend that would take this write, so a login
+    // living in a fallback file is not told it has the keychain's ceiling.
+    let price = store::cost(&live.chain, &live.service, &next);
+    if price.is_some_and(store::Cost::refused) {
+        let price = price.expect("refused implies a ceiling");
+        return Err(Error::CredentialTooLarge {
+            tool: which,
+            label: label.to_string(),
+            bytes: price.needs,
+            limit: price.limit,
+        });
+    }
+    // Said once per write rather than hidden: the same bytes are visible to `ps` for the
+    // length of one `security` call, which is the only way to write a login this size.
+    let on_the_command_line =
+        price
+            .filter(|p| p.on_the_second_route())
+            .map(|p| Warning::WrittenOnTheCommandLine {
+                tool: which,
+                bytes: p.needs,
+                limit: p.limit,
+            });
+    Ok(Readied {
+        guard,
+        before_raw,
+        before,
+        next,
+        on_the_command_line,
+    })
+}
+
+/// Whether a login of the tool's shape is in its live slot, read back after a write.
+///
+/// The tool may have rotated the token it was just given, which keeps the account and
+/// changes the bytes: a login of its shape being there at all is the fact.
+fn holds(which: ProviderId, live: &provider::LiveStore) -> std::result::Result<bool, store::Error> {
+    let tool = provider::of(which);
+    store::read_raw(&live.chain, &live.service).map(|now| {
+        now.and_then(|raw| serde_json::from_str::<Value>(&raw).ok())
+            .is_some_and(|document| tool.slice(&document).is_ok())
+    })
+}
+
+/// The program and how many of it are running, for a tool whose running sessions keep the
+/// login they started with. `None` when that is none, or nobody could count.
+fn running_sessions(ctx: &Context, which: ProviderId) -> Option<(&'static str, usize)> {
+    match provider::of(which).adoption() {
+        provider::Adoption::RestartRequired { program } => ctx
+            .host()
+            .running(program)
+            .filter(|count| *count > 0)
+            .map(|count| (program, count)),
+        provider::Adoption::PollingWithin(_) => None,
+    }
 }
 
 /// Ask the service about the login going in, not only about the one coming out.

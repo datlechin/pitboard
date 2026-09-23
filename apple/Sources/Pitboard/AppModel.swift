@@ -64,6 +64,10 @@ final class AppModel {
     /// One per tool. A switch of one tool says nothing about another's sessions, and a
     /// Claude Code switch used to put away the warning not to sign out inside a Codex
     /// session still using the account Codex had just parked.
+    ///
+    /// A sign-in that put a new login in use in place of the account's old one is kept here
+    /// too: sessions already running are left on the old login exactly as a switch leaves
+    /// them on the old account.
     struct LastSwitch: Equatable {
         /// The tool, as a `Tool`'s code.
         let provider: String
@@ -76,6 +80,8 @@ final class AppModel {
         var adopted: Date?
         /// For a tool whose running sessions never pick a switch up.
         var restart: Restart?
+        /// What a change that was not a switch said it did.
+        var said: String?
         var warnings: [Warning] = []
 
         /// What a switch means for a tool's running sessions, said only when the core did
@@ -548,7 +554,7 @@ final class AppModel {
             }
             shown.takesACode = session.takesACode()
             shown.session = session
-            await watch(session, shown: shown)
+            await watch(session, shown: shown, for: provider)
         } catch {
             guard signingIn === shown else { return }
             signingIn = nil
@@ -557,7 +563,7 @@ final class AppModel {
     }
 
     /// Reads what the tool says until it stops, then records what it signed in to.
-    private func watch(_ session: SignIn, shown: SigningIn) async {
+    private func watch(_ session: SignIn, shown: SigningIn, for provider: String) async {
         while let said = await Task.detached(
             priority: .utility,
             operation: {
@@ -570,13 +576,33 @@ final class AppModel {
         // "no longer running" is not something that went wrong, and nothing is enrolled.
         guard signingIn === shown else { return }
         do {
-            _ = try await Task.detached(priority: .utility) { try session.finish() }.value
+            let done = try await Task.detached(priority: .utility) {
+                try session.finish()
+            }.value
             signingIn = nil
+            enrolled(done, as: shown.label, for: provider)
             updatedAt = nil
             await refresh()
         } catch {
             signingIn = nil
             problem = Self.saying(error)
+        }
+    }
+
+    /// What a finished sign-in says beyond the row it adds. Signing in again to the account
+    /// in use puts its new login in use at once, and what that means for sessions already
+    /// running is kept the way a switch's is.
+    private func enrolled(_ done: Enrolled, as name: String, for provider: String) {
+        switch done.enrolled {
+        case .current, .signedIn, .renewed:
+            break
+        case .inUse:
+            remember(
+                LastSwitch(
+                    provider: provider,
+                    to: provider == defaultProvider ? name : qualified(name, for: provider),
+                    said: "Signed in to \(name) again. Its new login is the one in use now.",
+                    warnings: done.warnings))
         }
     }
 

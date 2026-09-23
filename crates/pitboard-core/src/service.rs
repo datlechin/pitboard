@@ -51,6 +51,13 @@ pub enum Warning {
         count: usize,
         from: String,
     },
+    /// A sign-in put a new login in use in place of the old one of the same account, and
+    /// sessions of a tool that never reads its login again were running with the old one.
+    SessionsKeepTheOldLogin {
+        program: &'static str,
+        count: usize,
+        label: String,
+    },
 }
 
 impl Warning {
@@ -65,6 +72,7 @@ impl Warning {
             Warning::AuthOverridden { .. } => "auth_overridden",
             Warning::WrittenOnTheCommandLine { .. } => "written_on_the_command_line",
             Warning::SessionsStillRunning { .. } => "sessions_still_running",
+            Warning::SessionsKeepTheOldLogin { .. } => "sessions_keep_old_login",
         }
     }
 }
@@ -126,6 +134,20 @@ impl fmt::Display for Warning {
                  still using `{from}`. Quit {} and start again to use the new account. Quit \
                  rather than signing out inside one: signing out there revokes `{from}`'s \
                  login, which pitboard has just parked.",
+                if *count == 1 { "" } else { "s" },
+                if *count == 1 { "is" } else { "are" },
+                if *count == 1 { "it" } else { "them" },
+            ),
+            Warning::SessionsKeepTheOldLogin {
+                program,
+                count,
+                label,
+            } => write!(
+                f,
+                "{count} `{program}` session{} started before this sign-in {} still running and \
+                 still using `{label}`'s old login. Quit {} and start again to use the new one. \
+                 Otherwise one of them can put the old login back in place of the new one when \
+                 it refreshes its token.",
                 if *count == 1 { "" } else { "s" },
                 if *count == 1 { "is" } else { "are" },
                 if *count == 1 { "it" } else { "them" },

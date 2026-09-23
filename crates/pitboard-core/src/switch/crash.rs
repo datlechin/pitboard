@@ -16,7 +16,9 @@
 //! a machine that cannot be fixed by running the command again, which is the only
 //! instruction a person is ever given.
 
-use super::harness::{NOW, POINTS, codex_machine, document, hold, machine, owner, recover};
+use super::harness::{
+    NOW, POINTS, codex_machine, document, hold, machine, owner, recover, signed_in,
+};
 use super::*;
 use crate::api::scripted::{ScriptedApi, Trouble};
 use crate::fault;
@@ -174,6 +176,43 @@ fn enrolling_killed_between_the_write_and_the_record_leaves_nothing_unnamed() {
 
         recover(&m).unwrap_or_else(|e| panic!("{point}: recovery refused: {e}"));
         hold(&m, point);
+    }
+}
+
+/// Signing in again to the account in use writes its new login in place of the old one,
+/// then records it, and parks nothing. Killed after either, the account is signed in with
+/// the login that was written and every other account still has its own.
+#[test]
+fn signing_in_again_killed_at_any_step_recovers_to_something_whole() {
+    type Make = fn(&str) -> super::harness::Machine;
+    let machines: [(&str, Make); 2] = [("claude", machine), ("codex", codex_machine)];
+    for (tool, make) in machines {
+        for point in ["enroll.installed", "enroll.recorded"] {
+            let m = make(&format!("again-{}", point.replace('.', "-")));
+            let login = signed_in(&m, "here", "here-refresh-2");
+
+            let settled = settle(&m.ctx, None).expect("nothing to recover yet").0;
+            let died = fault::killing(point, || enroll(settled, &m.key("here"), Some(login)));
+            assert_eq!(
+                died.unwrap_err(),
+                point,
+                "{tool}: the sign-in must reach {point} on this machine, or the case proves \
+                 nothing"
+            );
+
+            let at = format!("{tool}, {point}");
+            recover(&m).unwrap_or_else(|e| panic!("{at}: recovery refused: {e}"));
+            hold(&m, &at);
+            let live = m.live().expect("a login in use");
+            assert_eq!(
+                crate::provider::of(m.which).fingerprint(&live),
+                store::fingerprint("here-refresh-2"),
+                "{at}: the new login is the one in use"
+            );
+
+            recover(&m).unwrap_or_else(|e| panic!("{at}: the second recovery refused: {e}"));
+            hold(&m, &format!("{at}, recovered twice"));
+        }
     }
 }
 

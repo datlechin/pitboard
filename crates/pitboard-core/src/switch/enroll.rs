@@ -7,14 +7,17 @@
 //! Its first switch parks it at exactly that moment, and any other account is signed in
 //! inside a private directory, where the live slot is never touched and the vault is the
 //! new login's only holder.
+//!
+//! A sign-in to the account signed in now keeps the same rule. That account is not parked,
+//! so its new login is put in use the way a switch puts one there, in place of the old.
 
-use super::{Error, Result, Settled, identify_document, nothing_signed_in, purge};
+use super::{Error, Readied, Result, Settled, identify_document, nothing_signed_in, purge};
 use crate::api::Owner;
 use crate::context::Context;
 use crate::provider::{self, ProviderId};
 use crate::service::Warning;
 use crate::state::{Account, Key, Park, State};
-use crate::{home, park, state, store};
+use crate::{home, lock, park, state, store};
 use serde_json::{Value, json};
 use std::fs::{File, OpenOptions, TryLockError};
 use std::os::unix::fs::OpenOptionsExt;
@@ -28,6 +31,9 @@ pub enum Enrolled {
     SignedIn { email: String },
     /// An enrolled account signed in to again: its parked login is now the new one.
     Renewed { email: String },
+    /// The account signed in now, signed in to again: its new login is the one in use now,
+    /// and nothing was parked.
+    InUse { email: String },
 }
 
 /// A login a tool stored for pitboard in a private directory, not yet enrolled. Dropping it
@@ -300,7 +306,7 @@ pub fn enroll(
             login.provider.name(),
             key.provider.name()
         ))),
-        Some(login) => park_signed_in(&ctx, key, &mut state, &login),
+        Some(login) => from_sign_in(&ctx, key, &mut state, &login),
         None => record_current(&ctx, key, &mut state).map(|e| (e, Vec::new())),
     }
 }
@@ -355,15 +361,165 @@ fn record_current(ctx: &Context, key: &Key, state: &mut State) -> Result<Enrolle
     Ok(Enrolled::Current { email: owner.email })
 }
 
-fn park_signed_in(
+/// Enrol the account a sign-in produced: put in use when it is the account signed in now,
+/// and parked when it is any other.
+///
+/// Somebody signs in again to the account in use because its login is broken or about to
+/// lapse. Parked, the new login left the tool on the old one, and the next switch away
+/// parked the old one over it.
+fn from_sign_in(
     ctx: &Context,
     key: &Key,
     state: &mut State,
     login: &SignIn,
 ) -> Result<(Enrolled, Vec<Warning>)> {
-    let label = key.label.as_str();
     let owner = identify_document(ctx, login.provider, &login.document)?;
     claim(state, key, &owner)?;
+    match signed_in_now(ctx, key.provider, &owner) {
+        Some((live, first)) => install_signed_in(ctx, key, state, login, &owner, &live, &first),
+        None => park_signed_in(ctx, key, state, login, &owner),
+    }
+}
+
+/// Where the tool's live login is and what it held, when that is `owner`'s login.
+///
+/// Read the way a switch reads it. Anything short of knowing it is `owner`'s is `None`: a
+/// login that cannot be read, one whose account cannot be told, another account's, or
+/// nobody's. Writing over a login whose account is not known could lose that account's
+/// only login, so a new one is parked beside it instead.
+fn signed_in_now(
+    ctx: &Context,
+    which: ProviderId,
+    owner: &Owner,
+) -> Option<(provider::LiveStore, Value)> {
+    let live = super::live_store(ctx, which).ok()?;
+    let (_, first) = super::read_live(ctx, which, &live).ok()?;
+    let found = identify_document(ctx, which, &first).ok()?;
+    (found.account_uuid == owner.account_uuid).then_some((live, first))
+}
+
+/// Put the new login of the account signed in now in place of its old one, under the rules
+/// a switch writes by, and record the account as `record_current` does. Nothing is parked,
+/// and a park the account already holds is kept. The old login is dropped, which is what
+/// the tool's own sign-in does to the login it replaces.
+fn install_signed_in(
+    ctx: &Context,
+    key: &Key,
+    state: &mut State,
+    login: &SignIn,
+    owner: &Owner,
+    live: &provider::LiveStore,
+    first: &Value,
+) -> Result<(Enrolled, Vec<Warning>)> {
+    let which = key.provider;
+    let name = state.typed(key);
+    let slice = provider::of(which)
+        .slice(&login.document)
+        .map_err(|e| super::shape(which, e))?;
+    let Readied {
+        guard,
+        before_raw,
+        next,
+        on_the_command_line,
+        ..
+    } = super::ready(ctx, which, live, first, &owner.account_uuid, &slice, &name)?;
+
+    match super::install_with(
+        which,
+        |body| store::write_raw(&live.chain, &live.service, body),
+        || store::read_raw(&live.chain, &live.service),
+        &next,
+        &before_raw,
+        &name,
+        &name,
+    ) {
+        Ok(()) => {}
+        // The old login is where it was, and the new one goes with the sign-in.
+        Err(e @ Error::SwitchRolledBack { .. }) => return Err(e),
+        Err(Error::SwitchUnverified { detail, .. } | Error::SwitchCorrupted { detail, .. }) => {
+            return Err(not_installed(ctx, key, state, login, owner, detail));
+        }
+        Err(other) => return Err(other),
+    }
+    crate::fault::point("enroll.installed");
+
+    // Read back as a switch reads back: a write that landed has not necessarily held.
+    let lock_lost = guard.as_ref().is_some_and(lock::Guard::compromised);
+    let lost = match super::holds(which, live) {
+        Ok(true) => None,
+        Ok(false) => Some("it was gone again before pitboard finished".to_string()),
+        Err(unreadable) => Some(unreadable.to_string()),
+    };
+    if let Some(detail) = lost {
+        return Err(not_installed(ctx, key, state, login, owner, detail));
+    }
+
+    let parked = state.get(key).and_then(|a| a.parked.clone());
+    state.upsert(account(
+        which,
+        &key.label,
+        owner,
+        parked,
+        Some(ctx.now()),
+        &login.document,
+    ));
+    state.set_active(which, Some(key.label.clone()));
+    state::save(ctx, state)?;
+    crate::fault::point("enroll.recorded");
+    drop(guard);
+
+    // A session of a tool that never reads its login again goes on with the old one, and
+    // writes it back over the new one when it refreshes.
+    let still_running = super::running_sessions(ctx, which).map(|(program, count)| {
+        Warning::SessionsKeepTheOldLogin {
+            program,
+            count,
+            label: name.clone(),
+        }
+    });
+    let warnings = on_the_command_line
+        .into_iter()
+        .chain(still_running)
+        .chain(lock_lost.then_some(Warning::LockCompromised { tool: which }))
+        .collect();
+    Ok((
+        Enrolled::InUse {
+            email: owner.email.clone(),
+        },
+        warnings,
+    ))
+}
+
+/// A new login that could not be put in use, where the tool may be left without the old
+/// one too. The new one is the one copy of the account's login known to be good, so it is
+/// parked, as a sign-in of any other account would be, before the failure is reported.
+/// Where the slot could not be read back it may hold the new login as well, and the next
+/// switch away parks over this copy.
+fn not_installed(
+    ctx: &Context,
+    key: &Key,
+    state: &mut State,
+    login: &SignIn,
+    owner: &Owner,
+    detail: String,
+) -> Error {
+    let parked = park_signed_in(ctx, key, state, login, owner).is_ok();
+    Error::SignInNotInstalled {
+        tool: key.provider,
+        label: state.typed(key),
+        detail,
+        parked,
+    }
+}
+
+fn park_signed_in(
+    ctx: &Context,
+    key: &Key,
+    state: &mut State,
+    login: &SignIn,
+    owner: &Owner,
+) -> Result<(Enrolled, Vec<Warning>)> {
+    let label = key.label.as_str();
     let slice = provider::of(login.provider)
         .slice(&login.document)
         .map_err(|e| super::shape(login.provider, e))?;
@@ -386,7 +542,7 @@ fn park_signed_in(
     state.upsert(account(
         login.provider,
         label,
-        &owner,
+        owner,
         previous,
         last_used_at,
         &login.document,
@@ -398,10 +554,11 @@ fn park_signed_in(
     })?;
     crate::fault::point("enroll.park_recorded");
     purge(ctx, state);
+    let email = owner.email.clone();
     let enrolled = if renewed {
-        Enrolled::Renewed { email: owner.email }
+        Enrolled::Renewed { email }
     } else {
-        Enrolled::SignedIn { email: owner.email }
+        Enrolled::SignedIn { email }
     };
     Ok((enrolled, parking.into_iter().collect()))
 }
@@ -455,8 +612,305 @@ fn account(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::switch::harness::codex_machine;
+    use crate::api::scripted::Trouble;
+    use crate::store::memory::Fault;
+    use crate::switch::harness::{
+        Machine, NOW, codex_id, codex_login, codex_machine, hold, login_of, machine, oauth,
+        signed_in,
+    };
+    use crate::switch::{Outcome, settle, switch};
     use std::time::{Duration, Instant};
+
+    type Make = fn(&str) -> Machine;
+    /// A machine of each tool: `here` signed in, `there` parked and ready.
+    const MACHINES: [(&str, Make); 2] = [("claude", machine), ("codex", codex_machine)];
+
+    /// Whether the login in use is the one this refresh token belongs to.
+    fn in_use(m: &Machine, refresh: &str) -> bool {
+        m.live().is_some_and(|live| {
+            provider::of(m.which).fingerprint(&live) == store::fingerprint(refresh)
+        })
+    }
+
+    /// Enrols what a sign-in left under `label`, the way the next command would.
+    fn enrolled_as(m: &Machine, label: &str, login: SignIn) -> Result<(Enrolled, Vec<Warning>)> {
+        let settled = settle(&m.ctx, Some(m.which)).expect("nothing to recover").0;
+        enroll(settled, &m.key(label), Some(login))
+    }
+
+    fn park_of(m: &Machine, label: &str) -> Option<Park> {
+        state::load(&m.ctx)
+            .expect("state")
+            .get(&m.key(label))
+            .and_then(|a| a.parked.clone())
+    }
+
+    /// Somebody signs in again to the account in use, whose login is broken or about to
+    /// lapse. The new login is the one the tool uses from now on, and nothing is parked:
+    /// a park of the account in use is a copy the next switch away would only replace.
+    #[test]
+    fn signing_in_again_to_the_account_in_use_puts_the_new_login_in_use() {
+        for (tool, make) in MACHINES {
+            let m = make("again-in-use");
+            let vault = m.mem.vault().services();
+
+            let (enrolled, _) = enrolled_as(&m, "here", signed_in(&m, "here", "here-refresh-2"))
+                .unwrap_or_else(|e| panic!("{tool}: {e}"));
+
+            assert!(
+                matches!(enrolled, Enrolled::InUse { ref email } if email == "here@example.com"),
+                "{tool}: {enrolled:?}"
+            );
+            assert!(
+                in_use(&m, "here-refresh-2"),
+                "{tool}: the new login is in use"
+            );
+            assert_eq!(m.mem.vault().services(), vault, "{tool}: nothing is parked");
+            assert!(park_of(&m, "here").is_none(), "{tool}");
+            let state = state::load(&m.ctx).expect("state");
+            assert_eq!(state.active_for(m.which), Some("here"), "{tool}");
+            assert_eq!(
+                state.get(&m.key("here")).and_then(|a| a.last_used_at),
+                Some(NOW),
+                "{tool}: signing in to the account in use is using it"
+            );
+            hold(&m, &format!("{tool}, after signing in again"));
+        }
+    }
+
+    /// A park the account in use already holds, from before it was signed in to with the
+    /// tool itself, is kept as it is: this sign-in is about the login in use.
+    #[test]
+    fn signing_in_again_to_the_account_in_use_keeps_the_park_it_holds() {
+        for (tool, make) in MACHINES {
+            let m = make("again-keeps-park");
+            let (uuid, older) = match m.which {
+                ProviderId::Claude => ("here".to_string(), oauth("here-older", 30)),
+                ProviderId::Codex => (codex_id("here"), codex_login("here", "here-older")),
+            };
+            let service = park::reserve(&m.ctx, &uuid).expect("a free name");
+            let held = park::store_at(&m.ctx, m.which, &service, &older).expect("parked");
+            let mut state = state::load(&m.ctx).expect("state");
+            state.park(&m.key("here"), held.clone());
+            state::save(&m.ctx, &state).expect("saved");
+            let vault = m.mem.vault().services();
+
+            enrolled_as(&m, "here", signed_in(&m, "here", "here-refresh-2"))
+                .unwrap_or_else(|e| panic!("{tool}: {e}"));
+
+            assert!(in_use(&m, "here-refresh-2"), "{tool}");
+            assert_eq!(
+                park_of(&m, "here"),
+                Some(held),
+                "{tool}: the park is untouched"
+            );
+            assert_eq!(m.mem.vault().services(), vault, "{tool}");
+            hold(&m, &format!("{tool}, after signing in again beside a park"));
+        }
+    }
+
+    /// The failure this replaces: the new login was parked beside the old, and the next
+    /// switch away parked the old one over it, which for Codex could be a login whose
+    /// chain was already revoked. Now the switch parks what is in use, the new login.
+    #[test]
+    fn the_next_switch_away_parks_the_new_login_not_the_old() {
+        for (tool, make) in MACHINES {
+            let m = make("again-then-switch");
+            enrolled_as(&m, "here", signed_in(&m, "here", "here-refresh-2"))
+                .unwrap_or_else(|e| panic!("{tool}: {e}"));
+
+            let settled = settle(&m.ctx, Some(m.which)).expect("nothing to recover").0;
+            let (outcome, _) = switch(settled, &m.key("there"))
+                .unwrap_or_else(|e| panic!("{tool}: the switch away: {e}"));
+            assert!(matches!(outcome, Outcome::Switched { .. }), "{tool}");
+
+            let parked = park_of(&m, "here").expect("the outgoing login is parked");
+            assert_eq!(
+                parked.refresh_fingerprint,
+                store::fingerprint("here-refresh-2"),
+                "{tool}: the new login is parked, not the one it replaced"
+            );
+            hold(&m, &format!("{tool}, after the switch away"));
+        }
+    }
+
+    /// Another account's sign-in is parked, and the account in use is left exactly as it
+    /// was, as before.
+    #[test]
+    fn a_sign_in_of_another_account_is_parked_beside_the_one_in_use() {
+        for (tool, make) in MACHINES {
+            let m = make("another-parked");
+            let live = m.live();
+
+            let (enrolled, _) = enrolled_as(&m, "third", signed_in(&m, "third", "third-refresh"))
+                .unwrap_or_else(|e| panic!("{tool}: {e}"));
+
+            assert!(
+                matches!(enrolled, Enrolled::SignedIn { .. }),
+                "{tool}: {enrolled:?}"
+            );
+            assert_eq!(m.live(), live, "{tool}: the login in use is untouched");
+            assert_eq!(
+                park_of(&m, "third").map(|p| p.refresh_fingerprint),
+                Some(store::fingerprint("third-refresh")),
+                "{tool}"
+            );
+            hold(&m, &format!("{tool}, after another account's sign-in"));
+        }
+    }
+
+    /// Writing over a login whose account nobody can name could lose that account's only
+    /// login, so a sign-in to `here` while the login in use cannot be told apart is parked
+    /// beside it, as it always was. For Claude Code that is Anthropic refusing or not
+    /// answering about the login in use; for Codex, a login whose ID token cannot be read.
+    #[test]
+    fn a_login_in_use_whose_account_cannot_be_told_is_not_written_over() {
+        let mut cases: Vec<(String, Machine)> = Vec::new();
+        for (name, trouble) in [
+            ("refused", Trouble::Unauthorized),
+            ("offline", Trouble::Offline),
+        ] {
+            let m = machine(&format!("untold-{name}"));
+            m.api.token_trouble("access-here-refresh", trouble);
+            cases.push((format!("claude, {name}"), m));
+        }
+        let m = codex_machine("untold");
+        let mut unreadable = codex_login("here", "here-refresh");
+        unreadable["tokens"]["id_token"] = "not a token".into();
+        m.sign_in(&unreadable);
+        cases.push(("codex".into(), m));
+
+        for (case, m) in cases {
+            let live = m.live();
+
+            let (enrolled, _) = enrolled_as(&m, "here", signed_in(&m, "here", "here-refresh-2"))
+                .unwrap_or_else(|e| panic!("{case}: {e}"));
+
+            assert!(
+                matches!(enrolled, Enrolled::Renewed { .. }),
+                "{case}: {enrolled:?}"
+            );
+            assert_eq!(m.live(), live, "{case}: the login in use is untouched");
+            assert_eq!(
+                park_of(&m, "here").map(|p| p.refresh_fingerprint),
+                Some(store::fingerprint("here-refresh-2")),
+                "{case}: the new login is parked"
+            );
+        }
+    }
+
+    /// Somebody signs the tool in to another account between the first read and the one
+    /// made under the tool's lock. Nothing is written over the account now signed in.
+    #[test]
+    fn the_account_in_use_changing_before_the_write_is_refused_and_nothing_is_written() {
+        for (tool, make) in MACHINES {
+            let m = make("changed-before-write");
+            let key = m.key("here");
+            let login = signed_in(&m, "here", "here-refresh-2");
+            let owner = identify_document(&m.ctx, m.which, &login.document).expect("whose");
+            let (live, first) =
+                signed_in_now(&m.ctx, m.which, &owner).expect("`here` is signed in");
+
+            m.sign_in(&login_of(&m, "other", "other-refresh"));
+            let vault = m.mem.vault().services();
+            let recorded = serde_json::to_value(state::load(&m.ctx).expect("state")).unwrap();
+            let mut state = state::load(&m.ctx).expect("state");
+            let refused =
+                install_signed_in(&m.ctx, &key, &mut state, &login, &owner, &live, &first)
+                    .expect_err("refused");
+
+            assert_eq!(refused.code(), "signed_in_account_changed", "{tool}");
+            assert!(in_use(&m, "other-refresh"), "{tool}: the other login stays");
+            assert_eq!(m.mem.vault().services(), vault, "{tool}");
+            assert_eq!(
+                serde_json::to_value(state::load(&m.ctx).expect("state")).unwrap(),
+                recorded,
+                "{tool}: and nothing is recorded"
+            );
+        }
+    }
+
+    /// A write that fails and changes nothing leaves the old login in use, and the new one
+    /// goes with the sign-in: nothing was lost, and signing in again is the way on.
+    #[test]
+    fn a_new_login_that_cannot_be_written_leaves_the_old_one_in_use() {
+        for (tool, make) in MACHINES {
+            let m = make("again-write-fails");
+            let vault = m.mem.vault().services();
+            let login = signed_in(&m, "here", "here-refresh-2");
+            m.fault_live(Fault::FailWrite("refused".into()));
+
+            let failed = enrolled_as(&m, "here", login).expect_err("the write failed");
+
+            assert_eq!(failed.code(), "switch_rolled_back", "{tool}: {failed}");
+            assert!(in_use(&m, "here-refresh"), "{tool}");
+            assert_eq!(m.mem.vault().services(), vault, "{tool}");
+        }
+    }
+
+    /// The new login was written and was gone again before it was read back. The tool may
+    /// have no login for the account now, so the new one, the one copy known to be good, is
+    /// parked rather than thrown away, and the failure says so.
+    #[test]
+    fn a_new_login_that_did_not_hold_is_parked_rather_than_lost() {
+        for (tool, make) in MACHINES {
+            let m = make("again-did-not-hold");
+            let login = signed_in(&m, "here", "here-refresh-2");
+            m.fault_live(Fault::DeletedAfterWrite);
+
+            let failed = enrolled_as(&m, "here", login).expect_err("it did not hold");
+
+            assert!(
+                matches!(failed, Error::SignInNotInstalled { parked: true, .. }),
+                "{tool}: {failed:?}"
+            );
+            assert!(
+                failed.to_string().contains("parked instead"),
+                "{tool}: {failed}"
+            );
+            assert_eq!(
+                park_of(&m, "here").map(|p| p.refresh_fingerprint),
+                Some(store::fingerprint("here-refresh-2")),
+                "{tool}"
+            );
+            hold(&m, &format!("{tool}, after a new login that did not hold"));
+        }
+    }
+
+    /// A running `codex` keeps the login it started with and writes it back when it
+    /// refreshes its token, so a new login put in use is said to need them restarted.
+    /// Claude Code sessions read the new login by themselves, and nothing is said.
+    #[test]
+    fn sessions_running_on_the_old_login_are_counted_and_warned_about() {
+        for (tool, make) in MACHINES {
+            let m = make("again-sessions");
+            m.mem.runs("codex", 2);
+            m.mem.runs("claude", 2);
+
+            let (_, warnings) = enrolled_as(&m, "here", signed_in(&m, "here", "here-refresh-2"))
+                .unwrap_or_else(|e| panic!("{tool}: {e}"));
+
+            let said = warnings
+                .iter()
+                .find(|w| w.code() == "sessions_keep_old_login");
+            match m.which {
+                ProviderId::Claude => assert!(said.is_none(), "{warnings:?}"),
+                ProviderId::Codex => {
+                    let text = said.expect("warned").to_string();
+                    assert!(text.contains("2 `codex` sessions"), "{text}");
+                    assert!(text.contains("`codex/here`'s old login"), "{text}");
+                    assert!(text.contains("Quit them and start again"), "{text}");
+                    assert!(text.contains("put the old login back"), "{text}");
+                }
+            }
+            assert!(
+                warnings
+                    .iter()
+                    .all(|w| w.code() != "sessions_still_running"),
+                "{tool}: nobody switched away from anything: {warnings:?}"
+            );
+        }
+    }
 
     /// Codex prints its address and then nothing until the browser is done, so somebody
     /// pressing Cancel nearly always finds a reader waiting. The cancel must not wait with

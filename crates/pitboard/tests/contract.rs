@@ -104,6 +104,13 @@ fn enroll() {
         serde_json::from_str::<Value>(&out).unwrap(),
         code
     );
+    let (out, _, code) =
+        env.enroll_by_signing_in_json("alpha", &a, "a@example.com", &o, "refresh-a2");
+    contract!(
+        "enroll_in_use",
+        serde_json::from_str::<Value>(&out).unwrap(),
+        code
+    );
 }
 
 /// The last thing a person runs, and the one whose shape matters to whatever wrapper runs

@@ -114,6 +114,10 @@ pitboard enroll work --sign-in
 
 For a Codex account, name the tool: `pitboard enroll codex/work --sign-in`.
 
+Signing in again to the account you are using puts the new login in use in place of the old
+one, the way the tool's own sign-in would, and parks nothing. A running `codex` keeps the old
+login until you restart it.
+
 Other commands:
 
 - `pitboard rename wrong right` fixes a label without signing in again. A rename stays

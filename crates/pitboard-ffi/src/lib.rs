@@ -328,6 +328,8 @@ pub enum EnrolledAs {
     SignedIn,
     /// An enrolled account's parked login, renewed.
     Renewed,
+    /// The account signed in now, signed in to again: its new login is the one in use now.
+    InUse,
 }
 
 #[derive(uniffi::Record)]
@@ -335,6 +337,20 @@ pub struct Enrolled {
     pub email: String,
     pub enrolled: EnrolledAs,
     pub warnings: Vec<Warning>,
+}
+
+fn enrolled(enrolled: switch::Enrolled, warnings: Vec<Warning>) -> Enrolled {
+    let (email, enrolled) = match enrolled {
+        switch::Enrolled::Current { email } => (email, EnrolledAs::Current),
+        switch::Enrolled::SignedIn { email } => (email, EnrolledAs::SignedIn),
+        switch::Enrolled::Renewed { email } => (email, EnrolledAs::Renewed),
+        switch::Enrolled::InUse { email } => (email, EnrolledAs::InUse),
+    };
+    Enrolled {
+        email,
+        enrolled,
+        warnings,
+    }
 }
 
 /// The email of the account a change was made to.
@@ -492,18 +508,7 @@ impl SignIn {
         let login = watched.finish()?;
         changed(
             self.core.core.enroll_signed_in(&self.label, login),
-            |enrolled, warnings| {
-                let (email, enrolled) = match enrolled {
-                    switch::Enrolled::Current { email } => (email, EnrolledAs::Current),
-                    switch::Enrolled::SignedIn { email } => (email, EnrolledAs::SignedIn),
-                    switch::Enrolled::Renewed { email } => (email, EnrolledAs::Renewed),
-                };
-                Enrolled {
-                    email,
-                    enrolled,
-                    warnings,
-                }
-            },
+            enrolled,
         )
     }
 
@@ -587,18 +592,7 @@ impl Pitboard {
 
     /// Enroll the account signed in now under `label`.
     pub fn enroll_current(&self, label: String) -> Result<Enrolled, PitboardError> {
-        changed(self.core.enroll_current(&label), |enrolled, warnings| {
-            let (email, enrolled) = match enrolled {
-                switch::Enrolled::Current { email } => (email, EnrolledAs::Current),
-                switch::Enrolled::SignedIn { email } => (email, EnrolledAs::SignedIn),
-                switch::Enrolled::Renewed { email } => (email, EnrolledAs::Renewed),
-            };
-            Enrolled {
-                email,
-                enrolled,
-                warnings,
-            }
-        })
+        changed(self.core.enroll_current(&label), enrolled)
     }
 
     /// Starts the tool's own sign-in for a new account, watched rather than inherited. The

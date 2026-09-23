@@ -137,6 +137,41 @@ fn a_codex_switch_moves_the_login_and_says_to_restart_codex() {
     );
 }
 
+/// Signing in again to the Codex account in use writes the new login into `auth.json`, the
+/// way `codex login` would, and parks nothing. Parked beside the old login, the new one was
+/// thrown away by the next switch away, which parked the old one over it.
+#[test]
+fn signing_in_again_to_the_codex_account_in_use_puts_the_new_login_in_use() {
+    let env = two_codex_accounts("codex-again");
+    env.install_fake_codex_login(&codex_login(
+        &env.uuid('w'),
+        "w@example.com",
+        "codex-refresh-w2",
+    ));
+
+    let (out, err, code) = env.run(&["--json", "enroll", "codex/work", "--sign-in"]);
+    assert_eq!(code, 0, "{err}");
+    assert_eq!(envelope(&out)["data"]["enrolled"], "in_use", "{out}");
+    assert_eq!(
+        env.codex_live()["tokens"]["refresh_token"],
+        "codex-refresh-w2"
+    );
+    assert!(
+        account(&env, "codex", "work")["parked"].is_null(),
+        "nothing is parked beside the login in use"
+    );
+
+    let (_, err, code) = env.run(&["use", "codex/personal"]);
+    assert_eq!(code, 0, "{err}");
+    let (_, err, code) = env.run(&["use", "codex/work"]);
+    assert_eq!(code, 0, "{err}");
+    assert_eq!(
+        env.codex_live()["tokens"]["refresh_token"],
+        "codex-refresh-w2",
+        "the switch away parked the new login, and the switch back put it in use"
+    );
+}
+
 /// Two tools can each have a `work`. A bare `work` then names two accounts and is refused
 /// with both listed; a prefix names exactly one.
 #[test]

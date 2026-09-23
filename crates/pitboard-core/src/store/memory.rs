@@ -297,6 +297,17 @@ impl MemoryHost {
         &self.vault
     }
 
+    /// The file at `path`, where a tool that keeps its login in a file keeps it.
+    pub fn file_at(&self, path: PathBuf) -> Arc<MemoryStore> {
+        Arc::clone(
+            self.files
+                .lock()
+                .expect("a poisoned test host is a failed test")
+                .entry(path)
+                .or_insert_with(|| MemoryStore::of(Backend::File)),
+        )
+    }
+
     /// Say that `count` processes are running `program`.
     pub fn runs(&self, program: &str, count: usize) {
         self.running
@@ -312,15 +323,7 @@ impl Host for MemoryHost {
     }
 
     fn file(&self, path: PathBuf) -> Box<dyn RawStore> {
-        let mut files = self
-            .files
-            .lock()
-            .expect("a poisoned test host is a failed test");
-        Box::new(Arc::clone(
-            files
-                .entry(path)
-                .or_insert_with(|| MemoryStore::of(Backend::File)),
-        ))
+        Box::new(self.file_at(path))
     }
 
     fn vault(&self, _ctx: &Context) -> Box<dyn RawStore> {

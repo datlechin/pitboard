@@ -442,6 +442,20 @@ pub enum Error {
     },
 
     #[error(
+        "signed in to `{label}` again, and its new login could not be put in place of the \
+         one in use ({detail}), so {} may have no login for it now. {}",
+        tool.name(),
+        not_in_use(*tool, label, *parked)
+    )]
+    SignInNotInstalled {
+        tool: ProviderId,
+        label: String,
+        detail: String,
+        /// Whether the new login was parked instead, which keeps the one copy of it.
+        parked: bool,
+    },
+
+    #[error(
         "the record of an interrupted switch at {path} is damaged ({source}), so pitboard \
          cannot tell what that switch did. Nothing was changed. Check that `pitboard status` \
          shows the account you expect, then delete the file to continue."
@@ -569,6 +583,7 @@ impl Error {
             SwitchDidNotHold { .. } => "switch_did_not_hold",
             SwitchUnverified { .. } => "switch_unverified",
             SwitchCorrupted { .. } => "switch_corrupted",
+            SignInNotInstalled { .. } => "sign_in_not_installed",
             RecoveryFailed { .. } => "recovery_failed",
             RecoveryRecordCorrupt { .. } => "recovery_record_corrupt",
             SessionExpired { .. } => "session_expired",
@@ -616,6 +631,7 @@ impl Error {
             | SwitchCorrupted { .. }
             | SwitchUnverified { .. }
             | SwitchDidNotHold { .. }
+            | SignInNotInstalled { .. }
             | LiveCredentialElsewhere { .. }
             | CredentialTooLarge { .. }
             | CustomOauthEndpoint
@@ -667,6 +683,23 @@ fn after_it_did_not_hold(tool: ProviderId, from: &str, to: &str) -> String {
              codex, then run `pitboard` to see what is signed in; do not run `codex login` \
              or `codex logout` until you have, because either revokes the login they find."
         ),
+    }
+}
+
+/// Where a new login that could not be put in use went, and the way back from there.
+fn not_in_use(tool: ProviderId, label: &str, parked: bool) -> String {
+    if parked {
+        format!(
+            "The new login is parked instead. Run `pitboard` to see what is signed in; if \
+             nothing is, run `{}` and sign in to any enrolled account, then `pitboard use \
+             {label}`.",
+            tool.login_command()
+        )
+    } else {
+        format!(
+            "It could not be parked either: run `{}` and sign in to `{label}` again.",
+            tool.login_command()
+        )
     }
 }
 

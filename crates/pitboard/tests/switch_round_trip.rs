@@ -213,6 +213,30 @@ fn signing_in_to_an_enrolled_account_again_renews_its_parked_login() {
     assert_eq!(env.live()["claudeAiOauth"]["refreshToken"], "refresh-b2");
 }
 
+/// Signing in again to the account in use, whose login is broken or about to lapse, puts
+/// the new login in use and parks nothing, so the next switch away parks the new login and
+/// not the one it replaced.
+#[test]
+fn signing_in_again_to_the_account_in_use_puts_the_new_login_in_use() {
+    let mut env = two_accounts("again-in-use");
+    let (a, o) = (env.uuid('a'), env.uuid('o'));
+
+    let (out, err, code) = env.enroll_by_signing_in("alpha", &a, "a@example.com", &o, "refresh-a2");
+
+    assert_eq!(code, 0, "{err}");
+    assert!(
+        out.contains("Signed in to alpha") && out.contains("in use now"),
+        "{out}"
+    );
+    assert_eq!(env.live()["claudeAiOauth"]["refreshToken"], "refresh-a2");
+    assert!(env.parked_service("alpha").is_none(), "nothing is parked");
+    let (_, err, code) = env.run(&["use", "beta"]);
+    assert_eq!(code, 0, "{err}");
+    let (_, err, code) = env.run(&["use", "alpha"]);
+    assert_eq!(code, 0, "{err}");
+    assert_eq!(env.live()["claudeAiOauth"]["refreshToken"], "refresh-a2");
+}
+
 /// A label typed wrong at enroll time is fixed without signing in again, whichever account
 /// it names.
 #[test]

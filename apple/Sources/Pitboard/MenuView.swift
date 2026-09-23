@@ -190,6 +190,7 @@ struct Footer: View {
 /// A tool whose running sessions never pick a switch up gets a plain sentence where a
 /// countdown would otherwise be, and the switch's own warnings are kept here after the read
 /// that follows it: that read replaces the panel's warnings, and these are about the switch.
+/// A sign-in that put a new login in use says so here, above what it warned about.
 private struct AfterSwitch: View {
     let model: AppModel
     let last: AppModel.LastSwitch
@@ -202,9 +203,14 @@ private struct AfterSwitch: View {
                 .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
         }
         let warned = model.warnings(after: last)
-        if last.notice != nil || !warned.isEmpty {
+        if last.said != nil || last.notice != nil || !warned.isEmpty {
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 6) {
+                    if let said = last.said {
+                        Text(said)
+                            .font(.callout)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                     if let notice = last.notice {
                         Text(notice)
                             .font(.callout)

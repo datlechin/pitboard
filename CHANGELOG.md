@@ -217,6 +217,20 @@ All notable changes are recorded here. The format follows
   question for Anthropic, and still changes nothing when Anthropic cannot be reached.
 
 ### Fixed
+- Signing in again to the account in use puts its new login in use. `pitboard enroll
+  <label> --sign-in` for the account signed in now parked the new login and left the tool
+  on the old one, which is the login somebody signs in again to replace, and the next
+  switch away parked the old login over the new one and deleted it. For Codex, whose
+  outgoing account is read from its ID token without asking OpenAI, the login kept could be
+  one whose refresh chain was already revoked. The new login now goes in place of the old
+  under the same lock, checks and read-back as a switch, nothing is parked, and `--json`
+  says `in_use`. Where pitboard cannot tell that the login in use is that account's, the new
+  one is parked as before, because writing over a login nobody can name could lose it. A
+  running `codex` keeps the old login and can write it back when it refreshes, so the
+  sessions are counted and warned about, with the new code `sessions_keep_old_login`. A new
+  login that could not be put in use, where the old one may be gone too, is parked rather
+  than lost, with the new code `sign_in_not_installed`. The menu bar app says the new login
+  is the one in use, and keeps the warning like a switch's.
 - A renewal killed after writing the fresh login and before recording it could lose the
   login: the next change deleted the fresh copy as unrecorded and kept the old one, whose
   refresh token the service had already spent. A copy pitboard wrote down itself now

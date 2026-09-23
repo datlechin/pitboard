@@ -100,6 +100,8 @@ private final class ScriptedSignIn: SignIn, @unchecked Sendable {
     private(set) var pastedOnMain: Bool?
     private(set) var cancelledOnMain: Bool?
     private(set) var finished = false
+    /// What finishing enrols.
+    var enrolls = Enrolled(email: "a@b.c", enrolled: .signedIn, warnings: [])
 
     init(saying lines: [String], takesACode code: Bool, waits: Bool = false) {
         self.lines = lines
@@ -122,7 +124,7 @@ private final class ScriptedSignIn: SignIn, @unchecked Sendable {
     }
     override func finish() throws -> Enrolled {
         finished = true
-        return Enrolled(email: "a@b.c", enrolled: .signedIn, warnings: [])
+        return enrolls
     }
     override func cancel() {
         cancelledOnMain = Thread.isMainThread
@@ -518,6 +520,43 @@ private func account(_ label: String, signedIn: Bool, percent: Double) -> Accoun
     #expect(session.finished)
     #expect(model.signingIn == nil, "finished and enrolled")
     #expect(model.problem == nil)
+}
+
+/// Signing in again to the account in use puts its new login in use at once. The panel says
+/// so, and what the core warned about sessions still on the old login stays beside it until
+/// the tool has another account in use, the way a switch's warning does.
+@MainActor
+@Test func aSignInToTheAccountInUseSaysItsNewLoginIsInUse() async throws {
+    let oldLogin = Warning(
+        code: "sessions_keep_old_login",
+        message:
+            "2 `codex` sessions started before this sign-in are still running and still using "
+            + "`codex/work`'s old login.")
+    let stub = Stub(.success(status([account("work", of: "codex", signedIn: true)])))
+    let session = ScriptedSignIn(saying: ["https://auth.openai.com/oauth\n"], takesACode: false)
+    session.enrolls = Enrolled(email: "w@example.com", enrolled: .inUse, warnings: [oldLogin])
+    stub.session = session
+    let model = AppModel(watching: false, service: stub)
+
+    await model.signIn("work", for: "codex")
+
+    let last = try #require(model.lastSwitches.first)
+    #expect(last.to == "codex/work")
+    #expect(last.said == "Signed in to work again. Its new login is the one in use now.")
+    #expect(last.notice == nil, "nothing switched away from anything")
+    #expect(model.warnings(after: last) == [oldLogin])
+    #expect(model.problem == nil)
+}
+
+/// A sign-in of another account adds a row and says nothing more.
+@MainActor
+@Test func aSignInOfAnotherAccountSaysNothingMore() async {
+    let stub = Stub(.success(status([account("work", of: "codex", signedIn: true)])))
+    stub.session = ScriptedSignIn(
+        saying: ["https://auth.openai.com/oauth\n"], takesACode: false)
+    let model = AppModel(watching: false, service: stub)
+    await model.signIn("personal", for: "codex")
+    #expect(model.lastSwitches.isEmpty)
 }
 
 /// A code field is offered only by a sign-in whose tool reads one, whatever the tool prints,

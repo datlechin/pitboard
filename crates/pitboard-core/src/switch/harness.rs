@@ -2,8 +2,9 @@
 //! that answer from a script, and a clock that stands still.
 //!
 //! Shared by the tests that kill a change partway ([`super::crash`]), the tests that make
-//! one refuse ([`super::refusals`]), and the tests of what a change refused over its name
-//! still settles ([`crate::service`]), because all of them need the same starting shape:
+//! one refuse ([`super::refusals`]), the tests of what a sign-in enrols ([`super::enroll`]),
+//! and the tests of what a change refused over its name still settles ([`crate::service`]),
+//! because all of them need the same starting shape:
 //! one account signed in, one parked and ready, and the tool's own files where the engine
 //! expects them. There is one for each tool, and the invariants in [`hold`] are asked of
 //! every one of them through the provider boundary, because what must be true after a
@@ -71,6 +72,21 @@ impl Machine {
 
     pub(crate) fn key(&self, label: &str) -> Key {
         Key::new(self.which, label)
+    }
+
+    /// From now on the live login's store misbehaves this way: the keychain item for Claude
+    /// Code, the `auth.json` file for Codex.
+    pub(crate) fn fault_live(&self, fault: crate::store::memory::Fault) {
+        let live = crate::provider::of(self.which)
+            .live(&self.ctx)
+            .expect("a store to fault");
+        match self.which {
+            ProviderId::Claude => self.mem.live().fault(&live.service, fault),
+            ProviderId::Codex => self
+                .mem
+                .file_at(crate::provider::codex::paths::auth_file(&self.ctx))
+                .fault(&live.service, fault),
+        }
     }
 }
 
@@ -288,6 +304,23 @@ pub(crate) fn codex_machine(name: &str) -> Machine {
     state.set_active(ProviderId::Codex, Some("here".into()));
     state::save(&machine.ctx, &state).expect("saved");
     machine
+}
+
+/// A login of the account `who` as this machine's tool writes one, with the service taught
+/// whose it is where the tool has to ask.
+pub(crate) fn login_of(m: &Machine, who: &str, refresh: &str) -> Value {
+    match m.which {
+        ProviderId::Claude => {
+            m.api.owned_by(&format!("access-{refresh}"), owner(who));
+            document(refresh)
+        }
+        ProviderId::Codex => codex_login(who, refresh),
+    }
+}
+
+/// A sign-in the tool finished as `who`, left where a finished one leaves its login.
+pub(crate) fn signed_in(m: &Machine, who: &str, refresh: &str) -> enroll::SignIn {
+    enroll::planted(&m.ctx, m.which, login_of(m, who, refresh)).expect("a sign-in")
 }
 
 pub(crate) fn account(label: &str, uuid: &str, parked: Option<Park>) -> Account {

@@ -382,6 +382,12 @@ fn enrolled(pitboard: &Pitboard, label: &str, outcome: Changing<Enrolled>) -> Re
                 let human = format!("Renewed {name} ({email}): its parked login is a fresh one.\n");
                 ("renewed", email, human)
             }
+            Enrolled::InUse { email } => {
+                let human = format!(
+                    "Signed in to {name} ({email}) again. Its new login is the one in use now.\n"
+                );
+                ("in_use", email, human)
+            }
         };
         (
             json!({
