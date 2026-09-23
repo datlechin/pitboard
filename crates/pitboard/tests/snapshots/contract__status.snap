@@ -52,7 +52,9 @@ expression: "serde_json :: json! ({ \"exit\" : code, \"envelope\" : value })"
               }
             ]
           },
-          "stale": null
+          "stale": null,
+          "provider": "claude",
+          "qualified": "claude/alpha"
         },
         {
           "label": "beta",
@@ -90,7 +92,9 @@ expression: "serde_json :: json! ({ \"exit\" : code, \"envelope\" : value })"
               }
             ]
           },
-          "stale": null
+          "stale": null,
+          "provider": "claude",
+          "qualified": "claude/beta"
         }
       ]
     },
