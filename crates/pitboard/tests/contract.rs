@@ -213,3 +213,78 @@ fn doctor() {
         ".envelope.data.checks" => "[checks]",
     });
 }
+
+/// A machine with Claude Code and Codex both signed in. Every account says which tool it is
+/// for, a Codex account's name is given the way it is typed, and Claude Code's rows are
+/// what they were with two fields added.
+#[test]
+fn status_with_codex() {
+    let mut env = two_accounts("contract-codex");
+    let work = env.uuid('w');
+    env.sign_in_codex(&work, "w@example.com", "codex-refresh-w");
+    env.codex_usage(25.0, 60.0);
+    let (_, err, code) = env.run(&["enroll", "codex/work"]);
+    assert_eq!(code, 0, "enroll codex/work: {err}");
+
+    let (value, code) = json(&env, &["status"]);
+    contract!("status_with_codex", value, code);
+
+    // And for a person: each tool under its own heading, windows named alike.
+    let (text, err, code) = env.run(&["status"]);
+    assert_eq!(code, 0, "{err}");
+    let lines: Vec<&str> = text.lines().collect();
+    assert_eq!(lines[0], "Claude Code", "{text}");
+    let codex = lines.iter().position(|l| *l == "Codex").expect(&text);
+    assert!(lines[codex + 1].contains("w@example.com"), "{text}");
+    assert!(lines[codex + 2].trim_start().starts_with("5h"), "{text}");
+    assert!(lines[codex + 3].trim_start().starts_with("week"), "{text}");
+}
+
+/// A Codex login is in the report too, and is kept out of what is pasted as carefully as
+/// Claude Code's.
+#[test]
+fn doctor_with_codex() {
+    let mut env = two_accounts("contract-doctor-codex");
+    let work = env.uuid('w');
+    env.sign_in_codex(&work, "w@example.com", "codex-refresh-w");
+    env.codex_usage(25.0, 60.0);
+    let (_, err, code) = env.run(&["enroll", "codex/work"]);
+    assert_eq!(code, 0, "enroll codex/work: {err}");
+
+    let (value, code) = json(&env, &["doctor"]);
+    assert_eq!(code, 0, "{value}");
+    let printed = value.to_string();
+    for secret in ["w@example.com", work.as_str()] {
+        assert!(!printed.contains(secret), "the report carries {secret}");
+    }
+    let codex = &value["data"]["environment"]["codex"];
+    assert_eq!(codex["present"], true);
+    assert_eq!(codex["backend"], "file");
+    assert_eq!(codex["login_present"], true);
+    let codes: Vec<&str> = value["data"]["checks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|c| c["code"].as_str())
+        .filter(|c| c.starts_with("codex_"))
+        .collect();
+    for expected in [
+        "codex_backend",
+        "codex_auth_file",
+        "codex_login",
+        "codex_version",
+        "codex_running",
+    ] {
+        assert!(codes.contains(&expected), "{expected} in {codes:?}");
+    }
+    let account = value["data"]["checks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["name"] == "account codex/work")
+        .expect("the Codex account, named the way it is typed");
+    assert_eq!(account["level"], "ok", "it is the one signed in: {account}");
+
+    let (text, _, _) = env.run(&["doctor"]);
+    assert!(text.lines().any(|l| l == "Codex"), "{text}");
+}

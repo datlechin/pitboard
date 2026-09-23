@@ -427,6 +427,70 @@ chmod 600 "$CLAUDE_CONFIG_DIR/.credentials.json""#
         uuid_for(&self.name, who)
     }
 
+    /// Sign Codex in to `account` the way `codex login` leaves it: an `auth.json` in this
+    /// test's own `CODEX_HOME`, mode 0600, whose ID token names the account. The token is
+    /// signed by nothing, and nothing in pitboard checks a signature: it reads the claims.
+    pub fn sign_in_codex(&self, account: &str, email: &str, refresh: &str) {
+        let claims = serde_json::json!({
+            "email": email,
+            "https://api.openai.com/auth": {
+                "chatgpt_account_id": account,
+                "chatgpt_plan_type": "pro",
+            },
+        });
+        let login = serde_json::json!({
+            "auth_mode": "chatgpt",
+            "OPENAI_API_KEY": null,
+            "tokens": {
+                "id_token": format!(
+                    "{}.{}.{}",
+                    base64url(br#"{"alg":"RS256"}"#),
+                    base64url(claims.to_string().as_bytes()),
+                    base64url(b"not a real signature"),
+                ),
+                "access_token": format!("codex-access-{refresh}"),
+                "refresh_token": refresh,
+                "account_id": account,
+            },
+            "last_refresh": "2026-09-15T05:05:11Z",
+        });
+        use std::os::unix::fs::PermissionsExt;
+        let path = self.codex_home().join("auth.json");
+        std::fs::write(&path, login.to_string()).unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).unwrap();
+    }
+
+    /// Make the fake OpenAI answer what a Codex login has left: a five-hour window and a
+    /// weekly one, in the shape its usage endpoint answers with.
+    pub fn codex_usage(&mut self, five_hour: f64, weekly: f64) {
+        let window = |percent: f64, seconds: i64, reset_at: i64| {
+            serde_json::json!({
+                "used_percent": percent,
+                "limit_window_seconds": seconds,
+                "reset_after_seconds": 3600,
+                "reset_at": reset_at,
+            })
+        };
+        let mock = self
+            .server
+            .mock("GET", "/wham/usage")
+            .with_status(200)
+            .with_body(
+                serde_json::json!({
+                    "plan_type": "pro",
+                    "rate_limit": {
+                        "allowed": true,
+                        "limit_reached": false,
+                        "primary_window": window(five_hour, 18_000, 1_789_990_000),
+                        "secondary_window": window(weekly, 604_800, 1_790_500_000),
+                    },
+                })
+                .to_string(),
+            )
+            .create();
+        self.mocks.push(mock);
+    }
+
     /// Where this platform's Claude Code keeps the live credential: the keychain slot on
     /// macOS, and `.credentials.json` in the config directory everywhere else.
     fn live_path(&self) -> PathBuf {
@@ -552,6 +616,24 @@ impl Drop for Env {
         }
         let _ = std::fs::remove_dir_all(&self.root);
     }
+}
+
+/// Unpadded base64url, which is how every part of a JWT is written.
+fn base64url(bytes: &[u8]) -> String {
+    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+    let mut out = String::new();
+    for chunk in bytes.chunks(3) {
+        let mut held = 0u32;
+        for (at, byte) in chunk.iter().enumerate() {
+            held |= u32::from(*byte) << (16 - 8 * at);
+        }
+        for at in 0..(chunk.len() * 8).div_ceil(6) {
+            out.push(char::from(
+                ALPHABET[((held >> (18 - 6 * at)) & 0x3f) as usize],
+            ));
+        }
+    }
+    out
 }
 
 /// A credential shaped like Claude Code's, keyed so the fake Anthropic can tell who owns it.
