@@ -25,7 +25,7 @@ const CLIENT_ID: &str = "9d1c250a-e61b-44d9-88ed-5944d1962f5e";
 /// Where requests go instead, for tests. Nothing else may redirect them, because an address
 /// that answers "this token belongs to account X" decides which account a credential is filed
 /// under. Only loopback is accepted, so a token or an answer never leaves this machine.
-fn test_base(ctx: &Context) -> Option<String> {
+pub(crate) fn test_base(ctx: &Context) -> Option<String> {
     ctx.api_base.clone().filter(|url| is_loopback(url))
 }
 
@@ -165,7 +165,7 @@ pub fn renew(
     ctx.api().renew(ctx, refresh_token, scopes, client_id)
 }
 
-fn agent() -> &'static Agent {
+pub(crate) fn agent() -> &'static Agent {
     static AGENT: OnceLock<Agent> = OnceLock::new();
     AGENT.get_or_init(|| {
         // rustls's documented way to choose a crypto provider. Returns Err only when one is
@@ -212,7 +212,7 @@ fn get(ctx: &Context, path: &str, access_token: &str) -> Result<Value, ApiError>
 /// How long Anthropic asked us to wait, from `Retry-After`. Only the seconds form is read:
 /// the date form is allowed by the standard and has not been seen from this endpoint, and
 /// misreading one would be worse than not reading it.
-fn retry_after(headers: &ureq::http::HeaderMap) -> Option<i64> {
+pub(crate) fn retry_after(headers: &ureq::http::HeaderMap) -> Option<i64> {
     headers
         .get("retry-after")?
         .to_str()
@@ -273,7 +273,7 @@ fn ask_renew(
 /// was inside the noise. That is why there is no skew estimate here and no median of
 /// several observations: on a machine whose clock works there is nothing to correct, and
 /// on a machine whose clock does not, reading the time off the answer is the correction.
-fn server_time(headers: &ureq::http::HeaderMap) -> Option<i64> {
+pub(crate) fn server_time(headers: &ureq::http::HeaderMap) -> Option<i64> {
     let raw = headers.get("date")?.to_str().ok()?;
     // RFC 9110's preferred form, which is what every answer measured used:
     // `Mon, 22 Sep 2026 12:34:56 GMT`.

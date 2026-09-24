@@ -11,12 +11,13 @@ import SwiftUI
 ///
 /// One state at a time, and never more than one thing to press. Each is the actual next
 /// step, not a tour.
+///
+/// The `.onlyOne` nudge is true but not urgent: somebody may keep one account on purpose and
+/// watch its limits, so it can be declined, for its tool alone. The two blocking states are
+/// not dismissible, because dismissing them would leave an app that does nothing and says
+/// nothing.
 struct FirstRun: View {
     let model: AppModel
-    /// The `.onlyOne` nudge is true but not urgent: somebody may keep one account on
-    /// purpose and watch its limits. The two blocking states are not dismissible, because
-    /// dismissing them would leave an app that does nothing and says nothing.
-    @AppStorage("hideSecondAccountNudge") private var hidden = false
 
     var body: some View {
         switch model.footing {
@@ -39,45 +40,57 @@ struct FirstRun: View {
         case .noOneSignedIn:
             Card(
                 symbol: "person.crop.circle.badge.plus",
-                title: "Nobody is signed in to Claude Code",
+                title: "Nobody is signed in to \(addable)",
                 detail:
                     "Sign in once here and pitboard can park that login, so signing in to a "
                     + "second account does not cost you the first."
             ) {
-                Button("Sign in…") { model.naming = .another }
+                Button("Sign in…") { model.naming = .another(nil) }
                     .buttonStyle(.borderedProminent)
                     .keyboardShortcut(.defaultAction)
             }
-        case .unnamed(let email):
+        case .unnamed(let provider, let email):
             Card(
                 symbol: "tag",
                 title: "Give this account a name",
                 detail:
-                    "\(email) is signed in. pitboard parks logins under a name you choose, "
-                    + "and cannot park this one until it has one."
+                    "\(email) is signed in\(to(provider)). pitboard parks logins under a name "
+                    + "you choose, and cannot park this one until it has one."
             ) {
-                Button("Name it…") { model.naming = .theOneInUse }
+                Button("Name it…") { model.naming = .theOneInUse(provider) }
                     .buttonStyle(.borderedProminent)
                     .keyboardShortcut(.defaultAction)
             }
-        case .onlyOne(let label):
-            if !hidden {
-                Card(
-                    symbol: "arrow.left.arrow.right",
-                    title: "Add a second account",
-                    detail:
-                        "\(label) is the only account pitboard knows, so there is nothing to "
-                        + "switch to. Adding another signs in to it and parks this one."
-                ) {
-                    Button("Add another account…") { model.naming = .another }
-                        .buttonStyle(.borderedProminent)
-                        .keyboardShortcut(.defaultAction)
-                    Button("Not now") { hidden = true }
-                }
+        case .onlyOne(let provider, let label):
+            Card(
+                symbol: "arrow.left.arrow.right",
+                title: "Add a second \(tool(provider))account",
+                detail:
+                    "\(label) is the only \(tool(provider))account pitboard knows, so there "
+                    + "is nothing to switch to. Adding another signs in to it and parks "
+                    + "this one."
+            ) {
+                Button("Add another account…") { model.naming = .another(provider) }
+                    .buttonStyle(.borderedProminent)
+                    .keyboardShortcut(.defaultAction)
+                Button("Not now") { model.declineSecondAccount(for: provider) }
             }
         case .ready:
             EmptyView()
         }
+    }
+
+    /// "Claude Code", or "Claude Code or Codex" where both could be signed in to here.
+    private var addable: String { model.addable.map(\.name).joined(separator: " or ") }
+
+    /// " to Codex", once accounts of more than one tool are shown, and nothing before.
+    private func to(_ provider: String) -> String {
+        model.showsTools ? " to \(model.tool(provider)?.name ?? provider)" : ""
+    }
+
+    /// "Codex ", once accounts of more than one tool are shown, and nothing before.
+    private func tool(_ provider: String) -> String {
+        model.showsTools ? "\(model.tool(provider)?.name ?? provider) " : ""
     }
 }
 

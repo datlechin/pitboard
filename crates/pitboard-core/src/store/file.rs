@@ -1,22 +1,19 @@
-//! The plaintext backend Claude Code falls back to on macOS and always uses elsewhere.
+//! One file as a credential store. Claude Code falls back to one on macOS and uses one
+//! everywhere else; Codex and Gemini keep their whole login in one.
 
 use super::{Backend, Error, RawStore};
 use crate::atomic;
-use crate::context::Context;
 use std::path::PathBuf;
 
-/// Claude Code keeps exactly one plaintext credential per storage directory, so the service
+/// A tool that keeps its login in a file keeps exactly one per directory, so the service
 /// name selects nothing here.
 pub(super) struct PlainFile {
     path: PathBuf,
 }
 
 impl PlainFile {
-    /// The file Claude Code reads.
-    pub(super) fn live(ctx: &Context) -> PlainFile {
-        PlainFile {
-            path: super::credential_file(ctx),
-        }
+    pub(super) fn at(path: PathBuf) -> PlainFile {
+        PlainFile { path }
     }
 }
 

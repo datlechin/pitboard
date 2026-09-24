@@ -119,9 +119,30 @@ fn forgetting_waits_for_an_interrupted_switch_to_be_settled() {
         envelope["warnings"][0]["code"], "interrupted_switch_finished",
         "what recovery found belongs in the envelope, even when the command then fails"
     );
-    assert_eq!(env.state()["active"], "beta");
+    assert_eq!(env.state()["active"]["claude"], "beta");
     assert!(!env.root.join("pitboard/journal.json").exists());
     env.delete_park(&orphan);
+}
+
+/// A name nobody enrolled is still refused, but the interrupted switch is settled too, the
+/// way every change settles one, and the envelope carries both.
+#[test]
+fn a_mistyped_name_still_settles_an_interrupted_switch() {
+    let env = two_accounts("refused-name");
+    let orphan = interrupted_switch(&env);
+
+    let (out, err, code) = env.run(&["use", "nobody", "--json"]);
+    let envelope: serde_json::Value = serde_json::from_str(&out).expect(&err);
+
+    assert_eq!(code, 1, "{out}");
+    assert_eq!(envelope["error"]["code"], "account_unknown");
+    assert_eq!(
+        envelope["warnings"][0]["code"], "interrupted_switch_undone",
+        "what recovery found belongs in the envelope, even when the name is refused"
+    );
+    assert!(!env.root.join("pitboard/journal.json").exists());
+    assert!(!env.is_parked(&orphan), "the stale copy is deleted");
+    assert_eq!(env.state()["active"]["claude"], "alpha");
 }
 
 #[test]

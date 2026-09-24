@@ -38,7 +38,8 @@ expression: "serde_json :: json! ({ \"exit\" : code, \"envelope\" : value })"
                 "percent": 12.0,
                 "resets_at": 1789986600,
                 "is_active": false,
-                "severity": null
+                "severity": null,
+                "length_seconds": 18000
               },
               {
                 "kind": "seven_day",
@@ -46,11 +47,14 @@ expression: "serde_json :: json! ({ \"exit\" : code, \"envelope\" : value })"
                 "percent": 40.0,
                 "resets_at": 1790474400,
                 "is_active": false,
-                "severity": null
+                "severity": null,
+                "length_seconds": 604800
               }
             ]
           },
-          "stale": "not_asked"
+          "stale": "not_asked",
+          "provider": "claude",
+          "qualified": "claude/alpha"
         },
         {
           "label": "beta",
@@ -74,7 +78,8 @@ expression: "serde_json :: json! ({ \"exit\" : code, \"envelope\" : value })"
                 "percent": 12.0,
                 "resets_at": 1789986600,
                 "is_active": false,
-                "severity": null
+                "severity": null,
+                "length_seconds": 18000
               },
               {
                 "kind": "seven_day",
@@ -82,11 +87,14 @@ expression: "serde_json :: json! ({ \"exit\" : code, \"envelope\" : value })"
                 "percent": 40.0,
                 "resets_at": 1790474400,
                 "is_active": false,
-                "severity": null
+                "severity": null,
+                "length_seconds": 604800
               }
             ]
           },
-          "stale": "not_asked"
+          "stale": "not_asked",
+          "provider": "claude",
+          "qualified": "claude/beta"
         }
       ]
     },

@@ -108,6 +108,27 @@ impl RawStore for FileVault {
 mod tests {
     use super::*;
 
+    /// A real Codex account id is the ChatGPT account and the person inside it, and a park
+    /// of one has to be a name this vault stores. Joined with a colon once, every Codex
+    /// park on Linux was refused, after a browser sign-in had already been finished.
+    #[test]
+    fn a_real_codex_park_name_is_one_the_vault_stores() {
+        let root = std::env::temp_dir().join(format!(
+            "pitboard-vault-codex-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let ctx = Context::new(root.clone()).with_pitboard_home(root.clone());
+        let vault = FileVault::new(&ctx);
+        let name = crate::park::service_name(
+            "8c3f0f86-0a7c-4d52-9b0e-1f2a3b4c5d6e_user-AbC123dEf456",
+            1_790_000_000_000,
+        );
+        assert!(vault.path(&name).is_ok(), "{name}");
+        assert!(crate::park::is_park_name(&name));
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
     /// SECURITY.md tells people that a parked login here is 0600 inside a 0700 directory,
     /// and that this is the whole of what keeps it from everyone else with an account on
     /// the machine. Nothing checked it. `atomic::Perms::Secret` and `home::create_private`
@@ -133,7 +154,7 @@ mod tests {
 
         let ctx = Context::new(root.clone()).with_pitboard_home(root.join(".pitboard"));
         let vault = FileVault::new(&ctx);
-        let name = "pitboard-park-9aeb9c89-316c-4344-84c5-603d71dc5c9a-1789935600123";
+        let name = "pitboard-park-1f0e2d3c-4b5a-4968-8776-a5b4c3d2e1f0-1789935600123";
         vault
             .write(name, r#"{"claudeAiOauth":{}}"#)
             .expect("a park");
@@ -153,7 +174,7 @@ mod tests {
     fn only_names_pitboard_generates_are_accepted() {
         let vault = FileVault::new(&Context::from_env());
         for good in [
-            "pitboard-park-9aeb9c89-316c-4344-84c5-603d71dc5c9a-1789935600123",
+            "pitboard-park-1f0e2d3c-4b5a-4968-8776-a5b4c3d2e1f0-1789935600123",
             "a.b_c-1",
         ] {
             assert!(vault.path(good).is_ok(), "{good}");

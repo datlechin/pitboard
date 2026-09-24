@@ -104,6 +104,13 @@ fn enroll() {
         serde_json::from_str::<Value>(&out).unwrap(),
         code
     );
+    let (out, _, code) =
+        env.enroll_by_signing_in_json("alpha", &a, "a@example.com", &o, "refresh-a2");
+    contract!(
+        "enroll_in_use",
+        serde_json::from_str::<Value>(&out).unwrap(),
+        code
+    );
 }
 
 /// The last thing a person runs, and the one whose shape matters to whatever wrapper runs
@@ -162,6 +169,7 @@ fn usage_error() {
 #[test]
 fn doctor() {
     let env = two_accounts("contract-doctor");
+    env.install_fake_codex("0.154.0");
     let (value, code) = json(&env, &["doctor"]);
 
     let printed = value.to_string();
@@ -207,6 +215,145 @@ fn doctor() {
         ".envelope.data.environment.home" => "[path]",
         ".envelope.data.environment.credential_service" => "[slot]",
         ".envelope.data.environment.credential_store" => "[backend]",
+        ".envelope.data.environment.codex.home" => "[path]",
         ".envelope.data.checks" => "[checks]",
     });
+}
+
+/// A machine with Claude Code and Codex both signed in. Every account says which tool it is
+/// for, a Codex account's name is given the way it is typed, and Claude Code's rows are
+/// what they were with two fields added.
+#[test]
+fn status_with_codex() {
+    let mut env = two_accounts("contract-codex");
+    let work = env.uuid('w');
+    env.sign_in_codex(&work, "w@example.com", "codex-refresh-w");
+    env.codex_usage(25.0, 60.0);
+    let (_, err, code) = env.run(&["enroll", "codex/work"]);
+    assert_eq!(code, 0, "enroll codex/work: {err}");
+
+    let (value, code) = json(&env, &["status"]);
+    contract!("status_with_codex", value, code);
+
+    // And for a person: each tool under its own heading, windows named alike.
+    let (text, err, code) = env.run(&["status"]);
+    assert_eq!(code, 0, "{err}");
+    let lines: Vec<&str> = text.lines().collect();
+    assert_eq!(lines[0], "Claude Code", "{text}");
+    let codex = lines.iter().position(|l| *l == "Codex").expect(&text);
+    assert!(lines[codex + 1].contains("w@example.com"), "{text}");
+    assert!(lines[codex + 2].trim_start().starts_with("5h"), "{text}");
+    assert!(lines[codex + 3].trim_start().starts_with("week"), "{text}");
+}
+
+/// A Codex login is in the report too, and is kept out of what is pasted as carefully as
+/// Claude Code's.
+#[test]
+fn doctor_with_codex() {
+    let mut env = two_accounts("contract-doctor-codex");
+    env.install_fake_codex("0.154.0");
+    let work = env.uuid('w');
+    env.sign_in_codex(&work, "w@example.com", "codex-refresh-w");
+    env.codex_usage(25.0, 60.0);
+    let (_, err, code) = env.run(&["enroll", "codex/work"]);
+    assert_eq!(code, 0, "enroll codex/work: {err}");
+
+    let (value, code) = json(&env, &["doctor"]);
+    assert_eq!(code, 0, "{value}");
+    let printed = value.to_string();
+    for secret in ["w@example.com", work.as_str()] {
+        assert!(!printed.contains(secret), "the report carries {secret}");
+    }
+    let codex = &value["data"]["environment"]["codex"];
+    assert_eq!(codex["present"], true);
+    assert_eq!(codex["backend"], "file");
+    assert_eq!(codex["login_present"], true);
+    let codes: Vec<&str> = value["data"]["checks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|c| c["code"].as_str())
+        .filter(|c| c.starts_with("codex_"))
+        .collect();
+    for expected in [
+        "codex_backend",
+        "codex_auth_file",
+        "codex_login",
+        "codex_version",
+        "codex_running",
+    ] {
+        assert!(codes.contains(&expected), "{expected} in {codes:?}");
+    }
+    let account = value["data"]["checks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["name"] == "account codex/work")
+        .expect("the Codex account, named the way it is typed");
+    assert_eq!(account["level"], "ok", "it is the one signed in: {account}");
+    assert_eq!(
+        account["code"], "codex_parked_login",
+        "everything about Codex is found by its prefix"
+    );
+    assert_eq!(
+        codex["version"], "0.154.0",
+        "the test's own codex, never this machine's"
+    );
+
+    let (text, _, _) = env.run(&["doctor"]);
+    let lines: Vec<&str> = text.lines().collect();
+    let heading = lines.iter().position(|l| *l == "Codex").expect(&text);
+    let at = lines
+        .iter()
+        .position(|l| l.contains("account codex/work"))
+        .expect(&text);
+    assert!(at > heading, "listed under Codex: {text}");
+}
+
+/// Codex signed in with an API key, on a machine with a Codex account enrolled. Something
+/// is signed in and it is no account: `status` says so rather than that nobody is, and
+/// `doctor` says it is a choice rather than a broken login, so a script reading its exit
+/// code is not told to stop switching accounts.
+#[test]
+fn codex_signed_in_with_an_api_key() {
+    let mut env = two_accounts("contract-codex-api-key");
+    env.install_fake_codex("0.154.0");
+    let work = env.uuid('w');
+    env.sign_in_codex(&work, "w@example.com", "codex-refresh-w");
+    env.codex_usage(25.0, 60.0);
+    let (_, err, code) = env.run(&["enroll", "codex/work"]);
+    assert_eq!(code, 0, "enroll codex/work: {err}");
+    env.sign_in_codex_with_an_api_key();
+
+    let (value, code) = json(&env, &["status"]);
+    assert_eq!(code, 0, "{value}");
+    let accounts = value["data"]["accounts"].as_array().unwrap();
+    let codex: Vec<&Value> = accounts
+        .iter()
+        .filter(|a| a["provider"] == "codex")
+        .collect();
+    assert!(
+        codex.iter().all(|a| a["signed_in"] == false),
+        "no Codex account is signed in: {value}"
+    );
+    let said = codex
+        .iter()
+        .find(|a| a["label"].is_null())
+        .expect("a row for the login on no account");
+    assert_eq!(said["stale"], "login_unusable", "{said}");
+    assert!(said["qualified"].is_null(), "{said}");
+    assert!(
+        !value.to_string().contains("sk-not-a-real-key"),
+        "the key itself is never shown"
+    );
+
+    let (value, code) = json(&env, &["doctor"]);
+    assert_eq!(code, 0, "a choice is not a failure: {value}");
+    let login = value["data"]["checks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["code"] == "codex_login")
+        .expect("a codex_login check");
+    assert_eq!(login["level"], "warn", "{login}");
 }

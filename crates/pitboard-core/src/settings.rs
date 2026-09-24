@@ -19,8 +19,8 @@
 //! directory, not about the machine, and an answer true in the directory pitboard happened
 //! to be run from is worse than no answer at all.
 
-use crate::claude;
 use crate::context::Context;
+use crate::provider::claude::paths as claude;
 use serde_json::Value;
 use std::path::PathBuf;
 

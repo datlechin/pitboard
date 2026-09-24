@@ -9,7 +9,6 @@ pub mod memory;
 mod vault;
 
 use crate::context::Context;
-use crate::{claude, slot};
 
 use serde_json::Value;
 use std::path::PathBuf;
@@ -129,93 +128,110 @@ pub(crate) trait RawStore: Send + Sync {
 }
 
 /// The machine pitboard is standing on, as one value rather than a set of `cfg` branches
-/// spread through the module. A platform answers where the live credential may be, where
+/// spread through the module. A host answers where the live credential may be, where
 /// pitboard's own parked ones go, and how a private sign-in's credential is read and
 /// discarded. It takes the context on every call because a context is built by a builder
 /// and can still change after it exists.
-pub(crate) trait Platform: Send + Sync + std::fmt::Debug {
-    /// Backends that may hold Claude Code's live credential, in the order it looks.
-    fn live_chain(&self, ctx: &Context) -> Vec<Box<dyn RawStore>>;
+///
+/// It was called `Platform` until a second provider was on the way. The name said "which
+/// operating system", the body reached into Claude Code's own slot hashing, and once
+/// "provider" became a word this codebase uses, a reader meeting `Platform` could not tell
+/// which of the two axes it meant. The Claude Code half is on its way out of here; what
+/// stays behind this name is the machine, and only the machine.
+pub(crate) trait Host: Send + Sync + std::fmt::Debug {
+    /// Keychain items another program owns, kept under `account`. `None` on a machine with
+    /// no keychain, where a tool keeps its login in a file instead.
+    ///
+    /// Which items and which account is the other program's business, so both are handed
+    /// in. Deriving them here is how Claude Code's slot hashing came to live inside what
+    /// claimed to be an operating-system abstraction.
+    fn foreign_keychain(&self, ctx: &Context, account: &str) -> Option<Box<dyn RawStore>>;
 
-    /// Where pitboard's own parked credentials go. Never Claude Code's fallback file.
+    /// The single file at `path`, as a store.
+    fn file(&self, path: PathBuf) -> Box<dyn RawStore>;
+
+    /// Where pitboard's own parked logins go: the keychain where there is one, a private
+    /// directory of files where there is not. This one really is a fact about the machine.
     fn vault(&self, ctx: &Context) -> Box<dyn RawStore>;
 
-    /// The credential Claude Code keeps for a config directory, during a private sign-in.
-    fn read_signin(&self, ctx: &Context, dir: &std::path::Path) -> Result<Option<String>, Error>;
+    /// Whether every `PITBOARD_HOME` on this machine parks its logins in the one vault. A
+    /// keychain belongs to the whole login session, so a park in it that one home cannot
+    /// account for may be another home's; a vault of files lives inside its home, and
+    /// nothing in it can be anybody else's.
+    fn vault_is_shared(&self) -> bool;
 
-    /// Deletes an item Claude Code created, so it refuses any name that could hold a real
-    /// login.
-    fn discard_signin(&self, ctx: &Context, dir: &std::path::Path) -> Result<(), Error>;
+    /// How many processes are running `program` on this machine, where that can be told.
+    fn running(&self, program: &str) -> Option<usize> {
+        crate::process::running(program)
+    }
 }
 
-/// macOS: the keychain, with Claude Code's plaintext file behind it.
+/// The keychain account pitboard stores its own items under.
 ///
-/// Claude Code writes that file and deletes the keychain item when a keychain write fails
-/// outright, so both can be the live one at different times.
+/// It is Claude Code's derivation, and it stays Claude Code's derivation, because every
+/// park already on every machine is filed under whatever this returned the day it was
+/// written. Changing it would not move those items; it would make them unfindable, which
+/// is the same as deleting every parked login on upgrade.
+///
+/// macOS only: a keychain item is filed under an account, and a file is not.
+#[cfg(target_os = "macos")]
+pub(crate) fn vault_account(ctx: &Context) -> String {
+    crate::provider::claude::slot::account_name(ctx)
+}
+
+/// macOS: a keychain, and files.
 #[cfg(target_os = "macos")]
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct MacOs;
 
 #[cfg(target_os = "macos")]
-impl Platform for MacOs {
-    fn live_chain(&self, ctx: &Context) -> Vec<Box<dyn RawStore>> {
-        vec![
-            Box::new(keychain::Keychain::live(ctx)),
-            Box::new(file::PlainFile::live(ctx)),
-        ]
+impl Host for MacOs {
+    fn foreign_keychain(&self, ctx: &Context, account: &str) -> Option<Box<dyn RawStore>> {
+        Some(Box::new(keychain::Keychain::foreign(
+            ctx,
+            account.to_string(),
+        )))
+    }
+
+    fn file(&self, path: PathBuf) -> Box<dyn RawStore> {
+        Box::new(file::PlainFile::at(path))
     }
 
     fn vault(&self, ctx: &Context) -> Box<dyn RawStore> {
         Box::new(keychain::Keychain::vault(ctx))
     }
 
-    fn read_signin(&self, ctx: &Context, dir: &std::path::Path) -> Result<Option<String>, Error> {
-        keychain::Keychain::live(ctx).read(&slot::service_for_dir(&dir.to_string_lossy()))
-    }
-
-    fn discard_signin(&self, ctx: &Context, dir: &std::path::Path) -> Result<(), Error> {
-        let service = slot::service_for_dir(&dir.to_string_lossy());
-        if service == slot::LIVE_SERVICE || service == claude::live_service(ctx) {
-            return Err(Error::Write(format!("refusing to delete {service}")));
-        }
-        keychain::Keychain::live(ctx).delete(&service)
+    fn vault_is_shared(&self) -> bool {
+        true
     }
 }
 
-/// Everywhere else: one plaintext file per storage directory, and pitboard's own file vault.
+/// Everywhere else: files, and pitboard's own file vault.
 #[cfg(not(target_os = "macos"))]
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct PlainUnix;
 
 #[cfg(not(target_os = "macos"))]
-impl Platform for PlainUnix {
-    fn live_chain(&self, ctx: &Context) -> Vec<Box<dyn RawStore>> {
-        vec![Box::new(file::PlainFile::live(ctx))]
+impl Host for PlainUnix {
+    fn foreign_keychain(&self, _ctx: &Context, _account: &str) -> Option<Box<dyn RawStore>> {
+        None
+    }
+
+    fn file(&self, path: PathBuf) -> Box<dyn RawStore> {
+        Box::new(file::PlainFile::at(path))
     }
 
     fn vault(&self, ctx: &Context) -> Box<dyn RawStore> {
         Box::new(vault::FileVault::new(ctx))
     }
 
-    fn read_signin(&self, _ctx: &Context, dir: &std::path::Path) -> Result<Option<String>, Error> {
-        match std::fs::read_to_string(dir.join(slot::CRED_FILE)) {
-            Ok(s) => Ok(Some(s)),
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
-            Err(e) => Err(Error::Unreadable(e.to_string())),
-        }
-    }
-
-    fn discard_signin(&self, _ctx: &Context, dir: &std::path::Path) -> Result<(), Error> {
-        match std::fs::remove_file(dir.join(slot::CRED_FILE)) {
-            Ok(()) => Ok(()),
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
-            Err(e) => Err(Error::Write(e.to_string())),
-        }
+    fn vault_is_shared(&self) -> bool {
+        false
     }
 }
 
-/// The platform of this build, which is what every real context uses.
-pub(crate) fn host() -> std::sync::Arc<dyn Platform> {
+/// The host this build is standing on, which is what every real context uses.
+pub(crate) fn host() -> std::sync::Arc<dyn Host> {
     #[cfg(target_os = "macos")]
     {
         std::sync::Arc::new(MacOs)
@@ -227,7 +243,7 @@ pub(crate) fn host() -> std::sync::Arc<dyn Platform> {
 }
 
 fn vault(ctx: &Context) -> Box<dyn RawStore> {
-    ctx.platform().vault(ctx)
+    ctx.host().vault(ctx)
 }
 
 /// Only "not found" means absent. A permission error or a loop in the path says nothing about
@@ -237,15 +253,32 @@ fn exists(path: &std::path::Path) -> Result<bool, Error> {
         .map_err(|e| Error::Unreadable(format!("cannot look for {}: {e}", path.display())))
 }
 
-pub fn credential_file(ctx: &Context) -> PathBuf {
-    PathBuf::from(claude::storage_dir(ctx)).join(slot::CRED_FILE)
-}
-
 /// Where parked logins live when there is no keychain to put them in: one file each, in
 /// pitboard's own directory. Named here rather than in the backend so `doctor` can look at
 /// what is actually on the disk without the two spellings drifting apart.
 pub fn vault_dir(ctx: &Context) -> PathBuf {
     crate::home::dir(ctx).join("vault")
+}
+
+/// One tool's live credential chain, in the order that tool reads it.
+///
+/// Built by that tool's own module. Which backends can hold a login, and in what order, is
+/// a fact about the tool: Claude Code looks in the keychain and then in a plaintext file it
+/// demotes to, while Codex and Gemini have one file and nothing behind it.
+pub struct Live(Vec<Box<dyn RawStore>>);
+
+impl Live {
+    pub(crate) fn of(backends: Vec<Box<dyn RawStore>>) -> Live {
+        assert!(
+            !backends.is_empty(),
+            "a live chain with no backends can hold nothing"
+        );
+        Live(backends)
+    }
+
+    fn refs(&self) -> Vec<&dyn RawStore> {
+        self.0.iter().map(Box::as_ref).collect()
+    }
 }
 
 /// Which backend in `chain` holds `service`. The chain is a parameter so tests can pass
@@ -267,12 +300,8 @@ fn write_in(chain: &[&dyn RawStore], service: &str, contents: &str) -> Result<()
     backend.write(service, contents)
 }
 
-/// Resolved on every call, never cached: Claude Code moves the credential between backends
-/// when a keychain write fails, so a remembered answer goes wrong without warning.
-fn with_live<T>(ctx: &Context, run: impl FnOnce(&[&dyn RawStore]) -> T) -> T {
-    let owned = ctx.platform().live_chain(ctx);
-    let chain: Vec<&dyn RawStore> = owned.iter().map(Box::as_ref).collect();
-    run(&chain)
+fn with_live<T>(live: &Live, run: impl FnOnce(&[&dyn RawStore]) -> T) -> T {
+    run(&live.refs())
 }
 
 /// Which backend holds a credential, or `Absent`.
@@ -287,21 +316,21 @@ fn with_live<T>(ctx: &Context, run: impl FnOnce(&[&dyn RawStore]) -> T) -> T {
 /// One divergence, on purpose. Claude Code demotes to the plaintext file when a keychain
 /// write fails for good, and deletes the keychain item when it does. pitboard never does:
 /// see the note on `write_in`.
-pub fn resolve(ctx: &Context, service: &str) -> Result<Backend, Error> {
-    with_live(ctx, |chain| {
+pub fn resolve(live: &Live, service: &str) -> Result<Backend, Error> {
+    with_live(live, |chain| {
         Ok(resolve_in(chain, service)?.map_or(Backend::Absent, |b| b.kind()))
     })
 }
 
-pub fn read_raw(ctx: &Context, service: &str) -> Result<Option<String>, Error> {
-    with_live(ctx, |chain| match resolve_in(chain, service)? {
+pub fn read_raw(live: &Live, service: &str) -> Result<Option<String>, Error> {
+    with_live(live, |chain| match resolve_in(chain, service)? {
         Some(backend) => backend.read(service),
         None => Ok(None),
     })
 }
 
-pub fn read(ctx: &Context, service: &str) -> Result<Option<Value>, Error> {
-    match read_raw(ctx, service)? {
+pub fn read(live: &Live, service: &str) -> Result<Option<Value>, Error> {
+    match read_raw(live, service)? {
         None => Ok(None),
         Some(raw) => serde_json::from_str(&raw)
             .map(Some)
@@ -312,20 +341,8 @@ pub fn read(ctx: &Context, service: &str) -> Result<Option<Value>, Error> {
 /// Write the live credential where it already lives. A failed keychain write is never
 /// answered by writing the plaintext file: that demotion is Claude Code's to make, and
 /// making it here would move the user's token somewhere weaker without saying so.
-pub fn write_raw(ctx: &Context, service: &str, contents: &str) -> Result<(), Error> {
-    with_live(ctx, |chain| write_in(chain, service, contents))
-}
-
-/// The credential Claude Code keeps for a config directory: the hashed keychain slot on
-/// macOS, `.credentials.json` inside it elsewhere.
-pub fn read_signin(ctx: &Context, dir: &std::path::Path) -> Result<Option<String>, Error> {
-    ctx.platform().read_signin(ctx, dir)
-}
-
-/// This deletes an item Claude Code created, so it refuses any name that could hold a real
-/// login.
-pub fn discard_signin(ctx: &Context, dir: &std::path::Path) -> Result<(), Error> {
-    ctx.platform().discard_signin(ctx, dir)
+pub fn write_raw(live: &Live, service: &str, contents: &str) -> Result<(), Error> {
+    with_live(live, |chain| write_in(chain, service, contents))
 }
 
 pub fn vault_read(ctx: &Context, service: &str) -> Result<Option<String>, Error> {
@@ -334,6 +351,11 @@ pub fn vault_read(ctx: &Context, service: &str) -> Result<Option<String>, Error>
 
 pub fn vault_write(ctx: &Context, service: &str, contents: &str) -> Result<(), Error> {
     vault(ctx).write(service, contents)
+}
+
+/// What writing `contents` into the vault would cost against its ceiling, where it has one.
+pub fn vault_cost(ctx: &Context, service: &str, contents: &str) -> Option<Cost> {
+    vault(ctx).cost(service, contents)
 }
 
 pub fn vault_delete(ctx: &Context, service: &str) -> Result<(), Error> {
@@ -346,11 +368,16 @@ pub fn vault_list(ctx: &Context) -> Result<Option<Vec<String>>, Error> {
     vault(ctx).list()
 }
 
+/// Whether another `PITBOARD_HOME` could have parked a login where this one parks its own.
+pub fn vault_is_shared(ctx: &Context) -> bool {
+    ctx.host().vault_is_shared()
+}
+
 /// What writing the live credential would cost, asked of the backend that would take the
 /// write. A login living in the fallback file has no ceiling, and used to be told it had
 /// the keychain's.
-pub fn cost(ctx: &Context, service: &str, contents: &str) -> Option<Cost> {
-    with_live(ctx, |chain| {
+pub fn cost(live: &Live, service: &str, contents: &str) -> Option<Cost> {
+    with_live(live, |chain| {
         resolve_in(chain, service)
             .ok()
             .flatten()
@@ -484,19 +511,20 @@ mod tests {
         assert!(!fp.contains("sk-ant"));
     }
 
+    /// A machine without a keychain must say so rather than hand back something that
+    /// behaves like one. A tool's own module builds its chain out of this answer, so a
+    /// host that always offered a keychain would build a chain that cannot work.
     #[test]
-    fn the_live_chain_never_offers_a_keychain_off_macos() {
+    fn a_keychain_is_offered_only_where_there_is_one() {
         let ctx = Context::from_env();
-        let kinds: Vec<Backend> = ctx
-            .platform()
-            .live_chain(&ctx)
-            .iter()
-            .map(|b| b.kind())
-            .collect();
-        if cfg!(target_os = "macos") {
-            assert_eq!(kinds, vec![Backend::Keychain, Backend::File]);
-        } else {
-            assert_eq!(kinds, vec![Backend::File]);
-        }
+        let offered = ctx.host().foreign_keychain(&ctx, "someone");
+        assert_eq!(
+            offered.map(|k| k.kind()),
+            cfg!(target_os = "macos").then_some(Backend::Keychain)
+        );
+        assert_eq!(
+            ctx.host().file(PathBuf::from("/nowhere/at/all")).kind(),
+            Backend::File
+        );
     }
 }

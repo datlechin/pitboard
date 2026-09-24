@@ -8,7 +8,7 @@
 
 use super::{Backend, Error, RawStore};
 use crate::context::Context;
-use crate::{process, slot};
+use crate::process;
 use std::process::{Command, Output};
 use std::time::Duration;
 
@@ -42,11 +42,15 @@ pub(super) struct Keychain {
 }
 
 impl Keychain {
-    /// The slots Claude Code reads.
-    pub(super) fn live(ctx: &Context) -> Keychain {
+    /// Items some other program owns, stored under `account`.
+    ///
+    /// Which items, and under what account, is that program's business: this takes the
+    /// name rather than deriving it, because deriving it was how Claude Code's own slot
+    /// hashing came to live inside what claimed to be an operating-system abstraction.
+    pub(super) fn foreign(ctx: &Context, account: String) -> Keychain {
         Keychain {
             owner: Owner::ClaudeCode,
-            account: slot::account_name(ctx),
+            account,
             argv_fallback: ctx.argv_fallback(),
         }
     }
@@ -55,7 +59,7 @@ impl Keychain {
     pub(super) fn vault(ctx: &Context) -> Keychain {
         Keychain {
             owner: Owner::Pitboard,
-            account: slot::account_name(ctx),
+            account: super::vault_account(ctx),
             argv_fallback: ctx.argv_fallback(),
         }
     }
@@ -364,7 +368,7 @@ mod tests {
     #[test]
     fn the_stdin_route_stops_at_about_two_kilobytes() {
         let ctx = Context::from_env();
-        let live = Keychain::live(&ctx);
+        let live = Keychain::foreign(&ctx, "someone".into());
         assert!(live.price("svc", &"x".repeat(2100)).over());
         assert!(!live.price("svc", &"x".repeat(1900)).over());
     }
@@ -375,11 +379,12 @@ mod tests {
     fn only_a_refusing_context_refuses_a_login_this_size() {
         let ctx = Context::from_env();
         let big = "x".repeat(2100);
-        let allowed = Keychain::live(&ctx).price("svc", &big);
+        let allowed = Keychain::foreign(&ctx, "someone".into()).price("svc", &big);
         assert!(allowed.on_the_second_route());
         assert!(!allowed.refused());
 
-        let refusing = Keychain::live(&ctx.with_argv_fallback(false)).price("svc", &big);
+        let refusing =
+            Keychain::foreign(&ctx.with_argv_fallback(false), "someone".into()).price("svc", &big);
         assert!(refusing.refused());
         assert!(!refusing.on_the_second_route());
     }

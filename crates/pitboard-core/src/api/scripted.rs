@@ -10,6 +10,8 @@
 
 use super::{Api, ApiError, Owner, Renewed};
 use crate::context::Context;
+use crate::provider::ProviderError;
+use crate::provider::codex::api::{Fresh, OpenAi};
 use crate::usage::Snapshot;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -73,6 +75,7 @@ struct Script {
     owners: HashMap<String, Answer<Owner>>,
     usage: HashMap<String, Answer<Snapshot>>,
     renewals: HashMap<String, Answer<Renewed>>,
+    codex_renewals: HashMap<String, Answer<Fresh>>,
     asked: Vec<Asked>,
 }
 
@@ -127,6 +130,21 @@ impl ScriptedApi {
     }
 
     /// Renewing this refresh token goes wrong.
+    /// What OpenAI answers when Codex's refresh token is exchanged.
+    pub fn codex_renews(&self, refresh_token: &str, fresh: Fresh) -> &ScriptedApi {
+        self.script()
+            .codex_renewals
+            .insert(refresh_token.into(), Answer::Give(fresh));
+        self
+    }
+
+    pub fn codex_renew_trouble(&self, refresh_token: &str, trouble: Trouble) -> &ScriptedApi {
+        self.script()
+            .codex_renewals
+            .insert(refresh_token.into(), Answer::Fail(trouble));
+        self
+    }
+
     pub fn renew_trouble(&self, refresh_token: &str, trouble: Trouble) -> &ScriptedApi {
         self.script()
             .renewals
@@ -185,6 +203,59 @@ impl Api for ScriptedApi {
     }
 }
 
+/// A scripted failure as OpenAI's side of the boundary reports it.
+fn from_trouble(trouble: Trouble) -> ProviderError {
+    let service = crate::provider::ProviderId::Codex.service();
+    match trouble {
+        Trouble::Unauthorized => ProviderError::Unauthorized,
+        Trouble::RateLimited => ProviderError::RateLimited {
+            service,
+            retry_after: None,
+        },
+        Trouble::RateLimitedFor(seconds) => ProviderError::RateLimited {
+            service,
+            retry_after: Some(seconds),
+        },
+        Trouble::Offline => ProviderError::Network {
+            service,
+            detail: "no route to host".into(),
+        },
+        Trouble::Server(status) => ProviderError::Unexpected { service, status },
+        Trouble::InvalidGrant => ProviderError::InvalidGrant { service },
+    }
+}
+
+/// Usage is scripted by access token whichever service it is asked of, because a token
+/// names one login and a test gives each login its own.
+impl OpenAi for ScriptedApi {
+    fn usage(
+        &self,
+        _ctx: &Context,
+        access_token: &str,
+        _account_id: &str,
+        _now: i64,
+    ) -> Result<Snapshot, ProviderError> {
+        let mut script = self.script();
+        script.asked.push(Asked::Usage(access_token.into()));
+        match script.usage.get(access_token) {
+            Some(Answer::Give(snapshot)) => Ok(snapshot.clone()),
+            Some(Answer::Fail(trouble)) => Err(from_trouble(*trouble)),
+            None => Err(ProviderError::Unauthorized),
+        }
+    }
+
+    fn renew(&self, _ctx: &Context, refresh_token: &str) -> Result<Fresh, ProviderError> {
+        let service = crate::provider::ProviderId::Codex.service();
+        let mut script = self.script();
+        script.asked.push(Asked::Renew(refresh_token.into()));
+        match script.codex_renewals.get(refresh_token) {
+            Some(Answer::Give(fresh)) => Ok(fresh.clone()),
+            Some(Answer::Fail(trouble)) => Err(from_trouble(*trouble)),
+            None => Err(ProviderError::InvalidGrant { service }),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -225,11 +296,11 @@ mod tests {
             Err(ApiError::RateLimited { .. })
         ));
         assert!(matches!(
-            api.usage(&ctx, "live"),
+            Api::usage(&*api, &ctx, "live"),
             Err(ApiError::RateLimited { .. })
         ));
         assert!(matches!(
-            api.renew(&ctx, "stale", &[], None),
+            Api::renew(&*api, &ctx, "stale", &[], None),
             Err(ApiError::InvalidGrant)
         ));
     }
@@ -241,7 +312,7 @@ mod tests {
         let ctx = Context::new(std::path::PathBuf::from("/nowhere"));
 
         let _ = api.owner(&ctx, "live");
-        let _ = api.usage(&ctx, "live");
+        let _ = Api::usage(&*api, &ctx, "live");
         let _ = api.owner(&ctx, "live");
 
         assert_eq!(api.calls(), 3);

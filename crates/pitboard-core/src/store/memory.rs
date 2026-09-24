@@ -9,10 +9,10 @@
 //! to keep, that a write reads its own result back and reports anything else, and otherwise
 //! does exactly what it is told.
 
-use super::{Backend, Error, Platform, RawStore};
+use super::{Backend, Error, Host, RawStore};
 use crate::context::Context;
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 /// What a store does instead of working.
@@ -37,6 +37,10 @@ pub enum Fault {
     /// Code's `/logout` deletes the credential with no lock held once it has given up
     /// waiting, which is the one write pitboard cannot exclude.
     DeletedAfterWrite,
+    /// The write lands and the store locks before the write can read it back, so the write
+    /// says it could not tell, and so does every read after it. The same screen lock as
+    /// `LocksOnWrite`, a moment later.
+    LocksAfterWrite,
 }
 
 /// One store. Plant, peek and enumerate without going through the store's own rules, so a
@@ -49,6 +53,8 @@ pub struct MemoryStore {
     blanket: Mutex<Option<Fault>>,
     /// Services whose `LocksOnWrite` has fired.
     locked: Mutex<std::collections::HashSet<String>>,
+    /// How many bytes a write can take the cheap way, where the store has a ceiling.
+    ceiling: Mutex<Option<usize>>,
 }
 
 impl MemoryStore {
@@ -60,7 +66,17 @@ impl MemoryStore {
             faults: Mutex::new(HashMap::new()),
             blanket: Mutex::new(None),
             locked: Mutex::new(std::collections::HashSet::new()),
+            ceiling: Mutex::new(None),
         })
+    }
+
+    /// From now on a write costs what it would in a keychain whose `security` reads `limit`
+    /// bytes from its standard input, with the argument line allowed above that.
+    pub fn takes_on_stdin(&self, limit: usize) {
+        *self
+            .ceiling
+            .lock()
+            .expect("a poisoned test store is a failed test") = Some(limit);
     }
 
     /// Put something there without a write, to set a machine up.
@@ -216,6 +232,11 @@ impl RawStore for Arc<MemoryStore> {
                 self.lock_now(service);
                 return Err(Error::Write("the keychain is locked".into()));
             }
+            Some(Fault::LocksAfterWrite) => {
+                self.plant(service, contents);
+                self.lock_now(service);
+                return Err(Error::Unreadable("the keychain is locked".into()));
+            }
             Some(Fault::CorruptWrite(instead)) => self.plant(service, &instead),
             Some(Fault::DeletedAfterWrite) => {
                 // The write lands and whoever else is writing gets there before the
@@ -254,36 +275,59 @@ impl RawStore for Arc<MemoryStore> {
                 .collect(),
         ))
     }
+
+    fn cost(&self, _service: &str, contents: &str) -> Option<super::Cost> {
+        let limit = *self
+            .ceiling
+            .lock()
+            .expect("a poisoned test store is a failed test");
+        limit.map(|limit| super::Cost {
+            needs: contents.len(),
+            limit,
+            second_route: true,
+        })
+    }
 }
 
-/// A machine with no keychain and no files: a live chain, a vault, and whatever Claude Code
-/// would have left behind for a private sign-in.
+/// A machine whose keychain and filesystem are both in memory.
+///
+/// It fakes the two things a real host offers and nothing above them, so the code under
+/// test is the real one. Before this it faked `read_signin` with a map keyed by directory,
+/// which meant no test ever ran Claude Code's own slot hashing on the sign-in path: the
+/// double answered the question the code was supposed to answer.
 #[derive(Debug)]
-pub struct MemoryPlatform {
-    live: Arc<MemoryStore>,
+pub struct MemoryHost {
+    keychain: Arc<MemoryStore>,
     vault: Arc<MemoryStore>,
-    signins: Mutex<HashMap<PathBuf, String>>,
+    files: Mutex<HashMap<PathBuf, Arc<MemoryStore>>>,
+    running: Mutex<HashMap<String, usize>>,
+    /// Whether every home parks in `vault`, the way every home on macOS parks in the login
+    /// keychain. So by default, because that is where the rules about another pitboard's
+    /// parks are needed.
+    shared_vault: std::sync::atomic::AtomicBool,
 }
 
-impl Default for MemoryPlatform {
-    fn default() -> MemoryPlatform {
-        MemoryPlatform {
+impl Default for MemoryHost {
+    fn default() -> MemoryHost {
+        MemoryHost {
             // Keychain, because that is the chain the interesting rules are written for.
-            live: MemoryStore::of(Backend::Keychain),
+            keychain: MemoryStore::of(Backend::Keychain),
             vault: MemoryStore::of(Backend::Keychain),
-            signins: Mutex::new(HashMap::new()),
+            files: Mutex::new(HashMap::new()),
+            running: Mutex::new(HashMap::new()),
+            shared_vault: std::sync::atomic::AtomicBool::new(true),
         }
     }
 }
 
-impl MemoryPlatform {
-    pub fn new() -> Arc<MemoryPlatform> {
-        Arc::new(MemoryPlatform::default())
+impl MemoryHost {
+    pub fn new() -> Arc<MemoryHost> {
+        Arc::new(MemoryHost::default())
     }
 
-    /// Where Claude Code's live credential is.
+    /// The keychain, where a tool that uses one keeps its live credential.
     pub fn live(&self) -> &Arc<MemoryStore> {
-        &self.live
+        &self.keychain
     }
 
     /// Where pitboard's parked logins are.
@@ -291,39 +335,60 @@ impl MemoryPlatform {
         &self.vault
     }
 
-    /// What a private sign-in left in `dir`, as if `claude` had run there.
-    pub fn plant_signin(&self, dir: &Path, contents: &str) {
-        self.signins
+    /// The file at `path`, where a tool that keeps its login in a file keeps it.
+    pub fn file_at(&self, path: PathBuf) -> Arc<MemoryStore> {
+        Arc::clone(
+            self.files
+                .lock()
+                .expect("a poisoned test host is a failed test")
+                .entry(path)
+                .or_insert_with(|| MemoryStore::of(Backend::File)),
+        )
+    }
+
+    /// From now on the vault belongs to one home alone, the way pitboard's vault of files
+    /// does off macOS.
+    pub fn vault_of_its_own(&self) {
+        self.shared_vault
+            .store(false, std::sync::atomic::Ordering::SeqCst);
+    }
+
+    /// Say that `count` processes are running `program`.
+    pub fn runs(&self, program: &str, count: usize) {
+        self.running
             .lock()
-            .expect("a poisoned test platform is a failed test")
-            .insert(dir.to_path_buf(), contents.into());
+            .expect("a poisoned test host is a failed test")
+            .insert(program.to_string(), count);
     }
 }
 
-impl Platform for MemoryPlatform {
-    fn live_chain(&self, _ctx: &Context) -> Vec<Box<dyn RawStore>> {
-        vec![Box::new(Arc::clone(&self.live))]
+impl Host for MemoryHost {
+    fn foreign_keychain(&self, _ctx: &Context, _account: &str) -> Option<Box<dyn RawStore>> {
+        Some(Box::new(Arc::clone(&self.keychain)))
+    }
+
+    fn file(&self, path: PathBuf) -> Box<dyn RawStore> {
+        Box::new(self.file_at(path))
     }
 
     fn vault(&self, _ctx: &Context) -> Box<dyn RawStore> {
         Box::new(Arc::clone(&self.vault))
     }
 
-    fn read_signin(&self, _ctx: &Context, dir: &Path) -> Result<Option<String>, Error> {
-        Ok(self
-            .signins
-            .lock()
-            .expect("a poisoned test platform is a failed test")
-            .get(dir)
-            .cloned())
+    fn vault_is_shared(&self) -> bool {
+        self.shared_vault.load(std::sync::atomic::Ordering::SeqCst)
     }
 
-    fn discard_signin(&self, _ctx: &Context, dir: &Path) -> Result<(), Error> {
-        self.signins
-            .lock()
-            .expect("a poisoned test platform is a failed test")
-            .remove(dir);
-        Ok(())
+    /// What a test said is running, and nothing on the machine running the tests.
+    fn running(&self, program: &str) -> Option<usize> {
+        Some(
+            self.running
+                .lock()
+                .expect("a poisoned test host is a failed test")
+                .get(program)
+                .copied()
+                .unwrap_or(0),
+        )
     }
 }
 

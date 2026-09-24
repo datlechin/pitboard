@@ -57,23 +57,35 @@ private struct Accounts: View {
                 // The window is what a new install opens into, so the one thing to do
                 // belongs here as much as in the panel.
                 FirstRun(model: model)
-                ForEach(model.status?.accounts ?? [], id: \.accountUuid) { account in
+                ForEach(model.status?.accounts ?? [], id: \.id) { account in
                     GroupBox {
                         VStack(alignment: .leading, spacing: 8) {
                             HStack {
-                                Text(account.label ?? account.email)
+                                Text(account.heading)
                                     .font(.headline)
+                                if model.showsTools, let tool = model.tool(account.provider) {
+                                    Text(tool.name)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                        .padding(.horizontal, 6)
+                                        .padding(.vertical, 1)
+                                        .background(.quaternary, in: .capsule)
+                                }
                                 if account.signedIn {
                                     Text("signed in")
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
                                 }
                                 Spacer()
-                                if account.switchable, let label = account.label {
-                                    Button("Use") { Task { await model.use(label) } }
+                                if account.switchable, let qualified = account.qualified {
+                                    Button("Use") { Task { await model.use(qualified) } }
+                                        .accessibilityLabel(
+                                            "Switch to \(model.name(of: account))")
                                 }
                             }
-                            Text(account.email).font(.caption).foregroundStyle(.secondary)
+                            if !account.email.isEmpty {
+                                Text(account.email).font(.caption).foregroundStyle(.secondary)
+                            }
                             ForEach(
                                 Array((account.usage?.windows ?? []).enumerated()), id: \.offset
                             ) {

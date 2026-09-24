@@ -19,7 +19,7 @@ import Testing
 }
 
 private func renewed(_ outcome: String) -> Renewed {
-    Renewed(label: "acc", outcome: outcome)
+    Renewed(label: "acc", provider: "claude", outcome: outcome)
 }
 
 /// Nothing due is the ordinary case, and it has to read as ordinary rather than as a
@@ -39,4 +39,57 @@ private func renewed(_ outcome: String) -> Renewed {
     #expect(Set(levels.map(\.symbol)).count == levels.count)
     #expect(Set(levels.map(\.spoken)).count == levels.count)
     #expect(levels.allSatisfy { !$0.spoken.isEmpty })
+}
+
+/// A window is named by how long it runs, which both services agree on, so a Codex limit
+/// reads the way a Claude Code one does.
+@Test func aWindowIsNamedForItsLength() {
+    #expect(windowName(window("five_hour", 1, length: 18_000)) == "5-hour")
+    #expect(windowName(window("seven_day", 1, length: 604_800)) == "weekly")
+    #expect(windowName(window("1_day", 1, length: 86_400)) == "daily")
+    #expect(windowName(window("3_hour", 1, length: 10_800)) == "3-hour")
+    #expect(windowName(window("2_day", 1, length: 172_800)) == "2-day")
+    #expect(windowShortName(window("3_hour", 1, length: 10_800)) == "3h")
+    #expect(windowShortName(window("1_day", 1, length: 86_400)) == "day")
+    #expect(windowShortName(window("seven_day", 1, length: 604_800)) == "week")
+}
+
+/// A reading taken before the length was kept names its window the way it always did.
+@Test func aWindowOfUnknownLengthIsNamedFromItsKind() {
+    #expect(windowName(window("session", 1)) == "5-hour")
+    #expect(windowName(window("weekly_all", 1)) == "weekly")
+    #expect(windowName(window("primary_window", 1)) == "primary window")
+    #expect(windowShortName(window("session", 1)) == "5h")
+    #expect(windowShortName(window("weekly_scoped", 1, scope: "Fable")) == "week · Fable")
+}
+
+/// VoiceOver reads the column's "30m" as thirty meters and "5h" as letters, so a limit is
+/// said in words: its name as a sentence says it, what it has used, and when it resets.
+@Test func aLimitIsSpokenInWordsAndNotInItsColumnsShorthand() {
+    #expect(
+        spokenLimit(window("five_hour", 42, length: 18_000), resettingIn: 3 * 3600)
+            == "5-hour limit, 42 percent used, resets in 3 hours")
+    #expect(
+        spokenLimit(window("30_minute", 12, length: 1800), resettingIn: nil)
+            == "30-minute limit, 12 percent used")
+    #expect(
+        spokenLimit(window("weekly_scoped", 98, scope: "Fable"), resettingIn: 0)
+            == "weekly Fable limit, 98 percent used",
+        "a reset already passed is not said, as the column does not show it")
+}
+
+/// A label as the core types it, taken apart: bare means Claude Code.
+@Test func aTypedLabelIsTakenApart() {
+    #expect(split("codex/work") == ("codex", "work"))
+    #expect(split("work") == ("claude", "work"))
+}
+
+/// A row is headed by its label, by "unenrolled" before it has one, and for a login no
+/// account can be named for, by what is wrong with it.
+@Test func aRowIsHeadedTheSameWayEverywhere() {
+    #expect(account("work").heading == "work")
+    #expect(account(nil, signedIn: true, uuid: "u").heading == "unenrolled")
+    #expect(
+        unplaced(of: "codex").heading
+            == "Codex's login could not be read; run `pitboard doctor`")
 }

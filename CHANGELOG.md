@@ -5,7 +5,49 @@ All notable changes are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-09-24
+
 ### Added
+- Codex, beside Claude Code. `pitboard enroll codex/work` records the Codex account signed
+  in now, reading its account, email and plan out of its own ID token with no network
+  call; `pitboard enroll codex/work --sign-in` runs `codex login` in a private
+  `CODEX_HOME` so the account in use stays signed in; `pitboard use codex/work` switches
+  it; and `pitboard` shows each Codex account's five-hour and weekly limits from the same
+  usage read Codex itself makes, which spends no quota. Until a Codex account is enrolled,
+  pitboard reads nothing of Codex's and asks OpenAI nothing. Everything pitboard does for Codex
+  was read out of codex-cli 0.154.0 and is dated in a register of its own, checked against
+  every new build by the conformance run twice a week, and still green on 0.156.1.
+  Codex is not Claude Code, and pitboard says where they differ rather than hiding it:
+  - A running `codex` never notices a switch, so a switch says to restart it instead of
+    counting down, and names how many sessions are still using the outgoing account.
+  - `codex login` and `codex logout` revoke the stored refresh token, so a Codex park is
+    never a copy: the outgoing login is moved into the vault and read back before
+    anything replaces it. Signing out inside a session still running from before a
+    switch would revoke the login just parked, and the switch says so.
+  - Codex's keychain stores are items Codex made for itself, which every read by another
+    program would put a permission prompt in front of, so pitboard handles Codex's
+    default store, the `auth.json` file, and refuses the others with a reason.
+  - Codex takes no lock, so a session still running from before a switch can refresh its
+    token in the middle of one. The live login is read again just before it is replaced,
+    and nothing is written over a login that moved; a login that ends up naming two
+    accounts is refused rather than parked.
+- The menu bar app handles both tools. With accounts of both, the panel lists them under a
+  heading per tool, and the menu bar follows the signed-in account closest to running out.
+  When an account runs out, only another account of the same tool is offered. A Codex
+  switch has no countdown: the panel says running `codex` sessions keep the old account,
+  and how many pitboard found, and keeps saying so until that tool switches again rather
+  than until anything at all changes. "Add another account" asks which tool when more than
+  one is installed, and a Codex sign-in shows the address `codex login` printed. Cancelling
+  a sign-in no longer holds the app until the tool says something, which a Codex sign-in
+  never does before the browser is done.
+- Labels belong to a tool. `work` can be a Claude Code account and a Codex account at
+  once, `codex/work` says which, and a bare `work` still means what it always did as long
+  as it names one account; where it names two, pitboard lists both rather than picking.
+  A bare name for a new account means Claude Code, so every command written before there
+  was a second tool does what it did. New codes: `provider_unknown`, `label_ambiguous`,
+  `sign_in_not_isolated`, `live_store_unsupported`, `state_names_unknown_tool`,
+  `recovery_elsewhere`, `sessions_still_running`, `codex_program_missing` and
+  `codex_not_found`.
 - No parked login goes unnamed. Every name pitboard is about to write a login into is
   written down first, and the next command resolves any that nothing refers to: given back
   to the account whose name it carries when that account holds nothing, deleted when nobody
@@ -30,8 +72,14 @@ All notable changes are recorded here. The format follows
   belong to one `PITBOARD_HOME`, so a parked login it cannot account for is evidence of
   another pitboard rather than of an orphan, and deleting it would end that account's
   session for somebody who never ran the command. Giving one back is additive and safe on a
-  guess; deleting one is not. Measured first: `security dump-keychain` without `-d` never
-  prompts, takes 0.06 seconds, emits no secret of any item, and does not slow later reads.
+  guess; deleting one is not, so on macOS a login given back that this pitboard never wrote
+  down is deleted only once pitboard has used it, by switching to it or renewing it, even
+  when the renewal is stopped before it records what it got back. Parking over it, `forget`
+  and `uninstall` leave it where it is, and `uninstall` says how many it left, as
+  `parks_left` in `--json`. Elsewhere the vault is a directory inside pitboard's own, which
+  no other pitboard parks in, so whatever `repair` finds there is this one's. Measured
+  first: `security dump-keychain` without `-d` never prompts, takes 0.06 seconds, emits no
+  secret of any item, and does not slow later reads.
 - A crash matrix: every durable step of a switch, an enrolment, a renewal and a forget,
   killed where it stands, recovered, and checked against what must be true afterwards
   rather than against a particular outcome. Every case runs recovery twice, because a
@@ -174,6 +222,69 @@ All notable changes are recorded here. The format follows
   question for Anthropic, and still changes nothing when Anthropic cannot be reached.
 
 ### Fixed
+- The menu bar app finds a tool installed through a Node version manager or an npm prefix,
+  and can start its sign-in. An app opened from Finder has none of a shell's `PATH`, so it
+  looked for `claude` and `codex` only where their own installers put them, and did not
+  offer one installed through nvm, volta, fnm, asdf, mise, pnpm, bun or a custom npm
+  prefix. One it did find could not start if npm had installed it: an npm install is a
+  script run by `node`, which was not on the app's `PATH` either. The app now asks the
+  person's login shell for its `PATH`, off the main thread, which runs its startup files as
+  a terminal does, and looks there after `PITBOARD_CLAUDE` or `PITBOARD_CODEX` and before
+  the installers' places, passing over a folder macOS asks permission for, such as Documents
+  or iCloud Drive. A shell that does not answer within five seconds is stopped with
+  everything it started, and the app looks where it did before; it asks once more a minute
+  or more later, when the form for another account opens or a sign-in starts, because
+  startup files are slowest while the machine is still logging in.
+  Every sign-in, from the app and the command line, now starts the program by the path it
+  was found at: the first file on the `PATH` that can be run, in a directory named from the
+  root, so what is found is what starts. A program found where that `PATH` does not reach,
+  as the app finds one where its installer put it, has its own directory put first, which
+  is where npm puts the `node` that installed it; one found on the `PATH` runs with it as it
+  is, so it finds the `node` the terminal would.
+- Signing in again to the account in use puts its new login in use. `pitboard enroll
+  <label> --sign-in` for the account signed in now parked the new login and left the tool
+  on the old one, which is the login somebody signs in again to replace, and the next
+  switch away parked the old login over the new one and deleted it. For Codex, whose
+  outgoing account is read from its ID token without asking OpenAI, the login kept could be
+  one whose refresh chain was already revoked. The new login now goes in place of the old
+  under the same lock, checks and read-back as a switch, nothing is parked, and `--json`
+  says `in_use`; a label this enrols for the first time says it was enrolled. Where pitboard
+  cannot tell that the login in use is that account's, the new one is parked as before,
+  because writing over a login nobody can name could lose it, and when that is the account
+  pitboard last saw in use it says so and why, with the new code
+  `sign_in_parked_not_in_use`. A running `codex` keeps the old login and can write it back
+  when it refreshes, so the sessions are counted and warned about, with the new code
+  `sessions_keep_old_login`. A new login that could not be written was not kept, and says to
+  sign in again, with the new code `sign_in_not_kept`. A new login pitboard could not
+  confirm is in use, where the old one may be gone too, is parked rather than lost, with the
+  new code `sign_in_not_installed`, and still says what writing and parking it warned about.
+  Where it was in use after all, that parked copy holds the refresh token the tool is using:
+  no renewal spends it, and the next change or renewal that can read the tool's login drops
+  it. The menu bar app says the new login is the one in use, keeps what that tool's last
+  switch said beside it, and shows what a sign-in of any account warned about.
+- A renewal killed after writing the fresh login and before recording it could lose the
+  login: the next change deleted the fresh copy as unrecorded and kept the old one, whose
+  refresh token the service had already spent. A copy pitboard wrote down itself now
+  replaces an older copy of a different chain. A renewal whose record cannot be saved keeps
+  what it wrote for the next run instead of deleting it.
+- An interrupted switch is recovered only where its tool's login was when it started. Read
+  from another `CODEX_HOME` or `CLAUDE_CONFIG_DIR`, recovery compared the switch with a
+  login that had nothing to do with it; it now stops with `recovery_elsewhere`.
+- A change refused over the name it was given still settles an interrupted switch, like
+  every other change. `pitboard use nosuchlabel` after an interrupted switch refused the
+  name and left the switch for a later run without a word about it; it now finishes or
+  undoes the switch, records that in `pitboard log`, and reports it beside the refusal, as
+  a warning in `--json`, and so does a name `enroll --sign-in` refuses before it opens a
+  browser, from the command line or the app. With nothing interrupted, a mistyped name
+  still takes no lock and changes nothing.
+- Labels written by 0.1.x that contain a slash can be switched to, forgotten, renamed and
+  signed in to again; they read as a tool prefix and were refused.
+- The floor between two questions about one account was the minute pitboard uses for a
+  window it cannot time, not the three minutes it promises. It worked a window's length out
+  from its kind and knew `five_hour` and `seven_day`, and Anthropic has been answering
+  `session`, `weekly_all` and `weekly_scoped`. A window now carries its length where it is
+  known: stated outright by OpenAI, derived from the kind for Anthropic. In `--json` a
+  window gains `length_seconds`.
 - `pitboard doctor --json` is now what the bug template says it is. The template asks people
   to paste it and promises labels, codes, paths and times with no tokens, no email addresses
   and no account identifiers; it printed the signed-in email address and organisation uuid,
@@ -243,6 +354,49 @@ All notable changes are recorded here. The format follows
   that answers finishes or undoes the switch. The new code is `switch_unverified`.
 
 ### Changed
+- pitboard's account list is at schema 4: every account says which tool it is for, and
+  which account is signed in is kept per tool. A schema 3 file is brought forward on its
+  first read with nothing moved and nothing in the keychain or the vault touched. An older
+  pitboard refuses the new file and says to upgrade whichever of the command line and the
+  app is behind, rather than calling it corrupt.
+- Messages name the tool they are about. An error that used to say "Claude Code",
+  "Anthropic" or `claude` whatever the account now names that account's tool, its service
+  and the command that signs in to it. Codes are unchanged. A few Claude Code messages
+  gained the tool's name where a second tool made them ambiguous: "nothing is signed in
+  right now" reads "nothing is signed in to Claude Code right now". A name a message tells
+  somebody to type is qualified, `claude/work`, where another tool has an account of the
+  same name and a bare one would be refused as ambiguous.
+- A Claude Code credential with no account in it, which is what `/logout` leaves beside
+  the machine's MCP tokens, is nobody signed in. `use` and `enroll` answered
+  `live_credential_shape_unexpected` with exit 3 and now answer `live_credential_absent`
+  with exit 1, or `live_credential_elsewhere` where Claude Code's config still names
+  somebody, and `doctor` warns rather than fails.
+- In `--json`, `use` gains `provider` and an `adoption` object saying whether sessions
+  already running follow on their own within a number of seconds or need restarting;
+  `adoption_ceiling_seconds` is null for a tool that needs restarting. Enrolments and
+  renewals gain `provider`. All additive.
+- In `--json`, every `status` account gains `provider` and `qualified`, its name with the
+  tool spelled out (`codex/work`), null for a login nothing has enrolled. Two stale codes
+  are new: `login_unreadable`, for a tool's login that is there and could not be read, and
+  `login_unusable`, for one that was read and is no account pitboard can park or switch,
+  such as an API key. Where no record pins such a login on an account, it gets a row of
+  its own with no label, email or account id, and only for a tool with accounts enrolled.
+  `doctor` gains `environment.codex` (`home`, `present`, `backend`, `login_present`,
+  `version`) and a section about Codex whose codes all start `codex_`: `codex_backend`,
+  `codex_auth_file`, `codex_login`, `codex_version`, `codex_running`, and for a Codex
+  account `codex_parked_login` and `codex_dormant_account`. What somebody chose is not a
+  fault: a keychain store fails only where it puts enrolled Codex accounts out of reach,
+  an API key login is a warning only where there are Codex accounts to switch to, and
+  either is otherwise stated without a warning. All additive: Claude Code's rows, checks
+  and codes are what they were.
+- `CLAUDE_CODE_CUSTOM_OAUTH_URL` refuses changes to Claude Code accounts, and no longer
+  stops a change to a Codex one.
+- `pitboard-core` is reorganised around a provider boundary, and much of what it exposed
+  moved or changed shape: errors that name a tool carry it, `switch::settle` and
+  `sign_in` take the tool, renewals are keyed by account, and Claude Code's own document
+  rules live under `provider::claude`. A breaking change for anyone building on the crate,
+  declared as such; nothing changes for the command line's contract beyond the additions
+  above.
 - `pitboard-core` says what it supports. The interface other programs may build on is
   `service::Pitboard`, `context::Context` and what they return; the rest is reachable for
   this repository's own front ends and may change in any release. The enums a caller reads
@@ -463,7 +617,8 @@ First release.
 - Schema 3: one parked login per account, with when it expires. Earlier files are refused
   rather than migrated; nothing was ever released that wrote them.
 
-[Unreleased]: https://github.com/datlechin/pitboard/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/datlechin/pitboard/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/datlechin/pitboard/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/datlechin/pitboard/compare/v0.1.4...v0.2.0
 [0.1.4]: https://github.com/datlechin/pitboard/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/datlechin/pitboard/compare/v0.1.2...v0.1.3

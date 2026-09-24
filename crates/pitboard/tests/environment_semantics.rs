@@ -7,10 +7,17 @@ use std::process::Command;
 
 fn environment(home: &PathBuf, config_dir: Option<&str>) -> serde_json::Value {
     let mut command = Command::new(env!("CARGO_BIN_EXE_pitboard"));
+    // Nothing real is read. The slot under test is the default one, so the keychain account
+    // is a name nobody has and the lookup finds no item; Codex gets a home of its own; and
+    // PATH holds only the system's directories, so no installed `claude` or `codex` is
+    // resolved either.
     command
         .args(["doctor", "--json"])
         .env("HOME", home)
+        .env("USER", "pitboard-test-nobody")
         .env("PITBOARD_HOME", home.join("pitboard"))
+        .env("CODEX_HOME", home.join("codex"))
+        .env("PATH", "/usr/bin:/bin")
         .env_remove("CLAUDE_SECURESTORAGE_CONFIG_DIR");
     match config_dir {
         Some(v) => command.env("CLAUDE_CONFIG_DIR", v),

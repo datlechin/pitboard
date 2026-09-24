@@ -65,7 +65,7 @@ fn a_full_switch_moves_the_identity_and_nothing_else() {
     );
     assert_eq!(config["numStartups"], 7, "machine state must survive");
 
-    assert_eq!(env.state()["active"], "beta");
+    assert_eq!(env.state()["active"]["claude"], "beta");
     assert!(
         env.parked_service("alpha").is_some(),
         "the outgoing account is parked at the moment it is replaced"
@@ -213,6 +213,30 @@ fn signing_in_to_an_enrolled_account_again_renews_its_parked_login() {
     assert_eq!(env.live()["claudeAiOauth"]["refreshToken"], "refresh-b2");
 }
 
+/// Signing in again to the account in use, whose login is broken or about to lapse, puts
+/// the new login in use and parks nothing, so the next switch away parks the new login and
+/// not the one it replaced.
+#[test]
+fn signing_in_again_to_the_account_in_use_puts_the_new_login_in_use() {
+    let mut env = two_accounts("again-in-use");
+    let (a, o) = (env.uuid('a'), env.uuid('o'));
+
+    let (out, err, code) = env.enroll_by_signing_in("alpha", &a, "a@example.com", &o, "refresh-a2");
+
+    assert_eq!(code, 0, "{err}");
+    assert!(
+        out.contains("Signed in to alpha") && out.contains("in use now"),
+        "{out}"
+    );
+    assert_eq!(env.live()["claudeAiOauth"]["refreshToken"], "refresh-a2");
+    assert!(env.parked_service("alpha").is_none(), "nothing is parked");
+    let (_, err, code) = env.run(&["use", "beta"]);
+    assert_eq!(code, 0, "{err}");
+    let (_, err, code) = env.run(&["use", "alpha"]);
+    assert_eq!(code, 0, "{err}");
+    assert_eq!(env.live()["claudeAiOauth"]["refreshToken"], "refresh-a2");
+}
+
 /// A label typed wrong at enroll time is fixed without signing in again, whichever account
 /// it names.
 #[test]
@@ -225,7 +249,7 @@ fn renaming_keeps_the_login_and_the_new_label_switches() {
         assert_eq!(code, 0, "{err}");
         assert!(out.contains(&format!("Renamed {from} to {to}")), "{out}");
     }
-    assert_eq!(env.state()["active"], "personal");
+    assert_eq!(env.state()["active"]["claude"], "personal");
     assert_eq!(env.parked_service("work"), Some(beta_park.clone()));
     assert!(env.is_parked(&beta_park), "a rename deletes nothing");
 
@@ -745,4 +769,28 @@ fn what_each_accounts_limits_have_been_doing_is_kept() {
     let (_, err, code) = env.run(&["forget", "beta", "-y"]);
     assert_eq!(code, 0, "{err}");
     assert!(!readings.join(format!("{}.ndjson", env.uuid('b'))).exists());
+}
+
+/// A label written by 0.1.x could contain a slash. Every message about its lapsed login
+/// says to sign in to it again with `pitboard enroll <label> --sign-in`, and that has to
+/// work for such a label as it did before labels could name a tool.
+#[test]
+fn an_old_label_with_a_slash_can_be_signed_in_to_again() {
+    let mut env = two_accounts("old-slash-label");
+    env.edit_state(|state| {
+        for account in state["accounts"].as_array_mut().unwrap() {
+            if account["label"] == "beta" {
+                account["label"] = "team/beta".into();
+            }
+        }
+    });
+    let (b, p) = (env.uuid('b'), env.uuid('p'));
+    let (_, err, code) =
+        env.enroll_by_signing_in("team/beta", &b, "b@example.com", &p, "refresh-b2");
+    assert_eq!(code, 0, "{err}");
+    let renewed = accounts(&env)
+        .into_iter()
+        .find(|a| a["label"] == "team/beta")
+        .expect("still enrolled under its old label");
+    assert_eq!(renewed["provider"], "claude");
 }

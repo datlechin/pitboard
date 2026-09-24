@@ -34,8 +34,8 @@ body:
     id: versions
     attributes:
       label: Versions
-      description: "`pitboard --version`, `claude --version`, and your macOS or Linux version."
-      placeholder: "pitboard 0.1.4, Claude Code 2.1.278, macOS 26.1"
+      description: "`pitboard --version`, `claude --version` and `codex --version` for whichever you use, and your macOS or Linux version."
+      placeholder: "pitboard 0.1.4, Claude Code 2.1.278, codex-cli 0.156.1, macOS 26.1"
     validations:
       required: true
   - type: textarea

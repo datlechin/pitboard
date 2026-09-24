@@ -65,6 +65,51 @@ fn the_harness_can_park_a_login_find_it_and_take_it_away() {
     env.delete_park(&service);
 }
 
+/// No test may read a login the person running it is actually using.
+///
+/// The harness gives Claude Code a scratch config directory and a keychain slot hashed from
+/// it, and `guard_not_live` refuses the two names that could be real. Codex needed the same
+/// and did not have it: `status` reads every tool's live login, so the suite quietly started
+/// reading the developer's own signed-in Codex account and putting it in a snapshot.
+#[test]
+fn every_tool_is_pointed_at_a_scratch_home() {
+    let env = Env::new("isolation");
+    let command = env.command(&["status"]);
+    let named: Vec<(String, String)> = command
+        .get_envs()
+        .filter_map(|(k, v)| {
+            Some((
+                k.to_string_lossy().into_owned(),
+                v?.to_string_lossy().into_owned(),
+            ))
+        })
+        .collect();
+    for home in ["CLAUDE_CONFIG_DIR", "CODEX_HOME", "PITBOARD_HOME"] {
+        let set = named.iter().find(|(k, _)| k == home).unwrap_or_else(|| {
+            panic!("{home} is not pointed anywhere, so a test reads a real one")
+        });
+        assert!(
+            std::path::Path::new(&set.1).starts_with(&env.root),
+            "{home} is {} , which is outside this test's own directory",
+            set.1
+        );
+    }
+    // Set at all, even empty, this pins Claude Code's default slot whatever
+    // CLAUDE_CONFIG_DIR says, which is the real login. It has to be taken away, not left to
+    // whatever the person running the tests exported.
+    let removed: Vec<String> = command
+        .get_envs()
+        .filter(|(_, v)| v.is_none())
+        .map(|(k, _)| k.to_string_lossy().into_owned())
+        .collect();
+    assert!(
+        removed
+            .iter()
+            .any(|k| k == "CLAUDE_SECURESTORAGE_CONFIG_DIR"),
+        "CLAUDE_SECURESTORAGE_CONFIG_DIR is inherited, so a test can read the real slot"
+    );
+}
+
 use std::path::PathBuf;
 use std::process::Command;
 
@@ -176,10 +221,22 @@ impl Env {
         c.args(args)
             .env("CLAUDE_CONFIG_DIR", &self.root)
             .env_remove("CLAUDE_SECURESTORAGE_CONFIG_DIR")
+            // Every tool pitboard reads gets a scratch home of its own, empty unless a
+            // test puts something in it. Without this the suite reads whatever the person
+            // running it happens to be signed in to, which is both a flaky test and a real
+            // login no test may touch.
+            .env("CODEX_HOME", self.codex_home())
             .env("PITBOARD_HOME", self.root.join("pitboard"))
             .env("PITBOARD_API_BASE", self.server.url())
             .env("PATH", path);
         c
+    }
+
+    /// This test's own `CODEX_HOME`, created because Codex requires the directory to exist.
+    pub fn codex_home(&self) -> PathBuf {
+        let dir = self.root.join("codex");
+        let _ = std::fs::create_dir_all(&dir);
+        dir
     }
 
     pub fn run(&self, args: &[&str]) -> (String, String, i32) {
@@ -384,6 +441,140 @@ chmod 600 "$CLAUDE_CONFIG_DIR/.credentials.json""#
         uuid_for(&self.name, who)
     }
 
+    /// Sign Codex in to `account` the way `codex login` leaves it: an `auth.json` in this
+    /// test's own `CODEX_HOME`, mode 0600, whose ID token names the account. The token is
+    /// signed by nothing, and nothing in pitboard checks a signature: it reads the claims.
+    pub fn sign_in_codex(&self, account: &str, email: &str, refresh: &str) {
+        let login = codex_login(account, email, refresh);
+        use std::os::unix::fs::PermissionsExt;
+        let path = self.codex_home().join("auth.json");
+        std::fs::write(&path, login.to_string()).unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).unwrap();
+    }
+
+    /// Stand in for `codex login`: signs `login` into whichever `CODEX_HOME` it is run with,
+    /// the private directory pitboard makes for a sign-in, and does nothing else. Every
+    /// test that runs a Codex sign-in installs this first, because the harness keeps the
+    /// real `PATH` behind its own `bin`, and the real `codex login` must never run here.
+    pub fn install_fake_codex_login(&self, login: &serde_json::Value) {
+        use std::os::unix::fs::PermissionsExt;
+        let bin = self.root.join("bin");
+        std::fs::create_dir_all(&bin).unwrap();
+        let script = bin.join("codex");
+        let _ = std::fs::remove_file(&script);
+        std::fs::write(&script, format!("#!/bin/sh\n{}", fake_codex_login(login))).unwrap();
+        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
+
+    /// `install_fake_codex_login` laid out the way npm installs Codex, in a prefix of this
+    /// test's own that no `PATH` has. Returns `<prefix>/bin/codex`, the program as found.
+    ///
+    /// npm links `<prefix>/bin/codex` to a script inside `lib/node_modules` whose first line
+    /// is `#!/usr/bin/env node`, and puts the `node` that installed it in `<prefix>/bin`.
+    /// Here that is `fakenode`, which runs the script with `sh`, so a real `node` on this
+    /// machine can never be the one found: the script starts only where `PATH` has its
+    /// prefix's `bin`.
+    pub fn install_fake_npm_codex_login(&self, login: &serde_json::Value) -> PathBuf {
+        use std::os::unix::fs::PermissionsExt;
+        let prefix = self.root.join("npm");
+        let bin = prefix.join("bin");
+        let package = prefix.join("lib/node_modules/@openai/codex/bin");
+        std::fs::create_dir_all(&bin).unwrap();
+        std::fs::create_dir_all(&package).unwrap();
+        let node = bin.join("fakenode");
+        std::fs::write(&node, "#!/bin/sh\nexec /bin/sh \"$@\"\n").unwrap();
+        std::fs::set_permissions(&node, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let script = package.join("codex.js");
+        std::fs::write(
+            &script,
+            format!("#!/usr/bin/env fakenode\n{}", fake_codex_login(login)),
+        )
+        .unwrap();
+        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let program = bin.join("codex");
+        let _ = std::fs::remove_file(&program);
+        std::os::unix::fs::symlink("../lib/node_modules/@openai/codex/bin/codex.js", &program)
+            .unwrap();
+        program
+    }
+
+    /// The live Codex login, as this test's `CODEX_HOME` holds it.
+    pub fn codex_live(&self) -> serde_json::Value {
+        let raw = std::fs::read_to_string(self.codex_home().join("auth.json")).unwrap();
+        serde_json::from_str(&raw).unwrap()
+    }
+
+    /// Sign Codex in with an API key rather than an account, the way `codex login
+    /// --with-api-key` leaves it. The key is made up.
+    pub fn sign_in_codex_with_an_api_key(&self) {
+        use std::os::unix::fs::PermissionsExt;
+        let login = serde_json::json!({
+            "auth_mode": "apikey",
+            "OPENAI_API_KEY": "sk-not-a-real-key",
+        });
+        let path = self.codex_home().join("auth.json");
+        std::fs::write(&path, login.to_string()).unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).unwrap();
+    }
+
+    /// Put a `codex` of this test's own first on `PATH`, laid out the way Codex's standalone
+    /// installer lays one out, so whatever reads which Codex is installed reads this one.
+    ///
+    /// The `PATH` a test runs with ends with the real one, and the real standalone install
+    /// lives inside the developer's own `~/.codex`, which no test may go near. Running it
+    /// fails loudly: nothing that only asks which version it is ever runs it.
+    pub fn install_fake_codex(&self, version: &str) {
+        use std::os::unix::fs::PermissionsExt;
+        let installed = self
+            .root
+            .join("codex-install/releases")
+            .join(format!("{version}-test-target"))
+            .join("bin/codex");
+        std::fs::create_dir_all(installed.parent().unwrap()).unwrap();
+        std::fs::write(
+            &installed,
+            "#!/bin/sh\necho 'a test stand-in for codex, not meant to run' >&2\nexit 64\n",
+        )
+        .unwrap();
+        std::fs::set_permissions(&installed, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let bin = self.root.join("bin");
+        std::fs::create_dir_all(&bin).unwrap();
+        let link = bin.join("codex");
+        let _ = std::fs::remove_file(&link);
+        std::os::unix::fs::symlink(&installed, &link).unwrap();
+    }
+
+    /// Make the fake OpenAI answer what a Codex login has left: a five-hour window and a
+    /// weekly one, in the shape its usage endpoint answers with.
+    pub fn codex_usage(&mut self, five_hour: f64, weekly: f64) {
+        let window = |percent: f64, seconds: i64, reset_at: i64| {
+            serde_json::json!({
+                "used_percent": percent,
+                "limit_window_seconds": seconds,
+                "reset_after_seconds": 3600,
+                "reset_at": reset_at,
+            })
+        };
+        let mock = self
+            .server
+            .mock("GET", "/wham/usage")
+            .with_status(200)
+            .with_body(
+                serde_json::json!({
+                    "plan_type": "pro",
+                    "rate_limit": {
+                        "allowed": true,
+                        "limit_reached": false,
+                        "primary_window": window(five_hour, 18_000, 1_789_990_000),
+                        "secondary_window": window(weekly, 604_800, 1_790_500_000),
+                    },
+                })
+                .to_string(),
+            )
+            .create();
+        self.mocks.push(mock);
+    }
+
     /// Where this platform's Claude Code keeps the live credential: the keychain slot on
     /// macOS, and `.credentials.json` in the config directory everywhere else.
     fn live_path(&self) -> PathBuf {
@@ -509,6 +700,65 @@ impl Drop for Env {
         }
         let _ = std::fs::remove_dir_all(&self.root);
     }
+}
+
+/// A Codex login the way `codex login` writes one, for `account`: an ID token naming it,
+/// signed by nothing, and nothing in pitboard checks a signature: it reads the claims.
+pub fn codex_login(account: &str, email: &str, refresh: &str) -> serde_json::Value {
+    let claims = serde_json::json!({
+        "email": email,
+        "https://api.openai.com/auth": {
+            "chatgpt_account_id": account,
+            "chatgpt_user_id": format!("user-{account}"),
+            "chatgpt_plan_type": "pro",
+        },
+    });
+    serde_json::json!({
+        "auth_mode": "chatgpt",
+        "OPENAI_API_KEY": null,
+        "tokens": {
+            "id_token": format!(
+                "{}.{}.{}",
+                base64url(br#"{"alg":"RS256"}"#),
+                base64url(claims.to_string().as_bytes()),
+                base64url(b"not a real signature"),
+            ),
+            "access_token": format!("codex-access-{refresh}"),
+            "refresh_token": refresh,
+            "account_id": account,
+        },
+        "last_refresh": "2026-09-15T05:05:11Z",
+    })
+}
+
+/// What a stand-in for `codex login` does once started, whatever line starts it: store
+/// `login` in whichever `CODEX_HOME` it is run with, and nothing else.
+fn fake_codex_login(login: &serde_json::Value) -> String {
+    format!(
+        "[ \"$1\" = login ] || exit 64\n\
+         [ -n \"$CODEX_HOME\" ] || exit 65\n\
+         cat > \"$CODEX_HOME/auth.json\" <<'LOGIN'\n{login}\nLOGIN\n\
+         chmod 600 \"$CODEX_HOME/auth.json\"\n\
+         echo 'Successfully logged in' >&2\n"
+    )
+}
+
+/// Unpadded base64url, which is how every part of a JWT is written.
+fn base64url(bytes: &[u8]) -> String {
+    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+    let mut out = String::new();
+    for chunk in bytes.chunks(3) {
+        let mut held = 0u32;
+        for (at, byte) in chunk.iter().enumerate() {
+            held |= u32::from(*byte) << (16 - 8 * at);
+        }
+        for at in 0..(chunk.len() * 8).div_ceil(6) {
+            out.push(char::from(
+                ALPHABET[((held >> (18 - 6 * at)) & 0x3f) as usize],
+            ));
+        }
+    }
+    out
 }
 
 /// A credential shaped like Claude Code's, keyed so the fake Anthropic can tell who owns it.

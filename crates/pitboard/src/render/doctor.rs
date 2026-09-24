@@ -1,17 +1,41 @@
 //! `pitboard doctor` for a person and for a program.
 
-use crate::ui::{self, BAD, DIM, GOOD, WARN, pad, paint};
+use crate::ui::{self, BAD, BOLD, DIM, GOOD, WARN, pad, paint};
 use pitboard_core::doctor::{Check, Diagnosis, Level};
 use serde_json::{Value, json};
 
+/// Whether a check belongs to Codex's section.
+fn is_codex(check: &Check) -> bool {
+    check.code.starts_with("codex_")
+}
+
 pub fn human(checks: &[Check]) -> String {
-    let width = checks
-        .iter()
-        .map(|c| ui::columns(&c.name))
-        .max()
-        .unwrap_or(0);
+    // Each section lines up on its own, so what Codex's checks are called can never move a
+    // column of Claude Code's.
+    let width = |codex: bool| {
+        checks
+            .iter()
+            .filter(|c| is_codex(c) == codex)
+            .map(|c| ui::columns(&c.name))
+            .max()
+            .unwrap_or(0)
+    };
+    let (claude_width, codex_width) = (width(false), width(true));
     let mut out = String::new();
+    // Codex's checks come last and are coded `codex_`, so they get a heading of their own
+    // where they start. A machine with no Codex has none of them and reads as it always
+    // did.
+    let mut in_codex = false;
     for c in checks {
+        if !in_codex && is_codex(c) {
+            in_codex = true;
+            out.push_str(&format!("\n{}\n", paint(BOLD, "Codex")));
+        }
+        let width = if is_codex(c) {
+            codex_width
+        } else {
+            claude_width
+        };
         let mark = match c.level {
             Level::Ok => paint(GOOD, "✓"),
             Level::Warn => paint(WARN, "!"),
@@ -80,5 +104,59 @@ mod tests {
         assert!(plain(&[check(Level::Ok)]).ends_with("Everything pitboard relies on holds.\n"));
         assert!(plain(&[check(Level::Ok), check(Level::Warn)]).contains("1 to look at"));
         assert!(plain(&[check(Level::Fail)]).contains("1 broken"));
+    }
+
+    /// Codex's checks sit under a heading of their own, after everything about Claude
+    /// Code, and a report with none of them reads as it did before there were any.
+    #[test]
+    fn codex_checks_get_a_heading_of_their_own() {
+        let plain = |checks: &[Check]| anstream::adapter::strip_str(&human(checks)).to_string();
+        let claude = [check(Level::Ok), check(Level::Warn)];
+        assert!(!plain(&claude).contains("Codex"));
+        let before = plain(&[check(Level::Ok)]);
+
+        let mut codex = check(Level::Ok);
+        codex.code = "codex_backend";
+        codex.name = "Codex login store".into();
+        let mut running = check(Level::Ok);
+        running.code = "codex_running";
+        running.name = "running Codex".into();
+        let text = plain(&[check(Level::Ok), codex, running]);
+        let lines: Vec<&str> = text.lines().collect();
+        let heading = lines.iter().position(|l| *l == "Codex").expect(&text);
+        assert_eq!(
+            lines[heading - 1],
+            "",
+            "set apart from Claude Code's: {text}"
+        );
+        assert!(lines[heading + 1].contains("Codex login store"), "{text}");
+        assert_eq!(text.matches("\nCodex\n").count(), 1, "{text}");
+        assert!(
+            before.starts_with(&text[..text.find("\nCodex").unwrap()]),
+            "what comes before it is what a machine without Codex shows: {text}"
+        );
+    }
+
+    /// A Codex account's checks are Codex's: under its heading, and in its column, so a
+    /// long `codex/...` name cannot push Claude Code's details along.
+    #[test]
+    fn a_codex_account_is_listed_under_codex() {
+        let plain = |checks: &[Check]| anstream::adapter::strip_str(&human(checks)).to_string();
+        let mut backend = check(Level::Ok);
+        backend.code = "codex_backend";
+        backend.name = "Codex login store".into();
+        let mut account = check(Level::Ok);
+        account.code = "codex_parked_login";
+        account.name = "account codex/a-rather-long-label".into();
+        let before = plain(&[check(Level::Ok)]);
+        let text = plain(&[check(Level::Ok), backend, account]);
+        let lines: Vec<&str> = text.lines().collect();
+        let heading = lines.iter().position(|l| *l == "Codex").expect(&text);
+        let at = lines
+            .iter()
+            .position(|l| l.contains("codex/a-rather-long-label"))
+            .unwrap();
+        assert!(at > heading, "{text}");
+        assert_eq!(lines[0], before.lines().next().unwrap(), "{text}");
     }
 }

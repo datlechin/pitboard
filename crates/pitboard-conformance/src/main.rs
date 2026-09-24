@@ -1,4 +1,4 @@
-//! Check what pitboard believes about Claude Code against a Claude Code build.
+//! Check what pitboard believes about a coding tool against a build of that tool.
 //!
 //! Every load-bearing fact in pitboard was read out of one build and lives in
 //! [`pitboard_core::assumptions`] with the literals it is readable by. This reads those
@@ -18,21 +18,32 @@
 //! landed.
 //!
 //! ```text
-//! pitboard-conformance <path to a claude binary> [--json]
+//! pitboard-conformance <path to a binary> [--provider claude|codex] [--json]
 //! ```
+//!
+//! Each tool has its own register, and a build of one tool says nothing about another's
+//! facts, so a run checks one tool's build against that tool's register. Claude Code is
+//! the default, which is what every run before there was a second tool meant.
 
 use pitboard_core::assumptions::{self, Reading};
+use pitboard_core::provider::ProviderId;
 use std::process::ExitCode;
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    let as_json = args.iter().any(|a| a == "--json");
-    let Some(path) = args.iter().find(|a| !a.starts_with("--")) else {
-        eprintln!("usage: pitboard-conformance <path to a claude binary> [--json]");
-        return ExitCode::from(2);
+    let (path, provider, as_json) = match parse(&args) {
+        Ok(parsed) => parsed,
+        Err(problem) => {
+            eprintln!("{problem}");
+            eprintln!(
+                "usage: pitboard-conformance <path to a binary> [--provider {}] [--json]",
+                known().join("|")
+            );
+            return ExitCode::from(2);
+        }
     };
 
-    let bytes = match std::fs::read(path) {
+    let bytes = match std::fs::read(&path) {
         Ok(b) => b,
         Err(e) => {
             eprintln!("cannot read {path}: {e}");
@@ -41,7 +52,7 @@ fn main() -> ExitCode {
     };
     let strings = assumptions::printable_runs(&bytes, 6);
 
-    let readings: Vec<(&assumptions::Assumption, Reading)> = assumptions::ASSUMPTIONS
+    let readings: Vec<(&assumptions::Assumption, Reading)> = assumptions::of(provider)
         .iter()
         .map(|a| (a, assumptions::read_from_build(a, &strings)))
         .collect();
@@ -56,7 +67,7 @@ fn main() -> ExitCode {
     if as_json {
         let report = serde_json::json!({
             "build": path,
-            "verified_against": assumptions::VERIFIED_AGAINST,
+            "verified_against": assumptions::verified_against(provider),
             "assumptions": readings.iter().map(|(a, r)| serde_json::json!({
                 "name": a.name,
                 "reading": match r {
@@ -81,8 +92,9 @@ fn main() -> ExitCode {
         println!("{report}");
     } else {
         println!(
-            "{path}\npitboard's facts were read from Claude Code {}\n",
-            assumptions::VERIFIED_AGAINST
+            "{path}\npitboard's facts about {} were read from {}\n",
+            provider.code(),
+            assumptions::verified_against(provider)
         );
         for (a, reading) in &readings {
             match reading {
@@ -125,5 +137,77 @@ fn main() -> ExitCode {
         ExitCode::SUCCESS
     } else {
         ExitCode::FAILURE
+    }
+}
+
+/// Every tool with a register, as `--provider` takes it.
+fn known() -> Vec<&'static str> {
+    ProviderId::ALL.iter().map(|p| p.code()).collect()
+}
+
+/// The build to read, the tool whose register to read it against, and whether to answer in
+/// JSON. Flags go anywhere; the one argument that is not a flag or a flag's value is the
+/// build.
+fn parse(args: &[String]) -> Result<(String, ProviderId, bool), String> {
+    let mut path = None;
+    let mut provider = ProviderId::Claude;
+    let mut as_json = false;
+    let mut rest = args.iter();
+    while let Some(arg) = rest.next() {
+        match arg.as_str() {
+            "--json" => as_json = true,
+            "--provider" => {
+                let named = rest.next().ok_or("--provider needs a tool")?;
+                provider = ProviderId::parse(named)
+                    .ok_or_else(|| format!("--provider takes one of: {}", known().join(", ")))?;
+            }
+            flag if flag.starts_with("--") => return Err(format!("unknown flag {flag}")),
+            build if path.is_none() => path = Some(build.to_string()),
+            extra => return Err(format!("one build at a time, not also {extra}")),
+        }
+    }
+    let path = path.ok_or("no build to read")?;
+    Ok((path, provider, as_json))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn args(text: &str) -> Vec<String> {
+        text.split_whitespace().map(str::to_owned).collect()
+    }
+
+    /// The build was once taken as whatever came two places after `--provider`, so a flag
+    /// there was read as the file to open.
+    #[test]
+    fn flags_go_anywhere_and_the_build_is_the_one_bare_argument() {
+        for line in [
+            "/b --provider codex --json",
+            "--provider codex --json /b",
+            "--json /b --provider codex",
+        ] {
+            assert_eq!(
+                parse(&args(line)).unwrap(),
+                ("/b".into(), ProviderId::Codex, true),
+                "{line}"
+            );
+        }
+        assert_eq!(
+            parse(&args("/b")).unwrap(),
+            ("/b".into(), ProviderId::Claude, false)
+        );
+    }
+
+    #[test]
+    fn what_cannot_be_read_says_why() {
+        assert!(parse(&args("--provider")).is_err());
+        assert!(
+            parse(&args("/b --provider nothing"))
+                .unwrap_err()
+                .contains("codex")
+        );
+        assert!(parse(&args("--json")).is_err());
+        assert!(parse(&args("/a /b")).is_err());
     }
 }

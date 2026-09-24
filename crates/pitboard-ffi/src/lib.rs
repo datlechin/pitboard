@@ -11,8 +11,8 @@ use std::sync::{Arc, Mutex};
 
 uniffi::setup_scaffolding!();
 
-/// Where Claude Code and pitboard keep things. An app started from Finder sees none of the
-/// shell's environment, so it passes these itself; `None` means Claude Code's default.
+/// Where each tool and pitboard keep things. An app started from Finder sees none of the
+/// shell's environment, so it passes these itself; `None` means the tool's default.
 #[derive(uniffi::Record)]
 pub struct Settings {
     pub home: String,
@@ -25,6 +25,15 @@ pub struct Settings {
     pub user: Option<String>,
     /// The `claude` that runs a sign-in, since `PATH` may not find it.
     pub claude_program: Option<String>,
+    /// `CODEX_HOME`; empty means unset.
+    pub codex_home: Option<String>,
+    /// The `codex` that runs a sign-in, since `PATH` may not find it.
+    pub codex_program: Option<String>,
+    /// Where a tool's program is looked for, in `PATH`'s form, and what its sign-in is given
+    /// as `PATH`, behind the program's own directory where that is not on it: the person's
+    /// login shell's, which an app does not inherit. `None` is this process's own `PATH`.
+    #[uniffi(default)]
+    pub search_path: Option<String>,
 }
 
 impl Settings {
@@ -45,9 +54,45 @@ impl Settings {
         if let Some(program) = self.claude_program {
             ctx = ctx.with_claude_program(PathBuf::from(program));
         }
+        if let Some(dir) = self.codex_home {
+            ctx = ctx.with_codex_home(dir);
+        }
+        if let Some(program) = self.codex_program {
+            ctx = ctx.with_codex_program(PathBuf::from(program));
+        }
+        if let Some(path) = self.search_path {
+            ctx = ctx.with_search_path(path);
+        }
         // These bindings exist for the app, so a change made through them says so.
         ctx.with_caller("app".into())
     }
+}
+
+/// A tool pitboard handles, as the app names it to a person.
+#[derive(Debug, uniffi::Record)]
+pub struct Tool {
+    /// What a label's prefix and every `provider` field say: `claude`, `codex`.
+    pub code: String,
+    /// As its own documentation names it: `Claude Code`, `Codex`.
+    pub name: String,
+    /// The command that runs it, which is what a person restarts.
+    pub program: String,
+    /// The company behind it, which is who is asked about its accounts.
+    pub service: String,
+}
+
+/// Every tool pitboard handles, in the order a listing shows them.
+#[uniffi::export]
+pub fn tools() -> Vec<Tool> {
+    pitboard_core::provider::ProviderId::ALL
+        .iter()
+        .map(|tool| Tool {
+            code: tool.code().into(),
+            name: tool.name().into(),
+            program: tool.program().into(),
+            service: tool.service().into(),
+        })
+        .collect()
 }
 
 /// Something to know about that did not stop the operation.
@@ -93,7 +138,10 @@ pub struct Abandoned {
 /// What renewing every due parked login came to.
 #[derive(Debug, uniffi::Record)]
 pub struct Renewed {
+    /// As a person types it: bare for Claude Code, `codex/work` for Codex.
     pub label: String,
+    /// Which tool's login it is.
+    pub provider: String,
     /// `renewed`, `renewal_deferred`, `parked_login_refused`, or the code of a failure.
     pub outcome: String,
 }
@@ -173,8 +221,12 @@ pub enum Source {
 
 #[derive(uniffi::Record)]
 pub struct Window {
-    /// Anthropic's kind, such as `session`, `weekly_all` or `weekly_scoped`.
+    /// The service's own name for it: Anthropic's `session`, `weekly_all` or
+    /// `weekly_scoped`, or one named after its length for OpenAI.
     pub kind: String,
+    /// How long the window runs, where that is known. The way to name a window to a person
+    /// whatever its service called it.
+    pub length_seconds: Option<i64>,
     /// The model a scoped limit applies to.
     pub scope: Option<String>,
     /// Share already used; past 100 once exceeded.
@@ -202,8 +254,21 @@ pub struct Parked {
 
 #[derive(uniffi::Record)]
 pub struct Account {
+    /// Unique among the accounts of one status, and stable between two: the tool and the
+    /// account, or the tool alone for a login that belongs to no account pitboard can name.
+    /// Two tools' accounts can share a label, so a label cannot be an identity.
+    pub id: String,
+    /// Which tool the account is for, as a `Tool`'s `code`.
+    pub provider: String,
     /// `None` for an account signed in but not enrolled.
     pub label: Option<String>,
+    /// The label with its tool, `claude/work` or `codex/work`: what to pass back to switch
+    /// to, forget or rename it, which names exactly one account whatever else is enrolled.
+    /// `None` exactly when `label` is.
+    pub qualified: Option<String>,
+    /// A login of this tool is there and belongs to no account pitboard can name: one it
+    /// could not read, or one it cannot switch, such as an API key. Not an account to enrol.
+    pub unplaced: bool,
     pub email: String,
     pub account_uuid: String,
     pub signed_in: bool,
@@ -234,13 +299,23 @@ pub struct Status {
     pub warnings: Vec<Warning>,
 }
 
+/// When a session of the tool that is already running picks a switch up.
+#[derive(uniffi::Enum)]
+pub enum Adoption {
+    /// On its own, within this many seconds.
+    Follows { within_seconds: u32 },
+    /// Never: `program` has to be quit and started again.
+    Restart { program: String },
+}
+
 #[derive(uniffi::Enum)]
 pub enum Switch {
-    /// Running Claude Code sessions follow within `adoption_ceiling_seconds`.
     Switched {
+        /// Which tool's login moved.
+        provider: String,
         from: String,
         to: String,
-        adoption_ceiling_seconds: u32,
+        adoption: Adoption,
     },
     AlreadyActive {
         label: String,
@@ -261,6 +336,9 @@ pub enum EnrolledAs {
     SignedIn,
     /// An enrolled account's parked login, renewed.
     Renewed,
+    /// The account signed in now, signed in to: its new login is the one in use now.
+    /// `again` when it was enrolled already, and not when this sign-in enrolled it.
+    InUse { again: bool },
 }
 
 #[derive(uniffi::Record)]
@@ -268,6 +346,20 @@ pub struct Enrolled {
     pub email: String,
     pub enrolled: EnrolledAs,
     pub warnings: Vec<Warning>,
+}
+
+fn enrolled(enrolled: switch::Enrolled, warnings: Vec<Warning>) -> Enrolled {
+    let (email, enrolled) = match enrolled {
+        switch::Enrolled::Current { email } => (email, EnrolledAs::Current),
+        switch::Enrolled::SignedIn { email } => (email, EnrolledAs::SignedIn),
+        switch::Enrolled::Renewed { email } => (email, EnrolledAs::Renewed),
+        switch::Enrolled::InUse { email, again } => (email, EnrolledAs::InUse { again }),
+    };
+    Enrolled {
+        email,
+        enrolled,
+        warnings,
+    }
 }
 
 /// The email of the account a change was made to.
@@ -302,12 +394,23 @@ pub struct Diagnosis {
 }
 
 fn account(row: status::Row, now: i64) -> Account {
+    let key = row.key();
+    let unplaced = row.unplaced();
     Account {
+        id: if row.account_uuid.is_empty() {
+            format!("{}:login", row.provider.code())
+        } else {
+            format!("{}:{}", row.provider.code(), row.account_uuid)
+        },
+        provider: row.provider.code().into(),
+        qualified: key.map(|k| k.qualified()),
+        unplaced,
         switchable: row.switchable(now),
         lasts_seconds: row.runway.seconds(),
         lasts_burning: matches!(row.runway, pitboard_core::history::Runway::Burning(_)),
         stale: row.stale.map(|s| s.code().to_string()),
-        stale_explanation: row.stale.and_then(|s| s.explanation()).map(str::to_owned),
+        // In the row's own tool's words: a Codex row is not about Anthropic.
+        stale_explanation: row.explanation().map(str::to_owned),
         parked: row.parked.map(|p| Parked {
             parked_at: p.parked_at,
             access_expires_at: p.access_expires_at,
@@ -324,6 +427,7 @@ fn account(row: status::Row, now: i64) -> Account {
                 .windows
                 .into_iter()
                 .map(|w| Window {
+                    length_seconds: w.length_seconds,
                     kind: w.kind,
                     scope: w.scope,
                     percent: w.percent,
@@ -348,23 +452,39 @@ fn changed<T, R>(
     Ok(make(done.value, warnings(&done.warnings)))
 }
 
-/// A sign-in in progress: Claude Code's own, running with its output piped here because an
-/// app has no terminal to hand it. Measured in 2.1.278: it opens the browser itself and
-/// finishes through a loopback callback, reading stdin only for the fallback code.
+/// A sign-in in progress: the tool's own, running with its output piped here because an
+/// app has no terminal to hand it. Both tools open the browser themselves and finish
+/// through a loopback callback. Claude Code reads stdin only for a fallback code to paste;
+/// Codex prints the address to open when its browser cannot, and reads nothing.
 #[derive(uniffi::Object)]
 pub struct SignIn {
     watched: Mutex<Option<switch::WatchedSignIn>>,
+    /// Apart from `watched`: reading waits on the tool, and Codex says nothing between its
+    /// address and the browser coming back, so a read that held `watched` kept a cancel or
+    /// a paste waiting until then, and the app's main thread with it.
+    said: switch::Said,
     label: String,
+    provider: pitboard_core::provider::ProviderId,
     core: Arc<Pitboard>,
 }
 
 #[uniffi::export]
 impl SignIn {
-    /// The next thing Claude Code said, or nothing once it has stopped saying anything.
+    /// Which tool's sign-in this is, as a `Tool`'s `code`.
+    pub fn provider(&self) -> String {
+        self.provider.code().into()
+    }
+
+    /// Whether this tool's sign-in can take a code typed back, for when the browser cannot
+    /// reach its callback. Claude Code's can; Codex's prints an address instead.
+    pub fn takes_a_code(&self) -> bool {
+        self.provider == pitboard_core::provider::ProviderId::Claude
+    }
+
+    /// The next thing the tool said, or nothing once it has stopped saying anything.
     /// Blocks, so call it off the main thread.
     pub fn next_line(&self) -> Option<String> {
-        let held = self.watched.lock().ok()?;
-        held.as_ref()?.next_line()
+        self.said.next()
     }
 
     /// Types the code back, for when the browser could not reach the callback.
@@ -397,18 +517,7 @@ impl SignIn {
         let login = watched.finish()?;
         changed(
             self.core.core.enroll_signed_in(&self.label, login),
-            |enrolled, warnings| {
-                let (email, enrolled) = match enrolled {
-                    switch::Enrolled::Current { email } => (email, EnrolledAs::Current),
-                    switch::Enrolled::SignedIn { email } => (email, EnrolledAs::SignedIn),
-                    switch::Enrolled::Renewed { email } => (email, EnrolledAs::Renewed),
-                };
-                Enrolled {
-                    email,
-                    enrolled,
-                    warnings,
-                }
-            },
+            enrolled,
         )
     }
 
@@ -436,8 +545,8 @@ impl Pitboard {
         })
     }
 
-    /// Every account and what it has left, asked of Anthropic. Parked logins whose access
-    /// has lapsed are renewed first.
+    /// Every account of every tool and what it has left, each asked of its own service.
+    /// Parked logins whose access has lapsed are renewed first.
     ///
     /// `fresh` asks about every account whatever was asked moments ago. Pass false for a
     /// poll and true when somebody asked for it: an account is otherwise only asked about
@@ -461,10 +570,28 @@ impl Pitboard {
     pub fn switch_to(&self, label: String) -> Result<Switched, PitboardError> {
         changed(self.core.switch_to(&label), |outcome, warnings| Switched {
             outcome: match outcome {
-                switch::Outcome::Switched { from, to, .. } => Switch::Switched {
+                switch::Outcome::Switched {
+                    provider,
                     from,
                     to,
-                    adoption_ceiling_seconds: switch::ADOPTION_CEILING_SECONDS,
+                    adoption,
+                    ..
+                } => Switch::Switched {
+                    provider: provider.code().into(),
+                    from,
+                    to,
+                    adoption: match adoption {
+                        pitboard_core::provider::Adoption::PollingWithin(seconds) => {
+                            Adoption::Follows {
+                                within_seconds: seconds,
+                            }
+                        }
+                        pitboard_core::provider::Adoption::RestartRequired { program } => {
+                            Adoption::Restart {
+                                program: program.into(),
+                            }
+                        }
+                    },
                 },
                 switch::Outcome::AlreadyActive { label } => Switch::AlreadyActive { label },
             },
@@ -474,27 +601,20 @@ impl Pitboard {
 
     /// Enroll the account signed in now under `label`.
     pub fn enroll_current(&self, label: String) -> Result<Enrolled, PitboardError> {
-        changed(self.core.enroll_current(&label), |enrolled, warnings| {
-            let (email, enrolled) = match enrolled {
-                switch::Enrolled::Current { email } => (email, EnrolledAs::Current),
-                switch::Enrolled::SignedIn { email } => (email, EnrolledAs::SignedIn),
-                switch::Enrolled::Renewed { email } => (email, EnrolledAs::Renewed),
-            };
-            Enrolled {
-                email,
-                enrolled,
-                warnings,
-            }
-        })
+        changed(self.core.enroll_current(&label), enrolled)
     }
 
-    /// Starts Claude Code's own sign-in for a new account, watched rather than inherited.
-    /// The caller shows what it says, can paste the fallback code, and finishes it.
+    /// Starts the tool's own sign-in for a new account, watched rather than inherited. The
+    /// label may name the tool, as in `codex/work`; a bare one means Claude Code. The caller
+    /// shows what the tool says, can paste a fallback code, and finishes it.
     pub fn sign_in(self: Arc<Self>, label: String) -> Result<Arc<SignIn>, PitboardError> {
-        let watched = self.core.sign_in_watched()?;
+        let watched = self.core.sign_in_watched(&label)?;
+        let provider = watched.provider();
         Ok(Arc::new(SignIn {
+            said: watched.said(),
             watched: Mutex::new(Some(watched)),
             label,
+            provider,
             core: self,
         }))
     }
@@ -577,8 +697,9 @@ impl Pitboard {
         self.core
             .renew()
             .into_iter()
-            .map(|(label, outcome)| Renewed {
-                label,
+            .map(|(key, outcome)| Renewed {
+                label: key.typed(),
+                provider: key.provider.code().into(),
                 outcome: outcome.code().to_string(),
             })
             .collect()

@@ -32,6 +32,8 @@ pub mod budget;
 pub mod context;
 pub mod doctor;
 pub mod error;
+pub mod label;
+pub mod provider;
 pub mod redact;
 pub mod schedule;
 pub mod service;
@@ -44,19 +46,14 @@ pub mod time;
 pub mod usage;
 
 pub(crate) mod atomic;
-pub(crate) mod claude;
-pub(crate) mod configfile;
-pub(crate) mod daemon;
 pub(crate) mod fault;
 pub mod history;
 pub(crate) mod home;
 pub(crate) mod lock;
 pub(crate) mod park;
 pub(crate) mod pending;
-#[cfg(target_os = "macos")]
 pub(crate) mod process;
 pub(crate) mod readings;
-pub(crate) mod slot;
 pub(crate) mod store;
 
 /// What the integration tests reach into: they plant and inspect parked logins in the real
@@ -65,9 +62,9 @@ pub(crate) mod store;
 #[doc(hidden)]
 pub mod testing {
     pub use crate::api::scripted::{Answer, Asked, ScriptedApi, Trouble};
-    pub use crate::claude::live_service;
-    pub use crate::slot::{LIVE_SERVICE, dir_hash, service_for_dir};
-    pub use crate::store::memory::{Fault, MemoryPlatform, MemoryStore};
+    pub use crate::provider::claude::paths::live_service;
+    pub use crate::provider::claude::slot::{LIVE_SERVICE, dir_hash, service_for_dir};
+    pub use crate::store::memory::{Fault, MemoryHost, MemoryStore};
     pub use crate::store::{vault_delete, vault_read, vault_write};
     pub use crate::time::{Clock, FixedClock};
 }

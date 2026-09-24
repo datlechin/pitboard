@@ -14,7 +14,14 @@ expression: "serde_json::json!({ \"exit\": code, \"envelope\": value })"
         "storage_dir": "[path]",
         "credential_service": "[slot]",
         "credential_store": "[backend]",
-        "home": "[path]"
+        "home": "[path]",
+        "codex": {
+          "home": "[path]",
+          "present": true,
+          "backend": "file",
+          "login_present": false,
+          "version": "0.154.0"
+        }
       },
       "checks": "[checks]"
     },

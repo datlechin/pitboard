@@ -1,5 +1,5 @@
 ---
-source: tests/contract.rs
+source: crates/pitboard/tests/contract.rs
 expression: "serde_json :: json! ({ \"exit\" : code, \"envelope\" : value })"
 ---
 {
@@ -11,9 +11,14 @@ expression: "serde_json :: json! ({ \"exit\" : code, \"envelope\" : value })"
     "data": {
       "from": "alpha",
       "to": "beta",
+      "provider": "claude",
       "changed": true,
       "parked_at": "[time]",
-      "adoption_ceiling_seconds": 33
+      "adoption_ceiling_seconds": 33,
+      "adoption": {
+        "follows": "polling",
+        "within_seconds": 33
+      }
     },
     "warnings": [],
     "error": null

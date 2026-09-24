@@ -27,15 +27,21 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-/// How long each window kind covers, which is what makes the floor a derivation rather
-/// than a preference. Measured from the reading itself where the reading says; these are
-/// the fallbacks for a kind whose reset time is missing.
-fn window_seconds(kind: &str) -> Option<i64> {
-    match kind {
-        "five_hour" => Some(5 * 3600),
-        "seven_day" => Some(7 * 86_400),
-        _ => None,
-    }
+/// How long a window runs, which is what makes the floor a derivation rather than a
+/// preference.
+///
+/// The reading says, where the service said: OpenAI states every window's length, and
+/// pitboard derives Anthropic's from its kind when it reads the answer. A reading
+/// remembered from before pitboard kept the length has only its kind, and Anthropic's
+/// kinds are the only ones that could have been remembered then.
+///
+/// Until this read the length, it knew only `five_hour` and `seven_day`, and Anthropic has
+/// been answering `session` and `weekly_all`. Every account was asked about once a minute,
+/// the unknown-window fallback, against the three minutes this module promises.
+fn window_seconds(window: &crate::usage::Window) -> Option<i64> {
+    window
+        .length_seconds
+        .or_else(|| crate::usage::anthropic_window_length(&window.kind))
 }
 
 /// One percentage point of the tightest window this account has, in seconds. The floor.
@@ -49,7 +55,7 @@ pub fn floor_for(reading: Option<&Snapshot>) -> i64 {
         .map(|s| s.windows.as_slice())
         .unwrap_or_default()
         .iter()
-        .filter_map(|w| window_seconds(&w.kind))
+        .filter_map(window_seconds)
         .min();
     shortest.map_or(UNKNOWN_FLOOR, |seconds| (seconds / 100).max(1))
 }
@@ -268,9 +274,31 @@ mod tests {
                     resets_at: None,
                     is_active: true,
                     severity: None,
+                    length_seconds: None,
                 })
                 .collect(),
         }
+    }
+
+    /// Anthropic names its windows `session` and `weekly_all`. The floor knew only the older
+    /// `five_hour` and `seven_day`, so every account was asked about once a minute against
+    /// the three the module promises.
+    #[test]
+    fn the_floor_knows_the_windows_anthropic_actually_sends() {
+        assert_eq!(floor_for(Some(&reading(&["session"]))), 180);
+        assert_eq!(
+            floor_for(Some(&reading(&["weekly_all", "weekly_scoped"]))),
+            6048
+        );
+    }
+
+    /// A window whose length the service stated is timed by that, whatever it is called:
+    /// OpenAI's are measured in seconds and named after their length.
+    #[test]
+    fn a_stated_length_wins_over_the_name() {
+        let mut stated = reading(&["primary"]);
+        stated.windows[0].length_seconds = Some(18_000);
+        assert_eq!(floor_for(Some(&stated)), 180);
     }
 
     /// The floor is a derivation, not a preference: how long the tightest limit takes to

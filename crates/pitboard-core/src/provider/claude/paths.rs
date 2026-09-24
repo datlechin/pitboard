@@ -2,7 +2,8 @@
 
 use crate::context::Context;
 use crate::error::{Error, Result};
-use crate::slot;
+use crate::provider::claude::daemon;
+use crate::provider::claude::slot;
 use serde_json::Value;
 use std::path::PathBuf;
 
@@ -28,28 +29,9 @@ pub fn config_file(ctx: &Context) -> PathBuf {
 }
 
 /// Where the `claude` that signs someone in actually is, if it is anywhere. A bare name is
-/// looked up in PATH the way a shell would.
+/// looked up on the context's search path the way a shell would.
 pub fn program(ctx: &Context) -> Option<PathBuf> {
-    let named = &ctx.claude_program;
-    if named.components().count() > 1 {
-        return std::fs::metadata(named).is_ok().then(|| named.clone());
-    }
-    std::env::var_os("PATH")?
-        .to_string_lossy()
-        .split(':')
-        .filter(|dir| !dir.is_empty())
-        .map(|dir| PathBuf::from(dir).join(named))
-        .find(|candidate| std::fs::metadata(candidate).is_ok())
-}
-
-/// Nothing in any store pitboard reads, and Claude Code's config naming somebody as signed
-/// in, are two different situations with one message today. The second means pitboard is
-/// looking in the wrong place, and writing a login there would put it where nobody reads.
-pub fn nothing_signed_in(ctx: &Context) -> Error {
-    match load_config(ctx).ok().as_ref().and_then(identity) {
-        Some(id) => Error::LiveCredentialElsewhere { email: id.email },
-        None => Error::LiveCredentialAbsent,
-    }
+    crate::provider::program_of(ctx, crate::provider::ProviderId::Claude)
 }
 
 /// Which Claude Code is installed here, read off disk and never by running it.
@@ -75,7 +57,7 @@ pub fn installed_version(ctx: &Context) -> Option<String> {
     {
         return Some(version);
     }
-    crate::daemon::read(ctx).and_then(|d| d.version)
+    daemon::read(ctx).and_then(|d| d.version)
 }
 
 fn looks_like_a_version(name: &str) -> bool {

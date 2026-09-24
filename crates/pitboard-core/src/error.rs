@@ -1,6 +1,8 @@
 //! Every way pitboard can fail. Each variant has a message naming the cause and an action,
 //! a stable code for programs to branch on, and an exit code.
 
+use crate::provider::ProviderId;
+use crate::state::Key;
 use std::path::PathBuf;
 
 /// The labels an account list holds, rendered for a message: " Enrolled: `a`, `b`." or
@@ -58,6 +60,22 @@ impl Cause {
         }
     }
 
+    /// The same question asked of a provider rather than of Anthropic directly.
+    pub fn of_provider(error: &crate::provider::ProviderError) -> Cause {
+        use crate::provider::ProviderError as P;
+        match error {
+            P::Unauthorized => Cause::TokenExpired,
+            P::RateLimited { .. } => Cause::RateLimited,
+            P::Network { .. } => Cause::Unreachable,
+            P::Unexpected { .. } => Cause::ServerError,
+            P::Malformed { .. }
+            | P::ShapeUnexpected { .. }
+            | P::Unsupported { .. }
+            | P::NoLogin { .. } => Cause::AnswerNotUnderstood,
+            P::InvalidGrant { .. } => Cause::LoginRefused,
+        }
+    }
+
     /// Stable, for a program to branch on; the same as its JSON form.
     pub fn code(self) -> &'static str {
         match self {
@@ -92,20 +110,23 @@ pub enum Error {
     #[error(
         "the login for `{label}` needs {bytes} bytes and `security` reads {limit} from \
          stdin, so it can only be written on the argument line, which PITBOARD_NO_ARGV \
-         forbids. Unset it, or sign out of MCP servers you no longer use to make the login \
-         smaller."
+         forbids. {}",
+        smaller(*tool)
     )]
     CredentialTooLarge {
+        tool: ProviderId,
         label: String,
         bytes: usize,
         limit: usize,
     },
 
     #[error(
-        "`{program}` is not on this machine, and pitboard signs in with Claude Code's own \
-         sign-in. Install Claude Code, or point pitboard at it."
+        "`{program}` is not on this machine, and pitboard signs in with {}'s own sign-in. \
+         Install {}, or point pitboard at it.",
+        tool.name(),
+        tool.name()
     )]
-    ClaudeProgramMissing { program: String },
+    ProgramMissing { tool: ProviderId, program: String },
 
     #[error(
         "CLAUDE_CODE_CUSTOM_OAUTH_URL is set, so Claude Code keeps its login under a \
@@ -146,6 +167,13 @@ pub enum Error {
          and enroll your accounts again."
     )]
     StateVersionUnknown { path: PathBuf, found: u32 },
+
+    #[error(
+        "{path} has an account for `{tool}`, a tool this pitboard does not know, so it was \
+         written by a newer one. The command line and the app update separately, so upgrade \
+         whichever is behind: `brew upgrade pitboard`, or the app's own Check for Updates."
+    )]
+    StateNamesUnknownTool { path: PathBuf, tool: String },
 
     #[error(
         "{path} was written on another computer. Parked logins do not move between \
@@ -201,8 +229,12 @@ pub enum Error {
         source: serde_json::Error,
     },
 
-    #[error("nothing is signed in right now. Run `claude`, sign in, then try again.")]
-    LiveCredentialAbsent,
+    #[error(
+        "nothing is signed in to {} right now. Run `{}`, sign in, then try again.",
+        tool.name(),
+        tool.login_command()
+    )]
+    LiveCredentialAbsent { tool: ProviderId },
 
     #[error(
         "Claude Code's config says {email} is signed in, but pitboard cannot find that \
@@ -214,10 +246,15 @@ pub enum Error {
     LiveCredentialElsewhere { email: String },
 
     #[error(
-        "the signed-in credential is not shaped like a Claude Code login ({detail}). \
-         Run `pitboard doctor` before switching again."
+        "the signed-in credential is not shaped like a {} login ({detail}). \
+         Run `pitboard doctor` before switching again.",
+        tool.name()
     )]
-    LiveCredentialShapeUnexpected { detail: String },
+    LiveCredentialShapeUnexpected { tool: ProviderId, detail: String },
+
+    /// The tool is configured to keep its login somewhere pitboard does not handle.
+    #[error("{reason}.")]
+    LiveStoreUnsupported { tool: ProviderId, reason: String },
 
     #[error(
         "no account is enrolled as `{label}`.{enrolled} Run `pitboard enroll {label} \
@@ -231,10 +268,11 @@ pub enum Error {
 
     #[error(
         "`{label}` has no parked login to switch to: the last one went back into use and \
-         Claude Code has moved on from it. Run `pitboard enroll {label} --sign-in` to sign \
-         in to it again."
+         {} has moved on from it. Run `pitboard enroll {label} --sign-in` to sign in to it \
+         again.",
+        tool.name()
     )]
-    NothingParked { label: String },
+    NothingParked { tool: ProviderId, label: String },
 
     #[error(
         "the parked login for `{label}` has expired. Run `pitboard enroll {label} --sign-in` \
@@ -244,18 +282,36 @@ pub enum Error {
 
     #[error(
         "{email} is signed in but not enrolled, so it cannot be parked. \
-         Run `pitboard enroll <label>` for it first."
+         Run `pitboard enroll {}` for it first.",
+        Key::new(*tool, "<label>").typed()
     )]
-    LiveAccountNotEnrolled { email: String },
+    LiveAccountNotEnrolled { tool: ProviderId, email: String },
 
     #[error(
         "{email} is already enrolled as `{label}`. To add a different account, run \
-         `pitboard enroll <label> --sign-in`."
+         `pitboard enroll {} --sign-in`.",
+        Key::new(*tool, "<label>").typed()
     )]
-    AlreadyEnrolled { email: String, label: String },
+    AlreadyEnrolled {
+        tool: ProviderId,
+        email: String,
+        label: String,
+    },
 
     #[error("`{label}` already refers to {email}. Choose a different label.")]
     LabelTaken { label: String, email: String },
+
+    #[error(
+        "`{typed}` is not a tool pitboard knows. It knows: {}.",
+        known.join(", ")
+    )]
+    ProviderUnknown { typed: String, known: Vec<String> },
+
+    #[error(
+        "`{label}` is enrolled for more than one tool: {}. Say which one.",
+        matches.iter().map(|m| format!("`{m}`")).collect::<Vec<_>>().join(", ")
+    )]
+    LabelAmbiguous { label: String, matches: Vec<String> },
 
     #[error("`{label}` is signed in; switch to another account before forgetting it.")]
     CannotForgetActiveAccount { label: String },
@@ -290,26 +346,35 @@ pub enum Error {
     ConfigWriteFailed { path: PathBuf, detail: String },
 
     #[error(
-        "Claude Code's session has expired, so pitboard cannot confirm which account is \
-         signed in. Run `claude` once so it refreshes, then try again."
+        "{}'s session has expired, so pitboard cannot confirm which account is signed in. \
+         Run `{}` once so it refreshes, then try again.",
+        tool.name(),
+        tool.program()
     )]
-    SessionExpired,
+    SessionExpired { tool: ProviderId },
 
     #[error(
-        "pitboard could not confirm with Anthropic which account is signed in ({detail}), \
-         and will not move a login it cannot identify. Check the connection and try again."
+        "pitboard could not confirm with {} which account is signed in ({detail}), and will \
+         not move a login it cannot identify. Check the connection and try again.",
+        tool.service()
     )]
-    IdentityUnverifiable { cause: Cause, detail: String },
+    IdentityUnverifiable {
+        tool: ProviderId,
+        cause: Cause,
+        detail: String,
+    },
 
     #[error("the signed-in account changed while switching. Nothing was moved; try again.")]
     SignedInAccountChanged,
 
     #[error(
         "an earlier switch from `{from}` to `{to}` was interrupted, and pitboard cannot yet \
-         tell whether it finished ({detail}). Nothing was changed. Run `claude` once so its \
-         session is current, then try again."
+         tell whether it finished ({detail}). Nothing was changed. Run `{}` once so its \
+         session is current, then try again.",
+        tool.program()
     )]
     RecoveryUndetermined {
+        tool: ProviderId,
         from: String,
         to: String,
         detail: String,
@@ -325,11 +390,12 @@ pub enum Error {
     },
 
     #[error(
-        "Anthropic no longer accepts `{label}`'s parked login, so pitboard did not move \
-         anything. The copy has been dropped; sign in to that account again with \
-         `pitboard enroll {label} --sign-in`."
+        "{} no longer accepts `{label}`'s parked login, so pitboard did not move anything. \
+         The copy has been dropped; sign in to that account again with \
+         `pitboard enroll {label} --sign-in`.",
+        tool.service()
     )]
-    ParkedLoginRefused { label: String },
+    ParkedLoginRefused { tool: ProviderId, label: String },
 
     #[error(
         "`{label}`'s parked login belongs to {email}, not to the account pitboard has \
@@ -339,21 +405,24 @@ pub enum Error {
     ParkedLoginBelongsElsewhere { label: String, email: String },
 
     #[error(
-        "signed in as `{to}`, and the login was gone again before pitboard finished. \
-         Claude Code removes a login without taking the write lock when `/logout` has given \
-         up waiting, which is the one write pitboard cannot exclude. Nothing was lost: both \
-         `{from}` and `{to}` are parked. Run `claude` and sign in to any enrolled account, \
-         then `pitboard use {to}`."
+        "signed in as `{to}`, and the login was gone again before pitboard finished. {}",
+        after_it_did_not_hold(*tool, from, to)
     )]
-    SwitchDidNotHold { from: String, to: String },
+    SwitchDidNotHold {
+        tool: ProviderId,
+        from: String,
+        to: String,
+    },
 
     #[error(
         "could not sign in as `{to}` ({detail}), and could not read the credential store \
          back to find out whether anything changed. Nothing has been deleted and both \
-         logins are still here. Unlock the keychain and run `pitboard` again; it finishes \
-         or undoes this before doing anything else."
+         logins are still here. {} and run `pitboard` again; it finishes or undoes this \
+         before doing anything else.",
+        make_readable(*tool)
     )]
     SwitchUnverified {
+        tool: ProviderId,
         from: String,
         to: String,
         detail: String,
@@ -361,12 +430,43 @@ pub enum Error {
 
     #[error(
         "could not sign in as `{to}`, and could not put `{from}` back either ({detail}). \
-         `{from}`'s login is still parked: run `claude` and sign in to any enrolled account, \
-         then `pitboard use {from}`."
+         `{from}`'s login is still parked: run `{}` and sign in to any enrolled account, \
+         then `pitboard use {from}`.",
+        tool.login_command()
     )]
     SwitchCorrupted {
+        tool: ProviderId,
         from: String,
         to: String,
+        detail: String,
+    },
+
+    #[error(
+        "signed in to `{label}` again, and pitboard could not confirm that its new login \
+         took the place of the one in use ({detail}), so {} may have no login for it now. {}",
+        tool.name(),
+        not_in_use(*tool, label, *parked)
+    )]
+    SignInNotInstalled {
+        tool: ProviderId,
+        label: String,
+        detail: String,
+        /// Whether the new login was parked instead, which keeps the one copy of it.
+        parked: bool,
+        /// What writing it and parking it warned about, which is still true of a change
+        /// that failed afterwards. Taken out by the service and reported beside the error.
+        warnings: Vec<crate::service::Warning>,
+    },
+
+    #[error(
+        "the new login for `{label}` could not be put in use ({detail}), so it was not \
+         kept, and {} keeps the login it has. Run `pitboard enroll {label} --sign-in` to \
+         sign in again.",
+        tool.name()
+    )]
+    SignInNotKept {
+        tool: ProviderId,
+        label: String,
         detail: String,
     },
 
@@ -381,6 +481,21 @@ pub enum Error {
         source: serde_json::Error,
     },
 
+    #[error(
+        "an earlier switch of {} from `{from}` to `{to}` was interrupted while its login was \
+         at {slot}, and this run reads it from somewhere else, so it cannot tell what that \
+         switch did. Nothing was changed. Run pitboard with {} pointing where it did to \
+         finish it, or `pitboard abandon` to keep every login it names and move on.",
+        tool.name(),
+        tool.home_variable()
+    )]
+    RecoveryElsewhere {
+        tool: ProviderId,
+        from: String,
+        to: String,
+        slot: String,
+    },
+
     #[error("could not read or write pitboard's recovery record at {path}: {source}")]
     RecoveryFailed {
         path: PathBuf,
@@ -388,8 +503,12 @@ pub enum Error {
         source: std::io::Error,
     },
 
-    #[error("`claude` was not found on PATH. Install Claude Code, run it once, then try again.")]
-    ClaudeNotFound,
+    #[error(
+        "`{}` was not found on PATH. Install {}, run it once, then try again.",
+        tool.program(),
+        tool.name()
+    )]
+    ProgramNotFound { tool: ProviderId },
 
     #[error(
         "could not renew the parked login for `{label}` ({detail}); its last reading is shown \
@@ -403,6 +522,15 @@ pub enum Error {
 
     #[error("the sign-in did not finish, so nothing was enrolled.")]
     SignInIncomplete,
+
+    /// Signing in to a second account works by pointing the tool's own login at a scratch
+    /// directory. Where that does not isolate it from the live login, running one would
+    /// write over the account somebody is using, so pitboard will not.
+    #[error(
+        "pitboard will not sign in to a second account on this machine: {reason} Signing \
+         in would write over the login you are using."
+    )]
+    SignInNotIsolated { reason: String },
 
     #[error(
         "another `pitboard enroll --sign-in` is already waiting for its sign-in. Finish or \
@@ -427,13 +555,17 @@ impl Error {
         use Error::*;
         match self {
             StateOnSyncedDrive { .. } => "state_on_synced_drive",
-            ClaudeProgramMissing { .. } => "claude_program_missing",
+            ProgramMissing { tool, .. } => match tool {
+                ProviderId::Claude => "claude_program_missing",
+                ProviderId::Codex => "codex_program_missing",
+            },
             CredentialTooLarge { .. } => "credential_too_large",
             CustomOauthEndpoint => "custom_oauth_endpoint",
             StateUnreadable { .. } => "state_unreadable",
             StateCorrupt { .. } => "state_corrupt",
             StateFromNewerVersion { .. } => "state_from_newer_version",
             StateVersionUnknown { .. } => "state_version_unknown",
+            StateNamesUnknownTool { .. } => "state_names_unknown_tool",
             StateWrongMachine { .. } => "state_wrong_machine",
             StateWriteFailed { .. } => "state_write_failed",
             ScheduleUnsupported => "schedule_unsupported",
@@ -442,7 +574,8 @@ impl Error {
             ClaudeConfigMissing { .. } => "claude_config_missing",
             ClaudeConfigUnreadable { .. } => "claude_config_unreadable",
             ClaudeConfigNotJson { .. } => "claude_config_not_json",
-            LiveCredentialAbsent => "live_credential_absent",
+            LiveCredentialAbsent { .. } => "live_credential_absent",
+            LiveStoreUnsupported { .. } => "live_store_unsupported",
             LiveCredentialElsewhere { .. } => "live_credential_elsewhere",
             LiveCredentialShapeUnexpected { .. } => "live_credential_shape_unexpected",
             AccountUnknown { .. } => "account_unknown",
@@ -453,6 +586,8 @@ impl Error {
             LiveAccountNotEnrolled { .. } => "live_account_not_enrolled",
             AlreadyEnrolled { .. } => "already_enrolled",
             LabelTaken { .. } => "label_taken",
+            ProviderUnknown { .. } => "provider_unknown",
+            LabelAmbiguous { .. } => "label_ambiguous",
             CannotForgetActiveAccount { .. } => "cannot_forget_active_account",
             ParkSlotExhausted => "park_slot_exhausted",
             ParkedCredentialMissing { .. } => "parked_credential_missing",
@@ -463,14 +598,21 @@ impl Error {
             SwitchDidNotHold { .. } => "switch_did_not_hold",
             SwitchUnverified { .. } => "switch_unverified",
             SwitchCorrupted { .. } => "switch_corrupted",
+            SignInNotInstalled { .. } => "sign_in_not_installed",
+            SignInNotKept { .. } => "sign_in_not_kept",
             RecoveryFailed { .. } => "recovery_failed",
             RecoveryRecordCorrupt { .. } => "recovery_record_corrupt",
-            SessionExpired => "session_expired",
+            SessionExpired { .. } => "session_expired",
             IdentityUnverifiable { .. } => "identity_unverifiable",
             SignedInAccountChanged => "signed_in_account_changed",
             RecoveryUndetermined { .. } => "recovery_undetermined",
-            ClaudeNotFound => "claude_not_found",
+            RecoveryElsewhere { .. } => "recovery_elsewhere",
+            ProgramNotFound { tool } => match tool {
+                ProviderId::Claude => "claude_not_found",
+                ProviderId::Codex => "codex_not_found",
+            },
             SignInIncomplete => "sign_in_incomplete",
+            SignInNotIsolated { .. } => "sign_in_not_isolated",
             RenewalFailed { .. } => "renewal_failed",
             SignInInProgress => "sign_in_in_progress",
             Usage(_) => "usage",
@@ -489,8 +631,17 @@ impl Error {
         match self {
             IdentityUnverifiable { cause, .. } => Some(*cause),
             RenewalFailed { cause, .. } => *cause,
-            SessionExpired => Some(Cause::TokenExpired),
+            SessionExpired { .. } => Some(Cause::TokenExpired),
             _ => None,
+        }
+    }
+
+    /// Warnings a failed change carries in itself, for the caller to report beside it. Only
+    /// a failure that happened after something worth warning about was done carries any.
+    pub(crate) fn take_warnings(&mut self) -> Vec<crate::service::Warning> {
+        match self {
+            Error::SignInNotInstalled { warnings, .. } => std::mem::take(warnings),
+            _ => Vec::new(),
         }
     }
 
@@ -500,10 +651,12 @@ impl Error {
             // A login or Claude Code's files in a state pitboard will not act on, which is
             // what exit 3 means: not a failure of the attempt, a refusal to attempt.
             LiveCredentialShapeUnexpected { .. }
+            | LiveStoreUnsupported { .. }
             | ClaudeConfigNotJson { .. }
             | SwitchCorrupted { .. }
             | SwitchUnverified { .. }
             | SwitchDidNotHold { .. }
+            | SignInNotInstalled { .. }
             | LiveCredentialElsewhere { .. }
             | CredentialTooLarge { .. }
             | CustomOauthEndpoint
@@ -517,6 +670,64 @@ impl Error {
 
 pub type Result<T> = std::result::Result<T, Error>;
 
+/// What makes a tool's live login readable again, where it could not be read.
+fn make_readable(tool: ProviderId) -> &'static str {
+    match tool {
+        ProviderId::Claude => "Unlock the keychain",
+        ProviderId::Codex => "Make Codex's auth.json readable to you again",
+    }
+}
+
+/// What makes a login smaller, where anything does.
+fn smaller(tool: ProviderId) -> &'static str {
+    match tool {
+        ProviderId::Claude => {
+            "Unset it, or sign out of MCP servers you no longer use to make the login smaller."
+        }
+        ProviderId::Codex => "Unset it to let pitboard write it.",
+    }
+}
+
+/// Which write took a switched-in login away again, as far as each tool is known to make
+/// one, and what that leaves.
+fn after_it_did_not_hold(tool: ProviderId, from: &str, to: &str) -> String {
+    match tool {
+        ProviderId::Claude => format!(
+            "Claude Code removes a login without taking the write lock when `/logout` has \
+             given up waiting, which is the one write pitboard cannot exclude. Nothing was \
+             lost: both `{from}` and `{to}` are parked. Run `claude` and sign in to any \
+             enrolled account, then `pitboard use {to}`."
+        ),
+        // Not "nothing was lost": the likeliest writer is a codex session refreshing the
+        // outgoing account, which spends the token in that account's park, and `codex
+        // login` would revoke whatever login is left in auth.json.
+        ProviderId::Codex => format!(
+            "Codex takes no lock, so a codex session still running from before the switch, \
+             refreshing or signing out, rewrote auth.json underneath it. `{to}` is still \
+             parked. `{from}`'s park may hold a token that refresh spent. Quit every running \
+             codex, then run `pitboard` to see what is signed in; do not run `codex login` \
+             or `codex logout` until you have, because either revokes the login they find."
+        ),
+    }
+}
+
+/// Where a new login that could not be put in use went, and the way back from there.
+fn not_in_use(tool: ProviderId, label: &str, parked: bool) -> String {
+    if parked {
+        format!(
+            "The new login is parked, so it is not lost. Run `pitboard` to see what is \
+             signed in; if nothing is, run `{}` and sign in to any enrolled account, then \
+             `pitboard use {label}`.",
+            tool.login_command()
+        )
+    } else {
+        format!(
+            "It could not be parked either: run `{}` and sign in to `{label}` again.",
+            tool.login_command()
+        )
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -524,17 +735,32 @@ mod tests {
     #[test]
     fn codes_are_unique_so_a_caller_can_branch_on_them() {
         let samples = [
-            Error::LiveCredentialAbsent,
+            Error::LiveCredentialAbsent {
+                tool: ProviderId::Claude,
+            },
             Error::ParkSlotExhausted,
             Error::AccountUnknown {
                 label: "x".into(),
                 enrolled: Enrolled::default(),
             },
-            Error::NothingParked { label: "x".into() },
+            Error::NothingParked {
+                tool: ProviderId::Claude,
+                label: "x".into(),
+            },
             Error::ParkedLoginExpired { label: "x".into() },
             Error::LabelTaken {
                 label: "x".into(),
                 email: "e".into(),
+            },
+            Error::SwitchRolledBack {
+                from: "x".into(),
+                to: "y".into(),
+                detail: "d".into(),
+            },
+            Error::SignInNotKept {
+                tool: ProviderId::Codex,
+                label: "x".into(),
+                detail: "d".into(),
             },
         ];
         let mut codes: Vec<&str> = samples.iter().map(Error::code).collect();
@@ -547,7 +773,11 @@ mod tests {
     #[test]
     fn a_broken_assumption_exits_differently_from_a_bad_request() {
         assert_eq!(
-            Error::LiveCredentialShapeUnexpected { detail: "x".into() }.exit_code(),
+            Error::LiveCredentialShapeUnexpected {
+                tool: ProviderId::Claude,
+                detail: "x".into()
+            }
+            .exit_code(),
             3
         );
         assert_eq!(
@@ -564,13 +794,21 @@ mod tests {
     fn every_message_tells_the_user_something_to_do() {
         // A message that only states a fact leaves the user stuck.
         let actionable = [
-            Error::LiveCredentialAbsent.to_string(),
+            Error::LiveCredentialAbsent {
+                tool: ProviderId::Claude,
+            }
+            .to_string(),
+            Error::LiveCredentialAbsent {
+                tool: ProviderId::Codex,
+            }
+            .to_string(),
             Error::AccountUnknown {
                 label: "work".into(),
                 enrolled: Enrolled(vec!["personal".into()]),
             }
             .to_string(),
             Error::NothingParked {
+                tool: ProviderId::Claude,
                 label: "work".into(),
             }
             .to_string(),
@@ -583,7 +821,14 @@ mod tests {
             }
             .to_string(),
             Error::LiveAccountNotEnrolled {
+                tool: ProviderId::Claude,
                 email: "a@b.c".into(),
+            }
+            .to_string(),
+            Error::SignInNotKept {
+                tool: ProviderId::Codex,
+                label: "codex/work".into(),
+                detail: "the keychain is locked".into(),
             }
             .to_string(),
         ];
@@ -593,5 +838,82 @@ mod tests {
                 "no action offered: {message}"
             );
         }
+    }
+
+    /// Codex's messages name Codex and the command that signs in to it; Claude Code's name
+    /// Claude Code. A message about the wrong tool sends somebody to run the wrong program.
+    #[test]
+    fn a_message_names_the_tool_it_is_about() {
+        let codex = Error::LiveCredentialAbsent {
+            tool: ProviderId::Codex,
+        }
+        .to_string();
+        assert!(
+            codex.contains("Codex") && codex.contains("`codex login`"),
+            "{codex}"
+        );
+        assert!(!codex.contains("Claude"), "{codex}");
+
+        let unverifiable = Error::IdentityUnverifiable {
+            tool: ProviderId::Codex,
+            cause: Cause::Unreachable,
+            detail: "offline".into(),
+        }
+        .to_string();
+        assert!(unverifiable.contains("OpenAI"), "{unverifiable}");
+
+        let claude = Error::IdentityUnverifiable {
+            tool: ProviderId::Claude,
+            cause: Cause::Unreachable,
+            detail: "offline".into(),
+        }
+        .to_string();
+        assert!(claude.contains("confirm with Anthropic"), "{claude}");
+    }
+
+    /// The codes of the two tools' missing programs stay distinct, and Claude Code's keep
+    /// the names they were released under.
+    #[test]
+    fn a_missing_program_keeps_its_released_code() {
+        let missing = |tool| Error::ProgramNotFound { tool }.code();
+        assert_eq!(missing(ProviderId::Claude), "claude_not_found");
+        assert_eq!(missing(ProviderId::Codex), "codex_not_found");
+        let absent = |tool| {
+            Error::ProgramMissing {
+                tool,
+                program: "x".into(),
+            }
+            .code()
+        };
+        assert_eq!(absent(ProviderId::Claude), "claude_program_missing");
+        assert_eq!(absent(ProviderId::Codex), "codex_program_missing");
+    }
+
+    /// Advice to enrol names the tool the account is for: a bare name would enrol a Claude
+    /// Code account for a Codex login.
+    #[test]
+    fn enrolment_advice_keeps_the_tool() {
+        let codex = Error::LiveAccountNotEnrolled {
+            tool: ProviderId::Codex,
+            email: "a@b.c".into(),
+        }
+        .to_string();
+        assert!(codex.contains("pitboard enroll codex/<label>"), "{codex}");
+        let claude = Error::LiveAccountNotEnrolled {
+            tool: ProviderId::Claude,
+            email: "a@b.c".into(),
+        }
+        .to_string();
+        assert!(claude.contains("pitboard enroll <label>"), "{claude}");
+        let already = Error::AlreadyEnrolled {
+            tool: ProviderId::Codex,
+            email: "a@b.c".into(),
+            label: "codex/work".into(),
+        }
+        .to_string();
+        assert!(
+            already.contains("pitboard enroll codex/<label> --sign-in"),
+            "{already}"
+        );
     }
 }

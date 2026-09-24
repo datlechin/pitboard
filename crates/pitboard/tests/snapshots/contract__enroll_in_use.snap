@@ -1,0 +1,20 @@
+---
+source: crates/pitboard/tests/contract.rs
+expression: "serde_json :: json!\n({ \"exit\" : code, \"envelope\" : serde_json::from_str::<Value>(&out).unwrap() })"
+---
+{
+  "exit": 0,
+  "envelope": {
+    "v": 1,
+    "command": "enroll",
+    "ok": true,
+    "data": {
+      "label": "alpha",
+      "provider": "claude",
+      "email": "a@example.com",
+      "enrolled": "in_use"
+    },
+    "warnings": [],
+    "error": null
+  }
+}

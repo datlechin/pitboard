@@ -3,29 +3,6 @@ import Testing
 
 @testable import Pitboard
 
-private func window(
-    _ kind: String, _ percent: Double, resets: Int64 = 100, scope: String? = nil,
-    active: Bool = true
-) -> Limits {
-    Limits(
-        kind: kind, scope: scope, percent: percent, resetsAt: resets, severity: nil,
-        isActive: active)
-}
-
-private func account(
-    _ label: String, signedIn: Bool = false, switchable: Bool = true, _ windows: [Limits]
-) -> Account {
-    Account(
-        label: label, email: "\(label)@example.com", accountUuid: label, signedIn: signedIn,
-        switchable: switchable, parked: nil,
-        usage: Usage(source: .live, observedAt: 0, windows: windows), stale: nil,
-        staleExplanation: nil, lastsSeconds: nil, lastsBurning: false)
-}
-
-private func status(_ accounts: [Account]) -> Status {
-    Status(now: 0, accounts: accounts, warnings: [])
-}
-
 @Test func theMenuBarNamesTheAccountInUseAndItsTightestLimit() {
     let read = status([
         account("work", signedIn: true, [window("session", 12), window("weekly_all", 64.4)]),
@@ -55,10 +32,13 @@ private func status(_ accounts: [Account]) -> Status {
         account("spare", [window("session", 80)]),
         account("fresh", [window("session", 5)]),
     ])
-    let advice = Advice.about(read, unless: [:])
+    let advice = Advice.about(read, unless: [:]).first
     #expect(advice?.ran == "work")
     #expect(advice?.use == "fresh")
     #expect(advice?.left == 95)
+    #expect(advice?.switchTo == "claude/fresh", "the switch names the account with its tool")
+    #expect(advice?.tool == nil, "one tool, so nothing says which")
+    #expect(advice?.notification.userInfo["label"] as? String == "claude/fresh")
 }
 
 @Test func anAccountThatCannotBeSwitchedToIsNotOffered() {
@@ -66,7 +46,7 @@ private func status(_ accounts: [Account]) -> Status {
         account("work", signedIn: true, [window("session", 100)]),
         account("parked", switchable: false, [window("session", 0)]),
     ])
-    #expect(Advice.about(read, unless: [:]) == nil)
+    #expect(Advice.about(read, unless: [:]).isEmpty)
 }
 
 @Test func nothingIsSaidWhenEveryAccountIsSpent() {
@@ -74,17 +54,19 @@ private func status(_ accounts: [Account]) -> Status {
         account("work", signedIn: true, [window("session", 100)]),
         account("spare", [window("session", 100)]),
     ])
-    #expect(Advice.about(read, unless: [:]) == nil)
+    #expect(Advice.about(read, unless: [:]).isEmpty)
 }
 
 @Test func oneExhaustedWindowIsMentionedOnce() {
+    let exhausted = window("session", 100, resets: 42)
     let read = status([
-        account("work", signedIn: true, [window("session", 100, resets: 42)]),
+        account("work", signedIn: true, [exhausted]),
         account("spare", [window("session", 0)]),
     ])
-    #expect(Advice.about(read, unless: ["session": 42]) == nil)
+    let told = Advice.key("claude", "work", exhausted)
+    #expect(Advice.about(read, unless: [told: 42]).isEmpty)
     // The next window is its own; what was said about the last one does not carry over.
-    #expect(Advice.about(read, unless: ["session": 41])?.use == "spare")
+    #expect(Advice.about(read, unless: [told: 41]).first?.use == "spare")
 }
 
 @Test func aWeeklyLimitIsComparedWithWeeklyLimits() {
@@ -92,7 +74,7 @@ private func status(_ accounts: [Account]) -> Status {
         account("work", signedIn: true, [window("session", 10), window("weekly_all", 100)]),
         account("spare", [window("session", 100), window("weekly_all", 20)]),
     ])
-    let advice = Advice.about(read, unless: [:])
+    let advice = Advice.about(read, unless: [:]).first
     #expect(advice?.window.kind == "weekly_all")
     #expect(advice?.use == "spare")
 }
@@ -120,4 +102,105 @@ private func status(_ accounts: [Account]) -> Status {
     ]
     #expect(headline(of: windows)?.kind == "session")
     #expect(headline(of: [])?.kind == nil)
+}
+
+// MARK: - More than one tool
+
+/// A Codex account with room is no help to somebody whose Claude Code account has run out:
+/// a switch between them is not a switch at all.
+@Test func adviceNeverCrossesTools() {
+    let read = status([
+        account("work", signedIn: true, [window("session", 100)]),
+        account("job", of: "codex", signedIn: true, [window("five_hour", 10, length: 18_000)]),
+        account("spare", of: "codex", [window("five_hour", 0, length: 18_000)]),
+    ])
+    #expect(Advice.about(read, tools: bothTools, unless: [:]).isEmpty)
+}
+
+/// Each tool is advised about from its own accounts, and says which tool it is about.
+@Test func eachToolIsAdvisedFromItsOwnAccounts() {
+    let read = status([
+        account("work", signedIn: true, [window("session", 100)]),
+        account("personal", [window("session", 30)]),
+        account(
+            "work", of: "codex", signedIn: true, [window("seven_day", 100, length: 604_800)]),
+        account("spare", of: "codex", [window("seven_day", 60, length: 604_800)]),
+    ])
+    let advice = Advice.about(read, tools: bothTools, unless: [:])
+    #expect(advice.map(\.switchTo) == ["claude/personal", "codex/spare"])
+    #expect(advice.map(\.tool) == ["Claude Code", "Codex"])
+    #expect(advice.last?.limit == "weekly")
+    #expect(
+        advice.last?.said
+            == "Codex: work has none of its weekly limit left. spare has 40% of its own left.")
+}
+
+/// What was said about one tool's `work` says nothing about another's.
+@Test func whatWasToldIsKeptApartByTool() {
+    let exhausted = window("session", 100, resets: 7)
+    let read = status([
+        account("work", of: "codex", signedIn: true, [exhausted]),
+        account("spare", of: "codex", [window("session", 0)]),
+    ])
+    let toldClaude = Advice.key("claude", "work", exhausted)
+    #expect(Advice.about(read, unless: [toldClaude: 7]).first?.switchTo == "codex/spare")
+    #expect(Advice.about(read, unless: [Advice.key("codex", "work", exhausted): 7]).isEmpty)
+}
+
+/// With an account in use in each tool and one menu bar, the bar shows the one closest to
+/// running out.
+@Test func theMenuBarFollowsTheMostUsedAccountAcrossTools() {
+    let read = status([
+        account("personal", signedIn: true, [window("session", 40)]),
+        account("job", of: "codex", signedIn: true, [window("five_hour", 71, length: 18_000)]),
+        account("spare", of: "codex", [window("five_hour", 99, length: 18_000)]),
+    ])
+    #expect(menuTitle(for: read, order: bothTools) == "job 71%")
+}
+
+/// A tie goes to the tool listed first, and a login nobody has named does not take the bar
+/// from one that has a name.
+@Test func aTieInTheMenuBarGoesToTheFirstTool() {
+    let tied = status([
+        account("job", of: "codex", signedIn: true, [window("five_hour", 50)]),
+        account("personal", signedIn: true, [window("session", 50)]),
+    ])
+    #expect(menuTitle(for: tied, order: bothTools) == "personal 50%")
+
+    let unnamed = status([
+        account("personal", signedIn: true, [window("session", 10)]),
+        account(nil, of: "codex", signedIn: true, uuid: "c", [window("five_hour", 99)]),
+    ])
+    #expect(menuTitle(for: unnamed, order: bothTools) == "personal 10%")
+}
+
+/// One tool, whichever it is: no headings, the rows in the order the core gave them, and the
+/// bar naming the first account signed in, as it always has.
+@Test func oneToolLooksAsItAlwaysDid() {
+    for tool in ["claude", "codex"] {
+        let accounts = [
+            account(nil, of: tool, signedIn: true, uuid: "u", [window("session", 80)]),
+            account("work", of: tool, [window("session", 10)]),
+        ]
+        let groups = grouped(accounts, by: bothTools)
+        #expect(groups.count == 1)
+        #expect(groups.first?.name == nil)
+        #expect(groups.first?.accounts == accounts)
+        #expect(menuTitle(for: status(accounts), order: bothTools) == "unenrolled 80%")
+    }
+    #expect(grouped([], by: bothTools).isEmpty)
+}
+
+/// More than one tool: a section per tool, headed by its name, in the order the tools are
+/// listed whatever order the rows came in.
+@Test func accountsOfTwoToolsAreGroupedByTool() {
+    let groups = grouped(
+        [
+            account("job", of: "codex"),
+            account("work", signedIn: true),
+            account("side", of: "codex", signedIn: true),
+        ],
+        by: bothTools)
+    #expect(groups.map(\.name) == ["Claude Code", "Codex"])
+    #expect(groups.map { $0.accounts.compactMap(\.label) } == [["work"], ["job", "side"]])
 }

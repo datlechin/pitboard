@@ -3,7 +3,8 @@
 //! itself: an app started from Finder does not see a shell's environment.
 
 use crate::api::{Anthropic, Api};
-use crate::store::Platform;
+use crate::provider::codex::api::{Network as OpenAiNetwork, OpenAi};
+use crate::store::Host;
 use crate::time::{Clock, SystemClock};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -34,19 +35,30 @@ pub struct Context {
     /// Which front end asked, for the audit log. A change made from the menu bar and one
     /// typed at a prompt read the same otherwise.
     pub(crate) caller: String,
-    /// The `claude` that runs a sign-in; a bare name is looked up on `PATH`.
+    /// The `claude` that runs a sign-in; a bare name is looked up on the search path.
     pub(crate) claude_program: PathBuf,
     /// Where Anthropic's endpoints are reached instead, for tests; `api` honours loopback only.
     pub(crate) api_base: Option<String>,
     /// `CLAUDE_CODE_HOVER_REST`, which switches on Claude Code's successor credential backend.
     pub(crate) hover_rest: bool,
+    /// `CODEX_HOME`, which moves everything Codex keeps, including its keyring account.
+    pub(crate) codex_home: Option<String>,
+    /// The `codex` that runs a sign-in; a bare name is looked up on the search path.
+    pub(crate) codex_program: PathBuf,
+    /// Where a tool's program is looked for, in `PATH`'s form, and what its sign-in is given
+    /// as `PATH`, behind the program's own directory where that is not on it. `None` is this
+    /// process's own `PATH`: an app opened from Finder has almost nothing on it, so it
+    /// passes the one the person's login shell would have.
+    pub(crate) search_path: Option<std::ffi::OsString>,
     /// Where the time comes from. The machine's clock in every real context; a test puts
     /// its own here to reach the judgements that only happen at a particular moment.
     pub(crate) clock: Arc<dyn Clock>,
-    /// The machine's credential stores. This build's platform in every real context.
-    pub(crate) platform: Arc<dyn Platform>,
+    /// The machine's credential stores. This build's host in every real context.
+    pub(crate) host: Arc<dyn Host>,
     /// Who answers for Anthropic. The network in every real context.
     pub(crate) api: Arc<dyn Api>,
+    /// Who answers for OpenAI. The network in every real context.
+    pub(crate) openai: Arc<dyn OpenAi>,
 }
 
 impl Context {
@@ -66,11 +78,15 @@ impl Context {
     }
 
     /// The credential stores this context reaches.
-    pub(crate) fn platform(&self) -> &dyn Platform {
-        self.platform.as_ref()
+    pub(crate) fn host(&self) -> &dyn Host {
+        self.host.as_ref()
     }
 
     /// Who this context asks about a login.
+    pub(crate) fn openai(&self) -> &dyn OpenAi {
+        self.openai.as_ref()
+    }
+
     pub(crate) fn api(&self) -> &dyn Api {
         self.api.as_ref()
     }
@@ -92,10 +108,24 @@ impl Context {
             claude_program: PathBuf::from("claude"),
             api_base: None,
             hover_rest: false,
+            codex_home: None,
+            codex_program: PathBuf::from("codex"),
+            search_path: None,
             clock: Arc::new(SystemClock),
-            platform: crate::store::host(),
+            host: crate::store::host(),
             api: Arc::new(Anthropic),
+            openai: Arc::new(OpenAiNetwork),
         }
+    }
+
+    /// Where Codex keeps its login. Empty means unset, as Codex reads it.
+    pub fn with_codex_home(mut self, dir: String) -> Context {
+        self.codex_home = Some(dir).filter(|d| !d.is_empty());
+        self
+    }
+
+    pub(crate) fn codex_home(&self) -> Option<&str> {
+        self.codex_home.as_deref()
     }
 
     pub fn with_pitboard_home(mut self, dir: PathBuf) -> Context {
@@ -160,6 +190,42 @@ impl Context {
         self
     }
 
+    /// The same for `codex`.
+    pub fn with_codex_program(mut self, program: PathBuf) -> Context {
+        self.codex_program = program;
+        self
+    }
+
+    /// The `codex` pitboard would run to sign someone in.
+    pub fn codex_program(&self) -> &std::path::Path {
+        &self.codex_program
+    }
+
+    /// Look for a tool's program on `path`, in `PATH`'s form, rather than on this process's
+    /// own `PATH`. An app opened from Finder has only the system's directories there, so a
+    /// tool installed through a version manager or an npm prefix is found only on the `PATH`
+    /// the person's shell has, and a script it runs finds its interpreter only there.
+    pub fn with_search_path(mut self, path: String) -> Context {
+        self.search_path = Some(path.into());
+        self
+    }
+
+    /// Where a tool's program is looked for: the path given, or this process's `PATH`.
+    pub(crate) fn search_path(&self) -> std::ffi::OsString {
+        self.search_path
+            .clone()
+            .or_else(|| std::env::var_os("PATH"))
+            .unwrap_or_default()
+    }
+
+    /// The program named for this tool, found or not.
+    pub fn program_for(&self, tool: crate::provider::ProviderId) -> &std::path::Path {
+        match tool {
+            crate::provider::ProviderId::Claude => &self.claude_program,
+            crate::provider::ProviderId::Codex => &self.codex_program,
+        }
+    }
+
     pub fn from_env() -> Context {
         let var = |name: &str| std::env::var(name).ok();
         let home = std::env::var_os("HOME")
@@ -184,17 +250,24 @@ impl Context {
             claude_program: PathBuf::from("claude"),
             api_base: var("PITBOARD_API_BASE"),
             hover_rest: var("CLAUDE_CODE_HOVER_REST").is_some_and(|v| v == "1" || v == "true"),
+            codex_home: var("CODEX_HOME").filter(|v| !v.is_empty()),
+            codex_program: PathBuf::from("codex"),
+            search_path: None,
             clock: Arc::new(SystemClock),
-            platform: crate::store::host(),
+            host: crate::store::host(),
             api: Arc::new(Anthropic),
+            openai: Arc::new(OpenAiNetwork),
         }
     }
 
-    /// Answer for Anthropic from a script, where a test can produce a 429 or a refusal.
+    /// Answer for every service from a script, where a test can produce a 429 or a
+    /// refusal. One script for all of them, so a test that forgets to script a tool's
+    /// service gets a refusal rather than a request to the real one.
     #[cfg(any(test, feature = "test-support"))]
     #[doc(hidden)]
     pub fn with_scripted_api(mut self, api: Arc<crate::api::scripted::ScriptedApi>) -> Context {
-        self.api = api;
+        self.api = api.clone();
+        self.openai = api;
         self
     }
 
@@ -202,11 +275,8 @@ impl Context {
     /// tests do this, which is why the trait behind it is not public.
     #[cfg(any(test, feature = "test-support"))]
     #[doc(hidden)]
-    pub fn with_memory_stores(
-        mut self,
-        memory: Arc<crate::store::memory::MemoryPlatform>,
-    ) -> Context {
-        self.platform = memory;
+    pub fn with_memory_stores(mut self, memory: Arc<crate::store::memory::MemoryHost>) -> Context {
+        self.host = memory;
         self
     }
 

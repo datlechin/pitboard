@@ -105,7 +105,7 @@ mod tests {
     fn sheet() -> Sheet {
         Sheet::new("this report", "/Users/someone")
             .hide("me@example.com", "email")
-            .hide("8499da91-744e-452b-ab4d-cca7cc448a36", "account")
+            .hide("7c6b5a49-3827-4165-a4b3-c2d1e0f9a8b7", "account")
             .hide("someone", "user")
     }
 

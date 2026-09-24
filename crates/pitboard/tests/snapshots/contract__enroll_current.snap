@@ -1,5 +1,5 @@
 ---
-source: tests/contract.rs
+source: crates/pitboard/tests/contract.rs
 expression: "serde_json :: json! ({ \"exit\" : code, \"envelope\" : value })"
 ---
 {
@@ -10,6 +10,7 @@ expression: "serde_json :: json! ({ \"exit\" : code, \"envelope\" : value })"
     "ok": true,
     "data": {
       "label": "alpha",
+      "provider": "claude",
       "email": "a@example.com",
       "enrolled": "current"
     },

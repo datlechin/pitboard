@@ -5,8 +5,14 @@
 //! limits of the account that session is using. So this reads only files: no keychain, no
 //! network, and nothing written. The other accounts show pitboard's last reading of them,
 //! with its age once that is worth knowing.
+//!
+//! It is Claude Code's status bar, so it is about Claude Code's accounts and nothing else.
+//! The account in use is the one Claude Code's own record names, looked up among Claude
+//! Code's accounts only, and the others listed are the ones this session could be switched
+//! to. A Codex account is neither, whatever its label or its identity happens to be.
 
 use crate::context::Context;
+use crate::provider::ProviderId;
 use crate::state::State;
 use crate::usage::{Snapshot, Source, Window};
 use serde_json::Value;
@@ -80,7 +86,8 @@ fn remembered_shares(snapshot: &Snapshot, now: i64) -> Shares {
     }
 }
 
-/// `signed_in` is the account Claude Code's config names.
+/// `signed_in` is the account Claude Code's config names, which is an identity in Claude
+/// Code's namespace and is only ever looked up there.
 fn line(
     input: &Value,
     state: &State,
@@ -88,10 +95,13 @@ fn line(
     remembered: &HashMap<String, Snapshot>,
     now: i64,
 ) -> StatusLine {
-    let current = signed_in.and_then(|uuid| state.by_uuid(uuid));
+    // Claude Code runs this, so the line is about Claude Code's accounts. Another tool's
+    // account is not something this session could switch to.
+    let current = signed_in.and_then(|uuid| state.by_uuid(ProviderId::Claude, uuid));
     let others = state
         .accounts
         .iter()
+        .filter(|a| a.provider() == ProviderId::Claude)
         .filter(|a| current.is_none_or(|c| c.account_uuid != a.account_uuid))
         .map(|account| {
             let reading = remembered.get(&account.account_uuid);
@@ -125,6 +135,7 @@ fn session_snapshot(input: &Value, uuid: &str, now: i64) -> Option<Snapshot> {
             percent: w.get("used_percentage")?.as_f64()?,
             resets_at: w.get("resets_at").and_then(Value::as_i64),
             is_active: true,
+            length_seconds: crate::usage::anthropic_window_length(name),
         })
     };
     let windows: Vec<Window> = ["five_hour", "seven_day"]
@@ -148,11 +159,11 @@ fn session_snapshot(input: &Value, uuid: &str, now: i64) -> Option<Snapshot> {
 pub fn read(ctx: &Context, input: &str) -> StatusLine {
     let input: Value = serde_json::from_str(input).unwrap_or(Value::Null);
     let state = crate::state::load(ctx).unwrap_or_default();
-    let signed_in = crate::claude::load_config(ctx)
-        .ok()
-        .as_ref()
-        .and_then(crate::claude::identity)
-        .map(|id| id.account_uuid);
+    // Claude Code's own record of who is signed in, which is its config: a file, and so
+    // something a status bar can afford to read after every message.
+    let signed_in = crate::provider::of(ProviderId::Claude)
+        .recorded_identity(ctx)
+        .map(|id| id.account_id);
     let now = ctx.now();
     let remembered = crate::readings::load(ctx);
     if let Some(uuid) = signed_in.as_deref() {
@@ -182,8 +193,10 @@ mod tests {
             label: label.into(),
             account_uuid: format!("{label}-uuid"),
             email: format!("{label}@example.com"),
-            organization_uuid: "o".into(),
-            oauth_account: json!({}),
+            detail: crate::state::Detail::Claude {
+                organization_uuid: "o".into(),
+                oauth_account: json!({}),
+            },
             parked: None,
         };
         State {
@@ -200,6 +213,7 @@ mod tests {
             resets_at: Some(resets_at),
             is_active: false,
             severity: None,
+            length_seconds: None,
         };
         Snapshot {
             windows: vec![window("session", five), window("weekly_all", week)],
@@ -260,5 +274,37 @@ mod tests {
         assert_eq!(line.session, Shares::default());
         assert!(line.others.iter().all(|e| e.shares == Shares::default()));
         assert_eq!(line.others.len(), 3);
+    }
+
+    /// Claude Code runs this, so the line is about Claude Code's accounts. A Codex account
+    /// whose identity matches the session's is not the account in use, and one that shares
+    /// a label is not an account this session could be switched to.
+    #[test]
+    fn another_tools_accounts_are_not_on_claude_codes_line() {
+        let codex = |label: &str, uuid: &str| Account {
+            last_used_at: None,
+            label: label.into(),
+            account_uuid: uuid.into(),
+            email: format!("{label}@example.com"),
+            detail: crate::state::Detail::Codex {
+                workspace_id: None,
+                plan: None,
+            },
+            parked: None,
+        };
+        let mut s = state();
+        s.accounts.insert(0, codex("shadow", "work-uuid"));
+        s.accounts.push(codex("work", "codex-work"));
+
+        let found = line(&json!({}), &s, Some("work-uuid"), &HashMap::new(), NOW);
+        assert_eq!(found.current.as_deref(), Some("work"));
+        let others: Vec<&str> = found.others.iter().map(|e| e.label.as_str()).collect();
+        assert_eq!(others, ["personal", "side"]);
+
+        let found = line(&json!({}), &s, Some("codex-work"), &HashMap::new(), NOW);
+        assert_eq!(
+            found.current, None,
+            "a Codex identity names no Claude Code account"
+        );
     }
 }

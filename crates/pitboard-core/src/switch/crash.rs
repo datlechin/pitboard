@@ -16,7 +16,9 @@
 //! a machine that cannot be fixed by running the command again, which is the only
 //! instruction a person is ever given.
 
-use super::harness::{NOW, POINTS, document, hold, machine, owner, recover};
+use super::harness::{
+    NOW, POINTS, codex_machine, document, hold, machine, owner, recover, signed_in,
+};
 use super::*;
 use crate::api::scripted::{ScriptedApi, Trouble};
 use crate::fault;
@@ -26,24 +28,34 @@ use std::sync::Arc;
 
 /// Kill a switch at every durable step, recover, and check. Then recover again, because a
 /// recovery that only works once leaves a machine nobody can fix.
+///
+/// For every tool, through the same invariants: what must be true after a crash is a fact
+/// about parking a login, and a tool whose park may never be a copy is exactly the one
+/// where getting it wrong costs most.
 #[test]
 fn a_switch_killed_at_any_step_recovers_to_something_whole() {
-    for point in POINTS {
-        let m = machine(&point.replace('.', "-"));
+    type Make = fn(&str) -> super::harness::Machine;
+    let machines: [(&str, Make); 2] = [("claude", machine), ("codex", codex_machine)];
+    for (tool, make) in machines {
+        for point in POINTS {
+            let m = make(&point.replace('.', "-"));
 
-        let settled = settle(&m.ctx).expect("nothing to recover yet").0;
-        let died = fault::killing(point, || switch(settled, "there"));
-        assert_eq!(
-            died.unwrap_err(),
-            point,
-            "the switch must reach {point} on this machine, or the case proves nothing"
-        );
+            let settled = settle(&m.ctx, None).expect("nothing to recover yet").0;
+            let died = fault::killing(point, || switch(settled, &m.key("there")));
+            assert_eq!(
+                died.unwrap_err(),
+                point,
+                "{tool}: the switch must reach {point} on this machine, or the case proves \
+                 nothing"
+            );
 
-        recover(&m).unwrap_or_else(|e| panic!("{point}: recovery refused: {e}"));
-        hold(&m, point);
+            let at = format!("{tool}, {point}");
+            recover(&m).unwrap_or_else(|e| panic!("{at}: recovery refused: {e}"));
+            hold(&m, &at);
 
-        recover(&m).unwrap_or_else(|e| panic!("{point}: the second recovery refused: {e}"));
-        hold(&m, &format!("{point}, recovered twice"));
+            recover(&m).unwrap_or_else(|e| panic!("{at}: the second recovery refused: {e}"));
+            hold(&m, &format!("{at}, recovered twice"));
+        }
     }
 }
 
@@ -56,8 +68,13 @@ fn a_switch_killed_with_nobody_to_ask_is_recovered_from_the_record() {
     for point in POINTS {
         let m = machine(&format!("offline-{}", point.replace('.', "-")));
 
-        let settled = settle(&m.ctx).expect("nothing to recover yet").0;
-        let died = fault::killing(point, || switch(settled, "there"));
+        let settled = settle(&m.ctx, None).expect("nothing to recover yet").0;
+        let died = fault::killing(point, || {
+            switch(
+                settled,
+                &crate::state::Key::new(crate::provider::ProviderId::Claude, "there"),
+            )
+        });
         assert_eq!(died.unwrap_err(), point);
 
         // Anthropic goes away. A scripted api answers Unauthorized for tokens it does not
@@ -70,7 +87,7 @@ fn a_switch_killed_with_nobody_to_ask_is_recovered_from_the_record() {
         // Which side the live credential came from is written in the record as two
         // fingerprints, so this settles without asking anyone. Dropped at once: a settled
         // machine holds pitboard's exclusivity lock until it is.
-        let decided = settle(&ctx).is_ok();
+        let decided = settle(&ctx, None).is_ok();
         assert!(
             decided,
             "{point}: recovery should read the live login's fingerprint rather than \
@@ -96,8 +113,13 @@ fn a_switch_killed_with_nobody_to_ask_is_recovered_from_the_record() {
 #[test]
 fn a_switch_whose_token_rotated_while_it_was_interrupted_still_needs_anthropic() {
     let m = machine("rotated-offline");
-    let settled = settle(&m.ctx).expect("nothing to recover yet").0;
-    let died = fault::killing("switch.park_recorded", || switch(settled, "there"));
+    let settled = settle(&m.ctx, None).expect("nothing to recover yet").0;
+    let died = fault::killing("switch.park_recorded", || {
+        switch(
+            settled,
+            &crate::state::Key::new(crate::provider::ProviderId::Claude, "there"),
+        )
+    });
     assert_eq!(died.unwrap_err(), "switch.park_recorded");
 
     // Claude Code refreshes the login it still believes is signed in, so the slot now holds
@@ -120,7 +142,7 @@ fn a_switch_whose_token_rotated_while_it_was_interrupted_still_needs_anthropic()
     offline.token_trouble("access-here-refresh", Trouble::Offline);
 
     assert!(
-        settle(&ctx).is_err(),
+        settle(&ctx, None).is_err(),
         "with nothing to read off and nobody to ask, this must not be guessed at"
     );
     assert_eq!(m.mem.vault().services(), before, "nothing may be deleted");
@@ -140,13 +162,57 @@ fn enrolling_killed_between_the_write_and_the_record_leaves_nothing_unnamed() {
         let m = machine(&point.replace('.', "-"));
         m.api.owned_by("access-third-refresh", owner("third"));
 
-        let settled = settle(&m.ctx).expect("nothing to recover").0;
-        let login = enroll::planted(&m.ctx, document("third-refresh")).expect("a sign-in");
-        let died = fault::killing(point, || enroll(settled, "third", Some(login)));
+        let settled = settle(&m.ctx, None).expect("nothing to recover").0;
+        let login = enroll::planted(&m.ctx, ProviderId::Claude, document("third-refresh"))
+            .expect("a sign-in");
+        let died = fault::killing(point, || {
+            enroll(
+                settled,
+                &crate::state::Key::new(crate::provider::ProviderId::Claude, "third"),
+                Some(login),
+            )
+        });
         assert_eq!(died.unwrap_err(), point);
 
         recover(&m).unwrap_or_else(|e| panic!("{point}: recovery refused: {e}"));
         hold(&m, point);
+    }
+}
+
+/// Signing in again to the account in use writes its new login in place of the old one,
+/// then records it, and parks nothing. Killed after either, the account is signed in with
+/// the login that was written and every other account still has its own.
+#[test]
+fn signing_in_again_killed_at_any_step_recovers_to_something_whole() {
+    type Make = fn(&str) -> super::harness::Machine;
+    let machines: [(&str, Make); 2] = [("claude", machine), ("codex", codex_machine)];
+    for (tool, make) in machines {
+        for point in ["enroll.installed", "enroll.recorded"] {
+            let m = make(&format!("again-{}", point.replace('.', "-")));
+            let login = signed_in(&m, "here", "here-refresh-2");
+
+            let settled = settle(&m.ctx, None).expect("nothing to recover yet").0;
+            let died = fault::killing(point, || enroll(settled, &m.key("here"), Some(login)));
+            assert_eq!(
+                died.unwrap_err(),
+                point,
+                "{tool}: the sign-in must reach {point} on this machine, or the case proves \
+                 nothing"
+            );
+
+            let at = format!("{tool}, {point}");
+            recover(&m).unwrap_or_else(|e| panic!("{at}: recovery refused: {e}"));
+            hold(&m, &at);
+            let live = m.live().expect("a login in use");
+            assert_eq!(
+                crate::provider::of(m.which).fingerprint(&live),
+                store::fingerprint("here-refresh-2"),
+                "{at}: the new login is the one in use"
+            );
+
+            recover(&m).unwrap_or_else(|e| panic!("{at}: the second recovery refused: {e}"));
+            hold(&m, &format!("{at}, recovered twice"));
+        }
     }
 }
 
@@ -159,9 +225,13 @@ fn a_switch_whose_login_was_removed_again_does_not_report_a_switch() {
     let m = machine("did-not-hold");
     let parked_before = m.mem.vault().services();
 
-    let settled = settle(&m.ctx).expect("nothing to recover yet").0;
+    let settled = settle(&m.ctx, None).expect("nothing to recover yet").0;
     m.mem.live().fault(&m.service, Fault::DeletedAfterWrite);
-    let failed = switch(settled, "there").expect_err("the login did not stay");
+    let failed = switch(
+        settled,
+        &crate::state::Key::new(crate::provider::ProviderId::Claude, "there"),
+    )
+    .expect_err("the login did not stay");
     assert!(
         matches!(failed, Error::SwitchDidNotHold { .. }),
         "got {failed:?}"
@@ -171,11 +241,25 @@ fn a_switch_whose_login_was_removed_again_does_not_report_a_switch() {
     // Both logins are still here: the one that was parked on the way out, and the one that
     // was being installed. Neither may be thrown away over a write that did not hold.
     assert!(
-        state.get("here").expect("account").parked.is_some(),
+        state
+            .get(&crate::state::Key::new(
+                crate::provider::ProviderId::Claude,
+                "here"
+            ))
+            .expect("account")
+            .parked
+            .is_some(),
         "the outgoing login was parked and stays parked"
     );
     assert!(
-        state.get("there").expect("account").parked.is_some(),
+        state
+            .get(&crate::state::Key::new(
+                crate::provider::ProviderId::Claude,
+                "there"
+            ))
+            .expect("account")
+            .parked
+            .is_some(),
         "the incoming login is not discarded over a switch that did not stand"
     );
     assert!(m.mem.vault().services().len() > parked_before.len());
@@ -197,9 +281,13 @@ fn a_switch_that_cannot_read_the_store_back_keeps_every_copy_and_its_record() {
 
     // The keychain locks partway through, which is what a screen lock does. The reads the
     // switch makes before it writes still answer; the write and everything after it do not.
-    let settled = settle(&m.ctx).expect("nothing to recover yet").0;
+    let settled = settle(&m.ctx, None).expect("nothing to recover yet").0;
     m.mem.live().fault(&m.service, Fault::LocksOnWrite);
-    let failed = switch(settled, "there").expect_err("a keychain that locked partway");
+    let failed = switch(
+        settled,
+        &crate::state::Key::new(crate::provider::ProviderId::Claude, "there"),
+    )
+    .expect_err("a keychain that locked partway");
     assert!(
         matches!(failed, Error::SwitchUnverified { .. }),
         "got {failed:?}"
@@ -239,7 +327,10 @@ fn renewing_killed_between_the_write_and_the_record_leaves_nothing_unnamed() {
     // The parked login is due: its access token has lapsed.
     let mut state = state::load(&m.ctx).expect("state");
     let park = state
-        .get("there")
+        .get(&crate::state::Key::new(
+            crate::provider::ProviderId::Claude,
+            "there",
+        ))
         .expect("account")
         .parked
         .clone()
@@ -255,8 +346,9 @@ fn renewing_killed_between_the_write_and_the_record_leaves_nothing_unnamed() {
         .to_string(),
     );
     state.park(
-        "there",
+        &crate::state::Key::new(crate::provider::ProviderId::Claude, "there"),
         park::describe(
+            crate::provider::ProviderId::Claude,
             &park.service,
             NOW,
             &json!({
@@ -284,6 +376,95 @@ fn renewing_killed_between_the_write_and_the_record_leaves_nothing_unnamed() {
 
     recover(&m).expect("recovery");
     hold(&m, "renew.park_stored");
+
+    // Which chain survived is the whole point. Anthropic spent `there-refresh` when it
+    // answered; the copy written just before the kill is the only one that still works.
+    let kept = state::load(&m.ctx)
+        .expect("state")
+        .get(&crate::state::Key::new(
+            crate::provider::ProviderId::Claude,
+            "there",
+        ))
+        .and_then(|a| a.parked.clone())
+        .expect("`there` still holds a login");
+    assert_eq!(
+        kept.refresh_fingerprint,
+        crate::provider::claude::document::fingerprint_of(&json!({"refreshToken": "fresh"})),
+        "the fresh login is kept and the spent one dropped, not the other way round"
+    );
+    assert_eq!(m.mem.vault().services(), vec![kept.service]);
+}
+
+/// A renewal whose answer is written and whose record cannot be saved keeps what it wrote.
+/// The service has already spent the chain the record still names, so deleting the fresh
+/// copy, which this once did, left the account nothing that works. The next change gives
+/// it back.
+#[test]
+fn a_renewal_that_cannot_record_its_answer_keeps_it_for_the_next_run() {
+    use std::os::unix::fs::PermissionsExt;
+    let m = machine("renew-save-fails");
+    let key = crate::state::Key::new(crate::provider::ProviderId::Claude, "there");
+    let mut state = state::load(&m.ctx).expect("state");
+    let held = state.get(&key).unwrap().parked.clone().unwrap();
+    let lapsed = json!({
+        "accessToken": "access-there-refresh",
+        "refreshToken": "there-refresh",
+        "expiresAt": (NOW - 60) * 1000,
+        "refreshTokenExpiresAt": (NOW + 30 * 86_400) * 1000
+    });
+    m.mem.vault().plant(&held.service, &lapsed.to_string());
+    state.park(
+        &key,
+        park::describe(
+            crate::provider::ProviderId::Claude,
+            &held.service,
+            NOW,
+            &lapsed,
+        ),
+    );
+    state::save(&m.ctx, &state).expect("saved");
+    m.api.renews(
+        "there-refresh",
+        crate::api::Renewed {
+            access_token: "access-fresh".into(),
+            refresh_token: Some("fresh".into()),
+            expires_in: 3600,
+            refresh_token_expires_in: Some(30 * 86_400),
+            scopes: None,
+            at: None,
+        },
+    );
+
+    // pitboard's home goes read-only once the fresh login is in the vault, so the record
+    // of it cannot be written.
+    let home = crate::home::dir(&m.ctx);
+    let locked = home.clone();
+    let outcomes = fault::meanwhile(
+        "renew.park_stored",
+        move || {
+            std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o500)).unwrap();
+        },
+        || renew::renew_parked(&m.ctx),
+    );
+    std::fs::set_permissions(&home, std::fs::Permissions::from_mode(0o700)).unwrap();
+    assert!(
+        outcomes
+            .iter()
+            .any(|(_, r)| matches!(r, renew::Renewal::Failed(_))),
+        "the save failed, and says so"
+    );
+
+    recover(&m).expect("the next change");
+    let kept = state::load(&m.ctx)
+        .expect("state")
+        .get(&key)
+        .and_then(|a| a.parked.clone())
+        .expect("`there` still holds a login");
+    assert_eq!(
+        kept.refresh_fingerprint,
+        crate::provider::claude::document::fingerprint_of(&json!({"refreshToken": "fresh"})),
+    );
+    hold(&m, "after a renewal that could not be recorded");
 }
 
 /// Forgetting deletes the account before deleting its park. Killed between the two, the
@@ -291,9 +472,14 @@ fn renewing_killed_between_the_write_and_the_record_leaves_nothing_unnamed() {
 #[test]
 fn forgetting_killed_after_the_record_still_deletes_the_park() {
     let m = machine("forget-recorded");
-    let settled = settle(&m.ctx).expect("nothing to recover").0;
+    let settled = settle(&m.ctx, None).expect("nothing to recover").0;
 
-    let died = fault::killing("forget.recorded", || forget::forget(settled, "there"));
+    let died = fault::killing("forget.recorded", || {
+        forget::forget(
+            settled,
+            &crate::state::Key::new(crate::provider::ProviderId::Claude, "there"),
+        )
+    });
     assert_eq!(died.unwrap_err(), "forget.recorded");
 
     recover(&m).expect("recovery");

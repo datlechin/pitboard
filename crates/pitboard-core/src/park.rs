@@ -3,9 +3,10 @@
 
 use crate::context::Context;
 use crate::error::{Error, Result};
-use crate::state::{Park, State};
-use crate::{api, store};
-use serde_json::{Value, json};
+use crate::provider::ProviderId;
+use crate::state::{Key, Park, State};
+use crate::store;
+use serde_json::Value;
 
 const PREFIX: &str = "pitboard-park-";
 
@@ -45,11 +46,52 @@ pub fn reserve(ctx: &Context, account_uuid: &str) -> Result<String> {
     Err(Error::ParkSlotExhausted)
 }
 
+/// Whether a login can be parked at all on this machine, and how.
+///
+/// On macOS a park goes into the keychain through `security`, whose stdin takes 4032 bytes.
+/// A Claude Code slice is a few hundred, but a Codex login is its whole `auth.json`, over
+/// four kilobytes before it is hex-encoded, so every Codex park is past the ceiling. Above
+/// it the write goes on the argument line, which is said, or is refused where
+/// `PITBOARD_NO_ARGV` forbids that, before anything has moved rather than halfway through.
+pub fn price(
+    ctx: &Context,
+    provider: ProviderId,
+    label: &str,
+    service: &str,
+    document: &Value,
+) -> Result<Option<crate::service::Warning>> {
+    let body = serde_json::to_string(document).expect("a credential slice is always serialisable");
+    let Some(price) = store::vault_cost(ctx, service, &body) else {
+        return Ok(None);
+    };
+    if price.refused() {
+        return Err(Error::CredentialTooLarge {
+            tool: provider,
+            label: label.to_string(),
+            bytes: price.needs,
+            limit: price.limit,
+        });
+    }
+    Ok(price
+        .on_the_second_route()
+        .then_some(crate::service::Warning::WrittenOnTheCommandLine {
+            tool: provider,
+            bytes: price.needs,
+            limit: price.limit,
+        }))
+}
+
 /// Write a login into a reserved name and prove it reads back.
-pub fn store_at(ctx: &Context, service: &str, document: &Value) -> Result<Park> {
-    let park = describe(service, ctx.now(), document);
+pub fn store_at(
+    ctx: &Context,
+    provider: ProviderId,
+    service: &str,
+    document: &Value,
+) -> Result<Park> {
+    let park = describe(provider, service, ctx.now(), document);
     if park.refresh_fingerprint.is_empty() {
         return Err(Error::LiveCredentialShapeUnexpected {
+            tool: provider,
             detail: "it has no refresh token, so it could never be restored".into(),
         });
     }
@@ -59,90 +101,97 @@ pub fn store_at(ctx: &Context, service: &str, document: &Value) -> Result<Park> 
 }
 
 /// What the account index records about a login: nothing secret.
-pub fn describe(service: &str, parked_at: i64, document: &Value) -> Park {
-    let oauth = oauth_in(document);
-    // Claude Code records both expiries in epoch milliseconds.
-    let expiry = |key: &str| oauth.get(key).and_then(Value::as_i64).map(|ms| ms / 1000);
+pub fn describe(provider: ProviderId, service: &str, parked_at: i64, document: &Value) -> Park {
+    // Through the provider: where the dates are and what unit they are in is a fact about
+    // the tool, and the three disagree on both.
+    let tool = crate::provider::of(provider);
+    let expiry = tool.expiry(document);
     Park {
         service: service.to_string(),
         parked_at,
-        refresh_fingerprint: fingerprint_of(oauth),
-        access_expires_at: expiry("expiresAt"),
-        refresh_expires_at: expiry("refreshTokenExpiresAt"),
+        refresh_fingerprint: tool.fingerprint(document),
+        access_expires_at: expiry.access_expires_at,
+        refresh_expires_at: expiry.refresh_expires_at,
     }
 }
 
-/// The parked login with fresh tokens, stored as Claude Code stores its own after renewing,
-/// so it reads the same to Claude Code once restored. With no refresh-token lifetime in the
-/// answer Claude Code keeps the date it already had (`refreshTokenExpiresAt ?? previous`,
-/// measured in 2.1.278); dropping it instead would make a lapsed park look immortal, and
-/// pitboard would keep offering and renewing it forever.
-pub fn renewed(document: &Value, fresh: &api::Renewed, now_millis: i64) -> Value {
-    let mut next = document.clone();
-    // Whatever else the slice holds is kept; only the tokens move.
-    let oauth = match next.get_mut("claudeAiOauth") {
-        Some(block) => block,
-        None => &mut next,
-    };
-    let Some(fields) = oauth.as_object_mut() else {
-        return next;
-    };
-    fields.insert("accessToken".into(), json!(fresh.access_token));
-    if let Some(refresh) = &fresh.refresh_token {
-        fields.insert("refreshToken".into(), json!(refresh));
-    }
-    fields.insert(
-        "expiresAt".into(),
-        json!(now_millis + fresh.expires_in * 1000),
-    );
-    if let Some(seconds) = fresh.refresh_token_expires_in {
-        fields.insert(
-            "refreshTokenExpiresAt".into(),
-            json!(now_millis + seconds * 1000),
-        );
-    }
-    if let Some(scopes) = &fresh.scopes {
-        fields.insert("scopes".into(), json!(scopes));
-    }
-    next
-}
-
-/// The OAuth block inside a parked login.
-///
-/// A park holds the account's whole slice of Claude Code's credential document, which is
-/// `claudeAiOauth` plus whatever else of [`crate::switch::ACCOUNT_SCOPED`] was there. A
-/// park written before that held the OAuth block alone, so a document with no
-/// `claudeAiOauth` key is one of those and is the block itself. Reading either shape is
-/// what lets a park from an older pitboard still be restored.
-pub fn oauth_in(document: &Value) -> &Value {
-    document.get("claudeAiOauth").unwrap_or(document)
-}
-
-pub fn fingerprint_of(document: &Value) -> String {
-    oauth_in(document)
-        .get("refreshToken")
-        .and_then(Value::as_str)
-        .map(store::fingerprint)
-        .unwrap_or_default()
-}
-
-/// Takes the label so a failure names the account, not an item the user has never seen.
-pub fn load(ctx: &Context, label: &str, park: &Park) -> Result<Value> {
+/// Takes the account so a failure names it, not an item the user has never seen, and so
+/// the fingerprint is read the way that account's tool lays its login out.
+pub fn load(ctx: &Context, key: &Key, park: &Park) -> Result<Value> {
+    let label = key.typed();
     let raw =
         store::vault_read(ctx, &park.service)?.ok_or_else(|| Error::ParkedCredentialMissing {
-            label: label.to_string(),
+            label: label.clone(),
         })?;
     let value: Value = serde_json::from_str(&raw).map_err(|e| Error::ParkedCredentialCorrupt {
-        label: label.to_string(),
+        label: label.clone(),
         detail: e.to_string(),
     })?;
-    if park.refresh_fingerprint.is_empty() || fingerprint_of(&value) != park.refresh_fingerprint {
+    let found = crate::provider::of(key.provider).fingerprint(&value);
+    if park.refresh_fingerprint.is_empty() || found != park.refresh_fingerprint {
         return Err(Error::ParkedCredentialCorrupt {
-            label: label.to_string(),
+            label,
             detail: "it does not match the fingerprint pitboard recorded".into(),
         });
     }
     Ok(value)
+}
+
+/// Whether this parked document is a second copy of the login signed in now, for a tool
+/// whose park may never be one.
+///
+/// Answered from the two refresh tokens' fingerprints, so it needs no network. For a tool
+/// whose own sign-out revokes what it finds, keeping such a copy is keeping a token the
+/// person's next sign-out would end in both places; it is discarded instead. For a tool
+/// that tolerates a copy this is never true, and what was always done still is.
+pub fn is_live_twin(ctx: &Context, provider: ProviderId, document: &Value) -> bool {
+    let tool = crate::provider::of(provider);
+    if tool.park_semantics() != crate::provider::ParkSemantics::MoveOnly {
+        return false;
+    }
+    let parked = tool.fingerprint(document);
+    !parked.is_empty() && live_fingerprint(ctx, provider).is_some_and(|live| live == parked)
+}
+
+/// The fingerprint of the refresh token the tool has in use now, where there is one and it
+/// can be read.
+fn live_fingerprint(ctx: &Context, provider: ProviderId) -> Option<String> {
+    let tool = crate::provider::of(provider);
+    let live = tool.read_live(ctx).ok().flatten()?;
+    Some(tool.fingerprint(&live.raw)).filter(|found| !found.is_empty())
+}
+
+/// Every park an account holds that is a copy of the login its tool has in use now.
+///
+/// For every tool, where `is_live_twin` asks only for a tool whose park may never be a
+/// copy: whatever a tool does about copies, a copy of the login in use is one refresh token
+/// in two places, and renewing it spends the token the tool itself is about to present. One
+/// is left when a new login was put in use and could not be read back, so it was parked as
+/// well. A tool no account holds a park of is not read at all, and neither is Claude Code's
+/// login under a custom OAuth endpoint, which is somewhere pitboard does not act on.
+pub fn live_twins(ctx: &Context, state: &State) -> Vec<String> {
+    let mut twins = Vec::new();
+    for &provider in ProviderId::ALL {
+        let held: Vec<&crate::state::Park> = state
+            .accounts
+            .iter()
+            .filter(|a| a.provider() == provider)
+            .filter_map(|a| a.parked.as_ref())
+            .collect();
+        if held.is_empty() || (provider == ProviderId::Claude && crate::settings::custom_oauth(ctx))
+        {
+            continue;
+        }
+        let Some(live) = live_fingerprint(ctx, provider) else {
+            continue;
+        };
+        twins.extend(
+            held.into_iter()
+                .filter(|park| park.refresh_fingerprint == live)
+                .map(|park| park.service.clone()),
+        );
+    }
+    twins
 }
 
 /// Delete every discarded item, keeping listed only those that resisted. Returns how many
@@ -157,9 +206,14 @@ pub fn purge(ctx: &Context, state: &mut State) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::store::memory::{Fault, MemoryPlatform};
+    use crate::store::memory::{Fault, MemoryHost};
     use crate::time::FixedClock;
+    use serde_json::json;
     use std::sync::Arc;
+
+    fn work() -> Key {
+        Key::new(ProviderId::Claude, "work")
+    }
 
     fn oauth(token: &str) -> Value {
         json!({
@@ -172,14 +226,14 @@ mod tests {
 
     /// A machine whose stores are in memory, whose clock stands still, and whose home is a
     /// scratch directory: reserving a name writes it down before it is used.
-    fn machine() -> (Context, Arc<MemoryPlatform>, Scratch) {
+    fn machine() -> (Context, Arc<MemoryHost>, Scratch) {
         let root = std::env::temp_dir().join(format!(
             "pitboard-park-{}-{:?}",
             std::process::id(),
             std::thread::current().id()
         ));
         let _ = std::fs::remove_dir_all(&root);
-        let mem = MemoryPlatform::new();
+        let mem = MemoryHost::new();
         let clock = Arc::new(FixedClock::at(1_760_000_000));
         let ctx = Context::new(root.clone())
             .with_pitboard_home(root.clone())
@@ -203,10 +257,10 @@ mod tests {
     fn a_parked_login_reads_back_through_its_fingerprint() {
         let (ctx, mem, _scratch) = machine();
         let name = reserve(&ctx, "acc").expect("a free name");
-        let park = store_at(&ctx, &name, &oauth("r")).expect("stored");
+        let park = store_at(&ctx, ProviderId::Claude, &name, &oauth("r")).expect("stored");
 
         assert_eq!(mem.vault().services(), vec![name.clone()]);
-        assert_eq!(load(&ctx, "work", &park).expect("loads"), oauth("r"));
+        assert_eq!(load(&ctx, &work(), &park).expect("loads"), oauth("r"));
     }
 
     /// The distinction the whole store layer exists to keep. A park that is gone is gone and
@@ -216,11 +270,11 @@ mod tests {
     fn a_park_that_vanished_and_one_that_cannot_be_read_are_different_answers() {
         let (ctx, mem, _scratch) = machine();
         let name = reserve(&ctx, "acc").expect("a free name");
-        let park = store_at(&ctx, &name, &oauth("r")).expect("stored");
+        let park = store_at(&ctx, ProviderId::Claude, &name, &oauth("r")).expect("stored");
 
         mem.vault().fault(&name, Fault::Vanish);
         assert!(matches!(
-            load(&ctx, "work", &park),
+            load(&ctx, &work(), &park),
             Err(Error::ParkedCredentialMissing { .. })
         ));
 
@@ -228,7 +282,7 @@ mod tests {
             .fault(&name, Fault::Unreadable("the keychain is locked".into()));
         assert!(
             matches!(
-                load(&ctx, "work", &park),
+                load(&ctx, &work(), &park),
                 Err(Error::Store(crate::store::Error::Unreadable(_)))
             ),
             "a store that could not answer must never read as an absent login"
@@ -253,7 +307,12 @@ mod tests {
         let (ctx, mem, _scratch) = machine();
         let name = reserve(&ctx, "acc").expect("a free name");
         assert!(matches!(
-            store_at(&ctx, &name, &json!({"accessToken": "a"})),
+            store_at(
+                &ctx,
+                ProviderId::Claude,
+                &name,
+                &json!({"accessToken": "a"})
+            ),
             Err(Error::LiveCredentialShapeUnexpected { .. })
         ));
         assert!(mem.vault().services().is_empty());
@@ -262,6 +321,7 @@ mod tests {
     #[test]
     fn a_park_records_when_its_login_stops_working() {
         let park = describe(
+            ProviderId::Claude,
             "pitboard-park-x-1",
             50,
             &serde_json::json!({
@@ -274,61 +334,18 @@ mod tests {
         assert_eq!(park.refresh_expires_at, Some(1_792_000_000));
         assert_eq!(
             park.refresh_fingerprint,
-            fingerprint_of(&serde_json::json!({"refreshToken": "r"}))
+            crate::provider::claude::document::fingerprint_of(&serde_json::json!({
+                "refreshToken": "r"
+            }))
         );
-    }
-
-    #[test]
-    fn a_renewed_login_is_stored_as_claude_code_stores_its_own() {
-        let parked = json!({
-            "accessToken": "a1", "refreshToken": "r1", "expiresAt": 1,
-            "refreshTokenExpiresAt": 2, "scopes": ["user:inference"],
-            "subscriptionType": "max", "rateLimitTier": "default_claude_max_20x"
-        });
-        let fresh = api::Renewed {
-            access_token: "a2".into(),
-            refresh_token: Some("r2".into()),
-            expires_in: 60,
-            refresh_token_expires_in: Some(120),
-            scopes: None,
-            at: None,
-        };
-        let next = renewed(&parked, &fresh, 1_000_000);
-        assert_eq!(next["accessToken"], "a2");
-        assert_eq!(next["refreshToken"], "r2");
-        assert_eq!(next["expiresAt"], 1_060_000);
-        assert_eq!(next["refreshTokenExpiresAt"], 1_120_000);
-        assert_eq!(
-            next["scopes"],
-            json!(["user:inference"]),
-            "kept when not answered"
-        );
-        assert_eq!(
-            next["subscriptionType"], "max",
-            "what renewal does not touch stays"
-        );
-
-        let kept = api::Renewed {
-            refresh_token: None,
-            refresh_token_expires_in: None,
-            ..fresh
-        };
-        let next = renewed(&parked, &kept, 1_000_000);
-        assert_eq!(
-            next["refreshToken"], "r1",
-            "the server kept the refresh token"
-        );
-        // Claude Code keeps the date it had. Dropping it would make a park that is about to
-        // lapse look as though it never expires.
-        assert_eq!(next["refreshTokenExpiresAt"], 2);
     }
 
     #[test]
     fn service_names_carry_the_account_and_the_moment() {
-        let s = service_name("9aeb9c89-316c-4344-84c5-603d71dc5c9a", 1789935600123);
+        let s = service_name("1f0e2d3c-4b5a-4968-8776-a5b4c3d2e1f0", 1789935600123);
         assert_eq!(
             s,
-            "pitboard-park-9aeb9c89-316c-4344-84c5-603d71dc5c9a-1789935600123"
+            "pitboard-park-1f0e2d3c-4b5a-4968-8776-a5b4c3d2e1f0-1789935600123"
         );
         assert!(
             s.starts_with("pitboard-park-"),
@@ -341,14 +358,10 @@ mod tests {
     fn a_credential_with_no_refresh_token_is_refused_rather_than_parked() {
         let refused = store_at(
             &Context::from_env(),
+            ProviderId::Claude,
             "pitboard-park-test-no-refresh",
             &serde_json::json!({"accessToken": "a"}),
         );
         assert!(refused.is_err());
-    }
-
-    #[test]
-    fn a_credential_with_no_refresh_token_fingerprints_to_nothing_rather_than_panicking() {
-        assert_eq!(fingerprint_of(&serde_json::json!({"accessToken": "a"})), "");
     }
 }

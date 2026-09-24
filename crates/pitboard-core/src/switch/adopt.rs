@@ -27,9 +27,10 @@ use crate::{audit, state};
 /// What taking over found.
 #[derive(Debug, PartialEq, Eq)]
 pub struct Adopted {
-    /// The accounts kept, in the order they were enrolled.
+    /// The accounts kept, in the order they were enrolled, named the way they are typed:
+    /// bare for Claude Code, `codex/work` for another tool.
     pub accounts: Vec<String>,
-    /// Accounts that arrived holding a parked login, now dropped.
+    /// Accounts that arrived holding a parked login, now dropped, named the same way.
     pub logins_dropped: Vec<String>,
 }
 
@@ -42,19 +43,24 @@ pub fn adopt(ctx: &Context) -> Result<Option<Adopted>> {
         return Ok(None);
     }
 
-    let accounts: Vec<String> = state.accounts.iter().map(|a| a.label.clone()).collect();
+    let accounts: Vec<String> = state.accounts.iter().map(|a| a.key().typed()).collect();
     let mut logins_dropped = Vec::new();
-    for account in &mut state.accounts {
-        if let Some(park) = account.parked.take() {
-            logins_dropped.push(account.label.clone());
-            // Listed rather than deleted outright, so a delete that fails is retried. On a
-            // machine that did not receive the keychain there is nothing there to delete,
-            // and deleting what is not there succeeds.
-            state.discarded.push(park.service);
+    let mut parks = Vec::new();
+    for account in &state.accounts {
+        if let Some(park) = &account.parked {
+            logins_dropped.push(account.key().typed());
+            parks.push(park.service.clone());
         }
     }
-    state.active = None;
-    state.slot = None;
+    // Listed rather than deleted outright, so a delete that fails is retried. On a machine
+    // that did not receive the keychain there is nothing there to delete, and deleting what
+    // is not there succeeds. Released rather than discarded, because one `repair` gave back
+    // may be another pitboard's, and that keychain may have come across too.
+    for service in &parks {
+        state.release(service);
+    }
+    state.active.clear();
+    state.slot.clear();
     state.machine = state::machine_id();
     state::save(ctx, &state)?;
     purge(ctx, &mut state);
@@ -69,8 +75,9 @@ pub fn adopt(ctx: &Context) -> Result<Option<Adopted>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::provider::ProviderId;
     use crate::state::{Account, State};
-    use crate::store::memory::MemoryPlatform;
+    use crate::store::memory::MemoryHost;
     use crate::time::{Clock, FixedClock};
     use serde_json::json;
     use std::sync::Arc;
@@ -84,14 +91,14 @@ mod tests {
         }
     }
 
-    fn machine(name: &str) -> (Context, Arc<MemoryPlatform>, Scratch) {
+    fn machine(name: &str) -> (Context, Arc<MemoryHost>, Scratch) {
         let root = std::env::temp_dir().join(format!(
             "pitboard-adopt-{name}-{}-{:?}",
             std::process::id(),
             std::thread::current().id()
         ));
         let _ = std::fs::remove_dir_all(&root);
-        let mem = MemoryPlatform::new();
+        let mem = MemoryHost::new();
         let ctx = Context::new(root.clone())
             .with_pitboard_home(root.clone())
             .with_memory_stores(Arc::clone(&mem))
@@ -110,7 +117,7 @@ mod tests {
     }
 
     /// A home that came from somewhere else, with a login in the keychain that came with it.
-    fn from_elsewhere(ctx: &Context, mem: &MemoryPlatform) -> String {
+    fn from_elsewhere(ctx: &Context, mem: &MemoryHost) -> String {
         let service = "pitboard-park-acc-1750000000000";
         mem.vault().plant(service, &oauth().to_string());
         let mut state = State {
@@ -122,11 +129,18 @@ mod tests {
             label: "work".into(),
             account_uuid: "acc".into(),
             email: "me@example.com".into(),
-            organization_uuid: "org".into(),
-            oauth_account: json!({"accountUuid": "acc"}),
-            parked: Some(crate::park::describe(service, NOW, &oauth())),
+            detail: state::Detail::Claude {
+                organization_uuid: "org".into(),
+                oauth_account: json!({"accountUuid": "acc"}),
+            },
+            parked: Some(crate::park::describe(
+                crate::provider::ProviderId::Claude,
+                service,
+                NOW,
+                &oauth(),
+            )),
         });
-        state.active = Some("work".into());
+        state.set_active(ProviderId::Claude, Some("work".into()));
         let raw = serde_json::to_string(&state).expect("serialisable");
         std::fs::write(crate::home::dir(ctx).join("state.json"), raw).expect("written");
         service.to_string()
@@ -152,7 +166,12 @@ mod tests {
         assert_eq!(adopted.logins_dropped, vec!["work".to_string()]);
 
         let state = state::load(&ctx).expect("now it is this machine's");
-        let account = state.get("work").expect("the account is kept");
+        let account = state
+            .get(&crate::state::Key::new(
+                crate::provider::ProviderId::Claude,
+                "work",
+            ))
+            .expect("the account is kept");
         assert_eq!(account.email, "me@example.com");
         assert_eq!(account.account_uuid, "acc");
         assert!(
@@ -164,7 +183,7 @@ mod tests {
             "and the copy that came with it is deleted rather than left to be presented"
         );
         assert!(
-            state.active.is_none(),
+            state.active.is_empty(),
             "who was signed in was true elsewhere"
         );
     }
@@ -178,8 +197,10 @@ mod tests {
             label: "work".into(),
             account_uuid: "acc".into(),
             email: "me@example.com".into(),
-            organization_uuid: "org".into(),
-            oauth_account: json!({}),
+            detail: state::Detail::Claude {
+                organization_uuid: "org".into(),
+                oauth_account: json!({}),
+            },
             parked: None,
         });
         state::save(&ctx, &state).expect("saved");

@@ -5,15 +5,23 @@
 //! survives Claude Code rotating the token. When any fact cannot be read, recovery changes
 //! nothing and keeps the record.
 
-use super::{Error, Result, identify};
+use super::{Error, Result, identify_document};
 use crate::context::Context;
-use crate::state::{Park, State};
-use crate::{atomic, claude, home, park, state, store};
+use crate::provider::ProviderId;
+use crate::state::{Key, Park, State};
+use crate::{atomic, home, park, state, store};
 use serde_json::Value;
 use std::path::PathBuf;
 
 #[derive(serde::Serialize, serde::Deserialize)]
 pub(super) struct Journal {
+    /// Which tool's login moved. Both sides of a switch are always the same tool's: a
+    /// switch replaces one tool's live login with another account of that same tool.
+    ///
+    /// Absent from a record written before there was a second tool, and every one of those
+    /// was Claude Code's.
+    #[serde(default = "claude")]
+    pub(super) provider: ProviderId,
     pub(super) started_at: i64,
     pub(super) from_label: String,
     pub(super) from_uuid: String,
@@ -31,6 +39,14 @@ pub(super) struct Journal {
     pub(super) from_fingerprint: String,
     #[serde(default)]
     pub(super) to_fingerprint: String,
+    /// Where the tool's live login was when the switch started, as the tool names it.
+    ///
+    /// Which login is live depends on a home variable, and recovery judges an interrupted
+    /// switch by reading the live login. Read from another place, it would compare the
+    /// switch's two sides with a login that has nothing to do with them, and could decide
+    /// the switch landed when it never did. `None` on a record written before this was kept.
+    #[serde(default)]
+    pub(super) slot: Option<String>,
 }
 
 /// What a later run found an interrupted switch had done, now recorded in the state.
@@ -67,6 +83,20 @@ impl std::fmt::Display for Recovered {
     }
 }
 
+fn claude() -> ProviderId {
+    ProviderId::Claude
+}
+
+impl Journal {
+    fn from(&self) -> Key {
+        Key::new(self.provider, self.from_label.clone())
+    }
+
+    fn to(&self) -> Key {
+        Key::new(self.provider, self.to_label.clone())
+    }
+}
+
 fn journal_path(ctx: &Context) -> PathBuf {
     home::dir(ctx).join("journal.json")
 }
@@ -87,6 +117,14 @@ pub(super) fn write_journal(ctx: &Context, entry: &Journal) -> Result<()> {
 /// A switch was interrupted, and the next command that changes state will finish it.
 pub fn pending(ctx: &Context) -> bool {
     journal_path(ctx).exists()
+}
+
+/// Which tool's switch was interrupted, where one was and its record can be read.
+pub(crate) fn interrupted_tool(ctx: &Context) -> Option<ProviderId> {
+    let raw = std::fs::read_to_string(journal_path(ctx)).ok()?;
+    serde_json::from_str::<Journal>(&raw)
+        .ok()
+        .map(|journal| journal.provider)
 }
 
 /// The switch reached a state the account index fully describes.
@@ -128,7 +166,12 @@ fn repair_for(state: &State, journal: &Journal, found: &Found) -> Option<Repair>
     {
         repair.hold = Some((
             journal.from_uuid.clone(),
-            park::describe(&journal.park_service, journal.started_at, oauth),
+            park::describe(
+                journal.provider,
+                &journal.park_service,
+                journal.started_at,
+                oauth,
+            ),
         ));
     }
     Some(repair)
@@ -139,15 +182,18 @@ fn apply(state: &mut State, journal: &Journal, repair: Repair) {
         state.discard(&journal.park_service);
     }
     if let Some((uuid, park)) = repair.hold {
-        match state.by_uuid(&uuid).map(|a| a.label.clone()) {
-            Some(label) => state.park(&label, park),
+        match state
+            .by_uuid(journal.provider, &uuid)
+            .map(crate::state::Account::key)
+        {
+            Some(key) => state.park(&key, park),
             // The account it belongs to is gone, so nothing will ever restore this copy.
             // Listing it is what gets it deleted rather than left in the keychain.
-            None => state.discard(&park.service),
+            None => state.release(&park.service),
         }
     }
-    if repair.landed && state.get(&journal.to_label).is_some() {
-        state.active = Some(journal.to_label.clone());
+    if repair.landed && state.get(&journal.to()).is_some() {
+        state.set_active(journal.provider, Some(journal.to_label.clone()));
         state.discard(&journal.incoming_service);
     }
 }
@@ -159,14 +205,13 @@ fn read_park(ctx: &Context, service: &str) -> Option<Option<Value>> {
     }
 }
 
-fn live_owner(ctx: &Context) -> std::result::Result<String, String> {
-    let live = store::read(ctx, &claude::live_service(ctx))
+fn live_owner(ctx: &Context, which: ProviderId) -> std::result::Result<String, String> {
+    let live = crate::provider::of(which)
+        .read_live(ctx)
         .map_err(|e| e.to_string())?
-        .ok_or("nothing is signed in")?;
-    let token = live["claudeAiOauth"]["accessToken"]
-        .as_str()
-        .ok_or("the signed-in credential has no access token")?;
-    identify(ctx, token)
+        .ok_or("nothing is signed in")?
+        .raw;
+    identify_document(ctx, which, &live)
         .map(|owner| owner.account_uuid)
         .map_err(|e| e.to_string())
 }
@@ -190,8 +235,11 @@ fn live_owner_by_fingerprint(ctx: &Context, journal: &Journal) -> Option<String>
     if journal.from_fingerprint == journal.to_fingerprint {
         return None;
     }
-    let live = store::read(ctx, &claude::live_service(ctx)).ok()??;
-    let found = park::fingerprint_of(&live["claudeAiOauth"]);
+    let live = crate::provider::of(journal.provider)
+        .read_live(ctx)
+        .ok()??
+        .raw;
+    let found = crate::provider::of(journal.provider).fingerprint(&live);
     if found.is_empty() {
         return None;
     }
@@ -215,10 +263,15 @@ pub struct Abandoned {
 
 /// Throws away a record that cannot be finished, keeping every copy it names.
 ///
-/// Recovery needs Anthropic to say who owns the live login. Offline, or with a session
-/// Anthropic no longer accepts, it cannot, and every command that changes anything stops
-/// at that. This is the way out: nothing is deleted and nothing is installed, so the worst
-/// case is a copy that outlives its use, which `status` shows and `doctor` reports.
+/// Recovery needs the service to say who owns the live login. Offline, or with a session
+/// the service no longer accepts, it cannot, and every command that changes anything stops
+/// at that. This is the way out: nothing is installed and nothing that might be the only
+/// copy is deleted, so the worst case is a copy that outlives its use, which `status` shows
+/// and `doctor` reports.
+///
+/// One exception, for a tool whose park may never be a copy: a park whose refresh token is
+/// the live login's own is a second copy for certain, whoever owns it, and is dropped
+/// rather than kept.
 pub(super) fn abandon(ctx: &Context, state: &mut State) -> Result<Option<Abandoned>> {
     let path = journal_path(ctx);
     let raw = match std::fs::read_to_string(&path) {
@@ -233,16 +286,30 @@ pub(super) fn abandon(ctx: &Context, state: &mut State) -> Result<Option<Abandon
     // nothing holds a keychain item that no file names.
     let mut kept = 0;
     if let Some(Some(document)) = read_park(ctx, &journal.park_service)
-        && let Some(label) = state.by_uuid(&journal.from_uuid).map(|a| a.label.clone())
+        && park::is_live_twin(ctx, journal.provider, &document)
+    {
+        state.discard(&journal.park_service);
+    } else if let Some(Some(document)) = read_park(ctx, &journal.park_service)
+        && let Some(key) = state
+            .by_uuid(journal.provider, &journal.from_uuid)
+            .map(crate::state::Account::key)
     {
         state.park(
-            &label,
-            park::describe(&journal.park_service, ctx.now(), &document),
+            &key,
+            park::describe(
+                journal.provider,
+                &journal.park_service,
+                ctx.now(),
+                &document,
+            ),
         );
         kept += 1;
     }
-    if state
-        .by_uuid(&journal.to_uuid)
+    let incoming = read_park(ctx, &journal.incoming_service).flatten();
+    if incoming.is_some_and(|document| park::is_live_twin(ctx, journal.provider, &document)) {
+        state.discard(&journal.incoming_service);
+    } else if state
+        .by_uuid(journal.provider, &journal.to_uuid)
         .and_then(|a| a.parked.as_ref())
         .is_some()
     {
@@ -251,8 +318,8 @@ pub(super) fn abandon(ctx: &Context, state: &mut State) -> Result<Option<Abandon
     state::save(ctx, state)?;
     clear_journal(ctx);
     Ok(Some(Abandoned {
-        from: journal.from_label,
-        to: journal.to_label,
+        from: state.typed(&journal.from()),
+        to: state.typed(&journal.to()),
         kept,
     }))
 }
@@ -269,12 +336,24 @@ pub(super) fn reconcile(ctx: &Context, state: &mut State) -> Result<Option<Recov
     let journal = serde_json::from_str::<Journal>(&raw)
         .map_err(|source| Error::RecoveryRecordCorrupt { path, source })?;
 
+    if let Some(slot) = &journal.slot {
+        let here = crate::provider::of(journal.provider).slot(ctx);
+        if *slot != here {
+            return Err(Error::RecoveryElsewhere {
+                tool: journal.provider,
+                from: state.typed(&journal.from()),
+                to: state.typed(&journal.to()),
+                slot: slot.clone(),
+            });
+        }
+    }
+
     // The fingerprints settle it without a round trip whenever they can, which is what
     // makes an interrupted switch recoverable with no network at all.
     let by_fingerprint = live_owner_by_fingerprint(ctx, &journal);
     let owner = match &by_fingerprint {
         Some(uuid) => Ok(uuid.clone()),
-        None => live_owner(ctx),
+        None => live_owner(ctx, journal.provider),
     };
     let found = Found {
         parked: read_park(ctx, &journal.park_service),
@@ -282,8 +361,9 @@ pub(super) fn reconcile(ctx: &Context, state: &mut State) -> Result<Option<Recov
     };
     let Some(repair) = repair_for(state, &journal, &found) else {
         return Err(Error::RecoveryUndetermined {
-            from: journal.from_label,
-            to: journal.to_label,
+            tool: journal.provider,
+            from: state.typed(&journal.from()),
+            to: state.typed(&journal.to()),
             detail: owner
                 .err()
                 .unwrap_or_else(|| "its parked login could not be read".into()),
@@ -295,8 +375,8 @@ pub(super) fn reconcile(ctx: &Context, state: &mut State) -> Result<Option<Recov
     clear_journal(ctx);
 
     Ok(Some(Recovered {
-        from: journal.from_label,
-        to: journal.to_label,
+        from: state.typed(&journal.from()),
+        to: state.typed(&journal.to()),
         finished,
     }))
 }
@@ -311,6 +391,7 @@ mod tests {
 
     fn journal() -> Journal {
         Journal {
+            provider: ProviderId::Claude,
             started_at: 1_700_000_000,
             from_label: "from".into(),
             from_uuid: "from-uuid".into(),
@@ -320,6 +401,7 @@ mod tests {
             incoming_service: INCOMING.into(),
             from_fingerprint: "ffffffffffffffff".into(),
             to_fingerprint: "0000000000000000".into(),
+            slot: None,
         }
     }
 
@@ -349,8 +431,10 @@ mod tests {
             label: label.into(),
             account_uuid: format!("{label}-uuid"),
             email: format!("{label}@example.com"),
-            organization_uuid: format!("{label}-org"),
-            oauth_account: serde_json::json!({}),
+            detail: state::Detail::Claude {
+                organization_uuid: format!("{label}-org"),
+                oauth_account: serde_json::json!({}),
+            },
             parked: parked.map(|s| Park {
                 service: s.into(),
                 parked_at: 1_699_000_000,
@@ -395,7 +479,10 @@ mod tests {
     fn a_park_of_a_login_still_signed_in_is_dropped_not_kept() {
         for s in [before(), {
             let mut recorded = before();
-            recorded.park("from", account("x", Some(PARK)).parked.unwrap());
+            recorded.park(
+                &crate::state::Key::new(crate::provider::ProviderId::Claude, "from"),
+                account("x", Some(PARK)).parked.unwrap(),
+            );
             recorded
         }] {
             let repair = repair_for(&s, &journal(), &found(written(), Some("from-uuid"))).unwrap();
@@ -420,13 +507,27 @@ mod tests {
         assert!(repair.landed);
 
         apply(&mut s, &journal(), repair);
-        assert_eq!(s.active.as_deref(), Some("to"));
+        assert_eq!(s.active_for(ProviderId::Claude), Some("to"));
         assert_eq!(
-            s.get("from").unwrap().parked.as_ref().unwrap().service,
+            s.get(&crate::state::Key::new(
+                crate::provider::ProviderId::Claude,
+                "from"
+            ))
+            .unwrap()
+            .parked
+            .as_ref()
+            .unwrap()
+            .service,
             PARK
         );
         assert!(
-            s.get("to").unwrap().parked.is_none(),
+            s.get(&crate::state::Key::new(
+                crate::provider::ProviderId::Claude,
+                "to"
+            ))
+            .unwrap()
+            .parked
+            .is_none(),
             "the copy now live must never be offered again"
         );
         assert!(s.discarded.contains(&INCOMING.to_string()));
@@ -446,7 +547,10 @@ mod tests {
     #[test]
     fn an_already_recorded_park_is_not_held_twice() {
         let mut s = before();
-        s.park("from", account("x", Some(PARK)).parked.unwrap());
+        s.park(
+            &crate::state::Key::new(crate::provider::ProviderId::Claude, "from"),
+            account("x", Some(PARK)).parked.unwrap(),
+        );
         let repair = repair_for(&s, &journal(), &found(written(), Some("to-uuid"))).unwrap();
         assert_eq!(repair.hold, None);
     }
@@ -475,7 +579,8 @@ mod tests {
             "a park must never be filed under whatever account happens to hold a label"
         );
         assert_eq!(
-            s.active, None,
+            s.active_for(ProviderId::Claude),
+            None,
             "a destination that is gone is not made active"
         );
     }
