@@ -343,8 +343,12 @@ jobs:
             bom pitboard "$target" "pitboard-${GITHUB_REF_NAME}-${target}.tar.gz"
           done
           # The app carries the core for both macOS architectures, which resolve to the
-          # same dependencies, and Sparkle, which no lockfile here mentions.
+          # same dependencies, the command line, and Sparkle, which no lockfile here
+          # mentions.
           bom pitboard-ffi aarch64-apple-darwin "Pitboard-${GITHUB_REF_NAME}-macos.zip"
+          python3 .github/scripts/sbom-add-command-line.py \
+            "$RUNNER_TEMP/dist/Pitboard-${GITHUB_REF_NAME}-macos.zip.cdx.json" \
+            "$RUNNER_TEMP/dist/pitboard-${GITHUB_REF_NAME}-aarch64-apple-darwin.tar.gz.cdx.json"
           python3 .github/scripts/sbom-add-sparkle.py \
             "$RUNNER_TEMP/dist/Pitboard-${GITHUB_REF_NAME}-macos.zip.cdx.json" \
             apple/Package.resolved

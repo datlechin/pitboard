@@ -334,6 +334,7 @@ These decide how a release is allowed to move:
   crate in the artefact and deletes the rest. A target that is not installed still resolves.
   The two macOS targets resolve to the same 83 components, which is why the app has one bill
   of materials and not two; macOS and musl differ by 7, which is why each target has its own.
+  The app's is read from the bindings crate, and the command line it carries adds 4 more.
 - crates.io issues a Trusted Publishing token that lasts 30 minutes, and matches on
   repository owner, repository name, workflow filename and, when it is given one, the
   environment. Registration is per crate, so `pitboard` and `pitboard-core` each need it.
