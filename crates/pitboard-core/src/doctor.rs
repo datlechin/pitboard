@@ -1259,15 +1259,14 @@ fn judge_pending(facts: &Facts) -> Check {
 /// An app up to 0.3.0 scheduled itself rather than a command line, and an app does not
 /// renew anything when it is started with `renew`, so that is said as well.
 fn judge_schedule(facts: &Facts) -> Option<Check> {
-    const AGAIN: &str = "Turn daily renewal off and on again: in the app's Settings, or with \
-                         `pitboard schedule uninstall` and then `pitboard schedule install`.";
+    let again = again(cfg!(target_os = "macos"));
     let schedule = facts.schedule.as_ref()?;
     Some(match &schedule.program {
         Some(program) if !schedule.program_found => fail(
             "schedule",
             "renewal schedule",
             format!("runs {}, which is not there any more", program.display()),
-            AGAIN,
+            again,
         ),
         Some(program) if an_apps_own_program(program) => fail(
             "schedule",
@@ -1276,7 +1275,7 @@ fn judge_schedule(facts: &Facts) -> Option<Check> {
                 "runs {}, which is the app itself and not a command line",
                 program.display()
             ),
-            AGAIN,
+            again,
         ),
         Some(program) => ok(
             "schedule",
@@ -1290,9 +1289,20 @@ fn judge_schedule(facts: &Facts) -> Option<Check> {
                 "{} does not say which pitboard it runs",
                 schedule.path.display()
             ),
-            AGAIN,
+            again,
         ),
     })
+}
+
+/// How to write the schedule again. There is an app only on macOS.
+fn again(macos: bool) -> &'static str {
+    if macos {
+        "Turn daily renewal off and on again: in the app's Settings, or with \
+         `pitboard schedule uninstall` and then `pitboard schedule install`."
+    } else {
+        "Turn daily renewal off and on again with `pitboard schedule uninstall` and then \
+         `pitboard schedule install`."
+    }
 }
 
 /// Whether `program` is the one an app bundle starts, `Contents/MacOS/<name>`, where no
@@ -2116,11 +2126,7 @@ mod tests {
         let gone = check(&checks, "schedule");
         assert_eq!(gone.level, Level::Fail, "every renewal from now on fails");
         assert!(gone.detail.contains("/opt/homebrew/bin/pitboard"));
-        assert!(
-            gone.advice.contains("Settings") && gone.advice.contains("pitboard schedule install"),
-            "the way back works from the app and from the command line: {}",
-            gone.advice
-        );
+        assert_eq!(gone.advice, again(cfg!(target_os = "macos")));
 
         f.schedule = Some(ScheduleFact {
             path: PathBuf::from("/home/x/Library/LaunchAgents/com.datlechin.pitboard.renew.plist"),
@@ -2155,6 +2161,20 @@ mod tests {
         let unread = check(&checks, "schedule");
         assert_eq!(unread.level, Level::Warn);
         assert!(!unread.advice.is_empty());
+    }
+
+    /// The way back works from the command line everywhere, and names the app only where
+    /// there is one.
+    #[test]
+    fn a_broken_schedule_is_written_again_by_whatever_this_machine_has() {
+        let mac = again(true);
+        assert!(
+            mac.contains("the app's Settings") && mac.contains("pitboard schedule install"),
+            "{mac}"
+        );
+        let linux = again(false);
+        assert!(linux.contains("pitboard schedule install"), "{linux}");
+        assert!(!linux.contains("app"), "there is no app here: {linux}");
     }
 
     /// What the check above is given, read off a real disk: a schedule written the way
