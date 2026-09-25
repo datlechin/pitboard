@@ -3,8 +3,7 @@ import SwiftUI
 
 /// A menu bar app: no Dock icon, `LSUIElement` in Info.plist. The panel the status item
 /// opens is the glance, and the window and the settings are where the things that need room
-/// go.
-@main
+/// go. `Launch` starts it.
 struct PitboardApp: App {
     @State private var model = AppModel()
     @State private var updater = Updater()

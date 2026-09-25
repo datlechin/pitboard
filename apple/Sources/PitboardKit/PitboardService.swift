@@ -311,8 +311,9 @@ extension Settings {
     /// on this app's own, as it always did.
     ///
     /// The renewal schedule runs the command line inside the app `bundle`, since the app
-    /// itself does nothing with `renew`. It has no default: a caller that left it out would
-    /// still compile, and the app would have nothing to schedule.
+    /// has no renewal of its own and only hands `renew` on to that. It has no default: a
+    /// caller that left it out would still compile, and the app would have nothing to
+    /// schedule.
     static func forCurrentUser(
         environment: [String: String],
         loginPath: String?,

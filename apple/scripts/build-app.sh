@@ -37,7 +37,7 @@ binary=apple/build/Pitboard-universal
 lipo -create $slices -output "$binary"
 
 # The command line comes inside the app, so one update moves both, and the renewal
-# schedule has a pitboard to run: the app does nothing with `renew`. Not named
+# schedule has a pitboard to run: the app has no renewal of its own. Not named
 # pitboard-universal, which on a case-insensitive volume is the file above.
 for target in aarch64-apple-darwin x86_64-apple-darwin; do
     cargo build --locked --release -p pitboard --target "$target"

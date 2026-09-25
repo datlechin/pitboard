@@ -1256,8 +1256,8 @@ fn judge_pending(facts: &Facts) -> Check {
 /// away. The scheduler then fails once a day where nobody looks, and the parked logins it
 /// was keeping alive run out. Nothing is said where there is no schedule.
 ///
-/// An app up to 0.3.0 scheduled itself rather than a command line, and an app does not
-/// renew anything when it is started with `renew`, so that is said as well.
+/// An app up to 0.3.0 scheduled itself rather than a command line, and that app renews
+/// nothing when it is started with `renew`, so that is said as well.
 fn judge_schedule(facts: &Facts) -> Option<Check> {
     let again = again(cfg!(target_os = "macos"));
     let schedule = facts.schedule.as_ref()?;
@@ -2130,7 +2130,7 @@ mod tests {
         assert_eq!(
             the_app.level,
             Level::Fail,
-            "an app started with `renew` renews nothing"
+            "0.3.0's app renews nothing when started with `renew`"
         );
         assert!(
             the_app.detail.contains("the app itself"),

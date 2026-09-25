@@ -245,8 +245,8 @@ private func gone(_ pid: pid_t) async -> Bool {
     #expect(settings.searchPath == "/Users/x/Documentsbin:/usr/bin")
 }
 
-/// The renewal schedule runs the command line inside the app, since the app does nothing
-/// with `renew`. Anything not running from an app bundle names none, which means it cannot
+/// The renewal schedule runs the command line inside the app, since the app has no renewal
+/// of its own. Anything not running from an app bundle names none, which means it cannot
 /// schedule renewal: the only other thing to schedule is the app itself.
 @Test func theScheduleRunsTheCommandLineInsideTheApp() {
     func scheduled(from bundle: URL?) -> String? {

@@ -36,15 +36,16 @@ All notable changes are recorded here. The format follows
 - Daily renewal turned on from the app renewed nothing. The schedule recorded the program
   that asked for it, which from the app was the app itself, so launchd started a second
   menu bar app every day and no parked login was renewed. The app now names the command
-  line inside it, and when it opens it makes a schedule an older app wrote run that command
-  line instead, which `pitboard log` records. It turns renewal on only where that command
-  line will still be there when the schedule runs: not from the temporary copy macOS runs
-  an app from before it is moved to Applications, which is gone once the app quits, and not
-  from a build with no command line inside it. Settings says why. New codes, from the
-  app's bindings: `schedule_program_missing`, `schedule_program_temporary` and
-  `schedule_program_unnamed`. `pitboard doctor` reads the installed schedule back and fails
-  when the `pitboard` it runs is gone or is an app, and says to turn renewal off and on
-  again.
+  line inside it. A schedule an older app wrote starts the app, which now hands the renewal
+  to that command line, so the old schedule keeps renewing until the app is opened. Opening
+  it then points the schedule at the command line, which `pitboard log` records. The app
+  turns renewal on only where that command line will still be there when the schedule runs:
+  not from the temporary copy macOS runs an app from before it is moved to Applications,
+  which is gone once the app quits, and not from a build with no command line inside it.
+  Settings says why. New codes, from the app's bindings: `schedule_program_missing`,
+  `schedule_program_temporary` and `schedule_program_unnamed`. `pitboard doctor` reads the
+  installed schedule back and fails when the `pitboard` it runs is gone or is an app, and
+  says to turn renewal off and on again.
 - On Linux, a renewal schedule turned on from the command line stopped working at the next
   `brew upgrade`. It named the running pitboard with every link resolved, which from
   Homebrew is inside a directory named after the version, and the upgrade deletes that
@@ -99,11 +100,12 @@ A copy of the app from a release updates itself as before and brings the command
 it.
 
 If you turned on daily renewal in a 0.3.0 app, its schedule ran the app itself and renewed
-nothing. The app from this release makes that schedule run the command line inside it as
-soon as it opens. A schedule that runs a `pitboard` that is not there any more is left as
-it is. On Linux that includes one turned on with the formula: it ran the copy inside the
-formula's own directory, which goes with the formula. Turn such a schedule off and on
-again, in the app's Settings or with `pitboard schedule uninstall` and then
+nothing. Once the app from this release is in its place, the old schedule keeps renewing,
+through the command line inside the app, until you open the app. Opening it then points the
+schedule at that command line. A schedule that runs a `pitboard` that is not there any more
+is left as it is. On Linux that includes one turned on with the formula: it ran the copy
+inside the formula's own directory, which goes with the formula. Turn such a schedule off
+and on again, in the app's Settings or with `pitboard schedule uninstall` and then
 `pitboard schedule install`. `pitboard doctor` from this release says whether yours needs
 it, and so does Settings, Advanced, "Check this machine".
 

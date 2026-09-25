@@ -211,12 +211,20 @@ pub fn install(ctx: &Context) -> Result<PathBuf> {
 /// Point a schedule that runs an app's own program at the command line the context names.
 /// `true` when it did.
 ///
-/// An app up to 0.3.0 scheduled itself, and an app started with `renew` renews nothing:
-/// launchd started a second menu bar app every day instead. The app calls this when it
-/// starts, so nothing changes unless the schedule is such a one and belongs to this home,
-/// and the context names a command line that will still be there when the scheduler runs
-/// it.
+/// An app up to 0.3.0 scheduled itself, and that app renews nothing when started with
+/// `renew`: launchd started a second menu bar app every day instead. The app calls this
+/// when it starts, so nothing changes unless the schedule is such a one and belongs to this
+/// home, and the context names a command line that will still be there when the scheduler
+/// runs it.
+///
+/// Nothing changes from inside the schedule's own job either: launchd stops a job's process
+/// when it unloads the job, which a repair does before loading it again, so nothing would be
+/// left to load it back.
 pub fn repair(ctx: &Context) -> Result<bool> {
+    #[cfg(target_os = "macos")]
+    if ctx.launchd_job().as_deref() == Some(LABEL) {
+        return Ok(false);
+    }
     let Some(named) = ctx.schedule_program() else {
         return Ok(false);
     };
@@ -691,6 +699,46 @@ mod tests {
             "a command line that is gone once the app quits"
         );
         assert_eq!(installed_program(&ctx), Some(app));
+    }
+
+    /// launchd stops a job's own process when it unloads the job, and a repair unloads the
+    /// schedule before loading it again. Made from inside the schedule's own job, as by an
+    /// app the old schedule started, it would leave nothing loaded, so it is left to the app
+    /// once it is opened any other way.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn a_schedule_is_not_repaired_from_inside_its_own_job() {
+        let home = Scratch::new("inside");
+        std::fs::create_dir_all(home.0.join(".pitboard")).expect("a pitboard home");
+        let app = home
+            .0
+            .join("Applications/Pitboard.app/Contents/MacOS/Pitboard");
+        let bundled = home
+            .0
+            .join("Applications/Pitboard.app/Contents/Helpers/pitboard");
+        a_program_at(&app);
+        a_program_at(&bundled);
+        let ctx = Context::new(home.0.clone());
+        install(&ctx.clone().with_schedule_program(app.clone())).expect("0.3.0's schedule");
+        let the_app = ctx.clone().with_schedule_program(bundled.clone());
+
+        assert!(
+            !repair(&the_app.clone().with_launchd_job(LABEL.into())).expect("nothing to do"),
+            "started by the schedule"
+        );
+        assert_eq!(installed_program(&ctx), Some(app));
+        assert_eq!(
+            crate::audit::read(&ctx, 1)
+                .iter()
+                .map(|e| e.subject.as_str())
+                .collect::<Vec<_>>(),
+            ["install"],
+            "and nothing recorded"
+        );
+
+        let opened = the_app.with_launchd_job("application.com.datlechin.pitboard.1.2".into());
+        assert!(repair(&opened).expect("repaired"), "opened from Finder");
+        assert_eq!(installed_program(&ctx), Some(bundled));
     }
 
     /// Only the file `install` writes is read, and only the way it writes it.

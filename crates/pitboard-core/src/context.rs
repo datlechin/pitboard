@@ -54,6 +54,10 @@ pub struct Context {
     /// process's own `PATH`: an app opened from Finder has almost nothing on it, so it
     /// passes the one the person's login shell would have.
     pub(crate) search_path: Option<std::ffi::OsString>,
+    /// The launchd job this process runs as, where a test says. `None` is the one launchd
+    /// named when it started this process.
+    #[cfg(target_os = "macos")]
+    pub(crate) launchd_job: Option<String>,
     /// Where the time comes from. The machine's clock in every real context; a test puts
     /// its own here to reach the judgements that only happen at a particular moment.
     pub(crate) clock: Arc<dyn Clock>,
@@ -116,6 +120,8 @@ impl Context {
             codex_program: PathBuf::from("codex"),
             schedule_program: None,
             search_path: None,
+            #[cfg(target_os = "macos")]
+            launchd_job: None,
             clock: Arc::new(SystemClock),
             host: crate::store::host(),
             api: Arc::new(Anthropic),
@@ -235,6 +241,22 @@ impl Context {
             .unwrap_or_default()
     }
 
+    /// The label of the launchd job this process runs as, which launchd puts in
+    /// `XPC_SERVICE_NAME` when it starts one.
+    #[cfg(target_os = "macos")]
+    pub(crate) fn launchd_job(&self) -> Option<String> {
+        self.launchd_job
+            .clone()
+            .or_else(|| std::env::var("XPC_SERVICE_NAME").ok())
+    }
+
+    /// Say this process runs as the launchd job `label`, which no test does.
+    #[cfg(all(target_os = "macos", test))]
+    pub(crate) fn with_launchd_job(mut self, label: String) -> Context {
+        self.launchd_job = Some(label);
+        self
+    }
+
     /// The program named for this tool, found or not.
     pub fn program_for(&self, tool: crate::provider::ProviderId) -> &std::path::Path {
         match tool {
@@ -271,6 +293,8 @@ impl Context {
             codex_program: PathBuf::from("codex"),
             schedule_program: None,
             search_path: None,
+            #[cfg(target_os = "macos")]
+            launchd_job: None,
             clock: Arc::new(SystemClock),
             host: crate::store::host(),
             api: Arc::new(Anthropic),
