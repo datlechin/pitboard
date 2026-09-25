@@ -243,3 +243,25 @@ private func gone(_ pid: pid_t) async -> Bool {
     #expect(looked.count == 10, "the same five places for each tool: \(looked)")
     #expect(settings.searchPath == "/Users/x/Documentsbin:/usr/bin")
 }
+
+/// The renewal schedule runs the command line inside the app, since the app does nothing
+/// with `renew`. Anything not running from an app bundle names none, so a test or
+/// `swift run` never records a path that is not there.
+@Test func theScheduleRunsTheCommandLineInsideTheApp() {
+    func scheduled(from bundle: URL?) -> String? {
+        Settings.forCurrentUser(
+            environment: ["HOME": "/Users/x"], loginPath: nil, bundle: bundle,
+            isExecutable: { _ in false }
+        ).scheduleProgram
+    }
+    #expect(
+        scheduled(from: URL(fileURLWithPath: "/Applications/Pitboard.app"))
+            == "/Applications/Pitboard.app/Contents/Helpers/pitboard")
+    #expect(
+        scheduled(from: URL(fileURLWithPath: "/Users/x/My Apps/Pitboard.app"))
+            == "/Users/x/My Apps/Pitboard.app/Contents/Helpers/pitboard")
+    #expect(
+        scheduled(from: URL(fileURLWithPath: "/Users/x/pitboard/apple/.build/debug")) == nil)
+    #expect(scheduled(from: nil) == nil)
+    #expect(Settings.bundledCommandLine(in: Bundle.main.bundleURL) == nil, "these tests")
+}

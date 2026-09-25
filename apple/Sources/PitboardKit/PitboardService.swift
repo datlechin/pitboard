@@ -272,12 +272,13 @@ extension Settings {
         let settings = forCurrentUser(
             environment: environment,
             loginPath: asked.path,
+            bundle: Bundle.main.bundleURL,
             isExecutable: FileManager.default.isExecutableFile(atPath:))
         return (settings, asked.late)
     }
 
     /// `forCurrentUser` with what it reads from the machine handed in, so a test can say
-    /// what the login shell answered without starting one.
+    /// what the login shell answered without starting one, and which bundle is running.
     ///
     /// Each tool's program is looked for first where the variable naming it outright says,
     /// then on the login shell's `PATH`, where a version manager or an npm prefix puts it,
@@ -285,9 +286,13 @@ extension Settings {
     /// shell could not be asked. The login shell's `PATH`, as far as it is looked in here,
     /// is also where the core looks and what a sign-in is given; without one, the core looks
     /// on this app's own, as it always did.
+    ///
+    /// The renewal schedule runs the command line inside the app `bundle`, since the app
+    /// itself does nothing with `renew`.
     static func forCurrentUser(
         environment: [String: String],
         loginPath: String?,
+        bundle: URL? = nil,
         isExecutable: (String) -> Bool
     ) -> Settings {
         let home = environment["HOME"] ?? FileManager.default.homeDirectoryForCurrentUser.path
@@ -310,8 +315,17 @@ extension Settings {
             claudeProgram: find("claude", unless: "PITBOARD_CLAUDE"),
             codexHome: environment["CODEX_HOME"],
             codexProgram: find("codex", unless: "PITBOARD_CODEX"),
-            searchPath: loginPath.map { _ in shell.joined(separator: ":") }
+            searchPath: loginPath.map { _ in shell.joined(separator: ":") },
+            scheduleProgram: bundle.flatMap(bundledCommandLine(in:))
         )
+    }
+
+    /// The command line an app bundle comes with. Nil for anything that is not an app: a
+    /// test or `swift run` runs from a build directory, which has none, and a path made up
+    /// for one would be recorded as though it were there.
+    public static func bundledCommandLine(in bundle: URL) -> String? {
+        guard bundle.pathExtension == "app" else { return nil }
+        return bundle.appendingPathComponent("Contents/Helpers/pitboard").path
     }
 
     /// Whether `entry` is inside a folder macOS asks the person about before an app may read
