@@ -172,7 +172,7 @@ struct Footer: View {
                 )
                 Link(
                     "Documentation",
-                    destination: URL(string: "https://usepitboard.com/guide/")!)
+                    destination: URL(string: "https://docs.usepitboard.com")!)
                 Divider()
                 Button("Quit pitboard") { NSApp.terminate(nil) }
             } label: {

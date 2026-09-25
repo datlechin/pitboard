@@ -1,6 +1,6 @@
-//! The engine behind pitboard: parking and restoring a person's own Claude Code logins, and
-//! reading what each has left. It serves pitboard's own front ends, the command line and the
-//! native apps, which reach it through [`service::Pitboard`] with an explicit
+//! The engine behind pitboard: parking and restoring a person's own Claude Code and Codex
+//! logins, and reading what each has left. It serves pitboard's own front ends, the command
+//! line and the native apps, which reach it through [`service::Pitboard`] with an explicit
 //! [`context::Context`].
 //!
 //! # What is supported

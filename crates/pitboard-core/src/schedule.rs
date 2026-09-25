@@ -469,8 +469,8 @@ fn unescape(text: &str) -> String {
 fn service(program: &std::path::Path) -> String {
     format!(
         "[Unit]\n\
-         Description=Renew pitboard's parked Claude Code logins\n\
-         Documentation=https://usepitboard.com\n\
+         Description=Renew pitboard's parked logins\n\
+         Documentation=https://docs.usepitboard.com\n\
          \n\
          [Service]\n\
          Type=oneshot\n\
@@ -483,7 +483,7 @@ fn service(program: &std::path::Path) -> String {
 fn timer() -> String {
     format!(
         "[Unit]\n\
-         Description=Renew pitboard's parked Claude Code logins daily\n\
+         Description=Renew pitboard's parked logins daily\n\
          \n\
          [Timer]\n\
          OnUnitActiveSec={EVERY_SECONDS}\n\
