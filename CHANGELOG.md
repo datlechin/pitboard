@@ -17,10 +17,15 @@ All notable changes are recorded here. The format follows
 - Sessions on one account, and the menu bar, disagreed about the account in use. Each
   session showed the numbers of its own last response, so busy sessions read 22%·6% while an
   idle one read 20%·5%, and the menu bar showed what it had last asked Anthropic, or Claude
-  Code's own cache. The status line now records its session's numbers every time and shows
-  the newer of them and what any session recorded, `pitboard status` does the same, and the
-  menu bar follows the readings within seconds without asking anyone. The README's status
-  line settings add `"refreshInterval": 10`, so an idle session picks them up too.
+  Code's own cache. The status line now records its session's numbers wherever they are
+  newer and shows the newer of them and what any session recorded, `pitboard status` does
+  the same, and the menu bar follows the readings within seconds without asking anyone. The
+  README's status line settings add `"refreshInterval": 10`, so an idle session picks them
+  up too.
+- After a switch, a session still holding the numbers of the account before could record
+  them as the account switched to, until the next read. A session's numbers do not say
+  whose they are, so the status line now tells them apart by when their windows reset, and
+  records nothing in the half minute sessions take to follow a switch.
 
 ## [0.4.0] - 2026-09-25
 

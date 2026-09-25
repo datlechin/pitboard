@@ -76,6 +76,16 @@ impl Window {
     pub(crate) fn same_limit(&self, other: &Window) -> bool {
         limit(&self.kind) == limit(&other.kind) && self.scope == other.scope
     }
+
+    /// Whether `other` is this very window: the same limit, resetting at the same time as
+    /// far as sources agree on one. A window with no reset time is no window in particular.
+    pub(crate) fn same_window(&self, other: &Window) -> bool {
+        self.same_limit(other)
+            && matches!(
+                (self.resets_at, other.resets_at),
+                (Some(x), Some(y)) if x.abs_diff(y) < SAME_RESET
+            )
+    }
 }
 
 /// A limit by one name. A Claude Code session, and Anthropic's answer when it has no

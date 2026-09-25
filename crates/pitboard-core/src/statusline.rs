@@ -4,10 +4,11 @@
 //! Claude Code runs it after every message with its session as JSON on stdin, including the
 //! limits of the account that session is using, and on a timer too when its settings ask.
 //! So this reads only files, with no keychain and no network, and writes one: what the
-//! session passed goes into pitboard's readings, which keep it only where it is newer than
-//! what they have. The account in use shows the newer of the two, so a session left open
-//! shows what the busy ones have recorded since. The other accounts show pitboard's last
-//! reading of them, with its age once that is worth knowing.
+//! session passed goes into pitboard's readings as the account in use's, where it can be
+//! that account's, and they keep it only where it is newer than what they have. The account
+//! in use shows the newer of the two, so a session left open shows what the busy ones have
+//! recorded since. The other accounts show pitboard's last reading of them, with its age
+//! once that is worth knowing.
 //!
 //! It is Claude Code's status bar, so it is about Claude Code's accounts and nothing else.
 //! The account in use is the one Claude Code's own record names, looked up among Claude
@@ -44,8 +45,8 @@ pub struct Entry {
 pub struct StatusLine {
     /// The account Claude Code's config names, or `None` when it is not enrolled.
     pub current: Option<String>,
-    /// The session's own account: the newer, limit by limit, of what Claude Code passed
-    /// and what pitboard's readings have.
+    /// The session's own account: the newer, limit by limit, of what Claude Code passed,
+    /// where it can be this account's, and what pitboard's readings have.
     pub session: Shares,
     pub others: Vec<Entry>,
 }
@@ -95,7 +96,8 @@ fn line(
         })
         .collect();
     let known = signed_in.and_then(|uuid| remembered.get(uuid));
-    let in_use = crate::usage::merge(known, session_snapshot(input, known).as_ref(), now);
+    let offered = session_snapshot(input, signed_in, state, remembered, now);
+    let in_use = crate::usage::merge(known, offered.as_ref(), now);
     StatusLine {
         current: current.map(|a| a.label.clone()),
         session: in_use.map_or_else(Shares::default, |r| shares_of(&r, now)),
@@ -103,18 +105,60 @@ fn line(
     }
 }
 
-/// What Claude Code passed about the session's own account, as a reading to offer. Free:
-/// these are numbers the session already had, not a question asked of anyone.
+/// What Claude Code passed about the session's own account, as a reading to offer the
+/// account `signed_in` names. Free: these are numbers the session already had, not a
+/// question asked of anyone.
 ///
 /// It carries no time. The numbers are what the session's last response said, however long
 /// ago that was, so the readings stamp them only when they move something forward.
+///
+/// Nor does it say whose they are, and they can be another account's. A switch rewrites
+/// Claude Code's config at once, while an open session goes on using the account before
+/// until it takes up the switch, and one left idle passes that account's numbers until its
+/// next response. A window's reset is what tells them apart: each account's windows start
+/// when that account is first used in them, and its sessions recorded them under it while
+/// it was in use. So a window another of Claude Code's accounts has recorded, and this one
+/// has not, is left out, and so is one whose reset has passed, which says nothing about
+/// now. A window no account has is offered, which is how a session records its own
+/// account's next one. For as long as sessions take to follow a switch, counted from when
+/// pitboard last put the account to use, nothing is offered at all: a response they get
+/// then is the account before's, and an account nothing has read yet has no windows to be
+/// known by.
 ///
 /// A session says how much of each limit is used and when it resets, and nothing else. So a
 /// window is the one pitboard already has for that limit with those two numbers put in: its
 /// name, and whether the account is working against it, stay as Anthropic said. A share the
 /// session has moved is one Anthropic has not graded.
-fn session_snapshot(input: &Value, known: Option<&Snapshot>) -> Option<Snapshot> {
+fn session_snapshot(
+    input: &Value,
+    signed_in: Option<&str>,
+    state: &State,
+    remembered: &HashMap<String, Snapshot>,
+    now: i64,
+) -> Option<Snapshot> {
+    let adopting = signed_in
+        .and_then(|uuid| state.by_uuid(ProviderId::Claude, uuid))
+        .and_then(|account| account.last_used_at)
+        .is_some_and(|at| {
+            (0..i64::from(crate::switch::ADOPTION_CEILING_SECONDS)).contains(&(now - at))
+        });
+    if adopting {
+        return None;
+    }
     let limits = input.get("rate_limits")?;
+    let known = signed_in.and_then(|uuid| remembered.get(uuid));
+    // Claude Code's accounts only: a Codex reading is of other limits, whatever they are
+    // called.
+    let others: Vec<&Snapshot> = state
+        .accounts
+        .iter()
+        .filter(|a| a.provider() == ProviderId::Claude)
+        .filter(|a| Some(a.account_uuid.as_str()) != signed_in)
+        .filter_map(|a| remembered.get(&a.account_uuid))
+        .collect();
+    let has = |reading: &Snapshot, window: &Window| {
+        reading.windows.iter().any(|had| had.same_window(window))
+    };
     // Passed under the older names, recorded under the ones Anthropic's answer uses, so an
     // account's reading reads the same whoever took it.
     let window = |passed: &str, named: &str| -> Option<Window> {
@@ -128,6 +172,12 @@ fn session_snapshot(input: &Value, known: Option<&Snapshot>) -> Option<Snapshot>
             is_active: true,
             length_seconds: crate::usage::anthropic_window_length(named),
         };
+        let over = given.resets_at.is_some_and(|at| at <= now);
+        let anothers =
+            !known.is_some_and(|k| has(k, &given)) && others.iter().any(|r| has(r, &given));
+        if over || anothers {
+            return None;
+        }
         Some(
             match known.and_then(|k| k.windows.iter().find(|h| h.same_limit(&given))) {
                 Some(had) => Window {
@@ -155,11 +205,11 @@ fn session_snapshot(input: &Value, known: Option<&Snapshot>) -> Option<Snapshot>
 /// Reads Claude Code's session JSON. Never fails: a status bar has nowhere to show an
 /// error, so whatever cannot be read is left out.
 ///
-/// It also offers the readings what the session told it about the account in use, every
-/// time, and they keep it where it is newer. So the accounts a person actually works in
-/// stop reading as unknown without anyone running `pitboard` by hand, and every session and
-/// the menu bar show the newest numbers any of them has seen. It still asks nobody
-/// anything: no network, no credential.
+/// It also offers the readings what the session told it, every time, as the account in
+/// use's wherever it can be that account's, and they keep it where it is newer. So the
+/// accounts a person actually works in stop reading as unknown without anyone running
+/// `pitboard` by hand, and every session and the menu bar show the newest numbers any of
+/// them has seen. It still asks nobody anything: no network, no credential.
 pub fn read(ctx: &Context, input: &str) -> StatusLine {
     let input: Value = serde_json::from_str(input).unwrap_or(Value::Null);
     let state = crate::state::load(ctx).unwrap_or_default();
@@ -171,7 +221,7 @@ pub fn read(ctx: &Context, input: &str) -> StatusLine {
     let now = ctx.now();
     let remembered = crate::readings::load(ctx);
     if let Some(uuid) = signed_in.as_deref()
-        && let Some(offered) = session_snapshot(&input, remembered.get(uuid))
+        && let Some(offered) = session_snapshot(&input, Some(uuid), &state, &remembered, now)
     {
         crate::readings::remember(ctx, &[(uuid.to_string(), offered)]);
     }
@@ -188,6 +238,8 @@ mod tests {
     use std::sync::Arc;
 
     const NOW: i64 = 1_789_935_000;
+    const HOUR: i64 = 3_600;
+    const DAY: i64 = 86_400;
 
     fn state() -> State {
         let account = |label: &str| Account {
@@ -208,7 +260,12 @@ mod tests {
     }
 
     fn reading(five: f64, week: f64, observed_at: i64, resets_at: i64) -> Snapshot {
-        let window = |kind: &str, percent| Window {
+        timed((five, resets_at), (week, resets_at), observed_at)
+    }
+
+    /// A reading of the five-hour and weekly limits, each as its share and when it resets.
+    fn timed(five_hour: (f64, i64), weekly: (f64, i64), observed_at: i64) -> Snapshot {
+        let window = |kind: &str, (percent, resets_at): (f64, i64)| Window {
             kind: kind.into(),
             scope: None,
             percent,
@@ -218,7 +275,7 @@ mod tests {
             length_seconds: None,
         };
         Snapshot {
-            windows: vec![window("session", five), window("weekly_all", week)],
+            windows: vec![window("session", five_hour), window("weekly_all", weekly)],
             observed_at: Some(observed_at),
             account_uuid: None,
             source: Source::Remembered,
@@ -234,9 +291,15 @@ mod tests {
 
     /// What Claude Code passes a session's status line, with both windows resetting at once.
     fn session(five_hour: f64, weekly: f64, resets_at: i64) -> Value {
+        passed((five_hour, resets_at), (weekly, resets_at))
+    }
+
+    /// What Claude Code passes a session's status line: each limit's share and when it
+    /// resets.
+    fn passed(five_hour: (f64, i64), weekly: (f64, i64)) -> Value {
         json!({"rate_limits": {
-            "five_hour": {"used_percentage": five_hour, "resets_at": resets_at},
-            "seven_day": {"used_percentage": weekly, "resets_at": resets_at}
+            "five_hour": {"used_percentage": five_hour.0, "resets_at": five_hour.1},
+            "seven_day": {"used_percentage": weekly.0, "resets_at": weekly.1}
         }})
     }
 
@@ -258,20 +321,25 @@ mod tests {
         ));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(&root).expect("a scratch home");
+        let ctx = Context::new(root.clone())
+            .with_pitboard_home(root.join(".pitboard"))
+            .with_clock(Arc::new(FixedClock::at(NOW)) as Arc<dyn Clock>);
+        sign_in(&ctx, "work");
+        (ctx, Scratch(root))
+    }
+
+    /// Claude Code's config naming `label`'s account as signed in, as a switch leaves it.
+    fn sign_in(ctx: &Context, label: &str) {
         std::fs::write(
-            root.join(".claude.json"),
+            ctx.home().join(".claude.json"),
             json!({"oauthAccount": {
-                "accountUuid": "work-uuid",
-                "emailAddress": "work@example.com",
+                "accountUuid": format!("{label}-uuid"),
+                "emailAddress": format!("{label}@example.com"),
                 "organizationUuid": "o",
             }})
             .to_string(),
         )
         .expect("a Claude Code config");
-        let ctx = Context::new(root.clone())
-            .with_pitboard_home(root.join(".pitboard"))
-            .with_clock(Arc::new(FixedClock::at(NOW)) as Arc<dyn Clock>);
-        (ctx, Scratch(root))
     }
 
     fn recorded(ctx: &Context) -> Snapshot {
@@ -289,7 +357,7 @@ mod tests {
         let remembered = HashMap::from([
             (
                 "personal-uuid".to_string(),
-                reading(12.0, 40.0, NOW - 60, NOW + 600),
+                reading(12.0, 40.0, NOW - 60, NOW + 2 * HOUR),
             ),
             (
                 "side-uuid".to_string(),
@@ -435,5 +503,146 @@ mod tests {
             windows[0].severity, None,
             "a share Anthropic has not graded"
         );
+    }
+
+    /// A switch rewrites Claude Code's config at once, and a session left idle goes on
+    /// passing the numbers of its last response, which were the account before's. Recorded
+    /// as the account switched to, their later resets stood over every answer Anthropic gave
+    /// about it until its own windows reset: days, for the weekly limit.
+    #[test]
+    fn a_session_holding_the_account_before_a_switch_is_not_recorded_as_the_one_after() {
+        let (ctx, _scratch) = machine("switched");
+        crate::state::save(&ctx, &state()).expect("an account index");
+        let work = |five: f64, weekly: f64, observed_at: i64| {
+            timed((five, NOW + 2 * HOUR), (weekly, NOW + 3 * DAY), observed_at)
+        };
+        crate::readings::remember(&ctx, &[("work-uuid".into(), work(10.0, 30.0, NOW - 60))]);
+        let personals = passed((95.0, NOW + 4 * HOUR), (60.0, NOW + 5 * DAY)).to_string();
+        sign_in(&ctx, "personal");
+        read(&ctx, &personals);
+
+        sign_in(&ctx, "work");
+        let idle = read(&ctx, &personals);
+        assert_eq!(idle.current.as_deref(), Some("work"));
+        assert_eq!(
+            idle.session,
+            shares(10.0, 30.0),
+            "the pane shows work's own"
+        );
+        assert_eq!(shares_of(&recorded(&ctx), NOW), shares(10.0, 30.0));
+
+        let mut answered = work(12.0, 31.0, NOW);
+        answered.source = Source::Live;
+        crate::readings::remember(&ctx, &[("work-uuid".into(), answered)]);
+        assert_eq!(
+            shares_of(&recorded(&ctx), NOW),
+            shares(12.0, 31.0),
+            "and what Anthropic says about work is taken"
+        );
+    }
+
+    /// For half a minute after a switch a session goes on using the account before, and its
+    /// responses are that account's. One nothing has read has no windows to know them by,
+    /// so only the time says so.
+    #[test]
+    fn nothing_is_recorded_while_sessions_are_still_taking_up_a_switch() {
+        let (ctx, _scratch) = machine("adopting");
+        let mut switched = state();
+        switched.accounts[0].last_used_at = Some(NOW - 10);
+        crate::state::save(&ctx, &switched).expect("an account index");
+        let works = timed((10.0, NOW + 2 * HOUR), (30.0, NOW + 3 * DAY), NOW - 60);
+        crate::readings::remember(&ctx, &[("work-uuid".into(), works)]);
+
+        let unread = passed((95.0, NOW + 4 * HOUR), (60.0, NOW + 5 * DAY)).to_string();
+        let shown = read(&ctx, &unread);
+        assert_eq!(
+            shown.session,
+            shares(10.0, 30.0),
+            "the pane shows work's own"
+        );
+        assert_eq!(shares_of(&recorded(&ctx), NOW), shares(10.0, 30.0));
+
+        switched.accounts[0].last_used_at =
+            Some(NOW - i64::from(crate::switch::ADOPTION_CEILING_SECONDS));
+        crate::state::save(&ctx, &switched).expect("an account index");
+        read(
+            &ctx,
+            &passed((12.0, NOW + 2 * HOUR), (31.0, NOW + 3 * DAY)).to_string(),
+        );
+        assert_eq!(
+            shares_of(&recorded(&ctx), NOW),
+            shares(12.0, 31.0),
+            "and once they have, what they say is"
+        );
+    }
+
+    /// A window whose reset has passed says nothing about now, and a pane left open past it
+    /// can be holding any account's. Recorded, it put the share of a window that was over
+    /// into a reading, where the menu bar and the command line showed it.
+    #[test]
+    fn a_window_past_its_reset_is_not_recorded() {
+        let (ctx, _scratch) = machine("passed");
+        crate::state::save(&ctx, &state()).expect("an account index");
+        read(
+            &ctx,
+            &passed((90.0, NOW - 60), (40.0, NOW + 3 * DAY)).to_string(),
+        );
+        let kinds: Vec<String> = recorded(&ctx).windows.into_iter().map(|w| w.kind).collect();
+        assert_eq!(kinds, ["weekly_all"]);
+    }
+
+    /// An account's windows start when it is first used in them, so a reset no other
+    /// account has is this account's own. It is how a session records the window after one
+    /// that ran out, before anybody has asked Anthropic.
+    #[test]
+    fn a_session_still_records_its_own_accounts_next_window() {
+        let (ctx, _scratch) = machine("next");
+        crate::state::save(&ctx, &state()).expect("an account index");
+        crate::readings::remember(
+            &ctx,
+            &[
+                (
+                    "work-uuid".into(),
+                    timed((100.0, NOW - 60), (40.0, NOW + 3 * DAY), NOW - HOUR),
+                ),
+                (
+                    "personal-uuid".into(),
+                    timed((20.0, NOW + 4 * HOUR), (50.0, NOW + 5 * DAY), NOW - 60),
+                ),
+            ],
+        );
+        let shown = read(
+            &ctx,
+            &passed((2.0, NOW + 5 * HOUR), (41.0, NOW + 3 * DAY)).to_string(),
+        );
+        assert_eq!(shown.session, shares(2.0, 41.0));
+        assert_eq!(shares_of(&recorded(&ctx), NOW), shares(2.0, 41.0));
+    }
+
+    /// Two accounts' windows can reset within a minute of each other. When the account in
+    /// use has that window too, the session's numbers can be its own, and they are offered.
+    #[test]
+    fn a_window_both_accounts_have_is_still_offered() {
+        let (ctx, _scratch) = machine("coincident");
+        crate::state::save(&ctx, &state()).expect("an account index");
+        crate::readings::remember(
+            &ctx,
+            &[
+                (
+                    "work-uuid".into(),
+                    timed((20.0, NOW + 2 * HOUR), (30.0, NOW + 3 * DAY), NOW - 60),
+                ),
+                (
+                    "personal-uuid".into(),
+                    timed((50.0, NOW + 2 * HOUR + 30), (60.0, NOW + 5 * DAY), NOW - 60),
+                ),
+            ],
+        );
+        let shown = read(
+            &ctx,
+            &passed((25.0, NOW + 2 * HOUR), (31.0, NOW + 3 * DAY)).to_string(),
+        );
+        assert_eq!(shown.session, shares(25.0, 31.0));
+        assert_eq!(shares_of(&recorded(&ctx), NOW), shares(25.0, 31.0));
     }
 }

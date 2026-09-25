@@ -584,6 +584,16 @@ fn a_mistyped_command_line_still_answers_in_json_when_asked() {
 #[test]
 fn the_status_line_names_the_account_in_use_and_the_others() {
     let env = two_accounts("statusline");
+    // Enrolled moments ago, and for as long as sessions take to follow an account being put
+    // to use the status line takes nothing from them. An hour on, they are its own.
+    env.edit_state(|state| {
+        let alpha = &mut state["accounts"][0];
+        assert_eq!(alpha["label"], "alpha");
+        let used = alpha["last_used_at"]
+            .as_i64()
+            .expect("enrolling it was using it");
+        alpha["last_used_at"] = serde_json::json!(used - 3_600);
+    });
     let session = serde_json::json!({"rate_limits": {
         "five_hour": {"used_percentage": 46.0, "resets_at": 4_000_000_000i64},
         "seven_day": {"used_percentage": 70.0, "resets_at": 4_000_000_000i64}
