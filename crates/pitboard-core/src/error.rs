@@ -153,8 +153,8 @@ pub enum Error {
 
     #[error(
         "{path} was written by a newer pitboard (its format is {found}, this one reads \
-         {expected}). Update this pitboard the way you installed it, or with the app's own \
-         Check for Updates."
+         {expected}). Update this pitboard the way you installed it. The app, and the command \
+         line inside it, update with the app's Check for Updates."
     )]
     StateFromNewerVersion {
         path: PathBuf,
@@ -170,8 +170,8 @@ pub enum Error {
 
     #[error(
         "{path} has an account for `{tool}`, a tool this pitboard does not know, so it was \
-         written by a newer one. Update this pitboard the way you installed it, or with the \
-         app's own Check for Updates."
+         written by a newer one. Update this pitboard the way you installed it. The app, and \
+         the command line inside it, update with the app's Check for Updates."
     )]
     StateNamesUnknownTool { path: PathBuf, tool: String },
 
@@ -887,6 +887,37 @@ mod tests {
         };
         assert_eq!(absent(ProviderId::Claude), "claude_program_missing");
         assert_eq!(absent(ProviderId::Codex), "codex_program_missing");
+    }
+
+    /// A pitboard that finds its files written by a newer one is updated by the route it
+    /// came by. The app's Check for Updates moves only the app and the command line inside
+    /// it, so it is not offered as another way to update this one.
+    #[test]
+    fn a_newer_pitboards_files_say_which_update_moves_which_pitboard() {
+        let path = PathBuf::from("/home/x/.pitboard/state.json");
+        for message in [
+            Error::StateFromNewerVersion {
+                path: path.clone(),
+                found: 9,
+                expected: 5,
+            }
+            .to_string(),
+            Error::StateNamesUnknownTool {
+                path: path.clone(),
+                tool: "gemini".into(),
+            }
+            .to_string(),
+        ] {
+            assert!(
+                message.contains("Update this pitboard the way you installed it."),
+                "{message}"
+            );
+            assert!(
+                message.contains("The app, and the command line inside it, update with"),
+                "{message}"
+            );
+            assert!(!message.contains("or with the app"), "{message}");
+        }
     }
 
     /// Advice to enrol names the tool the account is for: a bare name would enrol a Claude
