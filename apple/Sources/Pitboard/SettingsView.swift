@@ -194,10 +194,10 @@ private struct CommandLineRows: View {
         switch model.commandLine {
         case .bundled(let path):
             LabeledContent("In your terminal") { found(path) }
-            note("The one inside this app, so it updates with the app.")
+            note(updateNote(bundled: true))
         case .another(let path):
             LabeledContent("In your terminal") { found(path) }
-            note("Installed apart from this app, so it updates on its own.")
+            note(updateNote(bundled: false))
         case .nowhere:
             LabeledContent("In your terminal") {
                 Text("not found").foregroundStyle(.secondary)

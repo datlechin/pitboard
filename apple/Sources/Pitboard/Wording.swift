@@ -30,6 +30,15 @@ func renewalNote(_ renewals: [Renewed]) -> String {
     }
 }
 
+/// How the `pitboard` a terminal runs is kept up to date: with the app when it is the one
+/// inside it, and otherwise the way it was installed. No other way of installing it updates
+/// it by itself, and saying it "updates on its own" read as though one did.
+func updateNote(bundled: Bool) -> String {
+    bundled
+        ? "The one inside this app, so it updates with the app."
+        : "Installed apart from this app, so update it the way you installed it."
+}
+
 /// How a person names a window in a sentence: "5-hour", "weekly", "daily", "3-hour".
 ///
 /// From its length, which is the one thing both services agree on: Anthropic names its
