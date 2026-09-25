@@ -143,6 +143,13 @@ Once, in this order:
 Then `CARGO_REGISTRY_TOKEN` can be deleted from this repository's secrets, and the token it
 held revoked on crates.io.
 
+The `tap` job reads `SHA256SUMS` back from the release it has just published and fills the
+placeholders in `packaging/pitboard.rb`, the command line, and `packaging/pitboard-app.rb`,
+the app. It commits them to the tap as `Casks/pitboard.rb` and `Casks/pitboard-app.rb`
+with `packaging/tap_migrations.json`, and removes `Formula/pitboard.rb`, in one commit. It
+refuses to push a cask with a placeholder left in it or a line missing from `SHA256SUMS`.
+Those files are its alone, and an edit made to them in the tap is gone at the next release.
+
 If the tap push fails, re-run the `tap` job. There is no script for doing it by hand any
 more: the checksums come from the `SHA256SUMS` the release computed, and a second download
 somewhere else is what this replaced.
@@ -182,8 +189,8 @@ from one that is lost.
 
 The floor is the version of rung one. A copy older than it never learned the next key and
 has nothing to check rung two with, so it stays where it is until somebody installs it
-again with `brew install --cask datlechin/tap/pitboard`. Say the floor version out loud in
-the release notes.
+again with `brew install --cask datlechin/tap/pitboard-app`. Say the floor version out
+loud in the release notes.
 
 Either route changes the key in the bundle, so set the repository variable
 `SPARKLE_KEY_ROTATION` to that version first or the app job refuses the build. Rung two
