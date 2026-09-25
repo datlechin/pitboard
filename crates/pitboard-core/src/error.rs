@@ -153,8 +153,8 @@ pub enum Error {
 
     #[error(
         "{path} was written by a newer pitboard (its format is {found}, this one reads \
-         {expected}). The command line and the app update separately, so upgrade whichever \
-         is behind: `brew upgrade pitboard`, or the app's own Check for Updates."
+         {expected}). Update this pitboard the way you installed it, or with the app's own \
+         Check for Updates."
     )]
     StateFromNewerVersion {
         path: PathBuf,
@@ -170,8 +170,8 @@ pub enum Error {
 
     #[error(
         "{path} has an account for `{tool}`, a tool this pitboard does not know, so it was \
-         written by a newer one. The command line and the app update separately, so upgrade \
-         whichever is behind: `brew upgrade pitboard`, or the app's own Check for Updates."
+         written by a newer one. Update this pitboard the way you installed it, or with the \
+         app's own Check for Updates."
     )]
     StateNamesUnknownTool { path: PathBuf, tool: String },
 

@@ -90,7 +90,8 @@ enum Command {
         #[arg(short = 'n', long, default_value_t = 20)]
         lines: usize,
     },
-    /// Delete every parked login this pitboard wrote, and pitboard's own files
+    /// Delete every parked login this pitboard wrote, the daily renewal schedule and
+    /// pitboard's own files
     Uninstall {
         /// Do not ask first
         #[arg(short = 'y', long)]
@@ -736,6 +737,9 @@ fn uninstall(pitboard: &Pitboard) -> Report {
             "Removed {} parked login(s). The login each tool is signed in with is untouched.\n",
             removed.parks
         );
+        if removed.schedule_removed {
+            human.push_str("Turned off the daily renewal schedule.\n");
+        }
         if removed.left > 0 {
             human.push_str(&format!(
                 "Left {} parked login(s) that `pitboard repair` found and this pitboard did \
@@ -751,8 +755,7 @@ fn uninstall(pitboard: &Pitboard) -> Report {
             ));
         } else if removed.home_removed {
             human.push_str(
-                "~/.pitboard is gone. Uninstall the binary itself with your \
-                            package manager.\n",
+                "~/.pitboard is gone. Remove pitboard itself the way you installed it.\n",
             );
         }
         (
@@ -761,6 +764,7 @@ fn uninstall(pitboard: &Pitboard) -> Report {
                 "parks_pending": removed.pending,
                 "parks_left": removed.left,
                 "home_removed": removed.home_removed,
+                "schedule_removed": removed.schedule_removed,
             }),
             human,
         )
@@ -852,9 +856,9 @@ fn main() -> ExitCode {
                 && std::io::stderr().is_terminal()
             {
                 eprint!(
-                    "Delete every parked login this pitboard wrote, and ~/.pitboard? The \
-                     account you are signed in to stays signed in; the others need a browser \
-                     sign-in again. [y/N] "
+                    "Delete every parked login this pitboard wrote, the daily renewal \
+                     schedule and ~/.pitboard? The account you are signed in to stays signed \
+                     in; the others need a browser sign-in again. [y/N] "
                 );
                 let _ = std::io::stderr().flush();
                 let mut answer = String::new();

@@ -1,6 +1,6 @@
 [package]
 name = "pitboard"
-description = "Park and restore your own Claude Code logins on one machine, and see what each one has left."
+description = "Park and restore your own Claude Code and Codex logins on one machine, and see what each one has left."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -17,6 +17,9 @@ categories = ["command-line-utilities"]
 pkg-url = "{ repo }/releases/download/v{ version }/{ name }-v{ version }-{ target }.tar.gz"
 pkg-fmt = "tgz"
 bin-dir = "{ name }-v{ version }-{ target }/{ bin }{ binary-ext }"
+# quick-install serves a third party's build, which a tool holding OAuth logins should not
+# install, and reports every install to a stats server.
+disabled-strategies = ["quick-install"]
 
 [dependencies]
 pitboard-core.workspace = true

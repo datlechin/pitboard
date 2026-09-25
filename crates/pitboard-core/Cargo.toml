@@ -1,6 +1,6 @@
 [package]
 name = "pitboard-core"
-description = "The engine behind pitboard: parking and restoring Claude Code logins. Serves pitboard's own front ends."
+description = "The engine behind pitboard: parking and restoring Claude Code and Codex logins. Serves pitboard's own front ends."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

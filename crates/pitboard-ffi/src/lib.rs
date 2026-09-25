@@ -34,6 +34,11 @@ pub struct Settings {
     /// login shell's, which an app does not inherit. `None` is this process's own `PATH`.
     #[uniffi(default)]
     pub search_path: Option<String>,
+    /// The command line the daily renewal schedule runs: the one the app comes with, since
+    /// the app itself is not one. `None` schedules this process, which only a command line
+    /// should do.
+    #[uniffi(default)]
+    pub schedule_program: Option<String>,
 }
 
 impl Settings {
@@ -62,6 +67,9 @@ impl Settings {
         }
         if let Some(path) = self.search_path {
             ctx = ctx.with_search_path(path);
+        }
+        if let Some(program) = self.schedule_program {
+            ctx = ctx.with_schedule_program(PathBuf::from(program));
         }
         // These bindings exist for the app, so a change made through them says so.
         ctx.with_caller("app".into())
@@ -751,5 +759,35 @@ impl Pitboard {
                 })
                 .collect(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn settings(schedule_program: Option<String>) -> Settings {
+        Settings {
+            home: "/Users/x".into(),
+            pitboard_home: None,
+            claude_config_dir: None,
+            secure_storage_dir: None,
+            user: None,
+            claude_program: None,
+            codex_home: None,
+            codex_program: None,
+            search_path: None,
+            schedule_program,
+        }
+    }
+
+    #[test]
+    fn the_app_names_the_command_line_its_schedule_runs() {
+        let bundled = "/Applications/Pitboard.app/Contents/Helpers/pitboard";
+        assert_eq!(
+            settings(Some(bundled.into())).context().schedule_program(),
+            Some(std::path::Path::new(bundled))
+        );
+        assert_eq!(settings(None).context().schedule_program(), None);
     }
 }

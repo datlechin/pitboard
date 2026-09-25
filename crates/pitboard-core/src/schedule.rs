@@ -85,12 +85,54 @@ pub fn status(ctx: &Context) -> Installed {
     }
 }
 
-/// The pitboard the schedule should run, which is this one.
-fn program() -> Result<PathBuf> {
+/// Whether the schedule is this context's to look after.
+///
+/// launchd and systemd start `renew` without `PITBOARD_HOME`, so the schedule always renews
+/// the default `~/.pitboard`. A pitboard pointed at another home has none of its own: the
+/// one there is belongs to the default home.
+pub(crate) fn serves(ctx: &Context) -> bool {
+    crate::home::dir(ctx) == ctx.home().join(".pitboard")
+}
+
+/// The pitboard the schedule should run: the one the context names, or this one.
+fn program(ctx: &Context) -> Result<PathBuf> {
+    if let Some(program) = ctx.schedule_program() {
+        return Ok(program.to_path_buf());
+    }
     std::env::current_exe().map_err(|source| Error::HomeUnwritable {
         path: PathBuf::from("the running pitboard"),
         source,
     })
+}
+
+/// The pitboard the installed schedule runs, read back from what `install` wrote. `None`
+/// where nothing is installed, and where the file does not name one the way `install`
+/// writes it.
+pub fn installed_program(ctx: &Context) -> Option<PathBuf> {
+    #[cfg(target_os = "macos")]
+    {
+        let body = std::fs::read_to_string(agent_path(ctx)).ok()?;
+        let (_, after) = body.split_once("<key>ProgramArguments</key>")?;
+        let (_, after) = after.split_once("<string>")?;
+        let (program, _) = after.split_once("</string>")?;
+        Some(PathBuf::from(unescape(program)))
+    }
+    #[cfg(target_os = "linux")]
+    {
+        // The timer is what says the schedule is installed; the service is what it runs.
+        if !unit_dir(ctx).join("pitboard-renew.timer").is_file() {
+            return None;
+        }
+        let body = std::fs::read_to_string(unit_dir(ctx).join("pitboard-renew.service")).ok()?;
+        body.lines()
+            .find_map(|line| line.strip_prefix("ExecStart=")?.strip_suffix(" renew"))
+            .map(PathBuf::from)
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    {
+        let _ = ctx;
+        None
+    }
 }
 
 fn write(path: &std::path::Path, body: &str) -> Result<()> {
@@ -110,7 +152,7 @@ fn write(path: &std::path::Path, body: &str) -> Result<()> {
 
 /// Install it, and ask the platform to start it. Returns where it went.
 pub fn install(ctx: &Context) -> Result<PathBuf> {
-    let program = program()?;
+    let program = program(ctx)?;
     let Some(path) = path(ctx) else {
         return Err(Error::ScheduleUnsupported);
     };
@@ -196,7 +238,18 @@ fn remove(path: &std::path::Path) -> Result<()> {
     }
 }
 
-#[cfg(any(target_os = "macos", target_os = "linux"))]
+/// Ask the platform's scheduler to start or stop the schedule.
+///
+/// Never from a test. A test's home is a scratch directory, but the scheduler it would ask is
+/// the person's own: launchd finds a job by the label inside the file, so booting out a
+/// scratch copy stops their real schedule, and `systemctl --user` reaches the one session
+/// there is. A test writes and reads the files and leaves the scheduler alone.
+#[cfg(all(any(target_os = "macos", target_os = "linux"), test))]
+fn run(_program: &str, _args: &[&str]) -> Result<()> {
+    Ok(())
+}
+
+#[cfg(all(any(target_os = "macos", target_os = "linux"), not(test)))]
 fn run(program: &str, args: &[&str]) -> Result<()> {
     let out = std::process::Command::new(program)
         .args(args)
@@ -241,8 +294,25 @@ fn plist(program: &std::path::Path) -> String {
 </dict>
 </plist>
 "#,
-        program.display()
+        escape(&program.to_string_lossy())
     )
+}
+
+/// A path as XML text. An app can be kept in a folder whose name has an ampersand in it,
+/// and launchd refuses a plist that is not well formed.
+#[cfg(target_os = "macos")]
+fn escape(text: &str) -> String {
+    text.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+}
+
+/// What [`escape`] wrote, read back.
+#[cfg(target_os = "macos")]
+fn unescape(text: &str) -> String {
+    text.replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&amp;", "&")
 }
 
 #[cfg(target_os = "linux")]
@@ -279,21 +349,107 @@ fn timer() -> String {
 mod tests {
     use super::*;
 
+    /// A home of the test's own, gone when the test is.
+    struct Scratch(PathBuf);
+
+    impl Scratch {
+        fn new(name: &str) -> Scratch {
+            let root = std::env::temp_dir().join(format!(
+                "pitboard-schedule-{name}-{}-{:?}",
+                std::process::id(),
+                std::thread::current().id()
+            ));
+            let _ = std::fs::remove_dir_all(&root);
+            std::fs::create_dir_all(&root).expect("a scratch home");
+            Scratch(root)
+        }
+    }
+
+    impl Drop for Scratch {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
     #[test]
     fn nothing_is_installed_on_a_machine_where_nothing_was_installed() {
-        let root = std::env::temp_dir().join(format!(
-            "pitboard-schedule-{}-{:?}",
-            std::process::id(),
-            std::thread::current().id()
-        ));
-        let _ = std::fs::remove_dir_all(&root);
-        std::fs::create_dir_all(&root).expect("a scratch home");
-        let ctx = Context::new(root.clone());
+        let home = Scratch::new("none");
+        let ctx = Context::new(home.0.clone());
         assert!(matches!(
             status(&ctx),
             Installed::No | Installed::Unsupported
         ));
-        let _ = std::fs::remove_dir_all(&root);
+        assert_eq!(installed_program(&ctx), None);
+    }
+
+    #[test]
+    fn the_schedule_runs_the_pitboard_the_context_names_and_otherwise_this_one() {
+        let ctx = Context::new(PathBuf::from("/home/x"));
+        assert_eq!(
+            program(&ctx).expect("this program"),
+            std::env::current_exe().expect("this test's own program"),
+            "the command line schedules itself"
+        );
+        let bundled = PathBuf::from("/Applications/Pitboard.app/Contents/Helpers/pitboard");
+        assert_eq!(
+            program(&ctx.with_schedule_program(bundled.clone())).expect("the named one"),
+            bundled,
+            "an app schedules the command line it comes with"
+        );
+    }
+
+    /// What `pitboard doctor` reads back is what was written, including a path launchd's
+    /// format has to escape.
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    #[test]
+    fn an_installed_schedule_says_which_pitboard_it_runs() {
+        let home = Scratch::new("installed");
+        let bundled = home
+            .0
+            .join("Tools&Apps/Pitboard.app/Contents/Helpers/pitboard");
+        let ctx = Context::new(home.0.clone()).with_schedule_program(bundled.clone());
+
+        install(&ctx).expect("installed");
+        assert!(matches!(status(&ctx), Installed::Yes { .. }));
+        assert_eq!(installed_program(&ctx), Some(bundled));
+
+        assert!(uninstall(&ctx).expect("taken away"));
+        assert_eq!(status(&ctx), Installed::No);
+        assert_eq!(installed_program(&ctx), None);
+    }
+
+    /// Only the file `install` writes is read, and only the way it writes it.
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    #[test]
+    fn a_schedule_file_pitboard_did_not_write_names_no_program() {
+        let home = Scratch::new("foreign");
+        let ctx = Context::new(home.0.clone());
+        let installed = path(&ctx).expect("a scheduler here");
+        write(&installed, "not what install writes\n").expect("written");
+        #[cfg(target_os = "linux")]
+        write(
+            &unit_dir(&ctx).join("pitboard-renew.service"),
+            "[Service]\nExecStart=/bin/true\n",
+        )
+        .expect("written");
+
+        assert!(matches!(status(&ctx), Installed::Yes { .. }));
+        assert_eq!(installed_program(&ctx), None);
+    }
+
+    /// launchd and systemd start `renew` with the default home, so a pitboard pointed
+    /// anywhere else leaves the schedule alone.
+    #[test]
+    fn the_schedule_belongs_to_the_default_home_alone() {
+        let ctx = Context::new(PathBuf::from("/home/x"));
+        assert!(serves(&ctx));
+        assert!(serves(
+            &ctx.clone()
+                .with_pitboard_home(PathBuf::from("/home/x/.pitboard/"))
+        ));
+        assert!(!serves(
+            &ctx.with_pitboard_home(PathBuf::from("/tmp/elsewhere"))
+        ));
     }
 
     /// What it runs is one verb with no arguments, and what it does not do is as much the

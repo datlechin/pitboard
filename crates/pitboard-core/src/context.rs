@@ -45,6 +45,10 @@ pub struct Context {
     pub(crate) codex_home: Option<String>,
     /// The `codex` that runs a sign-in; a bare name is looked up on the search path.
     pub(crate) codex_program: PathBuf,
+    /// The pitboard the daily renewal schedule runs. `None` is this program, which is right
+    /// for the command line and wrong for an app: the schedule runs `pitboard renew`, so an
+    /// app names the command line it comes with.
+    pub(crate) schedule_program: Option<PathBuf>,
     /// Where a tool's program is looked for, in `PATH`'s form, and what its sign-in is given
     /// as `PATH`, behind the program's own directory where that is not on it. `None` is this
     /// process's own `PATH`: an app opened from Finder has almost nothing on it, so it
@@ -110,6 +114,7 @@ impl Context {
             hover_rest: false,
             codex_home: None,
             codex_program: PathBuf::from("codex"),
+            schedule_program: None,
             search_path: None,
             clock: Arc::new(SystemClock),
             host: crate::store::host(),
@@ -201,6 +206,18 @@ impl Context {
         &self.codex_program
     }
 
+    /// An app is not a command line, so it names the one it comes with for the schedule to
+    /// run.
+    pub fn with_schedule_program(mut self, program: PathBuf) -> Context {
+        self.schedule_program = Some(program);
+        self
+    }
+
+    /// The pitboard the daily renewal schedule is written to run, where one was named.
+    pub fn schedule_program(&self) -> Option<&std::path::Path> {
+        self.schedule_program.as_deref()
+    }
+
     /// Look for a tool's program on `path`, in `PATH`'s form, rather than on this process's
     /// own `PATH`. An app opened from Finder has only the system's directories there, so a
     /// tool installed through a version manager or an npm prefix is found only on the `PATH`
@@ -252,6 +269,7 @@ impl Context {
             hover_rest: var("CLAUDE_CODE_HOVER_REST").is_some_and(|v| v == "1" || v == "true"),
             codex_home: var("CODEX_HOME").filter(|v| !v.is_empty()),
             codex_program: PathBuf::from("codex"),
+            schedule_program: None,
             search_path: None,
             clock: Arc::new(SystemClock),
             host: crate::store::host(),
@@ -307,5 +325,18 @@ mod tests {
             "empty is set, and pins the default slot"
         );
         assert_eq!(ctx.claude_program, PathBuf::from("claude"));
+    }
+
+    #[test]
+    fn only_a_front_end_that_names_one_changes_what_the_schedule_runs() {
+        assert_eq!(Context::from_env().schedule_program(), None);
+        let ctx = Context::new(PathBuf::from("/Users/x"));
+        assert_eq!(ctx.schedule_program(), None);
+        let bundled = PathBuf::from("/Applications/Pitboard.app/Contents/Helpers/pitboard");
+        assert_eq!(
+            ctx.with_schedule_program(bundled.clone())
+                .schedule_program(),
+            Some(bundled.as_path())
+        );
     }
 }
