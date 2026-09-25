@@ -139,27 +139,27 @@ Once, in this order:
 4. Delete `.github/workflows/follow-releases.yml` from `datlechin/homebrew-tap`. The
    release writes the tap now; leaving the old poller in place means two writers and a
    version that can come from either.
-5. Change `README.md` in `datlechin/homebrew-tap` to the two commands this repository's
-   README gives, `brew install datlechin/tap/pitboard` and
-   `brew install --cask datlechin/tap/pitboard-app`. The `tap` job writes the casks and
-   not that file, which still gives `--cask datlechin/tap/pitboard` for the app.
-6. Push a pre-release tag, `v<next>-rc1`, and watch the publish job. It exchanges the
+5. Push a pre-release tag, `v<next>-rc1`, and watch the publish job. It exchanges the
    crates.io token and uploads nothing, which is where a registration that does not match
    is meant to be found out.
 
 Then `CARGO_REGISTRY_TOKEN` can be deleted from this repository's secrets, and the token it
 held revoked on crates.io.
 
-The `tap` job reads `SHA256SUMS` back from the release it has just published and fills the
-placeholders in `packaging/pitboard.rb`, the command line, and `packaging/pitboard-app.rb`,
-the app. It commits them to the tap as `Casks/pitboard.rb` and `Casks/pitboard-app.rb`
-with `packaging/tap_migrations.json`, and removes `Formula/pitboard.rb`, in one commit. It
-refuses to push a cask with a placeholder left in it or a line missing from `SHA256SUMS`.
-Those files are its alone, and an edit made to them in the tap is gone at the next release.
+The publish job hands the `tap` job the `SHA256SUMS` it took of the files it published, as
+an artifact of the same run, and the `tap` job fills the placeholders in
+`packaging/pitboard.rb`, the command line, and `packaging/pitboard-app.rb`, the app, from
+that file. It never reads the checksums back from the release, where anyone able to change
+the release could change a file and its line together. It commits the casks to the tap as
+`Casks/pitboard.rb` and `Casks/pitboard-app.rb`, with `packaging/tap_migrations.json` and
+`packaging/tap-README.md` as the tap's `README.md`, and removes `Formula/pitboard.rb`, in
+one commit. It refuses to push a cask with a placeholder left in it or a line missing from
+`SHA256SUMS`. Those files are its alone, and an edit made to them in the tap is gone at the
+next release.
 
-If the tap push fails, re-run the `tap` job. There is no script for doing it by hand any
-more: the checksums come from the `SHA256SUMS` the release computed, and a second download
-somewhere else is what this replaced.
+If the tap push fails, re-run the `tap` job. It reads the same `SHA256SUMS` from the run.
+There is no script for doing it by hand any more: a second download somewhere else is what
+this replaced.
 
 The tap has two casks and no formula. `pitboard` installs the command line from the
 release's tarball for the machine, on macOS and Linux, and `pitboard-app` installs the app
@@ -167,8 +167,8 @@ and links the command line inside it onto `PATH`. They conflict, since both link
 `bin/pitboard`. `tap_migrations.json` moves anyone still on the old formula to the cask of
 the same name; Homebrew does that only when that cask is trusted, and otherwise prints what
 to run. Somebody on the old app cask has their app replaced by the command line once. That
-cost was accepted, and the CHANGELOG and the `pitboard` cask's caveats say how to get the
-app back.
+cost was accepted, and the CHANGELOG, the tap's README and the `pitboard` cask's caveats
+say how to get the app back.
 
 The `brew` job then installs from the public tap the way the README says, on a clean macOS
 runner and a clean Linux one: the `pitboard` cask on both, checking the version, the man

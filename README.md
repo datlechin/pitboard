@@ -224,8 +224,9 @@ command line tool…" links `/usr/local/bin/pitboard` to it, after asking for an
 administrator's password.
 
 Usage is read when you open the panel and every few minutes while the app runs. "Open at
-login" and daily renewal are in Settings. A copy from a release keeps itself up to date.
-One you build yourself does not, because it carries no update key:
+login" and daily renewal are in Settings. Daily renewal runs the command line inside the
+app, so move a downloaded app to Applications before turning it on. A copy from a release
+keeps itself up to date. One you build yourself does not, because it carries no update key:
 
 ```sh
 ./apple/scripts/build-app.sh

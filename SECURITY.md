@@ -192,8 +192,10 @@ IP address.
   it. On macOS the command line and the app are signed with a Developer ID and notarised,
   and the app carries its own signed copy of the command line, so an update replaces both.
   Homebrew installs these same files and builds nothing: the command line's tarball for the
-  machine, or the app. The checksums it checks are the lines the release itself wrote in
-  `SHA256SUMS` over the files it published, not ones taken later somewhere else.
+  machine, or the app. The checksums it checks are the ones the release took of the files
+  it published. The job that writes the tap is handed them inside the same run rather than
+  reading them back from the release, where somebody able to change the release could
+  replace a file and its checksum together.
 - A changed update key. An installed copy takes an update signed by the key in the bundle
   it came from. A release whose key differs from the one the previous release shipped is
   refused unless the repository says that release means to rotate, because an ad-hoc
