@@ -304,11 +304,12 @@ extension Settings {
     /// on this app's own, as it always did.
     ///
     /// The renewal schedule runs the command line inside the app `bundle`, since the app
-    /// itself does nothing with `renew`.
+    /// itself does nothing with `renew`. It has no default: a caller that left it out would
+    /// still compile, and the app would have nothing to schedule.
     static func forCurrentUser(
         environment: [String: String],
         loginPath: String?,
-        bundle: URL? = nil,
+        bundle: URL?,
         isExecutable: (String) -> Bool
     ) -> Settings {
         let home = environment["HOME"] ?? FileManager.default.homeDirectoryForCurrentUser.path
@@ -336,9 +337,10 @@ extension Settings {
         )
     }
 
-    /// The command line an app bundle comes with. Nil for anything that is not an app: a
-    /// test or `swift run` runs from a build directory, which has none, and a path made up
-    /// for one would be recorded as though it were there.
+    /// The command line an app bundle comes with. Nil for anything that is not an app, such
+    /// as a test or `swift run` in a build directory, which has none: that app cannot
+    /// schedule renewal, since the only other thing to schedule is the app itself, which
+    /// renews nothing.
     public static func bundledCommandLine(in bundle: URL) -> String? {
         guard bundle.pathExtension == "app" else { return nil }
         return bundle.appendingPathComponent("Contents/Helpers/pitboard").path

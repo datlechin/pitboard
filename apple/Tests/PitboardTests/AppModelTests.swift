@@ -48,8 +48,16 @@ private final class Stub: Core, @unchecked Sendable {
     func log(limit: UInt32) async -> [Change] { [] }
     func renew() async -> [Renewed] { [] }
     func schedule() async -> Schedule { .absent }
-    func scheduleInstall() async throws -> String { "/nowhere" }
-    func scheduleUninstall() async throws -> Bool { false }
+    private(set) var scheduleInstalls = 0
+    private(set) var scheduleUninstalls = 0
+    func scheduleInstall() async throws -> String {
+        scheduleInstalls += 1
+        return "/nowhere"
+    }
+    func scheduleUninstall() async throws -> Bool {
+        scheduleUninstalls += 1
+        return false
+    }
     func changedAt() async -> Int64 { changed }
     func doctor() async -> Diagnosis {
         Diagnosis(
@@ -763,6 +771,41 @@ private func account(_ label: String, signedIn: Bool, percent: Double) -> Accoun
     let other = AppModel(watching: false, service: stub)
     await other.findCommandLine()
     #expect(other.commandLine == .another(linked), "these tests are not an app")
+}
+
+/// Daily renewal is turned on only from an app with a command line inside it that stays
+/// where it is. The schedule runs it long after the app has quit: a copy macOS runs from a
+/// temporary place is gone by then, and a build with none inside it would schedule the app
+/// itself, which renews nothing. Turning it off is always possible, so a schedule that cannot
+/// work can be taken away.
+@MainActor
+@Test func dailyRenewalIsTurnedOnOnlyFromAnAppThatStaysWhereItIs() async {
+    func model(_ bundle: String) -> (AppModel, Stub) {
+        let stub = Stub(.success(status([])))
+        let model = AppModel(
+            watching: false, service: stub,
+            commandLineTool: CommandLineTool(bundle: URL(fileURLWithPath: bundle)))
+        return (model, stub)
+    }
+
+    let (installed, stub) = model("/Applications/Pitboard.app")
+    #expect(installed.cannotSchedule == nil)
+    await installed.setSchedule(on: true)
+    #expect(stub.scheduleInstalls == 1)
+    #expect(installed.problem == nil)
+
+    let (downloaded, temporary) = model(
+        "/private/var/folders/xy/abc/T/AppTranslocation/0A1B2C/d/Pitboard.app")
+    #expect(downloaded.cannotSchedule?.hasPrefix("Move pitboard to your Applications") == true)
+    let (built, unbundled) = model("/Users/x/pitboard/apple/.build/debug")
+    #expect(built.cannotSchedule?.contains("no command line inside it") == true)
+    for (refused, stub) in [(downloaded, temporary), (built, unbundled)] {
+        await refused.setSchedule(on: true)
+        #expect(stub.scheduleInstalls == 0)
+        #expect(refused.problem == refused.cannotSchedule)
+        await refused.setSchedule(on: false)
+        #expect(stub.scheduleUninstalls == 1)
+    }
 }
 
 /// The address Codex prints is the one to open; the loopback address it also prints is

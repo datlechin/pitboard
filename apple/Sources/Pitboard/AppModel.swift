@@ -358,12 +358,35 @@ final class AppModel {
         schedule = await service.schedule()
     }
 
+    /// Why daily renewal cannot be turned on from this copy of the app, or nil when it can.
+    ///
+    /// The schedule runs the command line inside the app long after the app has quit, so it
+    /// needs one a link would keep reaching. A copy macOS runs from a temporary place is gone
+    /// by then, and without one inside the app there is only the app itself to schedule,
+    /// which renews nothing.
+    var cannotSchedule: String? {
+        if commandLineTool.linkable { return nil }
+        if commandLineTool.translocated {
+            return "Move pitboard to your Applications folder first. Until then macOS runs it "
+                + "from a temporary copy, which is gone once pitboard quits."
+        }
+        return "This copy of pitboard has no command line inside it to run on a schedule."
+    }
+
     /// Hand the renewal of parked logins to this computer's own scheduler, or take it back.
     ///
     /// Opt-in, and the caller says what it does before offering it: a background process
     /// that talks to a service on a schedule is the shape most likely to be read as
     /// automation, so it is something a person turns on knowing what it is.
+    ///
+    /// Turning it on is refused where `cannotSchedule` says why, and not only left out of the
+    /// settings, so nothing that calls this can write a schedule that fails every day without
+    /// telling anyone. Turning it off never is: that is how such a schedule is taken away.
     func setSchedule(on: Bool) async {
+        if on, let why = cannotSchedule {
+            problem = why
+            return
+        }
         do {
             if on {
                 _ = try await service.scheduleInstall()

@@ -42,6 +42,9 @@ private struct General: View {
 
             Section {
                 Toggle("Renew parked logins daily", isOn: renewing)
+                    // Only turning it on, so a schedule that cannot work can still be taken
+                    // away.
+                    .disabled(!renewing.wrappedValue && model.cannotSchedule != nil)
                 Text(
                     """
                     A parked login is renewed whenever pitboard runs, and otherwise not, so \
@@ -68,6 +71,11 @@ private struct General: View {
                     Text("This computer has no scheduler pitboard knows how to write.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                } else if let why = model.cannotSchedule {
+                    Text(why)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
 
                 HStack {
