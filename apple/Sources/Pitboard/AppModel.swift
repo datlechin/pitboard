@@ -517,10 +517,9 @@ final class AppModel {
 
     /// How far along setting pitboard up this machine is.
     ///
-    /// Somebody who installed the app from the cask and nothing else has never typed a
-    /// pitboard command and may never want to. Every state before `ready` used to show
-    /// either a line naming a command to run or nothing at all, which is the same as
-    /// telling them the app does not work.
+    /// Somebody who installed only the app has never typed a pitboard command and may never
+    /// want to. Every state before `ready` used to show either a line naming a command to run
+    /// or nothing at all, which is the same as telling them the app does not work.
     enum Footing: Equatable {
         /// Claude Code is not on this machine and no other tool has an account here.
         /// Nothing pitboard does means anything without a tool, and pitboard cannot install
@@ -674,6 +673,14 @@ final class AppModel {
         }
         remember(said)
         return []
+    }
+
+    /// Signs in again to an enrolled account whose parked login can no longer be used,
+    /// through the same sign-in as a new account, so the address and the code field show
+    /// the same way. By its label alone, since `signIn` puts its tool in front.
+    func signInAgain(to account: Account) async {
+        guard let label = account.label else { return }
+        await signIn(label, for: account.provider)
     }
 
     /// Types the fallback code back, for a browser that could not reach the callback. Off

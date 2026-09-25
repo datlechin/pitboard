@@ -84,10 +84,13 @@ struct AccountRow: View {
                 .buttonStyle(.link)
                 .disabled(model.switching != nil)
                 .accessibilityLabel("Switch to \(model.name(of: account))")
-        } else if let name = typed(account) {
-            Text("sign in again: pitboard enroll \(name) --sign-in")
-                .font(.caption2)
-                .foregroundStyle(.orange)
+        } else if account.label != nil {
+            // The sign-in a new account gets, shown under the rows, so a Codex address or a
+            // field for Claude Code's code shows up the same way.
+            Button("Sign in again") { Task { await model.signInAgain(to: account) } }
+                .buttonStyle(.link)
+                .disabled(model.signingIn != nil || model.switching != nil)
+                .accessibilityLabel("Sign in again to \(model.name(of: account))")
         }
     }
 }

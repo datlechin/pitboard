@@ -3,11 +3,11 @@ import SwiftUI
 
 /// The one next thing to do, for a machine that is not set up yet.
 ///
-/// pitboard installs as a cask that puts both the app and the command line on the machine,
-/// and somebody who opens the app has usually never run a command and may never want to.
-/// Before this, an empty panel said "Run `pitboard enroll <label>`" and a machine without
-/// Claude Code said a one-line error, which between them sent every new person to a
-/// terminal to find out whether the thing they just installed works.
+/// The app comes with the command line inside it, but somebody who opens the app has usually
+/// never run a command and may never want to. Before this, an empty panel said "Run
+/// `pitboard enroll <label>`" and a machine without Claude Code said a one-line error, which
+/// between them sent every new person to a terminal to find out whether the thing they just
+/// installed works.
 ///
 /// One state at a time, and never more than one thing to press. Each is the actual next
 /// step, not a tour.

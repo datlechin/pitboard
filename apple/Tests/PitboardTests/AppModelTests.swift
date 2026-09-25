@@ -696,6 +696,41 @@ private func account(_ label: String, signedIn: Bool, percent: Double) -> Accoun
     #expect(model.problem == nil)
 }
 
+/// An account whose parked login can no longer be used is signed in to again from its row,
+/// through the sign-in a new account gets, so the address Codex prints shows in the panel
+/// the same way. The core is given the label with its tool once, as for a new account.
+@MainActor
+@Test func anAccountThatCannotBeSwitchedToIsSignedInToAgainFromThePanel() async throws {
+    let stub = Stub(
+        .success(
+            status([
+                account("personal", of: "codex", signedIn: true),
+                account("work", of: "codex", switchable: false),
+                account("spare", switchable: false),
+            ])))
+    let session = ScriptedSignIn(
+        saying: ["https://auth.openai.com/oauth/authorize?state=x\n"], takesACode: false,
+        waits: true)
+    stub.session = session
+    let model = AppModel(watching: false, service: stub)
+    await model.refresh()
+    let accounts = try #require(model.status?.accounts)
+
+    let running = Task { await model.signInAgain(to: accounts[1]) }
+    #expect(await eventually { model.signingIn?.url != nil })
+    #expect(stub.signedIn == ["codex/work"])
+    #expect(model.signingIn?.tool == "Codex")
+    #expect(model.signingIn?.label == "work")
+    session.done.signal()
+    await running.value
+    #expect(session.finished)
+    #expect(model.signingIn == nil)
+
+    stub.session = ScriptedSignIn(saying: [], takesACode: true)
+    await model.signInAgain(to: accounts[2])
+    #expect(stub.signedIn == ["codex/work", "claude/spare"])
+}
+
 /// The settings say which `pitboard` a terminal runs, looking where the login shell's
 /// `PATH` says before anywhere else, and whether it is this app's own.
 @MainActor
@@ -829,8 +864,8 @@ private func account(_ label: String, signedIn: Bool, percent: Double) -> Accoun
 
 // MARK: - What a machine that is not set up yet is told to do
 
-/// An app from the cask and nothing else. Before the first read there is nothing true to
-/// say, and a setup step shown to somebody who finished it years ago is worse than silence.
+/// A new install of the app. Before the first read there is nothing true to say, and a
+/// setup step shown to somebody who finished it years ago is worse than silence.
 @MainActor
 @Test func nothingIsAskedOfAnyoneBeforeTheFirstRead() {
     let model = AppModel(
