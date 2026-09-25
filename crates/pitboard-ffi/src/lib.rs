@@ -747,6 +747,14 @@ impl Pitboard {
         Ok(self.core.schedule_uninstall()?)
     }
 
+    /// Point a schedule an app up to 0.3.0 wrote at the command line this app comes with.
+    /// That app scheduled itself, so launchd has been starting a second app every day and
+    /// renewing nothing. For the app to call when it starts: `true` when it repaired one,
+    /// and nothing changes where the schedule already runs a command line or there is none.
+    pub fn schedule_repair(&self) -> Result<bool, PitboardError> {
+        Ok(self.core.schedule_repair()?)
+    }
+
     pub fn doctor(&self) -> Diagnosis {
         let diagnosis = self.core.doctor();
         Diagnosis {
@@ -814,5 +822,20 @@ mod tests {
         };
         assert_eq!(code, "schedule_program_unnamed");
         assert!(message.contains("command line"), "{message}");
+    }
+
+    /// Repairing at launch is a no-op wherever there is nothing to repair, and never
+    /// reaches a scheduler to find that out. This test's own program stands in for a
+    /// command line that is there.
+    #[test]
+    fn the_app_repairs_nothing_where_no_schedule_runs_it() {
+        let there = std::env::current_exe().expect("this test's own program");
+        for named in [None, Some(there.to_string_lossy().into_owned())] {
+            let pitboard = Pitboard::new(Settings {
+                home: "/dev/null".into(),
+                ..settings(named)
+            });
+            assert!(!pitboard.schedule_repair().expect("nothing to repair"));
+        }
     }
 }

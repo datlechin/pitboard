@@ -203,14 +203,61 @@ fn write(path: &std::path::Path, body: &str) -> Result<()> {
 
 /// Install it, and ask the platform to start it. Returns where it went.
 pub fn install(ctx: &Context) -> Result<PathBuf> {
-    let program = program(ctx)?;
+    let path = put(ctx, &program(ctx)?)?;
+    crate::audit::record(ctx, "schedule", "install", "ok");
+    Ok(path)
+}
+
+/// Point a schedule that runs an app's own program at the command line the context names.
+/// `true` when it did.
+///
+/// An app up to 0.3.0 scheduled itself, and an app started with `renew` renews nothing:
+/// launchd started a second menu bar app every day instead. The app calls this when it
+/// starts, so nothing changes unless the schedule is such a one and belongs to this home,
+/// and the context names a command line that will still be there when the scheduler runs
+/// it.
+pub fn repair(ctx: &Context) -> Result<bool> {
+    let Some(named) = ctx.schedule_program() else {
+        return Ok(false);
+    };
+    if !serves(ctx)
+        || lasting(named).is_err()
+        || !installed_program(ctx).is_some_and(|program| an_apps_own_program(&program))
+    {
+        return Ok(false);
+    }
+    let repaired = put(ctx, named);
+    crate::audit::record(
+        ctx,
+        "schedule",
+        "repair",
+        match &repaired {
+            Ok(_) => "ok",
+            Err(e) => e.code(),
+        },
+    );
+    repaired.map(|_| true)
+}
+
+/// Whether `program` is the one an app bundle starts, `Contents/MacOS/<name>`, where no
+/// command line is ever kept.
+pub(crate) fn an_apps_own_program(program: &std::path::Path) -> bool {
+    let mut dirs = program
+        .ancestors()
+        .skip(1)
+        .map(|dir| dir.file_name().and_then(|n| n.to_str()));
+    dirs.next() == Some(Some("MacOS")) && dirs.next() == Some(Some("Contents"))
+}
+
+/// Write the schedule to run `program`, and ask the platform to start it.
+fn put(ctx: &Context, program: &std::path::Path) -> Result<PathBuf> {
     let Some(path) = path(ctx) else {
         return Err(Error::ScheduleUnsupported);
     };
 
     #[cfg(target_os = "macos")]
     {
-        write(&path, &plist(&program))?;
+        write(&path, &plist(program))?;
         // `bootstrap` is launchd's own word for this, and replaces the deprecated `load`.
         // SAFETY: `getuid` cannot fail and touches no memory of this process.
         let uid = unsafe { libc::getuid() };
@@ -228,7 +275,7 @@ pub fn install(ctx: &Context) -> Result<PathBuf> {
     #[cfg(target_os = "linux")]
     {
         let dir = unit_dir(ctx);
-        write(&dir.join("pitboard-renew.service"), &service(&program))?;
+        write(&dir.join("pitboard-renew.service"), &service(program))?;
         write(&path, &timer())?;
         let _ = run("systemctl", &["--user", "daemon-reload"]);
         run(
@@ -237,7 +284,6 @@ pub fn install(ctx: &Context) -> Result<PathBuf> {
         )?;
     }
 
-    crate::audit::record(ctx, "schedule", "install", "ok");
     Ok(path)
 }
 
@@ -577,6 +623,74 @@ mod tests {
         assert!(uninstall(&ctx).expect("taken away"));
         assert_eq!(status(&ctx), Installed::No);
         assert_eq!(installed_program(&ctx), None);
+    }
+
+    /// An app up to 0.3.0 scheduled itself, and launchd has started a second menu bar app
+    /// every day since. An app that names the command line it comes with puts that in its
+    /// place, and every other schedule is left as it is.
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    #[test]
+    fn a_schedule_that_runs_an_app_is_pointed_at_its_command_line() {
+        let home = Scratch::new("repair");
+        std::fs::create_dir_all(home.0.join(".pitboard")).expect("a pitboard home");
+        let app = home
+            .0
+            .join("Applications/Pitboard.app/Contents/MacOS/Pitboard");
+        let bundled = home
+            .0
+            .join("Applications/Pitboard.app/Contents/Helpers/pitboard");
+        a_program_at(&app);
+        a_program_at(&bundled);
+        let ctx = Context::new(home.0.clone());
+        let the_app = ctx.clone().with_schedule_program(bundled.clone());
+
+        assert!(
+            !repair(&the_app).expect("nothing to do"),
+            "nothing installed"
+        );
+
+        install(&ctx.clone().with_schedule_program(app.clone())).expect("0.3.0's schedule");
+        assert!(
+            !repair(&ctx).expect("nothing to do"),
+            "no command line named"
+        );
+        let gone = home.0.join("Old.app/Contents/Helpers/pitboard");
+        assert!(
+            !repair(&ctx.clone().with_schedule_program(gone)).expect("nothing to do"),
+            "a command line that is not there"
+        );
+        assert!(
+            !repair(&the_app.clone().with_pitboard_home(home.0.join("elsewhere")))
+                .expect("nothing to do"),
+            "a schedule another home's pitboard looks after"
+        );
+        assert_eq!(installed_program(&ctx), Some(app.clone()));
+
+        assert!(repair(&the_app).expect("repaired"));
+        assert_eq!(installed_program(&ctx), Some(bundled));
+        let logged = crate::audit::read(&ctx, 1);
+        assert_eq!(
+            logged
+                .iter()
+                .map(|e| (e.verb.as_str(), e.subject.as_str(), e.outcome.as_str()))
+                .collect::<Vec<_>>(),
+            [("schedule", "repair", "ok")]
+        );
+
+        assert!(
+            !repair(&the_app).expect("nothing to do"),
+            "a schedule that runs a command line already"
+        );
+        install(&ctx.clone().with_schedule_program(app.clone())).expect("the app again");
+        let temporary = home
+            .0
+            .join("AppTranslocation/6A1C/d/Pitboard.app/Contents/Helpers/pitboard");
+        a_program_at(&temporary);
+        assert!(
+            !repair(&ctx.clone().with_schedule_program(temporary)).expect("nothing to do"),
+            "a command line that is gone once the app quits"
+        );
+        assert_eq!(installed_program(&ctx), Some(app));
     }
 
     /// Only the file `install` writes is read, and only the way it writes it.

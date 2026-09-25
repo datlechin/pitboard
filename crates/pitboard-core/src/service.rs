@@ -480,6 +480,12 @@ impl Pitboard {
         schedule::uninstall(&self.ctx)
     }
 
+    /// Point a schedule an app up to 0.3.0 wrote, which runs the app itself, at the command
+    /// line this context names. `true` when it did; nothing changes otherwise.
+    pub fn schedule_repair(&self) -> Result<bool> {
+        schedule::repair(&self.ctx)
+    }
+
     /// Take over a pitboard directory another machine wrote: keep the accounts, drop the
     /// logins that came with them. `None` when the directory was already this machine's.
     ///

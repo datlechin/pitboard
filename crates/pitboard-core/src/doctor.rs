@@ -1268,7 +1268,7 @@ fn judge_schedule(facts: &Facts) -> Option<Check> {
             format!("runs {}, which is not there any more", program.display()),
             again,
         ),
-        Some(program) if an_apps_own_program(program) => fail(
+        Some(program) if crate::schedule::an_apps_own_program(program) => fail(
             "schedule",
             "renewal schedule",
             format!(
@@ -1303,16 +1303,6 @@ fn again(macos: bool) -> &'static str {
         "Turn daily renewal off and on again with `pitboard schedule uninstall` and then \
          `pitboard schedule install`."
     }
-}
-
-/// Whether `program` is the one an app bundle starts, `Contents/MacOS/<name>`, where no
-/// command line is ever kept.
-fn an_apps_own_program(program: &std::path::Path) -> bool {
-    let mut dirs = program
-        .ancestors()
-        .skip(1)
-        .map(|dir| dir.file_name().and_then(|n| n.to_str()));
-    dirs.next() == Some(Some("MacOS")) && dirs.next() == Some(Some("Contents"))
 }
 
 /// Claude Code's supervisor daemon is a second writer of the login, on a schedule nobody
