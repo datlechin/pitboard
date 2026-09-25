@@ -5,6 +5,14 @@ All notable changes are recorded here. The format follows
 
 ## [Unreleased]
 
+### Changed
+- A usage reading only moves forward. pitboard keeps one reading per account, every front
+  end records into it and every front end shows it. A later reset is a newer window, and
+  within one window the higher share is the newer, so numbers a session has held since its
+  last response can no longer replace newer ones, whoever writes last. The one case where it
+  shows more than is used is a plan upgraded in the middle of a window: the old, higher
+  share stands until that window resets.
+
 ## [0.4.0] - 2026-09-25
 
 ### Changed

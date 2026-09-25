@@ -4,6 +4,7 @@
 
 use crate::time;
 use serde_json::Value;
+use std::cmp::Ordering;
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Window {
@@ -52,12 +53,145 @@ pub enum Source {
     Remembered,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Snapshot {
     pub windows: Vec<Window>,
     pub observed_at: Option<i64>,
     pub account_uuid: Option<String>,
     pub source: Source,
+}
+
+impl Window {
+    /// The share used as of `now`. A window whose reset has passed counts as reset, though
+    /// no reading has said so yet.
+    pub(crate) fn used(&self, now: i64) -> f64 {
+        if self.resets_at.is_some_and(|at| at <= now) {
+            0.0
+        } else {
+            self.percent
+        }
+    }
+
+    /// Whether `other` measures the same limit, whichever name its source gave it.
+    pub(crate) fn same_limit(&self, other: &Window) -> bool {
+        limit(&self.kind) == limit(&other.kind) && self.scope == other.scope
+    }
+}
+
+/// A limit by one name. A Claude Code session, and Anthropic's answer when it has no
+/// `limits`, use the older `five_hour` and `seven_day` for the limits `limits` calls
+/// `session` and `weekly_all`. Codex's windows borrow the older names for their lengths,
+/// which is harmless: one account's readings are only ever compared with each other.
+fn limit(kind: &str) -> &str {
+    match kind {
+        "five_hour" => "session",
+        "seven_day" => "weekly_all",
+        other => other,
+    }
+}
+
+/// Resets closer together than this are one reset.
+///
+/// Sources do not agree to the second on when a window resets: Anthropic's answer gives a
+/// fraction of a second, which is dropped, and a Claude Code session is given whole seconds.
+/// A limit's next window starts only once the last has reset, and the shortest window any
+/// service has shown runs five hours, so resets a minute apart are rounding and never two
+/// windows.
+const SAME_RESET: u64 = 60;
+
+/// Which of two measurements of the same limit is the newer: `Greater` when `a` is.
+///
+/// A later reset is a later window, whatever its share. Within one window the share only
+/// rises, so the higher share was measured later. A window whose reset has passed counts as
+/// reset, with nothing used, and one with no reset time is compared by its share alone.
+///
+/// No timestamp is needed, which is the point: a Claude Code session passes its limits with
+/// none. They are what its last response said, however long ago that was, and a session
+/// left open passes the same old numbers every time its status line runs. The reset time is
+/// the service's own, and use within a window only rises, so the numbers order themselves.
+///
+/// It keeps a number higher than the true one in one case: a plan upgraded in the middle of
+/// a window lowers that window's share, and the old, higher share stands until the window
+/// resets.
+pub(crate) fn recency(a: &Window, b: &Window, now: i64) -> Ordering {
+    match (a.resets_at, b.resets_at) {
+        (Some(x), Some(y)) if x.abs_diff(y) >= SAME_RESET => x.cmp(&y),
+        _ => a.used(now).total_cmp(&b.used(now)),
+    }
+}
+
+/// One account's reading with `offered` folded in, limit by limit: each limit keeps the
+/// newer measurement by [`recency`], taken whole, and on a tie the one already known, so a
+/// repeat changes nothing, whatever name or rounding it came with.
+///
+/// A limit only one of them measured is kept, because a reading can speak for fewer limits
+/// than there are: a session knows the five-hour and weekly limits and nothing scoped to a
+/// model. One that only `known` has goes once its reset has passed, so a limit the service
+/// stops reporting is not shown for ever.
+///
+/// `observed_at` is the latest time anything confirmed or advanced the reading. One offered
+/// without a time, which is what a session passes, is stamped `now` when it moves something
+/// forward, and vouches for nothing when it only repeats what is known.
+pub(crate) fn merge(
+    known: Option<&Snapshot>,
+    offered: Option<&Snapshot>,
+    now: i64,
+) -> Option<Snapshot> {
+    let Some(offered) = offered else {
+        return known.cloned();
+    };
+    let Some(known) = known else {
+        let mut first = offered.clone();
+        first.observed_at = first.observed_at.or(Some(now));
+        return Some(first);
+    };
+    let (mut advanced, mut confirmed) = (false, false);
+    let mut windows = Vec::new();
+    for had in &known.windows {
+        match offered.windows.iter().find(|w| w.same_limit(had)) {
+            Some(given) => match recency(given, had, now) {
+                Ordering::Less => windows.push(had.clone()),
+                Ordering::Equal => {
+                    confirmed = true;
+                    windows.push(had.clone());
+                }
+                Ordering::Greater => {
+                    advanced = true;
+                    windows.push(given.clone());
+                }
+            },
+            None if had.resets_at.is_some_and(|at| at <= now) => {}
+            None => windows.push(had.clone()),
+        }
+    }
+    for given in &offered.windows {
+        if !known.windows.iter().any(|w| w.same_limit(given)) {
+            advanced = true;
+            windows.push(given.clone());
+        }
+    }
+    let vouched = advanced || (confirmed && offered.observed_at.is_some());
+    Some(Snapshot {
+        windows,
+        observed_at: if advanced {
+            known
+                .observed_at
+                .max(Some(offered.observed_at.unwrap_or(now)))
+        } else if confirmed {
+            known.observed_at.max(offered.observed_at)
+        } else {
+            known.observed_at
+        },
+        account_uuid: known
+            .account_uuid
+            .clone()
+            .or_else(|| offered.account_uuid.clone()),
+        source: if vouched {
+            offered.source
+        } else {
+            known.source
+        },
+    })
 }
 
 /// A share of a limit. Past 100 is real, once a limit is exceeded; below zero is not.
@@ -227,5 +361,193 @@ mod tests {
     #[test]
     fn missing_cache_is_not_an_error() {
         assert!(from_config_cache(&serde_json::json!({})).is_none());
+    }
+
+    const NOW: i64 = 1_789_935_000;
+    const HOUR: i64 = 3_600;
+
+    fn measured(kind: &str, percent: f64, resets_at: Option<i64>) -> Window {
+        Window {
+            kind: kind.into(),
+            scope: None,
+            percent,
+            resets_at,
+            is_active: true,
+            severity: None,
+            length_seconds: anthropic_window_length(kind),
+        }
+    }
+
+    fn reading(windows: Vec<Window>, observed_at: Option<i64>) -> Snapshot {
+        Snapshot {
+            windows,
+            observed_at,
+            account_uuid: None,
+            source: Source::Live,
+        }
+    }
+
+    fn shares(reading: &Snapshot) -> Vec<(&str, f64)> {
+        reading
+            .windows
+            .iter()
+            .map(|w| (w.kind.as_str(), w.percent))
+            .collect()
+    }
+
+    #[test]
+    fn a_later_reset_is_a_newer_window_whatever_its_share() {
+        let full = measured("session", 90.0, Some(NOW + HOUR));
+        let next = measured("session", 2.0, Some(NOW + 6 * HOUR));
+        assert_eq!(recency(&next, &full, NOW), Ordering::Greater);
+        assert_eq!(recency(&full, &next, NOW), Ordering::Less);
+    }
+
+    #[test]
+    fn within_one_window_the_higher_share_is_the_newer() {
+        let earlier = measured("session", 20.0, Some(NOW + HOUR));
+        let later = measured("session", 22.0, Some(NOW + HOUR));
+        assert_eq!(recency(&later, &earlier, NOW), Ordering::Greater);
+        assert_eq!(recency(&earlier, &later, NOW), Ordering::Less);
+    }
+
+    /// Anthropic's answer gives a reset to a fraction of a second, which is dropped, and a
+    /// session is given whole seconds. Taken for a newer window, the session's older 20%
+    /// would win over the 22% the service has just measured.
+    #[test]
+    fn resets_a_second_apart_are_one_window() {
+        let answered = measured("session", 22.0, Some(NOW + HOUR));
+        let passed = measured("five_hour", 20.0, Some(NOW + HOUR + 1));
+        assert_eq!(recency(&passed, &answered, NOW), Ordering::Less);
+        assert_eq!(recency(&answered, &passed, NOW), Ordering::Greater);
+    }
+
+    /// A window that has reset has nothing used, however full it was, so any use of the
+    /// limit since is newer, even from a reading that does not say when it resets.
+    #[test]
+    fn a_window_past_its_reset_counts_as_reset() {
+        let over = measured("session", 90.0, Some(NOW - 1));
+        let begun = measured("session", 5.0, None);
+        assert_eq!(recency(&begun, &over, NOW), Ordering::Greater);
+        assert_eq!(recency(&over, &begun, NOW), Ordering::Less);
+    }
+
+    #[test]
+    fn a_reading_never_moves_a_limit_backwards() {
+        let known = reading(vec![measured("session", 22.0, Some(NOW + HOUR))], Some(NOW));
+        for behind in [
+            measured("five_hour", 20.0, Some(NOW + HOUR)),
+            measured("five_hour", 95.0, Some(NOW - 4 * HOUR)),
+        ] {
+            let merged = merge(Some(&known), Some(&reading(vec![behind], None)), NOW).unwrap();
+            assert_eq!(shares(&merged), [("session", 22.0)]);
+        }
+        let ahead = reading(vec![measured("five_hour", 25.0, Some(NOW + HOUR))], None);
+        let merged = merge(Some(&known), Some(&ahead), NOW).unwrap();
+        assert_eq!(
+            shares(&merged),
+            [("five_hour", 25.0)],
+            "under the name it came with"
+        );
+    }
+
+    /// A session knows the five-hour and weekly limits and nothing scoped to a model, so a
+    /// limit one reading leaves out is not a limit that has gone.
+    #[test]
+    fn a_limit_only_one_reading_measured_is_kept() {
+        let scoped = Window {
+            scope: Some("Fable".into()),
+            ..measured("weekly_scoped", 5.0, Some(NOW + 50 * HOUR))
+        };
+        let known = reading(
+            vec![measured("session", 22.0, Some(NOW + HOUR)), scoped],
+            Some(NOW - 60),
+        );
+        let offered = reading(
+            vec![
+                measured("five_hour", 25.0, Some(NOW + HOUR)),
+                measured("seven_day", 40.0, Some(NOW + 50 * HOUR)),
+            ],
+            None,
+        );
+        let merged = merge(Some(&known), Some(&offered), NOW).unwrap();
+        assert_eq!(
+            shares(&merged),
+            [
+                ("five_hour", 25.0),
+                ("weekly_scoped", 5.0),
+                ("seven_day", 40.0)
+            ]
+        );
+    }
+
+    /// Kept for ever, a limit the service stopped reporting would be shown for ever. Once
+    /// its window is over there is nothing left in it to show.
+    #[test]
+    fn a_limit_only_the_older_reading_has_goes_once_its_reset_has_passed() {
+        let known = reading(
+            vec![
+                measured("session", 22.0, Some(NOW + HOUR)),
+                measured("weekly_scoped", 5.0, Some(NOW - 1)),
+            ],
+            Some(NOW - 60),
+        );
+        let offered = reading(vec![measured("five_hour", 25.0, Some(NOW + HOUR))], None);
+        let merged = merge(Some(&known), Some(&offered), NOW).unwrap();
+        assert_eq!(shares(&merged), [("five_hour", 25.0)]);
+    }
+
+    #[test]
+    fn with_one_side_absent_the_other_stands() {
+        let known = reading(
+            vec![measured("session", 22.0, Some(NOW + HOUR))],
+            Some(NOW - 60),
+        );
+        assert_eq!(merge(Some(&known), None, NOW), Some(known.clone()));
+        assert_eq!(merge(None, None, NOW), None);
+
+        let first = merge(None, Some(&reading(known.windows.clone(), None)), NOW).unwrap();
+        assert_eq!(shares(&first), [("session", 22.0)]);
+        assert_eq!(first.observed_at, Some(NOW), "stamped when it arrived");
+    }
+
+    /// A session passes the numbers of its last response, however long ago that was, and
+    /// says nothing about when. Repeating them vouches for nothing; moving one forward means
+    /// the response that did it has only just come.
+    #[test]
+    fn a_reading_that_says_no_time_is_stamped_only_when_it_moves_something() {
+        let mut known = reading(
+            vec![measured("session", 22.0, Some(NOW + HOUR))],
+            Some(NOW - 600),
+        );
+        known.source = Source::Remembered;
+        let repeated = reading(vec![measured("five_hour", 22.0, Some(NOW + HOUR))], None);
+        let merged = merge(Some(&known), Some(&repeated), NOW).unwrap();
+        assert_eq!(
+            merged.windows, known.windows,
+            "a repeat changes nothing, name and all"
+        );
+        assert_eq!(merged.observed_at, Some(NOW - 600));
+        assert_eq!(
+            merged.source,
+            Source::Remembered,
+            "and it is still what was known"
+        );
+
+        let moved = reading(vec![measured("five_hour", 23.0, Some(NOW + HOUR))], None);
+        assert_eq!(
+            merge(Some(&known), Some(&moved), NOW).unwrap().observed_at,
+            Some(NOW)
+        );
+
+        let mut confirmed = reading(known.windows.clone(), Some(NOW - 5));
+        confirmed.source = Source::ClaudeCodeCache;
+        let merged = merge(Some(&known), Some(&confirmed), NOW).unwrap();
+        assert_eq!(
+            merged.observed_at,
+            Some(NOW - 5),
+            "a measured repeat confirms it"
+        );
+        assert_eq!(merged.source, Source::ClaudeCodeCache);
     }
 }
