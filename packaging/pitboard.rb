@@ -16,6 +16,35 @@ cask "pitboard" do
          arm64_linux:  "@SHA256_AARCH64_UNKNOWN_LINUX_MUSL@",
          x86_64_linux: "@SHA256_X86_64_UNKNOWN_LINUX_MUSL@"
 
+  # The renewal schedule, the launchd job on macOS and the systemd timer on Linux. In zap
+  # and not uninstall, because Homebrew runs uninstall on every upgrade and reinstall too.
+  # ~/.pitboard stays: it is the only index of the parked logins, and without it they are
+  # left where nothing can name them. `pitboard uninstall` deletes the logins and then the
+  # directory, so it has to come first. It is up here because Homebrew's style puts blocks
+  # for one system straight after the checksums.
+  on_macos do
+    zap launchctl: "com.datlechin.pitboard.renew"
+  end
+  # A timer systemd has loaded keeps firing after its files are deleted, so it is stopped
+  # first. Homebrew runs the script without XDG_RUNTIME_DIR, and systemctl --user cannot
+  # reach the user's manager without it. Where there is no timer, there is nothing to stop.
+  on_linux do
+    zap script: {
+          executable:   "/bin/sh",
+          args:         [
+            "-c",
+            "test ! -e ~/.config/systemd/user/pitboard-renew.timer || " \
+            "XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user disable --now pitboard-renew.timer",
+          ],
+          must_succeed: false,
+        },
+        trash:  [
+          "~/.config/systemd/user/pitboard-renew.service",
+          "~/.config/systemd/user/pitboard-renew.timer",
+          "~/.config/systemd/user/timers.target.wants/pitboard-renew.timer",
+        ]
+  end
+
   url "https://github.com/datlechin/pitboard/releases/download/v#{version}/pitboard-v#{version}-#{arch}-#{os}.tar.gz"
   name "pitboard"
   desc "Park and restore your own Claude Code and Codex logins"
@@ -29,18 +58,6 @@ cask "pitboard" do
   bash_completion "pitboard-v#{version}-#{arch}-#{os}/completions/pitboard.bash"
   zsh_completion "pitboard-v#{version}-#{arch}-#{os}/completions/pitboard.zsh"
   fish_completion "pitboard-v#{version}-#{arch}-#{os}/completions/pitboard.fish"
-
-  # The renewal schedule, the launchd job on macOS and the systemd timer on Linux. In zap
-  # and not uninstall, because Homebrew runs uninstall on every upgrade and reinstall too.
-  # ~/.pitboard stays: it is the only index of the parked logins, and without it they are
-  # left where nothing can name them. `pitboard uninstall` deletes the logins and then the
-  # directory, so it has to come first.
-  zap launchctl: "com.datlechin.pitboard.renew",
-      trash:     [
-        "~/.config/systemd/user/pitboard-renew.service",
-        "~/.config/systemd/user/pitboard-renew.timer",
-        "~/.config/systemd/user/timers.target.wants/pitboard-renew.timer",
-      ]
 
   caveats <<~EOS
     On macOS the menu bar app is the pitboard-app cask, and it includes this command line.
