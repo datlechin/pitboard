@@ -192,6 +192,23 @@ pub enum Error {
     #[error("the scheduler refused: {detail}")]
     ScheduleRefused { detail: String },
 
+    #[error("the renewal schedule would run {path}, which is not there. Nothing was scheduled.")]
+    ScheduleProgramMissing { path: PathBuf },
+
+    /// macOS runs an app opened where it was downloaded from a copy it makes somewhere
+    /// temporary, which is there while the app runs and gone once it quits.
+    #[error(
+        "the renewal schedule would run {path}, which is in a temporary copy macOS made of \
+         the app and is gone once the app quits. Move pitboard to your Applications folder, \
+         open it from there, and turn on daily renewal again."
+    )]
+    ScheduleProgramTemporary { path: PathBuf },
+
+    /// An app that names no command line for the schedule, where the only other thing to
+    /// schedule is the app itself, which renews nothing.
+    #[error("this copy of pitboard has no command line inside it for the renewal schedule to run.")]
+    ScheduleProgramUnnamed,
+
     #[error("could not write to pitboard's directory at {path}: {source}")]
     HomeUnwritable {
         path: PathBuf,
@@ -570,6 +587,9 @@ impl Error {
             StateWriteFailed { .. } => "state_write_failed",
             ScheduleUnsupported => "schedule_unsupported",
             ScheduleRefused { .. } => "schedule_refused",
+            ScheduleProgramMissing { .. } => "schedule_program_missing",
+            ScheduleProgramTemporary { .. } => "schedule_program_temporary",
+            ScheduleProgramUnnamed => "schedule_program_unnamed",
             HomeUnwritable { .. } => "home_unwritable",
             ClaudeConfigMissing { .. } => "claude_config_missing",
             ClaudeConfigUnreadable { .. } => "claude_config_unreadable",

@@ -35,8 +35,8 @@ pub struct Settings {
     #[uniffi(default)]
     pub search_path: Option<String>,
     /// The command line the daily renewal schedule runs: the one the app comes with, since
-    /// the app itself is not one. `None` schedules this process, which only a command line
-    /// should do.
+    /// the app itself is not one. `None` where the app has none, as in a build run from a
+    /// build directory, and then there is nothing to schedule.
     #[uniffi(default)]
     pub schedule_program: Option<String>,
 }
@@ -542,6 +542,9 @@ impl SignIn {
 #[derive(uniffi::Object)]
 pub struct Pitboard {
     core: service::Pitboard,
+    /// Whether the app named a command line for the schedule to run. The core schedules
+    /// the program asking where none is named, and that is the app, which renews nothing.
+    schedules_a_command_line: bool,
 }
 
 #[uniffi::export]
@@ -549,6 +552,7 @@ impl Pitboard {
     #[uniffi::constructor]
     pub fn new(settings: Settings) -> Arc<Self> {
         Arc::new(Pitboard {
+            schedules_a_command_line: settings.schedule_program.is_some(),
             core: service::Pitboard::new(settings.context()),
         })
     }
@@ -729,8 +733,12 @@ impl Pitboard {
     }
 
     /// Ask this computer's own scheduler to renew parked logins daily. Opt-in, and the
-    /// caller is expected to say what it does before offering it.
+    /// caller is expected to say what it does before offering it. Refused where the app
+    /// named no command line to run.
     pub fn schedule_install(&self) -> Result<String, PitboardError> {
+        if !self.schedules_a_command_line {
+            return Err(pitboard_core::error::Error::ScheduleProgramUnnamed.into());
+        }
         Ok(self.core.schedule_install()?.to_string_lossy().into_owned())
     }
 
@@ -789,5 +797,22 @@ mod tests {
             Some(std::path::Path::new(bundled))
         );
         assert_eq!(settings(None).context().schedule_program(), None);
+    }
+
+    /// These bindings serve the app, and the app is not a command line: where it names
+    /// none, scheduling this process would start a second app every day and renew nothing.
+    /// The home is one nothing can be written under, so even a regression here reaches no
+    /// scheduler.
+    #[test]
+    fn the_app_schedules_nothing_without_a_command_line_to_run() {
+        let pitboard = Pitboard::new(Settings {
+            home: "/dev/null".into(),
+            ..settings(None)
+        });
+        let Err(PitboardError::Failed { code, message, .. }) = pitboard.schedule_install() else {
+            panic!("the app scheduled itself");
+        };
+        assert_eq!(code, "schedule_program_unnamed");
+        assert!(message.contains("command line"), "{message}");
     }
 }

@@ -97,12 +97,35 @@ pub(crate) fn serves(ctx: &Context) -> bool {
 /// The pitboard the schedule should run: the one the context names, or this one.
 fn program(ctx: &Context) -> Result<PathBuf> {
     if let Some(program) = ctx.schedule_program() {
-        return Ok(program.to_path_buf());
+        return lasting(program).map(std::path::Path::to_path_buf);
     }
     std::env::current_exe().map_err(|source| Error::HomeUnwritable {
         path: PathBuf::from("the running pitboard"),
         source,
     })
+}
+
+/// `program`, where it will still be there when the scheduler runs it. launchd and systemd
+/// start a program that is gone without telling anyone, every day, so a path that leads
+/// nowhere is refused rather than written down.
+///
+/// A path inside the copy macOS makes of an app opened where it was downloaded leads
+/// somewhere while that app runs and nowhere once it quits, so it is refused as well.
+fn lasting(program: &std::path::Path) -> Result<&std::path::Path> {
+    if program
+        .components()
+        .any(|part| part.as_os_str() == "AppTranslocation")
+    {
+        return Err(Error::ScheduleProgramTemporary {
+            path: program.to_path_buf(),
+        });
+    }
+    if !program.is_file() {
+        return Err(Error::ScheduleProgramMissing {
+            path: program.to_path_buf(),
+        });
+    }
+    Ok(program)
 }
 
 /// The pitboard the installed schedule runs, read back from what `install` wrote. `None`
@@ -371,6 +394,12 @@ mod tests {
         }
     }
 
+    /// Put a program at `path`, for a schedule to name.
+    fn a_program_at(path: &std::path::Path) {
+        std::fs::create_dir_all(path.parent().expect("a directory")).expect("its directory");
+        std::fs::write(path, "").expect("a program");
+    }
+
     #[test]
     fn nothing_is_installed_on_a_machine_where_nothing_was_installed() {
         let home = Scratch::new("none");
@@ -384,17 +413,60 @@ mod tests {
 
     #[test]
     fn the_schedule_runs_the_pitboard_the_context_names_and_otherwise_this_one() {
-        let ctx = Context::new(PathBuf::from("/home/x"));
+        let home = Scratch::new("program");
+        let ctx = Context::new(home.0.clone());
         assert_eq!(
             program(&ctx).expect("this program"),
             std::env::current_exe().expect("this test's own program"),
             "the command line schedules itself"
         );
-        let bundled = PathBuf::from("/Applications/Pitboard.app/Contents/Helpers/pitboard");
+        let bundled = home
+            .0
+            .join("Applications/Pitboard.app/Contents/Helpers/pitboard");
+        a_program_at(&bundled);
         assert_eq!(
             program(&ctx.with_schedule_program(bundled.clone())).expect("the named one"),
             bundled,
             "an app schedules the command line it comes with"
+        );
+    }
+
+    /// A pitboard that is named is written down only where it will still be there when the
+    /// scheduler runs it. macOS runs an app opened where it was downloaded from a temporary
+    /// copy, which is there while the app runs and gone once it quits, so being there now
+    /// is not enough.
+    #[test]
+    fn a_named_pitboard_that_will_not_be_there_is_refused() {
+        let home = Scratch::new("refused");
+        let ctx = Context::new(home.0.clone());
+
+        let missing = home.0.join("Pitboard.app/Contents/Helpers/pitboard");
+        let refused = install(&ctx.clone().with_schedule_program(missing.clone()))
+            .expect_err("nothing there to run");
+        assert_eq!(refused.code(), "schedule_program_missing");
+        assert!(
+            refused.to_string().contains(&missing.display().to_string()),
+            "{refused}"
+        );
+
+        let temporary = home
+            .0
+            .join("AppTranslocation/6A1C/d/Pitboard.app/Contents/Helpers/pitboard");
+        a_program_at(&temporary);
+        let refused = install(&ctx.clone().with_schedule_program(temporary.clone()))
+            .expect_err("a copy that goes away");
+        assert_eq!(refused.code(), "schedule_program_temporary");
+        assert!(
+            refused
+                .to_string()
+                .contains(&temporary.display().to_string())
+                && refused.to_string().contains("Applications folder"),
+            "{refused}"
+        );
+
+        assert!(
+            matches!(status(&ctx), Installed::No | Installed::Unsupported),
+            "nothing was written"
         );
     }
 
@@ -408,6 +480,7 @@ mod tests {
         let bundled = home
             .0
             .join("Tools&Apps/Pitboard.app/Contents/Helpers/pitboard");
+        a_program_at(&bundled);
         let ctx = Context::new(home.0.clone()).with_schedule_program(bundled.clone());
 
         install(&ctx).expect("installed");
