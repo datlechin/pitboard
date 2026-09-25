@@ -399,7 +399,8 @@ mod tests {
     }
 
     /// What `pitboard doctor` reads back is what was written, including a path launchd's
-    /// format has to escape.
+    /// format has to escape. The file itself is looked at too: a path with an ampersand
+    /// reads back the same whether or not it was escaped.
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     #[test]
     fn an_installed_schedule_says_which_pitboard_it_runs() {
@@ -411,6 +412,12 @@ mod tests {
 
         install(&ctx).expect("installed");
         assert!(matches!(status(&ctx), Installed::Yes { .. }));
+        #[cfg(target_os = "macos")]
+        {
+            let written = std::fs::read_to_string(agent_path(&ctx)).expect("the agent");
+            assert!(written.contains("/Tools&amp;Apps/"), "{written}");
+            assert!(!written.contains("/Tools&Apps/"), "{written}");
+        }
         assert_eq!(installed_program(&ctx), Some(bundled));
 
         assert!(uninstall(&ctx).expect("taken away"));
@@ -467,6 +474,18 @@ mod tests {
             "installing it is not a reason to talk to Anthropic that second"
         );
         assert!(body.contains(&format!("<integer>{EVERY_SECONDS}</integer>")));
+    }
+
+    /// launchd refuses a plist that is not well formed, and a folder's name can hold any of
+    /// the characters XML gives a meaning to.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn the_agent_writes_a_path_as_xml_text() {
+        let body = plist(std::path::Path::new("/Users/x/A&B <old>/Pitboard.app"));
+        assert!(
+            body.contains("<string>/Users/x/A&amp;B &lt;old&gt;/Pitboard.app</string>"),
+            "{body}"
+        );
     }
 
     #[cfg(target_os = "linux")]

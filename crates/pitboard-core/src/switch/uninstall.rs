@@ -109,6 +109,44 @@ mod tests {
         }
     }
 
+    /// A schedule that cannot be taken away stops the uninstall before anything else is
+    /// touched. Left running, it would renew logins whose index is gone.
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    #[test]
+    fn a_schedule_that_cannot_be_taken_away_leaves_every_login_where_it_was() {
+        use std::os::unix::fs::PermissionsExt;
+        for make in [machine, codex_machine] {
+            let m = make("uninstall-stuck");
+            schedule::install(&m.ctx).expect("scheduled");
+            let dir = schedule::path(&m.ctx)
+                .and_then(|p| p.parent().map(std::path::Path::to_path_buf))
+                .expect("where the scheduler keeps it");
+            let mode = |mode| {
+                std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(mode))
+                    .expect("its mode changed");
+            };
+
+            mode(0o555);
+            let refused = uninstall(settle(&m.ctx, None).expect("nothing to recover").0);
+            mode(0o755);
+
+            let Err(error) = refused else {
+                panic!("{:?}: uninstalled with the schedule still there", m.which);
+            };
+            assert_eq!(error.code(), "home_unwritable");
+            let state = state::load(&m.ctx).expect("the account list");
+            assert_eq!(state.accounts.len(), 2, "{:?}", m.which);
+            let there = state.get(&m.key("there")).expect("`there` is enrolled");
+            let park = there.parked.as_ref().expect("`there` is still parked");
+            crate::park::load(&m.ctx, &m.key("there"), park).expect("its parked login is kept");
+            assert!(home::dir(&m.ctx).is_dir());
+            assert!(matches!(
+                schedule::status(&m.ctx),
+                schedule::Installed::Yes { .. }
+            ));
+        }
+    }
+
     #[test]
     fn uninstalling_where_nothing_is_scheduled_is_not_a_failure() {
         let m = machine("uninstall-unscheduled");
