@@ -37,7 +37,9 @@ pub struct Check {
     pub advice: String,
 }
 
-/// Everything read from the machine, so judging it touches nothing.
+/// Everything read from the machine, so judging it touches nothing. Each check that is
+/// added reads something more, so it cannot be built outside this crate.
+#[non_exhaustive]
 pub struct Facts {
     pub security_tool: Option<String>,
     pub config_path: PathBuf,

@@ -20,6 +20,10 @@ All notable changes are recorded here. The format follows
   release writes the tap's own README with the casks, so it names both.
 - A release no longer publishes a source tarball. Only the formula installed from it, and
   the source is on crates.io and in the tag.
+- `pitboard-core`: the report `uninstall` returns says whether the renewal schedule was
+  taken away, and it and `doctor::Facts` are now `#[non_exhaustive]`, so a later field is
+  not a breaking change. A breaking change for anyone who built either with a literal,
+  declared as such; nothing changes for the command line or the app.
 
 ### Added
 - Settings can put the app's command line on the `PATH`. The Advanced tab says which

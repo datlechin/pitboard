@@ -6,7 +6,9 @@ use crate::error::Error;
 use crate::state::Account;
 use crate::{home, schedule, state};
 
-/// What was removed, for the report.
+/// What was removed, for the report. It may say more in a later release, so it cannot be
+/// built outside this crate.
+#[non_exhaustive]
 pub struct Removed {
     /// Parked logins deleted from the keychain or the vault.
     pub parks: usize,
