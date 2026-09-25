@@ -5,7 +5,7 @@ import Testing
 /// A scratch home whose Claude Code and Codex directories are its own, so the credential
 /// slot read is hashed from it and never the machine's real login, and the Codex login read
 /// is a file that is not there.
-private func scratch(codex: String? = nil) throws -> Settings {
+private func scratch(codex: String? = nil, schedules: String? = nil) throws -> Settings {
     let root = FileManager.default.temporaryDirectory
         .appendingPathComponent("pitboardkit-\(UUID().uuidString)")
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -17,7 +17,8 @@ private func scratch(codex: String? = nil) throws -> Settings {
         user: NSUserName(),
         claudeProgram: nil,
         codexHome: root.appendingPathComponent("codex").path,
-        codexProgram: codex
+        codexProgram: codex,
+        scheduleProgram: schedules
     )
 }
 
@@ -142,4 +143,17 @@ private final class Asks: @unchecked Sendable {
     let diagnosis = await PitboardService(settings: try scratch()).doctor()
     #expect(!diagnosis.checks.isEmpty)
     #expect(diagnosis.checks.contains { $0.code == "state" })
+}
+
+/// The app asks for a repair every time it starts, so where there is nothing to repair it
+/// answers that and changes nothing. A scratch home has no schedule of its own.
+@Test func aHomeWithNoScheduleHasNothingToRepair() async throws {
+    let bundled = FileManager.default.temporaryDirectory
+        .appendingPathComponent("pitboardkit-helper-\(UUID().uuidString)")
+    try Data("#!/bin/sh\n".utf8).write(to: bundled)
+    defer { try? FileManager.default.removeItem(at: bundled) }
+    for program in [nil, bundled.path] {
+        let service = PitboardService(settings: try scratch(schedules: program))
+        #expect(try await service.scheduleRepair() == false)
+    }
 }

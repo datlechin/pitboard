@@ -33,6 +33,9 @@ public protocol Core: Sendable {
     func schedule() async -> Schedule
     func scheduleInstall() async throws -> String
     func scheduleUninstall() async throws -> Bool
+    /// Point a schedule an app up to 0.3.0 wrote, which runs that app and renews nothing, at
+    /// the command line inside this one. True when it did; nothing changes otherwise.
+    func scheduleRepair() async throws -> Bool
     /// When pitboard's account index last changed, in epoch seconds. One stat of one file,
     /// so it can be asked often: it is how this app notices a switch typed in a terminal.
     func changedAt() async -> Int64
@@ -166,6 +169,10 @@ public final class PitboardService: Core, Sendable {
 
     public func scheduleUninstall() async throws -> Bool {
         try await run(on: changes) { try $0.scheduleUninstall() }
+    }
+
+    public func scheduleRepair() async throws -> Bool {
+        try await run(on: changes) { try $0.scheduleRepair() }
     }
 
     /// One stat of one file. Deliberately not on the `changes` queue: it must answer while

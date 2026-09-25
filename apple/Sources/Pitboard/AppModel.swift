@@ -147,9 +147,10 @@ final class AppModel {
     /// is a real answer and not an absence.
     private var lastChangedAt: Int64?
 
-    /// `watching` starts the timers: the periodic read, the wake notice and the poll that
-    /// notices a change made somewhere else. A test drives those itself, and two of them
-    /// firing under a test is how a test stops telling the truth about what set what.
+    /// `watching` starts what runs by itself: the periodic read, the wake notice, the poll
+    /// that notices a change made somewhere else, and the one repair of a schedule an older
+    /// app wrote. A test drives those itself, and two of them firing under a test is how a
+    /// test stops telling the truth about what set what.
     init(
         watching: Bool = true,
         service: any Core = PitboardService(asking: { Settings.forCurrentUserAsked() }),
@@ -173,6 +174,9 @@ final class AppModel {
             Task { await self?.use(label) }
         }
         guard watching else { return }
+        // Once per launch: after that the schedule runs a command line, or was never the
+        // app's to repair. On the service's queue once the core is made, like every call.
+        Task { [weak self] in await self?.repairSchedule() }
         Task { [weak self] in
             while !Task.isCancelled {
                 await self?.refresh()
@@ -356,6 +360,14 @@ final class AppModel {
     /// Whether anything keeps parked logins alive without a command being run.
     func readSchedule() async {
         schedule = await service.schedule()
+    }
+
+    /// Points a renewal schedule an app up to 0.3.0 wrote, which runs that app and renews
+    /// nothing, at the command line inside this one, and shows the schedule again when it did.
+    /// A failure is not said here: the schedule is as it was, and doctor still reports it.
+    func repairSchedule() async {
+        guard (try? await service.scheduleRepair()) == true else { return }
+        await readSchedule()
     }
 
     /// Why daily renewal cannot be turned on from this copy of the app, or nil when it can.

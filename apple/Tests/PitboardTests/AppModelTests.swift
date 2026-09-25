@@ -47,7 +47,20 @@ private final class Stub: Core, @unchecked Sendable {
     func abandonRecovery() async throws -> Abandoned? { abandoned }
     func log(limit: UInt32) async -> [Change] { [] }
     func renew() async -> [Renewed] { [] }
-    func schedule() async -> Schedule { .absent }
+    /// What the scheduler has installed.
+    var scheduled: Schedule = .absent
+    private(set) var scheduleReads = 0
+    func schedule() async -> Schedule {
+        scheduleReads += 1
+        return scheduled
+    }
+    /// What repairing a schedule an older app wrote comes to.
+    var repairs: Result<Bool, Error> = .success(false)
+    private(set) var repairAsks = 0
+    func scheduleRepair() async throws -> Bool {
+        repairAsks += 1
+        return try repairs.get()
+    }
     private(set) var scheduleInstalls = 0
     private(set) var scheduleUninstalls = 0
     func scheduleInstall() async throws -> String {
@@ -805,6 +818,38 @@ private func account(_ label: String, signedIn: Bool, percent: Double) -> Accoun
         #expect(refused.problem == refused.cannotSchedule)
         await refused.setSchedule(on: false)
         #expect(stub.scheduleUninstalls == 1)
+    }
+}
+
+/// An app up to 0.3.0 scheduled itself, so launchd has been starting a second app every day
+/// and renewing nothing. This one asks the core to point that schedule at the command line
+/// inside it once, when it starts, and the settings then show the schedule as it is now.
+/// Where nothing was repaired, or the repair failed, nothing more is read or said.
+@MainActor
+@Test func anOldScheduleIsRepairedOnceTheAppStarts() async {
+    let installed = Schedule.installed(
+        path: "/Users/x/Library/LaunchAgents/com.usepitboard.renew.plist", everySeconds: 86_400)
+    let stub = Stub(.success(status([])))
+    stub.scheduled = installed
+    stub.repairs = .success(true)
+    let model = AppModel(service: stub, defaults: MemoryDefaults())
+    #expect(await eventually { model.schedule == installed })
+    #expect(stub.repairAsks == 1)
+
+    let refused = PitboardError.Failed(
+        code: "schedule_refused", cause: nil, message: "the scheduler refused: no",
+        warnings: [])
+    for answer: Result<Bool, Error> in [.success(false), .failure(refused)] {
+        let quiet = Stub(.success(status([])))
+        quiet.scheduled = installed
+        quiet.repairs = answer
+        let model = AppModel(watching: false, service: quiet)
+        #expect(quiet.repairAsks == 0, "a test drives it itself")
+        await model.repairSchedule()
+        #expect(quiet.repairAsks == 1)
+        #expect(quiet.scheduleReads == 0)
+        #expect(model.schedule == .absent)
+        #expect(model.problem == nil)
     }
 }
 
