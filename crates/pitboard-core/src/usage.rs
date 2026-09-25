@@ -124,6 +124,13 @@ pub(crate) fn recency(a: &Window, b: &Window, now: i64) -> Ordering {
 /// newer measurement by [`recency`], taken whole, and on a tie the one already known, so a
 /// repeat changes nothing, whatever name or rounding it came with.
 ///
+/// Except where the known window's reset has passed. A tie there is a reading that finds
+/// nothing used since, which is what an account nobody has used since says, with no reset or
+/// with the one that passed. Kept, the old share stood for as long as the account went
+/// unused. So the offered window is taken, or where its reset has passed too, the limit is
+/// recorded as nothing used and no reset, which a repeat then ties with and leaves alone.
+/// Nothing new was measured, so this confirms the reading rather than advancing it.
+///
 /// A limit only one of them measured is kept, because a reading can speak for fewer limits
 /// than there are: a session knows the five-hour and weekly limits and nothing scoped to a
 /// model. One that only `known` has goes once its reset has passed, so a limit the service
@@ -151,6 +158,18 @@ pub(crate) fn merge(
         match offered.windows.iter().find(|w| w.same_limit(had)) {
             Some(given) => match recency(given, had, now) {
                 Ordering::Less => windows.push(had.clone()),
+                Ordering::Equal if had.resets_at.is_some_and(|at| at <= now) => {
+                    confirmed = true;
+                    windows.push(if given.resets_at.is_none_or(|at| at > now) {
+                        given.clone()
+                    } else {
+                        Window {
+                            percent: 0.0,
+                            resets_at: None,
+                            ..had.clone()
+                        }
+                    });
+                }
                 Ordering::Equal => {
                     confirmed = true;
                     windows.push(had.clone());
@@ -549,5 +568,43 @@ mod tests {
             "a measured repeat confirms it"
         );
         assert_eq!(merged.source, Source::ClaudeCodeCache);
+    }
+
+    /// Asked about an account that has done nothing since its window reset, Anthropic finds
+    /// nothing used and gives no reset, or the one that passed, and Claude Code's cache says
+    /// the same offline. Kept on that tie, a parked account that had run out read as full,
+    /// marked live, until somebody used it again.
+    #[test]
+    fn a_window_past_its_reset_is_reset_by_a_reading_that_finds_nothing_used() {
+        let known = reading(
+            vec![measured("session", 100.0, Some(NOW - HOUR))],
+            Some(NOW - 2 * HOUR),
+        );
+        for (said, source) in [
+            (measured("session", 0.0, None), Source::Live),
+            (measured("session", 0.0, Some(NOW - HOUR)), Source::Live),
+            (measured("five_hour", 0.0, None), Source::ClaudeCodeCache),
+        ] {
+            let mut offered = reading(vec![said], Some(NOW - 5));
+            offered.source = source;
+            let merged = merge(Some(&known), Some(&offered), NOW).unwrap();
+            assert_eq!(merged.windows[0].percent, 0.0, "{source:?}");
+            assert_eq!(merged.windows[0].resets_at, None, "{source:?}");
+            assert_eq!(merged.source, source, "and it is what said so");
+            assert_eq!(
+                merge(Some(&merged), Some(&offered), NOW).as_ref(),
+                Some(&merged),
+                "a repeat changes nothing"
+            );
+        }
+
+        let untimed = reading(vec![measured("five_hour", 0.0, None)], None);
+        let merged = merge(Some(&known), Some(&untimed), NOW).unwrap();
+        assert_eq!(merged.windows[0].percent, 0.0);
+        assert_eq!(
+            merged.observed_at,
+            Some(NOW - 2 * HOUR),
+            "a reading that says no time moved nothing forward"
+        );
     }
 }

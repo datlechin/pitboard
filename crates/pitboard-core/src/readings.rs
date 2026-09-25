@@ -177,6 +177,16 @@ mod tests {
         Some(load(ctx).get(uuid)?.windows.first()?.percent)
     }
 
+    /// The readings as they are, laid out as nothing pitboard writes would lay them out, so
+    /// a rewrite shows.
+    fn laid_out(ctx: &Context) -> String {
+        let written: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(path(ctx)).unwrap()).unwrap();
+        let laid_out = serde_json::to_string_pretty(&written).unwrap();
+        std::fs::write(path(ctx), &laid_out).unwrap();
+        laid_out
+    }
+
     /// The owner's panes: a busy one had recorded 22% when an idle one, still holding the
     /// 20% of its last response, ran after it. Whoever writes last, the 22% stands.
     #[test]
@@ -211,14 +221,30 @@ mod tests {
                 ("personal".into(), reading("session", 3.0, Some(NOW - 60))),
             ],
         );
-        // Laid out as nothing pitboard writes would lay it out, so a rewrite shows.
-        let written: serde_json::Value =
-            serde_json::from_str(&std::fs::read_to_string(path(&ctx)).unwrap()).unwrap();
-        let laid_out = serde_json::to_string_pretty(&written).unwrap();
-        std::fs::write(path(&ctx), &laid_out).unwrap();
+        let laid_out = laid_out(&ctx);
 
         remember(&ctx, &[("work".into(), reading("five_hour", 20.0, None))]);
         remember(&ctx, &[("work".into(), reading("five_hour", 22.0, None))]);
+        assert_eq!(std::fs::read_to_string(path(&ctx)).unwrap(), laid_out);
+    }
+
+    /// A parked account that ran out, asked about once its window has reset: the answer that
+    /// finds nothing used is recorded once, and every read after it that finds the same
+    /// leaves the file alone.
+    #[test]
+    fn a_window_past_its_reset_is_recorded_reset_once() {
+        let (ctx, _scratch) = machine("reset");
+        let mut full = reading("session", 100.0, Some(NOW - 7_200));
+        full.windows[0].resets_at = Some(NOW - 3_600);
+        remember(&ctx, &[("parked".into(), full)]);
+
+        let mut idle = reading("session", 0.0, Some(NOW));
+        idle.windows[0].resets_at = None;
+        remember(&ctx, &[("parked".into(), idle.clone())]);
+        assert_eq!(five_hour(&ctx, "parked"), Some(0.0));
+
+        let laid_out = laid_out(&ctx);
+        remember(&ctx, &[("parked".into(), idle)]);
         assert_eq!(std::fs::read_to_string(path(&ctx)).unwrap(), laid_out);
     }
 }
