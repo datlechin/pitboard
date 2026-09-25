@@ -88,7 +88,7 @@ these in this order, before or after that `brew update`:
 
 ```sh
 brew uninstall --cask pitboard
-brew uninstall --formula pitboard
+brew uninstall --formula --force pitboard
 brew install --cask datlechin/tap/pitboard-app
 ```
 

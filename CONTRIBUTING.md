@@ -168,7 +168,7 @@ and links the command line inside it onto `PATH`. They conflict, since both link
 the same name; Homebrew does that only when that cask is trusted, and otherwise prints what
 to run. Somebody on the old app cask has their app replaced by the command line once. That
 cost was accepted, and the CHANGELOG, the tap's README and the `pitboard` cask's caveats
-say how to get the app back.
+give the same three commands to get the app back, in the same order.
 
 The `brew` job then installs from the public tap the way the README says, on a clean macOS
 runner and a clean Linux one: the `pitboard` cask on both, checking the version, the man
@@ -387,7 +387,7 @@ shape it could take, on macOS and on Linux. These decide what the casks may do:
   `Cask::Installer#zap` loads the installed cask file first. Run on 2026-09-25: a cask was
   installed, its zap changed in the tap, `brew update` run, and the zap that ran was the
   installed one's. A machine still on the old app cask therefore runs its zap, which
-  trashes `~/.pitboard`, and the CHANGELOG says to leave `--zap` out.
+  trashes `~/.pitboard`, and the CHANGELOG and the tap's README say to leave `--zap` out.
 - From Homebrew 6, installing a full name trusts that one cask or formula and nothing else.
   The old app cask depended on the formula, which Homebrew then refused to build, so
   `brew install --cask datlechin/tap/pitboard` failed with `build.rb ... exited with 1`
