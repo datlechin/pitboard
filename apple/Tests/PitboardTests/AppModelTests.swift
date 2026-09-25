@@ -23,6 +23,8 @@ private final class Stub: Core, @unchecked Sendable {
         Enrolled(email: "a@b.c", enrolled: .current, warnings: []))
     /// What a sign-in that cannot start warns about beside its refusal.
     var signInWarnings: [Warning] = []
+    /// The login shell's `PATH`, as far as the app looks in it.
+    var path: String?
 
     init(_ answer: Result<Status, Error>) {
         self.answer = answer
@@ -86,6 +88,7 @@ private final class Stub: Core, @unchecked Sendable {
         installedAsks += 1
         return found
     }
+    func searchPath() async -> String? { path }
 }
 
 /// A sign-in that says what it is given to say and then enrols, without a tool behind it.
@@ -691,6 +694,40 @@ private func account(_ label: String, signedIn: Bool, percent: Double) -> Accoun
     #expect(session.cancelledOnMain == false)
     #expect(!session.finished)
     #expect(model.problem == nil)
+}
+
+/// The settings say which `pitboard` a terminal runs, looking where the login shell's
+/// `PATH` says before anywhere else, and whether it is this app's own.
+@MainActor
+@Test func theSettingsLookForTheCommandLineWhereTheLoginShellSays() async throws {
+    let root = FileManager.default.temporaryDirectory
+        .appendingPathComponent("pitboard-path-\(UUID().uuidString)")
+    defer { try? FileManager.default.removeItem(at: root) }
+    let helper = root.appendingPathComponent("Pitboard.app/Contents/Helpers/pitboard")
+    let bin = root.appendingPathComponent("bin")
+    for directory in [helper.deletingLastPathComponent(), bin] {
+        try FileManager.default.createDirectory(
+            at: directory, withIntermediateDirectories: true)
+    }
+    try Data("#!/bin/sh\n".utf8).write(to: helper)
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: helper.path)
+    let linked = bin.appendingPathComponent("pitboard").path
+    try FileManager.default.createSymbolicLink(
+        atPath: linked, withDestinationPath: helper.path)
+
+    let stub = Stub(.success(status([])))
+    stub.path = "/nowhere/bin:\(bin.path)"
+    let model = AppModel(
+        watching: false, service: stub,
+        commandLineTool: CommandLineTool(
+            bundle: root.appendingPathComponent("Pitboard.app")))
+    #expect(model.commandLine == nil, "not looked for until the settings ask")
+    await model.findCommandLine()
+    #expect(model.commandLine == .bundled(linked))
+
+    let other = AppModel(watching: false, service: stub)
+    await other.findCommandLine()
+    #expect(other.commandLine == .another(linked), "these tests are not an app")
 }
 
 /// The address Codex prints is the one to open; the loopback address it also prints is

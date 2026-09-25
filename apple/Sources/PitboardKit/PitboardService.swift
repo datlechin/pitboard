@@ -44,6 +44,10 @@ public protocol Core: Sendable {
     /// never forbids anything. Finding them can mean asking the person's login shell, which
     /// takes a moment, so nothing waits on it on the main thread.
     func installed() async -> [Tool]
+    /// Where programs are looked for, in `PATH`'s form: the person's login shell's, as far
+    /// as the app looks in it. Nil when the shell could not be asked. Asked the same way and
+    /// as rarely as `installed`, and for the same reason.
+    func searchPath() async -> String?
 }
 
 /// pitboard's core, called off the main thread. Any call may wait on the keychain, a lock or
@@ -65,6 +69,8 @@ public final class PitboardService: Core, Sendable {
         /// The codes of the tools a program was given for, which is what `installed`
         /// answers.
         let found: Set<String>
+        /// The login shell's `PATH` as far as it was looked in, which `searchPath` answers.
+        let searchPath: String?
     }
 
     /// `settings` is asked for once, on first use and off the main thread, so it may take
@@ -94,7 +100,8 @@ public final class PitboardService: Core, Sendable {
                 core: Pitboard(settings: settings),
                 found: Set(
                     [("claude", settings.claudeProgram), ("codex", settings.codexProgram)]
-                        .compactMap { code, program in program == nil ? nil : code }))
+                        .compactMap { code, program in program == nil ? nil : code }),
+                searchPath: settings.searchPath)
             return (made, late)
         }
     }
@@ -104,15 +111,24 @@ public final class PitboardService: Core, Sendable {
     }
 
     public func installed() async -> [Tool] {
-        // Not on `reads`, where a read may be waiting on the network: what is installed is
-        // needed before the first read can say anything useful about it.
+        let found = await looked().found
+        return tools().filter { found.contains($0.code) }
+    }
+
+    public func searchPath() async -> String? {
+        await looked().searchPath
+    }
+
+    /// What finding the programs came to. Not on `reads`, where a read may be waiting on the
+    /// network: what is installed is needed before the first read can say anything useful
+    /// about it.
+    private func looked() async -> Made {
         let (made, after) = (self.made, askAgainAfter)
-        let found = await withCheckedContinuation { continuation in
+        return await withCheckedContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
-                continuation.resume(returning: made.value(askingAgainAfter: after).found)
+                continuation.resume(returning: made.value(askingAgainAfter: after))
             }
         }
-        return tools().filter { found.contains($0.code) }
     }
 
     /// `fresh` asks each tool's service about every account even if it was asked moments

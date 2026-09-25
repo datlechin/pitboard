@@ -57,6 +57,12 @@ final class AppModel {
     /// The stable code behind `problem`, for deciding what to offer. Branching on the
     /// wording of a message is how an offer survives the message changing under it.
     private(set) var problemCode: String?
+    /// This app's own command line, and where a terminal would find it.
+    let commandLineTool: CommandLineTool
+    /// The `pitboard` a terminal runs, once the settings have looked.
+    private(set) var commandLine: CommandLineTool.Found?
+    /// Why the command line could not be linked, said beside the button that tried.
+    private(set) var linkFailed: String?
 
     enum Naming: Equatable {
         /// Record the login signed in now to this tool: no browser, so the app does it
@@ -147,11 +153,13 @@ final class AppModel {
     init(
         watching: Bool = true,
         service: any Core = PitboardService(asking: { Settings.forCurrentUserAsked() }),
-        defaults: UserDefaults = .standard
+        defaults: UserDefaults = .standard,
+        commandLineTool: CommandLineTool = CommandLineTool()
     ) {
         self.service = service
         tools = service.tools()
         self.defaults = defaults
+        self.commandLineTool = commandLineTool
         var declined = Set(defaults.stringArray(forKey: Self.declinedKey) ?? [])
         // Said before there was a second tool, so about the only tool there was.
         if defaults.bool(forKey: "hideSecondAccountNudge") {
@@ -366,6 +374,30 @@ final class AppModel {
             problem = Self.saying(error)
         }
         await readSchedule()
+    }
+
+    /// Looks for the `pitboard` a terminal runs: on the login shell's `PATH`, then where
+    /// each way of installing it puts it.
+    func findCommandLine() async {
+        let path = await service.searchPath()
+        let home = ProcessInfo.processInfo.environment["HOME"] ?? NSHomeDirectory()
+        let directories =
+            (path?.split(separator: ":").map(String.init) ?? [])
+            + CommandLineTool.places(home: home)
+        let tool = commandLineTool
+        commandLine = await Task.detached(priority: .utility) {
+            tool.find(in: directories)
+        }.value
+    }
+
+    /// Links this app's command line onto the `PATH`, once macOS has asked for an
+    /// administrator's password.
+    func installCommandLine() async {
+        linkFailed = nil
+        if case .failed(let why) = await commandLineTool.install() {
+            linkFailed = why
+        }
+        await findCommandLine()
     }
 
     /// Renew every parked login that is due, now. Never switches and never asks for usage.
