@@ -25,18 +25,27 @@ machine with a real signed-in Claude Code or Codex.
 ## Install
 
 ```sh
-brew install datlechin/tap/pitboard        # the command line
-brew install --cask datlechin/tap/pitboard # the menu bar app, macOS 14 or later
+brew install datlechin/tap/pitboard            # the command line, macOS and Linux
+brew install --cask datlechin/tap/pitboard-app # the menu bar app, macOS 14 or later
 ```
 
-Or `cargo install pitboard`, or `cargo binstall pitboard` to fetch the built binary instead
-of compiling it. On Linux, the
-[latest release](https://github.com/datlechin/pitboard/releases/latest) carries static
-binaries for x86_64 and aarch64; the app is a signed and notarised download there too.
+The app includes the command line and keeps both up to date, so install one or the other.
+Neither needs Rust. Without Homebrew:
 
-Removing it: `pitboard uninstall` deletes every parked login it wrote and pitboard's own
-files, leaving the account you are signed in to signed in. Then remove the binary with
-whatever installed it.
+- `cargo binstall pitboard` fetches the release's command line for your machine.
+- The [latest release](https://github.com/datlechin/pitboard/releases/latest) has the
+  command line for macOS and Linux, x86_64 and aarch64, and the app. Check a download with
+  `gh attestation verify <file> --repo datlechin/pitboard`.
+- `cargo install --locked pitboard` builds it from source. Without `--locked`, cargo
+  ignores the `Cargo.lock` pitboard was released with and may pick newer dependencies.
+
+If you installed the app with the old cask, `datlechin/tap/pitboard`, that name is the
+command line now and Homebrew replaces your app with it once. Install the app again as
+`pitboard-app`, as [Upgrading from 0.3.0](CHANGELOG.md#upgrading-from-030) shows.
+
+Removing it: run `pitboard uninstall` first. It deletes every parked login it wrote,
+pitboard's own files and the daily renewal schedule, and leaves the account you are signed
+in to signed in. Then remove pitboard the way you installed it.
 
 ## Set up
 
@@ -142,9 +151,9 @@ Other commands:
 - `pitboard schedule install` asks this computer's own scheduler to run that daily, so
   parked logins stay alive while you are away. Opt-in; `pitboard schedule status` says
   whether it is on and `pitboard schedule uninstall` takes it away.
-- `pitboard uninstall` deletes every parked login it wrote and pitboard's own files. On
-  macOS it leaves one that `pitboard repair` gave back and this pitboard did not write, and
-  says how many it left.
+- `pitboard uninstall` deletes every parked login it wrote, the daily renewal schedule and
+  pitboard's own files. On macOS it leaves one that `pitboard repair` gave back and this
+  pitboard did not write, and says how many it left.
 
 ## Codex
 
@@ -207,10 +216,17 @@ quit them and start them again, and how many pitboard found running, if any. "Ad
 account" asks which tool the account is for when both are installed.
 
 It calls the same core as the command line rather than running `pitboard` for each answer.
-The panel adds and drops accounts itself. The cask installs the command line too, for
-renaming, `pitboard repair`, scripts and the status line. Usage is read when you open the panel and every few minutes while the
-app runs. "Open at login" is in the menu at the bottom right. A copy from a release keeps
-itself up to date. One you build yourself does not, because it carries no update key:
+The panel adds and drops accounts itself, and signs in again to one whose parked login has
+expired. The command line comes inside the app, for renaming, `pitboard repair`, scripts
+and the status line, and updates with it. The `pitboard-app` cask puts it on your `PATH`.
+Without the cask, and with no other `pitboard` installed, Settings, Advanced, "Install
+command line tool…" links `/usr/local/bin/pitboard` to it, after asking for an
+administrator's password.
+
+Usage is read when you open the panel and every few minutes while the app runs. "Open at
+login" and daily renewal are in Settings. Daily renewal runs the command line inside the
+app, so move a downloaded app to Applications before turning it on. A copy from a release
+keeps itself up to date. One you build yourself does not, because it carries no update key:
 
 ```sh
 ./apple/scripts/build-app.sh
@@ -325,14 +341,16 @@ the size of the Claude Code login.
 CLI's "Login with Google" to individual, Google AI Pro and Google AI Ultra accounts
 ([notice](https://developers.google.com/gemini-code-assist/docs/deprecations/code-assist-individuals)).
 
-**Why trust the download?** The macOS app is signed with a Developer ID and notarised by
-Apple, and its update feed is signed too. Every release attests what it published: each
-archive, the source tarball Homebrew builds from, `SHA256SUMS`, a bill of materials beside
+**Why trust the download?** On macOS the app and the command line are signed with a
+Developer ID and notarised by Apple, and the app's update feed is signed too. Homebrew
+installs those same files, checked against the release's own `SHA256SUMS`. Every release
+attests what it published: each tarball, the app, `SHA256SUMS`, a bill of materials beside
 each artefact, and `appcast.xml`, which is the file that decides what an installed copy
 runs next. The attestation names the workflow and the commit that produced the file:
 
 ```sh
-gh attestation verify Pitboard-v0.1.5-macos.zip --repo datlechin/pitboard
+gh attestation verify Pitboard-v0.3.0-macos.zip --repo datlechin/pitboard
+gh attestation verify pitboard-v0.3.0-aarch64-apple-darwin.tar.gz --repo datlechin/pitboard
 gh attestation verify SHA256SUMS --repo datlechin/pitboard
 gh attestation verify appcast.xml --repo datlechin/pitboard
 ```
@@ -340,7 +358,7 @@ gh attestation verify appcast.xml --repo datlechin/pitboard
 `SHA256SUMS` is worth attesting rather than only reading: on its own it is evidence against
 a download that went wrong, not against anyone who could change the release.
 
-Or build it yourself: `cargo install pitboard`.
+Or build it yourself: `cargo install --locked pitboard`.
 
 ## How it works
 

@@ -14,6 +14,8 @@
 //! kept. Adding an error, warning or check code is not a breaking change, which is why every
 //! enum a caller reads codes out of is `#[non_exhaustive]` and every such caller needs a
 //! fallback arm. Renaming or removing a code is a breaking change and gets a major version.
+//! A report a caller reads, such as what `uninstall` returns, may likewise say more in a
+//! later release, so those structs are `#[non_exhaustive]` too.
 //!
 //! What is deliberately not reachable: nothing outside this crate may write pitboard's index.
 //! Every change goes through [`switch`], which records what it is about to do first and

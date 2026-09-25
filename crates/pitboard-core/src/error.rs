@@ -153,8 +153,8 @@ pub enum Error {
 
     #[error(
         "{path} was written by a newer pitboard (its format is {found}, this one reads \
-         {expected}). The command line and the app update separately, so upgrade whichever \
-         is behind: `brew upgrade pitboard`, or the app's own Check for Updates."
+         {expected}). Update this pitboard the way you installed it. The app, and the command \
+         line inside it, update with the app's Check for Updates."
     )]
     StateFromNewerVersion {
         path: PathBuf,
@@ -170,8 +170,8 @@ pub enum Error {
 
     #[error(
         "{path} has an account for `{tool}`, a tool this pitboard does not know, so it was \
-         written by a newer one. The command line and the app update separately, so upgrade \
-         whichever is behind: `brew upgrade pitboard`, or the app's own Check for Updates."
+         written by a newer one. Update this pitboard the way you installed it. The app, and \
+         the command line inside it, update with the app's Check for Updates."
     )]
     StateNamesUnknownTool { path: PathBuf, tool: String },
 
@@ -191,6 +191,23 @@ pub enum Error {
 
     #[error("the scheduler refused: {detail}")]
     ScheduleRefused { detail: String },
+
+    #[error("the renewal schedule would run {path}, which is not there. Nothing was scheduled.")]
+    ScheduleProgramMissing { path: PathBuf },
+
+    /// macOS runs an app opened where it was downloaded from a copy it makes somewhere
+    /// temporary, which is there while the app runs and gone once it quits.
+    #[error(
+        "the renewal schedule would run {path}, which is in a temporary copy macOS made of \
+         the app and is gone once the app quits. Move pitboard to your Applications folder, \
+         open it from there, and turn on daily renewal again."
+    )]
+    ScheduleProgramTemporary { path: PathBuf },
+
+    /// An app that names no command line for the schedule, where the only other thing to
+    /// schedule is the app itself, which renews nothing.
+    #[error("this copy of pitboard has no command line inside it for the renewal schedule to run.")]
+    ScheduleProgramUnnamed,
 
     #[error("could not write to pitboard's directory at {path}: {source}")]
     HomeUnwritable {
@@ -570,6 +587,9 @@ impl Error {
             StateWriteFailed { .. } => "state_write_failed",
             ScheduleUnsupported => "schedule_unsupported",
             ScheduleRefused { .. } => "schedule_refused",
+            ScheduleProgramMissing { .. } => "schedule_program_missing",
+            ScheduleProgramTemporary { .. } => "schedule_program_temporary",
+            ScheduleProgramUnnamed => "schedule_program_unnamed",
             HomeUnwritable { .. } => "home_unwritable",
             ClaudeConfigMissing { .. } => "claude_config_missing",
             ClaudeConfigUnreadable { .. } => "claude_config_unreadable",
@@ -887,6 +907,37 @@ mod tests {
         };
         assert_eq!(absent(ProviderId::Claude), "claude_program_missing");
         assert_eq!(absent(ProviderId::Codex), "codex_program_missing");
+    }
+
+    /// A pitboard that finds its files written by a newer one is updated by the route it
+    /// came by. The app's Check for Updates moves only the app and the command line inside
+    /// it, so it is not offered as another way to update this one.
+    #[test]
+    fn a_newer_pitboards_files_say_which_update_moves_which_pitboard() {
+        let path = PathBuf::from("/home/x/.pitboard/state.json");
+        for message in [
+            Error::StateFromNewerVersion {
+                path: path.clone(),
+                found: 9,
+                expected: 5,
+            }
+            .to_string(),
+            Error::StateNamesUnknownTool {
+                path: path.clone(),
+                tool: "gemini".into(),
+            }
+            .to_string(),
+        ] {
+            assert!(
+                message.contains("Update this pitboard the way you installed it."),
+                "{message}"
+            );
+            assert!(
+                message.contains("The app, and the command line inside it, update with"),
+                "{message}"
+            );
+            assert!(!message.contains("or with the app"), "{message}");
+        }
     }
 
     /// Advice to enrol names the tool the account is for: a bare name would enrol a Claude

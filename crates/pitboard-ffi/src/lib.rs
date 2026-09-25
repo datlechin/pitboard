@@ -34,6 +34,11 @@ pub struct Settings {
     /// login shell's, which an app does not inherit. `None` is this process's own `PATH`.
     #[uniffi(default)]
     pub search_path: Option<String>,
+    /// The command line the daily renewal schedule runs: the one the app comes with, since
+    /// the app itself is not one. `None` where the app has none, as in a build run from a
+    /// build directory, and then there is nothing to schedule.
+    #[uniffi(default)]
+    pub schedule_program: Option<String>,
 }
 
 impl Settings {
@@ -62,6 +67,9 @@ impl Settings {
         }
         if let Some(path) = self.search_path {
             ctx = ctx.with_search_path(path);
+        }
+        if let Some(program) = self.schedule_program {
+            ctx = ctx.with_schedule_program(PathBuf::from(program));
         }
         // These bindings exist for the app, so a change made through them says so.
         ctx.with_caller("app".into())
@@ -534,6 +542,9 @@ impl SignIn {
 #[derive(uniffi::Object)]
 pub struct Pitboard {
     core: service::Pitboard,
+    /// Whether the app named a command line for the schedule to run. The core schedules
+    /// the program asking where none is named, and that is the app, which renews nothing.
+    schedules_a_command_line: bool,
 }
 
 #[uniffi::export]
@@ -541,6 +552,7 @@ impl Pitboard {
     #[uniffi::constructor]
     pub fn new(settings: Settings) -> Arc<Self> {
         Arc::new(Pitboard {
+            schedules_a_command_line: settings.schedule_program.is_some(),
             core: service::Pitboard::new(settings.context()),
         })
     }
@@ -721,14 +733,26 @@ impl Pitboard {
     }
 
     /// Ask this computer's own scheduler to renew parked logins daily. Opt-in, and the
-    /// caller is expected to say what it does before offering it.
+    /// caller is expected to say what it does before offering it. Refused where the app
+    /// named no command line to run.
     pub fn schedule_install(&self) -> Result<String, PitboardError> {
+        if !self.schedules_a_command_line {
+            return Err(pitboard_core::error::Error::ScheduleProgramUnnamed.into());
+        }
         Ok(self.core.schedule_install()?.to_string_lossy().into_owned())
     }
 
     /// Take it away. `false` when there was nothing installed.
     pub fn schedule_uninstall(&self) -> Result<bool, PitboardError> {
         Ok(self.core.schedule_uninstall()?)
+    }
+
+    /// Point a schedule an app up to 0.3.0 wrote at the command line this app comes with.
+    /// That app scheduled itself, so launchd has been starting a second app every day and
+    /// renewing nothing. For the app to call when it starts: `true` when it repaired one,
+    /// and nothing changes where the schedule already runs a command line or there is none.
+    pub fn schedule_repair(&self) -> Result<bool, PitboardError> {
+        Ok(self.core.schedule_repair()?)
     }
 
     pub fn doctor(&self) -> Diagnosis {
@@ -750,6 +774,68 @@ impl Pitboard {
                     advice: c.advice,
                 })
                 .collect(),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn settings(schedule_program: Option<String>) -> Settings {
+        Settings {
+            home: "/Users/x".into(),
+            pitboard_home: None,
+            claude_config_dir: None,
+            secure_storage_dir: None,
+            user: None,
+            claude_program: None,
+            codex_home: None,
+            codex_program: None,
+            search_path: None,
+            schedule_program,
+        }
+    }
+
+    #[test]
+    fn the_app_names_the_command_line_its_schedule_runs() {
+        let bundled = "/Applications/Pitboard.app/Contents/Helpers/pitboard";
+        assert_eq!(
+            settings(Some(bundled.into())).context().schedule_program(),
+            Some(std::path::Path::new(bundled))
+        );
+        assert_eq!(settings(None).context().schedule_program(), None);
+    }
+
+    /// These bindings serve the app, and the app is not a command line: where it names
+    /// none, scheduling this process would start a second app every day and renew nothing.
+    /// The home is one nothing can be written under, so even a regression here reaches no
+    /// scheduler.
+    #[test]
+    fn the_app_schedules_nothing_without_a_command_line_to_run() {
+        let pitboard = Pitboard::new(Settings {
+            home: "/dev/null".into(),
+            ..settings(None)
+        });
+        let Err(PitboardError::Failed { code, message, .. }) = pitboard.schedule_install() else {
+            panic!("the app scheduled itself");
+        };
+        assert_eq!(code, "schedule_program_unnamed");
+        assert!(message.contains("command line"), "{message}");
+    }
+
+    /// Repairing at launch is a no-op wherever there is nothing to repair, and never
+    /// reaches a scheduler to find that out. This test's own program stands in for a
+    /// command line that is there.
+    #[test]
+    fn the_app_repairs_nothing_where_no_schedule_runs_it() {
+        let there = std::env::current_exe().expect("this test's own program");
+        for named in [None, Some(there.to_string_lossy().into_owned())] {
+            let pitboard = Pitboard::new(Settings {
+                home: "/dev/null".into(),
+                ..settings(named)
+            });
+            assert!(!pitboard.schedule_repair().expect("nothing to repair"));
         }
     }
 }

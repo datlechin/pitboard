@@ -57,6 +57,12 @@ final class AppModel {
     /// The stable code behind `problem`, for deciding what to offer. Branching on the
     /// wording of a message is how an offer survives the message changing under it.
     private(set) var problemCode: String?
+    /// This app's own command line, and where a terminal would find it.
+    let commandLineTool: CommandLineTool
+    /// The `pitboard` a terminal runs, once the settings have looked.
+    private(set) var commandLine: CommandLineTool.Found?
+    /// Why the command line could not be linked, said beside the button that tried.
+    private(set) var linkFailed: String?
 
     enum Naming: Equatable {
         /// Record the login signed in now to this tool: no browser, so the app does it
@@ -141,17 +147,20 @@ final class AppModel {
     /// is a real answer and not an absence.
     private var lastChangedAt: Int64?
 
-    /// `watching` starts the timers: the periodic read, the wake notice and the poll that
-    /// notices a change made somewhere else. A test drives those itself, and two of them
-    /// firing under a test is how a test stops telling the truth about what set what.
+    /// `watching` starts what runs by itself: the periodic read, the wake notice, the poll
+    /// that notices a change made somewhere else, and the one repair of a schedule an older
+    /// app wrote. A test drives those itself, and two of them firing under a test is how a
+    /// test stops telling the truth about what set what.
     init(
         watching: Bool = true,
         service: any Core = PitboardService(asking: { Settings.forCurrentUserAsked() }),
-        defaults: UserDefaults = .standard
+        defaults: UserDefaults = .standard,
+        commandLineTool: CommandLineTool = CommandLineTool()
     ) {
         self.service = service
         tools = service.tools()
         self.defaults = defaults
+        self.commandLineTool = commandLineTool
         var declined = Set(defaults.stringArray(forKey: Self.declinedKey) ?? [])
         // Said before there was a second tool, so about the only tool there was.
         if defaults.bool(forKey: "hideSecondAccountNudge") {
@@ -165,6 +174,9 @@ final class AppModel {
             Task { await self?.use(label) }
         }
         guard watching else { return }
+        // Once per launch: after that the schedule runs a command line, or was never the
+        // app's to repair. On the service's queue once the core is made, like every call.
+        Task { [weak self] in await self?.repairSchedule() }
         Task { [weak self] in
             while !Task.isCancelled {
                 await self?.refresh()
@@ -350,12 +362,43 @@ final class AppModel {
         schedule = await service.schedule()
     }
 
+    /// Points a renewal schedule an app up to 0.3.0 wrote, which runs that app and renews
+    /// nothing, at the command line inside this one, and shows the schedule again when it did.
+    /// A failure is not said here: the schedule is as it was, and doctor still reports it.
+    func repairSchedule() async {
+        guard (try? await service.scheduleRepair()) == true else { return }
+        await readSchedule()
+    }
+
+    /// Why daily renewal cannot be turned on from this copy of the app, or nil when it can.
+    ///
+    /// The schedule runs the command line inside the app long after the app has quit, so it
+    /// needs one a link would keep reaching. A copy macOS runs from a temporary place is gone
+    /// by then, and without one inside the app there is only the app itself to schedule,
+    /// which renews nothing.
+    var cannotSchedule: String? {
+        if commandLineTool.linkable { return nil }
+        if commandLineTool.translocated {
+            return "Move pitboard to your Applications folder first. Until then macOS runs it "
+                + "from a temporary copy, which is gone once pitboard quits."
+        }
+        return "This copy of pitboard has no command line inside it to run on a schedule."
+    }
+
     /// Hand the renewal of parked logins to this computer's own scheduler, or take it back.
     ///
     /// Opt-in, and the caller says what it does before offering it: a background process
     /// that talks to a service on a schedule is the shape most likely to be read as
     /// automation, so it is something a person turns on knowing what it is.
+    ///
+    /// Turning it on is refused where `cannotSchedule` says why, and not only left out of the
+    /// settings, so nothing that calls this can write a schedule that fails every day without
+    /// telling anyone. Turning it off never is: that is how such a schedule is taken away.
     func setSchedule(on: Bool) async {
+        if on, let why = cannotSchedule {
+            problem = why
+            return
+        }
         do {
             if on {
                 _ = try await service.scheduleInstall()
@@ -366,6 +409,27 @@ final class AppModel {
             problem = Self.saying(error)
         }
         await readSchedule()
+    }
+
+    /// Looks for the `pitboard` a terminal runs: on the login shell's `PATH`, then where
+    /// each way of installing it puts it.
+    func findCommandLine() async {
+        let path = await service.searchPath()
+        let tool = commandLineTool
+        let directories = tool.directories(onPath: path)
+        commandLine = await Task.detached(priority: .utility) {
+            tool.find(in: directories)
+        }.value
+    }
+
+    /// Links this app's command line onto the `PATH`, once macOS has asked for an
+    /// administrator's password.
+    func installCommandLine() async {
+        linkFailed = nil
+        if case .failed(let why) = await commandLineTool.install() {
+            linkFailed = why
+        }
+        await findCommandLine()
     }
 
     /// Renew every parked login that is due, now. Never switches and never asks for usage.
@@ -485,10 +549,9 @@ final class AppModel {
 
     /// How far along setting pitboard up this machine is.
     ///
-    /// Somebody who installed the app from the cask and nothing else has never typed a
-    /// pitboard command and may never want to. Every state before `ready` used to show
-    /// either a line naming a command to run or nothing at all, which is the same as
-    /// telling them the app does not work.
+    /// Somebody who installed only the app has never typed a pitboard command and may never
+    /// want to. Every state before `ready` used to show either a line naming a command to run
+    /// or nothing at all, which is the same as telling them the app does not work.
     enum Footing: Equatable {
         /// Claude Code is not on this machine and no other tool has an account here.
         /// Nothing pitboard does means anything without a tool, and pitboard cannot install
@@ -642,6 +705,14 @@ final class AppModel {
         }
         remember(said)
         return []
+    }
+
+    /// Signs in again to an enrolled account whose parked login can no longer be used,
+    /// through the same sign-in as a new account, so the address and the code field show
+    /// the same way. By its label alone, since `signIn` puts its tool in front.
+    func signInAgain(to account: Account) async {
+        guard let label = account.label else { return }
+        await signIn(label, for: account.provider)
     }
 
     /// Types the fallback code back, for a browser that could not reach the callback. Off

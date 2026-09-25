@@ -33,6 +33,9 @@ public protocol Core: Sendable {
     func schedule() async -> Schedule
     func scheduleInstall() async throws -> String
     func scheduleUninstall() async throws -> Bool
+    /// Point a schedule an app up to 0.3.0 wrote, which runs that app and renews nothing, at
+    /// the command line inside this one. True when it did; nothing changes otherwise.
+    func scheduleRepair() async throws -> Bool
     /// When pitboard's account index last changed, in epoch seconds. One stat of one file,
     /// so it can be asked often: it is how this app notices a switch typed in a terminal.
     func changedAt() async -> Int64
@@ -44,6 +47,10 @@ public protocol Core: Sendable {
     /// never forbids anything. Finding them can mean asking the person's login shell, which
     /// takes a moment, so nothing waits on it on the main thread.
     func installed() async -> [Tool]
+    /// Where programs are looked for, in `PATH`'s form: the person's login shell's, as far
+    /// as the app looks in it. Nil when the shell could not be asked. Asked the same way and
+    /// as rarely as `installed`, and for the same reason.
+    func searchPath() async -> String?
 }
 
 /// pitboard's core, called off the main thread. Any call may wait on the keychain, a lock or
@@ -65,6 +72,8 @@ public final class PitboardService: Core, Sendable {
         /// The codes of the tools a program was given for, which is what `installed`
         /// answers.
         let found: Set<String>
+        /// The login shell's `PATH` as far as it was looked in, which `searchPath` answers.
+        let searchPath: String?
     }
 
     /// `settings` is asked for once, on first use and off the main thread, so it may take
@@ -94,7 +103,8 @@ public final class PitboardService: Core, Sendable {
                 core: Pitboard(settings: settings),
                 found: Set(
                     [("claude", settings.claudeProgram), ("codex", settings.codexProgram)]
-                        .compactMap { code, program in program == nil ? nil : code }))
+                        .compactMap { code, program in program == nil ? nil : code }),
+                searchPath: settings.searchPath)
             return (made, late)
         }
     }
@@ -104,15 +114,24 @@ public final class PitboardService: Core, Sendable {
     }
 
     public func installed() async -> [Tool] {
-        // Not on `reads`, where a read may be waiting on the network: what is installed is
-        // needed before the first read can say anything useful about it.
+        let found = await looked().found
+        return tools().filter { found.contains($0.code) }
+    }
+
+    public func searchPath() async -> String? {
+        await looked().searchPath
+    }
+
+    /// What finding the programs came to. Not on `reads`, where a read may be waiting on the
+    /// network: what is installed is needed before the first read can say anything useful
+    /// about it.
+    private func looked() async -> Made {
         let (made, after) = (self.made, askAgainAfter)
-        let found = await withCheckedContinuation { continuation in
+        return await withCheckedContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
-                continuation.resume(returning: made.value(askingAgainAfter: after).found)
+                continuation.resume(returning: made.value(askingAgainAfter: after))
             }
         }
-        return tools().filter { found.contains($0.code) }
     }
 
     /// `fresh` asks each tool's service about every account even if it was asked moments
@@ -150,6 +169,10 @@ public final class PitboardService: Core, Sendable {
 
     public func scheduleUninstall() async throws -> Bool {
         try await run(on: changes) { try $0.scheduleUninstall() }
+    }
+
+    public func scheduleRepair() async throws -> Bool {
+        try await run(on: changes) { try $0.scheduleRepair() }
     }
 
     /// One stat of one file. Deliberately not on the `changes` queue: it must answer while
@@ -272,12 +295,13 @@ extension Settings {
         let settings = forCurrentUser(
             environment: environment,
             loginPath: asked.path,
+            bundle: Bundle.main.bundleURL,
             isExecutable: FileManager.default.isExecutableFile(atPath:))
         return (settings, asked.late)
     }
 
     /// `forCurrentUser` with what it reads from the machine handed in, so a test can say
-    /// what the login shell answered without starting one.
+    /// what the login shell answered without starting one, and which bundle is running.
     ///
     /// Each tool's program is looked for first where the variable naming it outright says,
     /// then on the login shell's `PATH`, where a version manager or an npm prefix puts it,
@@ -285,9 +309,15 @@ extension Settings {
     /// shell could not be asked. The login shell's `PATH`, as far as it is looked in here,
     /// is also where the core looks and what a sign-in is given; without one, the core looks
     /// on this app's own, as it always did.
+    ///
+    /// The renewal schedule runs the command line inside the app `bundle`, since the app
+    /// has no renewal of its own and only hands `renew` on to that. It has no default: a
+    /// caller that left it out would still compile, and the app would have nothing to
+    /// schedule.
     static func forCurrentUser(
         environment: [String: String],
         loginPath: String?,
+        bundle: URL?,
         isExecutable: (String) -> Bool
     ) -> Settings {
         let home = environment["HOME"] ?? FileManager.default.homeDirectoryForCurrentUser.path
@@ -310,8 +340,18 @@ extension Settings {
             claudeProgram: find("claude", unless: "PITBOARD_CLAUDE"),
             codexHome: environment["CODEX_HOME"],
             codexProgram: find("codex", unless: "PITBOARD_CODEX"),
-            searchPath: loginPath.map { _ in shell.joined(separator: ":") }
+            searchPath: loginPath.map { _ in shell.joined(separator: ":") },
+            scheduleProgram: bundle.flatMap(bundledCommandLine(in:))
         )
+    }
+
+    /// The command line an app bundle comes with. Nil for anything that is not an app, such
+    /// as a test or `swift run` in a build directory, which has none: that app cannot
+    /// schedule renewal, since the only other thing to schedule is the app itself, which
+    /// renews nothing.
+    public static func bundledCommandLine(in bundle: URL) -> String? {
+        guard bundle.pathExtension == "app" else { return nil }
+        return bundle.appendingPathComponent("Contents/Helpers/pitboard").path
     }
 
     /// Whether `entry` is inside a folder macOS asks the person about before an app may read

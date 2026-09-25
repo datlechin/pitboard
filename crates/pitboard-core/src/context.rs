@@ -45,11 +45,19 @@ pub struct Context {
     pub(crate) codex_home: Option<String>,
     /// The `codex` that runs a sign-in; a bare name is looked up on the search path.
     pub(crate) codex_program: PathBuf,
+    /// The pitboard the daily renewal schedule runs. `None` is this program, which is right
+    /// for the command line and wrong for an app: the schedule runs `pitboard renew`, so an
+    /// app names the command line it comes with.
+    pub(crate) schedule_program: Option<PathBuf>,
     /// Where a tool's program is looked for, in `PATH`'s form, and what its sign-in is given
     /// as `PATH`, behind the program's own directory where that is not on it. `None` is this
     /// process's own `PATH`: an app opened from Finder has almost nothing on it, so it
     /// passes the one the person's login shell would have.
     pub(crate) search_path: Option<std::ffi::OsString>,
+    /// The launchd job this process runs as, where a test says. `None` is the one launchd
+    /// named when it started this process.
+    #[cfg(target_os = "macos")]
+    pub(crate) launchd_job: Option<String>,
     /// Where the time comes from. The machine's clock in every real context; a test puts
     /// its own here to reach the judgements that only happen at a particular moment.
     pub(crate) clock: Arc<dyn Clock>,
@@ -110,7 +118,10 @@ impl Context {
             hover_rest: false,
             codex_home: None,
             codex_program: PathBuf::from("codex"),
+            schedule_program: None,
             search_path: None,
+            #[cfg(target_os = "macos")]
+            launchd_job: None,
             clock: Arc::new(SystemClock),
             host: crate::store::host(),
             api: Arc::new(Anthropic),
@@ -201,6 +212,18 @@ impl Context {
         &self.codex_program
     }
 
+    /// An app is not a command line, so it names the one it comes with for the schedule to
+    /// run.
+    pub fn with_schedule_program(mut self, program: PathBuf) -> Context {
+        self.schedule_program = Some(program);
+        self
+    }
+
+    /// The pitboard the daily renewal schedule is written to run, where one was named.
+    pub fn schedule_program(&self) -> Option<&std::path::Path> {
+        self.schedule_program.as_deref()
+    }
+
     /// Look for a tool's program on `path`, in `PATH`'s form, rather than on this process's
     /// own `PATH`. An app opened from Finder has only the system's directories there, so a
     /// tool installed through a version manager or an npm prefix is found only on the `PATH`
@@ -216,6 +239,22 @@ impl Context {
             .clone()
             .or_else(|| std::env::var_os("PATH"))
             .unwrap_or_default()
+    }
+
+    /// The label of the launchd job this process runs as, which launchd puts in
+    /// `XPC_SERVICE_NAME` when it starts one.
+    #[cfg(target_os = "macos")]
+    pub(crate) fn launchd_job(&self) -> Option<String> {
+        self.launchd_job
+            .clone()
+            .or_else(|| std::env::var("XPC_SERVICE_NAME").ok())
+    }
+
+    /// Say this process runs as the launchd job `label`, which no test does.
+    #[cfg(all(target_os = "macos", test))]
+    pub(crate) fn with_launchd_job(mut self, label: String) -> Context {
+        self.launchd_job = Some(label);
+        self
     }
 
     /// The program named for this tool, found or not.
@@ -252,7 +291,10 @@ impl Context {
             hover_rest: var("CLAUDE_CODE_HOVER_REST").is_some_and(|v| v == "1" || v == "true"),
             codex_home: var("CODEX_HOME").filter(|v| !v.is_empty()),
             codex_program: PathBuf::from("codex"),
+            schedule_program: None,
             search_path: None,
+            #[cfg(target_os = "macos")]
+            launchd_job: None,
             clock: Arc::new(SystemClock),
             host: crate::store::host(),
             api: Arc::new(Anthropic),
@@ -307,5 +349,18 @@ mod tests {
             "empty is set, and pins the default slot"
         );
         assert_eq!(ctx.claude_program, PathBuf::from("claude"));
+    }
+
+    #[test]
+    fn only_a_front_end_that_names_one_changes_what_the_schedule_runs() {
+        assert_eq!(Context::from_env().schedule_program(), None);
+        let ctx = Context::new(PathBuf::from("/Users/x"));
+        assert_eq!(ctx.schedule_program(), None);
+        let bundled = PathBuf::from("/Applications/Pitboard.app/Contents/Helpers/pitboard");
+        assert_eq!(
+            ctx.with_schedule_program(bundled.clone())
+                .schedule_program(),
+            Some(bundled.as_path())
+        );
     }
 }

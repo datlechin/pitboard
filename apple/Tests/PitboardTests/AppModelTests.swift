@@ -23,6 +23,8 @@ private final class Stub: Core, @unchecked Sendable {
         Enrolled(email: "a@b.c", enrolled: .current, warnings: []))
     /// What a sign-in that cannot start warns about beside its refusal.
     var signInWarnings: [Warning] = []
+    /// The login shell's `PATH`, as far as the app looks in it.
+    var path: String?
 
     init(_ answer: Result<Status, Error>) {
         self.answer = answer
@@ -45,9 +47,30 @@ private final class Stub: Core, @unchecked Sendable {
     func abandonRecovery() async throws -> Abandoned? { abandoned }
     func log(limit: UInt32) async -> [Change] { [] }
     func renew() async -> [Renewed] { [] }
-    func schedule() async -> Schedule { .absent }
-    func scheduleInstall() async throws -> String { "/nowhere" }
-    func scheduleUninstall() async throws -> Bool { false }
+    /// What the scheduler has installed.
+    var scheduled: Schedule = .absent
+    private(set) var scheduleReads = 0
+    func schedule() async -> Schedule {
+        scheduleReads += 1
+        return scheduled
+    }
+    /// What repairing a schedule an older app wrote comes to.
+    var repairs: Result<Bool, Error> = .success(false)
+    private(set) var repairAsks = 0
+    func scheduleRepair() async throws -> Bool {
+        repairAsks += 1
+        return try repairs.get()
+    }
+    private(set) var scheduleInstalls = 0
+    private(set) var scheduleUninstalls = 0
+    func scheduleInstall() async throws -> String {
+        scheduleInstalls += 1
+        return "/nowhere"
+    }
+    func scheduleUninstall() async throws -> Bool {
+        scheduleUninstalls += 1
+        return false
+    }
     func changedAt() async -> Int64 { changed }
     func doctor() async -> Diagnosis {
         Diagnosis(
@@ -86,6 +109,7 @@ private final class Stub: Core, @unchecked Sendable {
         installedAsks += 1
         return found
     }
+    func searchPath() async -> String? { path }
 }
 
 /// A sign-in that says what it is given to say and then enrols, without a tool behind it.
@@ -693,6 +717,178 @@ private func account(_ label: String, signedIn: Bool, percent: Double) -> Accoun
     #expect(model.problem == nil)
 }
 
+/// An account whose parked login can no longer be used is signed in to again from its row,
+/// through the sign-in a new account gets, so the address Codex prints shows in the panel
+/// the same way. The core is given the label with its tool once, as for a new account.
+@MainActor
+@Test func anAccountThatCannotBeSwitchedToIsSignedInToAgainFromThePanel() async throws {
+    let stub = Stub(
+        .success(
+            status([
+                account("personal", of: "codex", signedIn: true),
+                account("work", of: "codex", switchable: false),
+                account("spare", switchable: false),
+            ])))
+    let session = ScriptedSignIn(
+        saying: ["https://auth.openai.com/oauth/authorize?state=x\n"], takesACode: false,
+        waits: true)
+    stub.session = session
+    let model = AppModel(watching: false, service: stub)
+    await model.refresh()
+    let accounts = try #require(model.status?.accounts)
+
+    let running = Task { await model.signInAgain(to: accounts[1]) }
+    #expect(await eventually { model.signingIn?.url != nil })
+    #expect(stub.signedIn == ["codex/work"])
+    #expect(model.signingIn?.tool == "Codex")
+    #expect(model.signingIn?.label == "work")
+    session.done.signal()
+    await running.value
+    #expect(session.finished)
+    #expect(model.signingIn == nil)
+
+    stub.session = ScriptedSignIn(saying: [], takesACode: true)
+    await model.signInAgain(to: accounts[2])
+    #expect(stub.signedIn == ["codex/work", "claude/spare"])
+}
+
+/// The settings say which `pitboard` a terminal runs, looking where the login shell's
+/// `PATH` says before anywhere else, and whether it is this app's own. Where the shell could
+/// not be asked, it is the first one found where a way of installing pitboard puts it.
+@MainActor
+@Test func theSettingsLookForTheCommandLineWhereTheLoginShellSays() async throws {
+    let root = FileManager.default.temporaryDirectory
+        .appendingPathComponent("pitboard-path-\(UUID().uuidString)")
+    defer { try? FileManager.default.removeItem(at: root) }
+    let helper = root.appendingPathComponent("Pitboard.app/Contents/Helpers/pitboard")
+    let bin = root.appendingPathComponent("bin")
+    let home = root.appendingPathComponent("home")
+    let cargo = home.appendingPathComponent(".cargo/bin/pitboard")
+    for directory in [
+        helper.deletingLastPathComponent(), bin, cargo.deletingLastPathComponent(),
+    ] {
+        try FileManager.default.createDirectory(
+            at: directory, withIntermediateDirectories: true)
+    }
+    for program in [helper, cargo] {
+        try Data("#!/bin/sh\n".utf8).write(to: program)
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o755], ofItemAtPath: program.path)
+    }
+    let linked = bin.appendingPathComponent("pitboard").path
+    try FileManager.default.createSymbolicLink(
+        atPath: linked, withDestinationPath: helper.path)
+
+    let stub = Stub(.success(status([])))
+    stub.path = "/nowhere/bin:\(bin.path)"
+    let model = AppModel(
+        watching: false, service: stub,
+        commandLineTool: CommandLineTool(
+            bundle: root.appendingPathComponent("Pitboard.app"), home: home.path))
+    #expect(model.commandLine == nil, "not looked for until the settings ask")
+    await model.findCommandLine()
+    #expect(model.commandLine == .bundled(linked), "ahead of the one cargo installed")
+
+    let other = AppModel(
+        watching: false, service: stub, commandLineTool: CommandLineTool(home: home.path))
+    await other.findCommandLine()
+    #expect(other.commandLine == .another(linked), "these tests are not an app")
+
+    stub.path = nil
+    await model.findCommandLine()
+    #expect(model.commandLine == .another(cargo.path), "the login shell could not be asked")
+}
+
+/// Why a link could not be made is said beside the button that tried, and a dismissed
+/// password prompt says nothing: it was somebody's answer, and it puts away what an earlier
+/// try said.
+@MainActor
+@Test func aDismissedPasswordPromptIsNotShownAsAFailure() async {
+    let root = FileManager.default.temporaryDirectory
+        .appendingPathComponent("pitboard-link-\(UUID().uuidString)").path
+    let scripts = Scripts()
+    let model = AppModel(
+        watching: false, service: Stub(.success(status([]))),
+        commandLineTool: CommandLineTool(
+            bundle: URL(fileURLWithPath: "/Applications/Pitboard.app"), home: root,
+            link: "\(root)/bin/pitboard", execute: scripts.run))
+
+    scripts.raise(1, "ln: \(root)/bin/pitboard: Permission denied")
+    await model.installCommandLine()
+    #expect(model.linkFailed == "ln: \(root)/bin/pitboard: Permission denied")
+    scripts.raise(-128, "User canceled.")
+    await model.installCommandLine()
+    #expect(model.linkFailed == nil)
+    #expect(scripts.ran.count == 2)
+}
+
+/// Daily renewal is turned on only from an app with a command line inside it that stays
+/// where it is. The schedule runs it long after the app has quit: a copy macOS runs from a
+/// temporary place is gone by then, and a build with none inside it would schedule the app
+/// itself, which renews nothing. Turning it off is always possible, so a schedule that cannot
+/// work can be taken away.
+@MainActor
+@Test func dailyRenewalIsTurnedOnOnlyFromAnAppThatStaysWhereItIs() async {
+    func model(_ bundle: String) -> (AppModel, Stub) {
+        let stub = Stub(.success(status([])))
+        let model = AppModel(
+            watching: false, service: stub,
+            commandLineTool: CommandLineTool(bundle: URL(fileURLWithPath: bundle)))
+        return (model, stub)
+    }
+
+    let (installed, stub) = model("/Applications/Pitboard.app")
+    #expect(installed.cannotSchedule == nil)
+    await installed.setSchedule(on: true)
+    #expect(stub.scheduleInstalls == 1)
+    #expect(installed.problem == nil)
+
+    let (downloaded, temporary) = model(
+        "/private/var/folders/xy/abc/T/AppTranslocation/0A1B2C/d/Pitboard.app")
+    #expect(downloaded.cannotSchedule?.hasPrefix("Move pitboard to your Applications") == true)
+    let (built, unbundled) = model("/Users/x/pitboard/apple/.build/debug")
+    #expect(built.cannotSchedule?.contains("no command line inside it") == true)
+    for (refused, stub) in [(downloaded, temporary), (built, unbundled)] {
+        await refused.setSchedule(on: true)
+        #expect(stub.scheduleInstalls == 0)
+        #expect(refused.problem == refused.cannotSchedule)
+        await refused.setSchedule(on: false)
+        #expect(stub.scheduleUninstalls == 1)
+    }
+}
+
+/// An app up to 0.3.0 scheduled itself, so launchd has been starting a second app every day
+/// and renewing nothing. This one asks the core to point that schedule at the command line
+/// inside it once, when it starts, and the settings then show the schedule as it is now.
+/// Where nothing was repaired, or the repair failed, nothing more is read or said.
+@MainActor
+@Test func anOldScheduleIsRepairedOnceTheAppStarts() async {
+    let installed = Schedule.installed(
+        path: "/Users/x/Library/LaunchAgents/com.usepitboard.renew.plist", everySeconds: 86_400)
+    let stub = Stub(.success(status([])))
+    stub.scheduled = installed
+    stub.repairs = .success(true)
+    let model = AppModel(service: stub, defaults: MemoryDefaults())
+    #expect(await eventually { model.schedule == installed })
+    #expect(stub.repairAsks == 1)
+
+    let refused = PitboardError.Failed(
+        code: "schedule_refused", cause: nil, message: "the scheduler refused: no",
+        warnings: [])
+    for answer: Result<Bool, Error> in [.success(false), .failure(refused)] {
+        let quiet = Stub(.success(status([])))
+        quiet.scheduled = installed
+        quiet.repairs = answer
+        let model = AppModel(watching: false, service: quiet)
+        #expect(quiet.repairAsks == 0, "a test drives it itself")
+        await model.repairSchedule()
+        #expect(quiet.repairAsks == 1)
+        #expect(quiet.scheduleReads == 0)
+        #expect(model.schedule == .absent)
+        #expect(model.problem == nil)
+    }
+}
+
 /// The address Codex prints is the one to open; the loopback address it also prints is
 /// where the browser comes back to.
 @MainActor
@@ -792,8 +988,8 @@ private func account(_ label: String, signedIn: Bool, percent: Double) -> Accoun
 
 // MARK: - What a machine that is not set up yet is told to do
 
-/// An app from the cask and nothing else. Before the first read there is nothing true to
-/// say, and a setup step shown to somebody who finished it years ago is worse than silence.
+/// A new install of the app. Before the first read there is nothing true to say, and a
+/// setup step shown to somebody who finished it years ago is worse than silence.
 @MainActor
 @Test func nothingIsAskedOfAnyoneBeforeTheFirstRead() {
     let model = AppModel(

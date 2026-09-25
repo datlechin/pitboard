@@ -42,6 +42,9 @@ private struct General: View {
 
             Section {
                 Toggle("Renew parked logins daily", isOn: renewing)
+                    // Only turning it on, so a schedule that cannot work can still be taken
+                    // away.
+                    .disabled(!renewing.wrappedValue && model.cannotSchedule != nil)
                 Text(
                     """
                     A parked login is renewed whenever pitboard runs, and otherwise not, so \
@@ -68,6 +71,11 @@ private struct General: View {
                     Text("This computer has no scheduler pitboard knows how to write.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                } else if let why = model.cannotSchedule {
+                    Text(why)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
 
                 HStack {
@@ -141,15 +149,16 @@ private struct Advanced: View {
             Section {
                 Text(
                     """
-                    The panel adds and drops accounts. The command line, which the cask \
-                    installs too, also renames them with `pitboard rename`, and `pitboard \
-                    repair` accounts for any parked login pitboard's own records have lost \
-                    track of.
+                    The panel adds and drops accounts. The command line, which this app \
+                    carries inside it, also renames them with `pitboard rename`, and \
+                    `pitboard repair` accounts for any parked login pitboard's own records \
+                    have lost track of.
                     """
                 )
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+                CommandLineRows(model: model)
             } header: {
                 Text("The command line")
             }
@@ -170,5 +179,65 @@ private struct Advanced: View {
             }
         }
         .formStyle(.grouped)
+        .task { await model.findCommandLine() }
+    }
+}
+
+/// Where a terminal finds `pitboard`, and a way to put this app's own there when it finds
+/// none. Only then: a `pitboard` found is one somebody installed, and a link in front of it
+/// would change what their terminal runs without saying so.
+private struct CommandLineRows: View {
+    let model: AppModel
+    @State private var linking = false
+
+    var body: some View {
+        switch model.commandLine {
+        case .bundled(let path):
+            LabeledContent("In your terminal") { found(path) }
+            note(updateNote(bundled: true))
+        case .another(let path):
+            LabeledContent("In your terminal") { found(path) }
+            note(updateNote(bundled: false))
+        case .nowhere:
+            LabeledContent("In your terminal") {
+                Text("not found").foregroundStyle(.secondary)
+            }
+            if model.commandLineTool.linkable {
+                Button("Install command line tool…") {
+                    linking = true
+                    Task {
+                        await model.installCommandLine()
+                        linking = false
+                    }
+                }
+                .disabled(linking)
+                note(
+                    "Links \(model.commandLineTool.link) to the one inside this app. "
+                        + "macOS asks for an administrator's password.")
+            } else if model.commandLineTool.translocated {
+                note(
+                    "Move pitboard to your Applications folder first. Until then macOS "
+                        + "runs it from a temporary copy, and a link to that would break.")
+            }
+        case nil:
+            EmptyView()
+        }
+        if let failed = model.linkFailed {
+            Text(failed)
+                .font(.caption)
+                .foregroundStyle(.orange)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private func found(_ path: String) -> some View {
+        Text(path).font(.caption).textSelection(.enabled)
+    }
+
+    private func note(_ text: String) -> some View {
+        Text(text)
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
     }
 }

@@ -273,9 +273,6 @@ jobs:
     # matches the environment name as well as the repository and the workflow, so a run
     # outside it cannot mint a publish token at all.
     environment: release
-    outputs:
-      source: ${{ steps.sums.outputs.source }}
-      app: ${{ steps.sums.outputs.app }}
     permissions:
       contents: write
       # Provenance: GitHub signs a statement of which workflow, at which commit, built
@@ -292,32 +289,20 @@ jobs:
           path: ${{ runner.temp }}/dist
           merge-multiple: true
 
-      # What the Homebrew formula builds from. GitHub makes an archive of a tag on demand
-      # and has changed the bytes it makes before now, so the tarball is a file of this
-      # release instead: its checksum is settled the moment it is taken, it is in
-      # SHA256SUMS with everything else, and it is attested.
-      - name: The source, as a file of this release
-        run: |
-          git archive --format=tar.gz --prefix="pitboard-${GITHUB_REF_NAME#v}/" \
-            -o "$RUNNER_TEMP/dist/pitboard-${GITHUB_REF_NAME}-source.tar.gz" HEAD
-
       # A tampered download is a realistic threat for a tool that handles OAuth tokens.
-      # These two lines are also what the tap is written from, so the checksum Homebrew
-      # checks is the one this release took of the file it published, not one taken later
-      # somewhere else.
-      - id: sums
+      - name: Checksums
         working-directory: ${{ runner.temp }}/dist
-        run: |
-          sha256sum -- *.tar.gz *.zip > SHA256SUMS
-          source=$(awk -v f="pitboard-${GITHUB_REF_NAME}-source.tar.gz" '$2 == f {print $1}' SHA256SUMS)
-          app=$(awk -v f="Pitboard-${GITHUB_REF_NAME}-macos.zip" '$2 == f {print $1}' SHA256SUMS)
-          if [ -z "$source" ] || [ -z "$app" ]; then
-            echo "SHA256SUMS has no line for the source tarball or for the app:" >&2
-            cat SHA256SUMS >&2
-            exit 1
-          fi
-          echo "source=$source" >> "$GITHUB_OUTPUT"
-          echo "app=$app" >> "$GITHUB_OUTPUT"
+        run: sha256sum -- *.tar.gz *.zip > SHA256SUMS
+      # The tap is written from this file, handed to the tap job inside this run, so the
+      # checksums Homebrew checks are the ones taken here of the files this job publishes.
+      # Read back from the release instead, they would be whatever the release held by then,
+      # and anyone who could change the release could change a tarball and its line together.
+      # Overwritten, so a publish job run again can hand it over again.
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: SHA256SUMS
+          path: ${{ runner.temp }}/dist/SHA256SUMS
+          overwrite: true
 
       - run: rustup toolchain install
       - uses: taiki-e/install-action@94c31af3204a9f15ab40b35ad084410b905bbc73 # v2.87.17
@@ -328,8 +313,7 @@ jobs:
       # every Cargo.toml in the workspace whatever --manifest-path says, so the one that
       # belongs to the crate in the artefact is kept and the rest deleted. A target that is
       # not installed still resolves, because the filter comes from cargo metadata and not
-      # from a standard library it has to find. The source tarball gets none: what it
-      # depends on is decided by the target somebody builds it for, and those are these.
+      # from a standard library it has to find.
       - name: Bill of materials
         run: |
           bom() {
@@ -343,8 +327,12 @@ jobs:
             bom pitboard "$target" "pitboard-${GITHUB_REF_NAME}-${target}.tar.gz"
           done
           # The app carries the core for both macOS architectures, which resolve to the
-          # same dependencies, and Sparkle, which no lockfile here mentions.
+          # same dependencies, the command line, and Sparkle, which no lockfile here
+          # mentions.
           bom pitboard-ffi aarch64-apple-darwin "Pitboard-${GITHUB_REF_NAME}-macos.zip"
+          python3 .github/scripts/sbom-add-command-line.py \
+            "$RUNNER_TEMP/dist/Pitboard-${GITHUB_REF_NAME}-macos.zip.cdx.json" \
+            "$RUNNER_TEMP/dist/pitboard-${GITHUB_REF_NAME}-aarch64-apple-darwin.tar.gz.cdx.json"
           python3 .github/scripts/sbom-add-sparkle.py \
             "$RUNNER_TEMP/dist/Pitboard-${GITHUB_REF_NAME}-macos.zip.cdx.json" \
             apple/Package.resolved
@@ -481,9 +469,13 @@ jobs:
   # part of a release rather than something done to it afterwards. It used to be a workflow
   # in the tap repository, waking every six hours and taking the checksum of whatever it
   # downloaded; between those two a release could be finished and green for most of a day
-  # with the tap still serving the version before it, and nothing anywhere said so. The two
-  # checksums written here are the lines the release put in SHA256SUMS, over the files it
-  # published itself.
+  # with the tap still serving the version before it, and nothing anywhere said so. The
+  # checksums written here are the SHA256SUMS the publish job took of the files it
+  # published, and a re-run of this job alone still reads that same file.
+  #
+  # The tap holds two casks and no formula: pitboard, the command line from the release's
+  # tarballs, and pitboard-app, the app with the same command line inside it. Nothing in
+  # either is built on the machine that installs it.
   tap:
     needs: [guard, publish]
     if: needs.guard.outputs.prerelease == 'false'
@@ -497,17 +489,39 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: SHA256SUMS
+          path: ${{ runner.temp }}/sums
       - env:
           TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
           VERSION: ${{ needs.guard.outputs.version }}
-          SOURCE_SHA: ${{ needs.publish.outputs.source }}
-          APP_SHA: ${{ needs.publish.outputs.app }}
         run: |
           set -euo pipefail
           if [ -z "$TOKEN" ]; then
             echo "HOMEBREW_TAP_TOKEN is not set, so the tap cannot be published" >&2
             exit 1
           fi
+
+          # One line for each file the casks download. A file the release has no line for
+          # is a cask nobody can install, so it stops the job before the tap is touched.
+          sums=$RUNNER_TEMP/sums/SHA256SUMS
+          checksum() {
+            local line
+            line=$(awk -v f="$1" '$2 == f { n++; sum = $1 } END { if (n == 1) print sum }' "$sums")
+            if ! printf '%s\n' "$line" | grep -qxE '[0-9a-f]{64}'; then
+              echo "SHA256SUMS does not have exactly one line for $1:" >&2
+              cat "$sums" >&2
+              return 1
+            fi
+            printf '%s' "$line"
+          }
+          arm=$(checksum "pitboard-$GITHUB_REF_NAME-aarch64-apple-darwin.tar.gz")
+          intel=$(checksum "pitboard-$GITHUB_REF_NAME-x86_64-apple-darwin.tar.gz")
+          arm_linux=$(checksum "pitboard-$GITHUB_REF_NAME-aarch64-unknown-linux-musl.tar.gz")
+          intel_linux=$(checksum "pitboard-$GITHUB_REF_NAME-x86_64-unknown-linux-musl.tar.gz")
+          app=$(checksum "Pitboard-$GITHUB_REF_NAME-macos.zip")
+
           # A header rather than a URL, so the token is not written into a git remote. Its
           # base64 is a different string from the secret, so it is masked by hand or the
           # log would carry it unredacted.
@@ -517,18 +531,48 @@ jobs:
           git -c "http.extraheader=$auth" clone --depth 1 \
             "https://github.com/${GITHUB_REPOSITORY_OWNER}/homebrew-tap.git" "$tap"
 
-          # The version and the checksum are the only two things that move, and a sed that
-          # matched nothing would leave the previous release's in place, which is the
-          # failure this job exists to end.
-          rewrite() {
-            sed -e "s|^  version \".*\"|  version \"$VERSION\"|" \
-                -e "s|^  sha256 \".*\"|  sha256 \"$2\"|" "$1" > "$3"
-            grep -q "^  version \"$VERSION\"$" "$3"
-            grep -q "^  sha256 \"$2\"$" "$3"
+          # Each placeholder is replaced and then looked for, and a file with any left is
+          # refused. A replacement that matched nothing would leave the previous release's
+          # value in place, or a placeholder Homebrew cannot read, and a template and this
+          # job that disagree have to stop here rather than in somebody's brew install.
+          fill() { # template, destination, then placeholder=value for each placeholder
+            local template=$1 out=$2 pair name value
+            shift 2
+            cp "$template" "$out"
+            for pair in "$@"; do
+              name=${pair%%=*}
+              value=${pair#*=}
+              if ! grep -qF "$name" "$out"; then
+                echo "$template has no $name" >&2
+                return 1
+              fi
+              sed -i "s|$name|$value|g" "$out"
+              if grep -qF "$name" "$out" || ! grep -qF "\"$value\"" "$out"; then
+                echo "$name was not replaced in $template" >&2
+                return 1
+              fi
+            done
+            if grep -nE '@[A-Z0-9_]+@' "$out"; then
+              echo "$template has a placeholder this job does not fill" >&2
+              return 1
+            fi
           }
-          mkdir -p "$tap/Formula" "$tap/Casks"
-          rewrite packaging/pitboard.rb "$SOURCE_SHA" "$tap/Formula/pitboard.rb"
-          rewrite packaging/pitboard-cask.rb "$APP_SHA" "$tap/Casks/pitboard.rb"
+          mkdir -p "$tap/Casks"
+          fill packaging/pitboard.rb "$tap/Casks/pitboard.rb" \
+            "@VERSION@=$VERSION" \
+            "@SHA256_AARCH64_APPLE_DARWIN@=$arm" \
+            "@SHA256_X86_64_APPLE_DARWIN@=$intel" \
+            "@SHA256_AARCH64_UNKNOWN_LINUX_MUSL@=$arm_linux" \
+            "@SHA256_X86_64_UNKNOWN_LINUX_MUSL@=$intel_linux"
+          fill packaging/pitboard-app.rb "$tap/Casks/pitboard-app.rb" \
+            "@VERSION@=$VERSION" \
+            "@SHA256_APP@=$app"
+          # The formula built from source and is gone. The migration points whoever still
+          # has it at the cask of the same name.
+          cp packaging/tap_migrations.json "$tap/tap_migrations.json"
+          rm -f "$tap/Formula/pitboard.rb"
+          # The tap's own page, so it cannot go on naming casks the tap no longer has.
+          cp packaging/tap-README.md "$tap/README.md"
 
           cd "$tap"
           git config user.name "github-actions[bot]"
@@ -541,14 +585,22 @@ jobs:
           git commit -m "pitboard $VERSION"
           git -c "http.extraheader=$auth" push
 
-  # What somebody following the README gets, got, on a machine with nothing of this
-  # repository on it. The cask depends on the formula, so a tap that moved one and not the
-  # other installs an old command line beside a new app and says nothing about it.
+  # What somebody following the README gets, got, on machines with nothing of this
+  # repository on them: the command line on macOS and Linux, then on macOS the app, whose
+  # copy of the command line is the one on PATH once it is installed.
   brew:
     needs: [guard, tap]
     if: needs.guard.outputs.prerelease == 'false'
-    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
     steps:
+      # The Linux runners come with Homebrew and leave it off PATH.
+      - if: runner.os == 'Linux'
+        run: echo /home/linuxbrew/.linuxbrew/bin >> "$GITHUB_PATH"
+
       - name: Install the way the README says to
         env:
           VERSION: ${{ needs.guard.outputs.version }}
@@ -557,10 +609,6 @@ jobs:
           cask_version() {
             brew info --json=v2 --cask datlechin/tap/pitboard |
               python3 -c "import json,sys; print(json.load(sys.stdin)['casks'][0]['version'])"
-          }
-          formula_version() {
-            brew info --json=v2 --formula datlechin/tap/pitboard |
-              python3 -c "import json,sys; print(json.load(sys.stdin)['formulae'][0]['versions']['stable'])"
           }
           # The push and this clone are two machines talking to GitHub, so the tap is given
           # a couple of minutes to be servable before it is called stale.
@@ -577,13 +625,7 @@ jobs:
             echo "this release published $VERSION and the tap serves $cask" >&2
             exit 1
           fi
-          formula=$(formula_version)
-          if [ "$formula" != "$VERSION" ]; then
-            echo "the tap's formula is $formula and its cask is $cask" >&2
-            exit 1
-          fi
-          brew install --formula datlechin/tap/pitboard
-          brew install --cask datlechin/tap/pitboard
+          brew install datlechin/tap/pitboard
 
       - name: What it installed
         env:
@@ -603,6 +645,30 @@ jobs:
               exit 1
               ;;
           esac
+          # The man page and the completions, where man and the shells look for them.
+          prefix=$(brew --prefix)
+          for file in share/man/man1/pitboard.1 etc/bash_completion.d/pitboard \
+            share/zsh/site-functions/_pitboard share/fish/vendor_completions.d/pitboard.fish; do
+            if [ ! -s "$prefix/$file" ]; then
+              echo "the cask left nothing at $prefix/$file" >&2
+              exit 1
+            fi
+          done
+          if ! grep -qF "\"pitboard $VERSION\"" "$prefix/share/man/man1/pitboard.1"; then
+            echo "the man page is not the one for $VERSION" >&2
+            exit 1
+          fi
+
+      # The two casks both put pitboard on PATH, so they conflict, and the command line goes
+      # before the app comes.
+      - if: runner.os == 'macOS'
+        name: The app, and the command line inside it
+        env:
+          VERSION: ${{ needs.guard.outputs.version }}
+        run: |
+          set -euo pipefail
+          brew uninstall --cask datlechin/tap/pitboard
+          brew install --cask datlechin/tap/pitboard-app
           app=
           for candidate in /Applications "$HOME/Applications"; do
             [ -d "$candidate/Pitboard.app" ] && app=$candidate/Pitboard.app && break
@@ -617,3 +683,24 @@ jobs:
             echo "the cask says $VERSION and installed $installed" >&2
             exit 1
           fi
+          # The copy inside the bundle is the one Sparkle updates, so PATH has to lead to it
+          # and not to a copy of its own.
+          prefix=$(brew --prefix)
+          app=$(realpath "$app")
+          linked=$(realpath "$prefix/bin/pitboard")
+          if [ "$linked" != "$app/Contents/Helpers/pitboard" ]; then
+            echo "pitboard on PATH is $linked, not the app's own" >&2
+            exit 1
+          fi
+          "$prefix/bin/pitboard" --version
+          "$prefix/bin/pitboard" --version | grep -qw "$VERSION"
+          for file in share/man/man1/pitboard.1 etc/bash_completion.d/pitboard \
+            share/zsh/site-functions/_pitboard share/fish/vendor_completions.d/pitboard.fish; do
+            case $(realpath "$prefix/$file") in
+              "$app/Contents/Resources/"*) ;;
+              *)
+                echo "$prefix/$file does not lead into the app" >&2
+                exit 1
+                ;;
+            esac
+          done

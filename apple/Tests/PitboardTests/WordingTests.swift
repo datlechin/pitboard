@@ -32,6 +32,16 @@ private func renewed(_ outcome: String) -> Renewed {
     #expect(renewalNote([renewed("expired")]) == "1 due; none could be renewed this time.")
 }
 
+/// A `pitboard` installed apart from the app is updated the way it was installed, and none
+/// of those ways does it by itself. Saying it "updates on its own" read as though nothing
+/// needed doing, until the app moved on and the command line refused its newer files.
+@Test func aCommandLineInstalledApartSaysHowToUpdateIt() {
+    #expect(updateNote(bundled: true) == "The one inside this app, so it updates with the app.")
+    #expect(
+        updateNote(bundled: false)
+            == "Installed apart from this app, so update it the way you installed it.")
+}
+
 /// A check is shown as a shape and a colour, and said as a word. If two levels ever came to
 /// look or sound the same, a broken check would read as a passing one.
 @Test func everyLevelLooksAndSoundsLikeItself() {

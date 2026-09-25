@@ -185,12 +185,17 @@ IP address.
   never parked or taken as proof that a switch held.
 - A state directory inside a cloud-synced folder: refused, because a parked login belongs
   to exactly one machine.
-- A changed download. Every release attests each archive, the source tarball Homebrew
-  builds from, `SHA256SUMS`, a bill of materials beside each artefact, and `appcast.xml`,
-  which is the file that decides what an installed copy runs next. `gh attestation verify
-  <file> --repo datlechin/pitboard` checks any of them against the workflow and the commit
-  that produced it. The checksums Homebrew checks are the lines the release itself wrote
-  over the files it published, not ones taken later somewhere else.
+- A changed download. Every release attests each command line tarball, the app,
+  `SHA256SUMS`, a bill of materials beside each artefact, and `appcast.xml`, which is the
+  file that decides what an installed copy runs next. `gh attestation verify <file> --repo
+  datlechin/pitboard` checks any of them against the workflow and the commit that produced
+  it. On macOS the command line and the app are signed with a Developer ID and notarised,
+  and the app carries its own signed copy of the command line, so an update replaces both.
+  Homebrew installs these same files and builds nothing: the command line's tarball for the
+  machine, or the app. The checksums it checks are the ones the release took of the files
+  it published. The job that writes the tap is handed them inside the same run rather than
+  reading them back from the release, where somebody able to change the release could
+  replace a file and its checksum together.
 - A changed update key. An installed copy takes an update signed by the key in the bundle
   it came from. A release whose key differs from the one the previous release shipped is
   refused unless the repository says that release means to rotate, because an ad-hoc
@@ -226,10 +231,14 @@ every copy it names, so nothing is lost and `pitboard status` can say who is sig
 one exception is a Codex park that copies the login signed in now: it is dropped, since that
 login is still in place and a sign-out would revoke both.
 
-To remove pitboard, run `pitboard uninstall`: it deletes every parked login before
-deleting its own directory, in that order, because the account list is the only index of
-those keychain items. Deleting the directory first leaves live refresh tokens on the
-machine with nothing able to name them.
+To remove pitboard, run `pitboard uninstall` before removing pitboard itself: it takes the
+daily renewal schedule away, then deletes every parked login before deleting its own
+directory, in that order, because the account list is the only index of those keychain
+items. Deleting the directory first leaves live refresh tokens on the machine with nothing
+able to name them, which is why the casks in the tap leave `~/.pitboard` where it is, even
+on `brew uninstall --zap`. The app cask 0.3.0 installed as `pitboard` did not: its zap
+moves `~/.pitboard` to the Trash, and Homebrew runs a cask's zap as it was installed, so
+leave `--zap` out when removing that one.
 
 Never copy `~/.pitboard` to another machine. pitboard refuses to read a state file written
 elsewhere, and a parked login presented from a second machine can end the login on both.

@@ -857,7 +857,12 @@ mod tests {
         let mut document = serde_json::json!({"schema": SCHEMA + 1});
         let err = migrate(&mut document, std::path::Path::new("/tmp/state.json")).unwrap_err();
         assert_eq!(err.code(), "state_from_newer_version");
-        assert!(err.to_string().contains("upgrade whichever"), "{err}");
+        let said = err.to_string();
+        assert!(said.contains("Update this pitboard"), "{said}");
+        assert!(
+            !said.contains("brew") && !said.contains("cargo"),
+            "it names no one way of installing pitboard: {said}"
+        );
     }
 
     use super::*;

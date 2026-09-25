@@ -12,7 +12,8 @@ expression: "serde_json :: json! ({ \"exit\" : code, \"envelope\" : value })"
       "parks_removed": 1,
       "parks_pending": 0,
       "parks_left": 0,
-      "home_removed": true
+      "home_removed": true,
+      "schedule_removed": false
     },
     "warnings": [],
     "error": null

@@ -37,7 +37,9 @@ pub struct Check {
     pub advice: String,
 }
 
-/// Everything read from the machine, so judging it touches nothing.
+/// Everything read from the machine, so judging it touches nothing. Each check that is
+/// added reads something more, so it cannot be built outside this crate.
+#[non_exhaustive]
 pub struct Facts {
     pub security_tool: Option<String>,
     pub config_path: PathBuf,
@@ -84,7 +86,20 @@ pub struct Facts {
     /// holding enrolled accounts. A machine that uses only Codex is not told Claude Code is
     /// broken.
     pub claude_present: bool,
+    /// The daily renewal schedule, where this home has one installed.
+    pub schedule: Option<ScheduleFact>,
     pub now: i64,
+}
+
+/// The daily renewal schedule as it is installed, read from the file pitboard wrote and
+/// never by asking the scheduler.
+pub struct ScheduleFact {
+    /// The file the platform's scheduler reads.
+    pub path: PathBuf,
+    /// The pitboard it runs, where the file names one the way pitboard writes it.
+    pub program: Option<PathBuf>,
+    /// Whether that pitboard is still there to be run.
+    pub program_found: bool,
 }
 
 /// What is read about Codex CLI on this machine.
@@ -260,8 +275,25 @@ pub fn gather(ctx: &Context) -> Facts {
         state,
         interrupted: switch::interrupted(ctx),
         service,
+        schedule: schedule_fact(ctx),
         now: ctx.now(),
     }
+}
+
+/// The schedule, where this home has one.
+fn schedule_fact(ctx: &Context) -> Option<ScheduleFact> {
+    if !crate::schedule::serves(ctx) {
+        return None;
+    }
+    let crate::schedule::Installed::Yes { path, .. } = crate::schedule::status(ctx) else {
+        return None;
+    };
+    let program = crate::schedule::installed_program(ctx);
+    Some(ScheduleFact {
+        program_found: program.as_deref().is_some_and(std::path::Path::is_file),
+        program,
+        path,
+    })
 }
 
 /// What is taking up the room in a credential document, largest first.
@@ -835,6 +867,7 @@ pub fn evaluate(facts: &Facts) -> Vec<Check> {
     checks.push(judge_storage_v5(facts));
     checks.push(judge_daemon(facts));
     checks.push(judge_pending(facts));
+    checks.extend(judge_schedule(facts));
     checks.push(judge_claude_version(facts));
     checks.push(judge_auth(facts));
     checks.push(judge_asking(facts));
@@ -1217,6 +1250,60 @@ fn judge_pending(facts: &Facts) -> Check {
              read them back to find out what is there. Unlock the keychain and run any \
              pitboard command; it resolves them before doing anything else.",
         ),
+    }
+}
+
+/// The schedule runs a pitboard by its path, and the path can stop leading anywhere after
+/// it was written: an upgrade that deletes the version it named, an app moved or thrown
+/// away. The scheduler then fails once a day where nobody looks, and the parked logins it
+/// was keeping alive run out. Nothing is said where there is no schedule.
+///
+/// An app up to 0.3.0 scheduled itself rather than a command line, and that app renews
+/// nothing when it is started with `renew`, so that is said as well.
+fn judge_schedule(facts: &Facts) -> Option<Check> {
+    let again = again(cfg!(target_os = "macos"));
+    let schedule = facts.schedule.as_ref()?;
+    Some(match &schedule.program {
+        Some(program) if !schedule.program_found => fail(
+            "schedule",
+            "renewal schedule",
+            format!("runs {}, which is not there any more", program.display()),
+            again,
+        ),
+        Some(program) if crate::schedule::an_apps_own_program(program) => fail(
+            "schedule",
+            "renewal schedule",
+            format!(
+                "runs {}, which is the app itself and not a command line",
+                program.display()
+            ),
+            again,
+        ),
+        Some(program) => ok(
+            "schedule",
+            "renewal schedule",
+            format!("daily  ·  runs {}", program.display()),
+        ),
+        None => warn(
+            "schedule",
+            "renewal schedule",
+            format!(
+                "{} does not say which pitboard it runs",
+                schedule.path.display()
+            ),
+            again,
+        ),
+    })
+}
+
+/// How to write the schedule again. There is an app only on macOS.
+fn again(macos: bool) -> &'static str {
+    if macos {
+        "Turn daily renewal off and on again: in the app's Settings, or with \
+         `pitboard schedule uninstall` and then `pitboard schedule install`."
+    } else {
+        "Turn daily renewal off and on again with `pitboard schedule uninstall` and then \
+         `pitboard schedule install`."
     }
 }
 
@@ -1608,6 +1695,7 @@ mod tests {
             interrupted: false,
             codex: no_codex(),
             claude_present: true,
+            schedule: None,
             now: NOW,
         }
     }
@@ -2005,6 +2093,120 @@ mod tests {
         let stopped = check(&checks, "claude_daemon");
         assert_eq!(stopped.level, Level::Ok);
         assert!(stopped.detail.contains("not running"));
+    }
+
+    #[test]
+    fn a_schedule_is_judged_by_whether_the_pitboard_it_runs_is_still_there() {
+        let mut f = facts();
+        assert!(
+            evaluate(&f).iter().all(|c| c.code != "schedule"),
+            "nothing is said where there is no schedule"
+        );
+
+        f.schedule = Some(ScheduleFact {
+            path: PathBuf::from("/home/x/Library/LaunchAgents/com.datlechin.pitboard.renew.plist"),
+            program: Some(PathBuf::from("/opt/homebrew/bin/pitboard")),
+            program_found: true,
+        });
+        let checks = evaluate(&f);
+        let found = check(&checks, "schedule");
+        assert_eq!(found.level, Level::Ok);
+        assert!(found.detail.contains("/opt/homebrew/bin/pitboard"));
+
+        f.schedule.as_mut().expect("set above").program_found = false;
+        let checks = evaluate(&f);
+        let gone = check(&checks, "schedule");
+        assert_eq!(gone.level, Level::Fail, "every renewal from now on fails");
+        assert!(gone.detail.contains("/opt/homebrew/bin/pitboard"));
+        assert_eq!(gone.advice, again(cfg!(target_os = "macos")));
+
+        f.schedule = Some(ScheduleFact {
+            path: PathBuf::from("/home/x/Library/LaunchAgents/com.datlechin.pitboard.renew.plist"),
+            program: Some(PathBuf::from(
+                "/Applications/Pitboard.app/Contents/MacOS/Pitboard",
+            )),
+            program_found: true,
+        });
+        let checks = evaluate(&f);
+        let the_app = check(&checks, "schedule");
+        assert_eq!(
+            the_app.level,
+            Level::Fail,
+            "0.3.0's app renews nothing when started with `renew`"
+        );
+        assert!(
+            the_app.detail.contains("the app itself"),
+            "{}",
+            the_app.detail
+        );
+        f.schedule.as_mut().expect("set above").program = Some(PathBuf::from(
+            "/Applications/Pitboard.app/Contents/Helpers/pitboard",
+        ));
+        assert_eq!(
+            check(&evaluate(&f), "schedule").level,
+            Level::Ok,
+            "the command line an app comes with is a command line"
+        );
+
+        f.schedule.as_mut().expect("set above").program = None;
+        let checks = evaluate(&f);
+        let unread = check(&checks, "schedule");
+        assert_eq!(unread.level, Level::Warn);
+        assert!(!unread.advice.is_empty());
+    }
+
+    /// The way back works from the command line everywhere, and names the app only where
+    /// there is one.
+    #[test]
+    fn a_broken_schedule_is_written_again_by_whatever_this_machine_has() {
+        let mac = again(true);
+        assert!(
+            mac.contains("the app's Settings") && mac.contains("pitboard schedule install"),
+            "{mac}"
+        );
+        let linux = again(false);
+        assert!(linux.contains("pitboard schedule install"), "{linux}");
+        assert!(!linux.contains("app"), "there is no app here: {linux}");
+    }
+
+    /// What the check above is given, read off a real disk: a schedule written the way
+    /// `pitboard schedule install` writes it, whose pitboard is then taken away.
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    #[test]
+    fn a_schedule_whose_pitboard_is_gone_is_found_on_the_disk() {
+        let root = std::env::temp_dir().join(format!(
+            "pitboard-doctor-schedule-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let _ = std::fs::remove_dir_all(&root);
+        struct Scratch(std::path::PathBuf);
+        impl Drop for Scratch {
+            fn drop(&mut self) {
+                let _ = std::fs::remove_dir_all(&self.0);
+            }
+        }
+        let _guard = Scratch(root.clone());
+        std::fs::create_dir_all(&root).expect("a scratch home");
+
+        let program = root.join("bin/pitboard");
+        let ctx = Context::new(root.clone()).with_schedule_program(program.clone());
+        assert!(schedule_fact(&ctx).is_none(), "nothing installed yet");
+
+        std::fs::create_dir_all(root.join("bin")).expect("a bin");
+        std::fs::write(&program, "").expect("a pitboard");
+        crate::schedule::install(&ctx).expect("installed");
+        let fact = schedule_fact(&ctx).expect("installed");
+        assert_eq!(fact.program.as_deref(), Some(program.as_path()));
+        assert!(fact.program_found);
+
+        std::fs::remove_file(&program).expect("taken away");
+        assert!(!schedule_fact(&ctx).expect("still installed").program_found);
+
+        assert!(
+            schedule_fact(&ctx.with_pitboard_home(root.join("elsewhere"))).is_none(),
+            "a pitboard pointed at another home has no schedule"
+        );
     }
 
     #[test]

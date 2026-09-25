@@ -178,7 +178,7 @@ private func gone(_ pid: pid_t) async -> Bool {
     let login = "/usr/bin:bin:/Users/x/.volta/bin:/Users/x/.nvm/versions/node/v22.1.0/bin"
 
     let shell = Settings.forCurrentUser(
-        environment: home, loginPath: login, isExecutable: here.contains)
+        environment: home, loginPath: login, bundle: nil, isExecutable: here.contains)
     #expect(shell.codexProgram == "/Users/x/.nvm/versions/node/v22.1.0/bin/codex")
     #expect(shell.claudeProgram == "/Users/x/.volta/bin/claude")
     #expect(
@@ -188,18 +188,18 @@ private func gone(_ pid: pid_t) async -> Bool {
 
     let named = Settings.forCurrentUser(
         environment: home.merging(["PITBOARD_CODEX": "/elsewhere/codex"]) { $1 },
-        loginPath: login, isExecutable: here.contains)
+        loginPath: login, bundle: nil, isExecutable: here.contains)
     #expect(named.codexProgram == "/elsewhere/codex")
     #expect(named.claudeProgram == "/Users/x/.volta/bin/claude")
 
     let unknown = Settings.forCurrentUser(
-        environment: home, loginPath: nil, isExecutable: here.contains)
+        environment: home, loginPath: nil, bundle: nil, isExecutable: here.contains)
     #expect(unknown.codexProgram == "/opt/homebrew/bin/codex")
     #expect(unknown.claudeProgram == "/opt/homebrew/bin/claude")
     #expect(unknown.searchPath == nil, "the core looks where it always did")
 
     let nowhere = Settings.forCurrentUser(
-        environment: home, loginPath: login, isExecutable: { _ in false })
+        environment: home, loginPath: login, bundle: nil, isExecutable: { _ in false })
     #expect(nowhere.codexProgram == nil)
     #expect(nowhere.claudeProgram == nil)
 }
@@ -209,7 +209,8 @@ private func gone(_ pid: pid_t) async -> Bool {
 @Test func aRelativeEntryIsNotLookedIn() {
     var looked: [String] = []
     _ = Settings.forCurrentUser(
-        environment: ["HOME": "/Users/x"], loginPath: "bin:./node_modules/.bin:/usr/bin"
+        environment: ["HOME": "/Users/x"], loginPath: "bin:./node_modules/.bin:/usr/bin",
+        bundle: nil
     ) {
         looked.append($0)
         return false
@@ -229,7 +230,7 @@ private func gone(_ pid: pid_t) async -> Bool {
         "/Users/x/Documentsbin", "/usr/bin",
     ].joined(separator: ":")
     let settings = Settings.forCurrentUser(
-        environment: ["HOME": "/Users/x"], loginPath: login
+        environment: ["HOME": "/Users/x"], loginPath: login, bundle: nil
     ) {
         looked.append($0)
         return false
@@ -242,4 +243,26 @@ private func gone(_ pid: pid_t) async -> Bool {
         "\(looked)")
     #expect(looked.count == 10, "the same five places for each tool: \(looked)")
     #expect(settings.searchPath == "/Users/x/Documentsbin:/usr/bin")
+}
+
+/// The renewal schedule runs the command line inside the app, since the app has no renewal
+/// of its own. Anything not running from an app bundle names none, which means it cannot
+/// schedule renewal: the only other thing to schedule is the app itself.
+@Test func theScheduleRunsTheCommandLineInsideTheApp() {
+    func scheduled(from bundle: URL?) -> String? {
+        Settings.forCurrentUser(
+            environment: ["HOME": "/Users/x"], loginPath: nil, bundle: bundle,
+            isExecutable: { _ in false }
+        ).scheduleProgram
+    }
+    #expect(
+        scheduled(from: URL(fileURLWithPath: "/Applications/Pitboard.app"))
+            == "/Applications/Pitboard.app/Contents/Helpers/pitboard")
+    #expect(
+        scheduled(from: URL(fileURLWithPath: "/Users/x/My Apps/Pitboard.app"))
+            == "/Users/x/My Apps/Pitboard.app/Contents/Helpers/pitboard")
+    #expect(
+        scheduled(from: URL(fileURLWithPath: "/Users/x/pitboard/apple/.build/debug")) == nil)
+    #expect(scheduled(from: nil) == nil)
+    #expect(Settings.bundledCommandLine(in: Bundle.main.bundleURL) == nil, "these tests")
 }

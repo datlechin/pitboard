@@ -3,8 +3,7 @@ import SwiftUI
 
 /// A menu bar app: no Dock icon, `LSUIElement` in Info.plist. The panel the status item
 /// opens is the glance, and the window and the settings are where the things that need room
-/// go.
-@main
+/// go. `Launch` starts it.
 struct PitboardApp: App {
     @State private var model = AppModel()
     @State private var updater = Updater()
@@ -44,9 +43,8 @@ private struct BarLabel: View {
     /// Whether this app has ever shown anyone anything.
     ///
     /// An app with no Dock icon that launches straight into a status item shows a person
-    /// who has just installed it nothing at all, and the cask installs the command line
-    /// beside it, so there is not even a leftover window to explain the mark that appeared
-    /// in their menu bar. Once, and never again.
+    /// who has just installed it nothing at all: no window, and nothing to explain the mark
+    /// that appeared in their menu bar. Once, and never again.
     @AppStorage("hasBeenSeen") private var seen = false
 
     var body: some View {

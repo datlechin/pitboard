@@ -69,6 +69,14 @@ jobs:
       # Proves the core still links into the app, that its bindings still match, and that
       # the bundle still assembles and signs.
       - run: ./apple/scripts/build-app.sh
+      # The command line the app comes with is what its renewal schedule runs and what the
+      # cask puts on PATH, so it is run from inside the bundle, checked for both
+      # architectures, and the bundle verified with it in place.
+      - run: |
+          helper=apple/build/Pitboard.app/Contents/Helpers/pitboard
+          "$helper" --version
+          for arch in arm64 x86_64; do lipo "$helper" -verify_arch "$arch"; done
+          codesign --verify --strict --deep apple/build/Pitboard.app
       - run: swift test --package-path apple
 
   # The floor the manifests promise, built the way someone on an older toolchain builds it.
