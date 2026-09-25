@@ -2,7 +2,7 @@
 //!
 //! A refresh token has a finite life, and the only two things that renew one are somebody
 //! typing `pitboard` and the menu bar app's poll. So the tool is safe for a macOS user who
-//! installed the cask and leaves it running, and quietly unsafe for everyone else: the
+//! installed the app and leaves it running, and quietly unsafe for everyone else: the
 //! whole of Linux, and any macOS user on the command line alone. Go away for the refresh
 //! window, come back, and every parked login is dead and each account needs a browser
 //! sign-in, which is precisely the cost pitboard exists to spare people.

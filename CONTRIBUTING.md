@@ -74,11 +74,12 @@ has to be standing before the next release.
 
 ## The state file
 
-`state.json` carries a `schema`. The command line and the app hold their own copy of the
-core and update by different routes, so on one machine an older pitboard will meet a file a
-newer one wrote. Reading forwards is `state::migrate`: each bump adds an arm that rewrites
-the document and falls through to the next. Reading backwards is not possible and says
-which half to upgrade. A bump needs a test that loads a file the previous version wrote.
+`state.json` carries a `schema`. The app updates the command line inside it, but a command
+line installed some other way updates by its own route, so on one machine an older
+pitboard will meet a file a newer one wrote. Reading forwards is `state::migrate`: each
+bump adds an arm that rewrites the document and falls through to the next. Reading
+backwards is not possible and says to update the pitboard that is behind. A bump needs a
+test that loads a file the previous version wrote.
 
 Schema 4 records each account's tool and keeps which account is signed in per tool. A
 schema 3 file is brought forward on its first read, with nothing in the keychain or the
@@ -91,9 +92,11 @@ A tag `v<version>` releases; a tag like `v0.2.0-rc1` is a pre-release, which ski
 crates.io and publishes no update feed, so nobody's installed copy updates into it. The
 guard job refuses a tag that disagrees with the manifest or has no CHANGELOG section.
 
-A release publishes the crates to crates.io, the command line for four targets, the app,
-and the Homebrew tap, signed and notarised when these repository secrets are set. Without
-them the release still happens and the app is signed ad-hoc, which Gatekeeper warns about.
+A release publishes the crates to crates.io, the command line for four targets, the app
+with the command line for both macOS targets inside it, and the Homebrew tap, signed and
+notarised when these repository secrets are set. Without them the release still happens
+and the app is signed ad-hoc, which Gatekeeper warns about. It publishes no source
+tarball: nothing installs from one, and crates.io has the source.
 
 | Secret | Where it comes from |
 | --- | --- |
@@ -136,7 +139,11 @@ Once, in this order:
 4. Delete `.github/workflows/follow-releases.yml` from `datlechin/homebrew-tap`. The
    release writes the tap now; leaving the old poller in place means two writers and a
    version that can come from either.
-5. Push a pre-release tag, `v<next>-rc1`, and watch the publish job. It exchanges the
+5. Change `README.md` in `datlechin/homebrew-tap` to the two commands this repository's
+   README gives, `brew install datlechin/tap/pitboard` and
+   `brew install --cask datlechin/tap/pitboard-app`. The `tap` job writes the casks and
+   not that file, which still gives `--cask datlechin/tap/pitboard` for the app.
+6. Push a pre-release tag, `v<next>-rc1`, and watch the publish job. It exchanges the
    crates.io token and uploads nothing, which is where a registration that does not match
    is meant to be found out.
 
@@ -153,6 +160,20 @@ Those files are its alone, and an edit made to them in the tap is gone at the ne
 If the tap push fails, re-run the `tap` job. There is no script for doing it by hand any
 more: the checksums come from the `SHA256SUMS` the release computed, and a second download
 somewhere else is what this replaced.
+
+The tap has two casks and no formula. `pitboard` installs the command line from the
+release's tarball for the machine, on macOS and Linux, and `pitboard-app` installs the app
+and links the command line inside it onto `PATH`. They conflict, since both link
+`bin/pitboard`. `tap_migrations.json` moves anyone still on the old formula to the cask of
+the same name; Homebrew does that only when that cask is trusted, and otherwise prints what
+to run. Somebody on the old app cask has their app replaced by the command line once. That
+cost was accepted, and the CHANGELOG and the `pitboard` cask's caveats say how to get the
+app back.
+
+The `brew` job then installs from the public tap the way the README says, on a clean macOS
+runner and a clean Linux one: the `pitboard` cask on both, checking the version, the man
+page and the completions, and on macOS `pitboard-app` in its place, checking that the
+`pitboard` on `PATH` is the one inside the app.
 
 ### Rotating the update key
 
@@ -203,7 +224,7 @@ repository secret, which is what stops it reaching the real key, and CI checks t
 still names none.
 
 If both the update key and the certificate are gone there is no route: nothing an installed
-copy will accept can be made. Reinstalling from the cask is the only way back, which is the
+copy will accept can be made. Installing the app again is the only way back, which is the
 argument for keeping the two in different places.
 
 ## Measured, not assumed
@@ -350,6 +371,34 @@ These decide how a release is allowed to move:
   could install what it published, and `packaging/pitboard.rb` in this repository still said
   v0.1.2 while the tap served 0.2.0 and the workspace was at 0.2.0. Nothing anywhere
   compared the three.
+
+Measured on 2026-09-24 in a Homebrew 7.0.6 of its own, against a copy of the tap in each
+shape it could take, on macOS and on Linux. These decide what the casks may do:
+
+- A cask's `uninstall` directives run on every upgrade and reinstall, not only on removal,
+  so a cask that took the renewal schedule away there would take it away at every release.
+  Both casks take it away in `zap`, which only `brew uninstall --zap` runs. Homebrew's
+  source has `zap launchctl:` look in the system domain too, with `sudo`, so it can ask for
+  an administrator's password; that was read, not run.
+- Neither cask's `zap` touches `~/.pitboard`. `state.json` is the only index of the parked
+  logins in the keychain, and deleting it without `pitboard uninstall` leaves live refresh
+  tokens nothing can name.
+- From Homebrew 6, installing a full name trusts that one cask or formula and nothing else.
+  The old app cask depended on the formula, which Homebrew then refused to build, so
+  `brew install --cask datlechin/tap/pitboard` failed with `build.rb ... exited with 1`
+  unless the formula was installed first.
+- `tap_migrations.json` moves an installed formula to the cask of the same name only when
+  that cask is trusted and some cask has been installed before. Otherwise `brew update`
+  prints two commands, which leave the formula linked in front of the cask, so the
+  CHANGELOG says to uninstall the formula first. Trust goes by name and type, so somebody on
+  the old app cask already trusts the cask `pitboard`, and `brew update` replaces their app
+  with the command line.
+- Nothing moves an app from the cask `pitboard` to `pitboard-app` while `pitboard` is still
+  a cask: `cask_renames.json` wins every lookup of the old name, hiding the command line,
+  and `brew audit` rejects it; `old_tokens` redirects nothing. `conflicts_with formula:` no
+  longer exists, only `cask:`.
+- `binary`, `manpage` and the three completion stanzas work on Linux, and `zap launchctl:`
+  does nothing there.
 
 ## A tool's register and the conformance run
 

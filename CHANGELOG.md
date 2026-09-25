@@ -5,6 +5,83 @@ All notable changes are recorded here. The format follows
 
 ## [Unreleased]
 
+### Changed
+- Installing pitboard no longer needs Rust. `brew install datlechin/tap/pitboard` is now a
+  cask, on macOS and Linux, that installs the release's own command line for the machine,
+  with its man page and completions: signed and notarised on macOS, attested, and checked
+  against the release's `SHA256SUMS`. It was a formula that fetched Rust and compiled
+  pitboard, which took minutes and a toolchain nobody had asked for.
+- The menu bar app's cask is `pitboard-app`, and the app carries the command line inside
+  it, at `Pitboard.app/Contents/Helpers/pitboard`. The cask links it onto `PATH` with its
+  man page and completions, so an update, from Sparkle or from Homebrew, moves the app and
+  the command line together. They used to be two installs that moved separately, and the
+  app's cask depended on the formula. The two casks conflict, since both link `pitboard`.
+  The app's bill of materials lists the command line and the crates only it uses.
+- A release no longer publishes a source tarball. Only the formula installed from it, and
+  the source is on crates.io and in the tag.
+
+### Added
+- Settings can put the app's command line on the `PATH`. The Advanced tab says which
+  `pitboard` a terminal runs and whether it is the app's own, and when there is none,
+  "Install command line tool…" links `/usr/local/bin/pitboard` to the one inside the app,
+  once macOS has asked for an administrator's password. It never links over a `pitboard`
+  somebody installed, a file that is not a link, or the temporary copy macOS runs an app
+  from before it is moved to Applications.
+- An account whose parked login has expired has a "Sign in again" button in its row, which
+  starts the same sign-in as adding an account. The row used to say to run `pitboard enroll
+  <label> --sign-in` in a terminal, which somebody with only the app does not use.
+
+### Fixed
+- Daily renewal turned on from the app renewed nothing. The schedule recorded the program
+  that asked for it, which from the app was the app itself, so launchd started a second
+  menu bar app every day and no parked login was renewed. The app now names the command
+  line inside it. `pitboard doctor` reads the installed schedule back and fails when the
+  `pitboard` it runs is gone or is an app, and says to turn renewal off and on again.
+- Removing pitboard leaves no renewal schedule behind. `pitboard uninstall` takes it away
+  first and says so, as `schedule_removed` in `--json`, where before it was left running
+  `pitboard renew` every day. Both casks take it away on `brew uninstall --zap`, and not on
+  a plain `brew uninstall`, because Homebrew runs a cask's uninstall steps on every upgrade
+  too. Neither touches `~/.pitboard`: it is the only index of the parked logins, so run
+  `pitboard uninstall` before removing pitboard.
+- Advice about upgrading and removing pitboard no longer assumes Homebrew. A state file
+  from a newer pitboard said to run `brew upgrade pitboard`, and `pitboard uninstall` said
+  to remove the binary with a package manager. Both now say to update or remove pitboard
+  the way it was installed, and the first still mentions the app's Check for Updates.
+- On Homebrew 6 and later, `brew install --cask datlechin/tap/pitboard` failed with
+  `build.rb ... exited with 1` unless the formula was installed first. Homebrew trusts only
+  the name it is asked to install, and refused to build the formula the app's cask depended
+  on. `pitboard-app` depends on nothing.
+- `cargo binstall pitboard` no longer falls back to a third party's build when it cannot
+  fetch the release's.
+
+### Upgrading from 0.3.0
+
+In the tap, the name `pitboard` now means the command line.
+
+From the old formula, `brew update` warns that it did not install the cask that replaces
+it, and pitboard stays at 0.3.0. The two commands it prints leave the formula in front of
+the cask, so install the cask in its place instead:
+
+```sh
+brew uninstall --formula pitboard
+brew install datlechin/tap/pitboard
+```
+
+From the old app cask, `brew update` replaces the app with the command line, once. Your
+settings and `~/.pitboard` stay. To get the app back, with the command line inside it, run
+these in this order, before or after that `brew update`:
+
+```sh
+brew uninstall --cask pitboard
+brew uninstall --formula pitboard
+brew install --cask datlechin/tap/pitboard-app
+```
+
+A copy of the app from a release updates itself as before and brings the command line with
+it. If you turned on daily renewal, run `pitboard doctor` afterwards: when it says the
+schedule runs something that is not there or is the app, turn renewal off and on again, in
+Settings or with `pitboard schedule uninstall` and `pitboard schedule install`.
+
 ## [0.3.0] - 2026-09-24
 
 ### Added
