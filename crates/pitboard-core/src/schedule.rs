@@ -99,10 +99,38 @@ fn program(ctx: &Context) -> Result<PathBuf> {
     if let Some(program) = ctx.schedule_program() {
         return lasting(program).map(std::path::Path::to_path_buf);
     }
-    std::env::current_exe().map_err(|source| Error::HomeUnwritable {
+    let running = std::env::current_exe().map_err(|source| Error::HomeUnwritable {
         path: PathBuf::from("the running pitboard"),
         source,
-    })
+    })?;
+    #[cfg(target_os = "linux")]
+    let running = started_as(
+        std::env::args_os().next().as_deref(),
+        &std::env::var_os("PATH").unwrap_or_default(),
+        running,
+    );
+    Ok(running)
+}
+
+/// The path this pitboard was started by, `argv0` found on `search` the way the shell found
+/// it, where that leads to the `running` program; otherwise `running`.
+///
+/// Linux says where the running program is with every link resolved, and the link is what
+/// lasts: Homebrew starts pitboard through one in its `bin` that leads into a directory
+/// named after the version, which the next upgrade deletes. A path that leads to some
+/// other file did not start this one. macOS already says what path a program was started
+/// by.
+#[cfg(any(target_os = "linux", test))]
+fn started_as(
+    argv0: Option<&std::ffi::OsStr>,
+    search: &std::ffi::OsStr,
+    running: PathBuf,
+) -> PathBuf {
+    let resolved = std::fs::canonicalize(&running).ok();
+    argv0
+        .and_then(|named| crate::provider::find_program(std::path::Path::new(named), search))
+        .filter(|found| resolved.is_some() && std::fs::canonicalize(found).ok() == resolved)
+        .unwrap_or(running)
 }
 
 /// `program`, where it will still be there when the scheduler runs it. launchd and systemd
@@ -415,10 +443,17 @@ mod tests {
     fn the_schedule_runs_the_pitboard_the_context_names_and_otherwise_this_one() {
         let home = Scratch::new("program");
         let ctx = Context::new(home.0.clone());
+        let scheduled = program(&ctx).expect("this program");
+        let running = std::env::current_exe().expect("this test's own program");
         assert_eq!(
-            program(&ctx).expect("this program"),
-            std::env::current_exe().expect("this test's own program"),
+            std::fs::canonicalize(&scheduled).expect("there"),
+            std::fs::canonicalize(&running).expect("there"),
             "the command line schedules itself"
+        );
+        #[cfg(target_os = "macos")]
+        assert_eq!(
+            scheduled, running,
+            "by the path macOS says it was started by"
         );
         let bundled = home
             .0
@@ -429,6 +464,52 @@ mod tests {
             bundled,
             "an app schedules the command line it comes with"
         );
+    }
+
+    /// Homebrew starts pitboard through a link in its `bin` that leads into a directory
+    /// named after the version, and the next upgrade deletes that directory. Linux says
+    /// where the running program is with every link resolved, so the schedule is given the
+    /// path pitboard was started by instead, wherever that leads to this same program.
+    #[test]
+    fn the_command_line_schedules_itself_by_the_path_it_was_started_by() {
+        use std::os::unix::fs::PermissionsExt;
+        let home = Scratch::new("started");
+        let runnable = |path: &std::path::Path| {
+            a_program_at(path);
+            std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755))
+                .expect("runnable");
+        };
+        let running = home.0.join("Caskroom/pitboard/0.4.0/pitboard");
+        runnable(&running);
+        let bin = home.0.join("bin");
+        std::fs::create_dir_all(&bin).expect("a bin");
+        let link = bin.join("pitboard");
+        std::os::unix::fs::symlink(&running, &link).expect("a link");
+        let another = home.0.join("elsewhere/pitboard");
+        runnable(&another);
+
+        let started = |argv0: Option<&std::path::Path>, search: &std::path::Path| {
+            started_as(
+                argv0.map(std::path::Path::as_os_str),
+                search.as_os_str(),
+                running.clone(),
+            )
+        };
+        let name = std::path::Path::new("pitboard");
+        let nowhere = std::path::Path::new("");
+        assert_eq!(started(Some(name), &bin), link, "a name found on PATH");
+        assert_eq!(started(Some(&link), nowhere), link, "a path");
+        assert_eq!(
+            started(Some(name), another.parent().expect("its directory")),
+            running,
+            "another pitboard on PATH is not the one that is running"
+        );
+        assert_eq!(
+            started(Some(name), nowhere),
+            running,
+            "a name found nowhere"
+        );
+        assert_eq!(started(None, &bin), running, "no name at all");
     }
 
     /// A pitboard that is named is written down only where it will still be there when the
