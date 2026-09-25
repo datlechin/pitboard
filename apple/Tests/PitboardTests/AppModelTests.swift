@@ -753,7 +753,8 @@ private func account(_ label: String, signedIn: Bool, percent: Double) -> Accoun
 }
 
 /// The settings say which `pitboard` a terminal runs, looking where the login shell's
-/// `PATH` says before anywhere else, and whether it is this app's own.
+/// `PATH` says before anywhere else, and whether it is this app's own. Where the shell could
+/// not be asked, it is the first one found where a way of installing pitboard puts it.
 @MainActor
 @Test func theSettingsLookForTheCommandLineWhereTheLoginShellSays() async throws {
     let root = FileManager.default.temporaryDirectory
@@ -761,12 +762,19 @@ private func account(_ label: String, signedIn: Bool, percent: Double) -> Accoun
     defer { try? FileManager.default.removeItem(at: root) }
     let helper = root.appendingPathComponent("Pitboard.app/Contents/Helpers/pitboard")
     let bin = root.appendingPathComponent("bin")
-    for directory in [helper.deletingLastPathComponent(), bin] {
+    let home = root.appendingPathComponent("home")
+    let cargo = home.appendingPathComponent(".cargo/bin/pitboard")
+    for directory in [
+        helper.deletingLastPathComponent(), bin, cargo.deletingLastPathComponent(),
+    ] {
         try FileManager.default.createDirectory(
             at: directory, withIntermediateDirectories: true)
     }
-    try Data("#!/bin/sh\n".utf8).write(to: helper)
-    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: helper.path)
+    for program in [helper, cargo] {
+        try Data("#!/bin/sh\n".utf8).write(to: program)
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o755], ofItemAtPath: program.path)
+    }
     let linked = bin.appendingPathComponent("pitboard").path
     try FileManager.default.createSymbolicLink(
         atPath: linked, withDestinationPath: helper.path)
@@ -776,14 +784,19 @@ private func account(_ label: String, signedIn: Bool, percent: Double) -> Accoun
     let model = AppModel(
         watching: false, service: stub,
         commandLineTool: CommandLineTool(
-            bundle: root.appendingPathComponent("Pitboard.app")))
+            bundle: root.appendingPathComponent("Pitboard.app"), home: home.path))
     #expect(model.commandLine == nil, "not looked for until the settings ask")
     await model.findCommandLine()
-    #expect(model.commandLine == .bundled(linked))
+    #expect(model.commandLine == .bundled(linked), "ahead of the one cargo installed")
 
-    let other = AppModel(watching: false, service: stub)
+    let other = AppModel(
+        watching: false, service: stub, commandLineTool: CommandLineTool(home: home.path))
     await other.findCommandLine()
     #expect(other.commandLine == .another(linked), "these tests are not an app")
+
+    stub.path = nil
+    await model.findCommandLine()
+    #expect(model.commandLine == .another(cargo.path), "the login shell could not be asked")
 }
 
 /// Daily renewal is turned on only from an app with a command line inside it that stays

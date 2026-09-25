@@ -415,11 +415,8 @@ final class AppModel {
     /// each way of installing it puts it.
     func findCommandLine() async {
         let path = await service.searchPath()
-        let home = ProcessInfo.processInfo.environment["HOME"] ?? NSHomeDirectory()
-        let directories =
-            (path?.split(separator: ":").map(String.init) ?? [])
-            + CommandLineTool.places(home: home)
         let tool = commandLineTool
+        let directories = tool.directories(onPath: path)
         commandLine = await Task.detached(priority: .utility) {
             tool.find(in: directories)
         }.value

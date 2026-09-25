@@ -15,9 +15,15 @@ struct CommandLineTool: Sendable {
 
     /// This app's own command line, or nil when the app is not running from its bundle.
     let helper: String?
+    /// Whose `.cargo/bin` and `.local/bin` are looked in.
+    let home: String
 
-    init(bundle: URL = Bundle.main.bundleURL) {
+    init(
+        bundle: URL = Bundle.main.bundleURL,
+        home: String = ProcessInfo.processInfo.environment["HOME"] ?? NSHomeDirectory()
+    ) {
         helper = Settings.bundledCommandLine(in: bundle)
+        self.home = home
     }
 
     /// The first `pitboard` found.
@@ -37,11 +43,16 @@ struct CommandLineTool: Sendable {
         case failed(String)
     }
 
-    /// Where each way of installing pitboard puts it, looked in after the login shell's
-    /// `PATH`, which may not have answered: cargo, a copy from a release, Homebrew on either
-    /// kind of Mac, and the link made here.
-    static func places(home: String) -> [String] {
-        ["\(home)/.cargo/bin", "\(home)/.local/bin", "/opt/homebrew/bin", "/usr/local/bin"]
+    /// Where a terminal would find `pitboard`, in the order it would: the login shell's
+    /// `PATH`, nil when the shell could not be asked, and then where each way of installing
+    /// pitboard puts it: cargo, a copy from a release, Homebrew on either kind of Mac, and
+    /// the link made here.
+    func directories(onPath path: String?) -> [String] {
+        (path?.split(separator: ":").map(String.init) ?? [])
+            + [
+                "\(home)/.cargo/bin", "\(home)/.local/bin", "/opt/homebrew/bin",
+                "/usr/local/bin",
+            ]
     }
 
     /// The first `pitboard` in `directories` that can be run, and whether it is this app's
