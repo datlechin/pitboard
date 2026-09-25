@@ -1,10 +1,8 @@
-# Homebrew cask for the command line on macOS and Linux, for the tap datlechin/homebrew-tap.
+# Homebrew cask for the command line on macOS and Linux, in the tap datlechin/homebrew-tap.
 #
-# This is the template. The release's `tap` job is the only thing that writes the tap: it
-# replaces each placeholder, a name in capitals between two @ signs, with the version or
-# with the checksum the release's SHA256SUMS gives for that tarball, and refuses to push a
-# file that still has one. So the values below are never the ones anybody installs, and
-# this file makes no claim about any release.
+# pitboard's release writes the tap's copy from packaging/pitboard.rb in datlechin/pitboard,
+# with the version and the checksums from the release's SHA256SUMS filled in. An edit made
+# to the tap's copy is replaced at the next release.
 #
 # The download is the release's own tarball for the machine, attested, and on macOS signed
 # and notarised, so nothing is built and nobody needs Rust.

@@ -1,7 +1,8 @@
-# Homebrew cask for the menu bar app, for the tap datlechin/homebrew-tap.
+# Homebrew cask for the menu bar app, in the tap datlechin/homebrew-tap.
 #
-# This is the template. The release's `tap` job fills its placeholders the way it fills
-# pitboard.rb's and commits the two in one commit, so the pair cannot be half updated. The
+# pitboard's release writes the tap's copy from packaging/pitboard-app.rb in
+# datlechin/pitboard the way it writes pitboard.rb, in the same commit, so the pair cannot
+# be half updated. An edit made to the tap's copy is replaced at the next release. The
 # download is the notarised build from the release, so Gatekeeper accepts it with no further
 # step. Sparkle keeps it up to date afterwards, which is why auto_updates is set.
 #
