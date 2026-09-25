@@ -571,6 +571,8 @@ jobs:
           # has it at the cask of the same name.
           cp packaging/tap_migrations.json "$tap/tap_migrations.json"
           rm -f "$tap/Formula/pitboard.rb"
+          # The tap's own page, so it cannot go on naming casks the tap no longer has.
+          cp packaging/tap-README.md "$tap/README.md"
 
           cd "$tap"
           git config user.name "github-actions[bot]"
