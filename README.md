@@ -196,8 +196,17 @@ accounts only, since Claude Code is what runs it. It does not use the network an
 touch a login. Add it to `~/.claude/settings.json`:
 
 ```json
-{ "statusLine": { "type": "command", "command": "pitboard statusline" } }
+{
+  "statusLine": {
+    "type": "command",
+    "command": "pitboard statusline",
+    "refreshInterval": 10
+  }
+}
 ```
+
+With `refreshInterval`, Claude Code also runs it every 10 seconds, so an idle session picks
+up the numbers your busy sessions recorded.
 
 To combine it with a status line of your own, pipe the same input to it:
 `echo "$input" | pitboard statusline`.
