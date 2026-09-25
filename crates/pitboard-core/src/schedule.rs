@@ -258,6 +258,11 @@ pub(crate) fn an_apps_own_program(program: &std::path::Path) -> bool {
 }
 
 /// Write the schedule to run `program`, and ask the platform to start it.
+///
+/// Where the platform will not start it, the files go back to what they were and whatever
+/// was running before is started again. The status, doctor and the app all read the files,
+/// so files left naming a schedule nothing is running would say renewal is on while it is
+/// not, which is the failure nobody would notice until the parked logins had run out.
 fn put(ctx: &Context, program: &std::path::Path) -> Result<PathBuf> {
     let Some(path) = path(ctx) else {
         return Err(Error::ScheduleUnsupported);
@@ -265,34 +270,56 @@ fn put(ctx: &Context, program: &std::path::Path) -> Result<PathBuf> {
 
     #[cfg(target_os = "macos")]
     {
+        let before = std::fs::read_to_string(&path).ok();
         write(&path, &plist(program))?;
         // `bootstrap` is launchd's own word for this, and replaces the deprecated `load`.
         // SAFETY: `getuid` cannot fail and touches no memory of this process.
         let uid = unsafe { libc::getuid() };
         let domain = format!("gui/{uid}");
-        let _ = run(
-            "/bin/launchctl",
-            &["bootout", &domain, &path.to_string_lossy()],
-        );
-        run(
-            "/bin/launchctl",
-            &["bootstrap", &domain, &path.to_string_lossy()],
-        )?;
+        let target = path.to_string_lossy();
+        let _ = run("/bin/launchctl", &["bootout", &domain, &target]);
+        if let Err(refused) = run("/bin/launchctl", &["bootstrap", &domain, &target]) {
+            restore(&path, before.as_deref());
+            if before.is_some() {
+                let _ = run("/bin/launchctl", &["bootstrap", &domain, &target]);
+            }
+            return Err(refused);
+        }
     }
 
     #[cfg(target_os = "linux")]
     {
-        let dir = unit_dir(ctx);
-        write(&dir.join("pitboard-renew.service"), &service(program))?;
+        let unit = unit_dir(ctx).join("pitboard-renew.service");
+        let before = (
+            std::fs::read_to_string(&unit).ok(),
+            std::fs::read_to_string(&path).ok(),
+        );
+        write(&unit, &service(program))?;
         write(&path, &timer())?;
         let _ = run("systemctl", &["--user", "daemon-reload"]);
-        run(
-            "systemctl",
-            &["--user", "enable", "--now", "pitboard-renew.timer"],
-        )?;
+        let start = ["--user", "enable", "--now", "pitboard-renew.timer"];
+        if let Err(refused) = run("systemctl", &start) {
+            restore(&unit, before.0.as_deref());
+            restore(&path, before.1.as_deref());
+            let _ = run("systemctl", &["--user", "daemon-reload"]);
+            if before.1.is_some() {
+                let _ = run("systemctl", &start);
+            }
+            return Err(refused);
+        }
     }
 
     Ok(path)
+}
+
+/// Put a file back the way it was before this run wrote it: its old contents, or not there.
+/// Best effort, because it runs on the way out of a failure that is already being reported.
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+fn restore(path: &std::path::Path, before: Option<&str>) {
+    let _ = match before {
+        Some(body) => write(path, body),
+        None => remove(path),
+    };
 }
 
 /// Take it away. `false` when there was nothing installed.
@@ -350,8 +377,26 @@ fn remove(path: &std::path::Path) -> Result<()> {
 /// scratch copy stops their real schedule, and `systemctl --user` reaches the one session
 /// there is. A test writes and reads the files and leaves the scheduler alone.
 #[cfg(all(any(target_os = "macos", target_os = "linux"), test))]
-fn run(_program: &str, _args: &[&str]) -> Result<()> {
-    Ok(())
+fn run(program: &str, args: &[&str]) -> Result<()> {
+    let refused = REFUSED.with(|refused| {
+        let mut refused = refused.borrow_mut();
+        refused
+            .filter(|verb| args.contains(verb))
+            .inspect(|_| *refused = None)
+    });
+    match refused {
+        Some(verb) => Err(Error::ScheduleRefused {
+            detail: format!("{program} refused {verb} in a test"),
+        }),
+        None => Ok(()),
+    }
+}
+
+#[cfg(all(any(target_os = "macos", target_os = "linux"), test))]
+thread_local! {
+    /// The scheduler verb a test has asked to be refused, once.
+    static REFUSED: std::cell::RefCell<Option<&'static str>> =
+        const { std::cell::RefCell::new(None) };
 }
 
 #[cfg(all(any(target_os = "macos", target_os = "linux"), not(test)))]
@@ -480,6 +525,65 @@ mod tests {
     fn a_program_at(path: &std::path::Path) {
         std::fs::create_dir_all(path.parent().expect("a directory")).expect("its directory");
         std::fs::write(path, "").expect("a program");
+    }
+
+    /// The verb that starts a schedule on this platform.
+    #[cfg(target_os = "macos")]
+    const START: &str = "bootstrap";
+    #[cfg(target_os = "linux")]
+    const START: &str = "enable";
+
+    /// Run `change` with the scheduler refusing `verb` the first time it is asked.
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    fn refusing<T>(verb: &'static str, change: impl FnOnce() -> T) -> T {
+        REFUSED.with(|refused| *refused.borrow_mut() = Some(verb));
+        let outcome = change();
+        REFUSED.with(|refused| *refused.borrow_mut() = None);
+        outcome
+    }
+
+    /// A schedule the scheduler will not start leaves no file behind saying renewal is on.
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    #[test]
+    fn a_schedule_the_scheduler_will_not_start_is_not_left_on_disk() {
+        let home = Scratch::new("refused");
+        let program = home.0.join("bin/pitboard");
+        a_program_at(&program);
+        let ctx = Context::new(home.0.clone()).with_schedule_program(program);
+
+        let refused = refusing(START, || install(&ctx)).expect_err("refused");
+
+        assert_eq!(refused.code(), "schedule_refused");
+        assert_eq!(status(&ctx), Installed::No);
+        assert_eq!(installed_program(&ctx), None);
+    }
+
+    /// A repair the scheduler will not start leaves the schedule that was there, which is
+    /// what the app and doctor then go on reporting.
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    #[test]
+    fn a_repair_the_scheduler_will_not_start_leaves_the_schedule_as_it_was() {
+        let home = Scratch::new("repair-refused");
+        std::fs::create_dir_all(home.0.join(".pitboard")).expect("a pitboard home");
+        let app = home
+            .0
+            .join("Applications/Pitboard.app/Contents/MacOS/Pitboard");
+        let bundled = home
+            .0
+            .join("Applications/Pitboard.app/Contents/Helpers/pitboard");
+        a_program_at(&app);
+        a_program_at(&bundled);
+        let ctx = Context::new(home.0.clone());
+        install(&ctx.clone().with_schedule_program(app.clone())).expect("0.3.0's schedule");
+
+        let refused = refusing(START, || {
+            repair(&ctx.clone().with_schedule_program(bundled))
+        })
+        .expect_err("refused");
+
+        assert_eq!(refused.code(), "schedule_refused");
+        assert!(matches!(status(&ctx), Installed::Yes { .. }));
+        assert_eq!(installed_program(&ctx), Some(app));
     }
 
     #[test]
