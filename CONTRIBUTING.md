@@ -383,6 +383,11 @@ shape it could take, on macOS and on Linux. These decide what the casks may do:
 - Neither cask's `zap` touches `~/.pitboard`. `state.json` is the only index of the parked
   logins in the keychain, and deleting it without `pitboard uninstall` leaves live refresh
   tokens nothing can name.
+- `brew uninstall --zap` runs the zap of a cask as it was installed, not the tap's copy:
+  `Cask::Installer#zap` loads the installed cask file first. Run on 2026-09-25: a cask was
+  installed, its zap changed in the tap, `brew update` run, and the zap that ran was the
+  installed one's. A machine still on the old app cask therefore runs its zap, which
+  trashes `~/.pitboard`, and the CHANGELOG says to leave `--zap` out.
 - From Homebrew 6, installing a full name trusts that one cask or formula and nothing else.
   The old app cask depended on the formula, which Homebrew then refused to build, so
   `brew install --cask datlechin/tap/pitboard` failed with `build.rb ... exited with 1`

@@ -24,9 +24,9 @@ All notable changes are recorded here. The format follows
 - Settings can put the app's command line on the `PATH`. The Advanced tab says which
   `pitboard` a terminal runs and whether it is the app's own, and when there is none,
   "Install command line tool…" links `/usr/local/bin/pitboard` to the one inside the app,
-  once macOS has asked for an administrator's password. It never links over a `pitboard`
-  somebody installed, a file that is not a link, or the temporary copy macOS runs an app
-  from before it is moved to Applications.
+  once macOS has asked for an administrator's password. It never replaces a `pitboard`
+  somebody installed or a file that is not a link, and never links to the temporary copy
+  macOS runs an app from before it is moved to Applications.
 - An account whose parked login has expired has a "Sign in again" button in its row, which
   starts the same sign-in as adding an account. The row used to say to run `pitboard enroll
   <label> --sign-in` in a terminal, which somebody with only the app does not use.
@@ -77,10 +77,21 @@ brew uninstall --formula pitboard
 brew install --cask datlechin/tap/pitboard-app
 ```
 
+Leave `--zap` out when you remove the old app cask. Its zap moves `~/.pitboard` to the
+Trash, and Homebrew runs the zap of a cask as it was installed, whatever the tap says by
+then.
+
 A copy of the app from a release updates itself as before and brings the command line with
-it. If you turned on daily renewal, run `pitboard doctor` afterwards: when it says the
-schedule runs something that is not there or is the app, turn renewal off and on again, in
-Settings or with `pitboard schedule uninstall` and `pitboard schedule install`.
+it.
+
+If you turned on daily renewal in a 0.3.0 app, its schedule ran the app itself and renewed
+nothing. The app from this release makes that schedule run the command line inside it as
+soon as it opens. A schedule that runs a `pitboard` that is not there any more is left as
+it is. On Linux that includes one turned on with the formula: it ran the copy inside the
+formula's own directory, which goes with the formula. Turn such a schedule off and on
+again, in the app's Settings or with `pitboard schedule uninstall` and then
+`pitboard schedule install`. `pitboard doctor` from this release says whether yours needs
+it, and so does Settings, Advanced, "Check this machine".
 
 ## [0.3.0] - 2026-09-24
 

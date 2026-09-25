@@ -233,7 +233,10 @@ To remove pitboard, run `pitboard uninstall` before removing pitboard itself: it
 daily renewal schedule away, then deletes every parked login before deleting its own
 directory, in that order, because the account list is the only index of those keychain
 items. Deleting the directory first leaves live refresh tokens on the machine with nothing
-able to name them, which is why `brew uninstall --zap` leaves `~/.pitboard` where it is.
+able to name them, which is why the casks in the tap leave `~/.pitboard` where it is, even
+on `brew uninstall --zap`. The app cask 0.3.0 installed as `pitboard` did not: its zap
+moves `~/.pitboard` to the Trash, and Homebrew runs a cask's zap as it was installed, so
+leave `--zap` out when removing that one.
 
 Never copy `~/.pitboard` to another machine. pitboard refuses to read a state file written
 elsewhere, and a parked login presented from a second machine can end the login on both.
