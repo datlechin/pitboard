@@ -290,12 +290,19 @@ jobs:
           merge-multiple: true
 
       # A tampered download is a realistic threat for a tool that handles OAuth tokens.
-      # This file is also what the tap is written from, so the checksums Homebrew checks are
-      # the ones this release took of the files it published, not ones taken later
-      # somewhere else.
       - name: Checksums
         working-directory: ${{ runner.temp }}/dist
         run: sha256sum -- *.tar.gz *.zip > SHA256SUMS
+      # The tap is written from this file, handed to the tap job inside this run, so the
+      # checksums Homebrew checks are the ones taken here of the files this job publishes.
+      # Read back from the release instead, they would be whatever the release held by then,
+      # and anyone who could change the release could change a tarball and its line together.
+      # Overwritten, so a publish job run again can hand it over again.
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: SHA256SUMS
+          path: ${{ runner.temp }}/dist/SHA256SUMS
+          overwrite: true
 
       - run: rustup toolchain install
       - uses: taiki-e/install-action@94c31af3204a9f15ab40b35ad084410b905bbc73 # v2.87.17
@@ -463,8 +470,8 @@ jobs:
   # in the tap repository, waking every six hours and taking the checksum of whatever it
   # downloaded; between those two a release could be finished and green for most of a day
   # with the tap still serving the version before it, and nothing anywhere said so. The
-  # checksums written here are read from the SHA256SUMS this release published, over the
-  # files it published itself.
+  # checksums written here are the SHA256SUMS the publish job took of the files it
+  # published, and a re-run of this job alone still reads that same file.
   #
   # The tap holds two casks and no formula: pitboard, the command line from the release's
   # tarballs, and pitboard-app, the app with the same command line inside it. Nothing in
@@ -482,8 +489,11 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: SHA256SUMS
+          path: ${{ runner.temp }}/sums
       - env:
-          GH_TOKEN: ${{ github.token }}
           TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
           VERSION: ${{ needs.guard.outputs.version }}
         run: |
@@ -495,9 +505,7 @@ jobs:
 
           # One line for each file the casks download. A file the release has no line for
           # is a cask nobody can install, so it stops the job before the tap is touched.
-          sums=$RUNNER_TEMP/SHA256SUMS
-          gh release download "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
-            --pattern SHA256SUMS --dir "$RUNNER_TEMP"
+          sums=$RUNNER_TEMP/sums/SHA256SUMS
           checksum() {
             local line
             line=$(awk -v f="$1" '$2 == f { n++; sum = $1 } END { if (n == 1) print sum }' "$sums")
