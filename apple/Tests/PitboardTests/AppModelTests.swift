@@ -33,11 +33,15 @@ private final class Stub: Core, @unchecked Sendable {
     private(set) var freshAsks = 0
     var offline: Result<Status, Error> = .success(Status(now: 0, accounts: [], warnings: []))
     var changed: Int64 = 0
+    /// When the readings last changed. A read moves it, as the core's does: what it measured
+    /// is recorded.
+    var readings: Int64 = 0
     private(set) var offlineReads = 0
     var abandoned: Abandoned?
 
     func status(fresh: Bool) async throws -> Status {
         if fresh { freshAsks += 1 }
+        readings += 1
         return try answer.get()
     }
     func statusOffline() async throws -> Status {
@@ -72,6 +76,7 @@ private final class Stub: Core, @unchecked Sendable {
         return false
     }
     func changedAt() async -> Int64 { changed }
+    func readingsChangedAt() async -> Int64 { readings }
     func doctor() async -> Diagnosis {
         Diagnosis(
             checks: [
@@ -945,6 +950,69 @@ private func account(_ label: String, signedIn: Bool, percent: Double) -> Accoun
     #expect(stub.offlineReads == before + 1, "it read what is already known")
     #expect(stub.freshAsks == 0, "and asked Anthropic nothing")
     #expect(model.status?.accounts.first?.label == "work")
+}
+
+/// Every session's status line records what its session has seen, and a reading only moves
+/// forward. The menu bar read 20% while every status line said 22%, because it only ever
+/// showed what it had asked Anthropic itself. It follows the readings the way it follows a
+/// switch made elsewhere: from what is already known, asking nobody.
+@MainActor
+@Test func numbersASessionRecordedReachTheMenuBarWithoutAskingAnyone() async {
+    let stub = Stub(.success(status([account("work", signedIn: true, percent: 20)])))
+    let model = AppModel(watching: false, service: stub)
+    await model.refresh()
+    #expect(model.title == "work 20%")
+
+    stub.offline = .success(status([account("work", signedIn: true, percent: 22)]))
+    stub.readings += 1
+    await model.noticeOtherChangesForTesting()
+
+    #expect(model.title == "work 22%")
+    #expect(stub.offlineReads == 1, "it read what is already known")
+    #expect(stub.freshAsks == 0, "and asked Anthropic nothing")
+}
+
+/// A reading moving says nothing about who is signed in. Taken for a change to the account
+/// index, it would have who is signed in read again from Claude Code's config, which a
+/// switch that could not update it leaves naming the account before, and so put away the one
+/// warning saying so. Numbers move several times a minute, so within seconds of the switch.
+@MainActor
+@Test func numbersMovingLeaveWhoIsSignedInAndWhatASwitchSaid() async {
+    let lagging = Warning(code: "config_write_failed", message: "the config did not update")
+    let stub = Stub(
+        .success(
+            status([
+                account("a", signedIn: false, percent: 10),
+                account("b", signedIn: true, percent: 10),
+            ])))
+    stub.switched = switched("claude", from: "a", to: "b", warnings: [lagging])
+    let model = AppModel(watching: false, service: stub)
+    await model.use("claude/b")
+    #expect(model.lastSwitches.first?.warnings == [lagging])
+
+    stub.offline = .success(
+        status([
+            account("a", signedIn: true, percent: 10),
+            account("b", signedIn: false, percent: 30),
+        ]))
+    stub.readings += 1
+    await model.noticeOtherChangesForTesting()
+
+    #expect(model.status?.accounts.last?.usage?.windows.first?.percent == 30)
+    #expect(model.status?.accounts.map(\.signedIn) == [false, true], "only the numbers moved")
+    #expect(model.lastSwitches.first?.warnings == [lagging], "and what the switch said stands")
+}
+
+/// The app's own read records what it measured, which moves the readings. Taken for somebody
+/// else's change, every read would be followed by a second one.
+@MainActor
+@Test func theAppsOwnReadIsNotTakenForSomebodyElses() async {
+    let stub = Stub(.success(status([account("work", signedIn: true, percent: 20)])))
+    let model = AppModel(watching: false, service: stub)
+    await model.noticeOtherChangesForTesting()
+    await model.refresh()
+    await model.noticeOtherChangesForTesting()
+    #expect(stub.offlineReads == 0)
 }
 
 /// A read that could not reach Anthropic still has something true to show. An empty panel

@@ -146,6 +146,8 @@ final class AppModel {
     /// Nil until something has looked. A machine with no account index reports 0, which
     /// is a real answer and not an absence.
     private var lastChangedAt: Int64?
+    /// The same for the usage readings, which every session's status line records into.
+    private var lastReadingsAt: Int64?
 
     /// `watching` starts what runs by itself: the periodic read, the wake notice, the poll
     /// that notices a change made somewhere else, and the one repair of a schedule an older
@@ -208,20 +210,32 @@ final class AppModel {
 
     /// Has anything on this machine changed since the last look. Reads only what is already
     /// known: no network, no keychain, and no request of any service.
+    ///
+    /// Two things are looked at, because they mean different things. The account index
+    /// changing can be a switch made somewhere else, so who is signed in is read again. The
+    /// readings changing is only numbers, newer ones a session or the command line has seen,
+    /// so only the numbers are taken. Read again every time, who is signed in would come from
+    /// each tool's own files several times a minute, and a switch that could not update
+    /// Claude Code's config leaves it naming the account before.
     private func noticeOtherChanges() async {
-        let now = await service.changedAt()
-        let seen = lastChangedAt
-        lastChangedAt = now
+        let changed = await service.changedAt()
+        let measured = await service.readingsChangedAt()
+        let (seen, seenReadings) = (lastChangedAt, lastReadingsAt)
+        lastChangedAt = changed
+        lastReadingsAt = measured
         // The first look only records where things stand; there is nothing to compare to.
         // A switch this app has in flight is its own change and not somebody else's, and
         // taking it for one put away what the switch had just said.
-        guard switching == nil, let seen, seen != now,
+        guard switching == nil, let seen, let seenReadings else { return }
+        if seen != changed {
+            guard let read = try? await service.statusOffline() else { return }
+            status = read
+            forgetSwitchesUndone(by: read)
+        } else if seenReadings != measured, status != nil,
             let read = try? await service.statusOffline()
-        else {
-            return
+        {
+            status = status.map { numbers(of: read, onto: $0) }
         }
-        status = read
-        forgetSwitchesUndone(by: read)
     }
 
     /// The account in use and its tightest limit, as the menu bar reads it.
@@ -325,7 +339,9 @@ final class AppModel {
             problem = read.warnings.first?.message
             stuck = read.warnings.contains { $0.code == "recovery_undetermined" }
             updatedAt = Date()
+            // What this read measured is recorded, and that is not somebody else's change.
             lastChangedAt = await service.changedAt()
+            lastReadingsAt = await service.readingsChangedAt()
             problemCode = read.warnings.first?.code
             advice = Advice.about(read, tools: tools, unless: notifier.told)
             advice.forEach(notifier.tell)
@@ -820,6 +836,27 @@ final class SigningIn {
     /// Claude Code asks for a code only when its callback could not be reached, and Codex
     /// never does.
     var wantsCode: Bool { takesACode && said.contains("Paste code") && !pasted }
+}
+
+/// `shown` with each account's numbers as `read` has them, and everything else as it was. An
+/// account `read` has no numbers for keeps its own.
+func numbers(of read: Status, onto shown: Status) -> Status {
+    let measured = Dictionary(
+        read.accounts.compactMap { account in account.usage.map { (account.id, $0) } },
+        uniquingKeysWith: { first, _ in first })
+    return Status(
+        now: shown.now,
+        accounts: shown.accounts.map { account in
+            guard let usage = measured[account.id] else { return account }
+            return Account(
+                id: account.id, provider: account.provider, label: account.label,
+                qualified: account.qualified, unplaced: account.unplaced, email: account.email,
+                accountUuid: account.accountUuid, signedIn: account.signedIn,
+                switchable: account.switchable, parked: account.parked, usage: usage,
+                stale: account.stale, staleExplanation: account.staleExplanation,
+                lastsSeconds: account.lastsSeconds, lastsBurning: account.lastsBurning)
+        },
+        warnings: shown.warnings)
 }
 
 /// The limit worth putting in the menu bar: the account's own, not one scoped to a single

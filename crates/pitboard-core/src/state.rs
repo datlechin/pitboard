@@ -453,9 +453,9 @@ fn file(ctx: &Context) -> PathBuf {
 /// switch that had already happened.
 ///
 /// This is the cheapest true answer there is: one stat of one file. It is deliberately the
-/// account index alone and not the whole directory, because the status line writes usage
-/// readings after every message in every open session, and something that fires on those
-/// would turn a menu bar app into a busy loop.
+/// account index alone and not the whole directory. The status line writes usage readings
+/// after a message in any open session, and those say nothing about who is signed in: a
+/// front end follows them with `readings::changed_at`, and takes only the numbers.
 pub fn changed_at(ctx: &Context) -> i64 {
     std::fs::metadata(file(ctx))
         .and_then(|m| m.modified())

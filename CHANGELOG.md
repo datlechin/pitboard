@@ -13,6 +13,15 @@ All notable changes are recorded here. The format follows
   shows more than is used is a plan upgraded in the middle of a window: the old, higher
   share stands until that window resets.
 
+### Fixed
+- Sessions on one account, and the menu bar, disagreed about the account in use. Each
+  session showed the numbers of its own last response, so busy sessions read 22%·6% while an
+  idle one read 20%·5%, and the menu bar showed what it had last asked Anthropic, or Claude
+  Code's own cache. The status line now records its session's numbers every time and shows
+  the newer of them and what any session recorded, `pitboard status` does the same, and the
+  menu bar follows the readings within seconds without asking anyone. The README's status
+  line settings add `"refreshInterval": 10`, so an idle session picks them up too.
+
 ## [0.4.0] - 2026-09-25
 
 ### Changed
