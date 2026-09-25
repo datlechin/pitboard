@@ -13,7 +13,8 @@
   every call synchronous.
 - `apple`: the Swift package. `PitboardKit` calls the bindings off the main thread,
   `Pitboard` is the menu bar app. `scripts/build-xcframework.sh` builds the core for both
-  architectures, `scripts/build-app.sh` assembles `Pitboard.app` from it.
+  architectures, `scripts/build-app.sh` assembles `Pitboard.app` from it, with the command
+  line inside at `Contents/Helpers/pitboard`.
 - `crates/pitboard`: the command line. Arguments, rendering for people, and the `--json`
   contract, pinned by the snapshots in `crates/pitboard/tests/snapshots`.
 
