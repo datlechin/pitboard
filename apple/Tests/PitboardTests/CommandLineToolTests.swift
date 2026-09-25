@@ -150,3 +150,62 @@ private struct Scratch {
     try run()
     #expect(tool.find(in: ["\(hostile)/bin"]) == .bundled(link))
 }
+
+/// Anything where the link goes that is not a link is somebody's own, such as a pitboard
+/// they copied there, so it is kept and no script runs. A link is replaced whether or not
+/// what it leads to is there, such as one left by a copy of the app that has since moved,
+/// and so is nothing at all.
+@Test func somebodysOwnFileWhereTheLinkGoesIsKept() async throws {
+    let scratch = try Scratch()
+    defer { scratch.remove() }
+    let bin = try scratch.directory("bin")
+    let link = "\(bin)/pitboard"
+    try Data("mine".utf8).write(to: URL(fileURLWithPath: link))
+    let scripts = Scripts()
+    let tool = CommandLineTool(bundle: scratch.app, link: link, execute: scripts.run)
+
+    #expect(
+        await tool.install()
+            == .failed("\(link) is already there and is not a link, so it was kept."))
+    #expect(try String(contentsOfFile: link, encoding: .utf8) == "mine")
+    try FileManager.default.removeItem(atPath: link)
+    try FileManager.default.createDirectory(atPath: link, withIntermediateDirectories: false)
+    #expect(await tool.install() != .linked, "a directory is kept too")
+    #expect(scripts.ran.isEmpty)
+
+    try FileManager.default.removeItem(atPath: link)
+    #expect(await tool.install() == .linked, "nothing there")
+    try scratch.link(link, to: "/Applications/Moved.app/Contents/Helpers/pitboard")
+    #expect(await tool.install() == .linked, "a link to a copy that has moved")
+    try FileManager.default.removeItem(atPath: link)
+    try scratch.link(link, to: "\(bin)/../Fake.app/Contents/Helpers/pitboard")
+    #expect(await tool.install() == .linked, "a link to a file that is there")
+    let script = CommandLineTool.script(linking: scratch.helper.path, at: link)
+    #expect(scripts.ran == [script, script, script])
+
+    let downloaded = CommandLineTool(
+        bundle: URL(
+            fileURLWithPath:
+                "/private/var/folders/xy/abc/T/AppTranslocation/0A1B2C/d/Pitboard.app"),
+        link: link, execute: scripts.run)
+    #expect(
+        await downloaded.install()
+            == .failed("This copy of pitboard cannot link the command line inside it."))
+    #expect(scripts.ran.count == 3)
+}
+
+/// A password prompt somebody dismissed is their answer, not a failure: AppleScript raises
+/// -128 for it. Any other error is a failure, in AppleScript's own words where it has any.
+@Test func aDismissedPasswordPromptIsAnAnswer() {
+    func error(_ number: Int, _ message: String? = nil) -> NSDictionary {
+        var error: [String: Any] = [NSAppleScript.errorNumber: number]
+        error[NSAppleScript.errorMessage] = message
+        return error as NSDictionary
+    }
+    #expect(CommandLineTool.outcome(of: nil) == .linked)
+    #expect(CommandLineTool.outcome(of: error(-128, "User canceled.")) == .cancelled)
+    #expect(
+        CommandLineTool.outcome(of: error(1, "ln: /usr/local/bin/pitboard: Permission denied"))
+            == .failed("ln: /usr/local/bin/pitboard: Permission denied"))
+    #expect(CommandLineTool.outcome(of: error(1)) == .failed("The link could not be made."))
+}

@@ -1,3 +1,4 @@
+import Foundation
 import PitboardKit
 
 @testable import Pitboard
@@ -46,4 +47,32 @@ func unplaced(of provider: String, signedIn: Bool = false) -> Account {
 
 func status(_ accounts: [Account], warnings: [Warning] = []) -> Status {
     Status(now: 0, accounts: accounts, warnings: warnings)
+}
+
+/// Stands in for AppleScript: keeps each script it is handed and raises what it is told to,
+/// so no test runs one that asks for an administrator's password.
+final class Scripts: @unchecked Sendable {
+    // Unchecked because the tool runs scripts off the main thread; every read and write
+    // holds `lock`.
+    private let lock = NSLock()
+    private var kept: [String] = []
+    private var raising: NSDictionary?
+
+    /// Every script handed in, oldest first.
+    var ran: [String] { lock.withLock { kept } }
+
+    /// What each script from now on raises: AppleScript's error number, and its message.
+    func raise(_ number: Int?, _ message: String? = nil) {
+        var error: [String: Any] = [:]
+        error[NSAppleScript.errorNumber] = number
+        error[NSAppleScript.errorMessage] = message
+        lock.withLock { raising = number == nil ? nil : error as NSDictionary }
+    }
+
+    func run(_ source: String) -> NSDictionary? {
+        lock.withLock {
+            kept.append(source)
+            return raising
+        }
+    }
 }

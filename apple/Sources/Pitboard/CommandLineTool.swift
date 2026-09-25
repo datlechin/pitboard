@@ -9,21 +9,29 @@ import PitboardKit
 /// to, the way editors on macOS put their own command there: one link in `/usr/local/bin`,
 /// made after macOS asks for an administrator's password.
 struct CommandLineTool: Sendable {
-    /// Where the link goes: on the `PATH` macOS gives every shell, and a directory only an
-    /// administrator can write to.
-    static let link = "/usr/local/bin/pitboard"
-
     /// This app's own command line, or nil when the app is not running from its bundle.
     let helper: String?
     /// Whose `.cargo/bin` and `.local/bin` are looked in.
     let home: String
+    /// Where the link goes: `/usr/local/bin/pitboard` unless a test says otherwise, on the
+    /// `PATH` macOS gives every shell and in a directory only an administrator can write to.
+    let link: String
+    /// A test hands in its own, so nothing it does waits on a password prompt.
+    private let execute: Runner
+
+    /// Runs an AppleScript and hands back the error it raised, or nil.
+    typealias Runner = @Sendable (String) -> NSDictionary?
 
     init(
         bundle: URL = Bundle.main.bundleURL,
-        home: String = ProcessInfo.processInfo.environment["HOME"] ?? NSHomeDirectory()
+        home: String = ProcessInfo.processInfo.environment["HOME"] ?? NSHomeDirectory(),
+        link: String = "/usr/local/bin/pitboard",
+        execute: @escaping Runner = CommandLineTool.execute(script:)
     ) {
         helper = Settings.bundledCommandLine(in: bundle)
         self.home = home
+        self.link = link
+        self.execute = execute
     }
 
     /// The first `pitboard` found.
@@ -81,12 +89,14 @@ struct CommandLineTool: Sendable {
         guard let helper, linkable else {
             return .failed("This copy of pitboard cannot link the command line inside it.")
         }
-        let type = try? FileManager.default.attributesOfItem(atPath: Self.link)[.type]
+        let type = try? FileManager.default.attributesOfItem(atPath: link)[.type]
         if let type, type as? FileAttributeType != .typeSymbolicLink {
-            return .failed("\(Self.link) is already there and is not a link, so it was kept.")
+            return .failed("\(link) is already there and is not a link, so it was kept.")
         }
-        let source = Self.script(linking: helper, at: Self.link)
-        return await Task.detached(priority: .userInitiated) { Self.run(source) }.value
+        let (source, execute) = (Self.script(linking: helper, at: link), execute)
+        return await Task.detached(priority: .userInitiated) {
+            Self.outcome(of: execute(source))
+        }.value
     }
 
     /// The script that runs `command` as an administrator. macOS asks for the password in
@@ -112,12 +122,19 @@ struct CommandLineTool: Sendable {
         return "\"\(escaped)\""
     }
 
-    private static func run(_ source: String) -> Linked {
+    /// Runs `source` as an AppleScript, and hands back the error it raised, or nil.
+    static func execute(script source: String) -> NSDictionary? {
         guard let script = NSAppleScript(source: source) else {
-            return .failed("The link could not be made.")
+            return [NSAppleScript.errorMessage: "The link could not be made."]
         }
         var error: NSDictionary?
         script.executeAndReturnError(&error)
+        return error
+    }
+
+    /// What running the script came to, from the error it raised. A dismissed password
+    /// prompt raises `userCanceledErr`, which is an answer and not a failure.
+    static func outcome(of error: NSDictionary?) -> Linked {
         guard let error else { return .linked }
         if error[NSAppleScript.errorNumber] as? Int == userCanceledErr { return .cancelled }
         return .failed(

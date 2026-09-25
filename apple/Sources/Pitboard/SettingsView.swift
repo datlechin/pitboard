@@ -212,8 +212,8 @@ private struct CommandLineRows: View {
                 }
                 .disabled(linking)
                 note(
-                    "Links \(CommandLineTool.link) to the one inside this app. macOS asks "
-                        + "for an administrator's password.")
+                    "Links \(model.commandLineTool.link) to the one inside this app. "
+                        + "macOS asks for an administrator's password.")
             } else if model.commandLineTool.translocated {
                 note(
                     "Move pitboard to your Applications folder first. Until then macOS "

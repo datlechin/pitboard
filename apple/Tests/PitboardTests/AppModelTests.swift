@@ -799,6 +799,29 @@ private func account(_ label: String, signedIn: Bool, percent: Double) -> Accoun
     #expect(model.commandLine == .another(cargo.path), "the login shell could not be asked")
 }
 
+/// Why a link could not be made is said beside the button that tried, and a dismissed
+/// password prompt says nothing: it was somebody's answer, and it puts away what an earlier
+/// try said.
+@MainActor
+@Test func aDismissedPasswordPromptIsNotShownAsAFailure() async {
+    let root = FileManager.default.temporaryDirectory
+        .appendingPathComponent("pitboard-link-\(UUID().uuidString)").path
+    let scripts = Scripts()
+    let model = AppModel(
+        watching: false, service: Stub(.success(status([]))),
+        commandLineTool: CommandLineTool(
+            bundle: URL(fileURLWithPath: "/Applications/Pitboard.app"), home: root,
+            link: "\(root)/bin/pitboard", execute: scripts.run))
+
+    scripts.raise(1, "ln: \(root)/bin/pitboard: Permission denied")
+    await model.installCommandLine()
+    #expect(model.linkFailed == "ln: \(root)/bin/pitboard: Permission denied")
+    scripts.raise(-128, "User canceled.")
+    await model.installCommandLine()
+    #expect(model.linkFailed == nil)
+    #expect(scripts.ran.count == 2)
+}
+
 /// Daily renewal is turned on only from an app with a command line inside it that stays
 /// where it is. The schedule runs it long after the app has quit: a copy macOS runs from a
 /// temporary place is gone by then, and a build with none inside it would schedule the app
