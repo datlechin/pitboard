@@ -56,6 +56,7 @@ pub(crate) mod park;
 pub(crate) mod pending;
 pub(crate) mod process;
 pub(crate) mod readings;
+pub(crate) mod sessions;
 pub(crate) mod store;
 
 /// What the integration tests reach into: they plant and inspect parked logins in the real

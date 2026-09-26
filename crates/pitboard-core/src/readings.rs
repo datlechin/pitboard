@@ -109,10 +109,10 @@ fn fold(all: &mut HashMap<String, Snapshot>, readings: &[(String, Snapshot)], no
     changed
 }
 
-/// Held while a change is written. A kernel lock, which the system lets go of when the
-/// process ends, and apart from the one around switches: a status line must never wait on
-/// a switch.
-fn exclusive(ctx: &Context) -> Option<std::fs::File> {
+/// Held while a change is written, here or to what sessions passed their status line. A
+/// kernel lock, which the system lets go of when the process ends, and apart from the one
+/// around switches: a status line must never wait on a switch.
+pub(crate) fn exclusive(ctx: &Context) -> Option<std::fs::File> {
     home::ensure(ctx).ok()?;
     let file = std::fs::OpenOptions::new()
         .create(true)

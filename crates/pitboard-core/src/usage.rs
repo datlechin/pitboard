@@ -122,10 +122,11 @@ const SAME_RESET: u64 = 60;
 /// the service's own, and use within a window only rises, so the numbers order themselves.
 ///
 /// Both must be the account's own: another account's windows order against its own just as
-/// readily. A session's numbers do not say whose they are, so the status line leaves out
-/// any whose reset shows them to be another account's before offering them. And where the
-/// service lowers a share within a window, as a plan upgraded in the middle of one does by
-/// raising the limit, the old, higher share stands until the window resets.
+/// readily. A session's numbers do not say whose they are, so the status line offers only
+/// what moved between two of a session's runs with the same account named both times, and
+/// leaves out any whose reset shows them to be another account's. And where the service
+/// lowers a share within a window, as a plan upgraded in the middle of one does by raising
+/// the limit, the old, higher share stands until the window resets.
 pub(crate) fn recency(a: &Window, b: &Window, now: i64) -> Ordering {
     match (a.resets_at, b.resets_at) {
         (Some(x), Some(y)) if x.abs_diff(y) >= SAME_RESET => x.cmp(&y),

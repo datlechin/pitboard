@@ -244,7 +244,8 @@ impl Pitboard {
     }
 
     /// The status line for Claude Code's session JSON. Reads only files, and writes only
-    /// pitboard's usage readings, which keep what the session passed where it is newer.
+    /// pitboard's own: what the session passed, for its next run to compare with, and the
+    /// usage readings, which keep what moved since its last run where it is newer.
     pub fn statusline(&self, session: &str) -> statusline::StatusLine {
         statusline::read(&self.ctx, session)
     }
