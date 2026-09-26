@@ -220,21 +220,28 @@ final class AppModel {
     private func noticeOtherChanges() async {
         let changed = await service.changedAt()
         let measured = await service.readingsChangedAt()
-        let (seen, seenReadings) = (lastChangedAt, lastReadingsAt)
+        let seen = lastChangedAt
         lastChangedAt = changed
-        lastReadingsAt = measured
         // The first look only records where things stand; there is nothing to compare to.
+        guard let seen, let seenReadings = lastReadingsAt else {
+            lastReadingsAt = measured
+            return
+        }
         // A switch this app has in flight is its own change and not somebody else's, and
-        // taking it for one put away what the switch had just said.
-        guard switching == nil, let seen, let seenReadings else { return }
+        // taking it for one put away what the switch had just said. Numbers recorded
+        // meanwhile are somebody else's, so they stay unseen until they are shown: a switch
+        // that fails reads nothing after it.
+        guard switching == nil else { return }
         if seen != changed {
             guard let read = try? await service.statusOffline() else { return }
             status = read
+            lastReadingsAt = measured
             forgetSwitchesUndone(by: read)
         } else if seenReadings != measured, status != nil,
             let read = try? await service.statusOffline()
         {
             status = status.map { numbers(of: read, onto: $0) }
+            lastReadingsAt = measured
         }
     }
 
@@ -331,6 +338,11 @@ final class AppModel {
             await askWhatIsInstalled()
         }
         if let updatedAt, Date().timeIntervalSince(updatedAt) < seconds { return }
+        // As they stood before the read, because a session can record newer numbers while it
+        // waits on a service, and the read then writes nothing over them. Taken after, they
+        // counted as seen though nothing had shown them. What the read writes itself costs
+        // one look at a file.
+        let readingsBefore = await service.readingsChangedAt()
         do {
             let read = try await service.status(fresh: asked)
             status = read
@@ -341,7 +353,7 @@ final class AppModel {
             updatedAt = Date()
             // What this read measured is recorded, and that is not somebody else's change.
             lastChangedAt = await service.changedAt()
-            lastReadingsAt = await service.readingsChangedAt()
+            lastReadingsAt = readingsBefore
             problemCode = read.warnings.first?.code
             advice = Advice.about(read, tools: tools, unless: notifier.told)
             advice.forEach(notifier.tell)

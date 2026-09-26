@@ -84,8 +84,11 @@ private final class Stub: Core, @unchecked Sendable {
             ],
             healthy: true)
     }
+    /// What happens on this machine while a switch is under way.
+    var duringSwitch: (@MainActor () async -> Void)?
     func switchTo(_ label: String) async throws -> Switched {
         switchedTo.append(label)
+        await duringSwitch?()
         return try switched.get()
     }
     func enrollCurrent(_ label: String) async throws -> Enrolled {
@@ -1003,16 +1006,62 @@ private func account(_ label: String, signedIn: Bool, percent: Double) -> Accoun
     #expect(model.lastSwitches.first?.warnings == [lagging], "and what the switch said stands")
 }
 
-/// The app's own read records what it measured, which moves the readings. Taken for somebody
-/// else's change, every read would be followed by a second one.
+/// The app's own read records what it measured, which moves the readings, and a session can
+/// record something newer while the app is asking. Either costs one look at what is
+/// recorded, which is a file, and never a second read of anyone.
 @MainActor
-@Test func theAppsOwnReadIsNotTakenForSomebodyElses() async {
+@Test func theAppsOwnReadCostsOneLookAtTheReadingsAtMost() async {
     let stub = Stub(.success(status([account("work", signedIn: true, percent: 20)])))
+    stub.offline = stub.answer
     let model = AppModel(watching: false, service: stub)
     await model.noticeOtherChangesForTesting()
     await model.refresh()
     await model.noticeOtherChangesForTesting()
-    #expect(stub.offlineReads == 0)
+    await model.noticeOtherChangesForTesting()
+    #expect(stub.offlineReads == 1)
+    #expect(stub.freshAsks == 0)
+    #expect(model.title == "work 20%")
+}
+
+/// Anthropic's answer can be behind what a busy session records while the app is waiting
+/// on it. The file then holds the session's newer numbers, and the app's own read writes
+/// nothing over them. Noted as seen when the read was done, they reached the menu bar only
+/// once some session wrote again.
+@MainActor
+@Test func numbersASessionRecordedDuringTheAppsOwnReadAreShownOnTheNextLook() async {
+    let stub = Stub(.success(status([account("work", signedIn: true, percent: 21)])))
+    let model = AppModel(watching: false, service: stub)
+    await model.noticeOtherChangesForTesting()
+    stub.offline = .success(status([account("work", signedIn: true, percent: 22)]))
+    await model.refresh()
+    #expect(model.title == "work 21%")
+
+    await model.noticeOtherChangesForTesting()
+    #expect(model.title == "work 22%")
+}
+
+/// A switch this app has in flight is its own change, so the poll leaves it alone. Numbers a
+/// session records meanwhile are somebody else's, and a switch that fails reads nothing
+/// after it: seen then, they were never shown.
+@MainActor
+@Test func numbersRecordedDuringASwitchAreTakenOnceItIsOver() async {
+    let stub = Stub(.success(status([account("work", signedIn: true, percent: 20)])))
+    stub.switched = .failure(
+        PitboardError.Failed(
+            code: "nothing_parked", cause: nil, message: "nothing parked", warnings: []))
+    let model = AppModel(watching: false, service: stub)
+    await model.refresh()
+    await model.noticeOtherChangesForTesting()
+    stub.duringSwitch = {
+        stub.offline = .success(status([account("work", signedIn: true, percent: 22)]))
+        stub.readings += 1
+        await model.noticeOtherChangesForTesting()
+    }
+    await model.use("claude/personal")
+    #expect(model.title == "work 20%")
+
+    await model.noticeOtherChangesForTesting()
+    #expect(model.title == "work 22%")
 }
 
 /// A read that could not reach Anthropic still has something true to show. An empty panel
