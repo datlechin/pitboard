@@ -5,6 +5,44 @@ All notable changes are recorded here. The format follows
 
 ## [Unreleased]
 
+### Changed
+- A usage reading only moves forward. pitboard keeps one reading per account, every front
+  end records into it and every front end shows it. A later reset is a newer window, and
+  within one window the higher share is the newer, so numbers a session has held since its
+  last response can no longer replace newer ones, whoever writes last. Where a window's
+  share falls, as it does when a plan is upgraded in the middle of one, the old, higher
+  share stands until that window resets.
+- The app's Documentation item opens docs.usepitboard.com.
+
+### Fixed
+- Sessions on one account, and the menu bar, disagreed about the account in use. Each
+  session showed the numbers of its own last response, so busy sessions read 22%·6% while an
+  idle one read 20%·5%, and the menu bar showed what it had last asked Anthropic, or Claude
+  Code's own cache. The status line now records what its session's responses bring wherever
+  it is newer, every session shows the newest numbers any of them has recorded, `pitboard
+  status` does the same, and the menu bar follows the readings within seconds without
+  asking anyone. The README's status line settings add `"refreshInterval": 10`, so an idle
+  session picks them up too.
+- After a switch, a session still holding the numbers of the account before could record
+  them as the account switched to, until the next read. A session's numbers do not say
+  whose they are, so the status line now keeps what each session passed at its last run,
+  and which account Claude Code's config named then, in `~/.pitboard/sessions.json`. It
+  records only what a session's response moved with the same account named before and
+  after, and nothing in the half minute sessions take to follow a switch, so a session left
+  idle is never recorded as anyone, whatever has happened to other accounts since: a
+  switch, a `/login`, an account forgotten. What a session passes the first time pitboard
+  sees it is left out, and so is what it passes as the account named changes; its next
+  response is recorded. A `/login` in Claude Code leaves pitboard no time to count from,
+  and for the half minute after one a session's response can still be the account
+  before's. The status line leaves that out where pitboard's reading of the account before
+  has the same window; otherwise, or where the two accounts' windows reset within the same
+  minute, the account signed in after can show the higher of their shares until that
+  window resets.
+- The panel's advice to switch, once the account in use had run out, went away at the
+  app's next read, as soon as the panel was opened again, while the account was still out.
+  It now comes as soon as the numbers show the account run out, stays for as long as they
+  do, and is told once.
+
 ## [0.4.0] - 2026-09-25
 
 ### Changed

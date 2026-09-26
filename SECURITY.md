@@ -93,7 +93,9 @@ pitboard's account list, `~/.pitboard/state.json`, holds each account's tool, la
 email address; for a Claude Code account its Anthropic account and organization
 identifiers, and for a Codex account its ChatGPT account and user ids, workspace id and
 plan. It holds no token. `~/.pitboard/usage.json` holds the last usage reading per
-account. The audit log holds labels, codes and times only.
+account, and `~/.pitboard/sessions.json` holds, for each Claude Code session seen in the
+last week, its id, the account Claude Code's config named at its last status line run and
+the limits it passed then. The audit log holds labels, codes and times only.
 
 ## What leaves your machine
 

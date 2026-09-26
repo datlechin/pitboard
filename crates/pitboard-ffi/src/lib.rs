@@ -656,6 +656,18 @@ impl Pitboard {
         self.core.changed_at()
     }
 
+    /// When pitboard's usage readings last changed, in epoch milliseconds, or 0 when there
+    /// are none.
+    ///
+    /// Every session's status line records what that session has seen, and a reading only
+    /// moves forward, so what is remembered is the newest any front end has. Poll this
+    /// beside `changed_at`, and when it moves, take the numbers from `status_offline`: no
+    /// network and no keychain. Only the numbers: a reading moving says nothing about who is
+    /// signed in, which is `changed_at`'s to say.
+    pub fn readings_changed_at(&self) -> i64 {
+        self.core.readings_changed_at()
+    }
+
     /// The same report without asking anyone: the last numbers pitboard measured, and who
     /// Claude Code's config says is signed in.
     ///

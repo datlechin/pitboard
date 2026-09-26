@@ -8,7 +8,7 @@ use crate::error::{Error, Result};
 use crate::provider::ProviderId;
 use crate::state::{self, Account, Key};
 use crate::switch::{self, Enrolled, Outcome, Recovered, Renewal, Settled, SignIn};
-use crate::{audit, schedule, status, statusline};
+use crate::{audit, readings, schedule, status, statusline};
 use std::fmt;
 
 /// Something to know about that did not stop the operation.
@@ -243,7 +243,9 @@ impl Pitboard {
         })
     }
 
-    /// The status line for Claude Code's session JSON. Reads only files.
+    /// The status line for Claude Code's session JSON. Reads only files, and writes only
+    /// pitboard's own: what the session passed, for its next run to compare with, and the
+    /// usage readings, which keep what moved since its last run where it is newer.
     pub fn statusline(&self, session: &str) -> statusline::StatusLine {
         statusline::read(&self.ctx, session)
     }
@@ -509,6 +511,12 @@ impl Pitboard {
     /// whether another one has done something without asking Anthropic about it.
     pub fn changed_at(&self) -> i64 {
         state::changed_at(&self.ctx)
+    }
+
+    /// When pitboard's usage readings last changed, in epoch milliseconds, for a front end
+    /// that shows them to follow what the others record without asking anyone.
+    pub fn readings_changed_at(&self) -> i64 {
+        readings::changed_at(&self.ctx)
     }
 
     /// The changes pitboard has made, newest last.

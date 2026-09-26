@@ -39,6 +39,10 @@ public protocol Core: Sendable {
     /// When pitboard's account index last changed, in epoch seconds. One stat of one file,
     /// so it can be asked often: it is how this app notices a switch typed in a terminal.
     func changedAt() async -> Int64
+    /// When pitboard's usage readings last changed, in epoch milliseconds. One stat of one
+    /// file, like `changedAt`: it is how this app follows the numbers every session's status
+    /// line records.
+    func readingsChangedAt() async -> Int64
     /// Every tool pitboard handles, in the order a listing shows them. Asks nothing of
     /// anyone.
     func tools() -> [Tool]
@@ -179,6 +183,10 @@ public final class PitboardService: Core, Sendable {
     /// a switch is in flight, which is exactly when something has changed.
     public func changedAt() async -> Int64 {
         (try? await run(on: reads) { $0.changedAt() }) ?? 0
+    }
+
+    public func readingsChangedAt() async -> Int64 {
+        (try? await run(on: reads) { $0.readingsChangedAt() }) ?? 0
     }
 
     public func doctor() async -> Diagnosis {

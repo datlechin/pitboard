@@ -33,11 +33,15 @@ private final class Stub: Core, @unchecked Sendable {
     private(set) var freshAsks = 0
     var offline: Result<Status, Error> = .success(Status(now: 0, accounts: [], warnings: []))
     var changed: Int64 = 0
+    /// When the readings last changed. A read moves it, as the core's does: what it measured
+    /// is recorded.
+    var readings: Int64 = 0
     private(set) var offlineReads = 0
     var abandoned: Abandoned?
 
     func status(fresh: Bool) async throws -> Status {
         if fresh { freshAsks += 1 }
+        readings += 1
         return try answer.get()
     }
     func statusOffline() async throws -> Status {
@@ -72,6 +76,7 @@ private final class Stub: Core, @unchecked Sendable {
         return false
     }
     func changedAt() async -> Int64 { changed }
+    func readingsChangedAt() async -> Int64 { readings }
     func doctor() async -> Diagnosis {
         Diagnosis(
             checks: [
@@ -79,8 +84,11 @@ private final class Stub: Core, @unchecked Sendable {
             ],
             healthy: true)
     }
+    /// What happens on this machine while a switch is under way.
+    var duringSwitch: (@MainActor () async -> Void)?
     func switchTo(_ label: String) async throws -> Switched {
         switchedTo.append(label)
+        await duringSwitch?()
         return try switched.get()
     }
     func enrollCurrent(_ label: String) async throws -> Enrolled {
@@ -945,6 +953,230 @@ private func account(_ label: String, signedIn: Bool, percent: Double) -> Accoun
     #expect(stub.offlineReads == before + 1, "it read what is already known")
     #expect(stub.freshAsks == 0, "and asked Anthropic nothing")
     #expect(model.status?.accounts.first?.label == "work")
+}
+
+/// Every session's status line records what its session has seen, and a reading only moves
+/// forward. The menu bar read 20% while every status line said 22%, because it only ever
+/// showed what it had asked Anthropic itself. It follows the readings the way it follows a
+/// switch made elsewhere: from what is already known, asking nobody.
+@MainActor
+@Test func numbersASessionRecordedReachTheMenuBarWithoutAskingAnyone() async {
+    let stub = Stub(.success(status([account("work", signedIn: true, percent: 20)])))
+    let model = AppModel(watching: false, service: stub)
+    await model.refresh()
+    #expect(model.title == "work 20%")
+
+    stub.offline = .success(status([account("work", signedIn: true, percent: 22)]))
+    stub.readings += 1
+    await model.noticeOtherChangesForTesting()
+
+    #expect(model.title == "work 22%")
+    #expect(stub.offlineReads == 1, "it read what is already known")
+    #expect(stub.freshAsks == 0, "and asked Anthropic nothing")
+}
+
+/// A reading moving says nothing about who is signed in. Taken for a change to the account
+/// index, it would have who is signed in read again from Claude Code's config, which a
+/// switch that could not update it leaves naming the account before, and so put away the one
+/// warning saying so. Numbers move several times a minute, so within seconds of the switch.
+@MainActor
+@Test func numbersMovingLeaveWhoIsSignedInAndWhatASwitchSaid() async {
+    let lagging = Warning(code: "config_write_failed", message: "the config did not update")
+    let stub = Stub(
+        .success(
+            status([
+                account("a", signedIn: false, percent: 10),
+                account("b", signedIn: true, percent: 10),
+            ])))
+    stub.switched = switched("claude", from: "a", to: "b", warnings: [lagging])
+    let model = AppModel(watching: false, service: stub)
+    await model.use("claude/b")
+    #expect(model.lastSwitches.first?.warnings == [lagging])
+
+    stub.offline = .success(
+        status([
+            account("a", signedIn: true, percent: 10),
+            account("b", signedIn: false, percent: 30),
+        ]))
+    stub.readings += 1
+    await model.noticeOtherChangesForTesting()
+
+    #expect(model.status?.accounts.last?.usage?.windows.first?.percent == 30)
+    #expect(model.status?.accounts.map(\.signedIn) == [false, true], "only the numbers moved")
+    #expect(model.lastSwitches.first?.warnings == [lagging], "and what the switch said stands")
+}
+
+/// The app's own read records what it measured, which moves the readings, and a session can
+/// record something newer while the app is asking. Either costs one look at what is
+/// recorded, which is a file, and never a second read of anyone.
+@MainActor
+@Test func theAppsOwnReadCostsOneLookAtTheReadingsAtMost() async {
+    let stub = Stub(.success(status([account("work", signedIn: true, percent: 20)])))
+    stub.offline = stub.answer
+    let model = AppModel(watching: false, service: stub)
+    await model.noticeOtherChangesForTesting()
+    await model.refresh()
+    await model.noticeOtherChangesForTesting()
+    await model.noticeOtherChangesForTesting()
+    #expect(stub.offlineReads == 1)
+    #expect(stub.freshAsks == 0)
+    #expect(model.title == "work 20%")
+}
+
+/// Anthropic's answer can be behind what a busy session records while the app is waiting
+/// on it. The file then holds the session's newer numbers, and the app's own read writes
+/// nothing over them. Noted as seen when the read was done, they reached the menu bar only
+/// once some session wrote again.
+@MainActor
+@Test func numbersASessionRecordedDuringTheAppsOwnReadAreShownOnTheNextLook() async {
+    let stub = Stub(.success(status([account("work", signedIn: true, percent: 21)])))
+    let model = AppModel(watching: false, service: stub)
+    await model.noticeOtherChangesForTesting()
+    stub.offline = .success(status([account("work", signedIn: true, percent: 22)]))
+    await model.refresh()
+    #expect(model.title == "work 21%")
+
+    await model.noticeOtherChangesForTesting()
+    #expect(model.title == "work 22%")
+}
+
+/// A switch this app has in flight is its own change, so the poll leaves it alone. Numbers a
+/// session records meanwhile are somebody else's, and a switch that fails reads nothing
+/// after it: seen then, they were never shown.
+@MainActor
+@Test func numbersRecordedDuringASwitchAreTakenOnceItIsOver() async {
+    let stub = Stub(.success(status([account("work", signedIn: true, percent: 20)])))
+    stub.switched = .failure(
+        PitboardError.Failed(
+            code: "nothing_parked", cause: nil, message: "nothing parked", warnings: []))
+    let model = AppModel(watching: false, service: stub)
+    await model.refresh()
+    await model.noticeOtherChangesForTesting()
+    stub.duringSwitch = {
+        stub.offline = .success(status([account("work", signedIn: true, percent: 22)]))
+        stub.readings += 1
+        await model.noticeOtherChangesForTesting()
+    }
+    await model.use("claude/personal")
+    #expect(model.title == "work 20%")
+
+    await model.noticeOtherChangesForTesting()
+    #expect(model.title == "work 22%")
+}
+
+/// A session's status line records that the account in use has run out, and the menu bar
+/// shows it within seconds. The advice to switch, and its notification, came only with the
+/// app's next read of its own, minutes later.
+@MainActor
+@Test func numbersThatRunAnAccountOutAdviseAtOnceAndTellItOnce() async {
+    let work = { (percent: Double, resets: Int64) in
+        account("work", signedIn: true, [window("session", percent, resets: resets)])
+    }
+    let personal = account("personal", [window("session", 10, resets: 9_000)])
+    let stub = Stub(.success(status([work(90, 7_200), personal])))
+    let model = AppModel(watching: false, service: stub)
+    await model.refresh()
+    #expect(model.advice.isEmpty)
+
+    stub.offline = .success(status([work(100, 7_200), personal]))
+    stub.readings += 1
+    await model.noticeOtherChangesForTesting()
+    #expect(model.advice.map(\.switchTo) == ["claude/personal"])
+    let told = Advice.key("claude", "work", window("session", 100))
+    #expect(model.toldForTesting == [told: 7_200])
+
+    // The same window again, as another source rounds its reset. Numbers move with every
+    // session's response, and advice put away seconds after it was told would be gone
+    // before anybody opened the panel.
+    stub.offline = .success(status([work(100, 7_201), personal]))
+    stub.readings += 1
+    await model.noticeOtherChangesForTesting()
+    #expect(model.advice.map(\.switchTo) == ["claude/personal"], "still true, so still said")
+    #expect(model.toldForTesting == [told: 7_200], "and told once")
+}
+
+/// Advice says the account in use has none of a limit left. Once what is recorded shows the
+/// window after it, with room, that is no longer true.
+@MainActor
+@Test func adviceTheNumbersNoLongerBearOutIsPutAway() async {
+    let personal = account("personal", [window("session", 10, resets: 9_000)])
+    let stub = Stub(
+        .success(
+            status([
+                account("work", signedIn: true, [window("session", 100, resets: 7_200)]),
+                personal,
+            ])))
+    let model = AppModel(watching: false, service: stub)
+    await model.refresh()
+    #expect(model.advice.count == 1)
+
+    stub.offline = .success(
+        status([
+            account("work", signedIn: true, [window("session", 3, resets: 25_200)]), personal,
+        ]))
+    stub.readings += 1
+    await model.noticeOtherChangesForTesting()
+    #expect(model.advice.isEmpty)
+}
+
+/// Advice told when what sessions recorded ran the account out stays while the numbers bear
+/// it out, whatever read comes next. The app's own read worked advice out afresh, leaving out
+/// what had been told, so opening the panel put it away with the account still at 100%.
+@MainActor
+@Test func adviceToldFromWhatSessionsRecordedOutlastsTheAppsNextRead() async {
+    let work = { (percent: Double) in
+        account("work", signedIn: true, [window("session", percent, resets: 7_200)])
+    }
+    let personal = account("personal", [window("session", 10, resets: 9_000)])
+    let stub = Stub(.success(status([work(90), personal])))
+    let model = AppModel(watching: false, service: stub)
+    await model.refresh()
+    stub.offline = .success(status([work(100), personal]))
+    stub.readings += 1
+    await model.noticeOtherChangesForTesting()
+    #expect(model.advice.map(\.switchTo) == ["claude/personal"])
+
+    stub.answer = .success(status([work(100), personal]))
+    await model.refresh()
+    #expect(model.title == "work 100%")
+    #expect(model.advice.map(\.switchTo) == ["claude/personal"])
+}
+
+/// The same for advice a read told: the next read found the window already told about and
+/// left it out, so it was gone a minute later, or at once if the panel was opened again.
+@MainActor
+@Test func adviceToldByAReadOutlastsTheNextReadAndIsToldOnce() async {
+    let work = account("work", signedIn: true, [window("session", 100, resets: 7_200)])
+    let personal = account("personal", [window("session", 10, resets: 9_000)])
+    let stub = Stub(.success(status([work, personal])))
+    let model = AppModel(watching: false, service: stub)
+    await model.refresh()
+    #expect(model.advice.count == 1)
+
+    await model.refresh()
+    #expect(model.advice.map(\.switchTo) == ["claude/personal"])
+    let told = Advice.key("claude", "work", window("session", 100))
+    #expect(model.toldForTesting == [told: 7_200])
+}
+
+/// A change to the account index can leave the account in use run out, and the poll that
+/// notices it reads who is signed in and the numbers again. What they show is advised then,
+/// not at the app's next read of its own.
+@MainActor
+@Test func theAccountIndexChangingElsewhereIsAdvisedOnAtOnce() async {
+    let work = { (percent: Double) in
+        account("work", signedIn: true, [window("session", percent, resets: 7_200)])
+    }
+    let personal = account("personal", [window("session", 10, resets: 9_000)])
+    let stub = Stub(.success(status([work(20), personal])))
+    let model = AppModel(watching: false, service: stub)
+    await model.refresh()
+    #expect(model.advice.isEmpty)
+
+    stub.offline = .success(status([work(100), personal]))
+    stub.changed += 1
+    await model.noticeOtherChangesForTesting()
+    #expect(model.advice.map(\.switchTo) == ["claude/personal"])
 }
 
 /// A read that could not reach Anthropic still has something true to show. An empty panel

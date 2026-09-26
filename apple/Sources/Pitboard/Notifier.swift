@@ -101,7 +101,7 @@ struct Advice {
                 let ran = current.label
             else { return nil }
             for window in current.usage?.windows ?? [] where window.percent >= 100 {
-                guard told[key(provider, ran, window)] != (window.resetsAt ?? 0) else {
+                if let at = told[key(provider, ran, window)], oneReset(at, window.resetsAt) {
                     continue
                 }
                 let spare =
@@ -121,6 +121,25 @@ struct Advice {
             }
             return nil
         }
+    }
+
+    /// Whether `status` still bears this out: the account that ran out is still the one in
+    /// use, and the same window of it is still spent.
+    func holds(in status: Status) -> Bool {
+        status.accounts.contains { account in
+            account.provider == provider && account.label == ran && account.signedIn
+                && (account.usage?.windows ?? []).contains {
+                    $0.kind == window.kind && $0.scope == window.scope && $0.percent >= 100
+                        && Self.oneReset($0.resetsAt ?? 0, window.resetsAt)
+                }
+        }
+    }
+
+    /// Whether two resets are one, as the core counts them: less than a minute apart. A
+    /// session is given a reset in whole seconds and Anthropic's answer a fraction that is
+    /// dropped, so one window can come back a second apart.
+    private static func oneReset(_ at: Int64, _ resetsAt: Int64?) -> Bool {
+        abs(at - (resetsAt ?? 0)) < 60
     }
 
     /// What an account has used of the same window, counting a window it does not report

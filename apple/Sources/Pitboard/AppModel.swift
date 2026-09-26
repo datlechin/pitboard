@@ -146,6 +146,8 @@ final class AppModel {
     /// Nil until something has looked. A machine with no account index reports 0, which
     /// is a real answer and not an absence.
     private var lastChangedAt: Int64?
+    /// The same for the usage readings, which every session's status line records into.
+    private var lastReadingsAt: Int64?
 
     /// `watching` starts what runs by itself: the periodic read, the wake notice, the poll
     /// that notices a change made somewhere else, and the one repair of a schedule an older
@@ -204,24 +206,62 @@ final class AppModel {
     #if DEBUG
         /// The change poll, for a test that must not wait two seconds for a timer.
         func noticeOtherChangesForTesting() async { await noticeOtherChanges() }
+        /// What has been told about, for a test that must see a run-out told once.
+        var toldForTesting: [String: Int64] { notifier.told }
     #endif
 
     /// Has anything on this machine changed since the last look. Reads only what is already
     /// known: no network, no keychain, and no request of any service.
+    ///
+    /// Two things are looked at, because they mean different things. The account index
+    /// changing can be a switch made somewhere else, so who is signed in is read again. The
+    /// readings changing is only numbers, newer ones a session or the command line has seen,
+    /// so only the numbers are taken. Read again every time, who is signed in would come from
+    /// each tool's own files several times a minute, and a switch that could not update
+    /// Claude Code's config leaves it naming the account before.
     private func noticeOtherChanges() async {
-        let now = await service.changedAt()
+        let changed = await service.changedAt()
+        let measured = await service.readingsChangedAt()
         let seen = lastChangedAt
-        lastChangedAt = now
+        lastChangedAt = changed
         // The first look only records where things stand; there is nothing to compare to.
-        // A switch this app has in flight is its own change and not somebody else's, and
-        // taking it for one put away what the switch had just said.
-        guard switching == nil, let seen, seen != now,
-            let read = try? await service.statusOffline()
-        else {
+        guard let seen, let seenReadings = lastReadingsAt else {
+            lastReadingsAt = measured
             return
         }
-        status = read
-        forgetSwitchesUndone(by: read)
+        // A switch this app has in flight is its own change and not somebody else's, and
+        // taking it for one put away what the switch had just said. Numbers recorded
+        // meanwhile are somebody else's, so they stay unseen until they are shown: a switch
+        // that fails reads nothing after it.
+        guard switching == nil else { return }
+        if seen != changed {
+            guard let read = try? await service.statusOffline() else { return }
+            status = read
+            lastReadingsAt = measured
+            forgetSwitchesUndone(by: read)
+            advise(from: read)
+        } else if seenReadings != measured, let shown = status,
+            let read = try? await service.statusOffline()
+        {
+            let overlaid = numbers(of: read, onto: shown)
+            status = overlaid
+            lastReadingsAt = measured
+            advise(from: overlaid)
+        }
+    }
+
+    /// Advice about a read, the app's own or numbers taken from what is recorded. What is new
+    /// is told, and what was said before stays for as long as the numbers bear it out.
+    /// Advice worked out afresh leaves out what has been told, so it was put away at the next
+    /// read, seconds after it was said once numbers moved with every session's response,
+    /// with the account still out. Still one per tool, the newer first.
+    private func advise(from read: Status) {
+        let new = Advice.about(read, tools: tools, unless: notifier.told)
+        new.forEach(notifier.tell)
+        let standing = new + advice.filter { $0.holds(in: read) }
+        advice = inOrder(standing.map(\.provider), by: tools).compactMap { provider in
+            standing.first { $0.provider == provider }
+        }
     }
 
     /// The account in use and its tightest limit, as the menu bar reads it.
@@ -317,6 +357,11 @@ final class AppModel {
             await askWhatIsInstalled()
         }
         if let updatedAt, Date().timeIntervalSince(updatedAt) < seconds { return }
+        // As they stood before the read, because a session can record newer numbers while it
+        // waits on a service, and the read then writes nothing over them. Taken after, they
+        // counted as seen though nothing had shown them. What the read writes itself costs
+        // one look at a file.
+        let readingsBefore = await service.readingsChangedAt()
         do {
             let read = try await service.status(fresh: asked)
             status = read
@@ -325,10 +370,11 @@ final class AppModel {
             problem = read.warnings.first?.message
             stuck = read.warnings.contains { $0.code == "recovery_undetermined" }
             updatedAt = Date()
+            // What this read measured is recorded, and that is not somebody else's change.
             lastChangedAt = await service.changedAt()
+            lastReadingsAt = readingsBefore
             problemCode = read.warnings.first?.code
-            advice = Advice.about(read, tools: tools, unless: notifier.told)
-            advice.forEach(notifier.tell)
+            advise(from: read)
         } catch {
             problem = Self.saying(error)
             problemCode = Self.code(of: error)
@@ -820,6 +866,27 @@ final class SigningIn {
     /// Claude Code asks for a code only when its callback could not be reached, and Codex
     /// never does.
     var wantsCode: Bool { takesACode && said.contains("Paste code") && !pasted }
+}
+
+/// `shown` with each account's numbers as `read` has them, and everything else as it was. An
+/// account `read` has no numbers for keeps its own.
+func numbers(of read: Status, onto shown: Status) -> Status {
+    let measured = Dictionary(
+        read.accounts.compactMap { account in account.usage.map { (account.id, $0) } },
+        uniquingKeysWith: { first, _ in first })
+    return Status(
+        now: shown.now,
+        accounts: shown.accounts.map { account in
+            guard let usage = measured[account.id] else { return account }
+            return Account(
+                id: account.id, provider: account.provider, label: account.label,
+                qualified: account.qualified, unplaced: account.unplaced, email: account.email,
+                accountUuid: account.accountUuid, signedIn: account.signedIn,
+                switchable: account.switchable, parked: account.parked, usage: usage,
+                stale: account.stale, staleExplanation: account.staleExplanation,
+                lastsSeconds: account.lastsSeconds, lastsBurning: account.lastsBurning)
+        },
+        warnings: shown.warnings)
 }
 
 /// The limit worth putting in the menu bar: the account's own, not one scoped to a single

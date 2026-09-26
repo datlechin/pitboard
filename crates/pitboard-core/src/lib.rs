@@ -1,6 +1,6 @@
-//! The engine behind pitboard: parking and restoring a person's own Claude Code logins, and
-//! reading what each has left. It serves pitboard's own front ends, the command line and the
-//! native apps, which reach it through [`service::Pitboard`] with an explicit
+//! The engine behind pitboard: parking and restoring a person's own Claude Code and Codex
+//! logins, and reading what each has left. It serves pitboard's own front ends, the command
+//! line and the native apps, which reach it through [`service::Pitboard`] with an explicit
 //! [`context::Context`].
 //!
 //! # What is supported
@@ -56,6 +56,7 @@ pub(crate) mod park;
 pub(crate) mod pending;
 pub(crate) mod process;
 pub(crate) mod readings;
+pub(crate) mod sessions;
 pub(crate) mod store;
 
 /// What the integration tests reach into: they plant and inspect parked logins in the real
