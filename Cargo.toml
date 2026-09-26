@@ -9,7 +9,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.4.0"
+version = "0.4.1"
 edition = "2024"
 rust-version = "1.91"
 license = "Apache-2.0"
@@ -17,7 +17,7 @@ repository = "https://github.com/datlechin/pitboard"
 homepage = "https://usepitboard.com"
 
 [workspace.dependencies]
-pitboard-core = { path = "crates/pitboard-core", version = "=0.4.0" }
+pitboard-core = { path = "crates/pitboard-core", version = "=0.4.1" }
 anstream = "1"
 anstyle = "1"
 clap = { version = "4", features = ["derive"] }
