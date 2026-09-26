@@ -206,6 +206,8 @@ final class AppModel {
     #if DEBUG
         /// The change poll, for a test that must not wait two seconds for a timer.
         func noticeOtherChangesForTesting() async { await noticeOtherChanges() }
+        /// What has been told about, for a test that must see a run-out told once.
+        var toldForTesting: [String: Int64] { notifier.told }
     #endif
 
     /// Has anything on this machine changed since the last look. Reads only what is already
@@ -237,11 +239,27 @@ final class AppModel {
             status = read
             lastReadingsAt = measured
             forgetSwitchesUndone(by: read)
-        } else if seenReadings != measured, status != nil,
+            advise(from: read)
+        } else if seenReadings != measured, let shown = status,
             let read = try? await service.statusOffline()
         {
-            status = status.map { numbers(of: read, onto: $0) }
+            let overlaid = numbers(of: read, onto: shown)
+            status = overlaid
             lastReadingsAt = measured
+            advise(from: overlaid)
+        }
+    }
+
+    /// Advice about numbers taken from what is recorded. What is new is told, and what was
+    /// said before stays for as long as the numbers bear it out: they move with every
+    /// session's response, and advice worked out afresh leaves out what has been told, so it
+    /// would be put away seconds after it was said. Still one per tool, the newer first.
+    private func advise(from read: Status) {
+        let new = Advice.about(read, tools: tools, unless: notifier.told)
+        new.forEach(notifier.tell)
+        let standing = new + advice.filter { $0.holds(in: read) }
+        advice = inOrder(standing.map(\.provider), by: tools).compactMap { provider in
+            standing.first { $0.provider == provider }
         }
     }
 

@@ -1064,6 +1064,61 @@ private func account(_ label: String, signedIn: Bool, percent: Double) -> Accoun
     #expect(model.title == "work 22%")
 }
 
+/// A session's status line records that the account in use has run out, and the menu bar
+/// shows it within seconds. The advice to switch, and its notification, came only with the
+/// app's next read of its own, minutes later.
+@MainActor
+@Test func numbersThatRunAnAccountOutAdviseAtOnceAndTellItOnce() async {
+    let work = { (percent: Double, resets: Int64) in
+        account("work", signedIn: true, [window("session", percent, resets: resets)])
+    }
+    let personal = account("personal", [window("session", 10, resets: 9_000)])
+    let stub = Stub(.success(status([work(90, 7_200), personal])))
+    let model = AppModel(watching: false, service: stub)
+    await model.refresh()
+    #expect(model.advice.isEmpty)
+
+    stub.offline = .success(status([work(100, 7_200), personal]))
+    stub.readings += 1
+    await model.noticeOtherChangesForTesting()
+    #expect(model.advice.map(\.switchTo) == ["claude/personal"])
+    let told = Advice.key("claude", "work", window("session", 100))
+    #expect(model.toldForTesting == [told: 7_200])
+
+    // The same window again, as another source rounds its reset. Numbers move with every
+    // session's response, and advice put away seconds after it was told would be gone
+    // before anybody opened the panel.
+    stub.offline = .success(status([work(100, 7_201), personal]))
+    stub.readings += 1
+    await model.noticeOtherChangesForTesting()
+    #expect(model.advice.map(\.switchTo) == ["claude/personal"], "still true, so still said")
+    #expect(model.toldForTesting == [told: 7_200], "and told once")
+}
+
+/// Advice says the account in use has none of a limit left. Once what is recorded shows the
+/// window after it, with room, that is no longer true.
+@MainActor
+@Test func adviceTheNumbersNoLongerBearOutIsPutAway() async {
+    let personal = account("personal", [window("session", 10, resets: 9_000)])
+    let stub = Stub(
+        .success(
+            status([
+                account("work", signedIn: true, [window("session", 100, resets: 7_200)]),
+                personal,
+            ])))
+    let model = AppModel(watching: false, service: stub)
+    await model.refresh()
+    #expect(model.advice.count == 1)
+
+    stub.offline = .success(
+        status([
+            account("work", signedIn: true, [window("session", 3, resets: 25_200)]), personal,
+        ]))
+    stub.readings += 1
+    await model.noticeOtherChangesForTesting()
+    #expect(model.advice.isEmpty)
+}
+
 /// A read that could not reach Anthropic still has something true to show. An empty panel
 /// says the accounts are gone, which is not what happened.
 @MainActor

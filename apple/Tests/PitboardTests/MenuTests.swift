@@ -66,7 +66,19 @@ import Testing
     let told = Advice.key("claude", "work", exhausted)
     #expect(Advice.about(read, unless: [told: 42]).isEmpty)
     // The next window is its own; what was said about the last one does not carry over.
-    #expect(Advice.about(read, unless: [told: 41]).first?.use == "spare")
+    #expect(Advice.about(read, unless: [told: 42 - 18_000]).first?.use == "spare")
+}
+
+/// A session is given a reset in whole seconds, and Anthropic's answer gives a fraction that
+/// is dropped, so one window can come back a second apart from what was told about it. The
+/// core counts resets a minute apart as one, and so does what is told.
+@Test func aWindowToldAboutIsNotToldAgainWithItsResetRoundedOtherwise() {
+    let exhausted = window("session", 100, resets: 43)
+    let read = status([
+        account("work", signedIn: true, [exhausted]),
+        account("spare", [window("session", 0)]),
+    ])
+    #expect(Advice.about(read, unless: [Advice.key("claude", "work", exhausted): 42]).isEmpty)
 }
 
 @Test func aWeeklyLimitIsComparedWithWeeklyLimits() {
