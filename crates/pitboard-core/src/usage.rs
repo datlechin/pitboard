@@ -109,20 +109,23 @@ fn limit(kind: &str) -> &str {
 /// windows.
 const SAME_RESET: u64 = 60;
 
-/// Which of two measurements of the same limit is the newer: `Greater` when `a` is.
+/// Which of two measurements of one account's limit is the newer: `Greater` when `a` is.
 ///
-/// A later reset is a later window, whatever its share. Within one window the share only
-/// rises, so the higher share was measured later. A window whose reset has passed counts as
-/// reset, with nothing used, and one with no reset time is compared by its share alone.
+/// A later reset is a later window, whatever its share. Within one window use only rises,
+/// so while the limit stays the same the higher share was measured later. A window whose
+/// reset has passed counts as reset, with nothing used, and one with no reset time is
+/// compared by its share alone.
 ///
 /// No timestamp is needed, which is the point: a Claude Code session passes its limits with
 /// none. They are what its last response said, however long ago that was, and a session
 /// left open passes the same old numbers every time its status line runs. The reset time is
 /// the service's own, and use within a window only rises, so the numbers order themselves.
 ///
-/// It keeps a number higher than the true one in one case: a plan upgraded in the middle of
-/// a window lowers that window's share, and the old, higher share stands until the window
-/// resets.
+/// Both must be the account's own: another account's windows order against its own just as
+/// readily. A session's numbers do not say whose they are, so the status line leaves out
+/// any whose reset shows them to be another account's before offering them. And where the
+/// service lowers a share within a window, as a plan upgraded in the middle of one does by
+/// raising the limit, the old, higher share stands until the window resets.
 pub(crate) fn recency(a: &Window, b: &Window, now: i64) -> Ordering {
     match (a.resets_at, b.resets_at) {
         (Some(x), Some(y)) if x.abs_diff(y) >= SAME_RESET => x.cmp(&y),

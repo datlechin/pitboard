@@ -9,8 +9,8 @@ All notable changes are recorded here. The format follows
 - A usage reading only moves forward. pitboard keeps one reading per account, every front
   end records into it and every front end shows it. A later reset is a newer window, and
   within one window the higher share is the newer, so numbers a session has held since its
-  last response can no longer replace newer ones, whoever writes last. The one case where it
-  shows more than is used is a plan upgraded in the middle of a window: the old, higher
+  last response can no longer replace newer ones, whoever writes last. Where a window's
+  share falls, as it does when a plan is upgraded in the middle of one, the old, higher
   share stands until that window resets.
 - The app's Documentation item opens docs.usepitboard.com.
 
@@ -26,7 +26,9 @@ All notable changes are recorded here. The format follows
 - After a switch, a session still holding the numbers of the account before could record
   them as the account switched to, until the next read. A session's numbers do not say
   whose they are, so the status line now tells them apart by when their windows reset, and
-  records nothing in the half minute sessions take to follow a switch.
+  records nothing in the half minute sessions take to follow a switch. Two accounts whose
+  windows reset within the same minute cannot be told apart that way, and there the account
+  switched to can show the higher of their two shares until that window resets.
 
 ## [0.4.0] - 2026-09-25
 
