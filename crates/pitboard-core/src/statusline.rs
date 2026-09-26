@@ -869,6 +869,44 @@ mod tests {
         assert_eq!(kinds, ["weekly_all"]);
     }
 
+    /// A session can hold a response from just before its five-hour window reset, one that
+    /// moved the weekly limit too, and run after the reset. Its numbers then leave the
+    /// five-hour window out, and the reading lost it: the pane showed no five-hour share
+    /// rather than none used, `pitboard status` and the menu bar lost the row, and with only
+    /// the weekly window left to time it by, the app waited a hundred minutes to ask again
+    /// rather than three.
+    #[test]
+    fn a_window_that_resets_stays_in_the_reading_with_nothing_used() {
+        let (ctx, _scratch) = machine("reset");
+        crate::state::save(&ctx, &state()).expect("an account index");
+        let works = timed((40.0, NOW - 10), (30.0, NOW + 3 * DAY), NOW - HOUR);
+        crate::readings::remember(&ctx, &[("work-uuid".into(), works)]);
+        let floor = crate::budget::floor_for(Some(&recorded(&ctx)));
+        run(
+            &at(&ctx, NOW - 60),
+            "pane",
+            &passed((40.0, NOW - 10), (30.0, NOW + 3 * DAY)),
+        );
+
+        let shown = run(
+            &ctx,
+            "pane",
+            &passed((41.0, NOW - 10), (31.0, NOW + 3 * DAY)),
+        );
+        assert_eq!(shown.session, shares(0.0, 31.0));
+        assert_eq!(shares_of(&recorded(&ctx), NOW), shares(0.0, 31.0));
+        let offline = crate::status::gather_offline(&ctx, &state());
+        let row = offline
+            .rows
+            .iter()
+            .find(|r| r.account_uuid == "work-uuid")
+            .and_then(|r| r.usage.as_ref())
+            .expect("work's numbers");
+        let kinds: Vec<&str> = row.windows.iter().map(|w| w.kind.as_str()).collect();
+        assert_eq!(kinds, ["session", "weekly_all"], "the row is kept");
+        assert_eq!(crate::budget::floor_for(Some(&recorded(&ctx))), floor);
+    }
+
     /// An account's windows start when it is first used in them, so a reset no other
     /// account has is this account's own. It is how a session records the window after one
     /// that ran out, before anybody has asked Anthropic.

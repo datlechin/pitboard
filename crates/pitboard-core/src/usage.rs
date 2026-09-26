@@ -147,8 +147,12 @@ pub(crate) fn recency(a: &Window, b: &Window, now: i64) -> Ordering {
 ///
 /// A limit only one of them measured is kept, because a reading can speak for fewer limits
 /// than there are: a session knows the five-hour and weekly limits and nothing scoped to a
-/// model. One that only `known` has goes once its reset has passed, so a limit the service
-/// stops reporting is not shown for ever.
+/// model. One that only `known` has goes once its reset has passed and an answer the
+/// service has just given leaves it out, so a limit the service stops reporting is not shown
+/// for ever. Nothing else takes a limit away: a session leaves out a window whose reset has
+/// passed, and taken for the service no longer reporting it, every reset took the five-hour
+/// limit off the status line, `pitboard status` and the menu bar until the next answer.
+/// Kept, the status line reads it as nothing used.
 ///
 /// `observed_at` is the latest time anything confirmed or advanced the reading. One offered
 /// without a time, which is what a session passes, is stamped `now` when it moves something
@@ -166,6 +170,7 @@ pub(crate) fn merge(
         first.observed_at = first.observed_at.or(Some(now));
         return Some(first);
     };
+    let answered = offered.source == Source::Live && offered.observed_at.is_some();
     let (mut advanced, mut confirmed) = (false, false);
     let mut windows = Vec::new();
     for had in &known.windows {
@@ -193,7 +198,7 @@ pub(crate) fn merge(
                     windows.push(given.clone());
                 }
             },
-            None if had.resets_at.is_some_and(|at| at <= now) => {}
+            None if answered && had.resets_at.is_some_and(|at| at <= now) => {}
             None => windows.push(had.clone()),
         }
     }
@@ -515,9 +520,10 @@ mod tests {
     }
 
     /// Kept for ever, a limit the service stopped reporting would be shown for ever. Once
-    /// its window is over there is nothing left in it to show.
+    /// its window is over, an answer that leaves it out is the service no longer reporting
+    /// it, and there is nothing left in it to show.
     #[test]
-    fn a_limit_only_the_older_reading_has_goes_once_its_reset_has_passed() {
+    fn a_limit_an_answer_leaves_out_goes_once_its_reset_has_passed() {
         let known = reading(
             vec![
                 measured("session", 22.0, Some(NOW + HOUR)),
@@ -525,9 +531,40 @@ mod tests {
             ],
             Some(NOW - 60),
         );
-        let offered = reading(vec![measured("five_hour", 25.0, Some(NOW + HOUR))], None);
-        let merged = merge(Some(&known), Some(&offered), NOW).unwrap();
-        assert_eq!(shares(&merged), [("five_hour", 25.0)]);
+        let answered = reading(vec![measured("session", 25.0, Some(NOW + HOUR))], Some(NOW));
+        let merged = merge(Some(&known), Some(&answered), NOW).unwrap();
+        assert_eq!(shares(&merged), [("session", 25.0)]);
+    }
+
+    /// A session says no time and leaves out a window whose reset has passed. Taken for the
+    /// service no longer reporting it, every reset took the five-hour limit away until the
+    /// next answer, where it reads as nothing used. Claude Code's cache is an answer as of
+    /// whenever Claude Code last asked, so it takes nothing away either.
+    #[test]
+    fn a_reading_that_is_not_an_answer_just_now_never_takes_a_limit_away() {
+        let known = reading(
+            vec![
+                measured("session", 40.0, Some(NOW - 10)),
+                measured("weekly_all", 30.0, Some(NOW + 50 * HOUR)),
+            ],
+            Some(NOW - HOUR),
+        );
+        let passed = reading(
+            vec![measured("seven_day", 31.0, Some(NOW + 50 * HOUR))],
+            None,
+        );
+        let mut cached = reading(passed.windows.clone(), Some(NOW - 5));
+        cached.source = Source::ClaudeCodeCache;
+        for offered in [passed, cached] {
+            let merged = merge(Some(&known), Some(&offered), NOW).unwrap();
+            assert_eq!(
+                shares(&merged),
+                [("session", 40.0), ("seven_day", 31.0)],
+                "{:?}",
+                offered.source
+            );
+            assert_eq!(merged.windows[0].used(NOW), 0.0);
+        }
     }
 
     #[test]
