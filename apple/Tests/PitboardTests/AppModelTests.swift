@@ -1119,6 +1119,66 @@ private func account(_ label: String, signedIn: Bool, percent: Double) -> Accoun
     #expect(model.advice.isEmpty)
 }
 
+/// Advice told when what sessions recorded ran the account out stays while the numbers bear
+/// it out, whatever read comes next. The app's own read worked advice out afresh, leaving out
+/// what had been told, so opening the panel put it away with the account still at 100%.
+@MainActor
+@Test func adviceToldFromWhatSessionsRecordedOutlastsTheAppsNextRead() async {
+    let work = { (percent: Double) in
+        account("work", signedIn: true, [window("session", percent, resets: 7_200)])
+    }
+    let personal = account("personal", [window("session", 10, resets: 9_000)])
+    let stub = Stub(.success(status([work(90), personal])))
+    let model = AppModel(watching: false, service: stub)
+    await model.refresh()
+    stub.offline = .success(status([work(100), personal]))
+    stub.readings += 1
+    await model.noticeOtherChangesForTesting()
+    #expect(model.advice.map(\.switchTo) == ["claude/personal"])
+
+    stub.answer = .success(status([work(100), personal]))
+    await model.refresh()
+    #expect(model.title == "work 100%")
+    #expect(model.advice.map(\.switchTo) == ["claude/personal"])
+}
+
+/// The same for advice a read told: the next read found the window already told about and
+/// left it out, so it was gone a minute later, or at once if the panel was opened again.
+@MainActor
+@Test func adviceToldByAReadOutlastsTheNextReadAndIsToldOnce() async {
+    let work = account("work", signedIn: true, [window("session", 100, resets: 7_200)])
+    let personal = account("personal", [window("session", 10, resets: 9_000)])
+    let stub = Stub(.success(status([work, personal])))
+    let model = AppModel(watching: false, service: stub)
+    await model.refresh()
+    #expect(model.advice.count == 1)
+
+    await model.refresh()
+    #expect(model.advice.map(\.switchTo) == ["claude/personal"])
+    let told = Advice.key("claude", "work", window("session", 100))
+    #expect(model.toldForTesting == [told: 7_200])
+}
+
+/// A change to the account index can leave the account in use run out, and the poll that
+/// notices it reads who is signed in and the numbers again. What they show is advised then,
+/// not at the app's next read of its own.
+@MainActor
+@Test func theAccountIndexChangingElsewhereIsAdvisedOnAtOnce() async {
+    let work = { (percent: Double) in
+        account("work", signedIn: true, [window("session", percent, resets: 7_200)])
+    }
+    let personal = account("personal", [window("session", 10, resets: 9_000)])
+    let stub = Stub(.success(status([work(20), personal])))
+    let model = AppModel(watching: false, service: stub)
+    await model.refresh()
+    #expect(model.advice.isEmpty)
+
+    stub.offline = .success(status([work(100), personal]))
+    stub.changed += 1
+    await model.noticeOtherChangesForTesting()
+    #expect(model.advice.map(\.switchTo) == ["claude/personal"])
+}
+
 /// A read that could not reach Anthropic still has something true to show. An empty panel
 /// says the accounts are gone, which is not what happened.
 @MainActor

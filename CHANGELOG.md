@@ -38,6 +38,10 @@ All notable changes are recorded here. The format follows
   has the same window; otherwise, or where the two accounts' windows reset within the same
   minute, the account signed in after can show the higher of their shares until that
   window resets.
+- The panel's advice to switch, once the account in use had run out, went away at the
+  app's next read, as soon as the panel was opened again, while the account was still out.
+  It now comes as soon as the numbers show the account run out, stays for as long as they
+  do, and is told once.
 
 ## [0.4.0] - 2026-09-25
 

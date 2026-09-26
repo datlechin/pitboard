@@ -250,10 +250,11 @@ final class AppModel {
         }
     }
 
-    /// Advice about numbers taken from what is recorded. What is new is told, and what was
-    /// said before stays for as long as the numbers bear it out: they move with every
-    /// session's response, and advice worked out afresh leaves out what has been told, so it
-    /// would be put away seconds after it was said. Still one per tool, the newer first.
+    /// Advice about a read, the app's own or numbers taken from what is recorded. What is new
+    /// is told, and what was said before stays for as long as the numbers bear it out.
+    /// Advice worked out afresh leaves out what has been told, so it was put away at the next
+    /// read, seconds after it was said once numbers moved with every session's response,
+    /// with the account still out. Still one per tool, the newer first.
     private func advise(from read: Status) {
         let new = Advice.about(read, tools: tools, unless: notifier.told)
         new.forEach(notifier.tell)
@@ -373,8 +374,7 @@ final class AppModel {
             lastChangedAt = await service.changedAt()
             lastReadingsAt = readingsBefore
             problemCode = read.warnings.first?.code
-            advice = Advice.about(read, tools: tools, unless: notifier.told)
-            advice.forEach(notifier.tell)
+            advise(from: read)
         } catch {
             problem = Self.saying(error)
             problemCode = Self.code(of: error)

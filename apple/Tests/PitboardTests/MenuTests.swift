@@ -81,6 +81,21 @@ import Testing
     #expect(Advice.about(read, unless: [Advice.key("claude", "work", exhausted): 42]).isEmpty)
 }
 
+/// Advice is about one window. The window after it, spent as well, is advice of its own to
+/// tell, and not this advice still holding.
+@Test func adviceHoldsForTheWindowItIsAboutAndNotTheOneAfter() {
+    let spent = { (resets: Int64) in
+        status([
+            account("work", signedIn: true, [window("session", 100, resets: resets)]),
+            account("spare", [window("session", 0)]),
+        ])
+    }
+    let advice = Advice.about(spent(7_200), unless: [:]).first
+    #expect(advice?.holds(in: spent(7_200)) == true)
+    #expect(advice?.holds(in: spent(7_201)) == true, "one reset, as another source rounds it")
+    #expect(advice?.holds(in: spent(25_200)) == false)
+}
+
 @Test func aWeeklyLimitIsComparedWithWeeklyLimits() {
     let read = status([
         account("work", signedIn: true, [window("session", 10), window("weekly_all", 100)]),
