@@ -12,6 +12,7 @@ All notable changes are recorded here. The format follows
   last response can no longer replace newer ones, whoever writes last. The one case where it
   shows more than is used is a plan upgraded in the middle of a window: the old, higher
   share stands until that window resets.
+- The app's Documentation item opens docs.usepitboard.com.
 
 ### Fixed
 - Sessions on one account, and the menu bar, disagreed about the account in use. Each

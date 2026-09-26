@@ -260,7 +260,7 @@ on their own (`{"follows": "polling", "within_seconds": 33}`) or need a restart
 
 Shell completions: `pitboard completions zsh` (or `bash`, `fish`, `elvish`, `powershell`).
 
-The same ground, with more detail: [docs.usepitboard.com](https://docs.usepitboard.com).
+Documentation: [docs.usepitboard.com](https://docs.usepitboard.com).
 
 ## What it will not do
 
