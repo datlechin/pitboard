@@ -1,5 +1,6 @@
 import Foundation
 import PitboardKit
+import WebKit
 
 @testable import PitboardApp
 
@@ -51,17 +52,99 @@ func status(_ accounts: [Account], warnings: [Warning] = []) -> Status {
 
 extension AppModel {
     /// The app's model with nothing of the Mac running the tests behind it: `service` for
-    /// the core, preferences of the test's own, a login item that registers nothing, and a
-    /// command line that links nothing. Nothing runs by itself unless `watching` says so, so
-    /// a test drives every read and knows what set what.
+    /// the core, preferences of the test's own, a login item that registers nothing, a
+    /// command line that links nothing, and claude.ai windows whose stores are stand-ins.
+    /// Nothing runs by itself unless `watching` says so, so a test drives every read and
+    /// knows what set what.
     convenience init(
         testing service: any Core, watching: Bool = false,
         defaults: UserDefaults = TestDefaults(), commandLineTool: CommandLineTool = .nowhere,
-        loginItem: any LoginItem = StandInLoginItem()
+        loginItem: any LoginItem = StandInLoginItem(), web: ClaudeWeb = .standIn()
     ) {
         self.init(
             watching: watching, service: service, defaults: defaults,
-            commandLineTool: commandLineTool, loginItem: loginItem, notifies: false)
+            commandLineTool: commandLineTool, loginItem: loginItem, notifies: false, web: web,
+            linkScheme: Fixture.linkScheme)
+    }
+}
+
+/// Stands in for WebKit's persistent stores: remembers which exist and which this pitboard
+/// recorded making, in preferences of its own, and deletes one the way WebKit does, refusing
+/// while a page still uses it. No test writes under ~/Library/WebKit.
+@MainActor
+final class StandInStores: WebStores {
+    /// The stores there are, whoever made them.
+    var existing: Set<UUID> = []
+    /// Which of them this pitboard made, as the app records it.
+    let record = WebStoreRecord(defaults: TestDefaults(), directory: "/Users/dana/.pitboard")
+    /// Every store asked for, in order.
+    private(set) var made: [UUID] = []
+    /// Every store deleted, in order.
+    private(set) var removed: [UUID] = []
+    /// How many deletions from now on are refused as though a web view still used the store.
+    var refusals = 0
+    /// Whether a page still uses a store, which WebKit refuses to delete. A test points this
+    /// at the model's pages.
+    var inUse: (UUID) -> Bool = { _ in false }
+    private var objects: [UUID: WKWebsiteDataStore] = [:]
+
+    enum Refusal: Error, LocalizedError {
+        case inUse
+        var errorDescription: String? { "Data store is in use." }
+    }
+
+    func store(for id: UUID) -> WKWebsiteDataStore {
+        made.append(id)
+        record.add(id)
+        existing.insert(id)
+        if let object = objects[id] { return object }
+        let object = WKWebsiteDataStore.nonPersistent()
+        objects[id] = object
+        return object
+    }
+
+    func identifiers() async -> Set<UUID> { existing }
+
+    func recorded() -> Set<UUID> { record.ids }
+
+    func unrecord(_ id: UUID) { record.remove(id) }
+
+    /// Stores this pitboard made before, as the app would have recorded them.
+    func made(_ ids: Set<UUID>) {
+        existing.formUnion(ids)
+        for id in ids { record.add(id) }
+    }
+
+    /// Runs as a deletion starts, for a test to do something while one is under way.
+    var removing: (UUID) -> Void = { _ in }
+
+    func remove(_ id: UUID) async throws {
+        removing(id)
+        if inUse(id) { throw Refusal.inUse }
+        if refusals > 0 {
+            refusals -= 1
+            throw Refusal.inUse
+        }
+        existing.remove(id)
+        objects[id] = nil
+        removed.append(id)
+    }
+}
+
+extension ClaudeWeb {
+    /// claude.ai windows for a test: the fixture's home, `stores` for WebKit's, a downloads
+    /// folder nobody writes to, and links and pauses kept in `record`, with no waiting.
+    static func standIn(
+        stores: StandInStores = StandInStores(), record: WebRecord = WebRecord()
+    ) -> ClaudeWeb {
+        ClaudeWeb(
+            home: URL(string: "pitboard-fixture://claude.ai/")!,
+            stores: stores,
+            downloads: FileManager.default.temporaryDirectory
+                .appendingPathComponent("pitboard-tests/Downloads"),
+            openElsewhere: { record.open($0) },
+            prepare: { _ in },
+            pause: { record.pause($0) })
     }
 }
 

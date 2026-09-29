@@ -48,9 +48,11 @@ extension XCUIApplication {
 
     /// An item of the menu bar item's menu. The app keeps a main menu, hidden while it has
     /// no Dock icon, and its Settings…, Quit and Add Account… have the same titles, so the
-    /// item is looked for under the menu bar item.
+    /// item is looked for under the menu bar item. Only the menu's own items: the submenu of
+    /// Open claude.ai lists the accounts' labels again, and an account's item is the one
+    /// that switches.
     func menuItem(_ title: String) -> XCUIElement {
-        statusItems.firstMatch.menuItems[title]
+        statusItems.firstMatch.menus.firstMatch.children(matching: .menuItem)[title]
     }
 
     /// The alert showing over the window. A button is looked for in it rather than in the

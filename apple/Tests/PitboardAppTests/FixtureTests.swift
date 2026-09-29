@@ -1,6 +1,7 @@
 import Foundation
 import PitboardKit
 import Testing
+import WebKit
 
 @testable import PitboardApp
 
@@ -501,6 +502,34 @@ struct FixtureLaunchTests {
         #expect(
             described(try #require(model.status))
                 == described(try await FixtureCore(.twoTools).statusOffline()))
+    }
+
+    /// A fixture's claude.ai windows reach nothing: they load the stand-in page on an origin
+    /// of their own, keep their stores in memory, save downloads in the fixture's temporary
+    /// folder, and record a link for the browser without opening it. Its links are the debug
+    /// build's, and it never tells macOS about the Service.
+    @Test func theFixtureWebWorldReachesNothing() async throws {
+        defer { forgetLaunches() }
+        let launch = Fixture.twoTools.dependencies(defaults: TestDefaults())
+        #expect(launch.web.home.absoluteString == "pitboard-fixture://claude.ai/")
+        #expect(launch.web.stores is FixtureStores)
+        let store = launch.web.stores.store(for: UUID())
+        #expect(!store.isPersistent)
+        #expect(await launch.web.stores.identifiers().count == 1)
+        #expect(
+            launch.web.downloads.path.hasPrefix(FileManager.default.temporaryDirectory.path))
+        #expect(launch.linkScheme == "pitboard-debug")
+        #expect(!launch.registersServices)
+
+        let record = WebRecord()
+        let web = ClaudeWeb.fixture(record: record)
+        web.openElsewhere(URL(string: "https://example.com/")!)
+        #expect(record.opened == [URL(string: "https://example.com/")!])
+
+        let configuration = WKWebViewConfiguration()
+        web.prepare(configuration)
+        #expect(configuration.urlSchemeHandler(forURLScheme: "pitboard-fixture") != nil)
+        #expect(FixturePageHandler.page.contains("<title>claude.ai stand-in</title>"))
     }
 
     /// A fixture's command line is inside a stand-in app in a temporary directory, and

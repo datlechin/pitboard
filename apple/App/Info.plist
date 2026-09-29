@@ -29,5 +29,53 @@
 	<!-- A menu bar app: no Dock icon, no window at launch. -->
 	<key>LSUIElement</key>
 	<true/>
+	<!-- A pitboard link, pitboard://open?url=<a claude.ai link>, opens the account picker.
+	     The project sets the scheme per configuration: pitboard-debug in a debug build, so a
+	     build from a branch never answers a link meant for the installed app. -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>$(PRODUCT_BUNDLE_IDENTIFIER).link</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>$(PITBOARD_URL_SCHEME)</string>
+			</array>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+		</dict>
+	</array>
+	<!-- Open in pitboard, for a selected link or text with one in it. Chromium offers a
+	     selection only to a service that takes exactly public.utf8-plain-text. Without
+	     NSRequiredContext the system registers a service and leaves it out of the menu; with
+	     it, the item shows only where the selection has a link. No key equivalent: one
+	     would sit in every app's menu and could take a key a browser uses. -->
+	<key>NSServices</key>
+	<array>
+		<dict>
+			<key>NSMenuItem</key>
+			<dict>
+				<key>default</key>
+				<string>$(PITBOARD_SERVICE_TITLE)</string>
+			</dict>
+			<key>NSMessage</key>
+			<string>openClaudeLink</string>
+			<key>NSPortName</key>
+			<string>$(EXECUTABLE_NAME)</string>
+			<key>NSSendTypes</key>
+			<array>
+				<string>public.utf8-plain-text</string>
+				<string>public.url</string>
+			</array>
+			<key>NSRequiredContext</key>
+			<dict>
+				<key>NSTextContent</key>
+				<string>URL</string>
+			</dict>
+		</dict>
+	</array>
+	<!-- What macOS shows if it asks before a claude.ai window saves a download. -->
+	<key>NSDownloadsFolderUsageDescription</key>
+	<string>pitboard saves what you download in a claude.ai window to your Downloads folder.</string>
 </dict>
 </plist>

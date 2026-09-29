@@ -33,6 +33,10 @@ struct MenuBarContent: View {
         Section {
             Button("Open pitboard") { model.showWindow() }
                 .keyboardShortcut("0")
+            ClaudeMenuItems(model: model)
+            if ClaudeMenu(model.claudeWindows) != .none {
+                Button("Open claude.ai Link…") { model.links.enter() }
+            }
             Button("Settings…") {
                 // Choosing an item of a menu bar item's menu does not make the app active,
                 // and settings already open would come forward behind the app in front.

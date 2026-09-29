@@ -35,7 +35,8 @@
 
         /// The fixture's world. It reads, notices changes and reads when a menu opens, as the
         /// app does on a real machine, since that is what the UI tests are testing; only
-        /// notifications are left out. `defaults` stands in for the fixture's suite, for a unit
+        /// notifications are left out. Its claude.ai windows load a stand-in page and keep
+        /// nothing on disk. `defaults` stands in for the fixture's suite, for a unit
         /// test that must not leave the suite's file behind.
         @MainActor
         func dependencies(defaults given: UserDefaults? = nil) -> Dependencies {
@@ -48,8 +49,15 @@
                 loginItem: FixtureLoginItem(),
                 commandLineTool: Self.commandLineTool(),
                 notifies: false,
-                watching: true)
+                watching: true,
+                web: .fixture(),
+                linkScheme: Self.linkScheme,
+                registersServices: false)
         }
+
+        /// The pitboard link scheme a fixture answers: the debug build's, whichever build
+        /// this is, so a UI test's link never reaches an installed copy.
+        static let linkScheme = "pitboard-debug"
     }
 
     extension Fixture {
