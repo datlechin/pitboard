@@ -103,11 +103,16 @@ Use the first word, never the others.
 | pitboard's item in the menu bar; the pitboard window; pane | status item, tray icon, panel, dashboard, tab |
 | shortcut menu; dialog; Settings | context menu; sheet, modal; Preferences |
 | Claude Code; Codex ("OpenAI's Codex CLI" on first mention) | Claude (for the tool), Codex CLI |
+| claude.ai window | web window, browser window, web view |
+| pitboard link | deep link, URL scheme link |
+| account picker (prose); **Open claude.ai Link** (its title) | chooser, account chooser |
+| Share menu; Services menu | share sheet (except Arc's own), services list |
 
 ## UI and commands
 
 - UI text in bold, exactly as shown, without a trailing ellipsis: **Add Account**,
-  **Sign In Again**. Quote UI text with its contraction: **Couldn't Read Accounts**.
+  **Sign In Again**, **Sign Out of This Window**. Quote UI text with its contraction:
+  **Couldn't Read Accounts**.
 - Mac verbs: choose a menu item; click a button, tab or pane; turn on or turn off a
   switch; select a row; press a key; enter text. Paths: **Settings** > **General**.
 - Shortcuts spelled out, no bold or code: Command-N, Command-Comma.

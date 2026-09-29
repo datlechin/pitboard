@@ -7,4 +7,8 @@ enum DefaultsKey {
     static let secondAccountDeclined = "secondAccountDeclined"
     /// What the menu bar item shows.
     static let menuBarShows = "menuBarShows"
+    /// The version that last told macOS about the Service, so it is told once per version.
+    static let servicesVersion = "servicesVersion"
+    /// The claude.ai window stores each pitboard directory made, by the directory's path.
+    static let webStores = "webStores"
 }

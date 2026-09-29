@@ -121,6 +121,11 @@ enum Symbol {
     static let update = "arrow.down.circle"
     static let terminal = "terminal"
     static let general = "gearshape"
+    /// A claude.ai window's way back and forward through its pages.
+    static let back = "chevron.left"
+    static let forward = "chevron.right"
+    /// A file saved from a claude.ai window. Not `arrow.down.circle`, which is an update.
+    static let download = "tray.and.arrow.down"
 }
 
 extension View {

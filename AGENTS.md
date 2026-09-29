@@ -20,6 +20,12 @@ guide; this file is what an agent needs before it touches anything.
 - Never print a token. `pitboard doctor --json` hides them; raw files do not.
 - Tests never touch launchd, systemd, `/usr/local/bin`, `/Applications` or
   `~/Library/LaunchAgents`.
+- Never load claude.ai or sign in to it from a test, a script or a branch build. A
+  fixture's claude.ai window loads a stand-in page, and the unit tests use stand-in stores.
+- Never open a `pitboard://` link against a real home: it opens the app installed there. A
+  debug build claims `pitboard-debug://`, and tests send those to a fixture.
+- Never read a browser's cookies or data, or the web data a claude.ai window keeps under
+  `~/Library/WebKit`. `HandsOffTests` fails on the names that would.
 
 ## Check a change
 

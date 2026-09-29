@@ -139,14 +139,25 @@ from Xcode, it reads this Mac's accounts, as that copy does. To run it in a fixt
 add `PITBOARD_FIXTURE=twoTools` to the scheme's environment variables. The fixtures are the
 cases of `Fixture` in `apple/Sources/PitboardApp/Fixture/Fixture.swift`.
 
+In a fixture, a claude.ai window loads a stand-in page served under
+`pitboard-fixture://claude.ai`, keeps its data in memory and opens no link outside it, so
+nothing reaches claude.ai. A debug build run without a fixture loads the real claude.ai,
+into stores of its own under `~/Library/WebKit/com.usepitboard.Pitboard.debug`.
+
+The debug build claims `pitboard-debug://` rather than `pitboard://`, shows as
+**pitboard Debug** in Share menus and as **Open in pitboard Debug** in the Services menu,
+once it has been built. A link or share meant for an installed copy never reaches a build
+from a branch. The Share extension is the `PitboardShare` target, from
+`apple/ShareExtension`; it links `PitboardLinks` and nothing else of the app's.
+
 `./apple/scripts/build-app.sh` builds the release bundle the way CI and a release do.
 
 CI checks the format of the Swift written by hand, leaving out the generated bindings:
 
 ```sh
 swift format lint --strict --recursive --configuration apple/.swift-format \
-  apple/Sources/PitboardApp apple/Sources/PitboardKit apple/App apple/UITests \
-  apple/Tests apple/scripts .github/scripts
+  apple/Sources/PitboardApp apple/Sources/PitboardKit apple/Sources/PitboardLinks \
+  apple/App apple/ShareExtension apple/UITests apple/Tests apple/scripts .github/scripts
 ```
 
 ## Tool registers

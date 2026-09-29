@@ -45,6 +45,22 @@ ditto apple/build/DerivedData/Build/Products/Release/Pitboard.app "$app"
     echo "Xcode did not embed Sparkle.framework" >&2
     exit 1
 }
+# The Share extension, which hands a page's claude.ai link to the app, built for both kinds
+# of Mac like the app. The release claims pitboard://, which the extension, the Service and
+# the bookmarklet all open; a debug build claims pitboard-debug:// instead.
+appex=$app/Contents/PlugIns/PitboardShare.appex
+[ -d "$appex" ] || {
+    echo "Xcode did not embed PitboardShare.appex" >&2
+    exit 1
+}
+for arch in arm64 x86_64; do
+    lipo "$appex/Contents/MacOS/PitboardShare" -verify_arch "$arch"
+done
+scheme=$(plutil -extract CFBundleURLTypes.0.CFBundleURLSchemes.0 raw "$app/Contents/Info.plist")
+[ "$scheme" = pitboard ] || {
+    echo "the app claims $scheme://, not pitboard://" >&2
+    exit 1
+}
 
 # The command line comes inside the app, so one update moves both, and the renewal
 # schedule has a pitboard to run: the app has no renewal of its own.
@@ -63,6 +79,9 @@ mkdir -p "$app/Contents/Resources"
 swift apple/scripts/make-icon.swift apple/build
 iconutil --convert icns --output "$app/Contents/Resources/AppIcon.icns" \
     apple/build/AppIcon.iconset
+# The Share menu shows the extension's own icon, which is the app's.
+mkdir -p "$appex/Contents/Resources"
+cp "$app/Contents/Resources/AppIcon.icns" "$appex/Contents/Resources/AppIcon.icns"
 
 # The man page and completions for whatever links the command line onto PATH, written by
 # the build that ships so they describe it, and before signing, since the app's signature
@@ -105,6 +124,19 @@ for helper in "$app/Contents/Frameworks/Sparkle.framework/Versions/"*/XPCService
 done
 # shellcheck disable=SC2086 # $options is a list of flags.
 codesign --force $options --sign "$identity" "$app/Contents/Frameworks/Sparkle.framework"
+# An app extension must be sandboxed, or macOS refuses to run it, and a signature made
+# without --entitlements carries none. It is signed before the app, and the app's own
+# signature is made without --deep, so it keeps this one. The key is written with its dots
+# escaped, which plutil otherwise reads as a path of four keys.
+# shellcheck disable=SC2086 # $options is a list of flags.
+codesign --force $options --sign "$identity" \
+    --entitlements apple/ShareExtension/PitboardShare.entitlements "$appex"
+sandboxed=$(codesign -d --entitlements - --xml "$appex" 2>/dev/null |
+    plutil -extract 'com\.apple\.security\.app-sandbox' raw - 2>/dev/null || true)
+[ "$sandboxed" = true ] || {
+    echo "the share extension is not sandboxed" >&2
+    exit 1
+}
 # shellcheck disable=SC2086
 codesign --force $options --sign "$identity" "$app"
 codesign --verify --strict --deep "$app"

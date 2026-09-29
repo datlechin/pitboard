@@ -20,6 +20,10 @@ Only the account changes: your history, sessions, settings and projects stay whe
 A Claude Code session that is already open picks up a switch within about 33 seconds. A
 running `codex` keeps the old account until you restart it.
 
+The menu bar app also gives each Claude Code account a
+[claude.ai window](https://docs.usepitboard.com/guides/claude-web) of its own, all signed in
+side by side, and opens a claude.ai link from any browser as the account you choose.
+
 pitboard sends a login only to the service that issued it: Anthropic for Claude Code, OpenAI
 for Codex. It has no server of its own and no telemetry, and parked logins stay on your
 computer. For every request, including the app's update check on GitHub, see

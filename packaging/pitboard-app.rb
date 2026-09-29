@@ -33,12 +33,18 @@ cask "pitboard-app" do
   # upgrade and reinstall too. ~/.pitboard stays: it is the only index of the parked logins,
   # and without it they are left where nothing can name them. `pitboard uninstall` deletes
   # the logins and then the directory, so it has to come first.
+  #
+  # ~/Library/WebKit/com.usepitboard.Pitboard holds each claude.ai window's data, its
+  # claude.ai sign-in included. The Share extension's container is made by macOS the first
+  # time the extension runs, and holds nothing pitboard writes.
   zap launchctl: "com.datlechin.pitboard.renew",
       trash:     [
         "~/Library/Application Support/com.usepitboard.Pitboard",
         "~/Library/Caches/com.usepitboard.Pitboard",
+        "~/Library/Containers/com.usepitboard.Pitboard.share",
         "~/Library/HTTPStorages/com.usepitboard.Pitboard",
         "~/Library/HTTPStorages/com.usepitboard.Pitboard.binarycookies",
         "~/Library/Preferences/com.usepitboard.Pitboard.plist",
+        "~/Library/WebKit/com.usepitboard.Pitboard",
       ]
 end

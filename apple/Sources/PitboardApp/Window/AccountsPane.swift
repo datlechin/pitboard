@@ -41,10 +41,8 @@ struct AccountsPane: View {
             ) { account in
                 Button("Forget", role: .destructive) { forget(account) }
                 Button("Cancel", role: .cancel) {}
-            } message: { _ in
-                Text(
-                    "pitboard deletes the login it parked for this account. Using it again "
-                        + "needs a sign-in in your browser.")
+            } message: { account in
+                Text(forgetMessage(for: account))
             }
             .alert("Give up on the interrupted switch?", isPresented: $givingUp) {
                 Button("Give Up", role: .destructive) {
@@ -157,6 +155,9 @@ struct AccountsPane: View {
         }
         if case .name = said.action {
             Button("Name…") { perform(said.action) }
+        }
+        if let store = webStoreID(for: account) {
+            Button("Open claude.ai") { model.openClaude(store) }
         }
         if let label = account.label, !account.unplaced {
             Button("Sign In Again…") {

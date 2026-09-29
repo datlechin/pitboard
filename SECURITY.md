@@ -92,6 +92,23 @@ A report is in scope when pitboard fails at one of these.
   signed ad hoc learns another key only from a release signed with its key, and otherwise
   stops updating without saying so. So the release workflow refuses a changed key unless
   the repository declares a rotation.
+- The app's claude.ai windows keep their hands off claude.ai's sign-in. pitboard never
+  reads, copies or changes what WebKit keeps for a window, adds no script to the page,
+  poses as no other browser, and never makes a claude.ai sign-in from a Claude Code
+  login. The sign-in happens on claude.ai's own page. A window stays on
+  `https://claude.ai`; any other page opens in your browser, and Google's sign-in, which
+  Google blocks in apps, is stopped rather than sent there. A download that an artifact or
+  another site starts asks first, and every download is quarantined, as a browser's is.
+- Forgetting a Claude Code account deletes what its claude.ai window keeps, sign-in
+  included: at once in the app, and at the app's next read after `pitboard forget`. A
+  store that cannot be deleted is said, and tried again at every later read.
+- Nothing from outside the app opens a claude.ai window by itself. A `pitboard://` link, a
+  Service request and a share each show the account picker, and only a choice there opens
+  a window. Only claude.ai links are accepted, and claude.ai's sign-in links are refused,
+  since one would sign a window in as whoever it belongs to. No route reads a browser's
+  cookies, history or files.
+- The Share extension is sandboxed, with no network, file or shared-group access. It reads
+  the one link its host hands it and keeps nothing.
 - pitboard renews a parked login while its account is enrolled, so an account nobody
   uses keeps a live refresh token. `pitboard doctor` warns about an account last switched
   to 30 days ago or more, a Claude Code refresh token's life. It does not warn about one
@@ -100,7 +117,11 @@ A report is in scope when pitboard fails at one of these.
 
 ## What pitboard does not protect against
 
-- Another process running as your user, which can read what you can read.
+- Another process running as your user, which can read what you can read. That includes
+  each claude.ai window's sign-in, which WebKit keeps as ordinary files under
+  `~/Library/WebKit/com.usepitboard.Pitboard`, as a browser keeps its cookies.
+- claude.ai's own page, which runs in WebKit's processes as it would in Safari, with its
+  own scripts and whatever it embeds. pitboard decides only where the window goes.
 - Another user with administrator access to your computer.
 - A compromised Claude Code, Codex or dependency of pitboard. CI checks every Rust
   dependency for known advisories, licences and sources. A weekly job checks Sparkle, the

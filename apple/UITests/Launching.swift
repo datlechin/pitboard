@@ -48,9 +48,11 @@ extension XCUIApplication {
 
     /// An item of the menu bar item's menu. The app keeps a main menu, hidden while it has
     /// no Dock icon, and its Settings…, Quit and Add Account… have the same titles, so the
-    /// item is looked for under the menu bar item.
+    /// item is looked for under the menu bar item. Only the menu's own items: the submenu of
+    /// Open claude.ai lists the accounts' labels again, and an account's item is the one
+    /// that switches.
     func menuItem(_ title: String) -> XCUIElement {
-        statusItems.firstMatch.menuItems[title]
+        statusItems.firstMatch.menus.firstMatch.children(matching: .menuItem)[title]
     }
 
     /// The alert showing over the window. A button is looked for in it rather than in the
@@ -74,6 +76,26 @@ extension XCUIApplication {
     /// An account's row in the window, by its label with its tool.
     func accountRow(_ qualified: String) -> XCUIElement {
         descendants(matching: .any)["account.\(qualified)"]
+    }
+
+    /// An account's claude.ai window, by the account's label. macOS titles it with the label
+    /// and the page's title after it, "work – claude.ai stand-in", so it is looked for among
+    /// the claude.ai scene's windows by a title that is the label or starts with it.
+    func claudeWindow(_ label: String) -> XCUIElement {
+        let format = "identifier BEGINSWITH %@ AND (title == %@ OR title BEGINSWITH %@)"
+        return windows.matching(NSPredicate(format: format, "claude-", label, "\(label) "))
+            .firstMatch
+    }
+
+    /// The account picker, by its scene's identifier.
+    var linkPicker: XCUIElement {
+        windows["link-picker"]
+    }
+
+    /// The picker's headline, by its identifier: it says what the picker is asking, or why it
+    /// cannot open the link.
+    var pickerTitle: XCUIElement {
+        linkPicker.descendants(matching: .any)["picker.title"]
     }
 }
 

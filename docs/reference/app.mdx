@@ -1,11 +1,13 @@
 ---
 title: "Menu bar app"
-description: "Look up each menu item, window pane, account action, dialog and keyboard shortcut of the menu bar app."
+description: "Look up each menu item, window, account action, dialog and keyboard shortcut of the menu bar app."
 ---
 
 The menu bar app calls the same core as the command line rather than running `pitboard`. It uses the same accounts, [parked logins](/concepts/switching#parked-logins) and log of changes.
 
-The app has no Dock icon. The first time it runs, it opens the pitboard window by itself.
+The app has no Dock icon, except while a claude.ai window is open. The first time it runs, it opens the pitboard window by itself.
+
+The app also opens a [claude.ai window](/guides/claude-web) for each enrolled Claude Code account, and the account picker for a claude.ai link from outside the app.
 
 ## Menu bar item
 
@@ -69,6 +71,8 @@ The commands come last:
 | **Add Account** | Command-N | Opens the **Add Account** dialog in the pitboard window. |
 | **Refresh** | Command-R | Asks for every account's usage again, even if pitboard asked moments ago. The line under it says when usage was last read, as in **Updated 20:52**, or **Reading** during a read. **Not read yet** and **Showing the last numbers measured** mean no read has succeeded since the app opened or since your last change in the app. The second means the last read failed. |
 | **Open pitboard** | Command-0 | Opens the pitboard window. |
+| **Open claude.ai as work** | None | Opens the claude.ai window of `work`, the one enrolled Claude Code account. With two or more, the item is **Open claude.ai**, with a submenu of labels. Absent with none. |
+| **Open claude.ai Link** | None | Opens the [account picker](#account-picker) with an empty **Link** field. Absent with no enrolled Claude Code account. |
 | **Settings** | Command-Comma | Opens [Settings](/reference/settings). |
 | **Check for Updates** | None | Opens the update window. Only in a copy from a release. |
 | **About pitboard** | None | Shows the app's version. |
@@ -145,6 +149,7 @@ Control-click an account in the **Accounts** pane to open its shortcut menu. For
 | --- | --- | --- |
 | **Use work** | An account you can switch to | Switches to it. |
 | **Name** | The account in use, when it has no label | Opens **Name This Account**. |
+| **Open claude.ai** | An enrolled Claude Code account | Opens its claude.ai window. |
 | **Sign In Again** | Any enrolled account, including the one in use | Opens **Sign In to work Again**. |
 | **Rename** | Any enrolled account | Opens **Rename "work"**. |
 | **Copy Email Address** | Any account with an email address | Copies the address. |
@@ -168,11 +173,116 @@ If an action fails, the dialog stays open with what you entered. It shows the re
 
 | Alert | Opened by | Says | Buttons |
 | --- | --- | --- | --- |
-| **Forget "work"?** | **Forget** in a shortcut menu, or pressing Delete on a selected row | **pitboard deletes the login it parked for this account. Using it again needs a sign-in in your browser.** | **Forget**, **Cancel** |
+| **Forget "work"?** | **Forget** in a shortcut menu, or pressing Delete on a selected row | For a Codex account: **pitboard deletes the login it parked for this account. Using it again needs a sign-in in your browser.** For a Claude Code account: **pitboard deletes the login it parked for this account, and everything its claude.ai window keeps on this Mac, its sign-in included. Using it again needs a sign-in in your browser.** | **Forget**, **Cancel** |
 | **Give up on the interrupted switch?** | **Give Up** in the notice **An interrupted switch is waiting** | **Every login is kept, and nothing is deleted. pitboard stops trying to finish it.** | **Give Up**, **Cancel** |
 | **Couldn't switch to work**, **Couldn't forget work**, **Couldn't give up on the interrupted switch** | A switch, forget or give-up that failed, including one started from the menu or a notification | The reason, then any warnings | **OK** |
+| **Couldn't delete work's claude.ai data** | A forget that worked, after which WebKit would not delete what the claude.ai window keeps | WebKit's reason, and that pitboard tries again at its next read | **OK** |
 
 For when to give up on an interrupted switch, see [Recover after a crash, a restore or a move](/troubleshooting/recovery#an-interrupted-switch-cannot-be-finished).
+
+## claude.ai windows
+
+Each enrolled Claude Code account has at most one [claude.ai window](/guides/claude-web). Its title is the account's label, and its subtitle is the page's title, or **claude.ai** before a page has loaded. A window closed and opened again starts at claude.ai's home page.
+
+In place of the page, the window shows **Reading accounts** until the app has read the accounts, and **Opening claude.ai** while it sets up the page. It shows **Signing out** during a sign-out. A window whose account is no longer enrolled closes itself.
+
+While a claude.ai window is open, the app has a Dock icon, is in the Command-Tab switcher and shows its menus in the menu bar.
+
+The toolbar has **Back** and **Forward**, dimmed when there is nowhere to go, and **Reload** (a circular arrow). The **View** menu has the same commands with their shortcuts. A two-finger swipe goes back or forward, and pinching zooms.
+
+A bar at the top of the window says what pitboard has to say about it. The next message replaces it, and **Dismiss** (an x) closes it:
+
+| Text | Shown when | Button |
+| --- | --- | --- |
+| **Sign in to claude.ai as** `<email>`, with how to use **Continue with email**: tap the emailed link on your phone, then enter here the code claude.ai shows there | The window opens on data WebKit had not stored before: the first time, and after **Sign Out of This Window** | None |
+| **Google does not allow its pages inside apps, so pitboard stopped it.**, with how to sign in by email, and that Gmail, Google Drive, Google Calendar and Google single sign-on cannot be connected in the window | The page went to Google's sign-in | None |
+| **claude.ai opened a page in your browser.**, and that anything connected there goes to the claude.ai account the browser is signed in to | claude.ai sent a page to the browser without a click | None |
+| **claude.ai tried to open a window pitboard doesn't show.** | claude.ai asked for a window with no address, or with a `blob:` or `data:` link that is not a download | None |
+| **claude.ai didn't load:**, the reason, and **Click Reload to try again.** | A page did not load, or the page's process ended twice before one finished loading | None |
+| **Downloading "report.pdf"** | A download started | None; a spinner |
+| **Downloaded "report.pdf" to Downloads.** | A download finished | **Show in Finder** |
+| **Couldn't download "report.pdf":** and the reason | A download failed | None |
+
+The window stays on `https://claude.ai`. A link to anywhere else opens in your default browser, and an email address you click opens in your default email app. A claude.ai link asked for in a new window opens in this one.
+
+The window refuses the microphone and the camera, and shows no web notifications. A page's alert or confirmation appears as a dialog over the window, titled with the site that asked. WebKit's own **Download Linked File**, **Download Image** and **Download Video** are left out of the shortcut menu.
+
+A download from claude.ai's own page goes straight to Downloads. One that an artifact, another frame or another site starts asks first. Closing the window lets a download finish; **Sign Out of This Window** and forgetting the account stop it. Each download is quarantined, as a browser's is.
+
+These menu commands act on the claude.ai window in front, and are dimmed when no claude.ai window is:
+
+| Command | Menu | Shortcut | What it does |
+| --- | --- | --- | --- |
+| **Open Link** | **File** | Command-L | Opens the dialog **Open a claude.ai Link as work**, with a **Link** field. **Open** stays dimmed until the field holds a claude.ai link, and a line under a refused link says why. |
+| **Sign Out of This Window** | **File** | None | Asks, then stops the window's downloads, deletes everything the window keeps and opens claude.ai again, signed out. |
+| **Reload Page** | **View** | Command-R | Loads the page again. |
+| **Back**, **Forward** | **View** | Command-Left Bracket, Command-Right Bracket | Shows the previous or next page, dimmed when there is none. |
+| **Actual Size**, **Zoom In**, **Zoom Out** | **View** | Command-0, Command-Plus, Command-Minus | Sets the page's zoom through Safari's steps, from 50% to 300%, for the life of the window. |
+
+The **File** menu also has **Open claude.ai as work**, or **Open claude.ai** with a submenu, as pitboard's menu does.
+
+| Alert | Says | Buttons |
+| --- | --- | --- |
+| **Sign out of claude.ai in this window?** | **pitboard deletes this window's sign-in and everything else claude.ai keeps for "work" on this Mac. The account stays signed in on your other devices and browsers. claude.ai's own Log Out would sign it out on every device.** | **Sign Out**, **Cancel** |
+| **Couldn't sign out of this window** | WebKit's reason. The window opens again, still signed in. | **OK** |
+| **Download "report.csv" from www.claudeusercontent.com?** | **pitboard saves it to your Downloads folder.** Shown for a download that an artifact, another frame or another site starts. | **Download**, **Cancel** |
+
+## Account picker
+
+The account picker, a small window titled **Open claude.ai Link**, asks which account's claude.ai window opens a link. Nothing opens until you choose an account and click **Open**, even with one account.
+
+It opens for **Open claude.ai Link** in pitboard's menu, a `pitboard://` link, **Open in pitboard** in the Services menu and **pitboard** in the Share menu. For each of them, see [Open claude.ai links as an account](/guides/claude-links). A second link while the picker is open replaces the first and keeps your choice.
+
+| Title | Shown when | Buttons |
+| --- | --- | --- |
+| **Open claude.ai Link**, with the link and the accounts | A claude.ai link, and at least one enrolled Claude Code account | **Cancel**, **Open** |
+| **Open claude.ai Link**, with a **Link** field and the accounts | You chose **Open claude.ai Link** in pitboard's menu. **Open** stays dimmed until the field holds a claude.ai link, and a line under a refused link says why. | **Cancel**, **Open** |
+| **Open claude.ai Link**, with **Reading accounts** | The app has not read the accounts yet | **Cancel** |
+| **Couldn't Read Accounts**, with the reason | The first read failed | **Cancel** |
+| **No Account Has a claude.ai Window** | No enrolled Claude Code account | **Cancel**, **Open in Browser**, **Add Account** |
+| **No Account Has a claude.ai Window**, naming the login's email address | No enrolled Claude Code account, and a Claude Code login with no name in pitboard | **Cancel**, **Open in Browser**, **Name** |
+| **Can't Open This Link**, with the reason | The link is refused | **OK** |
+
+**Open in Browser** opens the link in your default browser. **Add Account** and **Name** open the dialogs of those names in the pitboard window.
+
+Each account shows its label and email address. An account whose window is open adds **Window open. The link replaces what it shows; Back returns.** The picker first selects the account you chose last since the app opened, then the Claude Code account in use, then the first.
+
+### Refused links
+
+The account picker, the **Open Link** dialog and the Share extension refuse the same links in the same words:
+
+| Link | Says |
+| --- | --- |
+| On another site or a subdomain of claude.ai | **pitboard opens claude.ai links only. This link is on example.com.** |
+| On claude.ai with a port, such as `claude.ai:8443` | **pitboard opens claude.ai links only. This link is on claude.ai:8443.** |
+| With a user name before the host | **pitboard opens claude.ai links only.** |
+| claude.ai's emailed sign-in link, under `/magic-link`, however its path is written | **pitboard doesn't open claude.ai sign-in links from outside: one would sign the window in as whoever the link belongs to. Sign in inside the account's claude.ai window.** |
+| A path with a `.` or `..` segment, which claude.ai's own links never have | **There is no claude.ai link in what was sent.** |
+| Anything that is not an `http` or `https` link, such as `javascript:` or `file:` | **There is no claude.ai link in what was sent.** |
+| Longer than 8192 characters | **What was sent is too long to be a claude.ai link.** |
+| A `pitboard://` link asking for something this version does not know | **This pitboard link isn't one this version knows.**, and to update pitboard or paste the link into **Open claude.ai Link** |
+| A `pitboard://` link with more in it than one encoded link | **This pitboard link has more in it than one claude.ai link. The link inside it has to be encoded, as the bookmarklet does.** |
+
+pitboard takes `http://claude.ai` as `https`, and a bare `claude.ai/chat/abc` as `https://claude.ai/chat/abc`.
+
+### The pitboard link
+
+A pitboard link is `pitboard://open?url=` followed by one claude.ai link, encoded as JavaScript's `encodeURIComponent` encodes it:
+
+```text
+pitboard://open?url=https%3A%2F%2Fclaude.ai%2Fpublic%2Fartifacts%2F0e5a
+```
+
+`open` is the only request. A link with a fragment, a second item or no `url` is refused.
+
+## Services and Share menus
+
+| Item | Where | What it does |
+| --- | --- | --- |
+| **Open in pitboard** | The **Services** menu of any app, and the shortcut menu of a selection, when the selection holds a link | Takes the link the app sent, or the first claude.ai link in the first 64 KB of the selected text, and opens the account picker for it. It has no shortcut until you give it one in **System Settings** > **Keyboard** > **Keyboard Shortcuts** > **Services**. |
+| **pitboard** | The Share menu | Opens the account picker for the page being shared. A page not on claude.ai is refused in the Share extension's own dialog, **Can't Open This Link**, with **OK**, and nothing reaches pitboard. If macOS cannot open pitboard, the dialog is **Couldn't Open pitboard**, with the reason. |
+
+The Share extension is sandboxed: it has no network or file access and keeps nothing.
 
 ## Notifications
 
@@ -196,6 +306,11 @@ Clicking the notification itself does nothing. Notifications play no sound and s
 | Command-R | **Activity** pane | **Refresh**, which reads the log again |
 | Command-R | **This Mac** pane | **Check Again** |
 | Command-0 | pitboard's menu, while it is open | **Open pitboard** |
+| Command-Left Bracket and Command-Right Bracket | A claude.ai window | **Back** and **Forward** in the **View** menu |
+| Command-R | A claude.ai window | **Reload Page** in the **View** menu |
+| Command-L | A claude.ai window | **Open Link** |
+| Command-0, Command-Plus, Command-Minus | A claude.ai window | **Actual Size**, **Zoom In**, **Zoom Out** |
+| Up Arrow and Down Arrow, then Return | The account picker | Choose an account, then **Open**. Double-clicking an account opens it too. |
 | Command-Comma | pitboard's menu, while it is open | **Settings** |
 | Command-Q | pitboard's menu, while it is open | **Quit pitboard** |
 | Return, or double-click | A row in the **Accounts** pane | **Use** or **Sign In Again**, as the row's button does. On the account in use that has no label, **Name This Account**. |

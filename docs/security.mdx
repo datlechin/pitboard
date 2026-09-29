@@ -17,6 +17,20 @@ Claude Code keeps its login in a plaintext `~/.claude/.credentials.json`, as rea
 
 pitboard's other files hold no token, though some hold your email address, account identifiers and project paths; see [Files and environment variables](/reference/files#the-pitboard-directory).
 
+## Where claude.ai windows keep their sign-in
+
+Each [claude.ai window](/guides/claude-web) keeps claude.ai's cookies and storage in a folder of its own, `~/Library/WebKit/com.usepitboard.Pitboard/WebsiteDataStore/<id>`. WebKit writes them as ordinary files, as a browser keeps its cookies, so the folder holds a live claude.ai sign-in.
+
+pitboard makes a window's folder, and deletes it when you sign out of that window or forget its account. It never reads, copies or changes what is in one. It adds no script to claude.ai's page, sends WebKit's own user agent, and never makes a claude.ai sign-in from a Claude Code login.
+
+## Links from outside the app
+
+A web page, such as a bookmarklet on claude.ai, can ask to open a `pitboard://` link, and the browser asks you before it opens pitboard. pitboard then shows the account picker, and opens nothing until you choose an account. A link from the Services menu or the Share menu ends in the same picker.
+
+pitboard accepts claude.ai links only. It refuses claude.ai's emailed sign-in links, since one would sign a window in as whoever the link belongs to.
+
+The Share extension is sandboxed, with no network, file or shared-group access. It reads the one link its host hands it and keeps nothing. No way in reads a browser's cookies, history or files, and pitboard installs no browser extension.
+
 ## What leaves your machine
 
 pitboard makes only these requests. It has no server of its own and no telemetry.
@@ -28,6 +42,7 @@ pitboard makes only these requests. It has no server of its own and no telemetry
 | `platform.claude.com/v1/oauth/token` | A refresh token and the login's client id, or Claude Code's if it has none | Renewing a Claude Code parked login |
 | `chatgpt.com/backend-api/wham/usage` | An access token and the ChatGPT account id | What a Codex account has left, and whether OpenAI still accepts a login pitboard is about to switch to. It counts against no limit. |
 | `auth.openai.com/oauth/token` | A refresh token and Codex's public client id | Renewing a Codex parked login |
+| `claude.ai`, and whatever its pages load | What claude.ai keeps in that window, as a browser sends it | A claude.ai window you open. Nothing goes to claude.ai before you open one. |
 | `github.com/datlechin/pitboard/releases` | Nothing of yours | The app's update check (`appcast.xml`) and update downloads, only in a copy of the app from a release. It checks once a day while **Check for updates automatically** is on, and when you choose **Check for Updates** or click **Check Now**. The command line never checks. |
 
 pitboard never renews a login a tool is using. Each renewal is the request the tool itself makes to renew its own login. Until you enrol a Codex account, pitboard sends OpenAI nothing.
@@ -55,6 +70,9 @@ The command line reads the variable from your shell. The app reads it from its o
 - pitboard records a parked login's name before storing it and retries a failed delete, so no copy goes untracked.
 - A locked keychain is reported as unreadable, never as empty.
 - pitboard keeps no copy of a login in use.
+- A claude.ai window stays on `https://claude.ai`. Other pages open in your browser, and Google's sign-in, which Google blocks inside apps, is stopped.
+- A download that an artifact or another site starts in a claude.ai window asks you first. Every download is quarantined, so Gatekeeper checks it as it checks a browser's.
+- Forgetting a Claude Code account deletes its claude.ai window's data, at once in the app and at its next read after `pitboard forget`. The app deletes only data it made for the pitboard directory it reads, so a copy run with another `HOME` or `PITBOARD_HOME` leaves the other windows signed in.
 - pitboard refuses to keep its files in a synced folder, because a parked login belongs to one machine.
 - Every release is attested; see [Verify a download](/install/verify).
 - The app installs an update signed with the key it carries. A copy signed with a Developer ID also installs one whose app is signed by the same Developer ID team. The release workflow refuses a changed key unless the repository declares a rotation.
@@ -65,7 +83,8 @@ Deleting a parked login does not revoke it, and pitboard revokes no login. Its r
 
 ## What pitboard does not protect against
 
-- Another process running as you.
+- Another process running as you, which can read each claude.ai window's data as it can a browser's.
+- claude.ai's own page, which runs in WebKit as it would in Safari.
 - Another user with administrator access to your computer.
 - A compromised Claude Code or Codex, or a compromised library that pitboard uses. CI checks pitboard's Rust libraries against known advisories, and a weekly job checks Sparkle, the app's update framework, only for a newer release. Each release lists all of them in a bill of materials.
 - `/logout` in a `codex` session started before a switch, which revokes the login pitboard has parked; see [Switch accounts](/guides/switch#what-happens-to-open-sessions).

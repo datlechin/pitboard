@@ -16,7 +16,12 @@ public final class AppModel {
     private let service: any Core
     /// Every tool pitboard handles, in the order a listing shows them.
     let tools: [Tool]
-    private(set) var status: Status?
+    /// What the last read found. Every read that assigns it also tells the claude.ai windows
+    /// which accounts are enrolled, so the store of one forgotten anywhere is deleted, and a
+    /// read that fails with nothing known assigns nothing and deletes nothing.
+    private(set) var status: Status? {
+        didSet { web.keep(Set(claudeWindows.map(\.store))) }
+    }
     /// What went wrong with the last read, when it did not answer. The numbers shown are
     /// then the last ones measured.
     private(set) var problem: String?
@@ -82,6 +87,13 @@ public final class AppModel {
 
     /// Where pitboard keeps its own preferences, which views read through `@AppStorage`.
     let defaults: UserDefaults
+
+    /// The claude.ai windows. Given no `Core`, so nothing in them has a path to any login.
+    let web: WebModel
+    /// claude.ai links asked to be opened from outside, until somebody chooses an account.
+    let links: LinkModel
+    /// Whether the app tells macOS about its Service.
+    let registersServices: Bool
 
     /// What a tool's last switch said that the read after it does not say again.
     ///
@@ -160,24 +172,36 @@ public final class AppModel {
         self.init(
             watching: dependencies.watching, service: dependencies.core,
             defaults: dependencies.defaults, commandLineTool: dependencies.commandLineTool,
-            loginItem: dependencies.loginItem, notifies: dependencies.notifies)
+            loginItem: dependencies.loginItem, notifies: dependencies.notifies,
+            web: dependencies.web, linkScheme: dependencies.linkScheme,
+            registersServices: dependencies.registersServices)
     }
 
     /// `watching` starts what runs by itself: the periodic read, the wake notice, the read
     /// when a menu opens, the poll that notices a change made somewhere else, and the one
     /// repair of a schedule an older app wrote. A test drives those itself, and two of them
     /// firing under a test is how a test stops telling the truth about what set what.
+    ///
+    /// `web` has no default: WebKit's own stores are deleted by what a read says, and a model
+    /// made without saying which stores it keeps must not reach them.
     init(
         watching: Bool = true,
         service: any Core,
         defaults: UserDefaults = .standard,
         commandLineTool: CommandLineTool = CommandLineTool(),
         loginItem: any LoginItem = MainAppLoginItem(),
-        notifies: Bool = false
+        notifies: Bool = false,
+        web: ClaudeWeb,
+        linkScheme: String,
+        registersServices: Bool = false
     ) {
         self.service = service
         tools = service.tools()
         self.defaults = defaults
+        let windows = WebModel(web: web)
+        self.web = windows
+        links = LinkModel(scheme: linkScheme, web: windows)
+        self.registersServices = registersServices
         notifier = Notifier(delivering: notifies)
         var declined = Set(
             defaults.stringArray(forKey: DefaultsKey.secondAccountDeclined) ?? [])
@@ -373,6 +397,26 @@ public final class AppModel {
             self.sheet = sheet
         }
         showWindow(.accounts)
+    }
+
+    // MARK: - claude.ai windows
+
+    /// Every enrolled Claude Code account, each with the claude.ai window of its own.
+    var claudeWindows: [ClaudeAccount] { PitboardApp.claudeWindows(in: status) }
+
+    /// Asks for `store`'s claude.ai window, at `link` when there is one: from the menus, an
+    /// account's shortcut menu, or the account picker.
+    func openClaude(_ store: UUID, at link: URL? = nil) {
+        web.open(store, at: link)
+    }
+
+    /// The page of `store`'s window, once a read shows an enrolled account deriving it. Nil
+    /// before, since asking WebKit for the store would make one.
+    func claudePage(for store: UUID) async -> ClaudePage? {
+        guard let account = claudeWindows.first(where: { $0.store == store }) else {
+            return nil
+        }
+        return await web.attach(account)
     }
 
     /// Says a failure of something asked for away from the window, in the window.
@@ -744,18 +788,33 @@ extension AppModel {
         notifier.rename(label, of: provider, to: name)
     }
 
-    /// Drops the account `qualified` names, and the login parked for it.
+    /// Drops the account `qualified` names, and the login parked for it. A Claude Code
+    /// account's claude.ai window goes with it, and everything the window keeps, but only
+    /// once the core has forgotten the account: a forget that fails leaves both.
+    ///
+    /// The window's page closes before the read that follows, so WebKit can let the store
+    /// go. A store that still cannot be deleted is said, and the account is forgotten all
+    /// the same; the sweep tries again at every later read.
     @discardableResult
     func forget(_ qualified: String) async -> ActionFailure? {
+        let label = split(qualified).label
+        let forgotten = status?.accounts.first { $0.qualified == qualified }
+        let store = forgotten.flatMap(webStoreID(for:))
         do {
             _ = try await service.forget(qualified)
-            changesSeen += 1
-            updatedAt = nil
-            await refresh()
-            return nil
         } catch {
-            return ActionFailure("Couldn’t forget \(split(qualified).label)", error: error)
+            return ActionFailure("Couldn’t forget \(label)", error: error)
         }
+        changesSeen += 1
+        if let store { web.close(store) }
+        updatedAt = nil
+        await refresh()
+        guard let store, let failed = await web.discard(store) else { return nil }
+        return ActionFailure(
+            "Couldn’t delete \(label)’s claude.ai data",
+            message: "pitboard forgot \(label), but WebKit could not delete what its claude.ai "
+                + "window keeps: \(failed.localizedDescription) pitboard tries again the next "
+                + "time it reads your accounts.")
     }
 
     /// Give up on an interrupted switch that cannot be finished, keeping every login. The

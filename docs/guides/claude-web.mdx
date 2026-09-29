@@ -1,0 +1,76 @@
+---
+title: "Use claude.ai with each account"
+sidebarTitle: "claude.ai windows"
+description: "Open claude.ai for each Claude Code account in a window of its own, with every account signed in side by side."
+---
+
+The menu bar app gives each enrolled Claude Code account a claude.ai window of its own. Each window keeps its own website data, so every account stays signed in side by side, with no browser profile and no signing out.
+
+You sign in on claude.ai's own page, and WebKit keeps that sign-in on your Mac, as a browser would, in a [folder for each window](/reference/files#claude-ai-windows). pitboard never reads, copies or changes it, and never makes a claude.ai sign-in from a Claude Code login.
+
+## Open an account's window
+
+In pitboard's menu, choose **Open claude.ai as work**. With two or more Claude Code accounts, choose **Open claude.ai**, then the account's label. In the pitboard window, you can also Control-click an account and choose **Open claude.ai**.
+
+Each account has one window, titled with its label. Choosing the account again brings its window to the front. A window you close and open again starts at claude.ai's home page.
+
+While a claude.ai window is open, pitboard has a Dock icon, a place in the Command-Tab switcher and its menus in the menu bar. The **File** menu then lists the accounts too, and the **View** menu has **Back**, **Forward** and **Reload Page**. pitboard leaves the Dock when you close its last claude.ai window.
+
+A Codex account, a Claude Code login with no name in pitboard and a login pitboard cannot use have no claude.ai window. To give a login one, name it as [Add the account you are signed in to](/guides/accounts#add-the-account-you-are-signed-in-to) describes.
+
+## Sign in
+
+The first time a window opens, a bar at its top names the account to sign in as.
+
+<Steps>
+  <Step title="Ask for the email">
+    On claude.ai's page, click **Continue with email** and enter the account's address.
+  </Step>
+  <Step title="Tap the link on another device">
+    Open the email claude.ai sends on your phone and tap its link. claude.ai shows a code there.
+  </Step>
+  <Step title="Enter the code">
+    Enter the code in the window. The window stays signed in from then on.
+  </Step>
+</Steps>
+
+Anthropic's help centre says a link opened on another device shows a code. One report says a browser on the same Mac is signed in instead, so tap the link on your phone, not on this Mac.
+
+Google blocks its sign-in inside apps, so the window stops **Continue with Google** and says to use email. An account made with Google signs in by email with the same Gmail address.
+
+## Open a claude.ai link as the account
+
+In the window, choose **File** > **Open Link** (Command-L), paste the link, then click **Open**. The link opens in that window, signed in as its account. To open a link from a browser as the account you choose, see [Open claude.ai links as an account](/guides/claude-links).
+
+Links to anywhere but claude.ai open in your default browser. When claude.ai sends a page there by itself, such as a sign-in to connect an integration, the window says so. The browser connects it to the claude.ai account the browser is signed in to.
+
+## Download and upload files
+
+Downloads go to your Downloads folder, and the bar at the top of the window says when each one finishes. A download that an artifact or another site starts asks first, with **Download** and **Cancel**. A download goes on after you close its window.
+
+claude.ai's own upload button opens the Open dialog.
+
+If a page does not load, the bar says why. Choose **View** > **Reload Page** to try again.
+
+## Sign out of one window
+
+Choose **File** > **Sign Out of This Window**, then click **Sign Out**. pitboard stops the window's downloads, deletes everything the window keeps for the account, and opens claude.ai again, signed out.
+
+<Warning>
+  Do not use claude.ai's own **Log Out** to sign one window out. It signs the account out on every device and browser.
+</Warning>
+
+claude.ai is not told, so the sign-in stays listed under claude.ai's **Settings** > **Account** until it expires or you end it there.
+
+Forgetting a Claude Code account in pitboard deletes its window's data too. After `pitboard forget` on the command line, the app deletes it at its next read.
+
+## What a window does not do
+
+- Switching Claude Code changes no window. The claude.ai sign-in and the Claude Code login are separate, and neither is made from the other.
+- Google sign-in, Google single sign-on and connecting Gmail, Google Drive or Google Calendar are stopped, since Google blocks its pages inside apps.
+- Single sign-on through another identity provider, and connecting another integration such as GitHub, open in your browser. They sign in or connect the claude.ai account that browser has, not the window's.
+- Voice mode does not work: the window refuses the microphone and the camera.
+- Web notifications do not appear. WebKit has no public way for an app to show them.
+- WebKit's own **Download Linked File** and **Download Image** are not in the shortcut menu. Use claude.ai's own download buttons.
+
+For every command, message and shortcut of a claude.ai window, see [Menu bar app](/reference/app#claude-ai-windows).
