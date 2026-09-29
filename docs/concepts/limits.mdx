@@ -14,6 +14,7 @@ These are rules, not gaps:
 - It does not fail over to another account when one runs out or is rate limited.
 - It does not renew the login in use. The tool refreshes that login itself, and two programs renewing one login end it for both.
 - It does not copy parked logins, the logins it holds for accounts not in use, to another machine.
+- It never reads, copies or changes what a [claude.ai window](/guides/claude-web) keeps, and never makes a claude.ai sign-in from a Claude Code login.
 
 Two machines renewing one login also end it, so each machine signs in to each account itself.
 
@@ -32,6 +33,8 @@ These costs come from Claude Code, Codex and their services:
 
 pitboard moves only logins you already hold, between its own store and the place each tool reads them from. It does not share an account between people, pool requests or touch an account you do not own.
 
+A claude.ai window is claude.ai's own page in WebKit, which you sign in to and use by hand. WebKit keeps the sign-in on your Mac, and pitboard adds nothing to the page. What Anthropic's terms say about using claude.ai this way is for you to read in them; pitboard makes no claim about it.
+
 Whether several subscriptions suit your work depends on Anthropic's or OpenAI's terms.
 
 ## Tools and sign-ins pitboard does not support
@@ -40,4 +43,5 @@ Whether several subscriptions suit your work depends on Anthropic's or OpenAI's 
 - Codex signed in with an API key, or keeping its login in the keychain or in memory. See [Before you enrol a Codex account](/guides/codex#before-you-enrol-a-codex-account).
 - Windows. Claude Code keeps its login differently there.
 - Claude Code with `CLAUDE_CODE_CUSTOM_OAUTH_URL` set. It then keeps its login under another name, so pitboard refuses to act on Claude Code or run `repair`, `abandon` or `uninstall`. Codex accounts still switch.
+- Google sign-in and single sign-on in a claude.ai window. Google blocks its sign-in inside apps, and an identity provider opens in your browser. Sign in with **Continue with email**.
 - Claude Code set to use an API key, `CLAUDE_CODE_OAUTH_TOKEN`, `ANTHROPIC_AUTH_TOKEN`, a cloud provider or `apiKeyHelper`. Its sessions ignore the login pitboard moves, so a switch changes nothing they see. pitboard warns when it finds one. See [Environment variables](/reference/files#environment-variables).

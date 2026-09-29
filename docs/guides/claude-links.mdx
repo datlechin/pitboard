@@ -1,0 +1,87 @@
+---
+title: "Open claude.ai links as an account"
+sidebarTitle: "claude.ai links"
+description: "Open a claude.ai link from any browser in the claude.ai window of the account you choose."
+---
+
+pitboard opens a claude.ai link, such as an artifact's, in the [claude.ai window](/guides/claude-web) of the Claude Code account you choose. Each way in hands pitboard one link. None reads a browser's cookies, history or files, and pitboard installs no browser extension.
+
+Every way in ends in the account picker, **Open claude.ai Link**. It shows the link and your Claude Code accounts, and opens nothing until you choose an account and click **Open**, even with one account. If that account's window is open, the link replaces what it shows, and **Back** returns to it.
+
+pitboard accepts claude.ai links only, and refuses claude.ai's emailed sign-in links.
+
+## Paste a link
+
+Pasting works with every browser and every app, since it needs nothing from them.
+
+<Steps>
+  <Step title="Copy the link">
+    Copy the claude.ai link from the address bar, a message or anywhere else.
+  </Step>
+  <Step title="Open the account picker">
+    In pitboard's menu, choose **Open claude.ai Link**.
+  </Step>
+  <Step title="Open the link">
+    Paste the link into **Link**, select the account, then click **Open**.
+  </Step>
+</Steps>
+
+## Use the Services menu
+
+Select a link, or text with a claude.ai link in it, then choose **Open in pitboard** from the app's **Services** menu or the selection's shortcut menu. In a browser, press Command-L first to select the address of the page in front.
+
+To give **Open in pitboard** a keyboard shortcut, open **System Settings** > **Keyboard** > **Keyboard Shortcuts** > **Services**, find **Open in pitboard** and set one. In a browser whose address bar offers its text to Services, Command-L and then that shortcut open the page in front.
+
+**Open in pitboard** appears only when the selection holds a link. If it is missing after you install pitboard, log out of macOS and log in again.
+
+## Use the Share menu
+
+Choose **pitboard** from a browser's Share menu to open the page in front. In Safari, the Share menu is the toolbar's **Share** button and **File** > **Share**. In Chrome, Brave and Firefox, it is **File** > **Share**, and in Firefox also a tab's shortcut menu.
+
+In Safari, **Share** in a link's shortcut menu shares that link without opening it.
+
+If **pitboard** is missing, choose **Edit Extensions** at the end of the Share menu and turn on **pitboard**. You can also open **System Settings** > **General** > **Login Items & Extensions** > **Extensions** > **By Category** > **Sharing** (macOS 15 and later) or **System Settings** > **Privacy & Security** > **Extensions** > **Sharing** (macOS 14).
+
+The Share extension checks the link before it opens pitboard. A page not on claude.ai is refused there, and nothing reaches pitboard.
+
+## Use a bookmarklet
+
+Make a bookmark whose address is this text, and put it in your bookmarks bar, which Safari calls the Favorites bar:
+
+```text
+javascript:void(location.href='pitboard://open?url='+encodeURIComponent(location.href))
+```
+
+On a claude.ai page, clicking the bookmark opens the account picker for that page. It sends pitboard the address of the page in front and nothing else.
+
+The browser asks before it opens pitboard. Safari 17 and later, Chrome, Edge, Brave and Firefox offer to always allow it for claude.ai.
+
+Safari and Chromium browsers apply a page's content security policy to a bookmarklet, and a policy that blocks one gives no message. Whether claude.ai's policy blocks it has not been checked. Firefox runs bookmarklets whatever the policy, and Arc does not run them.
+
+## Which way works in which browser
+
+This comes from each browser's source code, documentation and bug trackers, read on 29 September 2026. No browser was run. "Expected" means read from the browser's engine and not checked in that browser.
+
+| Browser | Share menu | Services menu | Bookmarklet |
+| --- | --- | --- | --- |
+| Safari | Yes: the toolbar, **File** > **Share** and a link's shortcut menu | Yes, on page text; the address bar expected | Yes, unless the page's policy stops it |
+| Chrome | Yes: **File** > **Share** | Yes, on page text and the address bar | Yes, unless the page's policy stops it |
+| Firefox | Yes: **File** > **Share** and a tab's shortcut menu | Yes, on page text and the address bar, from **Firefox** > **Services** or the selection's shortcut menu | Yes |
+| Edge | Not checked | Expected, as Chrome | Expected, as Chrome |
+| Brave | **File** > **Share**. One report from January 2025 found it dimmed until Brave had Screen Recording permission. | Expected, as Chrome | Expected, as Chrome |
+| Arc | Arc's share sheet; whether it lists pitboard was not checked | Expected on page text; the address bar not checked | No |
+| Vivaldi, Opera, Dia and other Chromium browsers | Not checked | Expected on page text, as Chrome | Expected, as Chrome |
+| Zen, Floorp and other Firefox browsers | Not checked | Expected on page text, as Firefox | Expected, as Firefox |
+| Orion and other WebKit browsers | Not checked | Expected on page text, as Safari | Not checked |
+
+Every browser, listed or not, can copy its address for **Open claude.ai Link**. The Services menu and the Share menu need no permission from the browser.
+
+## The pitboard link
+
+The bookmarklet opens a pitboard link, which a script or another app can build too:
+
+```text
+pitboard://open?url=https%3A%2F%2Fclaude.ai%2Fpublic%2Fartifacts%2F0e5a
+```
+
+Encode the claude.ai link after `url=` as JavaScript's `encodeURIComponent` does. For the links pitboard refuses, see [Refused links](/reference/app#refused-links).

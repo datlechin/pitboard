@@ -6,6 +6,41 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Added
+
+- The app gives each enrolled Claude Code account a claude.ai window with its own website
+  data, so every account stays signed in side by side without browser profiles. Choose
+  **Open claude.ai** in pitboard's menu, the **File** menu or an account's shortcut menu,
+  and sign in on claude.ai's own page with **Continue with email**. pitboard never reads,
+  copies or changes what claude.ai keeps, adds no script to the page, and never makes a
+  claude.ai sign-in from a Claude Code login. Google blocks its sign-in inside apps, so the
+  window stops it and says so. Links outside claude.ai open in your default browser,
+  **Open Link** (Command-L) opens a claude.ai link as the window's account, and **Sign Out
+  of This Window** deletes that window's data without signing the account out anywhere
+  else. A download that an artifact or another site starts asks first. While a claude.ai
+  window is open, the app has a Dock icon and its menus. See
+  [Use claude.ai with each account](https://docs.usepitboard.com/guides/claude-web).
+- A claude.ai link, such as an artifact's, opens from any browser as the account you
+  choose. pitboard shows the link and your Claude Code accounts, and opens nothing until
+  you pick one. There are four ways in: **Open claude.ai Link** in pitboard's menu, for a
+  pasted link, which works with every browser; **Open in pitboard** in the Services menu,
+  for a selected link or address; **pitboard** in the Share menu; and a bookmarklet that
+  opens a `pitboard://open?url=` link. Only claude.ai links are accepted, and sign-in links
+  are refused. pitboard reads nothing a browser keeps, and the Share extension is
+  sandboxed. See
+  [Open claude.ai links as an account](https://docs.usepitboard.com/guides/claude-links).
+
+### Changed
+
+- Forgetting a Claude Code account also deletes its claude.ai window's data: at once in the
+  app, and at the app's next read after `pitboard forget`. The app deletes only the data it
+  made for the pitboard directory it reads, so a copy run with another `HOME` or
+  `PITBOARD_HOME` never signs another copy's windows out.
+- `brew uninstall --zap --cask pitboard-app` also removes
+  `~/Library/WebKit/com.usepitboard.Pitboard`, where the claude.ai windows keep their data,
+  and `~/Library/Containers/com.usepitboard.Pitboard.share`, the Share extension's empty
+  container. A cask installed before this release runs its own older zap, which leaves both.
+
 ## [0.5.1] - 2026-09-29
 
 Fixes that writing the documentation site turned up, and pitboard's facts about Claude Code

@@ -76,7 +76,7 @@ In `pitboard use`, `pitboard forget` and `pitboard rename`, `work` alone is enou
 
 ## Rename an account
 
-Renaming changes only the label.
+Renaming changes only the label. An account's [claude.ai window](/guides/claude-web) stays signed in.
 
 <Tabs>
   <Tab title="App">
@@ -97,7 +97,7 @@ Renaming changes only the label.
 
 ## Forget an account
 
-Forgetting an account deletes its parked login, so adding it again needs a browser sign-in. To forget the account in use, switch to another account first.
+Forgetting an account deletes its parked login, so adding it again needs a browser sign-in. For a Claude Code account, it also deletes what the account's [claude.ai window](/guides/claude-web) keeps, its sign-in included. To forget the account in use, switch to another account first.
 
 <Tabs>
   <Tab title="App">
@@ -123,5 +123,7 @@ Forgetting an account deletes its parked login, so adding it again needs a brows
     To skip the question, add `--yes`.
   </Tab>
 </Tabs>
+
+The app deletes the claude.ai window's data at once when you forget in the app, and at its next read when you forget with `pitboard forget`.
 
 Forgetting does not revoke the parked login, so it stays valid until it expires. For what that means, see [Security and privacy](/security#what-pitboard-protects-against).

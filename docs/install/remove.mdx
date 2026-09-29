@@ -47,6 +47,12 @@ On macOS, pitboard leaves any parked login that `pitboard repair` found in the k
 
 If `CLAUDE_CODE_CUSTOM_OAUTH_URL` is set in your environment or in Claude Code's settings, `pitboard uninstall` refuses to run. Unset it, then run `pitboard uninstall` again.
 
+## Remove the claude.ai windows' sign-ins
+
+Each [claude.ai window](/guides/claude-web) keeps its claude.ai sign-in under `~/Library/WebKit/com.usepitboard.Pitboard`. `pitboard uninstall` does not delete it. The app deletes each window's data if it runs again afterwards, since no account is enrolled.
+
+To remove every window's sign-in, quit the app, then move `~/Library/WebKit/com.usepitboard.Pitboard` to the Trash. claude.ai is not told, so each sign-in stays listed under claude.ai's **Settings** > **Account** until it expires or you end it there.
+
 ## Remove pitboard itself
 
 | Installed with | To remove it |
@@ -57,7 +63,9 @@ If `CLAUDE_CODE_CUSTOM_OAUTH_URL` is set in your environment or in Claude Code's
 | A release tarball | Delete `pitboard` and any man page or completion files you copied from it. |
 | The app from a release download | Quit the app, then move `Pitboard.app` to the Trash. |
 
-Adding `--zap` to either `brew uninstall` removes the daily renewal schedule, if `pitboard uninstall` left it. For `pitboard-app`, `--zap` also removes the app's files in `~/Library`. Neither cask's `--zap` deletes `~/.pitboard`.
+Adding `--zap` to either `brew uninstall` removes the daily renewal schedule, if `pitboard uninstall` left it. For `pitboard-app`, `--zap` also removes the app's files in `~/Library`, the claude.ai windows' sign-ins included. Neither cask's `--zap` deletes `~/.pitboard`.
+
+`brew uninstall --zap` runs the zap of the cask you installed, and the app's own updates do not change that file. A `pitboard-app` cask installed before the claude.ai windows existed leaves `~/Library/WebKit/com.usepitboard.Pitboard` and `~/Library/Containers/com.usepitboard.Pitboard.share`. Move both to the Trash yourself.
 
 If you installed the app with the `pitboard` cask of 0.3.0 or earlier, leave out `--zap`. For the reason, see [Upgrade from 0.3.0 or earlier](/install/upgrade-from-0-3-0#from-the-old-app-cask).
 

@@ -54,6 +54,24 @@ Code, and to OpenAI, for Codex.
   `PitboardApp` is everything the app does.
   - `Pitboard.xcodeproj` is the app itself. Its `Pitboard` target in `App` starts
     `PitboardApp` and adds Sparkle, and `PitboardUITests` in `UITests` drives it.
+    `PitboardShare`, from `ShareExtension`, is the Share extension the app embeds.
+  - `PitboardApp/ClaudeWindow` is an account's claude.ai window: `ClaudePage` owns its web
+    view and answers its navigation and UI delegates, and `WebDownloads` keeps every
+    window's downloads until they end, past the window that started them.
+    `Model/WebModel.swift` keeps the pages, the requests to open one, the downloads and the
+    stores behind them, and `System/WebStores.swift` is where WebKit's persistent stores are
+    made, recorded, listed and deleted. `Presentation/Web.swift` holds what a window decides
+    as pure functions: the store an account derives, the navigation policy, which downloads
+    ask first, download names, which failed loads are said and what the window says.
+    `App/ClaudeCommands.swift` puts the window's commands in the File and View menus,
+    `Sheets/OpenLinkSheet.swift` is its **Open Link** dialog, and
+    `Fixture/FixtureWeb.swift` is the stand-in claude.ai a fixture's windows load.
+  - `Sources/PitboardLinks` is what a claude.ai link from outside may be, and the
+    `pitboard://open?url=` link that carries one. Foundation only, so the Share extension
+    can link it. `App/PitboardDelegate.swift` receives every pitboard link,
+    `System/LinkService.swift` is the Service, `Model/LinkModel.swift` holds the request
+    until somebody chooses, and `LinkPicker/` is the account picker that asks them, with
+    `Presentation/LinkPick.swift` deciding what it shows.
   - A renewal schedule written by an app up to 0.3.0 starts the app with `renew`.
     `App/Main.swift` then replaces the process with the command line inside the app.
   - `scripts/build-xcframework.sh` builds the core and its Swift bindings for both Mac
@@ -112,6 +130,31 @@ Code, and to OpenAI, for Codex.
 - The `--json` contract changes only on purpose. A change to a snapshot is a change to the
   contract.
 - The state file is read forwards only.
+- pitboard never reads, copies or changes what claude.ai keeps in a window's store, adds
+  no script or message handler to the page, and poses as no other browser.
+  `HandsOffTests.theAppNeverTouchesWhatClaudeKeeps` fails on any source file that names
+  the WebKit calls that would, or a browser's data or the keychain. A web session is never
+  made from a Claude Code login.
+- `WebModel` has no `Core`, so nothing in a claude.ai window has a path to any login.
+- A window's store is a version 5 UUID of `claude:<account id>` in a fixed namespace. The
+  namespace and the name never change: a change would make every store an orphan, and the
+  next sweep would sign every window out. A golden test pins both.
+- The sweep deletes each store this pitboard directory recorded making that no enrolled
+  Claude Code account derives, whenever a read assigns the accounts, and never before one
+  has. The record is in the app's preferences, keyed by the directory's path, and a store
+  is recorded before WebKit makes it. A store nobody recorded is left alone: WebKit keeps
+  every store of one bundle under the person's own Library, so it can belong to a copy run
+  with another home. A read that fails with nothing known assigns nothing and deletes
+  nothing. A store in use is deleted only once its page is closed and its downloads are
+  stopped.
+- Every way in from outside ends in the account picker, and only a person's choice there
+  opens a window. No scene handles an outside event; `PitboardDelegate` receives every
+  pitboard link. Only claude.ai links are accepted, and sign-in links are refused.
+- The pitboard link's format changes only on purpose. A golden test pins it, as the
+  snapshots pin `--json`, because bookmarklets and scripts build it.
+- The Share extension stays sandboxed, asks for nothing else and links only
+  `PitboardLinks`. `build-app.sh` signs it with its entitlements before the app and fails
+  when the signature says it is not sandboxed.
 
 ## Boundaries
 
@@ -128,6 +171,10 @@ Code, and to OpenAI, for Codex.
 - pitboard and each service meet at a few requests. The list, with what each request
   carries, is in
   [What leaves your machine](https://docs.usepitboard.com/security#what-leaves-your-machine).
+- pitboard and claude.ai meet at a window a person opens. claude.ai's own page signs the
+  window in, WebKit keeps that sign-in, and pitboard decides only where a navigation goes.
+- pitboard and a browser meet at a pitboard link, a Service request or a share, each
+  carrying one link the browser hands over. pitboard reads nothing a browser keeps.
 - The code and the release meet at a `v` tag, which `.github/workflows/release.yml` turns
   into a release. [RELEASING.md](RELEASING.md) has the procedure.
 
@@ -296,6 +343,76 @@ treated, and only the macOS build shows it. The run reads both builds since.
   of api.anthropic.com across eight requests. `Date` has a granularity of one second.
 - That spread is inside the noise, so pitboard keeps no estimate of clock skew. A renewal's
   expiries are counted from the `Date` of the answer that carried them.
+
+### WebKit and the ways in
+
+Read from the WebKit and AppKit headers of the macOS 27 SDK in Xcode 27.1, and measured with
+Foundation on macOS 27, on 29 September 2026.
+
+- `WKWebsiteDataStore(forIdentifier:)` is macOS 14 and later. It makes the store when there
+  is none, and throws on the nil UUID. Two objects for one identifier stop their web views
+  sharing processes, so pitboard keeps one per identifier.
+- WebKit roots an app's stores at the Library folder Foundation gives it, and Foundation
+  does not read `HOME`: under `HOME=<scratch>/fakehome`, `NSHomeDirectory()`,
+  `.libraryDirectory` and `homeDirectoryForCurrentUser` all still give the real home. The
+  core reads `HOME` and `PITBOARD_HOME`. So a copy run with a fresh home sees the installed
+  copy's stores and none of its accounts, which is why the sweep deletes only what it
+  recorded.
+- `WKDownload.delegate` and `WKDownload.webView` are weak, and
+  `download(_:decideDestinationUsing:suggestedFilename:completionHandler:)` is required. A
+  download with no delegate gets no destination and is cancelled, so `WebDownloads` keeps
+  each download strongly and is its delegate.
+- WebKit's own shortcut menu items **Download Linked File**, **Download Image** and
+  **Download Video** hand their download to the app only through the private
+  `_webView:contextMenuDidCreateDownload:`. Their identifiers, read from WebKit on macOS 27,
+  are `WKMenuItemIdentifierDownloadLinkedFile`, `WKMenuItemIdentifierDownloadImage` and
+  `WKMenuItemIdentifierDownloadMedia`; `ClaudeWebView` takes them out in `willOpenMenu`.
+- A SwiftUI `Window` scene lists itself in the Window menu unless `commandsRemoved()` is
+  applied, and a window of an app whose activation policy is `.accessory` has no menu bar,
+  Dock icon or Command-Tab entry. The app turns `.regular` while a claude.ai window is open.
+- `allDataStoreIdentifiers` lists only stores made by identifier: the default and
+  non-persistent stores have none. `remove(forIdentifier:)` refuses a store a web view still
+  uses, and the network process can hold one a moment after its last page closes, so
+  pitboard tries five times, 0.25, 0.5, 1 and 2 seconds apart.
+- The store of an app that is not sandboxed is
+  `~/Library/WebKit/<bundle id>/WebsiteDataStore/<identifier>`, cookies included, as
+  ordinary files.
+- `NSApplicationDelegate`'s `application(_:open:)` receives the URLs of every scheme the
+  Info.plist claims, at launch and while running. SwiftUI's `onOpenURL` is not called for a
+  `Window` scene.
+- `URLComponents` reads `pitboard://open?url=https%3A%2F%2Fclaude.ai%2Fchat%2Fabc%3Fx%3D1%23y`
+  back as `https://claude.ai/chat/abc?x=1#y`, and leaves `+` as `+`. `URL.path` decodes
+  `/magic%2Dlink` to `/magic-link`. `https://claude.ai@evil.example/` has the host
+  `evil.example`. `NSDataDetector` finds `claude.ai/share/x` without a scheme, as
+  `http://claude.ai/share/x`.
+- `plutil -extract` reads dots as a key path, so the entitlement
+  `com.apple.security.app-sandbox` is read as `com\.apple\.security\.app-sandbox`. Unescaped,
+  it finds no value. Signing the extension with its entitlements, then the app without
+  `--deep`, keeps the extension sandboxed and passes `codesign --verify --strict --deep`,
+  checked on a copy of a universal Release build signed ad hoc.
+- Chromium offers a selection to a Service only when the Service takes exactly
+  `public.utf8-plain-text` (`render_widget_host_view_cocoa.mm`,
+  `bridged_content_view.mm`); Firefox takes that type or HTML (`nsCocoaWindow.mm`); WebKit
+  its own string type (`WebViewImpl.mm`). Read from each browser's source at `main` on 29
+  September 2026.
+- No one route reaches every browser, so there are four. Read from source, documentation
+  and bug trackers on 29 September 2026; no browser was run.
+  - The Share menu: Safari's toolbar, **File** menu and a link's shortcut menu
+    (`WebContextMenuProxyMac.mm`); **File** > **Share** in Chrome and Brave
+    (`share_menu_controller.mm`), though one report of January 2025 found Brave's dimmed
+    until Brave had Screen Recording permission; in Firefox from 92, and Firefox's tab menu
+    from 88 (Mozilla bugs 1512851 and 1690569); Arc's share sheet (Arc release notes,
+    2023), though whether it lists pitboard was not checked.
+  - The Service on selected text: Safari, Chrome and Firefox in a page; the address bar in
+    Chrome and Firefox, and expected but not checked in Safari's, an AppKit field; in
+    Firefox's shortcut menu from 113, not on a link without a selection (Mozilla bugs
+    660452 and 1751335). Edge, Brave and Arc share Chromium's views and were not checked.
+  - The bookmarklet: Safari and Chromium apply the page's content security policy to it
+    (WebKit bug 156106, Chromium issue 40077444), and whether claude.ai's blocks it was not
+    checked. Firefox runs it regardless from 69 (Mozilla bug 1478037). Arc does not run
+    bookmarklets (a report of 16 February 2024).
+  - **Open claude.ai Link** with a pasted link needs nothing from any browser, and is the
+    only route known to work in every one.
 
 ### Codex
 

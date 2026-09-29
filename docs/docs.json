@@ -42,7 +42,9 @@
           "guides/sign-in-again",
           "guides/renewal",
           "guides/codex",
-          "guides/status-line"
+          "guides/status-line",
+          "guides/claude-web",
+          "guides/claude-links"
         ]
       },
       {

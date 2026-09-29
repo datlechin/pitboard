@@ -79,6 +79,7 @@ The app is `Pitboard.app`, with the bundle identifier `com.usepitboard.Pitboard`
 | `Contents/Helpers/pitboard` | The command line |
 | `Contents/Resources/man/pitboard.1` | The man page |
 | `Contents/Resources/completions/pitboard.bash`, `pitboard.zsh` and `pitboard.fish` | Shell completions |
+| `Contents/PlugIns/PitboardShare.appex` | The Share extension, **pitboard** in the Share menu |
 
 The app stores these keys in `~/Library/Preferences/com.usepitboard.Pitboard.plist`:
 
@@ -88,9 +89,23 @@ The app stores these keys in `~/Library/Preferences/com.usepitboard.Pitboard.pli
 | `secondAccountDeclined` | The tools for which you clicked **Not Now** when the **Accounts** pane suggested a second account |
 | `menuBarShows` | **Menu bar shows**: `nameAndUsage`, `usage` or `icon` |
 | `settingsTab` | The Settings tab shown last: `general`, `commandLine` or `updates` |
+| `servicesVersion` | The app version that last asked macOS to list **Open in pitboard** in the Services menu |
+| `webStores` | For each pitboard directory, the claude.ai windows' data folders the app made for it, which are the only ones it deletes |
 | Keys of Sparkle, the app's updater | Its update settings and when it last checked |
 
-macOS keeps **Open pitboard at login** as a login item, outside this file. The app's files can also be in `~/Library/Application Support`, `~/Library/Caches` and `~/Library/HTTPStorages`, named after `com.usepitboard.Pitboard`. To remove them, see [Remove pitboard](/install/remove#remove-pitboard-itself).
+macOS keeps **Open pitboard at login** as a login item, outside this file. The app's files can also be in `~/Library/Application Support`, `~/Library/Caches`, `~/Library/HTTPStorages` and `~/Library/WebKit`, named after `com.usepitboard.Pitboard`, and in the Share extension's `~/Library/Containers/com.usepitboard.Pitboard.share`. To remove them, see [Remove pitboard](/install/remove#remove-pitboard-itself).
+
+### claude.ai windows
+
+| Path | What it is |
+| --- | --- |
+| `~/Library/WebKit/com.usepitboard.Pitboard/WebsiteDataStore/<id>` | What one [claude.ai window](/guides/claude-web) keeps: claude.ai's cookies, its sign-in included, and its storage, written by WebKit. pitboard deletes the folder when you sign out of that window or forget its account. |
+| `~/Downloads` | Where a claude.ai window saves a download. A name already taken gets a number, as in `report 2.pdf`. |
+| `~/Library/Containers/com.usepitboard.Pitboard.share` | The Share extension's sandbox, which macOS makes the first time the extension runs. pitboard writes nothing there. |
+
+`<id>` is worked out from the account's Anthropic account UUID, and is not that UUID. A renamed account keeps its folder, and so its sign-in.
+
+WebKit keeps these folders under your own `~/Library` whatever `HOME` says. The app records in `webStores` which folders it made for the pitboard directory it reads, `PITBOARD_HOME` or `~/.pitboard`, and deletes only those. A copy run with another `HOME` or `PITBOARD_HOME` never deletes another copy's folders.
 
 ## Environment variables
 

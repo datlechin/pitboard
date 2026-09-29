@@ -111,6 +111,52 @@ The pitboard you ran is older than another using the same files. Update it: see 
 
 pitboard refuses to keep its files, `~/.pitboard` or `PITBOARD_HOME`, in a folder that syncs to other machines, such as Dropbox or iCloud Drive. Parked logins belong to one machine. Set `PITBOARD_HOME` to a local folder. For the names pitboard refuses, see [Files and environment variables](/reference/files#the-pitboard-directory).
 
+## Google sign-in in a claude.ai window goes nowhere
+
+Google blocks its sign-in inside apps, so a [claude.ai window](/guides/claude-web) stops **Continue with Google** and says to use email. Click **Continue with email** with the same address, open the email on your phone and tap its link, then enter the code claude.ai shows there.
+
+The window stops Google single sign-on, and connecting Gmail, Google Drive or Google Calendar, the same way. None of them can be done in a claude.ai window.
+
+## The emailed link signs in a browser instead of the window
+
+One report says tapping claude.ai's emailed link in a browser on the same Mac signs that browser in, rather than showing a code. Ask for another email in the window, then tap its link on your phone and enter the code it shows in the window.
+
+## A claude.ai window asks for a sign-in again
+
+A window starts signed out the first time it opens, after **Sign Out of This Window**, and after its account was forgotten and enrolled again. claude.ai's own **Log Out**, on any device, ends the window's sign-in too.
+
+Anthropic's help centre says a claude.ai sign-in lasts 28 days and is extended while you use claude.ai. An Enterprise organisation can set a shorter one. Sign in again with **Continue with email**.
+
+## A claude.ai window says claude.ai did not load
+
+WebKit shows no error page, so the window says why a page did not load, such as no network connection. Choose **View** > **Reload Page** when the connection is back.
+
+## A link opens in the browser instead of the window
+
+A claude.ai window keeps only `https://claude.ai`. A link to any other site, a subdomain or `http://claude.ai` opens in your default browser. To open a claude.ai link in the window, choose **File** > **Open Link**.
+
+## Open in pitboard is missing from the Services menu
+
+**Open in pitboard** appears only when the selection holds a link. macOS lists an app's services once it has read the app, and pitboard asks macOS to read it again after each install or update. If the item is still missing, log out of macOS and log in again.
+
+## pitboard is missing from the Share menu
+
+macOS can list a Share extension turned off. Choose **Edit Extensions** at the end of the Share menu and turn on **pitboard**. You can also open **System Settings** > **General** > **Login Items & Extensions** > **Extensions** > **By Category** > **Sharing** (macOS 15 and later) or **System Settings** > **Privacy & Security** > **Extensions** > **Sharing** (macOS 14).
+
+## The bookmarklet does nothing
+
+Safari and Chromium browsers apply a site's content security policy to a bookmarklet, and a policy that blocks it gives no message. Arc does not run bookmarklets. One report says Safari runs a bookmarklet only with **Allow JavaScript from Smart Search field** turned on in its settings for web developers. Another says Safari runs it without.
+
+Use another way in: choose **pitboard** in the Share menu, or copy the page's link and choose **Open claude.ai Link** in pitboard's menu. [Open claude.ai links as an account](/guides/claude-links) lists which way works in which browser.
+
+## The browser asks each time before it opens pitboard
+
+A browser asks before a page opens another app. In its question, choose to always allow claude.ai to open the link: **Always Allow** in Safari 17 and later, or the checkbox in Chrome, Edge, Brave and Firefox. The Share menu and the Services menu never ask.
+
+## This pitboard link is not one this version knows
+
+The link asks for something an older pitboard does not have. Update pitboard, as [Update pitboard](/install#update-pitboard) describes, or copy the claude.ai link and choose **Open claude.ai Link** in pitboard's menu.
+
 ## Report a problem
 
 Open a [GitHub issue](https://github.com/datlechin/pitboard/issues/new/choose) with:
