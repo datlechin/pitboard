@@ -13,7 +13,7 @@ final class LinkPickerTests: XCTestCase {
     func testAPitboardLinkAsksWhichAccountOpensIt() {
         let app = XCUIApplication.launched(.oneTool)
         app.open(link("https%3A%2F%2Fclaude.ai%2Fpublic%2Fartifacts%2F0e5a"))
-        let picker = app.windows["Open claude.ai Link"]
+        let picker = app.linkPicker
         XCTAssertTrue(picker.waitForExistence(timeout: 10))
         // The fixture's accounts, before anything is clicked: a relaunch outside the fixture
         // would list this Mac's own, and must fail here rather than open claude.ai.
@@ -23,11 +23,11 @@ final class LinkPickerTests: XCTestCase {
         XCTAssertTrue(picker.text("==", "claude.ai/public/artifacts/0e5a").exists)
         for label in ["work", "personal"] {
             XCTAssertFalse(
-                app.windows[label].exists, "\(label)'s window opened before a choice")
+                app.claudeWindow(label).exists, "\(label)'s window opened before a choice")
         }
         personal.click()
         picker.buttons["Open"].click()
-        let window = app.windows["personal"]
+        let window = app.claudeWindow("personal")
         XCTAssertTrue(window.waitForExistence(timeout: 10))
         XCTAssertTrue(
             window.webViews.firstMatch.text("==", "claude.ai stand-in")
@@ -39,11 +39,12 @@ final class LinkPickerTests: XCTestCase {
     func testALinkOutsideClaudeIsRefused() {
         let app = XCUIApplication.launched(.oneTool)
         app.open(link("https%3A%2F%2Fexample.com%2F"))
-        let picker = app.windows["Open claude.ai Link"]
+        let picker = app.linkPicker
         XCTAssertTrue(picker.waitForExistence(timeout: 10))
-        XCTAssertTrue(picker.text("==", "Can’t Open This Link").waitForExistence(timeout: 5))
-        XCTAssertFalse(app.windows["work"].exists)
-        XCTAssertFalse(app.windows["personal"].exists)
+        XCTAssertTrue(app.pickerTitle.waitForExistence(timeout: 5))
+        XCTAssertEqual(app.pickerTitle.label, "Can’t Open This Link")
+        XCTAssertFalse(app.claudeWindow("work").exists)
+        XCTAssertFalse(app.claudeWindow("personal").exists)
         picker.buttons["OK"].click()
         XCTAssertFalse(picker.waitForExistence(timeout: 2))
     }
@@ -54,11 +55,10 @@ final class LinkPickerTests: XCTestCase {
     func testWithNoClaudeAccountThePickerOffersToAddOne() {
         let app = XCUIApplication.launched(.empty)
         app.open(link("https%3A%2F%2Fclaude.ai%2Fnew"))
-        let picker = app.windows["Open claude.ai Link"]
+        let picker = app.linkPicker
         XCTAssertTrue(picker.waitForExistence(timeout: 10))
-        XCTAssertTrue(
-            picker.text("==", "No Account Has a claude.ai Window").waitForExistence(timeout: 10)
-        )
+        XCTAssertTrue(app.pickerTitle.waitForExistence(timeout: 10))
+        XCTAssertEqual(app.pickerTitle.label, "No Account Has a claude.ai Window")
         XCTAssertTrue(picker.buttons["Add Account…"].exists)
         XCTAssertTrue(picker.buttons["Open in Browser"].exists)
     }
@@ -70,7 +70,7 @@ final class LinkPickerTests: XCTestCase {
         let app = XCUIApplication.launched(.oneTool)
         app.openMenu()
         app.menuItem("Open claude.ai Link…").click()
-        let picker = app.windows["Open claude.ai Link"]
+        let picker = app.linkPicker
         XCTAssertTrue(picker.waitForExistence(timeout: 10))
         let field = picker.textFields["picker.field"]
         XCTAssertTrue(field.waitForExistence(timeout: 5))
@@ -80,7 +80,7 @@ final class LinkPickerTests: XCTestCase {
         picker.descendants(matching: .any)["picker.account.work"].click()
         XCTAssertTrue(picker.buttons["Open"].isEnabled)
         picker.buttons["Open"].click()
-        XCTAssertTrue(app.windows["work"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.claudeWindow("work").waitForExistence(timeout: 10))
     }
 
     /// A pitboard link for the debug build, which is the one a fixture answers.

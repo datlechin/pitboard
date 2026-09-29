@@ -77,6 +77,26 @@ extension XCUIApplication {
     func accountRow(_ qualified: String) -> XCUIElement {
         descendants(matching: .any)["account.\(qualified)"]
     }
+
+    /// An account's claude.ai window, by the account's label. macOS titles it with the label
+    /// and the page's title after it, "work – claude.ai stand-in", so it is looked for among
+    /// the claude.ai scene's windows by a title that is the label or starts with it.
+    func claudeWindow(_ label: String) -> XCUIElement {
+        let format = "identifier BEGINSWITH %@ AND (title == %@ OR title BEGINSWITH %@)"
+        return windows.matching(NSPredicate(format: format, "claude-", label, "\(label) "))
+            .firstMatch
+    }
+
+    /// The account picker, by its scene's identifier.
+    var linkPicker: XCUIElement {
+        windows["link-picker"]
+    }
+
+    /// The picker's headline, by its identifier: it says what the picker is asking, or why it
+    /// cannot open the link.
+    var pickerTitle: XCUIElement {
+        linkPicker.descendants(matching: .any)["picker.title"]
+    }
 }
 
 @MainActor

@@ -14,7 +14,7 @@ final class ClaudeWindowTests: XCTestCase {
         let app = XCUIApplication.launched(.onlyOne)
         app.openMenu()
         app.menuItem("Open claude.ai as work").click()
-        let window = app.windows["work"]
+        let window = app.claudeWindow("work")
         XCTAssertTrue(window.waitForExistence(timeout: 10))
         XCTAssertTrue(
             window.webViews.firstMatch.text("==", "claude.ai stand-in")
@@ -28,7 +28,7 @@ final class ClaudeWindowTests: XCTestCase {
         let app = XCUIApplication.launched(.onlyOne)
         app.openMenu()
         app.menuItem("Open claude.ai as work").click()
-        let window = app.windows["work"]
+        let window = app.claudeWindow("work")
         XCTAssertTrue(window.waitForExistence(timeout: 10))
         let page = window.webViews.firstMatch
         XCTAssertTrue(page.text("==", "claude.ai stand-in").waitForExistence(timeout: 10))
@@ -47,7 +47,7 @@ final class ClaudeWindowTests: XCTestCase {
         let app = XCUIApplication.launched(.onlyOne)
         app.openMenu()
         app.menuItem("Open claude.ai as work").click()
-        XCTAssertTrue(app.windows["work"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.claudeWindow("work").waitForExistence(timeout: 10))
         let menu = app.menuBars.menuBarItems["Window"]
         XCTAssertTrue(menu.waitForExistence(timeout: 10))
         menu.click()

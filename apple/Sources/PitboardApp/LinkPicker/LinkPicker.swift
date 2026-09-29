@@ -34,6 +34,7 @@ struct LinkPicker: View {
                 Text(pick.title)
                     .font(.headline)
                     .accessibilityAddTraits(.isHeader)
+                    .accessibilityIdentifier("picker.title")
                 Text(pick.message).explanatory().textSelection(.enabled)
             }
             .padding([.horizontal, .top], 20)
