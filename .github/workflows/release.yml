@@ -704,3 +704,12 @@ jobs:
                 ;;
             esac
           done
+          # macOS refuses to run an app extension that is not sandboxed, and the Share menu
+          # then has no pitboard. Read from the installed copy, as notarised and stapled.
+          appex=$app/Contents/PlugIns/PitboardShare.appex
+          sandboxed=$(codesign -d --entitlements - --xml "$appex" 2>/dev/null |
+            plutil -extract 'com\.apple\.security\.app-sandbox' raw - 2>/dev/null || true)
+          if [ "$sandboxed" != true ]; then
+            echo "the installed app's share extension is not sandboxed" >&2
+            exit 1
+          fi
