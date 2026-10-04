@@ -39,7 +39,7 @@ fn auth_base(ctx: &Context) -> String {
 
 /// Judged on the parsed host, never on a prefix: `http://127.0.0.1:@elsewhere/` begins like
 /// loopback and is not. A name is refused too, since the hosts file decides where it points.
-fn is_loopback(url: &str) -> bool {
+pub(crate) fn is_loopback(url: &str) -> bool {
     let Ok(uri) = url.parse::<ureq::http::Uri>() else {
         return false;
     };
@@ -76,6 +76,10 @@ pub enum ApiError {
     Network(String),
     #[error("Anthropic answered {status}")]
     Unexpected { status: u16 },
+    /// Something in front of the service stopped the request before it was read, such as
+    /// claude.ai's bot check: nothing is known about the login, and it may pass later.
+    #[error("{by} stopped the request ({status})")]
+    Blocked { status: u16, by: &'static str },
     #[error("Anthropic's answer was not understood: {0}")]
     Malformed(String),
     /// The refresh token was refused for good: revoked, or already used elsewhere.

@@ -1,6 +1,6 @@
 ---
 title: "How usage is read"
-description: "Pitboard reads usage from Anthropic and OpenAI, rereads it only once it could have moved, and estimates how long accounts last."
+description: "Pitboard reads usage from Anthropic, OpenAI and Claude Desktop's history, rereads it only once it could have moved, and estimates how long accounts last."
 ---
 
 Pitboard asks Anthropic and OpenAI how much of each limit your accounts have used, all at once.
@@ -10,6 +10,10 @@ Pitboard asks Anthropic and OpenAI how much of each limit your accounts have use
 For the Claude Code account in use, Pitboard asks Anthropic with Claude Code's login; for any other, with its [parked login](/concepts/switching#parked-logins).
 
 For accounts used with OpenAI's Codex CLI, Pitboard sends OpenAI Codex's own usage request, which counts against no limit. Until you enrol a Codex account, Pitboard asks OpenAI nothing.
+
+For Claude Desktop accounts, Pitboard reads `plan-usage-history.json`, the usage history Claude Desktop writes, without the network or the keychain. The file is the Mac's, not the account's, so Pitboard takes only entries for an organisation the account belongs to. Its five-hour and weekly numbers matched claude.ai's own count for two accounts, measured on 4 October 2026. They show no reset time.
+
+With [live usage](/guides/claude-desktop#see-usage-from-claudeai) on, Pitboard asks claude.ai instead, with each account's session cookie. claude.ai does not document that request; Pitboard was checked against its answer on 4 October 2026. Until live usage is on, Pitboard sends claude.ai nothing.
 
 Work on other machines counts too, as [What a switch costs you](/concepts/limits#what-a-switch-costs-you) explains.
 

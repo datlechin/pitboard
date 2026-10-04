@@ -78,6 +78,8 @@ func eachFixtureStartsWhereItsTestsExpect(_ fixture: Fixture) async throws {
                 ]
             )
         case .oneTool: (nil, [work, "claude/personal"])
+        case .claudeDesktop:
+            (nil, [work, "claude/personal", "desktop/personal, in use", "desktop/work"])
         case .onlyOne: (nil, [work])
         case .unnamed: (nil, ["dana@work.example, in use"])
         case .empty, .firstLaunch: (nil, [])
@@ -96,10 +98,12 @@ func eachFixtureStartsWhereItsTestsExpect(_ fixture: Fixture) async throws {
     } catch {
         #expect(AppModel.code(of: error) == expected.failure)
     }
-    #expect(core.tools() == bothTools)
+    let desktop = fixture == .claudeDesktop
+    #expect(core.tools() == bothTools + (desktop ? [claudeDesktop] : []))
     #expect(
         await core.installed().map(\.code)
-            == (fixture == .noClaudeCode ? [] : ["claude", "codex"]))
+            == (fixture == .noClaudeCode
+                ? [] : ["claude", "codex"] + (desktop ? ["desktop"] : [])))
 }
 
 /// The UI tests launch a fixture by setting this variable to one of these names, from a
@@ -109,7 +113,7 @@ func eachFixtureStartsWhereItsTestsExpect(_ fixture: Fixture) async throws {
     #expect(
         Fixture.allCases.map(\.rawValue) == [
             "twoTools", "oneTool", "empty", "firstLaunch", "noClaudeCode", "unnamed",
-            "onlyOne", "readFailure", "stuck", "chatGPTOpen",
+            "onlyOne", "readFailure", "stuck", "chatGPTOpen", "claudeDesktop",
         ])
 }
 

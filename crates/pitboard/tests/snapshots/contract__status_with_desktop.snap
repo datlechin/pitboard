@@ -1,0 +1,88 @@
+---
+source: crates/pitboard/tests/contract.rs
+expression: "serde_json :: json! ({ \"exit\" : code, \"envelope\" : value })"
+---
+{
+  "exit": 0,
+  "envelope": {
+    "v": 1,
+    "command": "status",
+    "ok": true,
+    "data": {
+      "slot": {
+        "service": "[slot]",
+        "default": false
+      },
+      "signed_in": null,
+      "signed_in_error": "nothing is signed in",
+      "accounts": [
+        {
+          "label": "home",
+          "email": "home@example.com",
+          "account_uuid": "fb420613-h111-4111-8111-111111111111",
+          "signed_in": true,
+          "switchable": false,
+          "parked": null,
+          "lasts": null,
+          "usage": {
+            "source": "desktop_history",
+            "observed_at": "[time]",
+            "windows": [
+              {
+                "kind": "five_hour",
+                "scope": null,
+                "percent": 0.3,
+                "resets_at": null,
+                "is_active": false,
+                "severity": null,
+                "length_seconds": 18000
+              },
+              {
+                "kind": "seven_day",
+                "scope": null,
+                "percent": 0.5,
+                "resets_at": null,
+                "is_active": false,
+                "severity": null,
+                "length_seconds": 604800
+              }
+            ]
+          },
+          "stale": "live_usage_off",
+          "provider": "desktop",
+          "qualified": "desktop/home"
+        },
+        {
+          "label": "work",
+          "email": "work@example.com",
+          "account_uuid": "fb420613-w111-4111-8111-111111111111",
+          "signed_in": false,
+          "switchable": true,
+          "parked": {
+            "parked_at": "[time]",
+            "access_expires_at": "[time]",
+            "refresh_expires_at": "[time]"
+          },
+          "lasts": null,
+          "usage": null,
+          "stale": "live_usage_off",
+          "provider": "desktop",
+          "qualified": "desktop/work"
+        }
+      ],
+      "desktop": {
+        "live_usage": {
+          "enabled": false,
+          "approval": "unknown",
+          "reason": null,
+          "changed_at": null,
+          "last_ok_at": null
+        },
+        "awaiting_sign_in": null,
+        "recovery_waiting": null
+      }
+    },
+    "warnings": [],
+    "error": null
+  }
+}

@@ -27,6 +27,9 @@
         case stuck
         /// `twoTools`, with ChatGPT open and running Codex's login.
         case chatGPTOpen
+        /// `oneTool`, with Claude Desktop installed and open: one Claude account in use whose
+        /// live usage macOS has stopped, and one parked whose sign-in lapses in two days.
+        case claudeDesktop
 
         /// The environment variable a debug build reads the fixture's name from.
         static let variable = "PITBOARD_FIXTURE"
@@ -45,7 +48,10 @@
             let defaults = given ?? UserDefaults(suiteName: Self.suite) ?? .standard
             if given == nil { defaults.removePersistentDomain(forName: Self.suite) }
             if self != .firstLaunch { defaults.set(true, forKey: DefaultsKey.hasBeenSeen) }
-            let apps = FixtureApps(running: self == .chatGPTOpen ? [FixtureApps.chatGPT] : [])
+            let apps = FixtureApps(
+                running: self == .chatGPTOpen
+                    ? [FixtureApps.chatGPT]
+                    : self == .claudeDesktop ? [FixtureApps.claude] : [])
             return Dependencies(
                 core: FixtureCore(self, apps: apps),
                 defaults: defaults,
@@ -98,6 +104,8 @@
     final class FixtureApps: @unchecked Sendable {
         /// ChatGPT, as the core names it from the `codex` it runs.
         static let chatGPT = "com.openai.codex"
+        /// Claude Desktop's app.
+        static let claude = "com.anthropic.claudefordesktop"
 
         private let lock = NSLock()
         private var running: Set<String>
@@ -147,6 +155,7 @@
         func running(_ bundleID: String) -> URL? {
             apps.isRunning(bundleID) ? FixtureApps.copy(of: bundleID) : nil
         }
+        func installed(_ bundleID: String) -> URL? { FixtureApps.copy(of: bundleID) }
         func requestQuit(_ bundleID: String) { apps.quit(bundleID) }
         func open(_ copy: URL) { apps.open(copy) }
     }

@@ -203,6 +203,11 @@ mod tests {
                 workspace_id: None,
                 plan: None,
             },
+            ProviderId::Desktop => Detail::Desktop {
+                organization_uuid: None,
+                session_fingerprint: String::new(),
+                session_expires_at: None,
+            },
         };
         Account {
             label: label.into(),

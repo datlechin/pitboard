@@ -69,6 +69,13 @@ struct SignInSheet: View {
                         }
                     }
                     .accessibilityIdentifier("sheet.tool")
+                    // Claude Desktop signs in inside Claude, which its own sheet walks
+                    // through.
+                    .onChange(of: provider) {
+                        if provider == desktopProvider {
+                            model.present(.add(provider: desktopProvider))
+                        }
+                    }
                 }
                 if let again {
                     LabeledContent("Account", value: again)

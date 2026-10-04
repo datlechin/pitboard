@@ -71,8 +71,11 @@ struct AccountRow: View {
     /// not new, how long the account in use lasts at this rate, and how long a parked login
     /// stays usable.
     private var notes: [String] {
-        [description.problem, description.staleNote, description.pace, description.parkedNote]
-            .compactMap { $0 }
+        [
+            description.problem, description.staleNote, description.pace,
+            description.parkedNote, description.sourceNote,
+        ]
+        .compactMap { $0 }
     }
 
     @ViewBuilder private var trailing: some View {

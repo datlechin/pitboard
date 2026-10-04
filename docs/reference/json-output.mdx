@@ -35,7 +35,7 @@ It prints this on one line:
 </ResponseField>
 
 <ResponseField name="command" type="string | null" required>
-  The command that ran, such as `rename`. The three `schedule` commands give `schedule`, and `completions` and `manpage` give `generate`. `null` when Pitboard could not parse the command line.
+  The command that ran, such as `rename`. The three `schedule` commands give `schedule`, the three `desktop live-usage` commands give `desktop`, and `completions` and `manpage` give `generate`. `null` when Pitboard could not parse the command line.
 </ResponseField>
 
 <ResponseField name="ok" type="boolean" required>
@@ -96,26 +96,27 @@ The `data` of each command, in the order of `pitboard --help`:
 | Command | `data` |
 | --- | --- |
 | `status` | See [Status data](/reference/json-output#status-data). |
-| `enroll` | `label` as typed, `provider` (`claude` or `codex`), `email`, and `enrolled`: `current`, `signed_in`, `renewed` or `in_use`, as [Account commands](/reference/account-commands#enroll) explains. |
-| `use` | Already in use: `to`, and `changed` set to `false`. After a switch: `from`, `to`, `provider`, `changed` set to `true`, `parked_at` (when the login you left was parked), `adoption_ceiling_seconds` and `adoption`. |
+| `enroll` | `label` as typed, `provider` (`claude`, `codex` or `desktop`), `email`, and `enrolled`: `current`, `signed_in`, `renewed` or `in_use`, as [Account commands](/reference/account-commands#enroll) explains. |
+| `use` | Already in use: `to`, and `changed` set to `false`. After a switch: `from`, `to`, `provider`, `changed` set to `true`, `parked_at` (when the login you left was parked), `adoption_ceiling_seconds` and `adoption`. `from` is `null` when nothing was signed in. After `pitboard use desktop --signed-out`: `to` is `null` and `signed_out` is `true`. |
 | `forget` | `label` and `email`. |
-| `abandon` | `abandoned`, `false` when there was no interrupted switch. When it is `true`, also `from`, `to` and `logins_kept`, a count. |
+| `abandon` | `abandoned`, `false` when there was no interrupted switch. When it is `true`, also `from`, `to` and `logins_kept`, a count. For an interrupted Claude Desktop switch, `logins_kept` counts the items in both parks, and `from` or `to` can be an empty string. |
 | `repair` | `given_back`, a list of objects with `label` and `service`, the parked login's name. `deleted`, `strangers` (left alone because they belong to no account this Pitboard knows) and `unreadable`, lists of parked login names. All four are always present. |
 | `adopt` | `adopted`, `false` when Pitboard's directory was already this computer's. When it is `true`, also `accounts`, the labels of the accounts kept, and `logins_dropped`, the labels whose parked login was dropped. |
-| `renew` | `accounts`, a list of objects with `label`, `provider` and `outcome`, and `renewed`, a count. `outcome` is `renewed`, `parked_login_refused` (the service refused the login and Pitboard dropped it), `renewal_deferred` (tried again next time) or an error code. |
+| `renew` | `accounts`, a list of objects with `label`, `provider` and `outcome`, and `renewed`, a count. `outcome` is `renewed`, `parked_login_refused` (the service refused the login and Pitboard dropped it), `renewal_deferred` (tried again next time), `not_renewable` or an error code. Every parked Claude Desktop login is `not_renewable`, with its label including `desktop/`, and `expires_at`, when its sign-in lapses, or `null` when that is not known. |
 | `schedule` | `schedule install`: `installed` set to `true`, and `path`. `schedule status`: `installed`, and when it is `true`, `path` and `every_seconds` (`86400`). Where Pitboard cannot write a schedule, also `supported` set to `false`. `schedule uninstall`: `installed` set to `false`, and `removed`. |
 | `log` | `entries`, oldest first, each with `at`, `caller` (`cli`, `app` or `unknown`), `verb`, `subject` and `outcome`. |
 | `uninstall` | `parks_removed`, `parks_pending` (could not be deleted) and `parks_left` (left because another Pitboard may own them), counts. `home_removed` and `schedule_removed`, booleans. |
 | `rename` | `from`, `to` and `email`. |
-| `doctor` | `environment`: the paths and login stores Pitboard found, and the version of OpenAI's Codex CLI. `checks`, each with `code`, `name`, `level` (`ok`, `warn` or `fail`), `detail` and `advice`, as [Maintenance commands](/reference/maintenance-commands#doctor) lists. |
+| `desktop` | `live_usage`, the object described in [Status data](/reference/json-output#status-data), after the change the command made. |
+| `doctor` | `environment`: the paths and login stores Pitboard found, the version of OpenAI's Codex CLI and, when Claude Desktop is there, `desktop`, described in [Doctor's Claude Desktop facts](/reference/json-output#doctors-claude-desktop-facts). `checks`, each with `code`, `name`, `level` (`ok`, `warn` or `fail`), `detail` and `advice`, as [Maintenance commands](/reference/maintenance-commands#doctor) lists. |
 | `statusline` | `line`, the status line without colour. |
 | `generate` (`completions` and `manpage`) | `{}` |
 
-`adoption` says how sessions already running pick up a switch. For Claude Code it is `{"follows":"polling","within_seconds":33}`, and `adoption_ceiling_seconds` is `33`. For Codex it is `{"follows":"restart","program":"codex"}`, and `adoption_ceiling_seconds` is `null`.
+`adoption` says how sessions already running pick up a switch. For Claude Code it is `{"follows":"polling","within_seconds":33}`, and `adoption_ceiling_seconds` is `33`. For Codex it is `{"follows":"restart","program":"codex"}`, and `adoption_ceiling_seconds` is `null`. For Claude Desktop it is `{"follows":"next_launch","program":"Claude"}`, because Claude was quit before the switch, and `adoption_ceiling_seconds` is `null`.
 
 ## Status data
 
-The `data` of `pitboard status` has four fields:
+The `data` of `pitboard status` has four fields, and a fifth, `desktop`, on a Mac with Claude Desktop installed or a Claude Desktop account enrolled:
 
 | Field | Type | Meaning |
 | --- | --- | --- |
@@ -123,6 +124,19 @@ The `data` of `pitboard status` has four fields:
 | `signed_in` | object or null | The Claude Code account in use, never a Codex one: `account_uuid`, `email` and `organization_uuid`. |
 | `signed_in_error` | string or null | Why `signed_in` is `null`, such as `nothing is signed in`. |
 | `accounts` | array | One object per enrolled account: Claude Code first, and the account in use first within each tool. A login in use that no account matches gets one too. |
+| `desktop` | object | Claude Desktop's state: `live_usage`, `awaiting_sign_in` and `recovery_waiting`. Left out on other machines. |
+
+For Claude Desktop, `desktop.live_usage` has these fields. The `desktop` command prints the same object.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `enabled` | boolean | Whether live usage is on. |
+| `approval` | string | Whether macOS lets Pitboard read Claude's key: `unknown`, `granted` or `needs_approval`. |
+| `reason` | string or null | Why approval is needed: `no_gui`, `denied`, `auth_failed`, `timed_out`, `item_changed`, `item_missing`, `key_does_not_decrypt`, `no_session` or `other`. |
+| `changed_at` | integer or null | When live usage was last turned on or off. |
+| `last_ok_at` | integer or null | When claude.ai last answered. |
+
+`desktop.awaiting_sign_in` is `null`, or the account `pitboard use desktop --signed-out` parked, as `from` and `started_at`. `desktop.recovery_waiting` is `null`, or the `from` and `to` labels of an interrupted Claude Desktop switch that waits for Claude to be quit. Either label can be an empty string.
 
 For Codex, the account in use is the object in `accounts` with `provider` set to `codex` and `signed_in` set to `true`.
 
@@ -135,14 +149,16 @@ Each object in `accounts` has these fields:
 | `account_uuid` | string | The account id. Empty in the same case. |
 | `signed_in` | boolean | `true` for the account its tool is using. |
 | `switchable` | boolean | `true` when `pitboard use` can switch to it: it is not in use, and its parked login can still be restored. |
-| `parked` | object or null | The parked login's `parked_at`, `access_expires_at` and `refresh_expires_at`. `null` when nothing is parked. Each expiry is `null` when unknown, and `refresh_expires_at` is always `null` for Codex. |
+| `parked` | object or null | The parked login's `parked_at`, `access_expires_at` and `refresh_expires_at`. `null` when nothing is parked. Each expiry is `null` when unknown, and `refresh_expires_at` is always `null` for Codex. For Claude Desktop, both expiries are when its sign-in lapses. |
 | `lasts` | object or null | `seconds` until the account's tightest limit fills at its recent rate (`why` is `filling`) or resets (`why` is `resets`), whichever comes first. `null` until there are enough readings, as [How long an account lasts](/concepts/usage#how-long-an-account-lasts) explains. |
 | `usage` | object or null | The last reading: `source`, `observed_at` (when it was taken) and `windows`. `null` when no usage is known. |
 | `stale` | string or null | Why the reading is not live, as listed in [Stale codes](/reference/json-output#stale-codes). |
-| `provider` | string | `claude` or `codex`. |
+| `provider` | string | `claude`, `codex` or `desktop`. |
 | `qualified` | string or null | The label with its tool, such as `claude/work`. `null` for a login nobody enrolled. |
 
-In `usage`, `source` is `live` when Pitboard asked the service this time. It is `claude_code_cache` for a reading copied from Claude Code's own cache, and `remembered` for the last reading Pitboard took itself.
+In `usage`, `source` is `live` when Pitboard asked the service this time. It is `claude_code_cache` for a reading copied from Claude Code's own cache, and `remembered` for the last reading Pitboard took itself. It is `desktop_history` for one read from Claude Desktop's own usage history.
+
+`usage.verified` is present, and `false`, only when what the reading's numbers mean has not been measured. A `desktop_history` reading leaves it out: on 4 October 2026 the app's history matched claude.ai's own count for two accounts. Its windows are `five_hour` and `seven_day`, with `resets_at` set to `null` and `is_active` set to `false`.
 
 Each object in `windows` is one limit:
 
@@ -178,4 +194,37 @@ Each object in `windows` is one limit:
 | `interrupted` | The request stopped before it had an answer. | `the check did not finish` |
 | `not_asked` | Read without the network, as every row of `pitboard status --offline` is. | `read without asking Anthropic` |
 
-For a Codex account, the text says Codex, OpenAI and `codex` where the table says Claude Code, Anthropic and `claude`.
+For a Codex account, the text says Codex, OpenAI and `codex` where the table says Claude Code, Anthropic and `claude`. For a Claude Desktop account, it says Claude Desktop and claude.ai, and an expired session says `open Claude and sign in again`.
+
+These codes apply only to Claude Desktop:
+
+| `stale` | Meaning | Text |
+| --- | --- | --- |
+| `live_usage_off` | Live usage is off, so usage is read from Claude's own history. | `read from Claude's own usage history`. `pitboard status` prints `from Claude's own history` in the usage line instead. |
+| `live_usage_needs_approval` | Live usage is on, but macOS has not let Pitboard read Claude's key. | `asking claude.ai waits for macOS to let Pitboard read Claude's key` |
+| `live_usage_needs_gui` | macOS can ask about Claude's key only on the Mac's own screen. | `macOS only asks about Claude's key on the Mac's own screen` |
+| `desktop_org_unknown` | Pitboard does not know yet which organisation to read usage for. | `which organisation to read usage for is not known yet` |
+| `recovery_waiting` | An interrupted Claude Desktop switch waits for Claude to be quit. | `` an interrupted switch waits for Claude to be quit; run `pitboard doctor` `` |
+| `bot_check` | claude.ai's bot check stopped the request. The error's cause stays `server_error`. | `claude.ai's bot check stopped the request; try again later` |
+
+## Doctor's Claude Desktop facts
+
+`environment.desktop` in `pitboard doctor --json` is present when Claude Desktop is installed, an account of it is enrolled, or Pitboard has Claude Desktop files. It is read without the keychain.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `installed` | boolean | Whether the app is where Pitboard looks for it. |
+| `version` | string or null | The app's version. |
+| `verified_against` | string | The version Pitboard's facts were read from, such as `2.19675.0`. |
+| `version_matches` | boolean or null | Whether the two versions are the same. |
+| `support_dir` | string or null | Claude's data folder. |
+| `same_volume` | boolean or null | Whether that folder and Pitboard's parks are on one volume. |
+| `cookies_meta_version` | integer or null | The cookie jar's format version. Pitboard reads `24`. |
+| `parks_dir_private` | boolean or null | Whether only you can open `~/.pitboard/desktop/parks`. |
+| `parks` | integer | How many parks there are. |
+| `orphan_parks` | string[] | Parks no account names. |
+| `strays` | object | `count` and `bytes` of what was set aside in `~/.pitboard/desktop/strays`. |
+| `recovery_pending` | boolean | Whether a Claude Desktop switch was interrupted. |
+| `running` | array or null | What runs from the app, or `null` when Pitboard could not tell. |
+| `live_usage` | object | `enabled`, `approval` and `reason`, as in status data. |
+| `unverified_facts` | string[] | The facts about Claude Desktop Pitboard relies on that have not been measured yet, such as `desktop_session_sliding`. |

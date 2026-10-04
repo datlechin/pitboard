@@ -51,15 +51,16 @@ pub fn changed_at(ctx: &Context) -> i64 {
 
 /// Drop what was remembered for an account that is no longer enrolled. Nothing here is
 /// secret, but an account someone has dropped should leave no trace behind either.
-pub fn forget(ctx: &Context, account_uuid: &str) {
-    if !load(ctx).contains_key(account_uuid) {
+/// `usage_key` is the account's `Account::usage_key`.
+pub fn forget(ctx: &Context, usage_key: &str) {
+    if !load(ctx).contains_key(usage_key) {
         return;
     }
     let Some(_held) = exclusive(ctx) else {
         return;
     };
     let mut all = load(ctx);
-    if all.remove(account_uuid).is_none() {
+    if all.remove(usage_key).is_none() {
         return;
     }
     if let Ok(body) = serde_json::to_string(&all) {
@@ -170,6 +171,7 @@ mod tests {
             observed_at,
             account_uuid: None,
             source: Source::Live,
+            verified: true,
         }
     }
 

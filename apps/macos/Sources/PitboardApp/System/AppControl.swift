@@ -12,6 +12,8 @@ public protocol AppControl: AnyObject {
     /// Where the running copy of the app was opened from, or nil when it is not running. An
     /// app is a bundle, so a running one always says where it is.
     func running(_ bundleID: String) -> URL?
+    /// Where macOS would open the app from, running or not, or nil when it knows of no copy.
+    func installed(_ bundleID: String) -> URL?
     /// Asks the app to quit the way Command-Q does, which lets it ask about work in
     /// progress. Returns at once; the app may take a while, or decline.
     func requestQuit(_ bundleID: String)
@@ -60,6 +62,10 @@ public final class WorkspaceAppControl: AppControl {
 
     public func running(_ bundleID: String) -> URL? {
         apps(bundleID).lazy.compactMap(\.bundleURL).first
+    }
+
+    public func installed(_ bundleID: String) -> URL? {
+        NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID)
     }
 
     public func requestQuit(_ bundleID: String) {

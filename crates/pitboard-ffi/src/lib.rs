@@ -70,6 +70,14 @@ pub struct Settings {
     /// line does when its environment says so.
     #[uniffi(default = false)]
     pub no_argv: bool,
+    /// `PITBOARD_CLAUDE_DESKTOP_DIR`: where Claude Desktop keeps its data; `None` or empty
+    /// means its own default.
+    #[uniffi(default)]
+    pub desktop_dir: Option<String>,
+    /// `PITBOARD_CLAUDE_DESKTOP_APP`: the Claude app bundle; `None` or empty means the one in
+    /// /Applications.
+    #[uniffi(default)]
+    pub desktop_app: Option<String>,
 }
 
 impl Settings {
@@ -105,6 +113,12 @@ impl Settings {
         if self.no_argv {
             ctx = ctx.with_argv_fallback(false);
         }
+        if let Some(dir) = self.desktop_dir {
+            ctx = ctx.with_desktop_dir(dir);
+        }
+        if let Some(app) = self.desktop_app {
+            ctx = ctx.with_desktop_app(app);
+        }
         // These bindings exist for the app, so a change made through them says so.
         ctx.with_caller("app".into())
     }
@@ -113,9 +127,9 @@ impl Settings {
 /// A tool Pitboard handles, as the app names it to a person.
 #[derive(Debug, uniffi::Record)]
 pub struct Tool {
-    /// What a label's prefix and every `provider` field say: `claude`, `codex`.
+    /// What a label's prefix and every `provider` field say: `claude`, `codex`, `desktop`.
     pub code: String,
-    /// As its own documentation names it: `Claude Code`, `Codex`.
+    /// As its own documentation names it: `Claude Code`, `Codex`, `Claude Desktop`.
     pub name: String,
     /// The command that runs it, which is what a person restarts.
     pub program: String,
@@ -293,8 +307,12 @@ pub struct Renewed {
     pub label: String,
     /// Which tool's login it is.
     pub provider: String,
-    /// `renewed`, `renewal_deferred`, `parked_login_refused`, or the code of a failure.
+    /// `renewed`, `renewal_deferred`, `parked_login_refused`, `not_renewable`, or the code
+    /// of a failure.
     pub outcome: String,
+    /// For a login Pitboard cannot renew, such as Claude Desktop's, when its sign-in lapses.
+    #[uniffi(default)]
+    pub expires_at: Option<i64>,
 }
 
 /// Whether anything keeps parked logins alive on this machine without a command being run.
@@ -368,6 +386,8 @@ pub enum Source {
     Live,
     ClaudeCodeCache,
     Remembered,
+    /// From Claude Desktop's own record of its plan usage, without asking claude.ai.
+    DesktopHistory,
 }
 
 /// One limit an account is measured against, such as the five-hour session or the week.
@@ -396,6 +416,50 @@ pub struct Usage {
     pub source: Source,
     pub observed_at: Option<i64>,
     pub windows: Vec<Limit>,
+    /// False for a reading whose meaning is not yet confirmed, which a person should be told
+    /// is unconfirmed. Claude Desktop's own history was measured on 4 October 2026, so it is
+    /// verified; a source whose register entry is unverified is not.
+    #[uniffi(default = true)]
+    pub verified: bool,
+}
+
+/// Whether Claude Desktop's usage is asked of claude.ai, which needs Claude's key.
+#[derive(Debug, uniffi::Record)]
+pub struct LiveUsageState {
+    pub enabled: bool,
+    /// `unknown`, `granted` or `needs_approval`: whether macOS lets Pitboard read the key.
+    pub approval: String,
+    /// Why it is not working, as a stable code: `no_gui`, `denied`, `auth_failed`,
+    /// `timed_out`, `item_changed`, `item_missing`, `key_does_not_decrypt`,
+    /// `no_session`, `other`.
+    pub reason: Option<String>,
+    /// When claude.ai last answered.
+    pub last_ok_at: Option<i64>,
+}
+
+impl From<status::LiveUsage> for LiveUsageState {
+    fn from(state: status::LiveUsage) -> LiveUsageState {
+        LiveUsageState {
+            enabled: state.enabled,
+            approval: match state.approval {
+                status::Approval::Unknown => "unknown",
+                status::Approval::Granted => "granted",
+                status::Approval::NeedsApproval => "needs_approval",
+            }
+            .into(),
+            reason: state.reason,
+            last_ok_at: state.last_ok_at,
+        }
+    }
+}
+
+/// A sign-out Pitboard made that no enrolment has followed yet: the app is signed out and
+/// waits for somebody to sign in to the next account.
+#[derive(Debug, uniffi::Record)]
+pub struct Awaiting {
+    /// The account that was parked, as its label; `None` where it is not known.
+    pub from_label: Option<String>,
+    pub started_at: i64,
 }
 
 #[derive(uniffi::Record)]
@@ -459,6 +523,9 @@ pub enum Adoption {
     Follows { within_seconds: u32 },
     /// Never: `program` has to be quit and started again.
     Restart { program: String },
+    /// When `program` is next opened: it was quit for the switch and reads the login as it
+    /// starts, so there is nothing running to restart.
+    NextLaunch { program: String },
 }
 
 /// What makes one kind of process take a switch.
@@ -506,6 +573,21 @@ impl From<pitboard_core::holder::Holding> for Holding {
             },
             pids: held.pids,
         }
+    }
+}
+
+/// When sessions already running follow a switch, as the app is told it.
+fn adoption_of(adoption: pitboard_core::provider::Adoption) -> Adoption {
+    match adoption {
+        pitboard_core::provider::Adoption::PollingWithin(seconds) => Adoption::Follows {
+            within_seconds: seconds,
+        },
+        pitboard_core::provider::Adoption::RestartRequired { program, .. } => Adoption::Restart {
+            program: program.into(),
+        },
+        pitboard_core::provider::Adoption::NextLaunch { program } => Adoption::NextLaunch {
+            program: program.into(),
+        },
     }
 }
 
@@ -666,13 +748,25 @@ pub fn parked_life(parked: Option<Parked>, now: i64) -> Option<String> {
 
 /// What a renewal run did, from what `Pitboard::renew` returned: "No parked login was due.",
 /// "Renewed one.", "Renewed 1 of 2; the rest are tried again next time.".
+///
+/// A login nothing can renew, such as Claude Desktop's, is never due, as the command line
+/// counts it, and its `expires_at` says when it lapses.
 #[uniffi::export]
 pub fn renewal_note(renewals: Vec<Renewed>) -> String {
+    let not_renewable = switch::Renewal::NotRenewable {
+        label: String::new(),
+        expires_at: None,
+    }
+    .code();
+    let due = renewals
+        .iter()
+        .filter(|r| r.outcome != not_renewable)
+        .count();
     let renewed = renewals
         .iter()
         .filter(|r| r.outcome == switch::Renewal::Renewed.code())
         .count();
-    words::renewal_note(renewals.len(), renewed)
+    words::renewal_note(due, renewed)
 }
 
 /// The line over a diagnosis's checks: what is worth looking at while checks only warn,
@@ -723,8 +817,10 @@ fn account(row: status::Row, now: i64) -> Account {
                 usage::Source::Live => Source::Live,
                 usage::Source::ClaudeCodeCache => Source::ClaudeCodeCache,
                 usage::Source::Remembered => Source::Remembered,
+                usage::Source::DesktopHistory => Source::DesktopHistory,
             },
             observed_at: u.observed_at,
+            verified: u.verified,
             windows: u
                 .windows
                 .into_iter()
@@ -744,6 +840,58 @@ fn account(row: status::Row, now: i64) -> Account {
         account_uuid: row.account_uuid,
         signed_in: row.signed_in,
     }
+}
+
+/// A switch as the app reads it.
+fn switched(outcome: Changing<switch::Outcome>) -> Result<Switched, PitboardError> {
+    changed(outcome, |outcome, warnings| Switched {
+        outcome: match outcome {
+            switch::Outcome::Switched {
+                provider,
+                from,
+                to,
+                adoption,
+                ..
+            } => Switch::Switched {
+                provider: provider.code().into(),
+                from,
+                to,
+                adoption: adoption_of(adoption),
+            },
+            // Said as a switch from nobody, an empty side the way a recovered switch
+            // names one, so the app reads it without a case of its own.
+            switch::Outcome::Installed {
+                provider,
+                to,
+                adoption,
+            } => Switch::Switched {
+                provider: provider.code().into(),
+                from: String::new(),
+                to,
+                adoption: adoption_of(adoption),
+            },
+            // Only `switch_to_signed_out` signs out, and it is said as a switch to
+            // nobody: an empty side, the way a recovered switch names one.
+            switch::Outcome::SignedOut {
+                provider,
+                from,
+                adoption,
+                ..
+            } => Switch::Switched {
+                provider: provider.code().into(),
+                from,
+                to: String::new(),
+                adoption: adoption_of(adoption),
+            },
+            switch::Outcome::AlreadyActive { label } => Switch::AlreadyActive { label },
+            // Nothing changed, said the way a sign-out that changed something is: an empty
+            // side for nobody, so the app reads it without a case of its own.
+            switch::Outcome::AlreadySignedOut { .. } => Switch::AlreadyActive {
+                label: String::new(),
+            },
+        },
+        warnings,
+    })
 }
 
 fn changed<T, R>(
@@ -845,19 +993,30 @@ struct Made {
 
 impl Made {
     fn from_settings(settings: Settings) -> Made {
+        let (claude, codex) = (
+            settings.claude_program.is_some(),
+            settings.codex_program.is_some(),
+        );
+        let search_path = settings.search_path.clone();
+        let schedules_a_command_line = settings.schedule_program.is_some();
+        let context = settings.context();
         Made {
             found: ProviderId::ALL
                 .iter()
                 .copied()
                 .filter(|&tool| match tool {
-                    ProviderId::Claude => settings.claude_program.is_some(),
-                    ProviderId::Codex => settings.codex_program.is_some(),
+                    ProviderId::Claude => claude,
+                    ProviderId::Codex => codex,
+                    // The Claude app counts only where its bundle has its program, the one
+                    // named or the one in /Applications: a bundle that is not there is not
+                    // an installed app.
+                    ProviderId::Desktop => pitboard_core::app::can_run(context.program_for(tool)),
                     _ => false,
                 })
                 .collect(),
-            search_path: settings.search_path.clone(),
-            schedules_a_command_line: settings.schedule_program.is_some(),
-            core: service::Pitboard::new(settings.context()),
+            search_path,
+            schedules_a_command_line,
+            core: service::Pitboard::new(context),
         }
     }
 
@@ -1054,37 +1213,51 @@ impl Pitboard {
     }
 
     pub fn switch_to(&self, label: String) -> Result<Switched, PitboardError> {
-        changed(self.core().core.switch_to(&label), |outcome, warnings| {
-            Switched {
-                outcome: match outcome {
-                    switch::Outcome::Switched {
-                        provider,
-                        from,
-                        to,
-                        adoption,
-                        ..
-                    } => Switch::Switched {
-                        provider: provider.code().into(),
-                        from,
-                        to,
-                        adoption: match adoption {
-                            pitboard_core::provider::Adoption::PollingWithin(seconds) => {
-                                Adoption::Follows {
-                                    within_seconds: seconds,
-                                }
-                            }
-                            pitboard_core::provider::Adoption::RestartRequired {
-                                program, ..
-                            } => Adoption::Restart {
-                                program: program.into(),
-                            },
-                        },
-                    },
-                    switch::Outcome::AlreadyActive { label } => Switch::AlreadyActive { label },
-                },
-                warnings,
+        switched(self.core().core.switch_to(&label))
+    }
+
+    /// Sign `tool`'s app out, parking the account in it, so somebody can sign in to another
+    /// account in the app and enrol that one with `enroll_current`. Only Claude Desktop, whose
+    /// login is a folder, is signed out this way; the result is a switch to nobody.
+    pub fn switch_to_signed_out(&self, tool: String) -> Result<Switched, PitboardError> {
+        use pitboard_core::provider::ProviderId;
+        let Some(which) = ProviderId::parse(&tool) else {
+            return Err(pitboard_core::error::Error::ProviderUnknown {
+                typed: tool,
+                known: ProviderId::ALL
+                    .iter()
+                    .map(|p| p.code().to_string())
+                    .collect(),
             }
+            .into());
+        };
+        switched(self.core().core.switch_to_signed_out(which))
+    }
+
+    /// The sign-out Pitboard made that no enrolment has followed yet, where there is one.
+    /// Reads Pitboard's own file and nothing else.
+    pub fn awaiting_sign_in(&self) -> Option<Awaiting> {
+        self.core().core.awaiting_sign_in().map(|a| Awaiting {
+            from_label: Some(a.from_label).filter(|label| !label.is_empty()),
+            started_at: a.started_at,
         })
+    }
+
+    /// Whether Claude Desktop's usage is asked of claude.ai. Reads Pitboard's own file and
+    /// nothing else, so it answers at once and never asks macOS anything.
+    pub fn live_usage(&self) -> LiveUsageState {
+        self.core().core.live_usage().into()
+    }
+
+    /// Turn live usage on: reads Claude's key once, which puts macOS's question in front of
+    /// the person. Only for a button somebody pressed, after saying what it does.
+    pub fn enable_live_usage(&self) -> Result<LiveUsageState, PitboardError> {
+        Ok(self.core().core.enable_live_usage()?.into())
+    }
+
+    /// Turn live usage off and forget the key. Reads nothing.
+    pub fn disable_live_usage(&self) -> Result<LiveUsageState, PitboardError> {
+        Ok(self.core().core.disable_live_usage()?.into())
     }
 
     /// Enroll the account signed in now under `label`.
@@ -1206,6 +1379,10 @@ impl Pitboard {
                 label: key.typed(),
                 provider: key.provider.code().into(),
                 outcome: outcome.code().to_string(),
+                expires_at: match &outcome {
+                    switch::Renewal::NotRenewable { expires_at, .. } => *expires_at,
+                    _ => None,
+                },
             })
             .collect()
     }
@@ -1306,6 +1483,8 @@ mod tests {
             search_path: None,
             schedule_program,
             no_argv: false,
+            desktop_dir: None,
+            desktop_app: None,
         }
     }
 
@@ -1338,6 +1517,72 @@ mod tests {
                 url: None,
                 wants_code: false
             }
+        );
+    }
+
+    /// Every tool the core handles is one the app lists, Claude Desktop included, now that
+    /// the app can sign it out, switch it and show it.
+    #[test]
+    fn the_app_lists_every_tool() {
+        let codes: Vec<String> = tools().into_iter().map(|tool| tool.code).collect();
+        assert_eq!(codes, ["claude", "codex", "desktop"]);
+    }
+
+    /// A home nothing can be written under: what these read is Pitboard's own files, and
+    /// there are none.
+    fn nowhere() -> Arc<Pitboard> {
+        Pitboard::new(Settings {
+            home: "/dev/null".into(),
+            desktop_dir: Some("/dev/null/claude-desktop".into()),
+            desktop_app: Some("/dev/null/Claude.app".into()),
+            ..settings(None)
+        })
+    }
+
+    /// Live usage is off until somebody turns it on, and reading whether it is reads
+    /// Pitboard's own file and nothing else.
+    #[test]
+    fn live_usage_is_off_until_somebody_turns_it_on() {
+        let state = nowhere().live_usage();
+        assert!(!state.enabled);
+        assert_eq!(state.approval, "unknown");
+        assert_eq!(state.reason, None);
+        assert_eq!(state.last_ok_at, None);
+        assert!(nowhere().awaiting_sign_in().is_none());
+    }
+
+    /// Only an app whose login is a folder is signed out by Pitboard, and a tool nobody
+    /// knows is said to be one rather than taken for another.
+    #[test]
+    fn only_claude_desktop_is_signed_out() {
+        let Err(PitboardError::Failed { code, .. }) =
+            nowhere().switch_to_signed_out("codex".into())
+        else {
+            panic!("Codex was signed out");
+        };
+        assert_eq!(code, "usage");
+        let Err(PitboardError::Failed { code, .. }) =
+            nowhere().switch_to_signed_out("nonsense".into())
+        else {
+            panic!("an unknown tool was signed out");
+        };
+        assert_eq!(code, "provider_unknown");
+    }
+
+    /// A sign-out that found nobody signed in reaches the app as nothing changed, with no
+    /// account named, which is what it read before the core said it apart.
+    #[test]
+    fn a_sign_out_of_nobody_reaches_the_app_as_nothing_changed() {
+        let said = switched(Ok(service::Done {
+            value: switch::Outcome::AlreadySignedOut {
+                provider: pitboard_core::provider::ProviderId::Desktop,
+            },
+            warnings: Vec::new(),
+        }))
+        .unwrap_or_else(|_| panic!("not a failure"));
+        assert!(
+            matches!(&said.outcome, Switch::AlreadyActive { label } if label.is_empty()),
+            "said as something else"
         );
     }
 
@@ -1438,8 +1683,14 @@ mod tests {
             label: "work".into(),
             provider: "claude".into(),
             outcome: outcome.into(),
+            expires_at: None,
         };
         assert_eq!(renewal_note(Vec::new()), "No parked login was due.");
+        assert_eq!(
+            renewal_note(vec![renewed("renewed"), renewed("not_renewable")]),
+            "Renewed one.",
+            "a login nothing can renew is not due"
+        );
         assert_eq!(
             renewal_note(vec![renewed("renewed"), renewed("renewal_deferred")]),
             "Renewed 1 of 2; the rest are tried again next time."
@@ -1510,11 +1761,13 @@ mod tests {
     }
 
     /// A core over a home nothing can be written under, with a `codex` named where one is
-    /// given.
+    /// given. Its Claude app is named and not there, so whether this Mac has Claude in
+    /// /Applications says nothing here.
     fn made(codex: Option<&str>) -> Made {
         Made::from_settings(Settings {
             home: "/dev/null".into(),
             codex_program: codex.map(str::to_owned),
+            desktop_app: Some("/dev/null/Claude.app".into()),
             ..settings(None)
         })
     }
@@ -1559,7 +1812,7 @@ mod tests {
             },
             ASK_AGAIN_AFTER,
         ));
-        assert_eq!(tools().len(), 2, "listing the tools asks nothing");
+        assert_eq!(tools().len(), 3, "listing the tools asks nothing");
         assert_eq!(asks.count(), 0, "and nor does making the object");
         let calls: Vec<_> = (0..3)
             .map(|which| {

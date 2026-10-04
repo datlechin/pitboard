@@ -25,6 +25,11 @@ struct Notice: Identifiable, Equatable {
         case giveUp
         /// Put away what giving up on one said.
         case dismissAbandoned
+        /// Show the sheet that asks to read Claude's key again, for live usage that macOS
+        /// stopped.
+        case allowLiveUsage
+        /// Show the sheet for a Claude Desktop account whose adding was left halfway.
+        case finishDesktopAdd
     }
 
     let id: String
@@ -75,6 +80,34 @@ extension AppModel {
                     title: "\(tool)\(advice.ran) has no \(advice.limit) limit left",
                     lines: ["\(advice.use) has \(advice.left)% of its own left."],
                     actions: [.use(qualified: advice.switchTo, label: advice.use)]))
+        }
+        // Said where it can be acted on rather than at every read: the notification about
+        // it is sent once, and this stays until live usage works again or is turned off.
+        if let liveUsage, liveUsage.enabled, liveUsage.approval == "needs_approval" {
+            notices.append(
+                Notice(
+                    id: "live-usage", severity: .warning,
+                    title: "Live usage for Claude is paused",
+                    lines: [
+                        "macOS stopped letting Pitboard read Claude’s key, which can happen "
+                            + "after Claude updates. Until it is allowed again, Claude "
+                            + "Desktop’s numbers come from Claude’s own history."
+                    ],
+                    actions: [.allowLiveUsage]))
+        }
+        // An add left halfway leaves Claude signed out. The window does not come forward for
+        // one started somewhere else, so this is where it is said.
+        if let awaiting = desktopAwaiting {
+            let back = awaiting.fromLabel.map { ", or put \($0) back" } ?? ""
+            notices.append(
+                Notice(
+                    id: "desktop-awaiting", severity: .warning,
+                    title: "Adding a Claude account isn’t finished",
+                    lines: [
+                        "Claude is signed out while another account is added. Sign in to it "
+                            + "in Claude and name it in Pitboard\(back)."
+                    ],
+                    actions: [.finishDesktopAdd]))
         }
         for last in lastSwitches {
             notices.append(notice(about: last, at: now))
@@ -149,6 +182,11 @@ func warningTitle(_ warning: Warning) -> String {
     case "interrupted_switch_finished": "An interrupted switch was finished"
     case "interrupted_switch_undone": "An interrupted switch was undone"
     case "recovery_undetermined": "An interrupted switch is waiting"
+    case "recovery_waiting": "An interrupted Claude Desktop switch is waiting"
+    case "switch_unfinished": "A Claude Desktop switch stopped partway"
+    case "park_expires_soon": "A Claude Desktop sign-in lapses soon"
+    case "strays_kept": "Claude Desktop files were set aside"
+    case "replaced_outside_pitboard": "Claude was signed in outside Pitboard"
     default: "Pitboard has a warning"
     }
 }

@@ -50,6 +50,21 @@ import Testing
             == "Renewed 1 of 2; the rest are tried again next time.")
 }
 
+/// A Claude Desktop login is never renewed by Pitboard, so a run lists each of its parks as
+/// `not_renewable`. That is how they are, not something that was due and failed, so they
+/// are left out of the count rather than read as a renewal that went wrong.
+@Test func aLoginThatIsNeverRenewedIsNeitherDueNorFailed() {
+    let renewed = { (outcome: String) in
+        Renewed(label: "home", provider: "desktop", outcome: outcome)
+    }
+    #expect(renewalNote(renewals: [renewed("not_renewable")]) == "No parked login was due.")
+    #expect(
+        renewalNote(renewals: [renewed("renewed"), renewed("not_renewable")]) == "Renewed one.")
+    #expect(
+        renewalNote(renewals: [renewed("expired"), renewed("not_renewable")])
+            == renewalNote(renewals: [renewed("expired")]))
+}
+
 /// VoiceOver reads the column's "30m" as thirty meters and "5h" as letters, so a limit is
 /// said in words: its name as a sentence says it, what it has used, and when it resets.
 @Test func aLimitIsSpokenInWordsAndNotInItsColumnsShorthand() {
@@ -85,4 +100,14 @@ import Testing
 @Test func aTypedLabelIsTakenApart() {
     #expect(split("codex/work") == ("codex", "work"))
     #expect(split("work") == ("claude", "work"))
+}
+
+/// A Claude Desktop account has no email, so a sentence that would start with one starts
+/// with words instead, and an account with neither label nor email is not titled by nothing.
+@Test func anAccountWithNoEmailIsNeverNamedByNothing() {
+    #expect(whoIsSignedIn("") == "An account")
+    #expect(whoIsSignedIn("a@example.com") == "a@example.com")
+    #expect(accountName(label: "work", email: "") == "work")
+    #expect(accountName(label: nil, email: "a@example.com") == "a@example.com")
+    #expect(accountName(label: nil, email: "") == "Unnamed account")
 }

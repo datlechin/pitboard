@@ -357,3 +357,130 @@ fn codex_signed_in_with_an_api_key() {
         .expect("a codex_login check");
     assert_eq!(login["level"], "warn", "{login}");
 }
+
+/// A machine with two Claude Desktop accounts, one signed in and one parked, and the app's
+/// own record of usage: every row says which tool it is for, usage read from that record
+/// is verified, and the `desktop` block says live usage is off.
+#[cfg(target_os = "macos")]
+#[test]
+fn status_with_desktop() {
+    let env = Env::new("contract-desktop-status");
+    let (home, _) = common::desktop::home_signed_in_work_parked(&env);
+    common::desktop::write_history(&env, &home);
+    let (value, code) = json(&env, &["status"]);
+    contract!("status_with_desktop", value, code);
+}
+
+/// Nothing renews a Claude Desktop sign-in, so each account is `not_renewable`, with when
+/// its sign-in lapses.
+#[cfg(target_os = "macos")]
+#[test]
+fn renew_with_desktop() {
+    let env = Env::new("contract-desktop-renew");
+    common::desktop::home_signed_in_work_parked(&env);
+    let (value, code) = json(&env, &["renew"]);
+    contract!("renew_with_desktop", value, code);
+}
+
+/// A switch of Claude Desktop while the app holds its data folder is refused before
+/// anything moves. The app is stood in for by its lock in the test's own folder, naming
+/// a stand-in process, so the envelope is the same whether or not Claude is open here.
+#[cfg(target_os = "macos")]
+#[test]
+fn use_desktop_app_still_open() {
+    let env = Env::new("contract-desktop-app-open");
+    common::desktop::home_signed_in_work_parked(&env);
+    let _held = common::desktop::hold_with_a_stand_in(&env);
+    let support = common::desktop::support(&env);
+    let parks = env.root.join("pitboard/desktop/parks");
+    let before = (
+        common::desktop::inodes_under(&support),
+        common::desktop::inodes_under(&parks),
+        std::fs::read(env.root.join("pitboard/state.json")).unwrap(),
+    );
+    let (value, code) = json(&env, &["use", "desktop/work"]);
+    contract!("use_desktop_app_still_open", value, code);
+    let after = (
+        common::desktop::inodes_under(&support),
+        common::desktop::inodes_under(&parks),
+        std::fs::read(env.root.join("pitboard/state.json")).unwrap(),
+    );
+    assert!(before == after, "nothing moved and nothing was written");
+}
+
+/// Signing out a Claude Desktop nobody is signed in to changes nothing, and says it is
+/// signed out already rather than naming an account.
+#[cfg(target_os = "macos")]
+#[test]
+fn use_signed_out_already() {
+    let env = Env::new("contract-signed-out-already");
+    let support = common::desktop::support(&env);
+    common::guard_not_live_dir(&support);
+    std::fs::create_dir_all(&support).unwrap();
+    let (value, code) = json(&env, &["use", "desktop", "--signed-out"]);
+    contract!("use_signed_out_already", value, code);
+    let (out, _, code) = env.run(&["use", "desktop", "--signed-out"]);
+    assert_eq!(code, 0);
+    assert_eq!(out, "Claude Desktop is already signed out.\n");
+}
+
+/// Only Claude Desktop is signed out: asked of another tool it is a usage error, and asked
+/// of a tool Pitboard does not know it says which it does.
+#[test]
+fn use_signed_out_refused() {
+    let env = Env::new("contract-signed-out");
+    let (value, code) = json(&env, &["use", "codex", "--signed-out"]);
+    contract!("use_signed_out_other_tool", value, code);
+    let (value, code) = json(&env, &["use", "nothing", "--signed-out"]);
+    contract!("use_signed_out_unknown_tool", value, code);
+}
+
+/// Claude Desktop's part of the report: the environment block, whose paths are this
+/// machine's, and every `desktop_` check, each with the five fields and no account's uuid
+/// or email.
+#[cfg(target_os = "macos")]
+#[test]
+fn doctor_with_desktop() {
+    let env = Env::new("contract-desktop-doctor");
+    let (home, work) = common::desktop::home_signed_in_work_parked(&env);
+    // Whether doctor passes as a whole is this machine's: whether Claude Code is installed
+    // here decides whether its checks run at all. Claude Desktop's own are the test's.
+    let (value, _) = json(&env, &["doctor"]);
+    let printed = value.to_string();
+    for secret in [
+        home.as_str(),
+        work.as_str(),
+        "home@example.com",
+        "work@example.com",
+    ] {
+        assert!(!printed.contains(secret), "the report carries {secret}");
+    }
+    let desktop: Vec<&Value> = value["data"]["checks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|c| {
+            c["code"]
+                .as_str()
+                .is_some_and(|c| c.starts_with("desktop_"))
+        })
+        .collect();
+    for check in &desktop {
+        assert_eq!(check["level"], "ok", "{check}");
+    }
+    let codes: Vec<&str> = desktop.iter().filter_map(|c| c["code"].as_str()).collect();
+    for expected in [
+        "desktop_version",
+        "desktop_cookies",
+        "desktop_parked_login",
+        "desktop_running",
+        "desktop_live_usage",
+    ] {
+        assert!(codes.contains(&expected), "{expected} in {codes:?}");
+    }
+    // Whether the person's own Claude is open is this machine's too.
+    insta::assert_json_snapshot!("doctor_with_desktop", value["data"]["environment"]["desktop"], {
+        ".support_dir" => "[path]",
+        ".running" => "[running]",
+    });
+}

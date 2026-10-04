@@ -1,0 +1,33 @@
+---
+source: crates/pitboard/tests/contract.rs
+expression: "value[\"data\"][\"environment\"][\"desktop\"]"
+---
+{
+  "installed": false,
+  "version": null,
+  "verified_against": "2.19675.0",
+  "version_matches": null,
+  "support_dir": "[path]",
+  "same_volume": true,
+  "cookies_meta_version": 24,
+  "parks_dir_private": true,
+  "parks": 1,
+  "orphan_parks": [],
+  "strays": {
+    "count": 0,
+    "bytes": 0
+  },
+  "recovery_pending": false,
+  "running": "[running]",
+  "live_usage": {
+    "enabled": false,
+    "approval": "unknown",
+    "reason": null
+  },
+  "unverified_facts": [
+    "desktop_uuid_tracks_signin",
+    "desktop_session_sliding",
+    "security_reads_do_not_slow_claude",
+    "desktop_update_keeps_item"
+  ]
+}

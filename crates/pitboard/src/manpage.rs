@@ -24,17 +24,24 @@ pub fn render(mut cmd: Command, w: &mut dyn Write) -> std::io::Result<()> {
 fn commands(cmd: &Command) -> Roff {
     let mut roff = Roff::new();
     roff.control("SH", ["COMMANDS"]);
-    for sub in shown(cmd) {
-        let nested: Vec<&Command> = shown(sub).collect();
-        if nested.is_empty() {
-            command(&mut roff, &[cmd, sub]);
-        } else {
-            for inner in nested {
-                command(&mut roff, &[cmd, sub, inner]);
-            }
-        }
-    }
+    leaves(&mut roff, &mut vec![cmd]);
     roff
+}
+
+/// Every command somebody can type, however deep: `pitboard desktop live-usage enable` is
+/// written out whole, and `pitboard desktop`, which does nothing by itself, is not listed.
+fn leaves<'a>(roff: &mut Roff, path: &mut Vec<&'a Command>) {
+    let last = *path.last().expect("a command");
+    let nested: Vec<&'a Command> = shown(last).collect();
+    if nested.is_empty() {
+        command(roff, path);
+        return;
+    }
+    for inner in nested {
+        path.push(inner);
+        leaves(roff, path);
+        path.pop();
+    }
 }
 
 /// The subcommands somebody types: not hidden ones, and not clap's own `help`.

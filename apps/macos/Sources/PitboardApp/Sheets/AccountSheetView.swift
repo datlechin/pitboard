@@ -8,14 +8,21 @@ struct AccountSheetView: View {
 
     var body: some View {
         switch sheet {
+        // Claude Desktop signs in inside Claude, so it has a sheet of its own.
+        case .add where model.provider(for: sheet) == desktopProvider:
+            DesktopSignInSheet(model: model, again: nil)
         case .add(let provider):
             SignInSheet(model: model, provider: provider, again: nil)
+        case .signInAgain(desktopProvider, let label):
+            DesktopSignInSheet(model: model, again: label)
         case .signInAgain(let provider, let label):
             SignInSheet(model: model, provider: provider, again: label)
         case .name(let provider, let email):
             NameSheet(model: model, provider: provider, email: email)
         case .rename(let provider, let label):
             RenameSheet(model: model, provider: provider, label: label)
+        case .liveUsage:
+            LiveUsageSheet(model: model)
         }
     }
 }

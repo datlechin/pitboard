@@ -58,6 +58,8 @@ extension Notice.Action {
         switch self {
         case .use(_, let label): "Switch to \(label)"
         case .giveUp: "Give Up…"
+        case .allowLiveUsage: "Allow Again…"
+        case .finishDesktopAdd: "Finish Adding…"
         case .dismissSwitch, .dismissAbandoned: "Dismiss"
         }
     }
@@ -67,7 +69,7 @@ extension Notice.Action {
     var dismisses: Bool {
         switch self {
         case .dismissSwitch, .dismissAbandoned: true
-        case .use, .giveUp: false
+        case .use, .giveUp, .allowLiveUsage, .finishDesktopAdd: false
         }
     }
 

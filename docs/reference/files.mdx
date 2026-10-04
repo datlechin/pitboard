@@ -31,8 +31,9 @@ Pitboard refuses a directory whose path contains `Dropbox`, `Google Drive`, `One
 | `backups/` | Copies of Claude Code's config from before each switch rewrote it. Each is named after the time it was made, in seconds since 1 January 1970, such as `claude.json.1790000000`. The 10 newest are kept. They hold no login, but do hold your email address, your Anthropic account and organisation identifiers, and the path of each project Claude Code has opened. Each keeps the mode of Claude Code's file. | A Claude Code switch |
 | `audit.log` | One tab-separated line per change or renewal: the time, `cli` or `app` for where it was made, the verb such as `use`, the subject and the outcome. It holds no email address, and holds an account id only in a `reclaim` line with the outcome `discarded`, whose subject is a parked login's name. [`pitboard log`](/reference/maintenance-commands#log) prints it. | Every change Pitboard makes, and renewals |
 | `audit.log.1` | The previous `audit.log`, moved aside once it passed 256 KiB | Every change Pitboard makes, and renewals |
+| `desktop/` | Claude Desktop's parks and records, listed in [Claude Desktop's parks](/reference/files#claude-desktops-parks) | Claude Desktop changes, and `pitboard desktop live-usage` |
 
-Only files in `vault/` and `signin/` can hold a login. To delete the directory, see [Remove Pitboard](/install/remove#delete-parked-logins-and-pitboards-files).
+Only files in `vault/`, `signin/` and `desktop/parks/` can hold a login. To delete the directory, see [Remove Pitboard](/install/remove#delete-parked-logins-and-pitboards-files).
 
 ## Parked logins
 
@@ -43,6 +44,20 @@ On macOS, each parked login is an item in your default keychain, named `pitboard
 On Linux, each parked login is a file in `~/.pitboard/vault/`, named `pitboard-park-<account id>-<time>.json`.
 
 For why parked logins are kept there, see [Security and privacy](/security#where-parked-logins-are-kept).
+
+## Claude Desktop's parks
+
+A Claude Desktop parked login is a folder, not a keychain item. Pitboard keeps it and its records in `~/.pitboard/desktop/`, which must be on the same volume as Claude's data folder.
+
+| Path in `~/.pitboard/desktop/` | Holds |
+| --- | --- |
+| `parks/pitboard-tree-<account uuid>-<time>/` | One parked login: the items moved out of Claude's data folder, `config-keys.json` with the three keys Pitboard moves from Claude's `config.json`, and `manifest.json` naming the account, a hash of its session and the items. Deleted only by `pitboard forget` and `pitboard uninstall`. |
+| `journal.json` | The record of a Claude Desktop switch while it runs. It names items, never their contents. The next change Pitboard makes while Claude is closed finishes or undoes it. |
+| `strays/<time>/` | Items found in Claude's data folder that belonged to neither account, such as what Claude made while signed out. Pitboard never deletes them, and `pitboard uninstall` keeps them. |
+| `awaiting.json` | The account `pitboard use desktop --signed-out` parked, and when, until the next Claude Desktop enrolment |
+| `live-usage.json` | Whether live usage is on, and whether macOS let Pitboard read Claude's key. It never holds the key. |
+
+`<time>` is in milliseconds since 1 January 1970.
 
 ## Claude Code and Codex files
 
@@ -57,6 +72,20 @@ For why parked logins are kept there, see [Security and privacy](/security#where
 | `~/.codex/config.toml` | Read for `cli_auth_credentials_store`. For the values Pitboard refuses, see [Use Pitboard with Codex](/guides/codex#before-you-enrol-a-codex-account). |
 
 For how a switch changes these files, see [How switching works](/concepts/switching#what-a-switch-does).
+
+## Claude Desktop files
+
+Claude Desktop's data folder is `~/Library/Application Support/Claude`. A switch moves only the items in this table, by rename, and only while Claude is closed. Everything else in the folder stays, including its caches, `claude-code/` and `claude_desktop_config.json`.
+
+| Path | What Pitboard does with it |
+| --- | --- |
+| `Cookies`, `Cookies-journal` | Moved by a switch. Read with `/usr/bin/sqlite3`, without decrypting anything, for the session's hash and expiry. |
+| `Local Storage`, `Session Storage`, `IndexedDB/https_claude.ai_0.indexeddb.leveldb`, `IndexedDB/https_claude.ai_0.indexeddb.blob`, `WebStorage`, `File System` | Moved by a switch. With `Cookies` and the `config.json` keys, they moved each of two accounts whole, measured on 4 October 2026. `File System` may be absent. |
+| `config.json` | Read for `lastKnownAccountUuid`. A switch writes its `oauth:tokenCache`, `oauth:tokenCacheV2` and `lastKnownAccountUuid` keys, and leaves the rest as it was. |
+| `plan-usage-history.json` | Read for usage. Never moved: it belongs to the machine. |
+| `SingletonLock` | Read to tell whether Claude is open. Claude 2.19675.0 keeps none, so Pitboard relies on the processes running from `Claude.app`. |
+| Keychain item `Claude Safe Storage` | Read only by `pitboard desktop live-usage` once you turn it on, never written. See [Claude's encryption key](/security#claudes-encryption-key). |
+| `/Applications/Claude.app` | Read for its version. A process running from a bundle named `Claude.app` stops a switch. |
 
 ## Renewal schedule
 
@@ -133,6 +162,9 @@ Opened from Finder, the app does not see your shell's variables, so the defaults
 | `CLAUDE_CODE_CUSTOM_OAUTH_URL` | Command line | Not empty: Pitboard refuses every change to a Claude Code account, and refuses `repair`, `uninstall` and `abandon`, with the error `custom_oauth_endpoint`. Claude Code then keeps its login under a name Pitboard does not read. The command line and the app also read it from an `env` block in Claude Code's settings. |
 | `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `CLAUDE_CODE_OAUTH_TOKEN`, `CLAUDE_CODE_USE_BEDROCK`, `CLAUDE_CODE_USE_VERTEX`, `CLAUDE_CODE_USE_FOUNDRY`, `CLAUDE_CODE_USE_GATEWAY`, `CLAUDE_CODE_USE_ANTHROPIC_AWS`, `CLAUDE_CODE_USE_ANTHROPIC_GOOGLE_CLOUD` | Command line | Any of these not empty: Claude Code uses something other than the login Pitboard switches. Changes to Claude Code accounts warn with `auth_overridden`, and `pitboard doctor` warns. The command line and the app also read these, and `apiKeyHelper`, from Claude Code's settings. |
 | `CODEX_HOME` | Both | Codex's directory, in place of `~/.codex`. Empty counts as unset. |
+| `PITBOARD_CLAUDE_DESKTOP_DIR` | Both | Claude Desktop's data folder, in place of `~/Library/Application Support/Claude`. Empty counts as unset. |
+| `PITBOARD_CLAUDE_DESKTOP_APP` | Both | The Claude app, in place of `/Applications/Claude.app`. Empty counts as unset. |
+| `PITBOARD_CLAUDE_WEB_BASE` | Command line | For Pitboard's tests. Sends live usage's request to this URL in place of `https://claude.ai`, if its host is a loopback IP address. |
 | `PATH` | Command line | Where the command line looks for `claude` and `codex`, which it runs to sign in. Only absolute directories are searched. |
 | `NO_COLOR` | Command line | Not empty: no colour in any output. `pitboard statusline` also drops its colour when `NO_COLOR` is set but empty. |
 | `PITBOARD_CLAUDE`, `PITBOARD_CODEX` | App | The path of the `claude` or `codex` program the app runs to sign in, in place of the one it finds. |

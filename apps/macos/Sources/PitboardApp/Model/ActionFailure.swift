@@ -49,6 +49,9 @@ public enum AccountSheet: Identifiable, Equatable, Sendable {
     case name(provider: String, email: String)
     /// A new name for an enrolled account.
     case rename(provider: String, label: String)
+    /// Live usage for Claude Desktop, which reads Claude's key and so can make macOS ask
+    /// for the login password: said first, and turned on only from this sheet.
+    case liveUsage
 
     public var id: String {
         switch self {
@@ -56,6 +59,7 @@ public enum AccountSheet: Identifiable, Equatable, Sendable {
         case .signInAgain(let provider, let label): "again/\(provider)/\(label)"
         case .name(let provider, _): "name/\(provider)"
         case .rename(let provider, let label): "rename/\(provider)/\(label)"
+        case .liveUsage: "liveUsage"
         }
     }
 }

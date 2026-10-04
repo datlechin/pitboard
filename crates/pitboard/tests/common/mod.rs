@@ -8,6 +8,10 @@
 // does not use one of these helpers would otherwise warn about it.
 #![allow(dead_code)]
 
+/// A Claude Desktop data folder and Pitboard's record of its accounts, made by hand.
+#[cfg(target_os = "macos")]
+pub mod desktop;
+
 /// Write a program a test then runs, and make it runnable.
 ///
 /// A separate process writes it, so this process never holds the file open for writing.
@@ -63,6 +67,10 @@ pub fn guard_not_live(service: &str) {
         "a test must never address the default credential slot"
     );
     assert_ne!(
+        service, "Claude Safe Storage",
+        "a test must never address the key Claude Desktop encrypts its cookies with"
+    );
+    assert_ne!(
         service,
         pitboard_core::testing::live_service(&ctx()),
         "a test must never address the slot this machine's Claude Code reads"
@@ -79,6 +87,155 @@ fn the_guard_refuses_the_slots_that_hold_a_real_login() {
     let caught =
         std::panic::catch_unwind(|| guard_not_live(&pitboard_core::testing::live_service(&ctx())));
     assert!(caught.is_err(), "this machine's live slot must be refused");
+    let caught = std::panic::catch_unwind(|| guard_not_live("Claude Safe Storage"));
+    assert!(
+        caught.is_err(),
+        "Claude Desktop's cookie key must be refused"
+    );
+}
+
+/// The home directory the passwd database gives this user, read without looking at `HOME`.
+///
+/// A test may point `HOME` anywhere, and a guard that trusted it would wave a write into the
+/// real `~/Library/Application Support/Claude` through as soon as one did. The shell's
+/// `~name` asks the passwd database, as `getpwnam` does, and `id -un` names this user id.
+pub fn passwd_home() -> PathBuf {
+    let out = Command::new("/bin/sh")
+        .args(["-c", "eval \"printf %s ~$(/usr/bin/id -un)\""])
+        .env_remove("HOME")
+        .output()
+        .expect("sh runs");
+    assert!(
+        out.status.success(),
+        "could not read this user's passwd entry"
+    );
+    let home = PathBuf::from(String::from_utf8(out.stdout).expect("a home that is UTF-8"));
+    assert!(
+        home.is_absolute(),
+        "the passwd home `{}` is not absolute",
+        home.display()
+    );
+    home
+}
+
+/// `path` as somewhere from the root, with `.` and `..` taken out by reading it rather than
+/// by asking the filesystem, which a path that does not exist yet cannot answer.
+fn lexically_absolute(path: &Path) -> PathBuf {
+    let absolute = std::path::absolute(path).expect("a path that can be made absolute");
+    let mut out = PathBuf::new();
+    for part in absolute.components() {
+        match part {
+            std::path::Component::ParentDir => {
+                out.pop();
+            }
+            std::path::Component::CurDir => {}
+            other => out.push(other),
+        }
+    }
+    out
+}
+
+/// `path` with every symlink in the part of it that exists followed, and the rest kept as
+/// written.
+fn resolved(path: &Path) -> PathBuf {
+    let path = lexically_absolute(path);
+    let mut rest = Vec::new();
+    let mut here = path.as_path();
+    loop {
+        if let Ok(real) = here.canonicalize() {
+            return rest.iter().rev().fold(real, |at, part| at.join(part));
+        }
+        match (here.parent(), here.file_name()) {
+            (Some(parent), Some(name)) => {
+                rest.push(name.to_owned());
+                here = parent;
+            }
+            _ => return path,
+        }
+    }
+}
+
+/// Refuse a directory or file that holds a real login, or is inside one: Claude Desktop's
+/// data folder, Pitboard's own home, Claude Code's and Codex's.
+///
+/// Every test that writes into a Claude Desktop data folder calls this first. The folders
+/// are named from the passwd home, never from `HOME`, and compared both as written and with
+/// symlinks followed, so neither `..` nor a link reaches one.
+pub fn guard_not_live_dir(path: &Path) {
+    let home = passwd_home();
+    let live = [
+        home.join("Library/Application Support/Claude"),
+        home.join(".pitboard"),
+        home.join(".claude"),
+        home.join(".claude.json"),
+        home.join(".codex"),
+    ];
+    for candidate in [lexically_absolute(path), resolved(path)] {
+        for root in &live {
+            for root in [root.clone(), resolved(root)] {
+                assert!(
+                    !candidate.starts_with(&root),
+                    "a test must never write to {}, which is inside {}",
+                    path.display(),
+                    root.display()
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn the_directory_guard_refuses_every_real_login_and_nothing_else() {
+    let home = passwd_home();
+    let refused = [
+        home.join("Library/Application Support/Claude"),
+        home.join("Library/Application Support/Claude/Cookies"),
+        home.join("Library/Application Support/Claude/Local Storage/leveldb"),
+        home.join("Library/Application Support/Claude/./config.json"),
+        home.join("Library/Application Support/Other/../Claude"),
+        home.join(".pitboard"),
+        home.join(".pitboard/desktop/parks"),
+        home.join(".claude"),
+        home.join(".claude.json"),
+        home.join(".codex/auth.json"),
+    ];
+    for path in refused {
+        let caught = std::panic::catch_unwind(|| guard_not_live_dir(&path));
+        assert!(caught.is_err(), "{} must be refused", path.display());
+    }
+
+    let env = Env::new("dir-guard");
+    guard_not_live_dir(&env.root.join("claude-desktop"));
+    guard_not_live_dir(&env.root.join("claude-desktop/Cookies"));
+    guard_not_live_dir(&home.join("Library/Application Support/Claude-Other"));
+    guard_not_live_dir(&home.join(".pitboard-scratch"));
+
+    // A link from a scratch directory into the real data folder is the real data folder.
+    let link = env.root.join("linked");
+    std::os::unix::fs::symlink(home.join("Library/Application Support"), &link)
+        .expect("a symlink in this test's own directory");
+    let caught = std::panic::catch_unwind(|| guard_not_live_dir(&link.join("Claude/Cookies")));
+    let reaches = home.join("Library/Application Support").exists();
+    assert_eq!(
+        caught.is_err(),
+        reaches,
+        "a link into the real data folder must be refused wherever that folder exists"
+    );
+}
+
+/// The passwd home is this user's, whatever `HOME` says.
+#[test]
+fn the_passwd_home_does_not_follow_home() {
+    let out = Command::new("/bin/sh")
+        .args(["-c", "eval \"printf %s ~$(/usr/bin/id -un)\""])
+        .env("HOME", "/nowhere/at/all")
+        .output()
+        .expect("sh runs");
+    assert_eq!(
+        PathBuf::from(String::from_utf8(out.stdout).unwrap()),
+        passwd_home()
+    );
+    assert_ne!(passwd_home(), Path::new("/nowhere/at/all"));
 }
 
 /// The harness stands in for the credential store on two platforms, and each thing it does
@@ -122,7 +279,13 @@ fn every_tool_is_pointed_at_a_scratch_home() {
             ))
         })
         .collect();
-    for home in ["CLAUDE_CONFIG_DIR", "CODEX_HOME", "PITBOARD_HOME"] {
+    for home in [
+        "CLAUDE_CONFIG_DIR",
+        "CODEX_HOME",
+        "PITBOARD_HOME",
+        "PITBOARD_CLAUDE_DESKTOP_DIR",
+        "PITBOARD_CLAUDE_DESKTOP_APP",
+    ] {
         let set = named.iter().find(|(k, _)| k == home).unwrap_or_else(|| {
             panic!("{home} is not pointed anywhere, so a test reads a real one")
         });
@@ -285,6 +448,13 @@ impl Env {
             // running it happens to be signed in to, which is both a flaky test and a real
             // login no test may touch.
             .env("CODEX_HOME", self.codex_home())
+            // Claude Desktop's data folder and app, neither of which exists until a test
+            // makes one, so no command can find or quit the person's own Claude.
+            .env(
+                "PITBOARD_CLAUDE_DESKTOP_DIR",
+                self.root.join("claude-desktop"),
+            )
+            .env("PITBOARD_CLAUDE_DESKTOP_APP", self.root.join("Claude.app"))
             .env("PITBOARD_HOME", self.root.join("pitboard"))
             .env("PITBOARD_API_BASE", self.server.url())
             .env("PATH", path);

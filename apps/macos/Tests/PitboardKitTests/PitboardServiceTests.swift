@@ -14,6 +14,11 @@ private struct ScratchHome {
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
     }
 
+    /// A Claude app of its own, which is not there unless `installClaudeDesktop` makes one,
+    /// so nothing looks in /Applications.
+    var desktopApp: String { root.appendingPathComponent("Claude.app").path }
+
+    /// Claude Desktop's data and app are this home's own.
     func settings(codex: String? = nil, schedules: String? = nil) -> Settings {
         Settings(
             home: root.path,
@@ -24,7 +29,9 @@ private struct ScratchHome {
             claudeProgram: nil,
             codexHome: root.appendingPathComponent("codex").path,
             codexProgram: codex,
-            scheduleProgram: schedules
+            scheduleProgram: schedules,
+            desktopDir: root.appendingPathComponent("claude-desktop").path,
+            desktopApp: desktopApp
         )
     }
 
@@ -36,6 +43,8 @@ private struct ScratchHome {
             "CLAUDE_CONFIG_DIR": root.appendingPathComponent("claude").path,
             "CODEX_HOME": root.appendingPathComponent("codex").path, "USER": NSUserName(),
             "PATH": "/usr/bin:/bin", "SHELL": root.appendingPathComponent("no-shell").path,
+            "PITBOARD_CLAUDE_DESKTOP_DIR": root.appendingPathComponent("claude-desktop").path,
+            "PITBOARD_CLAUDE_DESKTOP_APP": desktopApp,
         ].merging(extra) { $1 }
     }
 
@@ -56,6 +65,18 @@ private struct ScratchHome {
         try Data(login.utf8).write(to: file)
         try FileManager.default.setAttributes(
             [.posixPermissions: 0o600], ofItemAtPath: file.path)
+    }
+
+    /// Installs a Claude app here: a bundle with its program, which is all Pitboard looks
+    /// for to call it installed.
+    func installClaudeDesktop() throws {
+        let program = URL(fileURLWithPath: desktopApp).appendingPathComponent(
+            "Contents/MacOS/Claude")
+        try FileManager.default.createDirectory(
+            at: program.deletingLastPathComponent(), withIntermediateDirectories: true)
+        FileManager.default.createFile(
+            atPath: program.path, contents: Data("#!/bin/sh\n".utf8),
+            attributes: [.posixPermissions: 0o755])
     }
 
     func remove() { try? FileManager.default.removeItem(at: root) }
@@ -117,7 +138,7 @@ private struct GatedShell {
         "PITBOARD_CODEX": "/nowhere/codex",
     ])
     let service = PitboardService.forThisApp(environment: environment, bundle: home.root)
-    #expect(service.tools().count == 2, "listing the tools asks nothing")
+    #expect(service.tools().count == 3, "listing the tools asks nothing")
     #expect(shell.asks == 0, "and nor does making the service")
 
     // Waits on the main thread for the shell to be asked, then lets it go. `installed` is
@@ -215,10 +236,40 @@ private struct GatedShell {
         withCodex.remove()
     }
     let neither = PitboardService(settings: bare.settings())
-    #expect(neither.tools().map(\.code) == ["claude", "codex"])
+    #expect(neither.tools().map(\.code) == ["claude", "codex", "desktop"])
     #expect(await neither.installed().isEmpty)
     let codex = PitboardService(settings: withCodex.settings(codex: "/nowhere/codex"))
     #expect(await codex.installed().map(\.code) == ["codex"])
+}
+
+/// Claude Desktop is installed where its app has its program: the app named by
+/// `PITBOARD_CLAUDE_DESKTOP_APP`, as the command line reads it, and never anywhere on a
+/// `PATH` or asked of a login shell. An app without its program is not one.
+@Test func claudeDesktopIsInstalledWhereItsAppIs() async throws {
+    let (bare, withApp) = (try ScratchHome(), try ScratchHome())
+    defer {
+        bare.remove()
+        withApp.remove()
+    }
+    try FileManager.default.createDirectory(
+        atPath: bare.desktopApp, withIntermediateDirectories: true)
+    try withApp.installClaudeDesktop()
+    let missing = PitboardService.forThisApp(environment: bare.environment(), bundle: bare.root)
+    #expect(await !missing.installed().map(\.code).contains("desktop"))
+    let found = PitboardService.forThisApp(
+        environment: withApp.environment(), bundle: withApp.root)
+    #expect(await found.installed().map(\.code).contains("desktop"))
+}
+
+/// A Claude app named in the settings counts as found only once its program is there,
+/// unlike a program named outright: a bundle that is not there is not an installed app.
+@Test func aClaudeAppNamedInTheSettingsIsInstalledOnceItsProgramIs() async throws {
+    let home = try ScratchHome()
+    defer { home.remove() }
+    #expect(await PitboardService(settings: home.settings()).installed().isEmpty)
+    try home.installClaudeDesktop()
+    let service = PitboardService(settings: home.settings())
+    #expect(await service.installed().map(\.code) == ["desktop"])
 }
 
 @Test func doctorReportsEveryCheck() async throws {

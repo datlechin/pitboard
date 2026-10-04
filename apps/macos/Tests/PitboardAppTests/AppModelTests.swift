@@ -138,6 +138,16 @@ private final class Stub: Core, @unchecked Sendable {
         return found
     }
     func searchPath() async -> String? { path }
+    func switchToSignedOut(_ provider: String) async throws -> Switched {
+        throw PitboardError.Failed(
+            code: "unsupported", cause: nil, message: "not in this test", warnings: [])
+    }
+    func awaitingSignIn() async -> Awaiting? { nil }
+    func liveUsage() async -> LiveUsageState {
+        LiveUsageState(enabled: false, approval: "unknown", reason: nil, lastOkAt: nil)
+    }
+    func enableLiveUsage() async throws -> LiveUsageState { await liveUsage() }
+    func disableLiveUsage() async throws -> LiveUsageState { await liveUsage() }
 }
 
 /// A sign-in that says what it is given to say and then enrols, without a tool behind it.

@@ -20,10 +20,13 @@
 
 use crate::context::{Context, Environment};
 use crate::error::Result;
+use crate::provider::desktop::safe_storage::SafeStorage;
+use crate::provider::desktop::types::CookieTable;
 use crate::store::RawStore;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+mod bundle;
 #[cfg(target_os = "linux")]
 mod linux;
 #[cfg(target_os = "macos")]
@@ -39,6 +42,7 @@ use linux as os;
 #[cfg(target_os = "macos")]
 use macos as os;
 
+pub(crate) use bundle::Bundle;
 pub(crate) use os::{fs, proc, user};
 
 /// The operating systems Pitboard runs on.
@@ -112,6 +116,34 @@ impl Os {
         match self {
             Os::MacOs => &["/opt/homebrew/bin", "/usr/local/bin"],
             Os::Linux => &[],
+        }
+    }
+
+    /// Where Claude Desktop keeps its data folder, relative to the home: Chromium's place
+    /// for an app called Claude. Claude Desktop does not run on Linux, so there it has none.
+    pub fn claude_desktop_data(self) -> Option<&'static str> {
+        match self {
+            Os::MacOs => Some("Library/Application Support/Claude"),
+            Os::Linux => None,
+        }
+    }
+
+    /// Where the Claude app is installed unless somebody says otherwise. Claude Desktop does
+    /// not run on Linux, so there it has none.
+    pub fn claude_desktop_app(self) -> Option<&'static str> {
+        match self {
+            Os::MacOs => Some("/Applications/Claude.app"),
+            Os::Linux => None,
+        }
+    }
+
+    /// The program the Claude app at `app` starts, which is what a process list shows for
+    /// it: a Mac app's `Contents/MacOS/Claude`, named for the app and not for its bundle, so
+    /// a bundle renamed in the Finder still has it there. No Claude app runs on Linux.
+    pub fn claude_desktop_program(self, app: &Path) -> Option<PathBuf> {
+        match self {
+            Os::MacOs => Some(app.join("Contents/MacOS/Claude")),
+            Os::Linux => None,
         }
     }
 
@@ -220,6 +252,31 @@ pub(crate) trait Host: Send + Sync + std::fmt::Debug {
     /// another user's login, which a switch here never touches.
     fn processes(&self, program: &str) -> Option<Vec<Process>>;
 
+    /// Every process this user is running from inside `bundle`, wherever in it the program
+    /// is, except those at a path in `excluded` (relative to the bundle) that the bundle's
+    /// own processes did not start. `None` where the process list could not be read, which
+    /// is not the same as none running.
+    fn processes_within(&self, bundle: Bundle<'_>, excluded: &[&str]) -> Option<Vec<Process>>;
+
+    /// Whether process `pid` may be running. One this user may not signal is counted, since
+    /// it is there.
+    fn pid_alive(&self, pid: u32) -> bool;
+
+    /// The program process `pid` runs: its full path where the system says one. `None`
+    /// where that cannot be told, as for a process that has gone.
+    fn program_of(&self, pid: u32) -> Option<PathBuf>;
+
+    /// The device the file at `path` is on, so two places can be told to share a volume.
+    fn device_of(&self, path: &Path) -> std::io::Result<u64>;
+
+    /// What Chromium's cookie database at `path` holds for claude.ai, read without a lock.
+    /// A jar that is not there is `NotFound`; one mid-write is `ResourceBusy`.
+    fn cookie_table(&self, path: &Path) -> std::io::Result<CookieTable>;
+
+    /// The version an app bundle at `app` says it is. `None` where there is no app there or
+    /// it cannot be read.
+    fn bundle_version(&self, app: &Path) -> Option<String>;
+
     /// The system's own scheduler, which runs daily renewal. `None` where there is none
     /// Pitboard knows how to ask.
     fn scheduler(&self) -> Option<&dyn Scheduler>;
@@ -264,6 +321,12 @@ pub(crate) fn current() -> Arc<dyn Host> {
     os::host()
 }
 
+/// Claude Desktop's key, which every real context reads through: the keychain on macOS. A
+/// system Claude Desktop does not run on has no key to read.
+pub(crate) fn safe_storage() -> Arc<dyn SafeStorage> {
+    os::safe_storage()
+}
+
 /// The path this program was started by, where that lasts longer than the file it runs.
 pub(crate) fn current_program() -> std::io::Result<PathBuf> {
     os::current_program()
@@ -272,6 +335,27 @@ pub(crate) fn current_program() -> std::io::Result<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Claude Desktop runs on a Mac only: there it has a place and a program, and Linux
+    /// names neither, even for a bundle somebody named.
+    #[test]
+    fn claude_desktop_is_said_for_each_system() {
+        assert_eq!(
+            Os::MacOs.claude_desktop_app(),
+            Some("/Applications/Claude.app")
+        );
+        assert_eq!(
+            Os::MacOs.claude_desktop_program(Path::new("/scratch/Test Claude.app")),
+            Some(PathBuf::from(
+                "/scratch/Test Claude.app/Contents/MacOS/Claude"
+            ))
+        );
+        assert_eq!(Os::Linux.claude_desktop_app(), None);
+        assert_eq!(
+            Os::Linux.claude_desktop_program(Path::new("/scratch/Claude.app")),
+            None
+        );
+    }
 
     /// A machine without a store of secrets must say so rather than hand back something
     /// that behaves like one. A tool's own module builds its chain out of this answer, so a

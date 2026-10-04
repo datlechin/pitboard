@@ -1,0 +1,19 @@
+---
+source: crates/pitboard/tests/contract.rs
+expression: "serde_json :: json! ({ \"exit\" : code, \"envelope\" : value })"
+---
+{
+  "exit": 2,
+  "envelope": {
+    "v": 1,
+    "command": "use",
+    "ok": false,
+    "data": null,
+    "warnings": [],
+    "error": {
+      "code": "usage",
+      "message": "Codex is not signed out by Pitboard. Add another account with `pitboard enroll codex/<label> --sign-in`.",
+      "cause": null
+    }
+  }
+}

@@ -51,6 +51,8 @@ pub enum Source {
     ClaudeCodeCache,
     /// The last live reading Pitboard took itself.
     Remembered,
+    /// Read from Claude Desktop's own record of its plan usage, without asking claude.ai.
+    DesktopHistory,
 }
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -59,6 +61,20 @@ pub struct Snapshot {
     pub observed_at: Option<i64>,
     pub account_uuid: Option<String>,
     pub source: Source,
+    /// Whether what this reading's numbers mean has been measured. Every source is today:
+    /// Claude Desktop's own history follows the register's `desktop_usage_history_meaning`,
+    /// measured on 4 October 2026. A reading written before this field existed is verified
+    /// too, and only one that is not says so on the wire.
+    #[serde(default = "yes", skip_serializing_if = "is_yes")]
+    pub verified: bool,
+}
+
+fn yes() -> bool {
+    true
+}
+
+fn is_yes(verified: &bool) -> bool {
+    *verified
 }
 
 impl Window {
@@ -252,6 +268,7 @@ pub(crate) fn merge(
         } else {
             known.source
         },
+        verified: true,
     })
 }
 
@@ -327,6 +344,7 @@ pub fn from_usage_object(u: &Value, observed_at: i64) -> Snapshot {
         observed_at: Some(observed_at),
         account_uuid: None,
         source: Source::Live,
+        verified: true,
     }
 }
 
@@ -345,12 +363,37 @@ pub fn from_config_cache(config: &Value) -> Option<Snapshot> {
             .and_then(Value::as_str)
             .map(str::to_owned),
         source: Source::ClaudeCodeCache,
+        verified: true,
     })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A reading written before `verified` existed was of a measured source, and one that is
+    /// measured is written exactly as it was, so neither a file nor the contract changes.
+    #[test]
+    fn a_reading_is_verified_unless_it_says_otherwise() {
+        let old = serde_json::json!({
+            "windows": [],
+            "observed_at": 1,
+            "account_uuid": null,
+            "source": "remembered",
+        });
+        let read: Snapshot = serde_json::from_value(old.clone()).unwrap();
+        assert!(read.verified);
+        assert_eq!(serde_json::to_value(&read).unwrap(), old);
+
+        let unmeasured = Snapshot {
+            source: Source::DesktopHistory,
+            verified: false,
+            ..read
+        };
+        let written = serde_json::to_value(&unmeasured).unwrap();
+        assert_eq!(written["source"], "desktop_history");
+        assert_eq!(written["verified"], false);
+    }
 
     /// Trimmed from this machine's real `~/.claude.json`.
     fn real_config() -> Value {
@@ -445,6 +488,7 @@ mod tests {
             observed_at,
             account_uuid: None,
             source: Source::Live,
+            verified: true,
         }
     }
 

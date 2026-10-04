@@ -7,12 +7,14 @@ changes or a tool build moves a fact, not with each commit.
 
 ## Bird's eye view
 
-Pitboard switches Claude Code or Codex between a person's own accounts on one machine. It
-also shows how much of each account's limits is left. A switch parks the login in use and
-puts another account's parked login in its place.
+Pitboard switches Claude Code, Codex or Claude Desktop between a person's own accounts on
+one machine. It also shows how much of each account's limits is left. A switch parks the
+login in use and puts another account's parked login in its place.
 
-One crate, `pitboard-core`, does this for both tools. It reads and writes each tool's login,
-keeps Pitboard's index of accounts, and asks each tool's service for usage.
+One crate, `pitboard-core`, does this for every tool. It reads and writes each tool's login,
+keeps Pitboard's index of accounts, and asks each tool's service for usage. Claude Code's and
+Codex's logins are credentials, a keychain item or a file. Claude Desktop's is a list of
+items in its data folder, moved by rename.
 
 Two front ends use the core: the command line, `pitboard`, on macOS and Linux, and the menu
 bar app on macOS 14 or later. The app calls the core through UniFFI bindings. The command
@@ -25,20 +27,28 @@ accounts from the core, and nothing else. [Account windows](#account-windows) de
 them.
 
 Pitboard has no server of its own. The core sends requests only to Anthropic, for Claude
-Code, and to OpenAI, for Codex. An account's window loads its site, and whatever the site's
-pages load, as a browser would.
+Code, to OpenAI, for Codex, and to claude.ai, for Claude Desktop's live usage once somebody
+turns it on. An account's window loads its site, and whatever the site's pages load, as a
+browser would.
 
 ## Code map
 
 - `crates/pitboard-core`: the engine. Parking, switching, recovery, the stores and usage.
   The front ends reach it through `service::Pitboard`, built with a `context::Context`.
-  - `provider/`: one module per tool, `claude` and `codex`, each implementing the
-    `Provider` trait in `provider/mod.rs`. The trait covers where the tool keeps its login,
-    whose it is, how to renew it, what it has left and what its sign-in prints, which
-    `provider::sign_in_view` reads for both apps. Each module's `assumptions.rs` is
+  - `provider/`: one module per tool, `claude`, `codex` and `desktop`, each implementing
+    the `Provider` trait in `provider/mod.rs`. The trait covers where the tool keeps its
+    login, whose it is, how to renew it, what it has left and what its sign-in prints,
+    which `provider::sign_in_view` reads for both apps. Each module's `assumptions.rs` is
     that tool's register of facts. `provider/codex/holders.rs` names where a running
     `codex` can be, and what makes each take a switch. `provider/printed.rs` reads what a
     tool printed as a terminal does: the text it shows, and where each hyperlink goes.
+  - `provider/desktop/`: Claude Desktop. Its login is a `TreeLogin`, not a credential, so
+    every credential operation of `Provider` is an error there. `paths.rs` names the items
+    a switch moves, `config.rs` the three account keys of `config.json`, `cookies.rs` says
+    whose session the cookie jar holds without decrypting it, and `identity.rs` says whose
+    a data folder is. `holders.rs` is what holds the folder while Claude runs.
+    `history.rs` reads the app's own usage history. `safe_storage.rs`, `crypto.rs`,
+    `web.rs` and `live_usage.rs` are live usage, the only code that reads Claude's key.
   - `holder.rs`: what keeps a tool's login in memory while it runs, told apart by where
     its program runs from. A switch's warning, `doctor` and the app's offer to quit an app
     all read it, so they cannot disagree.
@@ -52,12 +62,22 @@ pages load, as a browser would.
     through `security`, `ps`, launchd) or `linux/` (`/proc`, systemd), each with what
     `unix/` holds for both. A fact that differs by system is a `match` on `host::OS`, such
     as the folders macOS asks about before an app may look in them.
+  - `host/` also reads what Claude Desktop needs of the machine. `bundle.rs` tells which
+    processes run from inside an app bundle, by one rule for every system's process list.
+    On macOS the host reads the cookie jar with `/usr/bin/sqlite3` in `macos/sqlite.rs`, a
+    bundle's version with `plutil`, and `Claude Safe Storage` in `macos/safe_storage.rs`,
+    through `security`.
+    Linux has no Claude Desktop, so there each of these finds nothing.
   - `store/`: reading and writing logins, whichever store holds them: the chain rules, a
     file, the vault of files and the stores in memory the tests use. On macOS, parked
-    logins are keychain items. On Linux, they are files in the vault.
+    logins are keychain items. On Linux, they are files in the vault. `store/tree.rs`
+    moves a tree login's items, only by `rename` on one volume, checked by inode, and
+    deletes nothing but a park.
   - `switch/`: every change to Pitboard's index (switching, enrolling, adopting, renaming,
     forgetting, renewing, repairing, abandoning and uninstalling), and the journal that
-    finishes an interrupted switch.
+    finishes an interrupted switch. `switch/tree.rs` is a Claude Desktop switch, enrolment
+    and sign-out, and `switch/tree_journal.rs` its own record,
+    `~/.pitboard/desktop/journal.json`, which finishes or undoes an interrupted one.
   - `state.rs`: `state.json`, the index of accounts and where each one's login is parked.
   - `lock.rs`: the lock Claude Code takes around credential writes, taken the same way.
   - `context.rs`: what the core takes from its environment, read from a map of variables
@@ -228,7 +248,36 @@ pages load, as a browser would.
   read back before the incoming login is written. Codex's own sign-in and sign-out revoke
   the stored refresh token, so two usable copies of one login must never be at rest.
 - No login moves until Pitboard knows whose it is. A Claude Code login's account is asked of
-  Anthropic; a Codex login's is read from its ID token.
+  Anthropic; a Codex login's is read from its ID token; a Claude Desktop login's is read
+  from its files. A session Pitboard has not seen, under an account id it knows, moves only
+  once the person has enrolled it again, as does a session it knows as one account's under
+  another id: E4 measured sign-ins that started with no account id, not one that replaces
+  the id Log out leaves behind.
+- A Claude Desktop login is a fixed list of files and folders in Claude's data directory,
+  and the three keys of its `config.json` that Pitboard moves with the account. Pitboard moves that list with
+  `rename` and nothing else: never a copy, never the whole directory (`TreeLogin::items`).
+- Nothing in Claude's data directory moves while anything runs from `Claude.app`, or from
+  a bundle under another name whose main program or helper is Claude's, and the check is
+  made again before every single move. A process list Pitboard cannot read counts as
+  Claude running. A `SingletonLock` counts only while its pid still runs Claude's program;
+  2.19675.0 keeps none (E14), so the process scan is the check that counts.
+- A Claude Desktop park is a directory under `~/.pitboard/desktop/parks`, mode 0700, on
+  the same volume as Claude's data directory. A move that would cross volumes is refused,
+  because it would be a copy.
+- Pitboard never deletes what it found in Claude's data directory. What Claude made while
+  signed out goes to `~/.pitboard/desktop/strays`. Only `forget` and `uninstall` delete a
+  Claude Desktop park, and only inside the parks directory.
+- Whose a Claude Desktop login is, is read from files: `lastKnownAccountUuid` and a hash of
+  the encrypted `sessionKey`. Switching, enrolling, identifying and verifying never read
+  the keychain.
+- Pitboard reads `Claude Safe Storage` only through `/usr/bin/security`, only after the
+  person turned live usage on, and never writes it. Only turning live usage on may show a
+  keychain prompt. Every other read gives up within 10 seconds rather than wait on one.
+- A Claude Desktop park cannot be renewed. Pitboard says when it lapses rather than
+  pretend to keep it alive.
+- An interrupted Claude Desktop switch has its own record, `~/.pitboard/desktop/journal.json`,
+  so it never blocks a Claude Code or Codex command. It is finished only while Claude is
+  closed.
 - Pitboard never renews the login in use. That is the tool's own job, and a second renewer
   would break it.
 - Nothing outside `pitboard-core` writes Pitboard's index. Every change goes through
@@ -287,6 +336,28 @@ A file naming a tool this build does not know is reported as written by a newer 
 not as corrupt. The advice for a corrupt file is to delete it, and following that here would
 orphan every parked login.
 
+Claude Desktop added no schema bump. Its accounts are schema 4 entries whose tool is
+`desktop` and whose detail is `Detail::Desktop`: the organisation's uuid when known, the
+session fingerprint (the SHA-256, in hex, of the `sessionKey` cookie's ciphertext) and when
+that session lapses. Its usage is kept under `desktop:<account uuid>`. A Pitboard older than
+this support reads such a file as naming an unknown tool, `state_names_unknown_tool`.
+
+What a Claude Desktop switch needs beyond the index is in `~/.pitboard/desktop/`, a
+directory of mode 0700 whose files are 0600:
+
+- `parks/pitboard-tree-<uuid>-<millis>/`: one parked login, its items, `config-keys.json`
+  with the three account keys, and `manifest.json` naming the account, the fingerprint and
+  the items.
+- `journal.json`: present only while a Claude Desktop switch is unfinished. It names items
+  and inodes, never values.
+- `strays/<millis>/`: what Claude made while signed out, set aside and never deleted by
+  Pitboard. One directory per switch or recovery, keeping each item's place; an item that
+  would land on another gets a directory of its own.
+- `awaiting.json`: the account parked by `pitboard use desktop --signed-out`, until the next
+  enrolment.
+- `live-usage.json`: whether live usage is on, and whether macOS let Pitboard read Claude's
+  key. It never holds the key.
+
 ## Tool registers
 
 Every fact Pitboard relies on about a tool was read out of one build of that tool. Each tool
@@ -319,9 +390,13 @@ Linux builds, and Codex's Linux build. Its most recent run says
 which facts can still be read from the build it checked, and which have moved.
 
 Adding a tool takes three things: a register read out of a named build, a module under
-`provider/` implementing `Provider`, and a conformance job. `ProviderId`, `ProviderId::ALL`
-and the matches in `provider::of` and `assumptions::of` name every tool. The compiler and
-the tests then point at what an added tool has to fill in.
+`provider/` implementing `Provider`, and a conformance job. Claude Desktop is the
+exception to the last: its literals live in `app.asar`, not in a binary the checker reads,
+so every entry has an empty probe and no conformance job runs. Its four entries not yet
+measured are dated `UNVERIFIED` and name the experiment that will settle each one, as
+[Claude Desktop under Measured facts](#claude-desktop) lists. `ProviderId`,
+`ProviderId::ALL` and the matches in `provider::of` and `assumptions::of` name every tool.
+The compiler and the tests then point at what an added tool has to fill in.
 
 How to run the checker and add a fact is in
 [Tool registers in CONTRIBUTING.md](CONTRIBUTING.md#tool-registers).
@@ -871,3 +946,127 @@ That needs a person, in a debug build with a scratch home.
   **File** > **Share** in Chrome and in Firefox from 92. That was read from the browsers'
   source and bug trackers, and no browser was run. Which other browsers list the extension
   is not known.
+
+### Claude Desktop
+
+Read from Claude Desktop 2.19675.0 on one Mac on 3 October 2026, read only: the bundle, the
+data folder's listing and sizes, the cookie database read without decrypting anything, the
+process list, the keychain item's attributes, and the exit code of one read of the key from
+a shell with no screen. The register is
+`provider/desktop/assumptions.rs`. No literal of the app can be probed for, so no
+conformance job reads it.
+
+- The app is `/Applications/Claude.app`, version 2.19675.0 in both `CFBundleShortVersionString`
+  and `CFBundleVersion`, bundle id `com.anthropic.claudefordesktop`, signed by team
+  `Q6L2SF6YDW`. Its Info.plist carries `ElectronAsarIntegrity`, and its code is in
+  `app.asar` and `app.asar.unpacked`.
+- The main process is `Contents/MacOS/Claude`. Its helpers run from inside the bundle with
+  `--user-data-dir=~/Library/Application Support/Claude`. `Contents/Helpers/chrome-native-host`
+  runs apart from the app.
+- The data folder, `~/Library/Application Support/Claude`, held 1.3 GB. The account's part
+  of it is about 6 MB: `Cookies` (32 KB), `config.json` (10 KB), `Local Storage` (2.3 MB,
+  origins `https://claude.ai` and `https://a.claude.ai`), `IndexedDB` (3.2 MB) and
+  `Session Storage` (108 KB), with `WebStorage` (44 KB) and `File System` (40 KB), which
+  move with it (E2).
+- The rest is the machine's: `Cache` (685 MB), `Code Cache` (222 MB), `claude-code/`
+  (431 MB), the GPU caches, `Shared Dictionary`, `Partitions`, `Local State` with no
+  `os_crypt` key, `Preferences` and `claude_desktop_config.json`.
+- Some of the folder is already kept per account by the app itself:
+  `claude-code-sessions/<account>/<organisation>`, `local-agent-mode-sessions/`,
+  `spaces-present/`, `ant-device-registry.json` and `cowork-enabled-cli-ops.json`. Three
+  accounts had signed in on that Mac.
+- No `Claude-3p` folder and no saved application state were there. The app's preferences
+  plist held only AppKit keys. `Caches`, `HTTPStorages` and `Logs` hold more of the app's
+  files outside the data folder.
+- `Cookies` is SQLite in `journal_mode=delete`, with `meta.version` 24 and
+  `last_compatible` 24. It held 20 cookies, all for claude.ai, each with an empty `value`
+  and an `encrypted_value` starting `v10`.
+- `sessionKey` and `sessionKeyV3` were 179 bytes each and expired on 30 October 2026, about
+  four weeks out. Their ciphertexts had the same SHA-256. `sessionKeyLC`, `sessionKeyV3LC`,
+  `routingHint`, `lastActiveOrg`, `__Host-ant_trusted_device` and `anthropic-device-id`
+  were there too.
+- While the app ran, `Cookies-journal` was 0 bytes with the same mtime as `Cookies`, and
+  there was no `Cookies-wal`.
+- `config.json` holds `oauth:tokenCache` and `oauth:tokenCacheV2`, base64 of values
+  starting `v10`, and `lastKnownAccountUuid`, a 36-character uuid equal to the
+  `ownerAccountId` in `cowork-enabled-cli-ops.json`.
+- The keychain item `Claude Safe Storage` is a generic password with account `Claude Key`
+  in the login keychain, its `cdat` equal to its `mdat`. Its attributes were read without
+  its password.
+- `security find-generic-password -w` on that item, run from a background shell of a
+  Claude Code session with no screen, exited 36. It was not run over ssh.
+- `plan-usage-history.json` is `{version: 2, samples: [{t, org, u: {fh, sd}}]}`. It held 87
+  samples for one organisation.
+- The home folder and the data folder were on one volume (`stat -f %d`).
+
+Measured on 4 October 2026 on Claude Desktop 2.19675.0, `Cookies` meta version 24, with two
+real claude.ai accounts and the data folder backed up first (31,674 entries). Only
+fingerprints (12-character SHA-256 prefixes), inodes, exit codes and times were recorded.
+Each experiment dates its register entry with the version:
+
+- Log out in the app revokes the session at claude.ai (E1). A byte copy of the listed items
+  and config keys, taken before Log out and put back after, was refused: within 5 seconds of
+  launch the app deleted `sessionKey`, emptied `oauth:tokenCacheV2` and showed its sign-in
+  screen. After Log out `lastKnownAccountUuid` still names the account that left, the
+  `sessionKey` row is gone, and `oauth:tokenCacheV2` holds the same 28-character empty value
+  as `oauth:tokenCache` (E1b). A switch from that state set 7 leftover items aside and put
+  the other account back.
+- The item list moves an account whole (E2): after a switch each way, the name,
+  conversations, Code tab, Cowork and connectors were the right account's, with nothing of
+  the other. One account had no `File System`, so an item on the list may be absent.
+- The `sessionKey` ciphertext keeps its fingerprint across quitting and opening the app, for
+  both accounts (E3). Only the analytics cookie `_dd_s_v2` changed.
+- `lastKnownAccountUuid` is written while the app runs, 35 and 15 seconds after launch on two
+  sign-ins, before `sessionKey` reaches the jar at 63 and 31 seconds (E4). The jar is flushed
+  about every 30 seconds. Both sign-ins started with no uuid in `config.json`, so whether a
+  sign-in replaces the uuid that Log out leaves behind (E1b) is still to be measured (E19).
+- A cookie is AES-128-CBC with a key from PBKDF2-SHA1 of the item's password, salt
+  `saltysalt`, 1003 rounds, 16 bytes, an IV of sixteen 0x20 bytes, and from meta version 24
+  a 32-byte SHA-256 of the host before the value (E5). A `sessionKey` decrypted this way was
+  accepted by claude.ai. The item's account is `Claude Key`.
+- At quit the app writes `Cookies`, `config.json`, `Local Storage`, `Session Storage`,
+  `WebStorage` and `Preferences`, each with the mtime of the second the main process exited
+  (E8).
+- `oauth:tokenCache` and `oauth:tokenCacheV2` are keyed
+  `acct:<lastKnownAccountUuid>|...:<org>:https://api.anthropic.com:<scopes>` and hold
+  `token`, `refreshToken`, `expiresAt`, `subscriptionType` and `rateLimitTier` (E9): 1668
+  and 1732 characters for one account, 28 and 1500 for the other. These and
+  `lastKnownAccountUuid` are the three keys a switch moves, and with the items on the list
+  they were enough to move each of two accounts whole (E2). Nobody went through the file's
+  other keys one by one to show none of them follows the account.
+- `GET claude.ai/api/organizations/<lastActiveOrg>/usage` with the `sessionKey` cookie
+  answers 200 with `five_hour` and `seven_day`, each with `utilization` and `resets_at`
+  (E10). The history's `fh` and `sd` matched it: 0% and 1% against 0% and 1% for one
+  account, 30% and 5% against 30% and 5% for the other, so history readings are verified.
+- Nothing ran from the bundle 0, 2, 5 and 30 seconds after a quit but `chrome-native-host`
+  (E12), and no crashpad handler or helper was left when the main process exited (E18).
+- The app keeps no `SingletonLock`, in its data folder or in `$TMPDIR`, while it runs; its
+  main process holds the `LOCK` files of its leveldb stores instead (E14). The lock check
+  finds nothing, and the process scan is the only sign the app is open.
+- claude.ai answered a request with the user agent `pitboard/<version>` with 200 and no bot
+  check (E15). `GET claude.ai/api/account` answers `email_address`, `uuid`, `full_name`,
+  `display_name` and `memberships` (E17); Pitboard does not ask it yet, so a Claude Desktop
+  account shows no email.
+- Always Allow left the key's `cdat` and `mdat` at 20260727084307Z (U-K1). Before it, a
+  background shell's read exited 36; after it, the same shell read the key without a
+  question (U-K1b), so refreshes need nobody at the Mac. Reads over ssh or from a launchd
+  job were not tried.
+- `security` exits 128 on Deny, and 128 too when a wrong password is typed and Allow chosen;
+  51 was never seen (U-K2). Killing it with SIGTERM (exit 143) leaves the question on screen
+  (U-K3), so a read that times out can leave a dialog behind. A refresh that timed out does
+  not ask again for the same stamp, but that gate is per process: every `enable` asks, and
+  two processes refreshing at once can each leave one. Reading the item's attributes
+  without `-w` never prompted, many times from a background shell (U-K5).
+
+Not measured yet, and dated `UNVERIFIED` in the register:
+
+- Whether the session's expiry slides forward with use (E11, E13). Both sessions read on 4
+  October 2026 expire on 1 November 2026, so the read that settles it comes after that.
+- Whether a sign-in replaces a `lastKnownAccountUuid` that Log out left behind (E19). Until
+  it is measured, a session Pitboard has not seen under a uuid it knows stops with
+  `desktop_identity_unconfirmed`, and enrolling that label confirms it.
+- Whether reads with Always Allow slow the app down (U-K6; U-K1 read only the stamp), and
+  whether an update of the app keeps the item (U-K4).
+
+Not in the register, because Pitboard checks it rather than assumes it: whether the data
+folder and `~/.pitboard` share a volume on other Macs (E7). Every switch checks it.

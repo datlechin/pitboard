@@ -5,38 +5,53 @@ use pitboard_core::doctor::{Check, Diagnosis, Level};
 use pitboard_core::words;
 use serde_json::{Value, json};
 
-/// Whether a check belongs to Codex's section.
-fn is_codex(check: &Check) -> bool {
-    check.code.starts_with("codex_")
+/// The section a check is listed under: Claude Code's, which has no heading, Codex's, or
+/// Claude Desktop's, told apart by their codes.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Section {
+    ClaudeCode,
+    Codex,
+    Desktop,
+}
+
+fn section(check: &Check) -> Section {
+    if check.code.starts_with("codex_") {
+        Section::Codex
+    } else if check.code.starts_with("desktop_") {
+        Section::Desktop
+    } else {
+        Section::ClaudeCode
+    }
 }
 
 pub fn human(checks: &[Check]) -> String {
-    // Each section lines up on its own, so what Codex's checks are called can never move a
-    // column of Claude Code's.
-    let width = |codex: bool| {
+    // Each section lines up on its own, so what another tool's checks are called can never
+    // move a column of Claude Code's.
+    let width = |of: Section| {
         checks
             .iter()
-            .filter(|c| is_codex(c) == codex)
+            .filter(|c| section(c) == of)
             .map(|c| ui::columns(&c.name))
             .max()
             .unwrap_or(0)
     };
-    let (claude_width, codex_width) = (width(false), width(true));
     let mut out = String::new();
-    // Codex's checks come last and are coded `codex_`, so they get a heading of their own
-    // where they start. A machine with no Codex has none of them and reads as it always
-    // did.
-    let mut in_codex = false;
+    // Codex's checks and then Claude Desktop's come after Claude Code's, so each gets a
+    // heading of its own where it starts. A machine with neither has none of them and
+    // reads as it always did.
+    let mut current = Section::ClaudeCode;
     for c in checks {
-        if !in_codex && is_codex(c) {
-            in_codex = true;
-            out.push_str(&format!("\n{}\n", paint(BOLD, "Codex")));
+        let of = section(c);
+        if of != current {
+            current = of;
+            let heading = match of {
+                Section::Codex => "Codex",
+                Section::Desktop => "Claude Desktop",
+                Section::ClaudeCode => "Claude Code",
+            };
+            out.push_str(&format!("\n{}\n", paint(BOLD, heading)));
         }
-        let width = if is_codex(c) {
-            codex_width
-        } else {
-            claude_width
-        };
+        let width = width(of);
         let mark = match c.level {
             Level::Ok => paint(GOOD, "✓"),
             Level::Warn => paint(WARN, "!"),
@@ -187,5 +202,40 @@ mod tests {
             .unwrap();
         assert!(at > heading, "{text}");
         assert_eq!(lines[0], before.lines().next().unwrap(), "{text}");
+    }
+
+    /// Claude Desktop's checks sit under a heading of their own, in a column of their own,
+    /// after Codex's, and a machine without the app reads as it did.
+    #[test]
+    fn claude_desktop_checks_get_a_heading_of_their_own() {
+        let plain = |checks: &[Check]| anstream::adapter::strip_str(&human(checks)).to_string();
+        let codex = || {
+            let mut codex = check(Level::Ok);
+            codex.code = "codex_backend";
+            codex.name = "Codex login store".into();
+            codex
+        };
+        let mut cookies = check(Level::Ok);
+        cookies.code = "desktop_cookies";
+        cookies.name = "Claude Desktop's cookie store".into();
+        let mut park = check(Level::Warn);
+        park.code = "desktop_parked_login";
+        park.name = "account desktop/a-rather-long-label".into();
+        let before = plain(&[check(Level::Ok), codex()]);
+        let text = plain(&[check(Level::Ok), codex(), cookies, park]);
+        let lines: Vec<&str> = text.lines().collect();
+        let codex_at = lines.iter().position(|l| *l == "Codex").expect(&text);
+        let heading = lines
+            .iter()
+            .position(|l| *l == "Claude Desktop")
+            .expect(&text);
+        assert!(heading > codex_at, "{text}");
+        assert_eq!(lines[heading - 1], "", "set apart: {text}");
+        assert!(lines[heading + 1].contains("cookie store"), "{text}");
+        assert!(
+            before.starts_with(&text[..text.find("\nClaude Desktop").unwrap()]),
+            "what comes before it is what a machine without the app shows: {text}"
+        );
+        assert!(!before.contains("Claude Desktop"), "{before}");
     }
 }

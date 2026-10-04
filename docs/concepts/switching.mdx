@@ -3,7 +3,7 @@ title: "How switching works"
 description: "Pitboard parks the login you leave, identifies every login before moving it, and can finish or undo an interrupted switch."
 ---
 
-A switch moves the login Claude Code or OpenAI's Codex CLI is using into Pitboard's store. A parked login takes its place.
+A switch moves the login Claude Code or OpenAI's Codex CLI is using into Pitboard's store. A parked login takes its place. Claude Desktop is switched differently: see [Claude Desktop](#claude-desktop).
 
 ## Parked logins
 
@@ -17,7 +17,7 @@ For where parked logins are kept and why they expire, see [Security and privacy]
 
 Pitboard does not move a login until it knows whose it is.
 
-For Claude Code, Pitboard asks Anthropic, because the account named in Claude Code's config file can be a day out of date. For Codex, it reads the account from the login's ID token.
+For Claude Code, Pitboard asks Anthropic, because the account named in Claude Code's config file can be a day out of date. For Codex, it reads the account from the login's ID token. For Claude Desktop, it reads Claude's files, without the network or the keychain.
 
 Pitboard records a fingerprint of each parked login's refresh token, and refuses one that no longer matches.
 
@@ -46,6 +46,15 @@ Everything that runs Codex holds its login in memory until it stops: a `codex` s
 
 So Pitboard moves the outgoing login into its store and reads it back before writing the incoming one. Finishing or undoing an interrupted switch, `pitboard abandon` and `pitboard repair` keep no copy of the login in use.
 
+## Claude Desktop
+
+Claude Desktop keeps its login as files in its data folder, plus keys in its `config.json`. Pitboard moves three of those keys with the account, which were enough to move each of two accounts whole. A switch renames those files into a park in `~/.pitboard/desktop/parks/` and renames the other account's files back. It never copies or deletes them, so both must be on one volume. Claude's settings and caches stay put. [Files and environment variables](/reference/files#claude-desktop-files) lists the files.
+
+- Nothing moves while anything runs from `Claude.app`, or while Claude's lock names a running process. If Pitboard cannot tell, it treats Claude as open. It checks again before each file.
+- Pitboard identifies the account from the account id in `config.json` and a hash of the encrypted session cookie. A cookie Pitboard has not seen, under an account id it knows, stops the switch with `desktop_identity_unconfirmed` until you check which account Claude shows and enrol it again, because whether Claude replaces the account id that Log out leaves behind has not been measured. A cookie Pitboard knows as one account's, under another account id, stops the switch the same way.
+- Files Claude made while signed out are set aside in `~/.pitboard/desktop/strays/`, never deleted. Each switch sets its files aside in one folder there.
+- A switch needs no network, and a parked Claude Desktop login is never renewed.
+
 ## Interrupted switches
 
 Before moving any login, a switch records what it is about to do, with fingerprints of the outgoing and the incoming login.
@@ -55,5 +64,7 @@ If the switch stops partway, the next command that changes something finishes or
 Those commands are `pitboard use`, `enroll`, `forget`, `rename`, `repair` and `uninstall`, and the same changes in the app. `pitboard`, `pitboard doctor`, `pitboard log` and `pitboard renew` do not finish it.
 
 A login matching neither fingerprint usually means the tool refreshed it after the switch stopped. Then Pitboard must identify it, which for Claude Code means asking Anthropic. Until it can, every such command stops without changing anything.
+
+A Claude Desktop switch keeps its own record. Until the outgoing account's park is recorded in the account list, recovery puts its files back. After that, recovery finishes the switch. Recovery runs only while Claude is closed. Until you quit Claude, a change to Claude Desktop stops with `recovery_waiting`, and other commands go ahead with a warning.
 
 To give up on the switch, see [Recover after a crash, a restore or a move](/troubleshooting/recovery#an-interrupted-switch-cannot-be-finished).

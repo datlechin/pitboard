@@ -75,6 +75,16 @@ private final class MachineStub: Core, @unchecked Sendable {
         return Array(history.suffix(Int(limit)))
     }
     func searchPath() async -> String? { path }
+    func switchToSignedOut(_ provider: String) async throws -> Switched {
+        throw PitboardError.Failed(
+            code: "unsupported", cause: nil, message: "not in this test", warnings: [])
+    }
+    func awaitingSignIn() async -> Awaiting? { nil }
+    func liveUsage() async -> LiveUsageState {
+        LiveUsageState(enabled: false, approval: "unknown", reason: nil, lastOkAt: nil)
+    }
+    func enableLiveUsage() async throws -> LiveUsageState { await liveUsage() }
+    func disableLiveUsage() async throws -> LiveUsageState { await liveUsage() }
 
     func status(fresh: Bool) async throws -> Status {
         Status(now: 0, accounts: [], warnings: [])

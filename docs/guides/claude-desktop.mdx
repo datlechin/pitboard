@@ -1,0 +1,111 @@
+---
+title: "Use Pitboard with Claude Desktop"
+sidebarTitle: "Claude Desktop"
+description: "Enrol and switch Claude Desktop accounts, and where they behave differently from Claude Code ones."
+---
+
+Pitboard switches Claude Desktop, Anthropic's app for macOS, between your own accounts. The menu bar app lists Claude Desktop accounts when it finds `Claude.app`.
+
+Claude Desktop keeps its login in its data folder, `~/Library/Application Support/Claude`. A switch moves the files that belong to the account into a park, and moves the other account's files back. Claude's settings and caches stay where they are.
+
+## Before you enrol a Claude Desktop account
+
+Pitboard moves nothing while anything runs from `Claude.app`. The menu bar app quits Claude the way Command-Q does before each enrolment and switch. If it quit Claude, it opens Claude again after. The command line never quits Claude: quit it with Command-Q first. Closing its window leaves it running.
+
+Run `pitboard doctor` to check that Pitboard finds Claude. Its `Claude Desktop build` line names the version installed, and warns when it differs from the version Pitboard's facts were read from.
+
+## Add Claude Desktop accounts
+
+A Claude Desktop label starts with `desktop/`. Claude Desktop has no sign-in Pitboard can run, so `--sign-in` does not work here. Instead, Pitboard parks one account and leaves Claude signed out for the next.
+
+<Tabs>
+  <Tab title="App">
+    1. If the Pitboard window shows **Give this account a name** for the account Claude is signed in to, click **Name**, enter a name such as `personal`, then click **Save**.
+    2. Choose **Add Account** in Pitboard's menu, then choose **Claude Desktop** in the **Tool** pop-up menu. The **Add another Claude account** dialog opens.
+    3. Click **Continue**. Pitboard quits Claude, parks `personal`, leaves Claude signed out and opens Claude again.
+    4. Sign in to the other account in Claude. When you see its chats, click **I'm Signed In**.
+    5. Enter a name such as `work`, then click **Add Account**. Pitboard quits Claude, enrols the account and opens Claude again.
+
+    To stop halfway, click **Put personal Back**. **Later** closes the dialog and leaves Claude signed out. **Finish Adding a Claude Account** in Pitboard's menu opens it again.
+  </Tab>
+  <Tab title="Command line">
+    Quit Claude, then enrol the account it is signed in to:
+
+    ```sh
+    pitboard enroll desktop/personal
+    ```
+
+    Park it and leave Claude signed out:
+
+    ```sh
+    pitboard use desktop --signed-out
+    ```
+
+    Open Claude, sign in to the other account, then quit Claude. Enrol the other account:
+
+    ```sh
+    pitboard enroll desktop/work
+    ```
+
+    Repeat the last three steps for each further account.
+  </Tab>
+</Tabs>
+
+<Warning>
+Never use **Log out** in Claude to add an account or to switch. Logging out ends that session at claude.ai, and Pitboard cannot bring it back: a copy of the login taken before was refused when put back, measured on 4 October 2026. Run `pitboard use desktop --signed-out` instead. Parking the account, as both ways do, leaves the session as it was.
+</Warning>
+
+## Switch Claude Desktop
+
+<Tabs>
+  <Tab title="App">
+    Choose the account in Pitboard's menu, or click **Use** in its row in the Pitboard window. If Claude is open, the app asks **Quit Claude to switch?** first. Click **Quit Claude and Switch**: Pitboard quits Claude, switches and opens Claude again. If Claude does not quit within 30 seconds, nothing changes.
+
+    If Claude was not open, the notice **Switched to personal** says **Open Claude to use personal.**
+  </Tab>
+  <Tab title="Command line">
+    Quit Claude, then run:
+
+    ```sh
+    pitboard use desktop/personal
+    ```
+
+    Pitboard prints:
+
+    ```text
+    Switched Claude Desktop to personal (was work).
+    Open Claude to use it.
+    ```
+
+    If Claude is still open, the switch stops with `app_still_open` and nothing moves.
+  </Tab>
+</Tabs>
+
+## How Claude Desktop accounts differ
+
+- A parked Claude Desktop login cannot be renewed. Its sign-in lasts about 4 weeks, and `pitboard status` shows the date each parked one lapses. Switch to an account before that date to keep it. Pitboard warns 7 days ahead.
+- `pitboard renew` lists each parked Claude Desktop login as not renewable, with the date it lapses.
+- Pitboard reads whose a login is from Claude's files, without the network or the keychain. If Claude holds a session Pitboard has not seen under an account it knows, or a session Pitboard knows as one label's under another account, Pitboard moves nothing and asks you to check the account in Claude and enrol it again. Whether Claude replaces the account that Log out leaves behind has not been measured, so Pitboard does not assume it.
+- Usage comes from Claude's own history, without reset times. Its numbers matched claude.ai's own count for two accounts, measured on 4 October 2026.
+- An interrupted switch waits until Claude is closed. Quit Claude, and Pitboard finishes it before the next change. [Interrupted switches](/concepts/switching#interrupted-switches) explains how.
+
+## See usage from claude.ai
+
+To see what each account has left as claude.ai counts it, with reset times, turn on live usage. It is off until you turn it on. claude.ai does not document the request live usage sends; Pitboard was checked against its answer on 4 October 2026.
+
+<Tabs>
+  <Tab title="App">
+    In **Settings** > **General** > **Claude Desktop**, turn on **Show live usage**. A dialog says what Pitboard reads. Click **Continue**.
+  </Tab>
+  <Tab title="Command line">
+    ```sh
+    pitboard desktop live-usage enable
+    ```
+  </Tab>
+</Tabs>
+
+Pitboard reads Claude's encryption key, the keychain item `Claude Safe Storage`, once. macOS asks for your login password: choose **Always Allow** so it does not ask again. After that, Pitboard read the key from a background shell with nobody at the Mac; reads over SSH or from a scheduled job have not been measured. Pitboard reads the item through `/usr/bin/security`, so Always Allow may also let other programs that run it read the item; that has not been measured either. Switching never needs the key.
+
+Pitboard waits 2 minutes for an answer when you turn live usage on, and 10 seconds on a later read. When it stops waiting, the dialog can stay on screen. Click **Deny** to close it, then turn live usage on again. After a later read stops waiting, Pitboard does not ask again until you turn live usage on again. Each time turning it on runs out of time can leave a dialog, and so can the app and a command reading at once.
+
+If macOS stops letting Pitboard read the key, `pitboard status` says live usage is paused. The app says so once in a notification, and in the notice **Live usage for Claude is paused**. Click **Allow Again** there, or run the same command again. To turn live usage off and forget the key, turn off **Show live usage**, or run `pitboard desktop live-usage disable`. [Security and privacy](/security#claudes-encryption-key) says what this read means.

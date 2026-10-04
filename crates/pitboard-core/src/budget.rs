@@ -166,12 +166,12 @@ pub enum Held {
 /// same refusal.
 pub fn may_ask(
     ctx: &Context,
-    account_uuid: &str,
+    usage_key: &str,
     last_reading: Option<&Snapshot>,
     forced: bool,
 ) -> Option<Held> {
     let ledger = load(ctx);
-    let entry = ledger.get(account_uuid)?;
+    let entry = ledger.get(usage_key)?;
     let record = &entry.record;
     let now = ctx.now();
     if record.held_until > now {
@@ -204,8 +204,8 @@ pub fn record(ctx: &Context, outcomes: &[(String, Outcome)]) {
     }
     let now = ctx.now();
     let mut ledger = load(ctx);
-    for (account_uuid, outcome) in outcomes {
-        let entry = ledger.entry(account_uuid.clone()).or_default();
+    for (usage_key, outcome) in outcomes {
+        let entry = ledger.entry(usage_key.clone()).or_default();
         let record = &mut entry.record;
         match outcome {
             Outcome::Answered => {
@@ -266,10 +266,11 @@ pub fn holds(ctx: &Context) -> Vec<(String, i64)> {
     held
 }
 
-/// Drop what is known about an account nobody is enrolled as any more.
-pub fn forget(ctx: &Context, account_uuid: &str) {
+/// Drop what is known about an account nobody is enrolled as any more, by its
+/// `Account::usage_key`.
+pub fn forget(ctx: &Context, usage_key: &str) {
     let mut ledger = load(ctx);
-    if ledger.remove(account_uuid).is_some() {
+    if ledger.remove(usage_key).is_some() {
         save(ctx, &ledger);
     }
 }
@@ -322,6 +323,7 @@ mod tests {
                     length_seconds: None,
                 })
                 .collect(),
+            verified: true,
         }
     }
 

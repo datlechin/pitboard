@@ -31,6 +31,12 @@ pub enum Renewal {
     /// Anthropic could not be reached or asked to slow down; tried again next time.
     Deferred,
     Failed(Error),
+    /// The parked login cannot be renewed by anybody but the app that wrote it, so it is
+    /// kept as it is until its session runs out at `expires_at`, in epoch seconds.
+    NotRenewable {
+        label: String,
+        expires_at: Option<i64>,
+    },
 }
 
 impl Renewal {
@@ -40,6 +46,7 @@ impl Renewal {
             Renewal::Refused => "parked_login_refused",
             Renewal::Deferred => "renewal_deferred",
             Renewal::Failed(e) => e.code(),
+            Renewal::NotRenewable { .. } => "not_renewable",
         }
     }
 }
@@ -97,6 +104,9 @@ pub fn renew_due(ctx: &Context, due: Due) -> Vec<(Key, Renewal)> {
         state
             .accounts
             .iter()
+            // A folder login is renewed by nobody but its own app: there is no credential
+            // in its park to present, and reading it as one would report it missing.
+            .filter(|a| crate::provider::of(a.provider()).tree().is_none())
             .filter_map(|a| {
                 let held = a.parked.as_ref()?;
                 due.covers(held, now).then(|| (a.key(), held.clone()))
@@ -214,7 +224,8 @@ pub(super) fn renew_one(
             tool: key.provider,
             label: state.typed(key),
         }),
-        Renewal::Deferred => Ok(None),
+        // A login nobody can renew is used as it is, the way one not renewed this time is.
+        Renewal::Deferred | Renewal::NotRenewable { .. } => Ok(None),
         Renewal::Failed(e) => Err(e),
     }
 }
@@ -299,6 +310,44 @@ mod tests {
     use crate::time::FixedClock;
     use serde_json::json;
     use std::sync::Arc;
+
+    /// A login only its own app can renew is reported under its own code, never as renewed
+    /// and never as refused.
+    #[test]
+    fn a_login_nobody_can_renew_says_so() {
+        let kept = Renewal::NotRenewable {
+            label: "desktop/work".into(),
+            expires_at: Some(1_790_000_000),
+        };
+        assert_eq!(kept.code(), "not_renewable");
+    }
+
+    /// A Claude Desktop park is a folder only the app can renew. However close its session
+    /// is to lapsing, renewing never reads it as a credential, never asks anybody, and
+    /// leaves it whole where it is.
+    #[test]
+    fn a_desktop_park_is_never_renewed() {
+        use crate::switch::harness::{Whole, desktop_machine};
+        let m = desktop_machine("renew-desktop");
+        let mut state = state::load(&m.ctx).expect("the state parses");
+        let soon = crate::switch::harness::NOW + 86_400;
+        let account = state
+            .accounts
+            .iter_mut()
+            .find(|a| a.label == "there")
+            .expect("there is enrolled");
+        let park = account.parked.as_mut().expect("there is parked");
+        park.access_expires_at = Some(soon);
+        park.refresh_expires_at = Some(soon);
+        state::save(&m.ctx, &state).expect("saved");
+
+        for due in [Due::ToStayAlive, Due::ToBeAsked] {
+            let outcomes = renew_due(&m.ctx, due);
+            assert!(outcomes.is_empty(), "{due:?}: {outcomes:?}");
+        }
+        assert_eq!(m.whole("there"), Whole::Parked);
+        assert_eq!(m.whole("here"), Whole::Live);
+    }
 
     const NOW: i64 = 1_760_000_000;
 

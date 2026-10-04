@@ -275,10 +275,12 @@ fn from_api(error: ApiError) -> ProviderError {
             service: ProviderId::Claude.service(),
             detail,
         },
-        ApiError::Unexpected { status } => ProviderError::Unexpected {
-            service: ProviderId::Claude.service(),
-            status,
-        },
+        ApiError::Unexpected { status } | ApiError::Blocked { status, .. } => {
+            ProviderError::Unexpected {
+                service: ProviderId::Claude.service(),
+                status,
+            }
+        }
         ApiError::Malformed(detail) => ProviderError::Malformed {
             service: ProviderId::Claude.service(),
             detail,

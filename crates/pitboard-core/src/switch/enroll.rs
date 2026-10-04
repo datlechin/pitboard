@@ -124,6 +124,7 @@ pub(super) fn planted(ctx: &Context, which: ProviderId, document: Value) -> Resu
 /// Run the tool's own sign-in in a private directory, where the live login is never
 /// touched, and read back the login it stored there.
 pub fn sign_in(ctx: &Context, which: ProviderId) -> Result<SignIn> {
+    signs_in_privately(which)?;
     let mut pending = reserve_signin(ctx, which)?;
     // Pitboard never sees the sign-in; it reads the login the tool stores once it is done.
     // What the tool prints goes to stderr, so `--json` output stays one JSON line.
@@ -138,6 +139,15 @@ pub fn sign_in(ctx: &Context, which: ProviderId) -> Result<SignIn> {
     }
     pending.document = signed_in_document(ctx, which, &pending.dir)?;
     Ok(pending)
+}
+
+/// A tool whose login is a folder its own app writes is signed in to in that app, by a
+/// person, and never by Pitboard in a private directory: refused before anything is made.
+fn signs_in_privately(which: ProviderId) -> Result<()> {
+    match provider::of(which).tree() {
+        Some(_) => Err(Error::SignInUnsupported { tool: which }),
+        None => Ok(()),
+    }
 }
 
 fn started(which: ProviderId, e: std::io::Error) -> Error {
@@ -229,6 +239,7 @@ impl WatchedSignIn {
 
 /// Starts the sign-in with its output piped, for a caller that will show it.
 pub fn sign_in_watched(ctx: &Context, which: ProviderId) -> Result<WatchedSignIn> {
+    signs_in_privately(which)?;
     let pending = reserve_signin(ctx, which)?;
     let command = provider::of(which).sign_in(ctx, &pending.dir);
     watch(command, pending).map_err(|e| started(which, e))
@@ -303,7 +314,15 @@ pub fn enroll(
             login.provider.name(),
             key.provider.name()
         ))),
+        // No sign-in of such a tool is ever run, so a login handed in for one is refused
+        // before it is read.
+        Some(_) if provider::of(key.provider).tree().is_some() => {
+            Err(Error::SignInUnsupported { tool: key.provider })
+        }
         Some(login) => from_sign_in(&ctx, key, &mut state, &login),
+        None if provider::of(key.provider).tree().is_some() => {
+            super::tree::enroll_current(&ctx, key, &mut state)
+        }
         None => record_current(&ctx, key, &mut state).map(|e| (e, Vec::new())),
     }
 }
@@ -669,6 +688,13 @@ fn account(
                     .map(str::to_owned),
             }
         }
+        // Claude Desktop is enrolled from its data folder, never from a credential: every
+        // credential operation of its refuses, so a sign-in never reaches here with one.
+        ProviderId::Desktop => state::Detail::Desktop {
+            organization_uuid: Some(owner.organization_uuid.clone()).filter(|id| !id.is_empty()),
+            session_fingerprint: String::new(),
+            session_expires_at: None,
+        },
     };
     Account {
         last_used_at,
@@ -686,8 +712,8 @@ mod tests {
     use crate::api::scripted::Trouble;
     use crate::store::memory::Fault;
     use crate::switch::harness::{
-        Machine, NOW, codex_id, codex_login, codex_machine, hold, login_of, machine, oauth, renews,
-        signed_in,
+        Machine, NOW, codex_id, codex_login, codex_machine, desktop_machine, hold, login_of,
+        machine, oauth, renews, signed_in,
     };
     use crate::switch::{Due, Outcome, renew_due, settle, switch};
     use crate::time::FixedClock;
@@ -763,6 +789,7 @@ mod tests {
             let (uuid, older) = match m.which {
                 ProviderId::Claude => ("here".to_string(), oauth("here-older", 30)),
                 ProviderId::Codex => (codex_id("here"), codex_login("here", "here-older")),
+                ProviderId::Desktop => unreachable!("no machine keeps Claude Desktop in a vault"),
             };
             let service = park::reserve(&m.ctx, &uuid).expect("a free name");
             let held = park::store_at(&m.ctx, m.which, &service, &older).expect("parked");
@@ -1116,6 +1143,7 @@ mod tests {
                     assert!(text.contains("Quit them and start again"), "{text}");
                     assert!(text.contains("put the old login back"), "{text}");
                 }
+                ProviderId::Desktop => unreachable!("no machine keeps Claude Desktop in a vault"),
             }
             assert!(
                 warnings
@@ -1149,5 +1177,77 @@ mod tests {
         );
         reserve_signin(&m.ctx, ProviderId::Codex)
             .expect("a cancelled sign-in lets the next one start");
+    }
+
+    /// Claude Desktop is signed in to by a person in the app itself, never by a tool run in
+    /// a private directory. Either way of starting one is refused before anything is made:
+    /// no lock, and no directory for a login that will never come.
+    #[test]
+    fn a_sign_in_to_claude_desktop_is_refused_before_anything_is_made() {
+        let m = desktop_machine("enroll-sign-in");
+        let home = home::dir(&m.ctx);
+        type Start = fn(&Context) -> Result<()>;
+        let started: [(&str, Start); 2] = [
+            ("inherited", |ctx| {
+                sign_in(ctx, ProviderId::Desktop).map(drop)
+            }),
+            ("watched", |ctx| {
+                sign_in_watched(ctx, ProviderId::Desktop).map(|w| w.cancel())
+            }),
+        ];
+        for (how, start) in started {
+            let refused = start(&m.ctx).expect_err("a Desktop sign-in");
+            assert!(
+                matches!(
+                    refused,
+                    Error::SignInUnsupported {
+                        tool: ProviderId::Desktop
+                    }
+                ),
+                "{how}: {refused:?}"
+            );
+            assert!(!home.join("signin").exists(), "{how}: a pending directory");
+            assert!(!home.join("signin.lock").exists(), "{how}: a sign-in lock");
+        }
+    }
+
+    /// A login handed to `enroll` for Claude Desktop is refused the same way, before it is
+    /// read: the account signed in to the app and every park stay as they were.
+    #[test]
+    fn a_desktop_login_handed_to_enroll_is_refused() {
+        let m = desktop_machine("enroll-handed");
+        let before = m.inodes();
+        let recorded = std::fs::read(home::dir(&m.ctx).join("state.json")).ok();
+        let login = planted(
+            &m.ctx,
+            ProviderId::Desktop,
+            json!({"account_uuid": "elsewhere"}),
+        )
+        .expect("a planted sign-in");
+        let settled = settle(&m.ctx, Some(ProviderId::Desktop))
+            .expect("nothing to recover")
+            .0;
+
+        let refused = enroll(settled, &m.key("elsewhere"), Some(login)).expect_err("refused");
+
+        assert!(
+            matches!(
+                refused,
+                Error::SignInUnsupported {
+                    tool: ProviderId::Desktop
+                }
+            ),
+            "{refused:?}"
+        );
+        assert_eq!(m.inodes(), before, "nothing moved");
+        assert_eq!(
+            std::fs::read(home::dir(&m.ctx).join("state.json")).ok(),
+            recorded,
+            "nothing recorded"
+        );
+        assert!(
+            !home::dir(&m.ctx).join("signin").exists(),
+            "a pending directory"
+        );
     }
 }

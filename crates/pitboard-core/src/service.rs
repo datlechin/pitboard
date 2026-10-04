@@ -65,6 +65,39 @@ pub enum Warning {
         label: String,
         why: String,
     },
+    /// An earlier switch of a tool kept in a folder was interrupted, and the app is open, so
+    /// it could not be finished on a run that only reads.
+    RecoveryWaiting {
+        tool: ProviderId,
+        from: String,
+        to: String,
+    },
+    /// A switch of a tool kept in a folder failed partway and left its record, so half of
+    /// each account may be where the other's should be until the next change finishes or
+    /// undoes it. The app must stay closed until then.
+    SwitchUnfinished {
+        tool: ProviderId,
+        from: String,
+        to: String,
+    },
+    /// A parked Claude Desktop login cannot be renewed, and its session runs out at
+    /// `expires_at`, in epoch seconds.
+    ParkExpiresSoon {
+        label: String,
+        expires_at: i64,
+    },
+    /// Items a switch found in the data folder that belong to neither account were set aside
+    /// in `path` rather than deleted.
+    StraysKept {
+        path: std::path::PathBuf,
+        count: usize,
+    },
+    /// Somebody signed the tool in to another account outside Pitboard, and the account
+    /// recorded in use had no park, so it is no longer recorded in use.
+    ReplacedOutsidePitboard {
+        tool: ProviderId,
+        label: String,
+    },
 }
 
 impl Warning {
@@ -81,6 +114,11 @@ impl Warning {
             Warning::SessionsStillRunning { .. } => "sessions_still_running",
             Warning::SessionsKeepTheOldLogin { .. } => "sessions_keep_old_login",
             Warning::SignInParkedNotInUse { .. } => "sign_in_parked_not_in_use",
+            Warning::RecoveryWaiting { .. } => "recovery_waiting",
+            Warning::SwitchUnfinished { .. } => "switch_unfinished",
+            Warning::ParkExpiresSoon { .. } => "park_expires_soon",
+            Warning::StraysKept { .. } => "strays_kept",
+            Warning::ReplacedOutsidePitboard { .. } => "replaced_outside_pitboard",
         }
     }
 }
@@ -105,9 +143,9 @@ impl fmt::Display for Warning {
             ),
             Warning::ParkedLoginRefused { tool, label } => write!(
                 f,
-                "{} no longer accepts the parked login for `{label}`. Run `pitboard enroll \
-                 {label} --sign-in` to sign in to it again.",
-                tool.service()
+                "{} no longer accepts the parked login for `{label}`. {}",
+                tool.service(),
+                crate::error::sign_in_again(label, "sign in to it again")
             ),
             Warning::WrittenOnTheCommandLine { tool, bytes, limit } => {
                 write!(
@@ -164,6 +202,41 @@ impl fmt::Display for Warning {
                 tool.name(),
                 tool.login_command()
             ),
+            Warning::RecoveryWaiting { tool, from, to } => write!(
+                f,
+                "an earlier switch of {} from `{from}` to `{to}` was interrupted, and {} is \
+                 open, so Pitboard cannot finish it yet. Quit {}, and the next change \
+                 finishes it.",
+                tool.name(),
+                tool.program(),
+                tool.program()
+            ),
+            Warning::SwitchUnfinished { tool, from, to } => write!(
+                f,
+                "the switch of {} from `{from}` to `{to}` stopped partway, and Pitboard kept \
+                 its record. Keep {} closed: the next change finishes or undoes it first.",
+                tool.name(),
+                tool.program()
+            ),
+            Warning::ParkExpiresSoon { label, expires_at } => write!(
+                f,
+                "the parked login for `{label}` runs out on {} and Pitboard cannot renew it. \
+                 Switch to `{label}` before then to keep it.",
+                crate::time::local(*expires_at, "%b %-d %H:%M")
+            ),
+            Warning::StraysKept { path, count } => write!(
+                f,
+                "{count} item(s) in Claude's data folder belonged to neither account, so \
+                 Pitboard set them aside in {} rather than delete them.",
+                path.display()
+            ),
+            Warning::ReplacedOutsidePitboard { tool, label } => write!(
+                f,
+                "{} was signed in to another account outside Pitboard, and `{label}` had no \
+                 parked login to keep, so it is no longer recorded in use. Enroll it again to \
+                 switch back to it.",
+                tool.name()
+            ),
         }
     }
 }
@@ -214,9 +287,10 @@ impl Pitboard {
                     label: state.typed(&key),
                 }),
                 Renewal::Failed(e) => warnings.push(Warning::RenewalFailed(e)),
-                Renewal::Renewed | Renewal::Deferred => {}
+                Renewal::Renewed | Renewal::Deferred | Renewal::NotRenewable { .. } => {}
             }
         }
+        warnings.extend(switch::tree_waiting(&self.ctx, &state));
         Ok(Done {
             value: status::gather(&self.ctx, &state, fresh),
             warnings,
@@ -234,7 +308,9 @@ impl Pitboard {
         let state = state::load(&self.ctx)?;
         Ok(Done {
             value: status::gather_offline(&self.ctx, &state),
-            warnings: Vec::new(),
+            warnings: switch::tree_waiting(&self.ctx, &state)
+                .into_iter()
+                .collect(),
         })
     }
 
@@ -258,6 +334,58 @@ impl Pitboard {
         })
     }
 
+    /// Sign `which`'s app out, parking the account in it, so somebody can open the app, sign
+    /// in to another account and enrol that one. Only an app whose login is a folder signs
+    /// out this way: a tool with a sign-in of its own adds an account with `--sign-in`.
+    pub fn switch_to_signed_out(&self, which: ProviderId) -> Changing<Outcome> {
+        let subject = format!("{which} -> signed out");
+        if crate::provider::of(which).tree().is_none() {
+            let error = Error::Usage(format!(
+                "{} is not signed out by Pitboard. Add another account with `pitboard enroll \
+                 {which}/<label> --sign-in`.",
+                which.name()
+            ));
+            return Err(self.refused("use", &subject, Some(which), error.code(), error));
+        }
+        self.changing("use", &subject, Some(which), |settled| {
+            switch::sign_out(settled, which)
+        })
+    }
+
+    /// The sign-out Pitboard made that no enrolment has followed yet, where there is one.
+    pub fn awaiting_sign_in(&self) -> Option<switch::Awaiting> {
+        switch::awaiting_sign_in(&self.ctx)
+    }
+
+    /// Whether Claude Desktop's usage is asked of claude.ai, and whether macOS lets Pitboard
+    /// read the key that needs. Reads Pitboard's own file and nothing else.
+    pub fn live_usage(&self) -> status::LiveUsage {
+        crate::provider::desktop::live_usage::load(&self.ctx)
+    }
+
+    /// Turn live usage on, which reads Claude's key once and may put macOS's question in
+    /// front of somebody. Nothing else in Pitboard ever asks for it.
+    pub fn enable_live_usage(&self) -> Result<status::LiveUsage> {
+        let turned = crate::provider::desktop::live_usage::enable(&self.ctx);
+        self.audit_live_usage("enable", &turned);
+        turned
+    }
+
+    /// Turn live usage off and forget the key. Reads nothing.
+    pub fn disable_live_usage(&self) -> Result<status::LiveUsage> {
+        let turned = crate::provider::desktop::live_usage::disable(&self.ctx);
+        self.audit_live_usage("disable", &turned);
+        turned
+    }
+
+    fn audit_live_usage(&self, subject: &str, turned: &Result<status::LiveUsage>) {
+        let outcome = match turned {
+            Ok(_) => "ok",
+            Err(e) => e.code(),
+        };
+        audit::record(&self.ctx, "live_usage", subject, outcome);
+    }
+
     /// Which account somebody meant, as the key the engine looks accounts up by.
     ///
     /// Resolving here rather than deeper down means every command takes `codex/work` and
@@ -270,7 +398,7 @@ impl Pitboard {
         })?;
         crate::label::resolve(&state, typed)
             .map(Account::key)
-            .map_err(|error| self.refused(verb, typed, error.code(), error))
+            .map_err(|error| self.refused(verb, typed, named_tool(typed), error.code(), error))
     }
 
     /// `typed` may name a tool, as in `claude/work`. A bare name means the default tool.
@@ -288,7 +416,7 @@ impl Pitboard {
     /// `claude/work`.
     fn chosen(&self, verb: &str, typed: &str) -> std::result::Result<Key, Failed> {
         self.enrolling(typed)
-            .map_err(|error| self.refused(verb, typed, "label_unusable", error))
+            .map_err(|error| self.refused(verb, typed, chosen_tool(typed), "label_unusable", error))
     }
 
     /// A change refused over the name it was given, which happens before it settles.
@@ -300,19 +428,37 @@ impl Pitboard {
     /// endpoint allows or refuses exactly as it would a change to that tool, and reports what
     /// it found beside the refusal. Only as far as it can: a recovery that cannot finish is
     /// the next change's to report, and what this one reports is why it was refused.
-    fn refused(&self, verb: &str, subject: &str, code: &str, error: Error) -> Failed {
-        let recovered = if switch::interrupted(&self.ctx) {
-            switch::settle(&self.ctx, switch::interrupted_tool(&self.ctx))
-                .ok()
-                .and_then(|(_, recovered)| recovered)
+    ///
+    /// A folder login's interrupted run is settled only where the change would have settled
+    /// it: one about its own tool, or about no tool the name says. `tool` is the tool the
+    /// refused change was about, where its name says one. A change to Claude Code or Codex
+    /// never moves anything of the Claude app's, even one refused for a typo.
+    fn refused(
+        &self,
+        verb: &str,
+        subject: &str,
+        tool: Option<ProviderId>,
+        code: &str,
+        error: Error,
+    ) -> Failed {
+        let interrupted = switch::interrupted_tool(&self.ctx);
+        let settle_for = if switch::interrupted(&self.ctx) {
+            Some(interrupted)
         } else {
-            None
+            // Only a folder login's run is left, and `interrupted` is its tool.
+            interrupted
+                .filter(|&folder| tool.is_none_or(|tool| tool == folder))
+                .map(|_| tool)
         };
-        let mut warnings = Vec::new();
-        if let Some(r) = recovered {
-            audit::record(&self.ctx, "recover", &r.to, r.code());
-            warnings.push(Warning::Recovered(r));
-        }
+        let recovered = match settle_for.map(|which| switch::settle(&self.ctx, which)) {
+            Some(Ok((_, recovered))) => recovered,
+            // The app is open, which is what a change about it would have said.
+            Some(Err(Error::RecoveryWaiting { tool, from, to })) => {
+                vec![Warning::RecoveryWaiting { tool, from, to }]
+            }
+            Some(Err(_)) | None => Vec::new(),
+        };
+        let warnings = self.recovered(recovered);
         audit::record(&self.ctx, verb, subject, code);
         Failed { error, warnings }
     }
@@ -394,6 +540,12 @@ impl Pitboard {
     /// only to be told the state file belongs to another machine, that the tool is not
     /// installed, or that the account could never be switched to afterwards.
     fn ready_to_sign_in(&self, tool: crate::provider::ProviderId) -> Result<()> {
+        // A tool whose login is a folder is signed in to inside its own app, with the data
+        // folder it always uses, so there is no private sign-in to run. Asked first, so
+        // nothing below can ever start the app.
+        if crate::provider::of(tool).tree().is_some() {
+            return Err(Error::SignInUnsupported { tool });
+        }
         if tool == crate::provider::ProviderId::Claude && self.ctx.custom_oauth() {
             return Err(Error::CustomOauthEndpoint);
         }
@@ -453,10 +605,34 @@ impl Pitboard {
 
     /// Renew every parked login that is due, and nothing else. No switch, no usage, and
     /// no request but the token exchange. This is what the schedule runs.
+    ///
+    /// A park that only its own app can renew is listed too, with when its session runs out,
+    /// so a schedule or a person reading the output knows it is kept as it is rather than
+    /// forgotten. It is not written in the audit log: nothing was done to it.
     pub fn renew(&self) -> Vec<(Key, Renewal)> {
-        let outcomes = switch::renew_due(&self.ctx, switch::Due::ToStayAlive);
+        let mut outcomes = switch::renew_due(&self.ctx, switch::Due::ToStayAlive);
         for (key, outcome) in &outcomes {
             audit::record(&self.ctx, "renew", &key.typed(), outcome.code());
+        }
+        if let Ok(state) = state::load(&self.ctx) {
+            outcomes.extend(
+                state
+                    .accounts
+                    .iter()
+                    .filter(|a| crate::provider::of(a.provider()).tree().is_some())
+                    .filter_map(|a| {
+                        let park = a.parked.as_ref()?;
+                        let key = a.key();
+                        let label = state.typed(&key);
+                        Some((
+                            key,
+                            Renewal::NotRenewable {
+                                label,
+                                expires_at: park.refresh_expires_at,
+                            },
+                        ))
+                    }),
+            );
         }
         outcomes
     }
@@ -506,8 +682,18 @@ impl Pitboard {
     /// on, by kind: for a front end to say so, or to offer to quit an app, before switching.
     /// Empty where nothing is, where the tool follows a switch by itself, or where nobody
     /// could tell. Reads the process list and nothing else.
+    ///
+    /// An app whose login is a folder is found by its own bundle: it is asked to quit before
+    /// a switch rather than told afterwards, so what runs it matters before, not after.
     pub fn holding(&self, which: ProviderId) -> Vec<holder::Holding> {
-        switch::still_holding(&self.ctx, which).unwrap_or_default()
+        match crate::provider::of(which).tree() {
+            Some(tree) => holder::find_within(&self.ctx, tree)
+                .unwrap_or_default()
+                .into_iter()
+                .filter(|holding| !holding.pids.is_empty())
+                .collect(),
+            None => switch::still_holding(&self.ctx, which).unwrap_or_default(),
+        }
     }
 
     /// When Pitboard's account index last changed, for a front end that wants to know
@@ -550,7 +736,13 @@ impl Pitboard {
                  tool and enrol the account there instead.",
                 from.provider, chosen.provider
             ));
-            return Err(self.refused("rename", &from.typed(), error.code(), error));
+            return Err(self.refused(
+                "rename",
+                &from.typed(),
+                Some(from.provider),
+                error.code(),
+                error,
+            ));
         }
         let to = chosen.label;
         self.changing(
@@ -589,10 +781,9 @@ impl Pitboard {
                 warnings.push(Warning::AuthOverridden { tool, names });
             }
         }
-        if let Some(r) = recovered {
-            audit::record(&self.ctx, "recover", &r.to, r.code());
-            warnings.push(Warning::Recovered(r));
-        }
+        warnings.extend(self.recovered(recovered));
+        // Settled, so a record still here is one settling left alone, not this run's.
+        let unfinished_before = switch::tree_interrupted(&self.ctx).is_some();
         match run(settled) {
             Ok((value, more)) => {
                 audit::record(&self.ctx, verb, subject, value.audit_code());
@@ -601,10 +792,49 @@ impl Pitboard {
             }
             Err(mut error) => {
                 audit::record(&self.ctx, verb, subject, error.code());
+                // A refusal that says a run is waiting for the app to quit says all the
+                // warning would.
+                if matches!(error, Error::RecoveryWaiting { .. }) {
+                    warnings.retain(|w| !matches!(w, Warning::RecoveryWaiting { .. }));
+                }
                 warnings.extend(error.take_warnings());
+                // A run that failed after its record was written left half of a switch,
+                // which a refusal for the app opening midway already says.
+                if !unfinished_before && !matches!(error, Error::AppStillOpen { midway: true, .. })
+                {
+                    warnings.extend(switch::tree_unfinished(&self.ctx));
+                }
                 Err(Failed { error, warnings })
             }
         }
+    }
+
+    /// What settling found, with each recovery written in the audit log.
+    fn recovered(&self, found: Vec<Warning>) -> Vec<Warning> {
+        for warning in &found {
+            if let Warning::Recovered(r) = warning {
+                audit::record(&self.ctx, "recover", &r.subject(), r.code());
+            }
+        }
+        found
+    }
+}
+
+/// The tool a name for an existing account says, where it says one. A bare name could be
+/// any tool's.
+fn named_tool(typed: &str) -> Option<ProviderId> {
+    match crate::label::parse(typed) {
+        Ok(crate::label::Spec::Qualified(tool, _)) => Some(tool),
+        _ => None,
+    }
+}
+
+/// The tool a name for a new account says: its prefix where that is a tool, and the
+/// default tool where it is bare.
+fn chosen_tool(typed: &str) -> Option<ProviderId> {
+    match typed.split_once(crate::label::SEPARATOR) {
+        None => Some(crate::label::DEFAULT),
+        Some((prefix, _)) => ProviderId::parse(prefix),
     }
 }
 
@@ -618,8 +848,11 @@ trait Audited {
 impl Audited for Outcome {
     fn audit_code(&self) -> &'static str {
         match self {
-            Outcome::Switched { .. } => "ok",
+            Outcome::Switched { .. } | Outcome::SignedOut { .. } | Outcome::Installed { .. } => {
+                "ok"
+            }
             Outcome::AlreadyActive { .. } => "already_active",
+            Outcome::AlreadySignedOut { .. } => "already_signed_out",
         }
     }
 }
@@ -645,6 +878,86 @@ mod tests {
     use std::collections::BTreeMap;
 
     type Make = fn(&str) -> Machine;
+
+    /// What a switch of Claude Desktop can warn about goes under the codes a front end
+    /// branches on, and names the app, not Claude Code.
+    #[test]
+    fn claude_desktops_warnings_have_their_codes() {
+        let warnings = [
+            (
+                Warning::RecoveryWaiting {
+                    tool: ProviderId::Desktop,
+                    from: "home".into(),
+                    to: "work".into(),
+                },
+                "recovery_waiting",
+            ),
+            (
+                Warning::ParkExpiresSoon {
+                    label: "desktop/work".into(),
+                    expires_at: 1_790_000_000,
+                },
+                "park_expires_soon",
+            ),
+            (
+                Warning::StraysKept {
+                    path: "/tmp/strays".into(),
+                    count: 2,
+                },
+                "strays_kept",
+            ),
+            (
+                Warning::ReplacedOutsidePitboard {
+                    tool: ProviderId::Desktop,
+                    label: "desktop/home".into(),
+                },
+                "replaced_outside_pitboard",
+            ),
+        ];
+        for (warning, code) in warnings {
+            assert_eq!(warning.code(), code);
+            let said = warning.to_string();
+            assert!(!said.contains("Claude Code"), "{said}");
+            assert!(!said.contains('\u{2014}'), "{said}");
+        }
+    }
+
+    /// Claude Desktop is signed in to inside the app, with the data folder it always uses,
+    /// so Pitboard has no sign-in of its own to run. It is refused before anything is
+    /// started or reserved, and the app is never opened from a sign-in.
+    #[test]
+    fn a_claude_desktop_sign_in_is_refused_before_anything_starts() {
+        let m = machine("desktop-sign-in");
+        let ctx = m
+            .ctx
+            .clone()
+            .with_desktop_dir(m.ctx_home().join("claude-desktop").to_string_lossy().into())
+            .with_desktop_app(m.ctx_home().join("Claude.app").to_string_lossy().into());
+        let before = files(&m);
+
+        let failed = Pitboard::new(ctx.clone())
+            .sign_in("desktop/work")
+            .err()
+            .expect("there is no sign-in to run");
+        assert_eq!(
+            failed.error.code(),
+            "sign_in_unsupported",
+            "{}",
+            failed.error
+        );
+        let watched = Pitboard::new(ctx)
+            .sign_in_watched("desktop/work")
+            .err()
+            .expect("nor one to watch");
+        assert_eq!(watched.error.code(), "sign_in_unsupported");
+
+        assert_eq!(files(&m), before, "no sign-in is reserved");
+        assert_eq!(
+            last_audited(&m).last(),
+            Some(&("enroll".to_string(), "sign_in_unsupported".to_string()))
+        );
+        assert!(!m.ctx_home().join("claude-desktop").exists());
+    }
 
     /// A name is refused the same way whichever tool it is for.
     const MACHINES: [(&str, Make); 2] = [("claude", machine), ("codex", codex_machine)];
@@ -830,6 +1143,340 @@ mod tests {
         assert!(
             switch::interrupted(&claude.ctx),
             "the record is kept for a run that can finish it"
+        );
+    }
+
+    /// An unfinished Claude Desktop switch, while Claude is open, is said to be waiting by a
+    /// change about no tool that goes ahead, and stops one that cannot, said once.
+    #[test]
+    fn a_desktop_switch_waiting_for_claude_is_reported() {
+        use crate::switch::harness::{APP_PATH, desktop_machine};
+        let m = desktop_machine("service-waiting");
+        assert_eq!(
+            m.crash_at("tree.item_parked").unwrap_err(),
+            "tree.item_parked"
+        );
+        m.mem.runs_within(APP_PATH);
+        let pitboard = Pitboard::new(m.ctx.clone());
+
+        let done = pitboard.repair().expect("goes ahead");
+        let codes: Vec<_> = done.warnings.iter().map(Warning::code).collect();
+        assert_eq!(codes, ["recovery_waiting"]);
+
+        let failed = pitboard.uninstall().err().expect("refused");
+        assert_eq!(failed.error.code(), "recovery_waiting");
+        assert!(
+            failed.warnings.is_empty(),
+            "the refusal says it: {:?}",
+            failed.warnings
+        );
+    }
+
+    /// A Claude Desktop switch that fails partway keeps its record, and the failure says so:
+    /// whoever quit Claude for it must keep Claude closed until the next change finishes or
+    /// undoes it, rather than open it on half of each account. A refusal that already says
+    /// it stopped partway is not said twice.
+    #[test]
+    fn a_desktop_switch_that_fails_partway_says_it_is_unfinished() {
+        use crate::switch::harness::{APP_PATH, desktop_machine};
+        use std::os::unix::fs::PermissionsExt;
+        let m = desktop_machine("service-unfinished");
+        let pitboard = Pitboard::new(m.ctx.clone());
+        let support = m.support();
+        let locked = support.clone();
+        let failed = crate::fault::meanwhile(
+            "tree.item_parked",
+            move || {
+                std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o500))
+                    .expect("lock the data folder");
+            },
+            || pitboard.switch_to("desktop/there"),
+        )
+        .expect_err("the next move fails");
+        std::fs::set_permissions(&support, std::fs::Permissions::from_mode(0o700))
+            .expect("unlock the data folder");
+        assert!(
+            switch::tree_interrupted(&m.ctx).is_some(),
+            "the record is kept"
+        );
+        let unfinished: Vec<_> = failed
+            .warnings
+            .iter()
+            .filter(|w| w.code() == "switch_unfinished")
+            .collect();
+        assert_eq!(unfinished.len(), 1, "{:?}", failed.warnings);
+        let said = unfinished[0].to_string();
+        assert!(
+            said.contains("desktop/here") && said.contains("desktop/there"),
+            "{said}"
+        );
+        assert!(said.contains("Claude"), "{said}");
+
+        // Claude opening partway says the same in its own refusal.
+        m.recover().expect("undone").expect("found");
+        let mem = std::sync::Arc::clone(&m.mem);
+        let pitboard = Pitboard::new(m.ctx.clone());
+        let opened = crate::fault::meanwhile(
+            "tree.item_parked",
+            move || {
+                mem.runs_within(APP_PATH);
+            },
+            || pitboard.switch_to("desktop/there"),
+        )
+        .expect_err("the app opened partway");
+        assert_eq!(opened.error.code(), "app_opened_midway");
+        assert!(
+            opened
+                .warnings
+                .iter()
+                .all(|w| w.code() != "switch_unfinished"),
+            "{:?}",
+            opened.warnings
+        );
+    }
+
+    /// Status reads and never moves, so a Claude Desktop switch a crash left while Claude is
+    /// open is said to be waiting, by both reports, and its record is kept for a change.
+    #[test]
+    fn status_says_a_desktop_switch_waits_while_claude_is_open() {
+        use crate::switch::harness::APP_PATH;
+        let (m, before) = interrupted_desktop("status-waiting");
+        m.mem.runs_within(APP_PATH);
+        let ctx = m
+            .ctx
+            .clone()
+            .with_scripted_api(crate::api::scripted::ScriptedApi::new())
+            .with_scripted_safe_storage(crate::api::scripted::ScriptedSafeStorage::forbidding());
+        let pitboard = Pitboard::new(ctx);
+
+        let reports = [
+            ("status", pitboard.status(false).expect("a report")),
+            ("offline", pitboard.status_offline().expect("a report")),
+        ];
+        for (how, done) in reports {
+            assert!(
+                matches!(
+                    done.warnings.as_slice(),
+                    [Warning::RecoveryWaiting { tool: ProviderId::Desktop, from, to }]
+                        if from == "desktop/here" && to == "desktop/there"
+                ),
+                "{how}: {:?}",
+                done.warnings
+            );
+        }
+        assert_eq!(m.inodes(), before, "nothing moved");
+        assert_eq!(
+            switch::tree_interrupted(&m.ctx),
+            Some(("desktop/here".to_string(), "desktop/there".to_string())),
+            "the record is kept"
+        );
+    }
+
+    /// A Claude Desktop machine whose switch to `there` died with `here`'s first item parked,
+    /// and every file it holds by inode.
+    fn interrupted_desktop(
+        name: &str,
+    ) -> (
+        crate::switch::harness::DesktopMachine,
+        BTreeMap<std::path::PathBuf, u64>,
+    ) {
+        let m = crate::switch::harness::desktop_machine(name);
+        assert_eq!(
+            m.crash_at("tree.item_parked").unwrap_err(),
+            "tree.item_parked"
+        );
+        assert!(switch::tree_interrupted(&m.ctx).is_some());
+        let inodes = m.inodes();
+        (m, inodes)
+    }
+
+    /// A change to Claude Code or Codex refused over its name leaves an interrupted Claude
+    /// Desktop switch alone, as the change itself would have: nothing in the data folder or
+    /// a park moves, and the record stays for a change to the app.
+    #[test]
+    fn a_change_to_another_tool_refused_over_its_name_leaves_a_desktop_switch_alone() {
+        type Attempt = fn(&Pitboard) -> Option<Failed>;
+        let attempts: [(&str, Attempt); 6] = [
+            ("use codex", |p| p.switch_to("codex/typo").err()),
+            ("use claude", |p| p.switch_to("claude/typo").err()),
+            ("forget codex", |p| p.forget("codex/typo").err()),
+            ("enroll codex", |p| p.enroll_current("codex/").err()),
+            // A bare new name is Claude Code's.
+            ("enroll bare", |p| p.enroll_current("").err()),
+            ("rename codex", |p| p.rename("codex/typo", "other").err()),
+        ];
+        for (at, attempt) in attempts {
+            let (m, before) = interrupted_desktop(&format!("refused-other-{}", at.len()));
+            let failed = attempt(&Pitboard::new(m.ctx.clone()))
+                .unwrap_or_else(|| panic!("{at}: the name must still be refused"));
+            assert!(failed.warnings.is_empty(), "{at}: {:?}", failed.warnings);
+            assert_eq!(m.inodes(), before, "{at}: nothing moved");
+            assert!(
+                switch::tree_interrupted(&m.ctx).is_some(),
+                "{at}: the record is kept for a change to the app"
+            );
+        }
+    }
+
+    /// A change to Claude Desktop refused over its name settles the app's interrupted switch
+    /// the way the change would have, and so does one whose name says no tool.
+    #[test]
+    fn a_change_to_the_app_refused_over_its_name_settles_its_switch() {
+        for typed in ["desktop/typo", "typo"] {
+            let (m, _) = interrupted_desktop(&format!("refused-desktop-{}", typed.len()));
+            let failed = Pitboard::new(m.ctx.clone())
+                .switch_to(typed)
+                .expect_err("refused");
+            assert_eq!(failed.error.code(), "account_unknown", "{typed}");
+            let said: Vec<&str> = failed.warnings.iter().map(Warning::code).collect();
+            assert_eq!(said, ["interrupted_switch_undone"], "{typed}");
+            assert!(switch::tree_interrupted(&m.ctx).is_none(), "{typed}");
+        }
+    }
+
+    /// While Claude is open, a change to it refused over its name moves nothing and says the
+    /// interrupted switch waits, rather than saying nothing.
+    #[test]
+    fn a_change_to_the_app_refused_while_it_is_open_says_its_switch_waits() {
+        use crate::switch::harness::APP_PATH;
+        for typed in ["desktop/typo", "typo"] {
+            let (m, before) = interrupted_desktop(&format!("refused-open-{}", typed.len()));
+            m.mem.runs_within(APP_PATH);
+            let failed = Pitboard::new(m.ctx.clone())
+                .switch_to(typed)
+                .expect_err("refused");
+            assert_eq!(failed.error.code(), "account_unknown", "{typed}");
+            let said: Vec<&str> = failed.warnings.iter().map(Warning::code).collect();
+            assert_eq!(said, ["recovery_waiting"], "{typed}");
+            assert_eq!(m.inodes(), before, "{typed}: nothing moved");
+            assert!(switch::tree_interrupted(&m.ctx).is_some(), "{typed}");
+        }
+    }
+
+    /// The audit log names the account an interrupted sign-out was signing out.
+    #[test]
+    fn a_recovered_sign_out_is_logged_with_its_account() {
+        use crate::switch::harness::desktop_machine;
+        let m = desktop_machine("service-sign-out");
+        let killed = crate::fault::killing("tree.config_spliced", || {
+            let (settled, _) = switch::settle(&m.ctx, Some(ProviderId::Desktop))?;
+            switch::sign_out(settled, ProviderId::Desktop)
+        });
+        assert_eq!(killed.unwrap_err(), "tree.config_spliced");
+
+        let done = Pitboard::new(m.ctx.clone()).repair().expect("repaired");
+        assert!(
+            matches!(done.warnings.as_slice(), [Warning::Recovered(r)] if r.signed_out),
+            "{:?}",
+            done.warnings
+        );
+        let recovered = audit::read(&m.ctx, 10)
+            .into_iter()
+            .find(|e| e.verb == "recover")
+            .expect("logged");
+        assert_eq!(recovered.subject, "desktop/here -> signed out");
+        assert_eq!(recovered.outcome, "interrupted_switch_finished");
+    }
+
+    /// A Claude Desktop machine whose keychain panics at any read: nothing here may ask for
+    /// Claude's key.
+    fn quiet_desktop(name: &str) -> (crate::switch::harness::DesktopMachine, Pitboard) {
+        let m = crate::switch::harness::desktop_machine(name);
+        let ctx = m
+            .ctx
+            .clone()
+            .with_scripted_safe_storage(crate::api::scripted::ScriptedSafeStorage::forbidding());
+        (m, Pitboard::new(ctx))
+    }
+
+    /// Adding a second account to the app starts by signing it out: the account in it is
+    /// parked, and Pitboard remembers that it waits for somebody to sign in and enrol.
+    #[test]
+    fn signing_claude_desktop_out_parks_its_account_and_waits_for_a_sign_in() {
+        let (m, pitboard) = quiet_desktop("service-signed-out");
+        let done = pitboard
+            .switch_to_signed_out(ProviderId::Desktop)
+            .expect("signed out");
+        assert!(
+            matches!(&done.value, Outcome::SignedOut { from, .. } if from == "desktop/here"),
+            "{:?}",
+            done.value
+        );
+        let awaiting = pitboard.awaiting_sign_in().expect("waiting for a sign-in");
+        assert_eq!(awaiting.from_label, "here");
+        let logged = audit::read(&m.ctx, 1).pop().expect("logged");
+        assert_eq!(
+            (
+                logged.verb.as_str(),
+                logged.subject.as_str(),
+                logged.outcome.as_str()
+            ),
+            ("use", "desktop -> signed out", "ok")
+        );
+    }
+
+    /// Only an app can sign itself out this way; a tool whose login is one document is
+    /// refused before anything is settled or moved.
+    #[test]
+    fn only_a_folder_login_is_signed_out() {
+        let m = machine("service-signed-out-claude");
+        let Err(failed) = Pitboard::new(m.ctx.clone()).switch_to_signed_out(ProviderId::Claude)
+        else {
+            panic!("refused");
+        };
+        assert_eq!(failed.error.code(), "usage", "{}", failed.error);
+    }
+
+    /// A Claude Desktop park is renewed by nobody but the app, so `renew` says so for each,
+    /// with when its session runs out, and changes nothing.
+    #[test]
+    fn renew_says_each_claude_desktop_park_is_not_renewable() {
+        let (m, pitboard) = quiet_desktop("service-renew");
+        let state_file = crate::home::dir(&m.ctx).join("state.json");
+        let before = std::fs::read(&state_file).expect("accounts");
+        let expiry = crate::state::load(&m.ctx)
+            .expect("accounts")
+            .get(&m.key("there"))
+            .and_then(|a| a.parked.as_ref())
+            .and_then(|p| p.refresh_expires_at);
+        assert!(expiry.is_some());
+        let outcomes = pitboard.renew();
+        assert_eq!(outcomes.len(), 1, "{outcomes:?}");
+        let (key, outcome) = &outcomes[0];
+        assert_eq!(key, &m.key("there"));
+        assert!(
+            matches!(outcome, Renewal::NotRenewable { label, expires_at }
+                if label == "desktop/there" && *expires_at == expiry),
+            "{outcome:?}"
+        );
+        assert_eq!(std::fs::read(&state_file).expect("accounts"), before);
+    }
+
+    /// Live usage is off until somebody turns it on, and turning it off reads nothing.
+    #[test]
+    fn live_usage_is_off_until_turned_on_and_turning_it_off_reads_nothing() {
+        let (_m, pitboard) = quiet_desktop("service-live-usage");
+        assert!(!pitboard.live_usage().enabled);
+        let off = pitboard.disable_live_usage().expect("turned off");
+        assert!(!off.enabled);
+        assert_eq!(pitboard.live_usage(), off);
+    }
+
+    /// What is running Claude Desktop is found by the app's own bundle, so a front end can
+    /// ask for it to be quit before a switch rather than after.
+    #[test]
+    fn whatever_runs_claude_desktop_is_found_before_a_switch() {
+        use crate::switch::harness::APP_PATH;
+        let (m, pitboard) = quiet_desktop("service-holding");
+        assert!(pitboard.holding(ProviderId::Desktop).is_empty());
+        let pid = m.mem.runs_within(APP_PATH);
+        let holding = pitboard.holding(ProviderId::Desktop);
+        assert_eq!(
+            holding
+                .iter()
+                .flat_map(|h| h.pids.clone())
+                .collect::<Vec<_>>(),
+            [pid]
         );
     }
 }

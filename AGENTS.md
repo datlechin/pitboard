@@ -13,8 +13,9 @@ guide; this file is what an agent needs before it touches anything.
 - Never run `claude`, `codex login`, `codex logout` or `claude auth login` against a real
   home: they replace or revoke the login stored there.
 - Never run a `pitboard` built from a branch, or the built app, against your real home.
-  Point `HOME`, `CODEX_HOME` and `CLAUDE_CONFIG_DIR` at a fresh directory first, and build
-  before you set them, since Cargo and rustup read `HOME` too.
+  Point `HOME`, `CODEX_HOME`, `CLAUDE_CONFIG_DIR` and `PITBOARD_CLAUDE_DESKTOP_DIR` at a
+  fresh directory first, and build before you set them, since Cargo and rustup read `HOME`
+  too.
 - Never write to `~/.claude`, `~/.claude.json`, `~/.codex` or `~/.pitboard` from a test
   or a script.
 - Never print a token. `pitboard doctor --json` hides them; raw files do not.
@@ -35,6 +36,12 @@ guide; this file is what an agent needs before it touches anything.
   the real home. Unregister it with `pluginkit -r` on each `PitboardShare.appex`, then
   `lsregister -u` on each `Pitboard.app`; [The app](CONTRIBUTING.md#the-app) has the
   commands.
+- Never move, write or delete anything in `~/Library/Application Support/Claude`, and never
+  write the `Claude Safe Storage` keychain item. Tests point `PITBOARD_CLAUDE_DESKTOP_DIR`
+  at a scratch directory and call `common::guard_not_live_dir` before the first write.
+- Never read `Claude Safe Storage` from a test or a script; tests stand in a scripted key
+  in its place.
+- Never start, quit or sign out of the Claude app from a test.
 
 ## Check a change
 

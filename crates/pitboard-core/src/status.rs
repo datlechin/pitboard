@@ -13,12 +13,18 @@ use crate::api::{self, ApiError, Owner};
 use crate::context::Context;
 use crate::error::Cause;
 use crate::provider::claude::paths as claude;
+use crate::provider::desktop::live_usage;
 use crate::provider::{ProviderError, ProviderId};
+use crate::state::Account;
 use crate::state::{Key, Park, State};
 use crate::usage::{Snapshot, Source, merge};
 use crate::{budget, park, readings};
 use serde_json::Value;
 use std::collections::{BTreeMap, HashMap};
+use std::path::{Path, PathBuf};
+
+pub use crate::provider::desktop::types::{Approval, ItemStamp, LiveUsage};
+pub use crate::switch::Awaiting;
 
 /// Why a reading is not live.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
@@ -59,6 +65,22 @@ pub enum Stale {
     Interrupted,
     /// Nobody was asked: this reading was taken without touching the network.
     NotAsked,
+    /// Claude Desktop's usage was read from the app's own history, because asking
+    /// claude.ai is turned off.
+    LiveUsageOff,
+    /// Asking claude.ai is turned on and waits for macOS to let Pitboard read Claude's key.
+    LiveUsageNeedsApproval,
+    /// Asking claude.ai needs Claude's key, and macOS only asks about that on the Mac's own
+    /// screen, which this session does not have.
+    LiveUsageNeedsGui,
+    /// Which of the account's organisations to read Claude Desktop's usage for is not known.
+    DesktopOrgUnknown,
+    /// A switch of Claude Desktop was interrupted and waits for the app to be quit, so the
+    /// folder it reads may hold either account's items.
+    RecoveryWaiting,
+    /// claude.ai's bot check stopped the request before claude.ai read it. Nothing is known
+    /// about the session, and asking later may pass.
+    BotCheck,
 }
 
 impl Stale {
@@ -95,6 +117,12 @@ impl Stale {
             Stale::AskedRecently => "asked_recently",
             Stale::Interrupted => "interrupted",
             Stale::NotAsked => "not_asked",
+            Stale::LiveUsageOff => "live_usage_off",
+            Stale::LiveUsageNeedsApproval => "live_usage_needs_approval",
+            Stale::LiveUsageNeedsGui => "live_usage_needs_gui",
+            Stale::DesktopOrgUnknown => "desktop_org_unknown",
+            Stale::RecoveryWaiting => "recovery_waiting",
+            Stale::BotCheck => "bot_check",
         }
     }
 
@@ -114,41 +142,50 @@ impl Stale {
     pub fn explanation_for(self, provider: ProviderId) -> Option<&'static str> {
         // A sentence per tool rather than one assembled at run time, so every word a person
         // reads is here to be read, and Claude Code's are exactly what they always were.
-        let per_tool = |claude: &'static str, codex: &'static str| match provider {
-            ProviderId::Claude => claude,
-            ProviderId::Codex => codex,
-        };
+        let per_tool =
+            |claude: &'static str, codex: &'static str, desktop: &'static str| match provider {
+                ProviderId::Claude => claude,
+                ProviderId::Codex => codex,
+                ProviderId::Desktop => desktop,
+            };
         match self {
             Stale::NothingSignedIn => Some("nothing is signed in"),
             Stale::LoginUnreadable => Some(per_tool(
                 "Claude Code's login could not be read; run `pitboard doctor`",
                 "Codex's login could not be read; run `pitboard doctor`",
+                "Claude Desktop's login could not be read; run `pitboard doctor`",
             )),
             Stale::LoginUnusable => Some(per_tool(
                 "Claude Code's login is not one Pitboard can park or switch; run `pitboard doctor`",
                 "Codex's login is not one Pitboard can park or switch; run `pitboard doctor`",
+                "Claude Desktop's login is not one Pitboard can park or switch; run `pitboard doctor`",
             )),
             Stale::SessionExpired => Some(per_tool(
                 "Claude Code's session has expired; `claude` renews it",
                 "Codex's session has expired; `codex` renews it",
+                "Claude Desktop's session has expired; open Claude and sign in again",
             )),
             Stale::ParkedAccessExpired | Stale::NothingParked => None,
             Stale::ParkUnreadable => Some("its parked login cannot be read; run `pitboard doctor`"),
             Stale::RateLimited => Some(per_tool(
                 "Anthropic is rate limiting usage checks",
                 "OpenAI is rate limiting usage checks",
+                "claude.ai is rate limiting usage checks",
             )),
             Stale::Unreachable => Some(per_tool(
                 "Anthropic could not be reached",
                 "OpenAI could not be reached",
+                "claude.ai could not be reached",
             )),
             Stale::ServerError => Some(per_tool(
                 "Anthropic answered with an error; try again later",
                 "OpenAI answered with an error; try again later",
+                "claude.ai answered with an error; try again later",
             )),
             Stale::AnswerNotUnderstood => Some(per_tool(
                 "Anthropic's answer was not understood",
                 "OpenAI's answer was not understood",
+                "claude.ai's answer was not understood",
             )),
             Stale::LoginRefused => Some("its parked login is no longer accepted; sign in again"),
             // Not worth a word: it is the ordinary state of a number that is
@@ -158,7 +195,22 @@ impl Stale {
             Stale::NotAsked => Some(per_tool(
                 "read without asking Anthropic",
                 "read without asking OpenAI",
+                "read without asking claude.ai",
             )),
+            Stale::LiveUsageOff => Some("read from Claude's own usage history"),
+            Stale::LiveUsageNeedsApproval => {
+                Some("asking claude.ai waits for macOS to let Pitboard read Claude's key")
+            }
+            Stale::LiveUsageNeedsGui => {
+                Some("macOS only asks about Claude's key on the Mac's own screen")
+            }
+            Stale::DesktopOrgUnknown => {
+                Some("which organisation to read usage for is not known yet")
+            }
+            Stale::RecoveryWaiting => {
+                Some("an interrupted switch waits for Claude to be quit; run `pitboard doctor`")
+            }
+            Stale::BotCheck => Some("claude.ai's bot check stopped the request; try again later"),
         }
     }
 }
@@ -202,6 +254,13 @@ impl Row {
             .map(|label| Key::new(self.provider, label.clone()))
     }
 
+    /// What this row's readings, history and budget are filed under: its account id, or
+    /// apart from it where its tool shares ids with another. See
+    /// [`crate::state::Account::usage_key`].
+    pub fn usage_key(&self) -> String {
+        crate::state::usage_key(self.provider, &self.account_uuid)
+    }
+
     /// What to tell a person about [`Row::stale`], in the words of this row's own tool.
     pub fn explanation(&self) -> Option<&'static str> {
         self.stale
@@ -236,6 +295,29 @@ pub struct Report {
     /// without ever saying which slot it was speaking for, so on a machine with a second
     /// config directory it was silently answering about one of them.
     pub slot: Slot,
+    /// What is true of Claude Desktop beyond its rows. `None` on a machine with neither the
+    /// app nor an account of it, which is told nothing about it.
+    pub desktop: Option<DesktopReport>,
+}
+
+/// What a front end says about Claude Desktop apart from its accounts.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DesktopReport {
+    /// Whether its usage is asked of claude.ai, and whether macOS lets Pitboard do it.
+    pub live_usage: LiveUsage,
+    /// A sign-out Pitboard made that no enrolment has followed yet.
+    pub awaiting_sign_in: Option<Awaiting>,
+    /// A switch that was interrupted and waits for the app to be quit.
+    pub recovery_waiting: Option<InterruptedSwitch>,
+}
+
+/// An interrupted switch of a folder login, as the accounts it was between, typed. Either
+/// side is empty where there was nobody: a switch made while nobody was signed in, or a
+/// sign-out.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InterruptedSwitch {
+    pub from: String,
+    pub to: String,
 }
 
 /// A credential slot, named.
@@ -283,6 +365,9 @@ struct Facts {
     /// One per enrolled account, in order.
     parked_usage: Vec<Result<Snapshot, Stale>>,
     claude_code_cache: Option<Snapshot>,
+    /// What Claude Desktop wrote down of its own usage, by usage key, for every account of
+    /// it this report is about. Shown when nothing newer is known, and never as measured.
+    desktop_history: HashMap<String, Snapshot>,
 }
 
 impl Facts {
@@ -305,6 +390,100 @@ fn parked_document(
         None => Err(Stale::NothingParked),
         Some(p) if !p.askable_at(now) => Err(Stale::ParkedAccessExpired),
         Some(p) => park::load(ctx, key, p).map_err(|_| Stale::ParkUnreadable),
+    }
+}
+
+/// The folder to ask about a parked folder login with, or why there is none.
+///
+/// Never [`park::load`]: a folder login's park is a directory of the app's own files, not a
+/// keychain item, and opening it as one reads as a park that cannot be read.
+fn parked_folder(
+    ctx: &Context,
+    parked: Option<&Park>,
+    recovering: bool,
+    now: i64,
+) -> Result<PathBuf, Stale> {
+    if recovering {
+        return Err(Stale::RecoveryWaiting);
+    }
+    match parked {
+        None => Err(Stale::NothingParked),
+        Some(p) if !p.askable_at(now) => Err(Stale::ParkedAccessExpired),
+        Some(p) => Ok(crate::provider::desktop::paths::parks_dir(ctx).join(&p.service)),
+    }
+}
+
+/// Whether a tool's login is a folder of files rather than one document.
+fn is_tree(which: ProviderId) -> bool {
+    crate::provider::of(which).tree().is_some()
+}
+
+/// Why a folder login's usage was not asked, when nothing was: turned off, unless somebody
+/// turned it on.
+fn not_asked_folder(ctx: &Context) -> Stale {
+    if live_usage::load(ctx).enabled {
+        Stale::NotAsked
+    } else {
+        Stale::LiveUsageOff
+    }
+}
+
+/// What a front end says about Claude Desktop apart from its rows, on a machine that has the
+/// app or an account of it.
+fn desktop_report(
+    ctx: &Context,
+    state: &State,
+    recovery: Option<(String, String)>,
+) -> Option<DesktopReport> {
+    let enrolled = state
+        .accounts
+        .iter()
+        .any(|a| a.provider() == ProviderId::Desktop);
+    // The bundle's own manifest, rather than asking it for its version: a status runs on
+    // every refresh of a menu bar, and the version is doctor's question.
+    let installed = ctx.desktop_installed();
+    (enrolled || installed).then(|| DesktopReport {
+        live_usage: live_usage::load(ctx),
+        awaiting_sign_in: crate::switch::awaiting_sign_in(ctx),
+        recovery_waiting: recovery.map(|(from, to)| InterruptedSwitch { from, to }),
+    })
+}
+
+/// What Claude Desktop wrote down of its own usage, by usage key, for each of its accounts
+/// in `state` and for `unenrolled`, a login signed in that nothing has enrolled.
+fn desktop_history(
+    ctx: &Context,
+    state: &State,
+    unenrolled: Option<&Account>,
+) -> HashMap<String, Snapshot> {
+    state
+        .accounts
+        .iter()
+        .filter(|a| a.provider() == ProviderId::Desktop)
+        .chain(unenrolled)
+        .filter_map(|a| {
+            Some((
+                a.usage_key(),
+                crate::provider::desktop::history::local_usage(ctx, a)?,
+            ))
+        })
+        .collect()
+}
+
+/// An account standing in for a folder login nothing has enrolled, so it can be asked about
+/// and its history read.
+fn unenrolled_folder(live: &crate::provider::desktop::TreeIdentity) -> Account {
+    Account {
+        last_used_at: None,
+        label: String::new(),
+        account_uuid: live.account_uuid.clone(),
+        email: String::new(),
+        detail: crate::state::Detail::Desktop {
+            organization_uuid: None,
+            session_fingerprint: live.fingerprint.clone(),
+            session_expires_at: live.expires_at,
+        },
+        parked: None,
     }
 }
 
@@ -344,6 +523,18 @@ fn in_use(state: &State) -> Vec<ProviderId> {
 
 pub fn gather_offline(ctx: &Context, state: &State) -> Report {
     let tools = in_use(state);
+    let recovery = crate::switch::tree_interrupted(ctx);
+    // A folder login is never asked offline either, and why says more than "not asked":
+    // asking is off, or the folder may hold either account's items.
+    let unasked = |which: ProviderId| {
+        if !is_tree(which) {
+            Stale::NotAsked
+        } else if recovery.is_some() {
+            Stale::RecoveryWaiting
+        } else {
+            not_asked_folder(ctx)
+        }
+    };
     let recorded: BTreeMap<ProviderId, crate::provider::Identity> = tools
         .iter()
         .filter_map(|&which| Some((which, crate::provider::of(which).recorded_identity(ctx)?)))
@@ -354,7 +545,7 @@ pub fn gather_offline(ctx: &Context, state: &State) -> Report {
             .map(|&which| {
                 let login = LiveLogin {
                     recorded_uuid: recorded.get(&which).map(|id| id.account_id.clone()),
-                    usage: Some(Err(Stale::NotAsked)),
+                    usage: Some(Err(unasked(which))),
                     ..LiveLogin::default()
                 };
                 (which, login)
@@ -364,12 +555,13 @@ pub fn gather_offline(ctx: &Context, state: &State) -> Report {
         parked_usage: state
             .accounts
             .iter()
-            .map(|_| Err(Stale::NotAsked))
+            .map(|a| Err(unasked(a.provider())))
             .collect(),
         claude_code_cache: claude::load_config(ctx)
             .ok()
             .as_ref()
             .and_then(crate::usage::from_config_cache),
+        desktop_history: desktop_history(ctx, state, None),
     };
     let remembered = readings::load(ctx);
     Report {
@@ -378,8 +570,8 @@ pub fn gather_offline(ctx: &Context, state: &State) -> Report {
         rows: assemble(
             state,
             &facts,
-            |uuid| remembered.get(uuid).cloned(),
-            |uuid| crate::history::runway_for(ctx, uuid, ctx.now()),
+            |key| remembered.get(key).cloned(),
+            |key| crate::history::runway_for(ctx, key, ctx.now()),
             ctx.now(),
         ),
         signed_in: recorded.get(&crate::label::DEFAULT).map_or_else(
@@ -392,7 +584,14 @@ pub fn gather_offline(ctx: &Context, state: &State) -> Report {
                 })
             },
         ),
+        desktop: desktop_report(ctx, state, recovery),
     }
+}
+
+/// What a parked account is asked about with: its login, or the folder its login waits in.
+enum Parked {
+    Document(Value),
+    Folder(PathBuf),
 }
 
 /// What one account's request came to: the reading, and what the budget should learn from
@@ -417,14 +616,116 @@ fn to_api(error: crate::provider::ProviderError) -> ApiError {
         | P::Unsupported { reason: detail, .. } => ApiError::Malformed(detail),
         P::NoLogin { .. } => ApiError::Malformed("nothing is signed in".into()),
         P::InvalidGrant { .. } => ApiError::InvalidGrant,
+        P::NotACredential => ApiError::Malformed("this tool's login is not a credential".into()),
     }
 }
 
-/// Ask about one account, or say why not.
+/// Why the budget kept a request from being made.
+fn held_back(held: budget::Held) -> Stale {
+    match held {
+        budget::Held::Fresh => Stale::AskedRecently,
+        budget::Held::RateLimited => Stale::RateLimited,
+        budget::Held::Unreachable => Stale::Unreachable,
+    }
+}
+
+/// Ask claude.ai about one Claude Desktop account with the session in the folder at `root`,
+/// or say why not.
+///
+/// The budget stands only while live usage is on. Off, nothing is asked of anybody, and a
+/// floor kept from before it was turned off would only hide that.
+fn ask_folder(
+    ctx: &Context,
+    root: &Path,
+    account: &Account,
+    remembered: Option<&Snapshot>,
+    fresh: bool,
+) -> Asked {
+    let key = account.usage_key();
+    if live_usage::load(ctx).enabled
+        && let Some(held) = budget::may_ask(ctx, &key, remembered, fresh)
+    {
+        return (Err(held_back(held)), None);
+    }
+    let answer = live_usage::ask(ctx, root, account);
+    let outcome = match &answer {
+        Ok(_) => Some(budget::Outcome::Answered),
+        // claude.ai's answer is read before it reaches here, and what it asked to wait is
+        // not kept: the budget's own floor stands in.
+        Err(Stale::RateLimited) => Some(budget::Outcome::RateLimited(None)),
+        Err(Stale::Unreachable | Stale::ServerError) => Some(budget::Outcome::Unreachable),
+        // Off, waiting on macOS, or a session that is finished: waiting fixes none of them.
+        Err(_) => None,
+    };
+    (answer, outcome.map(|outcome| (key, outcome)))
+}
+
+/// Ask about a folder login: whose the folder holds, and what it has left.
+///
+/// A folder that cannot be read is never a login that could not be read: it is the app
+/// writing its jar, or a sign-in it has not finished writing down, and the account
+/// Pitboard last put there is still the one signed in. Nobody is asked about it, and the
+/// row shows what the app wrote down.
+fn ask_tree(
+    ctx: &Context,
+    which: ProviderId,
+    state: &State,
+    recovering: bool,
+    remembered: &HashMap<String, Snapshot>,
+    fresh: bool,
+) -> Answered {
+    let tool = crate::provider::of(which);
+    let held = |stale: Stale, why: String| LiveLogin {
+        signed_in: Some(Err(why)),
+        recorded_uuid: tool
+            .recorded_identity(ctx)
+            .map(|id| id.account_id)
+            .or_else(|| active_uuid(state, which).map(str::to_owned)),
+        usage: Some(Err(stale)),
+        out_of_reach: false,
+    };
+    if recovering {
+        let why = "an interrupted switch waits for the app to be quit".to_string();
+        return (held(Stale::RecoveryWaiting, why), None);
+    }
+    let Some((tree, root)) = tool.tree().and_then(|tree| Some((tree, tree.root(ctx)?))) else {
+        return (LiveLogin::default(), None);
+    };
+    let live = match tree.identify(ctx, &root) {
+        Ok(Some(live)) => live,
+        Ok(None) => return (LiveLogin::default(), None),
+        Err(e) => return (held(not_asked_folder(ctx), e.to_string()), None),
+    };
+    let account = state
+        .by_uuid(which, &live.account_uuid)
+        .cloned()
+        .unwrap_or_else(|| unenrolled_folder(&live));
+    let (usage, learned) = ask_folder(
+        ctx,
+        &root,
+        &account,
+        remembered.get(&account.usage_key()),
+        fresh,
+    );
+    let login = LiveLogin {
+        signed_in: Some(Ok(Owner {
+            account_uuid: live.account_uuid,
+            email: account.email,
+            organization_uuid: String::new(),
+        })),
+        recorded_uuid: None,
+        usage: Some(usage),
+        out_of_reach: false,
+    };
+    (login, learned)
+}
+
+/// Ask about one account, or say why not. `usage_key` is what its budget is filed under,
+/// its [`crate::state::Account::usage_key`].
 fn ask_usage(
     ctx: &Context,
     which: ProviderId,
-    account_uuid: Option<&str>,
+    usage_key: Option<&str>,
     document: &Value,
     signed_in: bool,
     remembered: Option<&Snapshot>,
@@ -432,15 +733,10 @@ fn ask_usage(
 ) -> Asked {
     // An account Pitboard cannot name cannot be budgeted for; it is asked about, which is
     // what always happened.
-    if let Some(uuid) = account_uuid
-        && let Some(held) = budget::may_ask(ctx, uuid, remembered, fresh)
+    if let Some(key) = usage_key
+        && let Some(held) = budget::may_ask(ctx, key, remembered, fresh)
     {
-        let stale = match held {
-            budget::Held::Fresh => Stale::AskedRecently,
-            budget::Held::RateLimited => Stale::RateLimited,
-            budget::Held::Unreachable => Stale::Unreachable,
-        };
-        return (Err(stale), None);
+        return (Err(held_back(held)), None);
     }
     // Through the provider, because what a usage call needs is not the same everywhere:
     // Codex sends an account id header it reads out of the credential, and Gemini needs a
@@ -461,7 +757,7 @@ fn ask_usage(
         return (Err(Stale::ParkUnreadable), None);
     }
     let answer = answer.map_err(to_api);
-    let learned = account_uuid.and_then(|uuid| {
+    let learned = usage_key.and_then(|key| {
         let outcome = match &answer {
             Ok(_) => budget::Outcome::Answered,
             Err(api::ApiError::RateLimited { retry_after }) => {
@@ -474,7 +770,7 @@ fn ask_usage(
             // to wait: waiting fixes neither.
             Err(_) => return None,
         };
-        Some((uuid.to_string(), outcome))
+        Some((key.to_string(), outcome))
     });
     (answer.map_err(|e| Stale::of(&e, signed_in)), learned)
 }
@@ -559,18 +855,19 @@ fn ask_live(
         Ok(_) => None,
         Err(_) => own_record(),
     };
-    let uuid = owner
+    let key = owner
         .as_ref()
         .ok()
         .map(|o| o.account_uuid.clone())
-        .or_else(|| recorded.clone());
+        .or_else(|| recorded.clone())
+        .map(|uuid| crate::state::usage_key(which, &uuid));
     let (usage, learned) = ask_usage(
         ctx,
         which,
-        uuid.as_deref(),
+        key.as_deref(),
         document,
         true,
-        uuid.as_deref().and_then(|u| remembered.get(u)),
+        key.as_deref().and_then(|k| remembered.get(k)),
         fresh,
     );
     let login = LiveLogin {
@@ -622,8 +919,12 @@ pub fn gather(ctx: &Context, state: &State, fresh: bool) -> Report {
     // Each tool's live login, whole, or why it could not be read. Not a token out of it:
     // what a usage call needs is not the same everywhere, and pulling one field out here
     // would decide that for all of them.
-    let live_documents: Vec<(ProviderId, Result<Option<Value>, ProviderError>)> = in_use(state)
-        .into_iter()
+    let tools = in_use(state);
+    let recovery = crate::switch::tree_interrupted(ctx);
+    let live_documents: Vec<(ProviderId, Result<Option<Value>, ProviderError>)> = tools
+        .iter()
+        .copied()
+        .filter(|&which| !is_tree(which))
         .map(|which| {
             let read = crate::provider::of(which)
                 .read_live(ctx)
@@ -631,10 +932,23 @@ pub fn gather(ctx: &Context, state: &State, fresh: bool) -> Report {
             (which, read)
         })
         .collect();
-    let parked_documents: Vec<Result<Value, Stale>> = state
+    // A folder login's live login is not a document to read; it is asked about whole, in
+    // its own thread with the others.
+    let live_folders: Vec<ProviderId> = tools
+        .iter()
+        .copied()
+        .filter(|&which| is_tree(which))
+        .collect();
+    let parked_documents: Vec<Result<Parked, Stale>> = state
         .accounts
         .iter()
-        .map(|a| parked_document(ctx, &a.key(), a.parked.as_ref(), now))
+        .map(|a| {
+            if is_tree(a.provider()) {
+                parked_folder(ctx, a.parked.as_ref(), recovery.is_some(), now).map(Parked::Folder)
+            } else {
+                parked_document(ctx, &a.key(), a.parked.as_ref(), now).map(Parked::Document)
+            }
+        })
         .collect();
     let config = claude::load_config(ctx).ok();
     let remembered = readings::load(ctx);
@@ -653,6 +967,13 @@ pub fn gather(ctx: &Context, state: &State, fresh: bool) -> Report {
                         scope.spawn(move || ask_live(ctx, which, read, active, remembered, fresh));
                     (which, handle)
                 })
+                .chain(live_folders.iter().map(|&which| {
+                    let remembered = &remembered;
+                    let recovering = recovery.is_some();
+                    let handle = scope
+                        .spawn(move || ask_tree(ctx, which, state, recovering, remembered, fresh));
+                    (which, handle)
+                }))
                 .collect();
             let parked: Vec<_> = parked_documents
                 .iter()
@@ -661,15 +982,25 @@ pub fn gather(ctx: &Context, state: &State, fresh: bool) -> Report {
                     let remembered = &remembered;
                     scope.spawn(move || match token.as_ref() {
                         Err(stale) => (Err(*stale), None),
-                        Ok(document) => ask_usage(
+                        Ok(Parked::Folder(root)) => ask_folder(
                             ctx,
-                            account.provider(),
-                            Some(&account.account_uuid),
-                            document,
-                            false,
-                            remembered.get(&account.account_uuid),
+                            root,
+                            account,
+                            remembered.get(&account.usage_key()),
                             fresh,
                         ),
+                        Ok(Parked::Document(document)) => {
+                            let key = account.usage_key();
+                            ask_usage(
+                                ctx,
+                                account.provider(),
+                                Some(&key),
+                                document,
+                                false,
+                                remembered.get(&key),
+                                fresh,
+                            )
+                        }
                     })
                 })
                 .collect();
@@ -702,22 +1033,37 @@ pub fn gather(ctx: &Context, state: &State, fresh: bool) -> Report {
     let signed_in_default = live
         .get(&crate::label::DEFAULT)
         .and_then(|login| login.signed_in.clone());
+    // A folder login signed in that nothing has enrolled has history of its own to show.
+    let unenrolled =
+        live.iter()
+            .filter(|(which, _)| is_tree(**which))
+            .find_map(|(&which, login)| match &login.signed_in {
+                Some(Ok(owner)) if state.by_uuid(which, &owner.account_uuid).is_none() => {
+                    Some(unenrolled_folder(&crate::provider::desktop::TreeIdentity {
+                        account_uuid: owner.account_uuid.clone(),
+                        fingerprint: String::new(),
+                        expires_at: None,
+                    }))
+                }
+                _ => None,
+            });
     let facts = Facts {
         live,
         asked: true,
         parked_usage: parked_asked.into_iter().map(|(usage, _)| usage).collect(),
         claude_code_cache: config.as_ref().and_then(crate::usage::from_config_cache),
+        desktop_history: desktop_history(ctx, state, unenrolled.as_ref()),
     };
     let rows = assemble(
         state,
         &facts,
-        |uuid| remembered.get(uuid).cloned(),
-        |uuid| crate::history::runway_for(ctx, uuid, now),
+        |key| remembered.get(key).cloned(),
+        |key| crate::history::runway_for(ctx, key, now),
         now,
     );
     for row in &rows {
         if let Some(live) = row.usage.as_ref().filter(|u| u.source == Source::Live) {
-            crate::history::record(ctx, &row.account_uuid, live);
+            crate::history::record(ctx, &row.usage_key(), live);
         }
     }
     readings::remember(
@@ -728,7 +1074,7 @@ pub fn gather(ctx: &Context, state: &State, fresh: bool) -> Report {
                 r.usage
                     .as_ref()
                     .filter(|u| u.source == Source::Live)
-                    .map(|u| (r.account_uuid.clone(), u.clone()))
+                    .map(|u| (r.usage_key(), u.clone()))
             })
             .collect::<Vec<_>>(),
     );
@@ -745,6 +1091,7 @@ pub fn gather(ctx: &Context, state: &State, fresh: bool) -> Report {
             Some(Err(why)) => Err(why),
             None => Err("nothing is signed in".into()),
         },
+        desktop: desktop_report(ctx, state, recovery),
     }
 }
 
@@ -764,6 +1111,8 @@ fn rank(which: ProviderId) -> usize {
         .unwrap_or(usize::MAX)
 }
 
+/// `recall` and `lasting` are asked by usage key, never by account id alone: Claude Code and
+/// Claude Desktop can be signed in to the same account, and each keeps its own numbers.
 fn assemble(
     state: &State,
     facts: &Facts,
@@ -796,11 +1145,24 @@ fn assemble(
     // end has recorded. So a row shows the one reading the status lines show, and neither
     // an answer that lags a session's latest response nor a cache that moves only when
     // Claude Code asks can take it backwards.
-    let reading = |uuid: &str, asked: &Result<Snapshot, Stale>, cached: Option<Snapshot>| {
-        let recalled = recall(uuid);
+    //
+    // What Claude Desktop wrote down of its own usage is shown when nothing newer is known,
+    // and as it is: folding it in would mark it measured, which it is not.
+    let reading = |key: &str, asked: &Result<Snapshot, Stale>, cached: Option<Snapshot>| {
+        let recalled = recall(key);
         match asked {
             Ok(live) => (merge(recalled.as_ref(), Some(live), now), None),
-            Err(stale) => (merge(recalled.as_ref(), cached.as_ref(), now), Some(*stale)),
+            Err(stale) => {
+                let known = merge(recalled.as_ref(), cached.as_ref(), now);
+                let shown = match (known, facts.desktop_history.get(key)) {
+                    (Some(known), Some(written)) if written.observed_at < known.observed_at => {
+                        Some(known)
+                    }
+                    (_, Some(written)) => Some(written.clone()),
+                    (known, None) => known,
+                };
+                (shown, Some(*stale))
+            }
         }
     };
 
@@ -810,15 +1172,16 @@ fn assemble(
         .zip(&facts.parked_usage)
         .map(|(account, parked)| {
             let uuid = account.account_uuid.as_str();
+            let key = account.usage_key();
             let which = account.provider();
             let signed_in = live_uuid(which) == Some(uuid);
             let (usage, stale) = if signed_in {
                 let live = facts
                     .live_for(which)
                     .map_or(Err(Stale::NothingSignedIn), LiveLogin::usage);
-                reading(uuid, &live, cached_for(which, uuid))
+                reading(&key, &live, cached_for(which, uuid))
             } else {
-                reading(uuid, parked, None)
+                reading(&key, parked, None)
             };
             Row {
                 provider: which,
@@ -829,7 +1192,7 @@ fn assemble(
                 parked: account.parked.clone(),
                 usage,
                 stale,
-                runway: lasting(uuid),
+                runway: lasting(&key),
             }
         })
         .collect();
@@ -849,11 +1212,9 @@ fn assemble(
             {
                 continue;
             }
-            let (usage, stale) = reading(
-                &owner.account_uuid,
-                &live.usage(),
-                cached_for(which, &owner.account_uuid),
-            );
+            let key = crate::state::usage_key(which, &owner.account_uuid);
+            let (usage, stale) =
+                reading(&key, &live.usage(), cached_for(which, &owner.account_uuid));
             rows.push(Row {
                 provider: which,
                 label: None,
@@ -863,7 +1224,7 @@ fn assemble(
                 parked: None,
                 usage,
                 stale,
-                runway: lasting(&owner.account_uuid),
+                runway: lasting(&key),
             });
             continue;
         }
@@ -893,6 +1254,17 @@ fn assemble(
     // within each. Stable, so a machine with one tool reads in exactly the order it always
     // did.
     rows.sort_by_key(|r| (rank(r.provider), !r.signed_in));
+    // A reading remembered is filed under its usage key, which for a tool that shares ids
+    // with another is not the account's id. A front end matching a reading to its account
+    // reads the id.
+    for row in &mut rows {
+        let key = row.usage_key();
+        if let Some(usage) = row.usage.as_mut()
+            && usage.account_uuid.as_deref() == Some(key.as_str())
+        {
+            usage.account_uuid = Some(row.account_uuid.clone());
+        }
+    }
     rows
 }
 
@@ -932,6 +1304,7 @@ mod tests {
             observed_at: Some(NOW - 7_200),
             account_uuid: account.map(str::to_owned),
             source,
+            verified: true,
         }
     }
 
@@ -988,6 +1361,7 @@ mod tests {
             asked: true,
             parked_usage: parked,
             claude_code_cache: None,
+            desktop_history: HashMap::new(),
         }
     }
 
@@ -1011,6 +1385,7 @@ mod tests {
             asked: true,
             parked_usage: vec![Err(Stale::Unreachable), Err(Stale::Unreachable)],
             claude_code_cache: None,
+            desktop_history: HashMap::new(),
         };
         let rows = assemble(&state, &facts, nothing_remembered, nothing_known, NOW);
         let a = rows
@@ -1374,6 +1749,13 @@ mod tests {
             Stale::LoginUnusable => Some(
                 "Claude Code's login is not one Pitboard can park or switch; run `pitboard doctor`",
             ),
+            // Only ever said about Claude Desktop, and not in EVERY_STALE.
+            Stale::LiveUsageOff
+            | Stale::LiveUsageNeedsApproval
+            | Stale::LiveUsageNeedsGui
+            | Stale::DesktopOrgUnknown
+            | Stale::RecoveryWaiting
+            | Stale::BotCheck => unreachable!("{stale:?} is only said about Claude Desktop"),
         };
         for stale in EVERY_STALE {
             assert_eq!(
@@ -1387,6 +1769,44 @@ mod tests {
                 "a caller with only a code gets the default tool's words"
             );
         }
+    }
+
+    /// What only a Claude Desktop row can say, under the codes a front end branches on.
+    const DESKTOP_STALE: [(Stale, &str); 6] = [
+        (Stale::LiveUsageOff, "live_usage_off"),
+        (Stale::LiveUsageNeedsApproval, "live_usage_needs_approval"),
+        (Stale::LiveUsageNeedsGui, "live_usage_needs_gui"),
+        (Stale::DesktopOrgUnknown, "desktop_org_unknown"),
+        (Stale::RecoveryWaiting, "recovery_waiting"),
+        (Stale::BotCheck, "bot_check"),
+    ];
+
+    /// A Claude Desktop row names claude.ai and the app, never Claude Code or `claude`, which
+    /// is a different program with a different login.
+    #[test]
+    fn a_desktop_row_names_claude_ai_and_never_claude_code() {
+        for (stale, code) in DESKTOP_STALE {
+            assert_eq!(stale.code(), code);
+            assert!(
+                stale.explanation_for(ProviderId::Desktop).is_some(),
+                "{stale:?}"
+            );
+        }
+        for stale in EVERY_STALE
+            .into_iter()
+            .chain(DESKTOP_STALE.map(|(stale, _)| stale))
+        {
+            let Some(said) = stale.explanation_for(ProviderId::Desktop) else {
+                continue;
+            };
+            for other in ["Claude Code", "`claude`", "OpenAI", "codex"] {
+                assert!(!said.contains(other), "{stale:?}: {said}");
+            }
+        }
+        assert_eq!(
+            Stale::Unreachable.explanation_for(ProviderId::Desktop),
+            Some("claude.ai could not be reached")
+        );
     }
 
     /// "Anthropic could not be reached" said about a Codex account sends somebody to check
@@ -1424,6 +1844,7 @@ mod tests {
             asked: true,
             parked_usage: vec![Err(Stale::Unreachable)],
             claude_code_cache: None,
+            desktop_history: HashMap::new(),
         };
         let rows = assemble(&s, &f, nothing_remembered, nothing_known, NOW);
         assert_eq!(rows[0].explanation(), Some("OpenAI could not be reached"));
@@ -1473,6 +1894,7 @@ mod tests {
             asked: true,
             parked_usage: vec![Err(Stale::NothingParked)],
             claude_code_cache: None,
+            desktop_history: HashMap::new(),
         };
         let rows = assemble(&s, &f, nothing_remembered, nothing_known, NOW);
         assert_eq!(rows.len(), 2, "one row per tool");
@@ -1508,6 +1930,7 @@ mod tests {
             asked: true,
             parked_usage: vec![Err(Stale::NothingParked); 4],
             claude_code_cache: None,
+            desktop_history: HashMap::new(),
         };
         let order: Vec<(ProviderId, String, bool)> =
             assemble(&s, &f, nothing_remembered, nothing_known, NOW)
@@ -1537,6 +1960,7 @@ mod tests {
             asked: true,
             parked_usage: vec![Err(Stale::NothingParked)],
             claude_code_cache: None,
+            desktop_history: HashMap::new(),
         };
         f.claude_code_cache = Some(reading(77.0, Source::ClaudeCodeCache, Some("work-acc")));
         let rows = assemble(&s, &f, nothing_remembered, nothing_known, NOW);
@@ -1582,6 +2006,7 @@ mod tests {
             asked: true,
             parked_usage: vec![Err(Stale::NothingParked), Err(Stale::NothingParked)],
             claude_code_cache: None,
+            desktop_history: HashMap::new(),
         };
         let rows = assemble(&s, &f, nothing_remembered, nothing_known, NOW);
         let alpha = rows
@@ -1678,6 +2103,7 @@ mod tests {
             asked: true,
             parked_usage: vec![Err(Stale::NothingParked); parked],
             claude_code_cache: None,
+            desktop_history: HashMap::new(),
         };
 
         let claude_only = state(&["alpha"]);
@@ -1763,6 +2189,73 @@ mod tests {
             learned,
             Some(("acc-x".to_string(), budget::Outcome::Unreachable))
         );
+    }
+
+    /// Claude Desktop signs in to the same Anthropic account as Claude Code, under the same
+    /// uuid, and its usage is read another way. So what is remembered, recorded and budgeted
+    /// for one is never the other's, and forgetting one leaves the other's alone.
+    #[test]
+    fn claude_desktop_never_reads_what_claude_code_remembers() {
+        let home = scratch("usage-keys");
+        let (ctx, _mem, _api) = machine(&home.0, None);
+        let ctx = ctx.with_desktop_dir(home.0.join("claude-desktop").to_string_lossy().into());
+        let code = Account {
+            account_uuid: "shared-uuid".into(),
+            parked: None,
+            ..account("work")
+        };
+        let desktop = Account {
+            last_used_at: None,
+            label: "work".into(),
+            account_uuid: "shared-uuid".into(),
+            email: "work@example.com".into(),
+            detail: crate::state::Detail::Desktop {
+                organization_uuid: None,
+                session_fingerprint: "fp".into(),
+                session_expires_at: None,
+            },
+            parked: None,
+        };
+        let s = State {
+            accounts: vec![code.clone(), desktop.clone()],
+            ..State::default()
+        };
+        crate::state::save(&ctx, &s).expect("a state file");
+
+        let at = |when: i64, percent: f64| Snapshot {
+            observed_at: Some(when),
+            ..reading(percent, Source::Live, None)
+        };
+        for (when, percent) in [(NOW - 3_000, 10.0), (NOW - 1_800, 20.0), (NOW - 60, 30.0)] {
+            crate::history::record(&ctx, &code.usage_key(), &at(when, percent));
+        }
+        readings::remember(&ctx, &[(code.usage_key(), at(NOW - 60, 30.0))]);
+        budget::record(&ctx, &[(code.usage_key(), budget::Outcome::Answered)]);
+
+        let report = gather_offline(&ctx, &s);
+        let row = |which: ProviderId| {
+            report
+                .rows
+                .iter()
+                .find(|r| r.provider == which && r.label.as_deref() == Some("work"))
+                .unwrap_or_else(|| panic!("a row for {which}"))
+        };
+        let claude = row(ProviderId::Claude);
+        assert!(claude.usage.is_some(), "Claude Code's own reading");
+        assert_ne!(claude.runway, crate::history::Runway::Unknown);
+        let app = row(ProviderId::Desktop);
+        assert_eq!(app.usage, None, "Claude Code's reading is not the app's");
+        assert_eq!(app.runway, crate::history::Runway::Unknown);
+        assert!(
+            budget::may_ask(&ctx, &desktop.usage_key(), None, false).is_none(),
+            "asking about Claude Code is not asking about the app"
+        );
+
+        let (settled, _) = crate::switch::settle(&ctx, None).expect("nothing to recover");
+        crate::switch::forget(settled, &desktop.key()).expect("the app's account forgotten");
+        assert!(readings::load(&ctx).contains_key(&code.usage_key()));
+        assert_eq!(crate::history::series(&ctx, &code.usage_key()).len(), 3);
+        assert!(budget::may_ask(&ctx, &code.usage_key(), None, false).is_some());
     }
 
     /// Offline, each tool is asked for its own record. It used to be Claude Code's config
@@ -2048,6 +2541,184 @@ mod tests {
         row.label = Some("work".into());
         row.stale = Some(Stale::LoginUnreadable);
         assert!(!row.unplaced(), "an account");
+    }
+
+    /// What Claude Desktop wrote down of its own usage, for the organisation `here` keeps a
+    /// folder for: 12% of the session and 40% of the week, an hour before `NOW`.
+    fn desktop_history(m: &crate::switch::harness::DesktopMachine) {
+        let support = m.support();
+        std::fs::create_dir_all(support.join("claude-code-sessions/here/org-here"))
+            .expect("the folder the app keeps for here's organisation");
+        std::fs::write(
+            support.join("plan-usage-history.json"),
+            json!({"version": 2, "samples": [
+                {"t": (NOW - 3_600) * 1000, "org": "org-here", "u": {"fh": 12.0, "sd": 40.0}},
+                {"t": (NOW - 7_200) * 1000, "org": "org-other", "u": {"fh": 90.0, "sd": 90.0}},
+            ]})
+            .to_string(),
+        )
+        .expect("the app's history");
+    }
+
+    fn desktop_row<'a>(report: &'a Report, label: &str) -> &'a Row {
+        report
+            .rows
+            .iter()
+            .find(|r| r.provider == ProviderId::Desktop && r.label.as_deref() == Some(label))
+            .unwrap_or_else(|| panic!("a Claude Desktop row for {label}"))
+    }
+
+    /// Live usage is off until somebody turns it on, so a Claude Desktop row is the app's own
+    /// history, verified since experiment E10, and why. Its login is a folder, never a credential, so
+    /// it is never a login Pitboard could not read, and a park is never opened as a keychain
+    /// item it is not.
+    #[test]
+    fn a_desktop_row_reads_the_apps_own_history_while_live_usage_is_off() {
+        let m = crate::switch::harness::desktop_machine("status-history");
+        desktop_history(&m);
+        let api = ScriptedApi::new();
+        let ctx = m
+            .ctx
+            .clone()
+            .with_scripted_safe_storage(crate::api::scripted::ScriptedSafeStorage::forbidding())
+            .with_scripted_api(Arc::clone(&api));
+        let state = crate::state::load(&ctx).expect("the machine's accounts");
+
+        for report in [gather(&ctx, &state, false), gather_offline(&ctx, &state)] {
+            let here = desktop_row(&report, "here");
+            assert!(here.signed_in, "the folder's session is here's");
+            assert_eq!(here.stale, Some(Stale::LiveUsageOff));
+            let usage = here.usage.as_ref().expect("the app's own history");
+            assert_eq!(usage.source, Source::DesktopHistory);
+            assert!(usage.verified, "experiment E10 said what the numbers mean");
+            assert_eq!(usage.account_uuid.as_deref(), Some("here"), "the plain id");
+            assert_eq!(usage.windows.len(), 2);
+
+            let there = desktop_row(&report, "there");
+            assert!(!there.signed_in);
+            assert_eq!(
+                there.stale,
+                Some(Stale::LiveUsageOff),
+                "a folder park is not a keychain item to open"
+            );
+            let desktop = report
+                .desktop
+                .as_ref()
+                .expect("a machine with the app's accounts");
+            assert!(!desktop.live_usage.enabled);
+            assert_eq!(desktop.recovery_waiting, None);
+            assert_eq!(desktop.awaiting_sign_in, None);
+        }
+        assert_eq!(api.calls(), 0, "nobody is asked while live usage is off");
+    }
+
+    /// A reading remembered under the app's usage key comes back with the account's own id,
+    /// never the key it was filed under.
+    #[test]
+    fn a_desktop_reading_remembered_comes_back_under_the_plain_account_id() {
+        let m = crate::switch::harness::desktop_machine("status-recalled");
+        let ctx = m
+            .ctx
+            .clone()
+            .with_scripted_safe_storage(crate::api::scripted::ScriptedSafeStorage::forbidding())
+            .with_scripted_api(ScriptedApi::new());
+        let state = crate::state::load(&ctx).expect("the machine's accounts");
+        let here = state
+            .get(&m.key("here"))
+            .expect("here is enrolled")
+            .usage_key();
+        assert_ne!(here, "here", "the app's numbers are filed apart");
+        readings::remember(
+            &ctx,
+            &[(
+                here,
+                Snapshot {
+                    observed_at: Some(NOW - 60),
+                    ..reading(55.0, Source::Live, Some("here"))
+                },
+            )],
+        );
+
+        let report = gather(&ctx, &state, false);
+        let usage = desktop_row(&report, "here")
+            .usage
+            .as_ref()
+            .expect("what was remembered");
+        assert_eq!(usage.account_uuid.as_deref(), Some("here"));
+        assert!(usage.verified);
+    }
+
+    /// A Claude Desktop folder that cannot be read for the moment, because the app is
+    /// writing its jar, is the history and a word about it, never a login Pitboard could not
+    /// read.
+    #[test]
+    fn a_busy_desktop_folder_is_never_an_unreadable_login() {
+        let m = crate::switch::harness::desktop_machine("status-busy");
+        desktop_history(&m);
+        m.mem.jar_fails(std::io::ErrorKind::ResourceBusy);
+        let ctx = m
+            .ctx
+            .clone()
+            .with_scripted_safe_storage(crate::api::scripted::ScriptedSafeStorage::forbidding())
+            .with_scripted_api(ScriptedApi::new());
+        let state = crate::state::load(&ctx).expect("the machine's accounts");
+
+        let report = gather(&ctx, &state, false);
+        for row in report
+            .rows
+            .iter()
+            .filter(|r| r.provider == ProviderId::Desktop)
+        {
+            assert_ne!(row.stale, Some(Stale::LoginUnreadable), "{:?}", row.label);
+            assert!(!row.unplaced());
+        }
+        let here = desktop_row(&report, "here");
+        assert!(here.signed_in, "the account Pitboard last put there");
+        assert_eq!(here.stale, Some(Stale::LiveUsageOff));
+        assert!(here.usage.is_some());
+    }
+
+    /// While an interrupted switch waits for Claude to be quit, the folder may hold either
+    /// account's items, so nobody is asked about it and every row of the app says so.
+    #[test]
+    fn an_interrupted_desktop_switch_is_said_on_every_row_of_the_app() {
+        let m = crate::switch::harness::desktop_machine("status-recovery");
+        m.crash_at("tree.live_parked").unwrap_err();
+        let ctx = m
+            .ctx
+            .clone()
+            .with_scripted_safe_storage(crate::api::scripted::ScriptedSafeStorage::forbidding())
+            .with_scripted_api(ScriptedApi::new());
+        let state = crate::state::load(&ctx).expect("the machine's accounts");
+
+        let report = gather(&ctx, &state, false);
+        for label in ["here", "there"] {
+            assert_eq!(
+                desktop_row(&report, label).stale,
+                Some(Stale::RecoveryWaiting),
+                "{label}"
+            );
+        }
+        let desktop = report.desktop.as_ref().expect("the app's accounts");
+        assert_eq!(
+            desktop.recovery_waiting,
+            Some(InterruptedSwitch {
+                from: "desktop/here".into(),
+                to: "desktop/there".into(),
+            })
+        );
+    }
+
+    /// A machine that has never had the app is told nothing about it.
+    #[test]
+    fn a_machine_without_the_app_has_no_desktop_block() {
+        let home = scratch("no-desktop");
+        let (ctx, _mem, _api) = machine(&home.0, Some("alpha-uuid"));
+        let ctx = ctx
+            .with_desktop_dir(home.0.join("claude-desktop").to_string_lossy().into())
+            .with_desktop_app(home.0.join("Claude.app").to_string_lossy().into());
+        let report = gather_offline(&ctx, &state(&["alpha"]));
+        assert!(report.desktop.is_none());
     }
 
     /// A home of this test's own, removed when the test is done with it.

@@ -55,7 +55,7 @@ pub struct Assumption {
     pub fact: &'static str,
     /// Where in Claude Code it was read, so it can be read again.
     pub read_from: &'static str,
-    /// The build it was last verified against.
+    /// The build it was last verified against, or [`UNVERIFIED`] while it has not been.
     pub verified_against: &'static str,
     /// What in this crate stops being true if it moves.
     pub depends: &'static str,
@@ -87,6 +87,7 @@ pub fn of(provider: ProviderId) -> &'static [Assumption] {
     match provider {
         ProviderId::Claude => crate::provider::claude::assumptions::ASSUMPTIONS,
         ProviderId::Codex => crate::provider::codex::assumptions::ASSUMPTIONS,
+        ProviderId::Desktop => crate::provider::desktop::assumptions::ASSUMPTIONS,
     }
 }
 
@@ -99,6 +100,7 @@ pub fn read_on(provider: ProviderId, name: &str) -> &'static [Platform] {
     match provider {
         ProviderId::Claude => crate::provider::claude::assumptions::read_on(name),
         ProviderId::Codex => Platform::ALL,
+        ProviderId::Desktop => crate::provider::desktop::assumptions::read_on(name),
     }
 }
 
@@ -107,7 +109,24 @@ pub fn verified_against(provider: ProviderId) -> &'static str {
     match provider {
         ProviderId::Claude => crate::provider::claude::assumptions::VERIFIED_AGAINST,
         ProviderId::Codex => crate::provider::codex::assumptions::VERIFIED_AGAINST,
+        ProviderId::Desktop => crate::provider::desktop::assumptions::VERIFIED_AGAINST,
     }
+}
+
+/// What an entry is dated against while nobody has measured it yet.
+///
+/// Such an entry is written down so the code that leans on it can be found, and it names
+/// the experiment that settles it. Code whose behaviour turns on it asks [`verified`]
+/// rather than assuming either way, and dating it against a build changes that behaviour.
+pub const UNVERIFIED: &str = "unverified";
+
+/// Whether one of a provider's facts has been measured against a build. A fact the
+/// register does not name has not been.
+pub fn verified(provider: ProviderId, name: &str) -> bool {
+    of(provider)
+        .iter()
+        .find(|a| a.name == name)
+        .is_some_and(|a| a.verified_against != UNVERIFIED)
 }
 
 /// Every provider's register, in one list.
@@ -325,8 +344,8 @@ mod tests {
             assert!(!a.read_from.is_empty(), "{} says nowhere", a.name);
             assert!(!a.depends.is_empty(), "{} costs nothing", a.name);
             assert!(
-                a.verified_against.split('.').count() == 3,
-                "{} is dated against `{}`, which is not a version",
+                a.verified_against.split('.').count() == 3 || a.verified_against == UNVERIFIED,
+                "{} is dated against `{}`, which is neither a version nor unverified",
                 a.name,
                 a.verified_against
             );
@@ -338,6 +357,45 @@ mod tests {
                 a.name
             );
         }
+    }
+
+    /// A fact nobody has measured yet is only honest while it says how it will be. Every
+    /// such entry names the experiment that settles it, `E<n>` or `U-K<n>`, so flipping it
+    /// to a build is a matter of running that and nothing else.
+    #[test]
+    fn every_unverified_fact_names_its_experiment() {
+        fn names_an_experiment(read_from: &str) -> bool {
+            let words = read_from.split(|c: char| !(c.is_ascii_alphanumeric() || c == '-'));
+            words.into_iter().any(|word| {
+                let number = word
+                    .strip_prefix("U-K")
+                    .or_else(|| word.strip_prefix('E'))
+                    .unwrap_or_default();
+                !number.is_empty() && number.bytes().all(|b| b.is_ascii_digit())
+            })
+        }
+        let unverified: Vec<&Assumption> = all()
+            .into_iter()
+            .filter(|a| a.verified_against == UNVERIFIED)
+            .collect();
+        assert!(
+            !unverified.is_empty(),
+            "Claude Desktop's register has facts still to be measured"
+        );
+        for a in unverified {
+            assert!(
+                names_an_experiment(a.read_from),
+                "{} is unverified and names no experiment in `{}`",
+                a.name,
+                a.read_from
+            );
+            assert!(!verified(ProviderId::Desktop, a.name), "{}", a.name);
+        }
+        assert!(verified(ProviderId::Desktop, "desktop_bundle"));
+        assert!(!verified(ProviderId::Desktop, "no_such_fact"));
+        assert!(!names_an_experiment("ps on a Mac"));
+        assert!(names_an_experiment("E11/E13"));
+        assert!(names_an_experiment("U-K4"));
     }
 
     #[test]

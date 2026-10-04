@@ -26,6 +26,7 @@ fn id(m: &Machine, who: &str) -> String {
     match m.which {
         ProviderId::Claude => who.to_string(),
         ProviderId::Codex => codex_id(who),
+        ProviderId::Desktop => unreachable!("no machine keeps Claude Desktop in a vault"),
     }
 }
 
@@ -34,6 +35,7 @@ fn enrolled(m: &Machine, who: &str, parked: Option<Park>) -> Account {
     match m.which {
         ProviderId::Claude => account(who, who, parked),
         ProviderId::Codex => codex_account(who, &codex_id(who), parked),
+        ProviderId::Desktop => unreachable!("no machine keeps Claude Desktop in a vault"),
     }
 }
 
@@ -53,10 +55,12 @@ fn login(m: &Machine, who: &str, refresh: &str) -> Value {
                     observed_at: Some(NOW),
                     account_uuid: None,
                     source: crate::usage::Source::Live,
+                    verified: true,
                 },
             );
             codex_login(who, refresh)
         }
+        ProviderId::Desktop => unreachable!("no machine keeps Claude Desktop in a vault"),
     }
 }
 
@@ -70,6 +74,7 @@ fn lapsed(m: &Machine, who: &str, refresh: &str) -> Value {
                 &json!({"exp": NOW - 60, "for": refresh})
             ));
         }
+        ProviderId::Desktop => unreachable!("no machine keeps Claude Desktop in a vault"),
     }
     document
 }
@@ -299,6 +304,7 @@ fn a_park_repair_gave_back_that_the_service_refuses_is_let_go_and_left() {
             ProviderId::Codex => m
                 .api
                 .codex_renew_trouble("away-elsewhere", Trouble::InvalidGrant),
+            ProviderId::Desktop => unreachable!("no machine keeps Claude Desktop in a vault"),
         };
         assert_eq!(repair_here(&m).given_back.len(), 1);
 

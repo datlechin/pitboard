@@ -243,6 +243,7 @@ fn snapshot(body: &Value, account_id: &str, now: i64) -> Snapshot {
         observed_at: Some(now),
         account_uuid: Some(account_id.to_string()),
         source: Source::Live,
+        verified: true,
     }
 }
 

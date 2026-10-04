@@ -53,12 +53,19 @@ To work on the app, you need a Mac with Xcode, and its Swift must be 6.2 or late
    writes points `CODEX_HOME` at a scratch directory and never writes to `~/.codex`. The
    one ignored test that reads a real `auth.json` only reads it. Nothing runs `codex login`
    or `codex logout` against a real home, because both revoke the login stored there.
+   A Claude Desktop test points `PITBOARD_CLAUDE_DESKTOP_DIR` and
+   `PITBOARD_CLAUDE_DESKTOP_APP` into its own directory and calls
+   `common::guard_not_live_dir` before the first write. Nothing writes to
+   `~/Library/Application Support/Claude`, reads or writes the `Claude Safe Storage`
+   keychain item, or starts, quits or signs out of the Claude app. Core tests stand in a
+   scripted key, `ScriptedSafeStorage`, for that item.
 
 4. Measure the tool, do not guess at it. Claude Code's behaviour here is undocumented,
    Codex's moves with its source, and both ship several times a week. A claim about either
-   needs an experiment or a reading of a named build. It belongs in a test, the tool's
-   register or the commit message. [Tool registers](#tool-registers) says how to add a
-   fact, and [ARCHITECTURE.md](ARCHITECTURE.md#tool-registers) says what a register is.
+   needs an experiment or a reading of a named build. Such a claim belongs in a test, the
+   tool's register or the commit message. Claude Desktop's behaviour is undocumented too,
+   and its code ships inside `app.asar`. [Tool registers](#tool-registers) says how to add
+   a fact, and [ARCHITECTURE.md](ARCHITECTURE.md#tool-registers) says what a register is.
 
 ## Check a change
 
@@ -87,6 +94,33 @@ push, run:
 ```sh
 cargo-zigbuild clippy --target x86_64-unknown-linux-gnu --all-targets
 ```
+
+Claude Desktop's tests through the binary are in `crates/pitboard/tests/desktop.rs`, with
+helpers in `crates/pitboard/tests/common/desktop.rs`. They run only on macOS, against a data
+folder each test makes in its own directory, with a cookie jar `/usr/bin/sqlite3` writes.
+To run them on their own:
+
+```sh
+cargo test --locked -p pitboard --test desktop
+```
+
+A switch waits while anything runs from Claude's bundle. With both
+`PITBOARD_CLAUDE_DESKTOP_DIR` and `PITBOARD_CLAUDE_DESKTOP_APP` pointed elsewhere, as the
+tests set them, it looks only at the bundle at that path, so your own Claude being open does
+not hold the tests back and none of them is skipped. A test that needs a switch refused
+holds its own folder with a `SingletonLock` naming a stand-in process, a program called
+`Claude` outside any bundle (`hold_with_a_stand_in`), so it runs either way. Claude
+2.19675.0 keeps no such lock (experiment E14), so the lock is a second sign and the process
+scan the one that counts.
+
+The tests set these variables. Set the first two to a scratch directory too before you run
+a `pitboard` built from a branch, with `HOME`, `CODEX_HOME` and `CLAUDE_CONFIG_DIR`:
+
+| Variable | What it points at |
+| --- | --- |
+| `PITBOARD_CLAUDE_DESKTOP_DIR` | Claude's data folder, by default `~/Library/Application Support/Claude` |
+| `PITBOARD_CLAUDE_DESKTOP_APP` | The app, by default `/Applications/Claude.app`; empty means the default |
+| `PITBOARD_CLAUDE_WEB_BASE` | Where live usage sends its request, in place of `https://claude.ai` |
 
 The snapshots in `crates/pitboard/tests/snapshots` pin the `--json` contract. A snapshot
 changes only when the contract changes on purpose. Review the difference with
@@ -222,6 +256,14 @@ build of the tool and says which are still there:
 cargo run -p pitboard-conformance -- <claude binary>
 cargo run -p pitboard-conformance -- <codex binary> --provider codex
 ```
+
+Claude Desktop's register, `provider/desktop/assumptions.rs`, has no conformance run. Its
+literals are in `app.asar`, not in a binary the checker reads, so every fact has an empty
+`probe`. A fact read from one Mac is dated with the app's version, `VERIFIED_AGAINST`. A
+fact not yet measured is dated `UNVERIFIED`, its `read_from` names the experiment that
+settles it, such as E11, and code that would act on it asks `assumptions::verified` first.
+To settle one, run its experiment on a Mac, then date the entry with the version you read
+it from.
 
 Add `--json` for a report a program can read. The checker exits 1 when a fact has moved: a
 literal it needs is gone, or one it rules out has turned up. It exits 2 when it cannot make

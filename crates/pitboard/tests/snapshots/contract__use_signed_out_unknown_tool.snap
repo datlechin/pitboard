@@ -1,0 +1,19 @@
+---
+source: crates/pitboard/tests/contract.rs
+expression: "serde_json :: json! ({ \"exit\" : code, \"envelope\" : value })"
+---
+{
+  "exit": 1,
+  "envelope": {
+    "v": 1,
+    "command": "use",
+    "ok": false,
+    "data": null,
+    "warnings": [],
+    "error": {
+      "code": "provider_unknown",
+      "message": "`nothing` is not a tool Pitboard knows. It knows: claude, codex, desktop.",
+      "cause": null
+    }
+  }
+}

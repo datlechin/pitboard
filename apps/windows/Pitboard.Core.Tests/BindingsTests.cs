@@ -8,8 +8,8 @@ namespace Pitboard.Core.Tests;
 [TestClass]
 public sealed class BindingsTests
 {
-    private static readonly string[] Codes = ["claude", "codex"];
-    private static readonly string[] Names = ["Claude Code", "Codex"];
+    private static readonly string[] Codes = ["claude", "codex", "desktop"];
+    private static readonly string[] Names = ["Claude Code", "Codex", "Claude Desktop"];
 
     [TestMethod]
     public void TheBindingsLoadTheCoreAndAgreeWithIt()

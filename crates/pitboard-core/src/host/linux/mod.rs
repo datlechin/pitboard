@@ -9,12 +9,15 @@ mod systemd;
 pub(crate) use super::unix::{fs, proc, user};
 
 use super::unix::service;
-use super::{Host, LoginPath, Os, Process, Scheduler};
+use super::{Bundle, Host, LoginPath, Os, Process, Scheduler};
 use crate::context::{Context, Environment};
+use crate::provider::desktop::safe_storage::{ItemStamp, KeyRead, KeyReadError, SafeStorage};
+use crate::provider::desktop::types::CookieTable;
 use crate::store::vault::FileVault;
 use crate::store::{PlainFile, RawStore};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use zeroize::Zeroizing;
 
 pub(super) const OS: Os = Os::Linux;
 
@@ -54,6 +57,35 @@ impl Host for Linux {
         procfs::processes(program)
     }
 
+    fn processes_within(&self, bundle: Bundle<'_>, excluded: &[&str]) -> Option<Vec<Process>> {
+        procfs::processes_within(bundle, excluded)
+    }
+
+    fn pid_alive(&self, pid: u32) -> bool {
+        proc::may_be_running(pid)
+    }
+
+    fn program_of(&self, pid: u32) -> Option<PathBuf> {
+        procfs::program_of(pid)
+    }
+
+    fn device_of(&self, path: &Path) -> std::io::Result<u64> {
+        fs::device(path)
+    }
+
+    /// Claude Desktop does not run on Linux, and there is no jar to read.
+    fn cookie_table(&self, _path: &Path) -> std::io::Result<CookieTable> {
+        Err(std::io::Error::new(
+            std::io::ErrorKind::Unsupported,
+            "Claude Desktop's cookies are read on macOS only",
+        ))
+    }
+
+    /// No app runs on Linux.
+    fn bundle_version(&self, _app: &Path) -> Option<String> {
+        None
+    }
+
     fn scheduler(&self) -> Option<&dyn Scheduler> {
         Some(&self.scheduler)
     }
@@ -63,6 +95,24 @@ pub(super) fn host() -> Arc<dyn Host> {
     Arc::new(Linux {
         scheduler: systemd::Systemd::new(service::system()),
     })
+}
+
+/// Claude Desktop does not run on Linux, so there is no key to read.
+#[derive(Debug)]
+struct NoSafeStorage;
+
+impl SafeStorage for NoSafeStorage {
+    fn stamp(&self, _ctx: &Context) -> Result<ItemStamp, KeyReadError> {
+        Err(KeyReadError::Missing)
+    }
+
+    fn password(&self, _ctx: &Context, _how: KeyRead) -> Result<Zeroizing<Vec<u8>>, KeyReadError> {
+        Err(KeyReadError::Missing)
+    }
+}
+
+pub(super) fn safe_storage() -> Arc<dyn SafeStorage> {
+    Arc::new(NoSafeStorage)
 }
 
 /// The path this Pitboard was started by, where that leads to the program running.

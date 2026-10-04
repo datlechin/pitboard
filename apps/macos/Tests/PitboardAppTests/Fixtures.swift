@@ -105,6 +105,8 @@ final class StandInAppControl: AppControl {
         running.contains(bundleID) ? Self.copy(of: bundleID) : nil
     }
 
+    func installed(_ bundleID: String) -> URL? { Self.copy(of: bundleID) }
+
     func requestQuit(_ bundleID: String) {
         asked.append("quit \(bundleID)")
         if quits { running.remove(bundleID) }

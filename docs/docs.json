@@ -2,7 +2,7 @@
   "$schema": "https://mintlify.com/docs.json",
   "theme": "mint",
   "name": "Pitboard",
-  "description": "Switch between your own Claude Code and Codex logins, and see how much each one has left.",
+  "description": "Switch between your own Claude Code, Codex and Claude Desktop logins, and see how much each one has left.",
   "colors": {
     "primary": "#166534",
     "light": "#4DD170",
@@ -43,6 +43,7 @@
           "guides/sign-in-again",
           "guides/renewal",
           "guides/codex",
+          "guides/claude-desktop",
           "guides/status-line"
         ]
       },
