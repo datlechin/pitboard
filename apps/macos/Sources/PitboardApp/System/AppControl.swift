@@ -17,9 +17,9 @@ public protocol AppControl: AnyObject {
     /// Asks the app to quit the way Command-Q does, which lets it ask about work in
     /// progress. Returns at once; the app may take a while, or decline.
     func requestQuit(_ bundleID: String)
-    /// Opens the app at `url` the way Finder would, without bringing it to the front:
-    /// whatever Pitboard has to say about the switch stays in front of it.
-    func open(_ url: URL)
+    /// Opens the app at `url` the way Finder would. Brought to the front only when `inFront`:
+    /// otherwise whatever Pitboard has to say about the switch stays in front of it.
+    func open(_ url: URL, inFront: Bool)
 }
 
 /// What came of asking an app to quit.
@@ -72,9 +72,9 @@ public final class WorkspaceAppControl: AppControl {
         for app in apps(bundleID) { app.terminate() }
     }
 
-    public func open(_ url: URL) {
+    public func open(_ url: URL, inFront: Bool) {
         let configuration = NSWorkspace.OpenConfiguration()
-        configuration.activates = false
+        configuration.activates = inFront
         NSWorkspace.shared.openApplication(at: url, configuration: configuration)
     }
 }

@@ -222,9 +222,9 @@ private final class TrailAppControl: AppControl {
         running.remove(bundleID)
     }
 
-    func open(_ copy: URL) {
+    func open(_ copy: URL, inFront: Bool) {
         let bundleID = copy.deletingPathExtension().lastPathComponent
-        trail.add("open \(bundleID)")
+        trail.add(inFront ? "open \(bundleID) in front" : "open \(bundleID)")
         running.insert(bundleID)
     }
 }
@@ -264,18 +264,19 @@ private func desktopMachine(
 // MARK: - Switching
 
 /// Claude keeps its sign-in in its own files while it runs, so it is quit the way
-/// Command-Q quits it, switched, and opened again, in that order.
+/// Command-Q quits it, switched, and opened again, in that order. Claude is the app being
+/// switched, so choosing one of its accounts is the request to restart it: nothing waits
+/// on a question, which a window behind Claude hid while the menu said "Switching…".
+/// Claude comes back in front, where it was, since Pitboard has nothing to say.
 @MainActor
 @Test func testDesktopSwitchQuitsClaudeAndOpensItAgain() async throws {
     let (model, _, apps, trail) = desktopMachine()
     await model.switchAsked(to: "desktop/work")
-    let question = try #require(model.quitting)
-    #expect(question.name == "Claude")
-    #expect(question.bundleID == claudeApp)
-    #expect(trail.steps.isEmpty, "nothing is quit before the person says so")
-
-    await model.quitAndSwitch(question)
-    #expect(trail.steps == ["quit \(claudeApp)", "switch desktop/work", "open \(claudeApp)"])
+    #expect(model.quitting == nil)
+    #expect(
+        trail.steps == [
+            "quit \(claudeApp)", "switch desktop/work", "open \(claudeApp) in front",
+        ])
     #expect(apps.running == [claudeApp])
     #expect(model.presentedFailure == nil)
     #expect(model.switching == nil)
@@ -287,7 +288,6 @@ private func desktopMachine(
 @Test func testDesktopSwitchShowsNoRestartNoticeAfterReopening() async throws {
     let (model, _, _, _) = desktopMachine()
     await model.switchAsked(to: "desktop/work")
-    await model.quitAndSwitch(try #require(model.quitting))
     let last = try #require(model.lastSwitches.first)
     #expect(last.provider == "desktop")
     #expect(last.notice == nil)
@@ -312,12 +312,13 @@ private func desktopMachine(
 @MainActor
 @Test func aSwitchWaitsForClaudesHelpersToClose() async throws {
     let (model, core, apps, trail) = desktopMachine()
-    await model.switchAsked(to: "desktop/work")
-    let question = try #require(model.quitting)
     core.lingering = 2
-    await model.quitAndSwitch(question)
+    await model.switchAsked(to: "desktop/work")
     #expect(model.presentedFailure == nil)
-    #expect(trail.steps == ["quit \(claudeApp)", "switch desktop/work", "open \(claudeApp)"])
+    #expect(
+        trail.steps == [
+            "quit \(claudeApp)", "switch desktop/work", "open \(claudeApp) in front",
+        ])
     #expect(apps.running == [claudeApp])
 }
 
@@ -327,10 +328,8 @@ private func desktopMachine(
 @Test func helpersThatStayStopTheSwitchAndClaudeIsOpenedAgain() async throws {
     let (model, core, apps, trail) = desktopMachine()
     model.closeWithin = .milliseconds(50)
-    await model.switchAsked(to: "desktop/work")
-    let question = try #require(model.quitting)
     core.lingering = .max
-    await model.quitAndSwitch(question)
+    await model.switchAsked(to: "desktop/work")
     #expect(trail.steps == ["quit \(claudeApp)", "open \(claudeApp)"])
     #expect(apps.running == [claudeApp])
     #expect(model.presentedFailure?.code == "app_still_open")
@@ -361,12 +360,10 @@ private func desktopMachine(
 @MainActor
 @Test func aSwitchLeftUnfinishedLeavesClaudeClosed() async throws {
     let (model, core, apps, trail) = desktopMachine()
-    await model.switchAsked(to: "desktop/work")
-    let question = try #require(model.quitting)
     core.switchFailing = PitboardError.Failed(
         code: "io", cause: nil, message: "could not move an item",
         warnings: [Warning(code: "switch_unfinished", message: "stopped partway")])
-    await model.quitAndSwitch(question)
+    await model.switchAsked(to: "desktop/work")
     #expect(trail.steps == ["quit \(claudeApp)"])
     #expect(apps.running.isEmpty)
     #expect(model.presentedFailure?.warnings.map(\.code) == ["switch_unfinished"])
@@ -709,12 +706,8 @@ private func desktopMachine(
 
 // MARK: - What is said
 
-/// Claude's own alert, which says why Claude has to quit rather than ChatGPT's reason.
-@Test func claudeIsAskedToQuitInItsOwnWords() {
-    #expect(
-        quitQuestion(name: "Claude", to: "work")
-            == "Claude keeps its sign-in in its own files while it runs. Pitboard quits it, "
-            + "switches to work, and opens it again.")
+/// The one app still asked about says why it has to quit.
+@Test func chatGPTIsAskedToQuitInItsOwnWords() {
     #expect(
         quitQuestion(name: "ChatGPT", to: "spare")
             == "ChatGPT keeps using the account it started with until it quits. Pitboard "

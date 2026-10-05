@@ -157,7 +157,7 @@
         }
         func installed(_ bundleID: String) -> URL? { FixtureApps.copy(of: bundleID) }
         func requestQuit(_ bundleID: String) { apps.quit(bundleID) }
-        func open(_ copy: URL) { apps.open(copy) }
+        func open(_ copy: URL, inFront: Bool) { apps.open(copy) }
     }
 
     /// A login item that remembers what it was told and registers nothing.

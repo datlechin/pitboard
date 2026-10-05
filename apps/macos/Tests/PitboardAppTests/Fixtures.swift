@@ -112,9 +112,9 @@ final class StandInAppControl: AppControl {
         if quits { running.remove(bundleID) }
     }
 
-    func open(_ copy: URL) {
+    func open(_ copy: URL, inFront: Bool) {
         let bundleID = copy.deletingPathExtension().lastPathComponent
-        asked.append("open \(bundleID)")
+        asked.append(inFront ? "open \(bundleID) in front" : "open \(bundleID)")
         running.insert(bundleID)
     }
 }

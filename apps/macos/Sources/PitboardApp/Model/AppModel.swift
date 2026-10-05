@@ -462,7 +462,8 @@ public final class AppModel {
     /// Where an app runs the tool with its login in memory, as ChatGPT runs Codex, the switch
     /// waits for the person to let Pitboard quit it first: switched under it, the app would go
     /// on with the account left behind, and its own sign-out would revoke the login Pitboard
-    /// has just parked.
+    /// has just parked. Claude Desktop, the app whose accounts are switched, is quit the way
+    /// Command-Q quits it without being asked about first.
     func switchAsked(to qualified: String) async {
         // One switch at a time: the second would wait behind the first anyway, and its
         // choice was made from a menu that did not yet show the first. A question waiting
@@ -474,9 +475,17 @@ public final class AppModel {
         // Claimed before anything is awaited, so a second request made meanwhile waits too.
         switching = qualified
         if let app = await appHolding(split(qualified).provider) {
-            switching = nil
-            quitting = QuitToSwitch(
+            let pending = QuitToSwitch(
                 qualified: qualified, bundleID: app.bundleID, name: app.name)
+            // Claude is the app being switched, so choosing one of its accounts is the
+            // request to restart it, as adding one is. A question waited in the window,
+            // which Claude in front hid, while the menu said "Switching…" for good.
+            if split(qualified).provider == desktopProvider {
+                await quitAndSwitch(pending)
+                return
+            }
+            switching = nil
+            quitting = pending
             showWindow(.accounts)
             return
         }
@@ -508,7 +517,7 @@ public final class AppModel {
             if split(pending.qualified).provider == desktopProvider,
                 !(await closed(pending.bundleID, of: desktopProvider))
             {
-                appControl.open(copy)
+                appControl.open(copy, inFront: false)
                 present(
                     Self.stillClosing(
                         "Couldn’t switch to \(split(pending.qualified).label)", pending.name))
@@ -517,7 +526,10 @@ public final class AppModel {
             // Opened as soon as the switch is made, not after the read that follows it,
             // which can wait on the network.
             let failure = await switchWithoutReading(to: pending.qualified, reopening: true)
-            if !Self.leftUnfinished(failure) { appControl.open(copy) }
+            // Claude, quit without a question, comes back in front, where it was, once
+            // there is nothing to say; a failure stays in front of it.
+            let inFront = failure == nil && split(pending.qualified).provider == desktopProvider
+            if !Self.leftUnfinished(failure) { appControl.open(copy, inFront: inFront) }
             if failure == nil { await refresh() }
             present(failure)
         }
@@ -1213,11 +1225,11 @@ extension AppModel {
             return await body(false)
         case .quit(let copy):
             guard await closed(app.bundleID, of: desktopProvider) else {
-                appControl.open(copy)
+                appControl.open(copy, inFront: false)
                 return Self.stillClosing(title, app.name)
             }
             let failure = await body(true)
-            if !Self.leftUnfinished(failure) { appControl.open(copy) }
+            if !Self.leftUnfinished(failure) { appControl.open(copy, inFront: false) }
             return failure
         }
     }
@@ -1370,7 +1382,7 @@ extension AppModel {
                 "Couldn’t open Claude",
                 message: "macOS doesn’t know where Claude is. Open it from Applications.")
         }
-        appControl.open(copy)
+        appControl.open(copy, inFront: false)
         claudeLeftClosed = false
         return nil
     }

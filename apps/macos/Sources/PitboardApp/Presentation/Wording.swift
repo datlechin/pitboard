@@ -135,13 +135,8 @@ func changeDate(_ at: String) -> Date? {
 }
 
 /// Why an app has to quit before its tool can switch, as the alert that asks says it.
-/// Claude Desktop keeps its sign-in in files it rewrites while it runs, so the reason is
-/// not the one an app holding a login in memory has.
+/// Claude Desktop is not asked about: it is the app being switched, and is quit without it.
 func quitQuestion(name: String, to label: String) -> String {
-    if name == "Claude" {
-        return "Claude keeps its sign-in in its own files while it runs. Pitboard quits it, "
-            + "switches to \(label), and opens it again."
-    }
     return "\(name) keeps using the account it started with until it quits. Pitboard quits "
         + "it, switches, and opens it again."
 }

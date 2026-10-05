@@ -23,13 +23,14 @@ the menu bar app quits Claude around a switch and opens it again.
   [Use Pitboard with Claude Desktop](https://docs.usepitboard.com/guides/claude-desktop)
   has the steps.
 - The menu bar app lists Claude Desktop accounts when it finds `Claude.app`, with the date
-  each parked one lapses and where its usage came from. A switch while Claude is open asks
-  first, then the app quits Claude, switches and opens it again for you. **Add Account**
-  walks through adding a Claude Desktop account in three steps, quitting and opening Claude
-  around each change, and **Put personal Back** undoes it halfway. **Settings** > **General**
-  has **Show live usage**, which explains the keychain prompt before anything is read. When
-  macOS stops letting Pitboard read Claude's key, the app says live usage is paused, once in
-  a notification and in a notice with **Allow Again**.
+  each parked one lapses and where its usage came from. A switch while Claude is open quits
+  Claude the way Command-Q does, switches and opens it again in front for you, without
+  asking first: a question asked in the window, behind Claude, left the menu saying
+  "Switching…". **Add Account** walks through adding a Claude Desktop account in three
+  steps, quitting and opening Claude around each change, and **Put personal Back** undoes it
+  halfway. **Settings** > **General** has **Show live usage**, which explains the keychain
+  prompt before anything is read. When macOS stops letting Pitboard read Claude's key, the
+  app says live usage is paused, once in a notification and in a notice with **Allow Again**.
 - A Claude Desktop switch counts Claude as open when it runs from a copy of `Claude.app`
   under another name, and is not held up by a `SingletonLock` whose process now runs another
   program. If Claude is opened while a switch moves its files, the switch stops with
