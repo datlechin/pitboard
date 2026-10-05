@@ -1,0 +1,19 @@
+---
+source: crates/pitboard/tests/contract.rs
+expression: "serde_json :: json! ({ \"exit\" : code, \"envelope\" : value })"
+---
+{
+  "exit": 3,
+  "envelope": {
+    "v": 1,
+    "command": "use",
+    "ok": false,
+    "data": null,
+    "warnings": [],
+    "error": {
+      "code": "app_still_open",
+      "message": "Claude is still open, so nothing was moved. Quit Claude (Command-Q), then try again.",
+      "cause": null
+    }
+  }
+}

@@ -18,7 +18,7 @@ Pitboard's item in the menu bar shows a speedometer symbol and text such as **wo
 | The label, **work** | The label of the account in use, or **unnamed** when no account in use is enrolled. A label longer than 12 characters is cut to 11 characters and an ellipsis. |
 | The percentage, **42%** | How much of one limit the account has used. For Claude Code, it is the most used of the limits Anthropic marks as active, or of all its limits when none is marked. For OpenAI's Codex CLI, it is the most used limit. A limit for one model counts only when the account has no other limit. |
 
-When both tools have accounts, the item shows one account in use: the enrolled one closest to running out. To show only the percentage or only the symbol, see [Menu bar shows](/reference/settings#menu-bar-shows).
+When more than one tool has accounts, the item shows one account in use: the enrolled one closest to running out. To show only the percentage or only the symbol, see [Menu bar shows](/reference/settings#menu-bar-shows).
 
 ## Menu
 
@@ -33,7 +33,7 @@ What needs attention appears as these items:
 | **Install Pitboard** `<version>` | A copy from a release has found an update. | Opens the update window. |
 | **Claude Code isn't installed** | The app found neither `claude` nor `codex`, and no tool has a login or an account. | Opens Claude Code's setup page in your browser. |
 
-The accounts are under a heading per tool once both tools have accounts. A check mark shows the account in use in each tool. The line under each account is one of these:
+The accounts are under a heading per tool once more than one tool has accounts. A check mark shows the account in use in each tool. The line under each account is one of these:
 
 | Line | Meaning |
 | --- | --- |
@@ -69,6 +69,7 @@ The commands come last:
 | Item | Shortcut | What it does |
 | --- | --- | --- |
 | **Add Account** | Command-N | Opens the **Add Account** dialog in the Pitboard window. |
+| **Finish Adding a Claude Account** | None | Opens **Add another Claude account** where you left it. Only while a Claude Desktop account is half added and Claude is signed out. |
 | **Refresh** | Command-R | Asks for every account's usage again, even if Pitboard asked moments ago. The line under it says when usage was last read, as in **Updated 20:52**, or **Reading** during a read. **Not read yet** and **Showing the last numbers measured** mean no read has succeeded since the app opened or since your last change in the app. The second means the last read failed. |
 | **Open claude.ai as work** | None | Opens the [window](#account-windows) of `work`, the only enrolled Claude Code account. With two or more, the item is **Open claude.ai**, with a submenu that lists each account. Absent when there is none. |
 | **Open chatgpt.com as main** | None | The same, for the Codex accounts and their chatgpt.com windows. |
@@ -100,7 +101,7 @@ A tip suggests the next step in setting up Pitboard:
 | Tip | Shown when | Buttons |
 | --- | --- | --- |
 | **Give this account a name** | A tool is signed in to an account Pitboard has not enrolled. | **Name** opens **Name This Account**. |
-| **Add a second account** | A tool has one enrolled account, and it is the one in use. When both tools have accounts, the title names the tool, as in **Add a second Codex account**. | **Add Account**, or **Not Now** to stop showing the tip for that tool. |
+| **Add a second account** | A tool has one enrolled account, and it is the one in use. When more than one tool has accounts, the title names the tool, as in **Add a second Codex account**. | **Add Account**, or **Not Now** to stop showing the tip for that tool. |
 
 Each account's row has these parts:
 
@@ -109,7 +110,7 @@ Each account's row has these parts:
 | Name | A symbol, the account's label and its email address. |
 | Right side | **In Use**, or a button: **Use** or **Sign In Again**. |
 | A line per limit | The limit's short name, such as **5h** or **week**, then a bar and the percentage used. Last is when it resets, such as **resets in 2h 10m**, or **resetting now** once that time has come. The bar is green under 70%, orange from 70% and red from 90%. |
-| Notes | In this order: why the account cannot be used, why its numbers are old, how long it lasts at the rate it has been used and how long its parked login lasts. The last appears only for a Claude Code account not in use. |
+| Notes | In this order: why the account cannot be used, why its numbers are old, how long it lasts at the rate it has been used, how long its parked login lasts and where its numbers came from. How long a parked login lasts appears for a Claude Code or Claude Desktop account not in use. For Claude Desktop it reads **Sign-in lapses on Oct 30. Pitboard cannot renew Claude Desktop sign-ins.** Where the numbers came from appears only for Claude Desktop: **From Claude's history**. |
 
 For what each line means, see [Check what each account has left](/guides/usage#read-the-lines-under-each-account).
 
@@ -120,6 +121,7 @@ Notices say what needs attention, most pressing first:
 | **An interrupted switch is waiting** | A switch stopped partway, and Pitboard cannot yet tell whether it finished. | **Give Up** |
 | **Couldn't read usage** | The last read failed. The reason is under the title. | None |
 | **work has no 5-hour limit left** | The account in use has used all of a limit, and another account has room. | **Switch to personal** |
+| **Live usage for Claude is paused** | Live usage for Claude Desktop is on, and macOS stopped letting Pitboard read Claude's key. Claude Desktop's numbers come from Claude's own history until it is allowed again. | **Allow Again**, which opens **Show live usage for Claude Desktop?** |
 | **Switched to work** | A switch you made in the app finished. The lines under it say what happens to open sessions. | **Dismiss** (an x) |
 | **work has a new login** | A sign-in in the app gave the account in use a new login. | **Dismiss** (an x) |
 | The title of another warning, such as **A parked login was refused** | A read or a change gave a warning. For each title, see [Warning codes](/reference/errors#warning-codes). | None |
@@ -166,6 +168,8 @@ Double-clicking a row, or selecting it and pressing Return, does what its button
 | **Signing In to Claude Code**, **Signing In to Codex** | **Sign In** in **Add Account** or **Sign In to work Again**. The same dialog takes this title. | **Waiting for your browser** while you sign in there. **Browser didn't open?** with **Open Sign-In Page**, when the tool gives its sign-in address. For Claude Code, a **Code** field and **Submit Code** from the start, for the code shown after you sign in. Claude Code takes it whether or not your browser came back to it. The dialog closes when the sign-in finishes. **Cancel** stops the sign-in and adds nothing. |
 | **Name This Account** | **Name** in a tip or a shortcut menu, a double-click or Return on the account's row, or an account in the menu marked **Not named yet** | A **Name** field and **Save** |
 | **Rename "work"** | **Rename** in a shortcut menu | A **Name** field holding the label, and **Rename** |
+| **Add another Claude account**, **Sign In to work Again** for a Claude Desktop account | **Claude Desktop** in the **Tool** pop-up menu of **Add Account**, **Sign In Again** on a Claude Desktop account, or **Finish Adding a Claude Account** | Three steps. First, **Continue** quits Claude, parks the account in use and leaves Claude signed out. Then sign in to the other account in Claude, and click **I'm Signed In**, **Put personal Back** or **Later**. Last, a **Name** field and **Add Account**, which quits Claude and enrols the account. Pitboard opens Claude again after each step that quit it. See [Use Pitboard with Claude Desktop](/guides/claude-desktop#add-claude-desktop-accounts). |
+| **Show live usage for Claude Desktop?** | Turning on **Show live usage** in [Settings](/reference/settings#claude-desktop), **Allow Again** in a notice or Settings, or the notification about live usage | What Pitboard reads from the keychain and why macOS asks for your password, then **Continue** and **Not Now**. Only **Continue** turns live usage on. |
 
 **Add Account** offers each tool whose program the app found, and each tool that has an enrolled account even if its program was not found. When the app finds neither program and no account is enrolled, it offers only Claude Code.
 
@@ -385,11 +389,20 @@ For when the app sends a notification, see [When an account runs out](/guides/sw
 | Part | Text |
 | --- | --- |
 | Title | **work has no 5-hour limit left** |
-| Subtitle | **Claude Code** or **Codex**, once both tools have accounts |
+| Subtitle | The tool, such as **Claude Code** or **Codex**, once more than one tool has accounts |
 | Body | **personal has 58% of its own left.** |
 | Button | **Switch**, which switches to `personal`. If the switch fails, the Pitboard window opens with an alert. |
 
-Clicking the notification itself does nothing. Notifications play no sound and set no badge.
+Clicking the notification itself does nothing.
+
+When macOS stops letting Pitboard read Claude's key for live usage, the app sends one notification. It sends another only after live usage has worked again or been turned off.
+
+| Part | Text |
+| --- | --- |
+| Title | **Live usage for Claude is paused** |
+| Body | **macOS stopped letting Pitboard read Claude's key, which can happen after Claude updates. Open Pitboard to allow it again.** |
+
+Clicking it opens the **Show live usage for Claude Desktop?** dialog. Notifications play no sound and set no badge.
 
 ## Keyboard shortcuts
 

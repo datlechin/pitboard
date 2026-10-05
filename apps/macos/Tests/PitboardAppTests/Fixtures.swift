@@ -105,14 +105,16 @@ final class StandInAppControl: AppControl {
         running.contains(bundleID) ? Self.copy(of: bundleID) : nil
     }
 
+    func installed(_ bundleID: String) -> URL? { Self.copy(of: bundleID) }
+
     func requestQuit(_ bundleID: String) {
         asked.append("quit \(bundleID)")
         if quits { running.remove(bundleID) }
     }
 
-    func open(_ copy: URL) {
+    func open(_ copy: URL, inFront: Bool) {
         let bundleID = copy.deletingPathExtension().lastPathComponent
-        asked.append("open \(bundleID)")
+        asked.append(inFront ? "open \(bundleID) in front" : "open \(bundleID)")
         running.insert(bundleID)
     }
 }

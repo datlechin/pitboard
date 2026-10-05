@@ -19,6 +19,24 @@
 
 use serde_json::Value;
 
+/// Claude Desktop's cookies as they turn up in a header or a message: a session is hidden
+/// outright, and the organisation as the identifier it is.
+const COOKIES: [(&str, Option<&str>); 3] = [
+    ("sessionKeyV3=", None),
+    ("sessionKey=", None),
+    ("lastActiveOrg=", Some("org")),
+];
+
+/// What every claude.ai session starts with, so one is hidden wherever it turns up bare.
+const SESSION_PREFIX: &str = "sk-ant-sid";
+
+/// How long the cookie value at the start of `text` is: up to whatever ends a value in a
+/// header, a query or a quoted string.
+fn value_len(text: &str) -> usize {
+    text.find(|c: char| c.is_whitespace() || matches!(c, ';' | ',' | '&' | '"' | '\'' | '<' | '>'))
+        .unwrap_or(text.len())
+}
+
 /// Everything a report must not carry out of a machine, and what to put in its place.
 #[derive(Debug, Clone)]
 pub struct Sheet {
@@ -79,7 +97,38 @@ impl Sheet {
                 out = out.replace(secret.as_str(), &self.digest(kind, secret));
             }
         }
-        out
+        self.cookies(&out)
+    }
+
+    /// `text` with every Claude Desktop cookie value in it hidden. These are never handed
+    /// to [`Sheet::hide`], because nothing that builds a report has them to hand: they turn
+    /// up only inside a message somebody else wrote.
+    fn cookies(&self, text: &str) -> String {
+        let mut out = String::with_capacity(text.len());
+        let mut rest = text;
+        loop {
+            let next = COOKIES
+                .iter()
+                .filter_map(|(name, kind)| rest.find(name).map(|at| (at, name.len(), *kind)))
+                .chain(rest.find(SESSION_PREFIX).map(|at| (at, 0, None)))
+                .min_by_key(|(at, _, _)| *at);
+            let Some((at, name_len, kind)) = next else {
+                out.push_str(rest);
+                return out;
+            };
+            // A bare session starts at its prefix, so it always moves on past it.
+            let start = at + name_len;
+            let len = value_len(&rest[start..]);
+            out.push_str(&rest[..start]);
+            let value = &rest[start..start + len];
+            if !value.is_empty() {
+                match kind {
+                    Some(kind) => out.push_str(&self.digest(kind, value)),
+                    None => out.push_str("<session>"),
+                }
+            }
+            rest = &rest[start + len..];
+        }
     }
 
     /// The same, over every string anywhere in a JSON value.
@@ -183,5 +232,35 @@ mod tests {
             "a table of absolutes",
             "a two-character name would rewrite half the report"
         );
+    }
+
+    /// Claude Desktop's session is a cookie, and a cookie header or a session value that
+    /// reaches an error message never reaches a report, whatever else was asked to be hidden.
+    #[test]
+    fn a_session_cookie_never_reaches_a_report() {
+        let s = Sheet::new("salt", "/nowhere");
+        let org = "aaaaaaaa-0000-0000-0000-000000000001";
+        let leaked = format!(
+            "GET /usage failed: Cookie: sessionKey=sk-ant-sid01-AbC_d-ef; \
+             sessionKeyV3=sk-ant-sid02-XyZ, lastActiveOrg={org}&x=1 \
+             and a bare sk-ant-sid01-Leaked_Value-9 at the end"
+        );
+        let hidden = s.over(&leaked);
+        for secret in ["AbC_d-ef", "XyZ", "Leaked_Value", "sk-ant-sid", org] {
+            assert!(!hidden.contains(secret), "{secret} in {hidden}");
+        }
+        // What the cookies were is kept, and what follows each is untouched.
+        assert!(hidden.contains("sessionKey=<session>;"), "{hidden}");
+        assert!(hidden.contains("sessionKeyV3=<session>,"), "{hidden}");
+        assert!(hidden.contains("lastActiveOrg=<org "), "{hidden}");
+        assert!(hidden.contains("&x=1"), "{hidden}");
+        assert!(hidden.ends_with("<session> at the end"), "{hidden}");
+        // The same organisation lines up within one report, as an identifier does.
+        assert_eq!(
+            s.over(&format!("lastActiveOrg={org}")),
+            s.over(&format!("lastActiveOrg={org}"))
+        );
+        let json = s.over_json(&serde_json::json!({"detail": leaked}));
+        assert!(!json.to_string().contains("AbC_d-ef"));
     }
 }

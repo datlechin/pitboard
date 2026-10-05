@@ -26,6 +26,9 @@ unicode-normalization.workspace = true
 machine-uid.workspace = true
 ureq.workspace = true
 rustls.workspace = true
+ring.workspace = true
+aes.workspace = true
+zeroize.workspace = true
 
 [target.'cfg(unix)'.dependencies]
 libc.workspace = true

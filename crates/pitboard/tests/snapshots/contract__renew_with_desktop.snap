@@ -1,0 +1,25 @@
+---
+source: crates/pitboard/tests/contract.rs
+expression: "serde_json :: json! ({ \"exit\" : code, \"envelope\" : value })"
+---
+{
+  "exit": 0,
+  "envelope": {
+    "v": 1,
+    "command": "renew",
+    "ok": true,
+    "data": {
+      "accounts": [
+        {
+          "label": "desktop/work",
+          "provider": "desktop",
+          "outcome": "not_renewable",
+          "expires_at": 1924992000
+        }
+      ],
+      "renewed": 0
+    },
+    "warnings": [],
+    "error": null
+  }
+}

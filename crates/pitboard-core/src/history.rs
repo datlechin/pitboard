@@ -49,19 +49,27 @@ fn dir(ctx: &Context) -> PathBuf {
     home::dir(ctx).join("readings")
 }
 
-fn path(ctx: &Context, account_uuid: &str) -> Option<PathBuf> {
+/// Where the history kept under `usage_key`, an `Account::usage_key`, lives.
+fn path(ctx: &Context, usage_key: &str) -> Option<PathBuf> {
+    // A Claude Desktop key is its account id behind `desktop:`. The file is named with a
+    // `.` there instead, which no plain identifier holds, so it can never be the name of
+    // another key's file, and `:` stays out of file names Finder would show as `/`.
+    let (prefix, id) = match usage_key.strip_prefix("desktop:") {
+        Some(id) => ("desktop.", id),
+        None => ("", usage_key),
+    };
     // The name goes into a file name, so anything that is not a plain identifier is refused
     // rather than escaped.
-    let safe = !account_uuid.is_empty()
-        && account_uuid
+    let safe = !id.is_empty()
+        && id
             .bytes()
             .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_');
-    safe.then(|| dir(ctx).join(format!("{account_uuid}.ndjson")))
+    safe.then(|| dir(ctx).join(format!("{prefix}{id}.ndjson")))
 }
 
 /// Everything known about this account, oldest first.
-pub fn series(ctx: &Context, account_uuid: &str) -> Vec<Point> {
-    let Some(path) = path(ctx, account_uuid) else {
+pub fn series(ctx: &Context, usage_key: &str) -> Vec<Point> {
+    let Some(path) = path(ctx, usage_key) else {
         return Vec::new();
     };
     std::fs::read_to_string(path)
@@ -104,13 +112,13 @@ fn worth_keeping(last: Option<&Point>, next: &Point) -> bool {
 }
 
 /// Record a reading, if it says anything.
-pub fn record(ctx: &Context, account_uuid: &str, snapshot: &Snapshot) {
-    let Some(path) = path(ctx, account_uuid) else {
+pub fn record(ctx: &Context, usage_key: &str, snapshot: &Snapshot) {
+    let Some(path) = path(ctx, usage_key) else {
         return;
     };
     let at = snapshot.observed_at.unwrap_or_else(|| ctx.now());
     let next = point_of(snapshot, at);
-    let existing = series(ctx, account_uuid);
+    let existing = series(ctx, usage_key);
     if !worth_keeping(existing.last(), &next) {
         return;
     }
@@ -145,9 +153,9 @@ pub fn record(ctx: &Context, account_uuid: &str, snapshot: &Snapshot) {
     }
 }
 
-/// Forget an account nobody is enrolled as any more.
-pub fn forget(ctx: &Context, account_uuid: &str) {
-    if let Some(path) = path(ctx, account_uuid) {
+/// Forget an account nobody is enrolled as any more, by its `Account::usage_key`.
+pub fn forget(ctx: &Context, usage_key: &str) {
+    if let Some(path) = path(ctx, usage_key) {
         let _ = std::fs::remove_file(path);
     }
 }
@@ -238,8 +246,8 @@ pub fn runway(points: &[Point], now: i64) -> Runway {
 }
 
 /// The same, for a whole account, read from disk.
-pub fn runway_for(ctx: &Context, account_uuid: &str, now: i64) -> Runway {
-    runway(&series(ctx, account_uuid), now)
+pub fn runway_for(ctx: &Context, usage_key: &str, now: i64) -> Runway {
+    runway(&series(ctx, usage_key), now)
 }
 
 #[cfg(test)]
@@ -302,6 +310,7 @@ mod tests {
                 severity: None,
                 length_seconds: None,
             }],
+            verified: true,
         }
     }
 
@@ -456,6 +465,25 @@ mod tests {
         assert!(!series(&ctx, "acc").is_empty());
         forget(&ctx, "acc");
         assert!(series(&ctx, "acc").is_empty());
+    }
+
+    /// Claude Desktop and Claude Code can be signed in to the same account, and each keeps
+    /// a history of its own under its usage key, so one never reads the other's numbers.
+    #[test]
+    fn claude_desktop_keeps_a_history_apart_from_claude_codes() {
+        let (ctx, _clock, _s) = machine("desktop-key");
+        record(&ctx, "acc", &reading(NOW, 10.0, NOW + 3600));
+        record(&ctx, "desktop:acc", &reading(NOW, 70.0, NOW + 3600));
+        assert_eq!(series(&ctx, "acc"), points(&[(NOW, 10.0)], NOW + 3600));
+        assert_eq!(
+            series(&ctx, "desktop:acc"),
+            points(&[(NOW, 70.0)], NOW + 3600)
+        );
+        forget(&ctx, "desktop:acc");
+        assert!(series(&ctx, "desktop:acc").is_empty());
+        assert!(!series(&ctx, "acc").is_empty());
+        assert!(path(&ctx, "desktop:").is_none());
+        assert!(path(&ctx, "desktop:../x").is_none());
     }
 
     #[test]

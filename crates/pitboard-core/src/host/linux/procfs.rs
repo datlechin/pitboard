@@ -4,6 +4,7 @@
 //! has none, and the warning this feeds would quietly vanish.
 
 use crate::host::Process;
+use crate::host::bundle::{self, Bundle, Listed};
 use std::os::unix::fs::MetadataExt;
 use std::path::PathBuf;
 
@@ -27,6 +28,34 @@ pub(super) fn processes(program: &str) -> Option<Vec<Process>> {
         .collect();
     found.sort_unstable_by_key(|p| p.pid);
     Some(found)
+}
+
+/// This user's processes inside `bundle`, by the rule [`bundle::within`] gives.
+pub(super) fn processes_within(bundle: Bundle<'_>, excluded: &[&str]) -> Option<Vec<Process>> {
+    let me = std::fs::metadata("/proc/self").ok()?.uid();
+    let listed: Vec<Listed> = std::fs::read_dir("/proc")
+        .ok()?
+        .flatten()
+        .filter_map(|entry| {
+            let pid: u32 = entry.file_name().to_str()?.parse().ok()?;
+            if entry.metadata().ok()?.uid() != me {
+                return None;
+            }
+            // The parent is the second field after the name, which is in parentheses and
+            // may itself hold spaces and parentheses.
+            let stat = std::fs::read_to_string(entry.path().join("stat")).ok()?;
+            let (_, rest) = stat.rsplit_once(')')?;
+            let ppid = rest.split_whitespace().nth(1)?.parse().ok()?;
+            let path = std::fs::read_link(entry.path().join("exe")).ok()?;
+            Some(Listed { pid, ppid, path })
+        })
+        .collect();
+    Some(bundle::within(&listed, bundle, excluded))
+}
+
+/// The file process `pid` runs, where this user may read that.
+pub(super) fn program_of(pid: u32) -> Option<PathBuf> {
+    std::fs::read_link(format!("/proc/{pid}/exe")).ok()
 }
 
 #[cfg(test)]

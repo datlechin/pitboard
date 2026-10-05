@@ -65,6 +65,26 @@ pub enum Detail {
         #[serde(default)]
         plan: Option<String>,
     },
+    Desktop {
+        /// The organisation live usage last asked about, where it ever has.
+        #[serde(default)]
+        organization_uuid: Option<String>,
+        /// The SHA-256 of the session cookie's ciphertext when this account was last seen,
+        /// in hex. Never the cookie.
+        session_fingerprint: String,
+        /// When that session cookie expires, in epoch seconds.
+        #[serde(default)]
+        session_expires_at: Option<i64>,
+    },
+}
+
+/// What the usage of `provider`'s account `account_uuid` is filed under, whether or not
+/// anybody has enrolled it: see [`Account::usage_key`].
+pub fn usage_key(provider: ProviderId, account_uuid: &str) -> String {
+    match provider {
+        ProviderId::Desktop => format!("desktop:{account_uuid}"),
+        ProviderId::Claude | ProviderId::Codex => account_uuid.to_owned(),
+    }
 }
 
 /// Claude Code's own extras, for a caller that has already established it is holding a
@@ -157,7 +177,17 @@ impl Account {
         match self.detail {
             Detail::Claude { .. } => ProviderId::Claude,
             Detail::Codex { .. } => ProviderId::Codex,
+            Detail::Desktop { .. } => ProviderId::Desktop,
         }
+    }
+
+    /// What this account's usage readings, budget and history are filed under.
+    ///
+    /// Its identity, for Claude Code and Codex, as it always was. Claude Desktop signs in
+    /// to the same Anthropic account Claude Code can, under the same uuid, and its usage is
+    /// read from somewhere else and judged differently, so it is filed apart.
+    pub fn usage_key(&self) -> String {
+        usage_key(self.provider(), &self.account_uuid)
     }
 
     /// Claude Code's extras, or `None` when this account belongs to another tool.
@@ -170,7 +200,7 @@ impl Account {
                 organization_uuid,
                 oauth_account,
             }),
-            Detail::Codex { .. } => None,
+            Detail::Codex { .. } | Detail::Desktop { .. } => None,
         }
     }
 }
@@ -293,14 +323,25 @@ impl State {
             .find(|a| a.provider() == provider && a.account_uuid == uuid)
     }
 
-    /// The account a parked item was written for.
+    /// The account of `provider`'s a parked item was written for.
     ///
     /// A park's name carries the account's identity and not its tool, because names were
     /// fixed before there was a second tool and every item already on a machine is filed
-    /// under one. The identities cannot collide in practice: Claude Code's and Codex's are
-    /// UUIDs, and Gemini's is Google's numeric subject.
-    pub fn owner_of_park(&self, uuid: &str) -> Option<&Account> {
-        self.accounts.iter().find(|a| a.account_uuid == uuid)
+    /// under one. Claude Code's and Codex's identities cannot collide, but Claude Desktop
+    /// signs in to the same Anthropic account as Claude Code under the same uuid, so the
+    /// owner is looked for within one tool.
+    pub fn owner_of_park(&self, provider: ProviderId, uuid: &str) -> Option<&Account> {
+        self.by_uuid(provider, uuid)
+    }
+
+    /// The account a parked credential in the vault was written for, of whichever tool
+    /// parks in the vault. A tool whose login is a folder parks it as a folder and never in
+    /// the vault, so its accounts own nothing there, even under a uuid they share.
+    pub fn vault_owner_of_park(&self, uuid: &str) -> Option<&Account> {
+        self.accounts
+            .iter()
+            .filter(|a| crate::provider::of(a.provider()).tree().is_none())
+            .find(|a| a.account_uuid == uuid)
     }
 
     fn get_mut(&mut self, key: &Key) -> Option<&mut Account> {
@@ -401,9 +442,14 @@ impl State {
         if from.label != to
             && let Some(taken) = self.get(&target)
         {
+            // A Claude Desktop account has no email to name it by.
             return Err(Error::LabelTaken {
                 label: target.typed(),
-                email: taken.email.clone(),
+                email: if taken.email.is_empty() {
+                    "another account".into()
+                } else {
+                    taken.email.clone()
+                },
             });
         }
         if self.active_for(from.provider) == Some(from.label.as_str()) {
@@ -1182,6 +1228,91 @@ mod tests {
         assert_eq!(s.typed(&claude("work")), "claude/work");
         assert_eq!(s.typed(&Key::new(ProviderId::Codex, "work")), "codex/work");
         assert_eq!(s.typed(&claude("personal")), "personal");
+    }
+
+    fn desktop_account(label: &str, uuid: &str) -> Account {
+        Account {
+            last_used_at: None,
+            label: label.into(),
+            account_uuid: uuid.into(),
+            email: format!("{label}@example.com"),
+            detail: Detail::Desktop {
+                organization_uuid: None,
+                session_fingerprint: "fp".into(),
+                session_expires_at: None,
+            },
+            parked: None,
+        }
+    }
+
+    /// A Claude Desktop account has no email, so a rename onto its label names it as
+    /// another account, never as an empty pair of quotes.
+    #[test]
+    fn a_label_taken_by_an_account_with_no_email_names_another_account() {
+        let mut s = State::default();
+        s.upsert(Account {
+            email: String::new(),
+            ..desktop_account("home", "uuid-home")
+        });
+        s.upsert(Account {
+            email: String::new(),
+            ..desktop_account("work", "uuid-work")
+        });
+        let refused = s
+            .relabel(&Key::new(ProviderId::Desktop, "work"), "home")
+            .expect_err("taken");
+        assert!(
+            matches!(&refused, Error::LabelTaken { email, .. } if email == "another account"),
+            "{refused:?}"
+        );
+        assert!(!refused.to_string().contains("to ."), "{refused}");
+    }
+
+    /// Claude Code and Claude Desktop sign in to the same Anthropic account, so one person
+    /// enrolled in both has two accounts with one uuid. A park in the keychain is Claude
+    /// Code's, and must never be filed under the Desktop account just because it came
+    /// first in the list.
+    #[test]
+    fn a_park_is_owned_within_its_own_tool() {
+        let mut s = State::default();
+        s.upsert(desktop_account("work", "shared-uuid"));
+        s.upsert(Account {
+            account_uuid: "shared-uuid".into(),
+            ..account("work", Some(park("claude-park")))
+        });
+        assert_eq!(s.accounts.len(), 2);
+
+        let claude = s
+            .owner_of_park(ProviderId::Claude, "shared-uuid")
+            .expect("Claude Code's account");
+        assert_eq!(claude.provider(), ProviderId::Claude);
+        let vault = s
+            .vault_owner_of_park("shared-uuid")
+            .expect("the account a vault park belongs to");
+        assert_eq!(vault.provider(), ProviderId::Claude);
+        assert_eq!(
+            s.owner_of_park(ProviderId::Desktop, "shared-uuid")
+                .map(Account::provider),
+            Some(ProviderId::Desktop)
+        );
+        assert!(s.owner_of_park(ProviderId::Codex, "shared-uuid").is_none());
+    }
+
+    /// Readings, budgets and history are filed by a key. One Anthropic account enrolled in
+    /// Claude Code and in Claude Desktop is measured two different ways, so the two must
+    /// not share a key, while every key an existing install already wrote stays the same.
+    #[test]
+    fn usage_keys_do_not_collide() {
+        let code = Account {
+            account_uuid: "shared-uuid".into(),
+            ..account("work", None)
+        };
+        let desktop = desktop_account("work", "shared-uuid");
+        let codex = codex_account("work");
+        assert_eq!(code.usage_key(), "shared-uuid");
+        assert_eq!(codex.usage_key(), codex.account_uuid);
+        assert_eq!(desktop.usage_key(), "desktop:shared-uuid");
+        assert_ne!(code.usage_key(), desktop.usage_key());
     }
 
     #[test]

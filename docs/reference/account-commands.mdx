@@ -5,7 +5,7 @@ description: "`status`, `enroll`, `use`, `forget` and `rename` each get their us
 
 The account commands show, add, switch, forget and rename the accounts Pitboard knows. Each also takes `--json` and `--help`, described in [Global options](/reference/commands#global-options). Exit statuses are as in [Exit codes](/reference/commands#exit-codes) unless a section says otherwise.
 
-A label such as `codex/work` names an account of OpenAI's Codex CLI. `pitboard enroll` reads a bare label such as `work` as a Claude Code account. `pitboard use`, `pitboard forget` and the first label of `pitboard rename` look for a bare label in both tools.
+A label such as `codex/work` names an account of OpenAI's Codex CLI, and `desktop/work` one of Claude Desktop. `pitboard enroll` reads a bare label such as `work` as a Claude Code account. `pitboard use`, `pitboard forget` and the first label of `pitboard rename` look for a bare label in every tool.
 
 A parked login is the login Pitboard keeps for an account that is not in use. For more on both, see [Labels](/reference/commands#labels) and [Parked logins](/concepts/switching#parked-logins).
 
@@ -22,6 +22,8 @@ First, `status` renews each parked login whose access token has expired or expir
 An account asked about recently is not asked again until its numbers could have moved. For how long that takes, see [How usage is read](/concepts/usage#how-often-pitboard-asks).
 
 `status` shows Codex accounts only once one is enrolled. Until then, it reads none of Codex's files and asks OpenAI nothing.
+
+On a Mac with Claude Desktop installed, or a Claude Desktop account enrolled, `status` lists Claude Desktop accounts under their own heading, after Claude Code's. Their usage is read from Claude's own history, shown as `from Claude's own history`, unless [live usage](/reference/maintenance-commands#desktop-live-usage) is on. A parked one shows the date its sign-in lapses, as `ready · sign-in lapses 2026-10-30`.
 
 | Option | Description |
 | --- | --- |
@@ -78,7 +80,7 @@ Pitboard then deletes the directory and, on macOS, the keychain item Claude Code
 
 | Argument | Description |
 | --- | --- |
-| `<LABEL>` | A short name for this account, such as `personal` or `work`. `codex/work` names a Codex account; a bare name means Claude Code |
+| `<LABEL>` | A short name for this account, such as `personal` or `work`. `codex/work` names a Codex account and `desktop/work` a Claude Desktop one; a bare name means Claude Code |
 
 | Option | Description |
 | --- | --- |
@@ -119,6 +121,8 @@ Enrolled work (me@company.com). Switch to it with: pitboard use work
 
 For the same task in the app, see [Add and manage accounts](/guides/accounts#add-another-account).
 
+For Claude Desktop, quit Claude first. Without `--sign-in`, `pitboard enroll desktop/work` prints `Enrolled work for Claude Desktop, the account signed in now.` Claude Desktop has no sign-in Pitboard can run, so `--sign-in` fails with `sign_in_unsupported`. To add another account, see [Use Pitboard with Claude Desktop](/guides/claude-desktop#add-claude-desktop-accounts).
+
 ## `use`
 
 ```text
@@ -133,7 +137,11 @@ Before anything moves, Pitboard checks that the parked login belongs to that acc
 
 | Argument | Description |
 | --- | --- |
-| `<LABEL>` | The label the account was enrolled under, such as `work` or `codex/work` |
+| `<LABEL>` | The label the account was enrolled under, such as `work` or `codex/work`; with `--signed-out`, the tool, such as `desktop` |
+
+| Option | Description |
+| --- | --- |
+| `--signed-out` | Park the account in use and leave the tool signed out, so the next account to sign in to it can be enrolled. For Claude Desktop, which has no sign-in of its own for Pitboard to open |
 
 If the account is already in use, `use` prints `work is already signed in.` and moves no login.
 
@@ -153,6 +161,25 @@ Restart any running `codex` for this to take effect. It will not pick the switch
 ```
 
 For what to do with sessions that are already open, see [Switch accounts](/guides/switch#what-happens-to-open-sessions).
+
+A Claude Desktop switch needs no network. It checks whose login Claude holds from its files, and moves nothing while Claude is open (`app_still_open`). After it, `use` prints:
+
+```text
+Switched Claude Desktop to personal (was work).
+Open Claude to use it.
+```
+
+`--signed-out` works only for Claude Desktop. To park the Claude Desktop account in use and leave Claude signed out:
+
+```sh
+pitboard use desktop --signed-out
+```
+
+```text
+Parked personal. Claude Desktop is signed out.
+Open Claude, sign in to the other account, quit Claude, then run
+  pitboard enroll desktop/<label>
+```
 
 ## `forget`
 

@@ -36,9 +36,12 @@ pub fn forget(settled: Settled, key: &Key) -> Result<(String, Vec<Warning>)> {
     })?;
     state::save(&ctx, &state)?;
     crate::fault::point("forget.recorded");
-    crate::readings::forget(&ctx, &account.account_uuid);
-    crate::budget::forget(&ctx, &account.account_uuid);
-    crate::history::forget(&ctx, &account.account_uuid);
+    // Under the account's usage key, so forgetting Claude Desktop's account leaves what is
+    // known about the same account in Claude Code, and the other way round.
+    let usage_key = account.usage_key();
+    crate::readings::forget(&ctx, &usage_key);
+    crate::budget::forget(&ctx, &usage_key);
+    crate::history::forget(&ctx, &usage_key);
     let pending = purge(&ctx, &mut state);
     Ok((
         account.email,

@@ -228,6 +228,7 @@ fn session_snapshot(
         observed_at: None,
         account_uuid: None,
         source: Source::Live,
+        verified: true,
     })
 }
 
@@ -318,6 +319,7 @@ mod tests {
             observed_at: Some(observed_at),
             account_uuid: None,
             source: Source::Remembered,
+            verified: true,
         }
     }
 

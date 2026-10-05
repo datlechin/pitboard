@@ -4,7 +4,7 @@ use crate::ui::{self, BAD, BOLD, DIM, GOOD, WARN, pad, paint};
 use pitboard_core::doctor::renewal_due;
 use pitboard_core::provider::ProviderId;
 use pitboard_core::state::Key;
-use pitboard_core::status::{Report, Row, Stale};
+use pitboard_core::status::{LiveUsage, Report, Row, Stale};
 use pitboard_core::usage::{Snapshot, Source, Window};
 use pitboard_core::{time, words};
 use serde_json::{Value, json};
@@ -28,6 +28,7 @@ fn tool_name(which: ProviderId) -> &'static str {
     match which {
         ProviderId::Claude => "Claude Code",
         ProviderId::Codex => "Codex",
+        ProviderId::Desktop => "Claude Desktop",
         other => other.code(),
     }
 }
@@ -58,6 +59,9 @@ fn standing(row: &Row, now: i64) -> String {
             ),
         };
     }
+    if row.provider == ProviderId::Desktop {
+        return desktop_standing(row, now);
+    }
     let sign_in_again = format!("pitboard enroll {} --sign-in", typed(row));
     match &row.parked {
         None => paint(WARN, format!("nothing parked · {sign_in_again}")),
@@ -80,6 +84,40 @@ fn standing(row: &Row, now: i64) -> String {
     }
 }
 
+/// A parked Claude Desktop account. Its session cannot be renewed, so what matters is the
+/// day it lapses; and it has no sign-in of Pitboard's to offer, so where it cannot be
+/// switched to, `doctor` is what says the way back.
+fn desktop_standing(row: &Row, now: i64) -> String {
+    match &row.parked {
+        None => paint(WARN, "nothing parked · run pitboard doctor"),
+        Some(p) if !p.restorable_at(now) => paint(BAD, "sign-in lapsed · run pitboard doctor"),
+        Some(p) => match p.refresh_expires_at {
+            Some(at) => format!(
+                "{} {}",
+                paint(GOOD, "ready"),
+                paint(
+                    if renewal_due(at, now) { WARN } else { DIM },
+                    format!("· sign-in lapses {}", time::local(at, "%F"))
+                )
+            ),
+            None => paint(GOOD, "ready"),
+        },
+    }
+}
+
+/// Why a row is not live, in the words this command line uses. Claude Desktop's live
+/// usage being off is the ordinary state and its reading already says where it came from,
+/// so it goes unsaid; and where it waits for approval, the way on is a command typed here.
+fn why(row: &Row) -> Option<&'static str> {
+    match row.stale {
+        Some(Stale::LiveUsageOff) => None,
+        Some(Stale::LiveUsageNeedsApproval) => {
+            Some("live usage paused: run `pitboard desktop live-usage enable`")
+        }
+        _ => row.explanation(),
+    }
+}
+
 fn provenance(usage: &Snapshot, now: i64) -> Option<String> {
     let at = usage.observed_at?;
     match usage.source {
@@ -93,15 +131,36 @@ fn provenance(usage: &Snapshot, now: i64) -> Option<String> {
             time::moment(at, now),
             words::span(now - at)
         )),
+        // Experiment E10 matched the app's history against claude.ai, so a reading is
+        // verified while the register says so; were it not, a number somebody switches on
+        // should say so.
+        Source::DesktopHistory if !usage.verified => Some(format!(
+            "from Claude's own history (unconfirmed), measured {}",
+            time::moment(at, now)
+        )),
+        Source::DesktopHistory => Some(format!(
+            "from Claude's own history, measured {}",
+            time::moment(at, now)
+        )),
     }
 }
 
 pub fn human(report: &Report) -> String {
     let now = report.now;
     if report.rows.is_empty() {
-        return "Nothing is signed in and no account is enrolled.\n\
-                Run `claude` and sign in, then `pitboard enroll <label>`.\n"
-            .into();
+        let mut text = String::from(
+            "Nothing is signed in and no account is enrolled.\n\
+             Run `claude` and sign in, then `pitboard enroll <label>`.\n",
+        );
+        // Claude Desktop's login shows no row until it is enrolled, so someone signed in
+        // to the app would otherwise be told only about `claude`.
+        if report.desktop.is_some() {
+            text.push_str(
+                "For Claude Desktop, sign in to the app, quit Claude, then run \
+                 `pitboard enroll desktop/<label>`.\n",
+            );
+        }
+        return text;
     }
     let label_width = report
         .rows
@@ -159,7 +218,7 @@ pub fn human(report: &Report) -> String {
         ));
 
         let windows: Vec<&Window> = row.usage.iter().flat_map(|u| u.windows.iter()).collect();
-        let why = row.explanation();
+        let why = why(row);
         if windows.is_empty() {
             block.push_str(&format!(
                 "    {}\n",
@@ -233,7 +292,37 @@ pub fn human(report: &Report) -> String {
             ),
         );
     }
+    if let Some(waiting) = report
+        .desktop
+        .as_ref()
+        .and_then(|d| d.awaiting_sign_in.as_ref())
+    {
+        blocks.push(format!(
+            "{}\n",
+            paint(
+                WARN,
+                format!(
+                    "Claude Desktop is signed out, and {} is parked. Open Claude, sign in to \
+                     the other account, quit Claude, then run `pitboard enroll \
+                     desktop/<label>`.",
+                    waiting.from_label
+                )
+            )
+        ));
+    }
     blocks.join("\n")
+}
+
+/// Claude Desktop's live usage as a program reads it, the same in `status` and in
+/// `desktop live-usage`. The key's stamp is Pitboard's own bookkeeping and stays out.
+pub fn live_usage_json(state: &LiveUsage) -> Value {
+    json!({
+        "enabled": state.enabled,
+        "approval": state.approval,
+        "reason": state.reason,
+        "changed_at": state.changed_at,
+        "last_ok_at": state.last_ok_at,
+    })
 }
 
 /// The email to show, or what stands in for one on a login Pitboard could not pin on any
@@ -247,7 +336,7 @@ fn email(row: &Row) -> String {
 }
 
 pub fn json(report: &Report) -> Value {
-    json!({
+    let mut value = json!({
         // Which slot this answer is about. Accounts and their parked logins belong to the
         // machine; who is signed in belongs to one credential slot, and CLAUDE_CONFIG_DIR
         // selects a different one.
@@ -283,11 +372,19 @@ pub fn json(report: &Report) -> Value {
                     pitboard_core::history::Runway::Unknown => "unknown",
                 },
             })),
-            "usage": r.usage.as_ref().map(|u| json!({
-                "source": u.source,
-                "observed_at": u.observed_at,
-                "windows": u.windows,
-            })),
+            "usage": r.usage.as_ref().map(|u| {
+                let mut usage = json!({
+                    "source": u.source,
+                    "observed_at": u.observed_at,
+                    "windows": u.windows,
+                });
+                // Only where it is false: a reading with no key is confirmed, so every
+                // reading a program read before reads exactly the same.
+                if !u.verified {
+                    usage["verified"] = json!(false);
+                }
+                usage
+            }),
             "stale": r.stale,
             // Which tool the account is for, and its name as it would be typed with the
             // tool spelled out. Added beside what was there, so nothing a program already
@@ -295,7 +392,23 @@ pub fn json(report: &Report) -> Value {
             "provider": r.provider.code(),
             "qualified": r.key().map(|k| k.qualified()),
         })).collect::<Vec<_>>(),
-    })
+    });
+    // Only on a machine with the app or an account of it, so every other machine's answer
+    // is the one it always was.
+    if let Some(desktop) = &report.desktop {
+        value["desktop"] = json!({
+            "live_usage": live_usage_json(&desktop.live_usage),
+            "awaiting_sign_in": desktop.awaiting_sign_in.as_ref().map(|a| json!({
+                "from": a.from_label,
+                "started_at": a.started_at,
+            })),
+            "recovery_waiting": desktop.recovery_waiting.as_ref().map(|w| json!({
+                "from": w.from,
+                "to": w.to,
+            })),
+        });
+    }
+    value
 }
 
 #[cfg(test)]
@@ -320,6 +433,7 @@ mod tests {
             observed_at: Some(NOW - 7_200),
             account_uuid: None,
             source,
+            verified: true,
         }
     }
 
@@ -361,7 +475,170 @@ mod tests {
                 email: "work@example.com".into(),
                 organization_uuid: "org".into(),
             }),
+            desktop: None,
         }
+    }
+
+    /// A Claude Desktop account, its usage read from the app's own history the way it is
+    /// when live usage is off.
+    fn desktop(label: &str, signed_in: bool) -> Row {
+        let mut row = row(Some(label), signed_in);
+        row.provider = ProviderId::Desktop;
+        row.usage = Some(Snapshot {
+            verified: false,
+            ..reading(42.0, Source::DesktopHistory)
+        });
+        row.stale = Some(Stale::LiveUsageOff);
+        if let Some(park) = row.parked.as_mut() {
+            park.service = "pitboard-tree-x-1".into();
+            park.access_expires_at = None;
+        }
+        row
+    }
+
+    fn desktop_report(rows: Vec<Row>) -> Report {
+        Report {
+            desktop: Some(pitboard_core::status::DesktopReport {
+                live_usage: pitboard_core::status::LiveUsage::default(),
+                awaiting_sign_in: None,
+                recovery_waiting: None,
+            }),
+            ..report(rows)
+        }
+    }
+
+    /// Experiment on 4 October 2026: with no Claude Code login and nothing enrolled, status
+    /// told someone signed in to Claude Desktop only to run `claude`.
+    #[test]
+    fn an_empty_report_says_how_to_add_claude_desktop_when_it_is_installed() {
+        let text = plain(&human(&desktop_report(vec![])));
+        assert!(text.contains("pitboard enroll desktop/<label>"), "{text}");
+        assert!(text.contains("quit Claude"), "{text}");
+
+        let text = plain(&human(&report(vec![])));
+        assert!(!text.contains("desktop"), "{text}");
+    }
+
+    #[test]
+    fn a_claude_desktop_account_says_when_its_sign_in_lapses_and_never_to_sign_in() {
+        let lapses = NOW + 20 * 86_400;
+        let text = plain(&human(&desktop_report(vec![
+            desktop("work", true),
+            desktop("personal", false),
+        ])));
+        let date = time::local(lapses, "%F");
+        assert!(
+            text.contains(&format!("ready · sign-in lapses {date}")),
+            "{text}"
+        );
+        assert!(
+            !text.contains("--sign-in"),
+            "Claude has no sign-in to open:\n{text}"
+        );
+        assert!(!text.contains("good for"), "{text}");
+
+        let mut expired = desktop("old", false);
+        expired.parked.as_mut().unwrap().refresh_expires_at = Some(NOW - 1);
+        let mut empty = desktop("empty", false);
+        empty.parked = None;
+        let text = plain(&human(&desktop_report(vec![expired, empty])));
+        assert!(
+            text.contains("sign-in lapsed · run pitboard doctor"),
+            "{text}"
+        );
+        assert!(
+            text.contains("nothing parked · run pitboard doctor"),
+            "{text}"
+        );
+        assert!(!text.contains("--sign-in"), "{text}");
+    }
+
+    #[test]
+    fn claude_desktop_usage_from_its_history_is_marked_unconfirmed() {
+        let text = plain(&human(&desktop_report(vec![desktop("work", true)])));
+        assert!(text.contains("history (unconfirmed)"), "{text}");
+        // That live usage is off is the ordinary state, already said by where the reading
+        // came from, so it is not said a second time as though something were wrong.
+        assert!(!text.contains("usage history"), "{text}");
+        assert!(!text.contains("live usage paused"), "{text}");
+    }
+
+    #[test]
+    fn claude_desktop_live_usage_waiting_for_approval_says_the_command_that_gives_it() {
+        let mut work = desktop("work", true);
+        work.stale = Some(Stale::LiveUsageNeedsApproval);
+        let text = plain(&human(&desktop_report(vec![work])));
+        assert!(
+            text.contains("live usage paused: run `pitboard desktop live-usage enable`"),
+            "{text}"
+        );
+    }
+
+    #[test]
+    fn claude_desktop_gets_its_own_heading() {
+        let text = plain(&human(&desktop_report(vec![
+            row(Some("code"), true),
+            desktop("work", true),
+        ])));
+        assert!(text.contains("\nClaude Desktop\n"), "{text}");
+        assert!(text.starts_with("Claude Code\n"), "{text}");
+    }
+
+    #[test]
+    fn a_sign_out_waiting_for_the_next_account_says_what_to_do_next() {
+        let mut report = desktop_report(vec![desktop("personal", false)]);
+        report.desktop.as_mut().unwrap().awaiting_sign_in = Some(pitboard_core::status::Awaiting {
+            from_label: "personal".into(),
+            started_at: NOW - 60,
+        });
+        let text = plain(&human(&report));
+        assert!(text.contains("Claude Desktop is signed out"), "{text}");
+        assert!(text.contains("pitboard enroll desktop/<label>"), "{text}");
+    }
+
+    /// An interrupted switch waiting for the app to quit is an object naming both sides,
+    /// so a program reads it by field rather than by position.
+    #[test]
+    fn a_switch_waiting_for_the_app_names_both_sides_in_the_json() {
+        let mut report = desktop_report(vec![desktop("work", true)]);
+        report.desktop.as_mut().unwrap().recovery_waiting =
+            Some(pitboard_core::status::InterruptedSwitch {
+                from: "desktop/work".into(),
+                to: "desktop/personal".into(),
+            });
+        let value = json(&report);
+        assert_eq!(
+            value["desktop"]["recovery_waiting"],
+            serde_json::json!({"from": "desktop/work", "to": "desktop/personal"})
+        );
+    }
+
+    #[test]
+    fn the_json_marks_only_an_unconfirmed_reading_and_says_what_is_true_of_claude_desktop() {
+        let value = json(&desktop_report(vec![desktop("work", true)]));
+        let usage = &value["accounts"][0]["usage"];
+        assert_eq!(usage["source"], "desktop_history");
+        assert_eq!(usage["verified"], false);
+        assert_eq!(value["accounts"][0]["provider"], "desktop");
+        let live = &value["desktop"]["live_usage"];
+        assert_eq!(live["enabled"], false);
+        assert_eq!(live["approval"], "unknown");
+        assert!(live["reason"].is_null());
+        assert!(
+            live.get("stamp").is_none(),
+            "the key's stamp is Pitboard's own"
+        );
+        assert!(value["desktop"]["awaiting_sign_in"].is_null());
+        assert!(value["desktop"]["recovery_waiting"].is_null());
+
+        // A confirmed reading carries no key at all, so what a program read before reads
+        // the same, and a machine without Claude Desktop is told nothing about it.
+        let value = json(&report(vec![row(Some("work"), true)]));
+        assert!(
+            value["accounts"][0]["usage"].get("verified").is_none(),
+            "{value}"
+        );
+        assert!(value.get("desktop").is_none(), "{value}");
     }
 
     fn plain(styled: &str) -> String {

@@ -4,7 +4,7 @@ use clap::{CommandFactory, Parser, Subcommand};
 use pitboard_core::context::Context;
 use pitboard_core::doctor;
 use pitboard_core::error::Error;
-use pitboard_core::provider::Adoption;
+use pitboard_core::provider::{Adoption, ProviderId};
 use pitboard_core::service::{Changing, Done, Failed, Pitboard, Warning};
 use pitboard_core::switch::{Enrolled, Outcome, Renewal};
 use serde_json::{Value, json};
@@ -23,7 +23,8 @@ const CONTRACT: u32 = 1;
 const ERROR: Style = AnsiColor::Red.on_default().bold();
 const WARNING: Style = AnsiColor::Yellow.on_default().bold();
 
-/// Park and restore your own logins of Claude Code and Codex, and see what each one has left.
+/// Park and restore your own logins of Claude Code, Codex and Claude Desktop, and see what
+/// each one has left.
 #[derive(Parser)]
 #[command(name = "pitboard", version)]
 struct Cli {
@@ -50,7 +51,8 @@ enum Command {
     /// Add an account: the one signed in now, or with --sign-in, another one
     Enroll {
         /// A short name for this account, such as `personal` or `work`. `codex/work` names a
-        /// Codex account; a bare name means Claude Code
+        /// Codex account and `desktop/work` a Claude Desktop one; a bare name means Claude
+        /// Code
         #[arg(value_parser = label_to_enroll)]
         label: String,
         /// Sign in through the tool's own sign-in, without signing out of the account in
@@ -61,8 +63,14 @@ enum Command {
     },
     /// Switch a tool to an enrolled account
     Use {
-        /// The label the account was enrolled under, such as `work` or `codex/work`
+        /// The label the account was enrolled under, such as `work` or `codex/work`; with
+        /// --signed-out, the tool, such as `desktop`
         label: String,
+        /// Park the account in use and leave the tool signed out, so the next account to
+        /// sign in to it can be enrolled. For Claude Desktop, which has no sign-in of its
+        /// own for Pitboard to open
+        #[arg(long)]
+        signed_out: bool,
     },
     /// Drop an account and its parked login
     Forget {
@@ -105,6 +113,11 @@ enum Command {
         /// The label it should have
         #[arg(value_parser = new_label)]
         to: String,
+    },
+    /// Claude Desktop's own settings
+    Desktop {
+        #[command(subcommand)]
+        what: DesktopCommand,
     },
     /// Check that what Pitboard relies on still holds on this machine
     Doctor,
@@ -337,7 +350,9 @@ fn enroll_signing_in(pitboard: &Pitboard, label: &str) -> Report {
     let existing = pitboard.account_to_enroll(label);
     let who = existing
         .as_ref()
-        .map_or_else(|| "the account to add".to_string(), |a| a.email.clone());
+        .map(|a| a.email.clone())
+        .filter(|email| !email.is_empty())
+        .unwrap_or_else(|| "the account to add".to_string());
     let tool = existing.as_ref().map_or_else(
         || {
             pitboard_core::label::choose(label)
@@ -346,13 +361,27 @@ fn enroll_signing_in(pitboard: &Pitboard, label: &str) -> Report {
         },
         pitboard_core::state::Account::provider,
     );
-    eprintln!(
-        "Opening {}'s sign-in. Sign in as {who}; the account in use now stays signed in.",
-        tool.name()
-    );
+    // Claude Desktop has no sign-in Pitboard can open, and the core says so; saying it
+    // was being opened first would be a line the next one contradicts.
+    if tool != ProviderId::Desktop {
+        eprintln!(
+            "Opening {}'s sign-in. Sign in as {who}; the account in use now stays signed in.",
+            tool.name()
+        );
+    }
     match pitboard.sign_in(label) {
         Ok(login) => enrolled(pitboard, label, pitboard.enroll_signed_in(label, login)),
         Err(failed) => Report::refused("enroll", failed),
+    }
+}
+
+/// ` (email)` after an account's name, or nothing for an account with no email, as a
+/// Claude Desktop account has: an empty pair of brackets says nothing.
+fn bracketed(email: &str) -> String {
+    if email.is_empty() {
+        String::new()
+    } else {
+        format!(" ({email})")
     }
 }
 
@@ -373,34 +402,50 @@ fn enrolled(pitboard: &Pitboard, label: &str, outcome: Changing<Enrolled>) -> Re
     let another = pitboard_core::state::Key::new(provider, "<label>").typed();
     changed("enroll", outcome, |enrolled| {
         let (kind, email, human) = match enrolled {
+            // Claude Desktop adds its next account by being signed out, not by a sign-in
+            // of Pitboard's, so there is no `--sign-in` to offer.
+            Enrolled::Current { email } if provider == ProviderId::Desktop => {
+                let human = format!(
+                    "Enrolled {} for {}, the account signed in now.\n",
+                    paint(BOLD, bare(label)),
+                    provider.name()
+                );
+                ("current", email, human)
+            }
             Enrolled::Current { email } => {
                 let human = format!(
-                    "Enrolled {name} ({email}), the account signed in now.\n\
+                    "Enrolled {name}{}, the account signed in now.\n\
                      Add another without signing out of it: pitboard enroll {another} \
-                     --sign-in\n"
+                     --sign-in\n",
+                    bracketed(&email)
                 );
                 ("current", email, human)
             }
             Enrolled::SignedIn { email } => {
                 let human = format!(
-                    "Enrolled {name} ({email}). Switch to it with: pitboard use {to_use}\n"
+                    "Enrolled {name}{}. Switch to it with: pitboard use {to_use}\n",
+                    bracketed(&email)
                 );
                 ("signed_in", email, human)
             }
             Enrolled::Renewed { email } => {
-                let human = format!("Renewed {name} ({email}): its parked login is a fresh one.\n");
+                let human = format!(
+                    "Renewed {name}{}: its parked login is a fresh one.\n",
+                    bracketed(&email)
+                );
                 ("renewed", email, human)
             }
             Enrolled::InUse { email, again } => {
                 let human = if again {
                     format!(
-                        "Signed in to {name} ({email}) again. Its new login is the one in use \
-                         now.\n"
+                        "Signed in to {name}{} again. Its new login is the one in use now.\n",
+                        bracketed(&email)
                     )
                 } else {
                     format!(
-                        "Enrolled {name} ({email}), the account signed in now. Its new login is \
-                         the one in use.\n"
+                        "Enrolled {name}{}, the account signed in now. Its new login is the one \
+                         in use.\n",
+                        bracketed(&email)
                     )
                 };
                 ("in_use", email, human)
@@ -418,11 +463,83 @@ fn enrolled(pitboard: &Pitboard, label: &str, outcome: Changing<Enrolled>) -> Re
     })
 }
 
+/// What the switch says of when sessions already running follow it: the tool's own answer,
+/// not a constant. A number of seconds is only ever shown for a tool that really does
+/// follow on its own within them, and a tool that needs restarting has no number at all
+/// rather than a zero that reads as "at once".
+fn adoption_said(provider: ProviderId, adoption: Adoption) -> (Option<u32>, String, Value) {
+    match adoption {
+        Adoption::PollingWithin(seconds) => (
+            Some(seconds),
+            format!(
+                "{} sessions already running follow within {seconds} seconds.\n",
+                provider.name()
+            ),
+            json!({ "follows": "polling", "within_seconds": seconds }),
+        ),
+        Adoption::RestartRequired { program, .. } => (
+            None,
+            format!(
+                "Restart any running `{program}` for this to take effect. \
+                 It will not pick the switch up on its own.\n"
+            ),
+            json!({ "follows": "restart", "program": program }),
+        ),
+        // An app that reads its login only when it starts was quit before the switch, so
+        // there is nothing left running to restart.
+        Adoption::NextLaunch { program } => (
+            None,
+            format!("Open {program} to use it.\n"),
+            json!({ "follows": "next_launch", "program": program }),
+        ),
+    }
+}
+
+/// A label as somebody reads it, without the tool it was typed with: `personal` for
+/// `desktop/personal`. Only for a sentence that names the tool itself.
+fn bare(typed: &str) -> &str {
+    match typed.split_once(pitboard_core::label::SEPARATOR) {
+        Some((tool, label)) if ProviderId::parse(tool).is_some() => label,
+        _ => typed,
+    }
+}
+
 fn use_account(pitboard: &Pitboard, label: &str) -> Report {
-    changed("use", pitboard.switch_to(label), |outcome| match outcome {
+    switched(pitboard.switch_to(label))
+}
+
+/// `pitboard use desktop --signed-out`: the label is the tool to sign out.
+fn use_signed_out(pitboard: &Pitboard, tool: &str) -> Report {
+    match ProviderId::parse(tool) {
+        Some(which) => switched(pitboard.switch_to_signed_out(which)),
+        None => Report::failed(
+            Some("use"),
+            Error::ProviderUnknown {
+                typed: tool.to_string(),
+                known: ProviderId::ALL
+                    .iter()
+                    .map(|p| p.code().to_string())
+                    .collect(),
+            },
+        ),
+    }
+}
+
+fn switched(outcome: Changing<Outcome>) -> Report {
+    changed("use", outcome, |outcome| match outcome {
         Outcome::AlreadyActive { label } => (
             json!({ "to": label, "changed": false }),
             format!("{} is already signed in.\n", paint(BOLD, &label)),
+        ),
+        // A sign-out that found nobody signed in: said as one, with nothing parked.
+        Outcome::AlreadySignedOut { provider } => (
+            json!({
+                "to": null,
+                "signed_out": true,
+                "provider": provider,
+                "changed": false,
+            }),
+            format!("{} is already signed out.\n", provider.name()),
         ),
         Outcome::Switched {
             provider,
@@ -431,28 +548,7 @@ fn use_account(pitboard: &Pitboard, label: &str) -> Report {
             parked,
             adoption,
         } => {
-            // The tool's own answer, not a constant. A number of seconds is only ever shown
-            // for a tool that really does follow on its own within them, and a tool that
-            // needs restarting has no number at all rather than a zero that reads as "at
-            // once".
-            let (seconds, follows, adoption_json) = match adoption {
-                Adoption::PollingWithin(seconds) => (
-                    Some(seconds),
-                    format!(
-                        "{} sessions already running follow within {seconds} seconds.\n",
-                        provider.name()
-                    ),
-                    json!({ "follows": "polling", "within_seconds": seconds }),
-                ),
-                Adoption::RestartRequired { program, .. } => (
-                    None,
-                    format!(
-                        "Restart any running `{program}` for this to take effect. \
-                         It will not pick the switch up on its own.\n"
-                    ),
-                    json!({ "follows": "restart", "program": program }),
-                ),
-            };
+            let (seconds, follows, adoption_json) = adoption_said(provider, adoption);
             (
                 json!({
                     "from": from,
@@ -463,10 +559,70 @@ fn use_account(pitboard: &Pitboard, label: &str) -> Report {
                     "adoption_ceiling_seconds": seconds,
                     "adoption": adoption_json,
                 }),
+                if provider == ProviderId::Desktop {
+                    // One app, so the sentence names it, and the labels without it.
+                    format!(
+                        "Switched {} to {} (was {}).\n{follows}",
+                        provider.name(),
+                        paint(BOLD, bare(&to)),
+                        paint(BOLD, bare(&from)),
+                    )
+                } else {
+                    format!(
+                        "Switched to {}; {} is parked.\n{follows}",
+                        paint(BOLD, &to),
+                        paint(BOLD, &from),
+                    )
+                },
+            )
+        }
+        // Nothing was signed in, so nothing was parked.
+        Outcome::Installed {
+            provider,
+            to,
+            adoption,
+        } => {
+            let (seconds, follows, adoption_json) = adoption_said(provider, adoption);
+            (
+                json!({
+                    "from": null,
+                    "to": to,
+                    "provider": provider,
+                    "changed": true,
+                    "adoption_ceiling_seconds": seconds,
+                    "adoption": adoption_json,
+                }),
+                format!("Switched to {}.\n{follows}", paint(BOLD, &to)),
+            )
+        }
+        // Only an app whose login is a folder is signed out this way, and the next
+        // account is whoever signs in to it next, so the way on is the app's own sign-in.
+        Outcome::SignedOut {
+            provider,
+            from,
+            parked,
+            adoption,
+        } => {
+            let (seconds, _, adoption_json) = adoption_said(provider, adoption);
+            let next = pitboard_core::state::Key::new(provider, "<label>").typed();
+            (
+                json!({
+                    "from": from,
+                    "to": null,
+                    "signed_out": true,
+                    "provider": provider,
+                    "changed": true,
+                    "parked_at": parked.parked_at,
+                    "adoption_ceiling_seconds": seconds,
+                    "adoption": adoption_json,
+                }),
                 format!(
-                    "Switched to {}; {} is parked.\n{follows}",
-                    paint(BOLD, &to),
-                    paint(BOLD, &from),
+                    "Parked {}. {} is signed out.\n\
+                     Open {program}, sign in to the other account, quit {program}, then run\n  \
+                     pitboard enroll {next}\n",
+                    paint(BOLD, bare(&from)),
+                    provider.name(),
+                    program = provider.program(),
                 ),
             )
         }
@@ -477,7 +633,7 @@ fn forget(pitboard: &Pitboard, label: &str) -> Report {
     changed("forget", pitboard.forget(label), |email| {
         (
             json!({ "label": label, "email": email }),
-            format!("Forgot {} ({email}).\n", paint(BOLD, label)),
+            format!("Forgot {}{}.\n", paint(BOLD, label), bracketed(&email)),
         )
     })
 }
@@ -525,22 +681,136 @@ fn renew(pitboard: &Pitboard) -> Report {
         .iter()
         .filter(|(_, r)| matches!(r, Renewal::Renewed))
         .count();
-    let human = format!(
-        "{}\n",
-        pitboard_core::words::renewal_note(outcomes.len(), renewed)
-    );
+    // A login Pitboard cannot renew is said on a line of its own with when it lapses,
+    // because the only way to keep it is to sign in to it again before then.
+    let lapsing: Vec<String> = outcomes
+        .iter()
+        .filter_map(|(key, outcome)| match outcome {
+            Renewal::NotRenewable { expires_at, .. } => Some(format!(
+                "{}: not renewable; {}\n",
+                key.typed(),
+                match expires_at {
+                    Some(at) => format!(
+                        "its sign-in lapses {}",
+                        pitboard_core::time::local(*at, "%F")
+                    ),
+                    None => "when its sign-in lapses is not known".to_string(),
+                }
+            )),
+            _ => None,
+        })
+        .collect();
+    let due = outcomes.len() - lapsing.len();
+    let mut human = if due == 0 && !lapsing.is_empty() {
+        String::new()
+    } else {
+        format!("{}\n", pitboard_core::words::renewal_note(due, renewed))
+    };
+    human.push_str(&lapsing.concat());
     Report::done(
         "renew",
         json!({
-            "accounts": outcomes.iter().map(|(key, outcome)| json!({
-                "label": key.typed(),
-                "provider": key.provider,
-                "outcome": outcome.code(),
-            })).collect::<Vec<_>>(),
+            "accounts": outcomes.iter().map(|(key, outcome)| {
+                let mut said = json!({
+                    "label": key.typed(),
+                    "provider": key.provider,
+                    "outcome": outcome.code(),
+                });
+                if let Renewal::NotRenewable { expires_at, .. } = outcome {
+                    said["expires_at"] = json!(expires_at);
+                }
+                said
+            }).collect::<Vec<_>>(),
             "renewed": renewed,
         }),
         human,
     )
+}
+
+#[derive(Subcommand)]
+enum DesktopCommand {
+    /// Ask claude.ai how much each Claude Desktop account has left, which needs Claude's
+    /// key. Off until you turn it on; switching accounts never needs it
+    LiveUsage {
+        #[command(subcommand)]
+        what: LiveUsageCommand,
+    },
+}
+
+#[derive(Subcommand, Debug, Clone, Copy, PartialEq, Eq)]
+enum LiveUsageCommand {
+    /// Read Claude's key once, which macOS asks your login password for, and ask claude.ai
+    /// from then on
+    Enable,
+    /// Stop asking claude.ai, and forget the key
+    Disable,
+    /// Say whether it is on, and whether macOS lets Pitboard read the key
+    Status,
+}
+
+/// What `enable` is about to do, said before macOS asks, because macOS's own question does
+/// not say why Pitboard wants the key or what "Always Allow" lets through.
+const LIVE_USAGE_EXPLAINED: &str = "\
+Pitboard will read Claude's encryption key once to ask claude.ai how much each
+Claude Desktop account has left. macOS will ask for your login password:
+choose \"Always Allow\" so it does not ask again.
+Always Allow lets any program that runs /usr/bin/security read this key.
+Switching accounts never needs it. Turn it off with `pitboard desktop live-usage disable`.
+";
+
+fn live_usage(pitboard: &Pitboard, what: LiveUsageCommand, as_json: bool) -> Report {
+    use pitboard_core::status::Approval;
+    let turned = match what {
+        LiveUsageCommand::Status => Ok(pitboard.live_usage()),
+        LiveUsageCommand::Enable => {
+            // Said only to somebody at a terminal, who is the one macOS is about to ask. A
+            // script gets the envelope and nothing in front of it.
+            if !as_json && std::io::stderr().is_terminal() {
+                eprint!("{LIVE_USAGE_EXPLAINED}");
+            }
+            pitboard.enable_live_usage()
+        }
+        LiveUsageCommand::Disable => pitboard.disable_live_usage(),
+    };
+    let state = match turned {
+        Ok(state) => state,
+        Err(error) => return Report::failed(Some("desktop"), error),
+    };
+    let human = match (what, state.enabled, state.approval) {
+        (LiveUsageCommand::Enable, true, Approval::Granted) => "Live usage is on.\n".to_string(),
+        (LiveUsageCommand::Disable, false, _) => "Live usage is off. Claude Desktop's usage is \
+            read from its own history, and Pitboard has forgotten Claude's key.\n"
+            .to_string(),
+        (_, false, _) => "Live usage is off: Claude Desktop's usage is read from its own \
+            history. Turn it on with `pitboard desktop live-usage enable`.\n"
+            .to_string(),
+        (_, true, Approval::Granted) => format!(
+            "Live usage is on: Claude Desktop's usage is asked of claude.ai{}.\n",
+            state.last_ok_at.map_or_else(String::new, |at| format!(
+                ", last answered {}",
+                pitboard_core::time::moment(at, unix_now())
+            ))
+        ),
+        (_, true, _) => format!(
+            "Live usage is paused: macOS has not let Pitboard read Claude's key{}. Run \
+             `pitboard desktop live-usage enable` to ask again.\n",
+            state
+                .reason
+                .as_deref()
+                .map_or_else(String::new, |reason| format!(" ({reason})"))
+        ),
+    };
+    Report::done(
+        "desktop",
+        json!({ "live_usage": render::status::live_usage_json(&state) }),
+        human,
+    )
+}
+
+fn unix_now() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| i64::try_from(d.as_secs()).unwrap_or(i64::MAX))
 }
 
 fn schedule(pitboard: &Pitboard, what: &ScheduleCommand) -> Report {
@@ -761,6 +1031,13 @@ fn uninstall(pitboard: &Pitboard) -> Report {
                 "~/.pitboard is gone. Remove Pitboard itself the way you installed it.\n",
             );
         }
+        for dir in &removed.kept {
+            human.push_str(&format!(
+                "Kept {}: it holds Claude Desktop data Pitboard never deletes. Look through \
+                 it, then remove it yourself.\n",
+                dir.display()
+            ));
+        }
         (
             json!({
                 "parks_removed": removed.parks,
@@ -779,9 +1056,10 @@ fn rename(pitboard: &Pitboard, from: &str, to: &str) -> Report {
         (
             json!({ "from": from, "to": to, "email": email }),
             format!(
-                "Renamed {} to {} ({email}).\n",
+                "Renamed {} to {}{}.\n",
                 paint(BOLD, from),
-                paint(BOLD, to)
+                paint(BOLD, to),
+                bracketed(&email)
             ),
         )
     })
@@ -822,7 +1100,11 @@ fn main() -> ExitCode {
         Command::Enroll { label, .. } => {
             enrolled(&pitboard, &label, pitboard.enroll_current(&label))
         }
-        Command::Use { label } => use_account(&pitboard, &label),
+        Command::Use {
+            label,
+            signed_out: true,
+        } => use_signed_out(&pitboard, &label),
+        Command::Use { label, .. } => use_account(&pitboard, &label),
         Command::Forget { label, yes } => {
             // The way back is a browser sign-in for that account, which is the cost
             // Pitboard exists to spare people. Asked only where there is someone to ask:
@@ -873,6 +1155,9 @@ fn main() -> ExitCode {
             uninstall(&pitboard)
         }
         Command::Rename { from, to } => rename(&pitboard, &from, &to),
+        Command::Desktop {
+            what: DesktopCommand::LiveUsage { what },
+        } => live_usage(&pitboard, what, cli.json),
         // These write a file for a shell or for man, not a report, so there is no envelope
         // to put them in. Asking for one is a command line that cannot be satisfied.
         Command::Completions { .. } | Command::Manpage if cli.json => Report {
@@ -947,6 +1232,53 @@ mod tests {
         }
     }
 
+    /// Claude Desktop has no sign-in of its own to open, so a second account is added by
+    /// signing the app out and enrolling whoever signs in next.
+    #[test]
+    fn claude_desktop_is_signed_out_and_enrolled_from_the_command_line() {
+        let cli = Cli::try_parse_from(["pitboard", "use", "desktop", "--signed-out"]).unwrap();
+        assert!(
+            matches!(
+                cli.command,
+                Some(Command::Use { ref label, signed_out: true }) if label == "desktop"
+            ),
+            "the tool is what is signed out"
+        );
+        let cli = Cli::try_parse_from(["pitboard", "use", "desktop/work"]).unwrap();
+        assert!(matches!(
+            cli.command,
+            Some(Command::Use {
+                signed_out: false,
+                ..
+            })
+        ));
+        let cli = Cli::try_parse_from(["pitboard", "enroll", "desktop/work"]).unwrap();
+        assert!(matches!(
+            cli.command,
+            Some(Command::Enroll { ref label, sign_in: false }) if label == "desktop/work"
+        ));
+    }
+
+    #[test]
+    fn live_usage_is_turned_on_off_and_read_by_name() {
+        for (typed, expected) in [
+            ("enable", LiveUsageCommand::Enable),
+            ("disable", LiveUsageCommand::Disable),
+            ("status", LiveUsageCommand::Status),
+        ] {
+            let cli = Cli::try_parse_from(["pitboard", "desktop", "live-usage", typed]).unwrap();
+            match cli.command {
+                Some(Command::Desktop {
+                    what: DesktopCommand::LiveUsage { what },
+                }) => assert_eq!(what, expected, "{typed}"),
+                _ => panic!("{typed} parsed as something else"),
+            }
+        }
+        // Turning it on is a choice, so it is never what a bare command does.
+        assert!(Cli::try_parse_from(["pitboard", "desktop", "live-usage"]).is_err());
+        assert!(Cli::try_parse_from(["pitboard", "desktop"]).is_err());
+    }
+
     #[test]
     fn no_arguments_means_status() {
         assert!(Cli::try_parse_from(["pitboard"]).unwrap().command.is_none());
@@ -981,13 +1313,23 @@ mod tests {
             "pitboard doctor",
             "pitboard statusline",
             "pitboard completions",
+            // roff writes a hyphen escaped.
+            r"pitboard desktop live\-usage enable",
+            r"pitboard desktop live\-usage disable",
+            r"pitboard desktop live\-usage status",
         ] {
             assert!(
                 page.contains(&format!("\\fB{typed}\\fR")),
                 "{typed} missing:\n{page}"
             );
         }
-        for option in [r"\-\-offline", r"\-\-sign\-in", r"\-y", r"\-\-lines"] {
+        for option in [
+            r"\-\-offline",
+            r"\-\-sign\-in",
+            r"\-\-signed\-out",
+            r"\-y",
+            r"\-\-lines",
+        ] {
             assert!(page.contains(option), "{option} missing:\n{page}");
         }
         assert!(page.contains("[possible values: bash"), "{page}");

@@ -49,6 +49,23 @@ The text beside the button then gives the result, in the same line `pitboard ren
 
 **No parked login was due.** also appears while another Pitboard run is changing something, while a switch is interrupted, or when the account list cannot be read.
 
+### Claude Desktop
+
+This section appears when the app finds `Claude.app`, or when a Claude Desktop account is enrolled.
+
+**Show live usage** sets where Claude Desktop's numbers come from. Turning it on opens a dialog that says what Pitboard reads from the keychain, and only its **Continue** turns live usage on. Turning it off forgets Claude's key, as `pitboard desktop live-usage disable` does.
+
+The line under the switch says what is in effect:
+
+| Line | Meaning |
+| --- | --- |
+| **Off. Numbers come from Claude's own history, without reset times.** | Live usage is off. |
+| **On. Numbers come from claude.ai.** | Live usage is on, and the last read of Claude's key worked. |
+| **On. Pitboard asks claude.ai at the next read.** | Live usage is on, and Pitboard has not asked claude.ai yet. |
+| **Paused: macOS stopped letting Pitboard read Claude's key.** | Live usage is on, and macOS refused the read. **Allow Again** opens the dialog again. |
+
+For what live usage reads, see [Use Pitboard with Claude Desktop](/guides/claude-desktop#see-usage-from-claudeai).
+
 ## Command Line
 
 ### In your terminal

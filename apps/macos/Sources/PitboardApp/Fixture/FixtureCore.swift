@@ -17,6 +17,9 @@
         private var changes: [Change] = []
         private var scheduled = false
         private var changedAt: Int64 = 1
+        /// An add of a Claude Desktop account left halfway, as the core keeps one.
+        private var awaiting: Awaiting?
+        private var live: LiveUsageState
 
         init(_ fixture: Fixture, apps: FixtureApps = FixtureApps(), now: Date = Date()) {
             self.fixture = fixture
@@ -24,12 +27,24 @@
             accounts = Self.accounts(for: fixture, now: now)
             stuck = fixture == .stuck
             changes = Self.history(now: now)
+            // Turned on once, and stopped since by macOS, which an update to Claude can do.
+            live =
+                fixture == .claudeDesktop
+                ? LiveUsageState(
+                    enabled: true, approval: "needs_approval", reason: "item_changed",
+                    lastOkAt: Int64(now.timeIntervalSince1970) - 86_400)
+                : LiveUsageState(
+                    enabled: false, approval: "unknown", reason: nil, lastOkAt: nil)
         }
 
-        func tools() -> [Tool] { Self.tools }
+        /// Claude Desktop only where the fixture is about it, so every other fixture shows
+        /// what its UI tests were written against.
+        func tools() -> [Tool] {
+            fixture == .claudeDesktop ? Self.tools + [Self.desktop] : Self.tools
+        }
 
         func installed() async -> [Tool] {
-            fixture == .noClaudeCode ? [] : Self.tools
+            fixture == .noClaudeCode ? [] : tools()
         }
 
         func searchPath() async -> String? { "/usr/bin:/bin" }
@@ -58,8 +73,16 @@
             lock.withLock { currentStatus() }
         }
 
-        /// ChatGPT's two `codex` processes while it is open, as the process list shows them.
+        /// Claude's app and ChatGPT's two `codex` processes while each is open, as the
+        /// process list shows them, named as the real core names them.
         func holding(_ provider: String) async -> [Holding] {
+            if provider == "desktop", apps.isRunning(FixtureApps.claude) {
+                return [
+                    Holding(
+                        kind: "claude_desktop_app", phrase: "the Claude app", pids: [5151],
+                        remedy: .reopenApp(bundleId: FixtureApps.claude, name: "Claude"))
+                ]
+            }
             guard provider == "codex", apps.isRunning(FixtureApps.chatGPT) else { return [] }
             return [
                 Holding(
@@ -111,6 +134,7 @@
                 }
                 accounts[target] = with(accounts[target], signedIn: true, switchable: false)
                 record("switch", Self.typed(label))
+                if provider == "desktop" { awaiting = nil }
                 // Labels as the core types them: bare for Claude Code, with the tool for any
                 // other, which is what the app compares an account with.
                 return Switched(
@@ -119,7 +143,9 @@
                         from: from.flatMap { accounts[$0].qualified }.map(Self.typed) ?? "",
                         to: Self.typed(label),
                         adoption: provider == "codex"
-                            ? .restart(program: "codex") : .follows(withinSeconds: 45)),
+                            ? .restart(program: "codex")
+                            : provider == "desktop"
+                                ? .nextLaunch(program: "Claude") : .follows(withinSeconds: 45)),
                     warnings: [])
             }
         }
@@ -127,6 +153,15 @@
         func enrollCurrent(_ label: String) async throws -> Enrolled {
             try lock.withLock {
                 let (provider, name) = Self.parts(of: label)
+                // Somebody signed in to another account in Claude while Pitboard waited.
+                if provider == "desktop", awaiting != nil,
+                    !accounts.contains(where: { $0.provider == provider && $0.signedIn })
+                {
+                    accounts.append(
+                        Self.account(
+                            nil, of: provider, email: "dana@new.example", signedIn: true,
+                            windows: [Self.window("five_hour", 5, length: 18_000, in: 18_000)]))
+                }
                 guard
                     let index = accounts.firstIndex(where: {
                         $0.provider == provider && $0.signedIn && $0.label == nil
@@ -135,6 +170,7 @@
                 try requireUnused(name, of: provider)
                 accounts[index] = with(accounts[index], label: name)
                 record("enroll", Self.typed(label))
+                if provider == "desktop" { awaiting = nil }
                 return Enrolled(email: accounts[index].email, outcome: .current, warnings: [])
             }
         }
@@ -179,6 +215,51 @@
                 self?.signedIn(name, of: provider)
                     ?? Enrolled(
                         email: "", outcome: .signedIn, warnings: [])
+            }
+        }
+
+        /// Parks the Claude Desktop account in use and leaves Claude signed out, waiting for
+        /// a sign-in to another account.
+        func switchToSignedOut(_ tool: String) async throws -> Switched {
+            try lock.withLock {
+                guard tool == "desktop" else {
+                    throw Self.failed(
+                        "sign_out_unsupported", "Only Claude Desktop can be left signed out.")
+                }
+                let from = accounts.firstIndex { $0.provider == tool && $0.signedIn }
+                if let from {
+                    accounts[from] = with(accounts[from], signedIn: false, switchable: true)
+                }
+                let fromLabel = from.flatMap { accounts[$0].label }
+                awaiting = Awaiting(
+                    fromLabel: fromLabel, startedAt: Int64(Date().timeIntervalSince1970))
+                record("sign-out", tool)
+                return Switched(
+                    outcome: .switched(
+                        provider: tool, from: from.flatMap { accounts[$0].qualified } ?? "",
+                        to: "", adoption: .nextLaunch(program: "Claude")),
+                    warnings: [])
+            }
+        }
+
+        func awaitingSignIn() async -> Awaiting? { lock.withLock { awaiting } }
+
+        func liveUsage() async -> LiveUsageState { lock.withLock { live } }
+
+        func enableLiveUsage() async throws -> LiveUsageState {
+            lock.withLock {
+                live = LiveUsageState(
+                    enabled: true, approval: "granted", reason: nil,
+                    lastOkAt: Int64(Date().timeIntervalSince1970))
+                return live
+            }
+        }
+
+        func disableLiveUsage() async throws -> LiveUsageState {
+            lock.withLock {
+                live = LiveUsageState(
+                    enabled: false, approval: "unknown", reason: nil, lastOkAt: nil)
+                return live
             }
         }
 
@@ -288,6 +369,9 @@
             Tool(code: "codex", name: "Codex", program: "codex", service: "OpenAI"),
         ]
 
+        static let desktop = Tool(
+            code: "desktop", name: "Claude Desktop", program: "Claude", service: "Anthropic")
+
         private static func accounts(for fixture: Fixture, now: Date) -> [Account] {
             let work = account(
                 "work", email: "dana@work.example", signedIn: true,
@@ -319,6 +403,8 @@
                 return [work, personal, old, codexMain, codexSpare]
             case .oneTool, .readFailure, .stuck:
                 return [work, personal]
+            case .claudeDesktop:
+                return [work, personal] + desktopAccounts(now: now)
             case .onlyOne:
                 return [work]
             case .unnamed:
@@ -326,6 +412,35 @@
             case .empty, .firstLaunch, .noClaudeCode:
                 return []
             }
+        }
+
+        /// Claude Desktop's two accounts: `personal` in use, its numbers from Claude's own
+        /// history since macOS stopped live usage, and `work` parked, its sign-in lapsing in
+        /// two days.
+        private static func desktopAccounts(now: Date) -> [Account] {
+            let seconds = Int64(now.timeIntervalSince1970)
+            let history = Usage(
+                source: .desktopHistory, observedAt: seconds - 600,
+                windows: [window("five_hour", 23, length: 18_000, in: 9_000)], verified: false)
+            let inUse = Account(
+                id: "desktop:personal", provider: "desktop", label: "personal",
+                qualified: "desktop/personal", unplaced: false, email: "dana@home.example",
+                accountUuid: "desktop-personal", signedIn: true, switchable: false,
+                parked: nil, usage: history, stale: "live_usage_needs_approval",
+                staleExplanation:
+                    "macOS stopped letting Pitboard read Claude’s key, so these numbers come "
+                    + "from Claude’s own history.",
+                lastsSeconds: nil, lastsBurning: false)
+            let parked = Account(
+                id: "desktop:work", provider: "desktop", label: "work",
+                qualified: "desktop/work", unplaced: false, email: "dana@work.example",
+                accountUuid: "desktop-work", signedIn: false, switchable: true,
+                parked: Parked(
+                    parkedAt: seconds - 5 * 86_400, accessExpiresAt: nil,
+                    refreshExpiresAt: seconds + 2 * 86_400),
+                usage: nil, stale: nil, staleExplanation: nil, lastsSeconds: nil,
+                lastsBurning: false)
+            return [inUse, parked]
         }
 
         private static func history(now: Date) -> [Change] {
@@ -388,13 +503,14 @@
             let label = label ?? account.label
             let inUse = signedIn ?? account.signedIn
             let now = Int64(Date().timeIntervalSince1970)
-            // Codex states no expiry for its refresh token; Claude Code's lasts 30 days.
+            // Codex states no expiry for its refresh token; Claude Code's lasts 30 days, and
+            // so, as far as the fixture is concerned, does Claude Desktop's.
             let renewed: Parked? =
                 inUse
                 ? nil
                 : Parked(
                     parkedAt: now, accessExpiresAt: nil,
-                    refreshExpiresAt: account.provider == "claude" ? now + 30 * 86_400 : nil)
+                    refreshExpiresAt: account.provider == "codex" ? nil : now + 30 * 86_400)
             return Account(
                 id: account.id, provider: account.provider, label: label,
                 qualified: label.map { "\(account.provider)/\($0)" },

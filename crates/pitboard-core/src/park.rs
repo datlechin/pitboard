@@ -178,7 +178,12 @@ pub fn live_twins(ctx: &Context, state: &State) -> Vec<String> {
             .filter(|a| a.provider() == provider)
             .filter_map(|a| a.parked.as_ref())
             .collect();
-        if held.is_empty() || (provider == ProviderId::Claude && crate::settings::custom_oauth(ctx))
+        // A tree login's park is the account's own items, moved and never copied, so it is
+        // never a twin of anything; and its fingerprint is a cookie's, which a keychain
+        // login's could only match by chance.
+        if held.is_empty()
+            || crate::provider::of(provider).tree().is_some()
+            || (provider == ProviderId::Claude && crate::settings::custom_oauth(ctx))
         {
             continue;
         }
@@ -196,10 +201,18 @@ pub fn live_twins(ctx: &Context, state: &State) -> Vec<String> {
 
 /// Delete every discarded item, keeping listed only those that resisted. Returns how many
 /// remain.
+///
+/// A tree login's park is a directory, deleted from the parks directory and nowhere else;
+/// every other name is an item in the vault. The prefixes tell them apart, so neither kind
+/// of delete is ever handed the other's name.
 pub fn purge(ctx: &Context, state: &mut State) -> usize {
-    state
-        .discarded
-        .retain(|service| store::vault_delete(ctx, service).is_err());
+    state.discarded.retain(|service| {
+        if service.starts_with(crate::provider::desktop::paths::PARK_PREFIX) {
+            crate::store::tree::delete_park(ctx, service).is_err()
+        } else {
+            store::vault_delete(ctx, service).is_err()
+        }
+    });
     state.discarded.len()
 }
 
@@ -364,5 +377,41 @@ mod tests {
             &serde_json::json!({"accessToken": "a"}),
         );
         assert!(refused.is_err());
+    }
+
+    /// A Claude Desktop park is never a twin of a keychain login, even one of the same
+    /// account whose fingerprint it happens to carry: it is a folder moved out of the app,
+    /// never a copy, and dropping it as a twin would delete an account's only session.
+    #[test]
+    fn a_desktop_park_is_never_a_keychain_twin() {
+        let (ctx, mem, _scratch) = machine();
+        let live = json!({"claudeAiOauth": oauth("shared")});
+        mem.live().plant(
+            &crate::provider::claude::paths::live_service(&ctx),
+            &live.to_string(),
+        );
+        let fingerprint = crate::provider::of(ProviderId::Claude).fingerprint(&live);
+        assert!(!fingerprint.is_empty());
+
+        let mut state = State::default();
+        state.accounts.push(crate::state::Account {
+            last_used_at: None,
+            label: "desk".into(),
+            account_uuid: "acc".into(),
+            email: String::new(),
+            parked: Some(crate::state::Park {
+                service: "pitboard-tree-acc-1760000000000".into(),
+                parked_at: 1_760_000_000,
+                refresh_fingerprint: fingerprint,
+                access_expires_at: None,
+                refresh_expires_at: None,
+            }),
+            detail: crate::state::Detail::Desktop {
+                organization_uuid: None,
+                session_fingerprint: "f".into(),
+                session_expires_at: None,
+            },
+        });
+        assert_eq!(live_twins(&ctx, &state), Vec::<String>::new());
     }
 }

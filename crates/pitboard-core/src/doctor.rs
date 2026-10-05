@@ -85,6 +85,9 @@ pub struct Facts {
     pub interrupted: bool,
     /// What is read about Codex here, for the section that is about it.
     pub codex: CodexFacts,
+    /// What is read about Claude Desktop here, where it is installed or has accounts or
+    /// parks. `None` on a machine that has never had it, which then reads as it always did.
+    pub desktop: Option<DesktopFacts>,
     /// Whether Claude Code is on this machine at all: installed, run once, signed in, or
     /// holding enrolled accounts. A machine that uses only Codex is not told Claude Code is
     /// broken.
@@ -103,6 +106,51 @@ pub struct ScheduleFact {
     pub program: Option<PathBuf>,
     /// Whether that Pitboard is still there to be run.
     pub program_found: bool,
+}
+
+/// What is read about Claude Desktop on this machine.
+///
+/// Read off disk alone: the app's bundle, its data folder's cookie database, and
+/// Pitboard's own parks, strays and journal. Never the keychain, and never even the stamp
+/// on Claude's key, so a doctor run asks nobody anything.
+pub struct DesktopFacts {
+    /// Whether the app's bundle is where the context says.
+    pub installed: bool,
+    /// Its version, as its bundle says.
+    pub version: Option<String>,
+    /// Where it keeps its data.
+    pub support_dir: Option<PathBuf>,
+    /// Whether that and Pitboard's parks are on one volume, where a move is a rename.
+    /// `None` where either is not there to be asked.
+    pub same_volume: Option<bool>,
+    /// The cookie database's `meta.version`, where there is one that could be read.
+    pub cookies_meta_version: Option<u32>,
+    /// Whether the two copies of the session cookie disagree.
+    pub twins_differ: bool,
+    /// Whether only this user can reach the parks directory. `None` where there is none.
+    pub parks_dir_private: Option<bool>,
+    /// How many parks are in it.
+    pub parks: usize,
+    /// The parks no account's record names, by directory name.
+    pub orphan_parks: Vec<String>,
+    /// What switches set aside rather than deleted.
+    pub strays: Strays,
+    /// Whether a switch of the app's folder did not finish.
+    pub recovery_pending: bool,
+    /// What is running from inside the app's bundle. `None` where that could not be asked.
+    pub running: Option<Vec<crate::holder::Holding>>,
+    /// Whether live usage is on, and whether macOS lets Pitboard read Claude's key, as last
+    /// recorded. Read from Pitboard's own file, never from the keychain.
+    pub live_usage: crate::status::LiveUsage,
+    /// The register's entries for Claude Desktop that have not been measured yet.
+    pub unverified_facts: Vec<&'static str>,
+}
+
+/// What is in Claude Desktop's strays directory.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Strays {
+    pub count: usize,
+    pub bytes: u64,
 }
 
 /// What is read about Codex CLI on this machine.
@@ -214,7 +262,14 @@ fn park_facts(ctx: &Context, state: &State) -> Vec<ParkFact> {
             },
             park: a.parked.clone(),
             unreadable: a.parked.as_ref().and_then(|p| {
-                park::load(ctx, &a.key(), p).err().map(|e| match e {
+                // A folder login's park is a directory, never a keychain item: looking it up
+                // in the vault would always find it missing.
+                let read = if crate::provider::of(a.provider()).tree().is_some() {
+                    switch::check_tree_park(ctx, &a.label, a, p).map(|_| ())
+                } else {
+                    park::load(ctx, &a.key(), p).map(|_| ())
+                };
+                read.err().map(|e| match e {
                     Error::ParkedCredentialMissing { .. } => "missing from the vault".into(),
                     Error::ParkedCredentialCorrupt { detail, .. } => detail,
                     other => other.to_string(),
@@ -269,6 +324,7 @@ pub fn gather(ctx: &Context) -> Facts {
             .map(|s| park_facts(ctx, s))
             .unwrap_or_default(),
         codex: codex_facts(ctx, state.as_ref().ok()),
+        desktop: desktop_facts(ctx, state.as_ref().ok()),
         claude_present: claude::config_file(ctx).exists()
             || claude::program(ctx).is_some()
             || store::read_raw(&claude_live::chain(ctx), &service)
@@ -283,6 +339,119 @@ pub fn gather(ctx: &Context) -> Facts {
         service,
         schedule: schedule_fact(ctx),
         now: ctx.now(),
+    }
+}
+
+/// Claude Desktop's section, where the app is installed, an account is enrolled, or
+/// Pitboard has parked or set aside anything of it.
+fn desktop_facts(ctx: &Context, state: Option<&State>) -> Option<DesktopFacts> {
+    use crate::provider::desktop::{assumptions, cookies, live_usage, paths};
+    let tree = crate::provider::of(ProviderId::Desktop).tree()?;
+    let installed = ctx.desktop_installed();
+    let enrolled: Vec<&crate::state::Account> = state
+        .map(|s| {
+            s.accounts
+                .iter()
+                .filter(|a| a.provider() == ProviderId::Desktop)
+                .collect()
+        })
+        .unwrap_or_default();
+    let parks_dir = paths::parks_dir(ctx);
+    let recovery_pending = switch::tree_interrupted(ctx).is_some();
+    if !installed && enrolled.is_empty() && !recovery_pending && !paths::desktop_home(ctx).exists()
+    {
+        return None;
+    }
+
+    let support_dir = tree.root(ctx);
+    let table = support_dir
+        .as_ref()
+        .and_then(|root| ctx.host().cookie_table(&paths::cookies_db(root)).ok());
+    // Where the parks are, or where Pitboard would make them.
+    let parks_home = [parks_dir.clone(), paths::desktop_home(ctx), home::dir(ctx)]
+        .into_iter()
+        .find(|dir| dir.is_dir());
+    let same_volume = match (support_dir.as_ref().filter(|d| d.is_dir()), parks_home) {
+        (Some(support), Some(parks)) => {
+            let host = ctx.host();
+            match (host.device_of(support), host.device_of(&parks)) {
+                (Ok(a), Ok(b)) => Some(a == b),
+                _ => None,
+            }
+        }
+        _ => None,
+    };
+    let parks_dir_private = std::fs::symlink_metadata(&parks_dir).ok().map(|found| {
+        use std::os::unix::fs::MetadataExt;
+        !found.file_type().is_symlink() && found.is_dir() && found.mode() & 0o077 == 0
+    });
+    let park_names: Vec<String> = std::fs::read_dir(&parks_dir)
+        .map(|entries| {
+            entries
+                .flatten()
+                .filter_map(|entry| entry.file_name().into_string().ok())
+                .filter(|name| name.starts_with(paths::PARK_PREFIX))
+                .collect()
+        })
+        .unwrap_or_default();
+    // Only where the record could be read: a park cannot be called nobody's on the word of
+    // a record that says nothing.
+    let mut orphan_parks: Vec<String> = match state {
+        Some(state) => park_names
+            .iter()
+            .filter(|name| {
+                !enrolled
+                    .iter()
+                    .any(|a| a.parked.as_ref().is_some_and(|p| &p.service == *name))
+                    && !state.discarded.iter().any(|d| d == *name)
+            })
+            .cloned()
+            .collect(),
+        None => Vec::new(),
+    };
+    orphan_parks.sort();
+    let strays = {
+        let mut strays = Strays { count: 0, bytes: 0 };
+        count_files(&paths::strays_dir(ctx), &mut strays);
+        strays
+    };
+    Some(DesktopFacts {
+        installed,
+        version: installed.then(|| paths::installed_version(ctx)).flatten(),
+        support_dir,
+        same_volume,
+        cookies_meta_version: table.as_ref().map(|t| t.meta_version),
+        twins_differ: table.as_ref().is_some_and(cookies::twins_differ),
+        parks_dir_private,
+        parks: park_names.len(),
+        orphan_parks,
+        strays,
+        recovery_pending,
+        running: crate::holder::find_within(ctx, tree),
+        live_usage: live_usage::load(ctx),
+        unverified_facts: assumptions::ASSUMPTIONS
+            .iter()
+            .filter(|a| a.verified_against == crate::assumptions::UNVERIFIED)
+            .map(|a| a.name)
+            .collect(),
+    })
+}
+
+/// Every regular file under `dir` and what it takes up, without following a link.
+fn count_files(dir: &std::path::Path, found: &mut Strays) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let Ok(meta) = std::fs::symlink_metadata(entry.path()) else {
+            continue;
+        };
+        if meta.is_dir() {
+            count_files(&entry.path(), found);
+        } else {
+            found.count += 1;
+            found.bytes += meta.len();
+        }
     }
 }
 
@@ -483,7 +652,8 @@ fn running_codex(ctx: &Context) -> Option<Vec<crate::holder::Holding>> {
         crate::provider::Adoption::RestartRequired { program, holders } => {
             crate::holder::find(ctx, program, holders)
         }
-        crate::provider::Adoption::PollingWithin(_) => Some(Vec::new()),
+        crate::provider::Adoption::PollingWithin(_)
+        | crate::provider::Adoption::NextLaunch { .. } => Some(Vec::new()),
     }
 }
 
@@ -531,7 +701,7 @@ pub fn evaluate(facts: &Facts) -> Vec<Check> {
     // tool either: a new machine is told what to do first, as it always was. A machine
     // that uses only Codex is not told to run a program it does not use.
     let codex_here = facts.codex.present || facts.codex.enrolled > 0;
-    let claude_here = facts.claude_present || !codex_here;
+    let claude_here = facts.claude_present || !(codex_here || facts.desktop.is_some());
 
     if let Some(tool) = facts.os.secrets_tool() {
         checks.push(match &facts.security_tool {
@@ -801,10 +971,14 @@ pub fn evaluate(facts: &Facts) -> Vec<Check> {
     });
     // Claude Code's accounts here; every other tool's go in its own section, so a program
     // reading codes can tell them apart and Claude Code's column is Claude Code's alone.
-    let (claude_parks, codex_parks): (Vec<&ParkFact>, Vec<&ParkFact>) = facts
-        .parks
-        .iter()
-        .partition(|p| p.provider == ProviderId::Claude);
+    let parks_of = |which: ProviderId| -> Vec<&ParkFact> {
+        facts.parks.iter().filter(|p| p.provider == which).collect()
+    };
+    let (claude_parks, codex_parks, desktop_parks) = (
+        parks_of(ProviderId::Claude),
+        parks_of(ProviderId::Codex),
+        parks_of(ProviderId::Desktop),
+    );
     checks.extend(claude_parks.iter().map(|p| judge_park(p, facts.now)));
     if facts.interrupted {
         checks.push(warn(
@@ -852,6 +1026,10 @@ pub fn evaluate(facts: &Facts) -> Vec<Check> {
     if codex_here || !codex_parks.is_empty() {
         checks.extend(judge_codex(facts.os, &facts.codex, &codex_parks, facts.now));
     }
+    // After Codex's, and only where there is a Claude Desktop to say something about.
+    if let Some(desktop) = &facts.desktop {
+        checks.extend(judge_desktop(desktop, &desktop_parks, facts.now));
+    }
     if !claude_here {
         checks.retain(|check| !CLAUDE_CODES_OWN.contains(&check.code));
     }
@@ -877,10 +1055,16 @@ const CLAUDE_CODES_OWN: &[&str] = &[
 /// The code an account's check goes under: Claude Code's as it always was, and every other
 /// tool's in that tool's own namespace, so `codex_` is enough to find everything about
 /// Codex.
-fn account_code(provider: ProviderId, claude: &'static str, codex: &'static str) -> &'static str {
+fn account_code(
+    provider: ProviderId,
+    claude: &'static str,
+    codex: &'static str,
+    desktop: &'static str,
+) -> &'static str {
     match provider {
         ProviderId::Claude => claude,
         ProviderId::Codex => codex,
+        ProviderId::Desktop => desktop,
     }
 }
 
@@ -905,7 +1089,12 @@ fn judge_dormant(park: &ParkFact, now: i64) -> Option<Check> {
         return None;
     }
     Some(warn(
-        account_code(park.provider, "dormant_account", "codex_dormant_account"),
+        account_code(
+            park.provider,
+            "dormant_account",
+            "codex_dormant_account",
+            "desktop_dormant_account",
+        ),
         format!("account {}", park.typed()),
         format!(
             "not switched to for {}; Pitboard has kept its login alive that whole time",
@@ -995,7 +1184,12 @@ pub fn renewal_due(refresh_expires_at: i64, now: i64) -> bool {
 }
 
 fn judge_park(fact: &ParkFact, now: i64) -> Check {
-    let code = account_code(fact.provider, "parked_login", "codex_parked_login");
+    let code = account_code(
+        fact.provider,
+        "parked_login",
+        "codex_parked_login",
+        "desktop_parked_login",
+    );
     let name = format!("account {}", fact.typed());
     let renew = format!("Run `pitboard enroll {} --sign-in`.", fact.typed());
     let Some(park) = &fact.park else {
@@ -1095,7 +1289,7 @@ fn judge_asking(facts: &Facts) -> Check {
             .state
             .as_ref()
             .ok()
-            .and_then(|s| s.owner_of_park(uuid))
+            .and_then(|s| s.vault_owner_of_park(uuid))
             .map(crate::state::Account::provider)
     };
     let services = |tools: &mut Vec<ProviderId>| {
@@ -1518,6 +1712,225 @@ fn judge_codex_version(facts: &CodexFacts) -> Check {
     )
 }
 
+/// A parked Claude Desktop login this close to expiring is worth signing in to again. Its
+/// session lives about four weeks and nothing renews it, so a week is the warning.
+const DESKTOP_EXPIRES_SOON: i64 = 7 * 86_400;
+
+/// Claude Desktop's section: the app, its data folder, Pitboard's parks of it and live
+/// usage. Codes are `desktop_...`, so a program finds everything about it by prefix.
+fn judge_desktop(facts: &DesktopFacts, parks: &[&ParkFact], now: i64) -> Vec<Check> {
+    use crate::provider::desktop::{assumptions, cookies};
+    let mut checks = Vec::new();
+    let verified = assumptions::VERIFIED_AGAINST;
+    checks.push(match facts.version.as_deref() {
+        Some(installed) if installed != verified => warn(
+            "desktop_version_unverified",
+            "Claude Desktop build",
+            format!("{installed} installed; Pitboard's facts were read from {verified}"),
+            "Switching still checks each item before it moves anything. If a switch refuses, \
+             `pitboard doctor` and the register say which fact changed.",
+        ),
+        Some(installed) => ok(
+            "desktop_version",
+            "Claude Desktop build",
+            format!("{installed}, which is what Pitboard's facts were read from"),
+        ),
+        None if facts.installed => ok(
+            "desktop_version",
+            "Claude Desktop build",
+            format!("installed, and its version could not be read; Pitboard's facts were read from {verified}"),
+        ),
+        None => ok(
+            "desktop_version",
+            "Claude Desktop build",
+            format!("not found here; Pitboard's facts were read from {verified}"),
+        ),
+    });
+    match facts.cookies_meta_version {
+        Some(found) if found != cookies::EXPECTED_META => checks.push(fail(
+            "desktop_format_unknown",
+            "Claude Desktop cookies",
+            format!(
+                "the cookie database is version {found}; Pitboard reads version {}",
+                cookies::EXPECTED_META
+            ),
+            "Pitboard will not switch Claude Desktop accounts until it understands this \
+             format. Nothing has been moved.",
+        )),
+        Some(found) => checks.push(ok(
+            "desktop_cookies",
+            "Claude Desktop cookies",
+            format!("version {found}"),
+        )),
+        None => {}
+    }
+    if facts.same_volume == Some(false) {
+        checks.push(fail(
+            "desktop_different_volume",
+            "Claude Desktop volume",
+            "Claude's data folder and Pitboard's parks are on different volumes",
+            "A switch moves the folder's items by renaming them, which works only on one \
+             volume. Keep Pitboard's home on the same disk as your home folder.",
+        ));
+    }
+    if facts.parks_dir_private == Some(false) {
+        checks.push(fail(
+            "desktop_parks_not_private",
+            "Claude Desktop parks",
+            "the directory holding parked logins can be reached by others",
+            "It holds signed-in sessions. Pitboard will not park anything there until only \
+             you can reach it: `chmod 700` it.",
+        ));
+    }
+    if !facts.orphan_parks.is_empty() {
+        checks.push(warn(
+            "desktop_orphan_park",
+            "Claude Desktop parks",
+            format!(
+                "{} not named by any account: {}",
+                match facts.orphan_parks.len() {
+                    1 => "1 park is".to_string(),
+                    n => format!("{n} parks are"),
+                },
+                facts.orphan_parks.join(", ")
+            ),
+            "Left by a switch that did not finish, or by an account forgotten while it could \
+             not be deleted. Pitboard never deletes one it cannot place; look inside before \
+             removing it.",
+        ));
+    }
+    checks.extend(parks.iter().map(|p| judge_desktop_park(p, now)));
+    if facts.strays.count > 0 {
+        checks.push(ok(
+            "desktop_strays_kept",
+            "Claude Desktop strays",
+            format!(
+                "{} set aside, {} bytes",
+                match facts.strays.count {
+                    1 => "1 file".to_string(),
+                    n => format!("{n} files"),
+                },
+                facts.strays.bytes
+            ),
+        ));
+    }
+    if facts.recovery_pending {
+        checks.push(warn(
+            "desktop_recovery_pending",
+            "interrupted Claude Desktop switch",
+            "a switch of Claude Desktop did not finish",
+            "Keep Claude closed and run any `pitboard` command that changes Claude Desktop to \
+             finish it; `pitboard abandon` keeps every item where it is.",
+        ));
+    }
+    checks.push({
+        let (detail, advice) = match facts.running.as_deref() {
+            None => ("could not tell".to_string(), String::new()),
+            Some([]) => ("not running".to_string(), String::new()),
+            Some(holding) => (
+                crate::holder::described_with_pids(holding),
+                "Quit Claude (Command-Q) before a switch; nothing is moved while it runs."
+                    .to_string(),
+            ),
+        };
+        Check {
+            advice,
+            ..ok("desktop_running", "running Claude Desktop", detail)
+        }
+    });
+    let live = &facts.live_usage;
+    checks.push(
+        if live.enabled && live.approval == crate::status::Approval::NeedsApproval {
+            warn(
+                "desktop_live_usage_needs_approval",
+                "Claude Desktop live usage",
+                match &live.reason {
+                    Some(reason) => {
+                        format!("on, and macOS has not let it read Claude's key ({reason})")
+                    }
+                    None => "on, and macOS has not let it read Claude's key".to_string(),
+                },
+                "Run `pitboard desktop live-usage enable` again and choose \"Always Allow\", or \
+                 turn it off with `pitboard desktop live-usage disable`.",
+            )
+        } else if live.enabled {
+            ok("desktop_live_usage", "Claude Desktop live usage", "on")
+        } else {
+            ok(
+                "desktop_live_usage",
+                "Claude Desktop live usage",
+                "off; usage comes from Claude's own history",
+            )
+        },
+    );
+    if facts.twins_differ {
+        checks.push(ok(
+            "desktop_session_twins_differ",
+            "Claude Desktop session",
+            "the two copies of the session cookie differ; Pitboard goes by `sessionKey`",
+        ));
+    }
+    checks
+}
+
+/// A parked Claude Desktop account. Its session is never renewed, so how long it has left
+/// is said, and the way back is signing in again in the app.
+fn judge_desktop_park(fact: &ParkFact, now: i64) -> Check {
+    let name = format!("account {}", fact.typed());
+    let again = format!(
+        "Run `pitboard use desktop --signed-out`, sign in to this account in Claude, quit \
+         Claude, then run `pitboard enroll {}`.",
+        fact.typed()
+    );
+    let Some(park) = &fact.park else {
+        return if fact.active {
+            ok(
+                "desktop_parked_login",
+                name,
+                "signed in; parked when you switch away",
+            )
+        } else {
+            warn(
+                "desktop_parked_login",
+                name,
+                "nothing parked to switch to",
+                again,
+            )
+        };
+    };
+    if let Some(why) = &fact.unreadable {
+        return fail(
+            "desktop_parked_login",
+            name,
+            format!("its parked login is unusable: {why}"),
+            again,
+        );
+    }
+    match park.refresh_expires_at {
+        Some(at) if at <= now => warn(
+            "desktop_park_expired",
+            name,
+            format!("its parked sign-in lapsed {}", time::moment(at, now)),
+            again,
+        ),
+        Some(at) if at - now < DESKTOP_EXPIRES_SOON => warn(
+            "desktop_park_expires_soon",
+            name,
+            format!("its parked sign-in lapses in {}", words::span(at - now)),
+            format!(
+                "Switch to it with `pitboard use {}` before then, or sign in again: {again}",
+                fact.typed()
+            ),
+        ),
+        Some(at) => ok(
+            "desktop_parked_login",
+            name,
+            format!("parked, good for {}", words::span(at - now)),
+        ),
+        None => ok("desktop_parked_login", name, "parked"),
+    }
+}
+
 /// The checks, and where Claude Code's files were found, for a program to read rather than
 /// parse out of the checks' wording.
 pub struct Diagnosis {
@@ -1530,10 +1943,7 @@ pub struct Diagnosis {
 
 pub fn run(ctx: &Context) -> Diagnosis {
     let facts = gather(ctx);
-    Diagnosis {
-        redaction: redaction_for(ctx, &facts),
-        checks: evaluate(&facts),
-        environment: json!({
+    let mut environment = json!({
             "config_file": facts.config_path,
             "storage_dir": facts.storage_dir,
             "credential_service": facts.service,
@@ -1550,8 +1960,42 @@ pub fn run(ctx: &Context) -> Diagnosis {
                     .then_some(facts.codex.auth_access.is_some()),
                 "version": facts.codex.version,
             },
-        }),
+    });
+    // Claude Desktop's, only where it is here, so a machine without it reads as it did.
+    if let Some(desktop) = &facts.desktop {
+        environment["desktop"] = desktop_environment(desktop);
     }
+    Diagnosis {
+        redaction: redaction_for(ctx, &facts),
+        checks: evaluate(&facts),
+        environment,
+    }
+}
+
+/// Claude Desktop's part of the environment, for a program to read.
+fn desktop_environment(facts: &DesktopFacts) -> Value {
+    let verified = crate::provider::desktop::assumptions::VERIFIED_AGAINST;
+    json!({
+        "installed": facts.installed,
+        "version": facts.version,
+        "verified_against": verified,
+        "version_matches": facts.version.as_deref().map(|v| v == verified),
+        "support_dir": facts.support_dir,
+        "same_volume": facts.same_volume,
+        "cookies_meta_version": facts.cookies_meta_version,
+        "parks_dir_private": facts.parks_dir_private,
+        "parks": facts.parks,
+        "orphan_parks": facts.orphan_parks,
+        "strays": {"count": facts.strays.count, "bytes": facts.strays.bytes},
+        "recovery_pending": facts.recovery_pending,
+        "running": facts.running.as_ref().map(|holding| !holding.is_empty()),
+        "live_usage": {
+            "enabled": facts.live_usage.enabled,
+            "approval": facts.live_usage.approval,
+            "reason": facts.live_usage.reason,
+        },
+        "unverified_facts": facts.unverified_facts,
+    })
 }
 
 /// Everything in a diagnosis that names a person or an account.
@@ -1618,6 +2062,12 @@ fn redaction_for(ctx: &Context, facts: &Facts) -> crate::redact::Sheet {
                 .hide(held.service.clone(), "park");
         }
     }
+    // A Claude Desktop park's name carries the account's id, named by a record or not.
+    if let Some(desktop) = &facts.desktop {
+        for name in &desktop.orphan_parks {
+            sheet = sheet.hide(name.clone(), "park");
+        }
+    }
     sheet
 }
 
@@ -1682,6 +2132,7 @@ mod tests {
             parks: Vec::new(),
             interrupted: false,
             codex: no_codex(),
+            desktop: None,
             claude_present: true,
             schedule: None,
             now: NOW,
@@ -3095,5 +3546,340 @@ mod tests {
         let check = judge_credential(&facts);
         assert!(matches!(check.level, Level::Warn), "{}", check.detail);
         assert!(check.detail.contains("signed out"), "{}", check.detail);
+    }
+
+    /// Claude Desktop's section, as a machine with the app, one account signed in and one
+    /// parked, and nothing wrong, would gather it.
+    fn desktop() -> DesktopFacts {
+        DesktopFacts {
+            installed: true,
+            version: Some(crate::provider::desktop::assumptions::VERIFIED_AGAINST.into()),
+            support_dir: Some(PathBuf::from("/home/x/Library/Application Support/Claude")),
+            same_volume: Some(true),
+            cookies_meta_version: Some(24),
+            twins_differ: false,
+            parks_dir_private: Some(true),
+            parks: 1,
+            orphan_parks: Vec::new(),
+            strays: Strays { count: 0, bytes: 0 },
+            recovery_pending: false,
+            running: Some(Vec::new()),
+            live_usage: crate::status::LiveUsage::default(),
+            unverified_facts: vec!["desktop_signout_revokes"],
+        }
+    }
+
+    fn desktop_park(expires_at: Option<i64>) -> ParkFact {
+        ParkFact {
+            provider: ProviderId::Desktop,
+            label: "work".into(),
+            name: "desktop/work".into(),
+            active: false,
+            last_used_at: Some(NOW - 90 * 86_400),
+            park: Some(Park {
+                service: "pitboard-tree-work-1".into(),
+                refresh_fingerprint: "f".into(),
+                refresh_expires_at: expires_at,
+                access_expires_at: None,
+                parked_at: NOW - 1,
+            }),
+            unreadable: None,
+        }
+    }
+
+    fn with_desktop(desktop: DesktopFacts) -> Vec<Check> {
+        let mut facts = facts();
+        facts.desktop = Some(desktop);
+        evaluate(&facts)
+    }
+
+    fn level_of(checks: &[Check], code: &str) -> Option<Level> {
+        checks.iter().find(|c| c.code == code).map(|c| c.level)
+    }
+
+    /// A machine without Claude Desktop reads exactly as it did before Pitboard knew it.
+    #[test]
+    fn a_machine_without_claude_desktop_hears_nothing_of_it() {
+        let checks = evaluate(&facts());
+        assert!(checks.iter().all(|c| !c.code.starts_with("desktop_")));
+    }
+
+    /// Everything as the register says it should be is said, and nothing is warned about.
+    #[test]
+    fn a_healthy_claude_desktop_has_nothing_to_look_at() {
+        let checks = with_desktop(desktop());
+        let own: Vec<&Check> = checks
+            .iter()
+            .filter(|c| c.code.starts_with("desktop_"))
+            .collect();
+        assert!(!own.is_empty());
+        for check in own {
+            assert_eq!(check.level, Level::Ok, "{}: {}", check.code, check.detail);
+        }
+    }
+
+    /// Each thing that can be wrong with Claude Desktop has its own code, at the level the
+    /// design gives it: a broken assumption fails, advice warns, a plain fact is said.
+    #[test]
+    fn each_claude_desktop_problem_has_its_own_code() {
+        let cases: Vec<(&str, Level, DesktopFacts)> = vec![
+            (
+                "desktop_version_unverified",
+                Level::Warn,
+                DesktopFacts {
+                    version: Some("9.9.9".into()),
+                    ..desktop()
+                },
+            ),
+            (
+                "desktop_format_unknown",
+                Level::Fail,
+                DesktopFacts {
+                    cookies_meta_version: Some(25),
+                    ..desktop()
+                },
+            ),
+            (
+                "desktop_different_volume",
+                Level::Fail,
+                DesktopFacts {
+                    same_volume: Some(false),
+                    ..desktop()
+                },
+            ),
+            (
+                "desktop_parks_not_private",
+                Level::Fail,
+                DesktopFacts {
+                    parks_dir_private: Some(false),
+                    ..desktop()
+                },
+            ),
+            (
+                "desktop_orphan_park",
+                Level::Warn,
+                DesktopFacts {
+                    orphan_parks: vec!["pitboard-tree-ghost-1".into()],
+                    ..desktop()
+                },
+            ),
+            (
+                "desktop_strays_kept",
+                Level::Ok,
+                DesktopFacts {
+                    strays: Strays {
+                        count: 2,
+                        bytes: 10,
+                    },
+                    ..desktop()
+                },
+            ),
+            (
+                "desktop_recovery_pending",
+                Level::Warn,
+                DesktopFacts {
+                    recovery_pending: true,
+                    ..desktop()
+                },
+            ),
+            (
+                "desktop_live_usage_needs_approval",
+                Level::Warn,
+                DesktopFacts {
+                    live_usage: crate::status::LiveUsage {
+                        enabled: true,
+                        approval: crate::status::Approval::NeedsApproval,
+                        reason: Some("item_changed".into()),
+                        ..crate::status::LiveUsage::default()
+                    },
+                    ..desktop()
+                },
+            ),
+            (
+                "desktop_session_twins_differ",
+                Level::Ok,
+                DesktopFacts {
+                    twins_differ: true,
+                    ..desktop()
+                },
+            ),
+        ];
+        for (code, level, facts) in cases {
+            let checks = with_desktop(facts);
+            assert_eq!(level_of(&checks, code), Some(level), "{code}");
+        }
+    }
+
+    /// A parked Claude Desktop login is not renewed, so its expiry is said under its own
+    /// codes, and the advice is never `--sign-in`, which Claude Desktop does not take.
+    #[test]
+    fn a_claude_desktop_park_running_out_is_said_and_never_renewed() {
+        let judged = |expires_at| {
+            let mut facts = facts();
+            facts.desktop = Some(desktop());
+            facts.parks = vec![desktop_park(expires_at)];
+            evaluate(&facts)
+        };
+        let soon = judged(Some(NOW + 2 * 86_400));
+        assert_eq!(
+            level_of(&soon, "desktop_park_expires_soon"),
+            Some(Level::Warn)
+        );
+        let gone = judged(Some(NOW - 60));
+        assert_eq!(level_of(&gone, "desktop_park_expired"), Some(Level::Warn));
+        for checks in [&soon, &gone] {
+            for check in checks.iter().filter(|c| c.code.starts_with("desktop_park")) {
+                assert!(!check.advice.contains("--sign-in"), "{}", check.advice);
+            }
+            // Nobody renews it, so it is never said to have been kept alive.
+            assert!(checks.iter().all(|c| !c.code.contains("dormant")));
+            assert!(checks.iter().all(|c| !c.code.starts_with("codex_")));
+        }
+        let fine = judged(Some(NOW + 20 * 86_400));
+        assert!(
+            fine.iter()
+                .filter(|c| c.code.starts_with("desktop_"))
+                .all(|c| c.level == Level::Ok)
+        );
+    }
+
+    /// A machine that uses only Claude Desktop is not told Claude Code is broken.
+    #[test]
+    fn a_machine_with_only_claude_desktop_is_not_judged_on_claude_code() {
+        let mut facts = facts();
+        facts.claude_present = false;
+        facts.desktop = Some(desktop());
+        let checks = evaluate(&facts);
+        for own in CLAUDE_CODES_OWN {
+            assert!(checks.iter().all(|c| c.code != *own), "{own}");
+        }
+    }
+
+    /// A Mac with Claude Desktop on it: the app's bundle where the context says, its data
+    /// folder, and Pitboard's parks.
+    fn desktop_doctor(name: &str) -> crate::switch::harness::DesktopMachine {
+        let mut m = crate::switch::harness::desktop_machine(name);
+        let app = m.support().with_file_name("Claude.app");
+        std::fs::create_dir_all(app.join("Contents")).expect("a bundle");
+        // The bundle is there on disk; what version it says is the host's to read.
+        std::fs::write(app.join("Contents/Info.plist"), b"").expect("an Info.plist");
+        m.mem.bundle(
+            &app,
+            crate::provider::desktop::assumptions::VERIFIED_AGAINST,
+        );
+        m.ctx = m
+            .ctx
+            .clone()
+            .with_desktop_app(app.to_string_lossy().into_owned())
+            .with_scripted_safe_storage(crate::api::scripted::ScriptedSafeStorage::forbidding());
+        m
+    }
+
+    /// A Claude Desktop park is a folder, so it is checked as one and never looked up in
+    /// the keychain, where it would always be missing.
+    #[test]
+    fn a_claude_desktop_park_is_read_as_a_folder() {
+        let m = desktop_doctor("park-folder");
+        let facts = gather(&m.ctx);
+        let there = facts
+            .parks
+            .iter()
+            .find(|p| p.provider == ProviderId::Desktop && p.label == "there")
+            .expect("there's park");
+        assert_eq!(there.unreadable, None);
+        assert!(there.park.is_some());
+    }
+
+    /// What doctor reads of Claude Desktop, read off disk without asking the keychain for
+    /// anything.
+    #[test]
+    fn the_claude_desktop_environment_is_read_without_the_keychain() {
+        let m = desktop_doctor("environment");
+        let facts = gather(&m.ctx);
+        let desktop = facts.desktop.as_ref().expect("a Claude Desktop section");
+        assert!(desktop.installed);
+        assert_eq!(
+            desktop.version.as_deref(),
+            Some(crate::provider::desktop::assumptions::VERIFIED_AGAINST)
+        );
+        assert_eq!(desktop.support_dir.as_deref(), Some(m.support().as_path()));
+        assert_eq!(desktop.cookies_meta_version, Some(24));
+        assert_eq!(desktop.same_volume, Some(true));
+        assert_eq!(desktop.parks_dir_private, Some(true));
+        assert_eq!(desktop.parks, 1);
+        assert!(desktop.orphan_parks.is_empty());
+        assert!(!desktop.recovery_pending);
+        assert_eq!(desktop.running.as_deref().map(<[_]>::len), Some(0));
+        assert!(!desktop.live_usage.enabled);
+        assert!(
+            desktop
+                .unverified_facts
+                .iter()
+                .all(|name| !crate::assumptions::verified(ProviderId::Desktop, name))
+        );
+
+        // A park nobody's record names.
+        let ghost =
+            crate::provider::desktop::paths::parks_dir(&m.ctx).join("pitboard-tree-ghost-1");
+        crate::store::tree::ensure_private_dir(&ghost).expect("a ghost park");
+        let facts = gather(&m.ctx);
+        let desktop = facts.desktop.as_ref().expect("a Claude Desktop section");
+        assert_eq!(desktop.parks, 2);
+        assert_eq!(
+            desktop.orphan_parks,
+            vec!["pitboard-tree-ghost-1".to_string()]
+        );
+
+        let diagnosis = run(&m.ctx);
+        let env = &diagnosis.environment["desktop"];
+        for key in [
+            "installed",
+            "version",
+            "verified_against",
+            "version_matches",
+            "support_dir",
+            "same_volume",
+            "cookies_meta_version",
+            "parks_dir_private",
+            "parks",
+            "orphan_parks",
+            "strays",
+            "recovery_pending",
+            "running",
+            "live_usage",
+            "unverified_facts",
+        ] {
+            assert!(env.get(key).is_some(), "environment.desktop.{key}");
+        }
+        assert_eq!(env["strays"], json!({"count": 0, "bytes": 0}));
+        assert_eq!(
+            env["live_usage"],
+            json!({"enabled": false, "approval": "unknown", "reason": null})
+        );
+        // A park's name carries an account's id, so it never leaves the machine.
+        let redacted = diagnosis.redaction.over_json(&diagnosis.environment);
+        assert!(!redacted.to_string().contains("pitboard-tree-ghost-1"));
+    }
+
+    /// Without the app, an account or a park, there is no Claude Desktop section at all.
+    #[test]
+    fn a_machine_without_the_app_gathers_no_claude_desktop_section() {
+        let root = std::env::temp_dir().join(format!(
+            "pitboard-doctor-no-desktop-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).expect("a scratch home");
+        let ctx = Context::new(root.clone())
+            .with_pitboard_home(root.join(".pitboard"))
+            .with_desktop_dir(root.join("Claude").to_string_lossy().into_owned())
+            .with_desktop_app(root.join("Claude.app").to_string_lossy().into_owned())
+            .with_memory_stores(crate::host::memory::MemoryHost::new())
+            .with_scripted_safe_storage(crate::api::scripted::ScriptedSafeStorage::forbidding());
+        let facts = gather(&ctx);
+        assert!(facts.desktop.is_none());
+        assert!(run(&ctx).environment.get("desktop").is_none());
+        let _ = std::fs::remove_dir_all(&root);
     }
 }

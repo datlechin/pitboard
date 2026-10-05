@@ -138,3 +138,86 @@ struct Advice {
         return content
     }
 }
+
+extension Advice {
+    /// What to do about a Claude Desktop failure, said for the app. The core's own messages
+    /// are written for a terminal and name commands to type; in the app the same failure
+    /// says what to do here instead. Nil for a code with nothing app-specific to say, whose
+    /// message is then shown as the core wrote it. `reason` is why live usage was refused,
+    /// as the core records it; without one, the core's message is the one that knows.
+    static func desktop(_ code: String?, reason: String? = nil) -> String? {
+        switch code {
+        case "app_still_open":
+            "Claude is still open, so nothing has changed. Quit it, then try again."
+        case "app_state_unknown":
+            "Pitboard couldn’t tell whether Claude is open, so nothing has changed. Try "
+                + "again in a moment."
+        case "app_opened_midway":
+            "Claude was opened while Pitboard was moving its sign-in, so the switch stopped "
+                + "partway. Nothing is lost: quit Claude, then try again, and Pitboard "
+                + "finishes or undoes the interrupted switch first."
+        case "recovery_waiting":
+            "An earlier Claude Desktop switch was interrupted, and Claude is open. Quit "
+                + "Claude, then try again: Pitboard finishes the interrupted switch first."
+        case "desktop_identity_unconfirmed":
+            "Pitboard can’t yet tell which account Claude is signed in to. Open Claude, "
+                + "check it shows the account you expect, quit it, then name the account here."
+        case "live_usage_not_allowed":
+            liveUsageRefused(reason)
+        case "parked_login_expired":
+            "That account’s sign-in has lapsed, and Pitboard cannot renew Claude Desktop "
+                + "sign-ins. Sign in to it again in Claude."
+        case "desktop_sign_in_incomplete":
+            "Claude isn’t signed in to an account yet. Sign in to the other account in "
+                + "Claude, wait until you see its chats, then try again."
+        case "sign_in_unsupported":
+            "Claude Desktop signs in inside Claude itself. Use Add Account to put the "
+                + "account in use aside and sign in to another one there."
+        default: nil
+        }
+    }
+
+    /// What to do about live usage refused for `reason`. Numbers come from Claude's own
+    /// history meanwhile, whatever the reason.
+    private static func liveUsageRefused(_ reason: String?) -> String? {
+        let what: String
+        switch reason {
+        case "no_gui":
+            what =
+                "macOS can only ask about Claude’s key on this Mac’s own screen. Open "
+                + "Pitboard while you are signed in at the screen, then try again."
+        case "denied", "item_changed":
+            what =
+                "macOS didn’t let Pitboard read Claude’s key. Try again, enter your login "
+                + "password if macOS asks for it, and choose Always Allow."
+        case "auth_failed":
+            what =
+                "macOS didn’t accept the password for Claude’s key. Try again, and enter "
+                + "your login password."
+        case "timed_out":
+            what =
+                "macOS’s question about Claude’s key wasn’t answered in time, and it may "
+                + "still be on screen. Close it with Deny, then try again and choose Always "
+                + "Allow."
+        case "item_missing":
+            what =
+                "Claude’s key isn’t in your keychain yet. Open Claude once so it makes one, "
+                + "then try again."
+        case "key_does_not_decrypt":
+            what =
+                "The key macOS gave doesn’t open Claude’s sign-in, so Pitboard won’t use it. "
+                + "Open Claude once, quit it, then try again."
+        case "no_session":
+            what =
+                "Claude isn’t signed in on this Mac, so there is nothing to check its key "
+                + "against. Sign in in Claude, then try again."
+        case "other":
+            what =
+                "macOS gave an answer Pitboard didn’t expect when it asked for Claude’s key. "
+                + "Try again."
+        default:
+            return nil
+        }
+        return what + " Until then, numbers come from Claude’s own history."
+    }
+}

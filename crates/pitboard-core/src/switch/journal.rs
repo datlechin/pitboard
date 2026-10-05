@@ -55,6 +55,9 @@ pub struct Recovered {
     pub from: String,
     pub to: String,
     pub finished: bool,
+    /// The run was a sign-out of a folder login: `to` is empty because nobody was to be
+    /// signed in after it, not because the record named nobody.
+    pub signed_out: bool,
 }
 
 impl Recovered {
@@ -65,21 +68,45 @@ impl Recovered {
             "interrupted_switch_undone"
         }
     }
+
+    /// Who the audit log says the recovery was about: the account the run was switching
+    /// to, or for a sign-out the account it was signing out.
+    pub fn subject(&self) -> String {
+        if self.signed_out {
+            format!("{} -> signed out", self.from)
+        } else {
+            self.to.clone()
+        }
+    }
 }
 
 impl std::fmt::Display for Recovered {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "an earlier switch from `{}` to `{}` was interrupted; {}",
-            self.from,
-            self.to,
-            if self.finished {
-                "it had in fact finished, and Pitboard has recorded that"
-            } else {
-                "it had not finished, and nothing was lost"
-            }
-        )
+        let outcome = if self.finished {
+            "it had in fact finished, and Pitboard has recorded that"
+        } else {
+            "it had not finished, and nothing was lost"
+        };
+        if self.signed_out {
+            return write!(
+                f,
+                "an earlier sign-out of `{}` was interrupted; {outcome}",
+                self.from
+            );
+        }
+        // A folder login's switch made while nothing was signed in has no outgoing side.
+        match (self.from.is_empty(), self.to.is_empty()) {
+            (true, false) => write!(
+                f,
+                "an earlier switch to `{}` was interrupted; {outcome}",
+                self.to
+            ),
+            _ => write!(
+                f,
+                "an earlier switch from `{}` to `{}` was interrupted; {outcome}",
+                self.from, self.to
+            ),
+        }
     }
 }
 
@@ -119,12 +146,15 @@ pub fn pending(ctx: &Context) -> bool {
     journal_path(ctx).exists()
 }
 
-/// Which tool's switch was interrupted, where one was and its record can be read.
+/// Which tool's switch was interrupted, where one was and its record can be read. A
+/// folder login's record is asked only where there is no record of a vault switch.
 pub(crate) fn interrupted_tool(ctx: &Context) -> Option<ProviderId> {
-    let raw = std::fs::read_to_string(journal_path(ctx)).ok()?;
-    serde_json::from_str::<Journal>(&raw)
-        .ok()
-        .map(|journal| journal.provider)
+    match std::fs::read_to_string(journal_path(ctx)) {
+        Ok(raw) => serde_json::from_str::<Journal>(&raw)
+            .ok()
+            .map(|journal| journal.provider),
+        Err(_) => super::tree_journal::tool(ctx),
+    }
 }
 
 /// The switch reached a state the account index fully describes.
@@ -378,6 +408,7 @@ pub(super) fn reconcile(ctx: &Context, state: &mut State) -> Result<Option<Recov
         from: state.typed(&journal.from()),
         to: state.typed(&journal.to()),
         finished,
+        signed_out: false,
     }))
 }
 

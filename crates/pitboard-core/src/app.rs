@@ -49,7 +49,7 @@ impl AppContext {
     /// Each tool's program is the one its variable names outright, or else the first found
     /// on the login shell's `PATH`, where a version manager or an npm prefix puts it, and
     /// then where the tool's own installers put it, which is all there is when the shell
-    /// could not be asked.
+    /// could not be asked. Claude Desktop is found where its bundle is, and never on a path.
     pub(crate) fn read(
         env: &Environment,
         app: Option<&Path>,
@@ -75,6 +75,15 @@ impl AppContext {
             .unwrap_or_default();
         let mut found = Vec::new();
         for &tool in ProviderId::ALL {
+            // An app counts only where its bundle has its program, named outright or not:
+            // a bundle that is not there is not an installed app, and a system that runs no
+            // such app has none to look for.
+            if !tool.on_path() {
+                if context.desktop_program().is_some_and(&runnable) {
+                    found.push(tool);
+                }
+                continue;
+            }
             if env
                 .path(tool.program_variable())
                 .is_some_and(|named| !named.is_empty())
@@ -289,12 +298,56 @@ mod tests {
         assert_eq!(late.search_path, None);
     }
 
+    /// Claude Desktop is found in its bundle, where the context says it is, and never on a
+    /// search path: on a volume that ignores case, `Claude` there would be Claude Code.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn claude_desktop_is_found_in_its_bundle_and_never_on_a_path() {
+        let home = env(&[("HOME", "/Users/x")]);
+        let installed =
+            |path: &Path| path == Path::new("/Applications/Claude.app/Contents/MacOS/Claude");
+        let app = AppContext::read(&home, None, said("/usr/bin"), installed);
+        assert_eq!(app.found, [ProviderId::Desktop]);
+
+        let on_path = |path: &Path| path.ends_with("Claude") || path.ends_with("claude");
+        let looked = AppContext::read(&home, None, said("/Users/x/bin"), |path: &Path| {
+            path.starts_with("/Users/x/bin") && on_path(path)
+        });
+        assert_eq!(
+            looked.found,
+            [ProviderId::Claude],
+            "a `Claude` on the path is not the app"
+        );
+        assert_eq!(
+            looked.context.program_for(ProviderId::Desktop),
+            Path::new("/Applications/Claude.app/Contents/MacOS/Claude")
+        );
+
+        let moved_env = env(&[
+            ("HOME", "/Users/x"),
+            ("PITBOARD_CLAUDE_DESKTOP_APP", "/scratch/Claude.app"),
+        ]);
+        let absent = AppContext::read(&moved_env, None, said("/usr/bin"), |_| false);
+        assert!(
+            absent.found.is_empty(),
+            "a bundle named outright counts only where its program is"
+        );
+        let moved = AppContext::read(&moved_env, None, said("/usr/bin"), |path: &Path| {
+            path == Path::new("/scratch/Claude.app/Contents/MacOS/Claude")
+        });
+        assert_eq!(moved.found, [ProviderId::Desktop]);
+        assert_eq!(
+            moved.context.program_for(ProviderId::Desktop),
+            Path::new("/scratch/Claude.app/Contents/MacOS/Claude")
+        );
+    }
+
     /// The installers' places come after the login shell's `PATH`, in the order each tool
     /// says, and every tool's own installer goes first.
     #[test]
     fn each_tool_is_looked_for_where_its_installers_put_it() {
         let home = Path::new("/Users/x");
-        for &tool in ProviderId::ALL {
+        for &tool in ProviderId::ALL.iter().filter(|tool| tool.on_path()) {
             let places = tool.install_places(home);
             assert_eq!(places.first(), Some(&home.join(".local/bin")), "{tool}");
             let after: Vec<&Path> = places[1..].iter().map(PathBuf::as_path).collect();
@@ -425,8 +478,13 @@ mod tests {
             .map(|dir| dir.join("claude"))
             .collect();
         assert_eq!(looked[..claude.len()], claude[..], "{looked:?}");
+        // Claude Desktop is looked for only in its own bundle, never on the path.
+        let on_path: Vec<&PathBuf> = looked
+            .iter()
+            .filter(|path| !path.starts_with("/Applications/Claude.app"))
+            .collect();
         assert_eq!(
-            looked.len(),
+            on_path.len(),
             2 * claude.len(),
             "the same places for each tool: {looked:?}"
         );

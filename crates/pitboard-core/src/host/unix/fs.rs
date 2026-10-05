@@ -61,6 +61,77 @@ pub fn access(path: &Path) -> Option<Access> {
     })
 }
 
+/// The device the file at `path` is on, as its metadata says: two places on one device can
+/// be renamed between, and two on different ones cannot.
+pub(crate) fn device(path: &Path) -> io::Result<u64> {
+    use std::os::unix::fs::MetadataExt;
+    std::fs::metadata(path).map(|found| found.dev())
+}
+
+fn c_path(path: &Path) -> io::Result<std::ffi::CString> {
+    use std::os::unix::ffi::OsStrExt;
+    std::ffi::CString::new(path.as_os_str().as_bytes())
+        .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))
+}
+
+/// A rename the kernel itself refuses when `to` exists, so nothing that appears between a
+/// caller's check that `to` is free and the rename is replaced. Where the volume cannot do
+/// that, the caller's check is what stands, as it is on a system with no such call.
+#[cfg(target_vendor = "apple")]
+pub(crate) fn rename_exclusive(from: &Path, to: &Path) -> io::Result<()> {
+    let (c_from, c_to) = (c_path(from)?, c_path(to)?);
+    // SAFETY: both pointers are to NUL-terminated strings that outlive the call, which
+    // reads them and writes no memory of this process.
+    let renamed = unsafe { libc::renamex_np(c_from.as_ptr(), c_to.as_ptr(), libc::RENAME_EXCL) };
+    if renamed == 0 {
+        return Ok(());
+    }
+    match io::Error::last_os_error() {
+        e if matches!(e.raw_os_error(), Some(libc::EINVAL | libc::ENOTSUP)) => {
+            std::fs::rename(from, to)
+        }
+        e => Err(e),
+    }
+}
+
+#[cfg(all(target_os = "linux", any(target_env = "gnu", target_env = "musl")))]
+pub(crate) fn rename_exclusive(from: &Path, to: &Path) -> io::Result<()> {
+    let (c_from, c_to) = (c_path(from)?, c_path(to)?);
+    // SAFETY: both pointers are to NUL-terminated strings that outlive the call, which
+    // reads them and writes no memory of this process; `AT_FDCWD` names no descriptor.
+    let renamed = unsafe {
+        libc::renameat2(
+            libc::AT_FDCWD,
+            c_from.as_ptr(),
+            libc::AT_FDCWD,
+            c_to.as_ptr(),
+            libc::RENAME_NOREPLACE,
+        )
+    };
+    if renamed == 0 {
+        return Ok(());
+    }
+    match io::Error::last_os_error() {
+        e if matches!(
+            e.raw_os_error(),
+            Some(libc::EINVAL | libc::ENOSYS | libc::EOPNOTSUPP)
+        ) =>
+        {
+            std::fs::rename(from, to)
+        }
+        e => Err(e),
+    }
+}
+
+#[cfg(not(any(
+    target_vendor = "apple",
+    all(target_os = "linux", any(target_env = "gnu", target_env = "musl"))
+)))]
+pub(crate) fn rename_exclusive(from: &Path, to: &Path) -> io::Result<()> {
+    let _ = c_path;
+    std::fs::rename(from, to)
+}
+
 /// What a test does to a file's access to set up a machine, the way a person or another
 /// program might have left it.
 #[cfg(test)]

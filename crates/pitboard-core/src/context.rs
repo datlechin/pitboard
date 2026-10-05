@@ -14,6 +14,8 @@ use crate::api::{Anthropic, Api};
 use crate::host::Host;
 use crate::provider::ProviderId;
 use crate::provider::codex::api::{Network as OpenAiNetwork, OpenAi};
+use crate::provider::desktop::safe_storage::SafeStorage;
+use crate::provider::desktop::web::{ClaudeAi, ClaudeWeb};
 use crate::time::{Clock, SystemClock};
 use std::collections::HashMap;
 use std::ffi::{OsStr, OsString};
@@ -41,6 +43,9 @@ const READ: &[&str] = &[
     "PITBOARD_API_BASE",
     "PITBOARD_CLAUDE",
     "PITBOARD_CODEX",
+    "PITBOARD_CLAUDE_DESKTOP_APP",
+    "PITBOARD_CLAUDE_DESKTOP_DIR",
+    "PITBOARD_CLAUDE_WEB_BASE",
     "CLAUDE_CONFIG_DIR",
     "CLAUDE_SECURESTORAGE_CONFIG_DIR",
     "CLAUDE_CODE_CUSTOM_OAUTH_URL",
@@ -165,6 +170,18 @@ pub struct Context {
     pub(crate) codex_home: Option<String>,
     /// The `codex` that runs a sign-in; a bare name is looked up on the search path.
     pub(crate) codex_program: PathBuf,
+    /// `PITBOARD_CLAUDE_DESKTOP_DIR`: Claude Desktop's data folder, where a test or an app
+    /// says. `None` is the platform's own place for it.
+    pub(crate) desktop_dir: Option<PathBuf>,
+    /// The Claude app bundle, the system's own place for it unless a test or an app says.
+    /// `None` where the system has no Claude app and nobody named one.
+    pub(crate) desktop_app: Option<PathBuf>,
+    /// The program inside [`Context::desktop_app`], worked out once so
+    /// [`Context::program_for`] can lend it. `None` where the system runs no Claude app.
+    pub(crate) desktop_app_binary: Option<PathBuf>,
+    /// `PITBOARD_CLAUDE_WEB_BASE`: where claude.ai is reached instead, for tests; live
+    /// usage honours loopback only.
+    pub(crate) web_base: Option<String>,
     /// The Pitboard the daily renewal schedule runs. `None` is this program, which is right
     /// for the command line and wrong for an app: the schedule runs `pitboard renew`, so an
     /// app names the command line it comes with.
@@ -187,6 +204,23 @@ pub struct Context {
     pub(crate) api: Arc<dyn Api>,
     /// Who answers for OpenAI. The network in every real context.
     pub(crate) openai: Arc<dyn OpenAi>,
+    /// Claude Desktop's key in the keychain. `/usr/bin/security` in every real context;
+    /// a test never reads the real item.
+    pub(crate) safe_storage: Arc<dyn SafeStorage>,
+    /// Who answers for claude.ai. The network in every real context.
+    pub(crate) web: Arc<dyn ClaudeWeb>,
+}
+
+/// The Claude app bundle `named`, or the system's own place for it, with the program inside
+/// it. Empty names nothing, as the environment variable is read.
+fn desktop_app(named: Option<PathBuf>) -> (Option<PathBuf>, Option<PathBuf>) {
+    let app = named
+        .filter(|named| !named.as_os_str().is_empty())
+        .or_else(|| crate::host::OS.claude_desktop_app().map(PathBuf::from));
+    let program = app
+        .as_deref()
+        .and_then(|app| crate::host::OS.claude_desktop_program(app));
+    (app, program)
 }
 
 impl Context {
@@ -219,10 +253,21 @@ impl Context {
         self.api.as_ref()
     }
 
+    /// Where this context reads Claude Desktop's key.
+    pub(crate) fn safe_storage(&self) -> &dyn SafeStorage {
+        self.safe_storage.as_ref()
+    }
+
+    /// Who this context asks about Claude Desktop's usage.
+    pub(crate) fn web(&self) -> &dyn ClaudeWeb {
+        self.web.as_ref()
+    }
+
     /// Claude Code's defaults for a person whose home is `home`: `~/.pitboard`, `~/.claude`,
     /// the default credential slot, `claude` looked up on `PATH`. An app starts here and sets
     /// only what differs.
     pub fn new(home: PathBuf) -> Context {
+        let (desktop_app, desktop_app_binary) = desktop_app(None);
         Context {
             pitboard_home: home.join(".pitboard"),
             home,
@@ -238,6 +283,10 @@ impl Context {
             hover_rest: false,
             codex_home: None,
             codex_program: PathBuf::from("codex"),
+            desktop_dir: None,
+            desktop_app,
+            desktop_app_binary,
+            web_base: None,
             schedule_program: None,
             search_path: None,
             scheduled_job: None,
@@ -245,7 +294,44 @@ impl Context {
             host: crate::host::current(),
             api: Arc::new(Anthropic),
             openai: Arc::new(OpenAiNetwork),
+            safe_storage: crate::host::safe_storage(),
+            web: Arc::new(ClaudeAi),
         }
+    }
+
+    /// Where Claude Desktop keeps its data. Empty means unset, as the environment variable
+    /// is read.
+    pub fn with_desktop_dir(mut self, dir: String) -> Context {
+        self.desktop_dir = Some(dir).filter(|d| !d.is_empty()).map(PathBuf::from);
+        self
+    }
+
+    /// The Claude app bundle. Empty means unset, as the environment variable is read.
+    pub fn with_desktop_app(mut self, path: String) -> Context {
+        (self.desktop_app, self.desktop_app_binary) = desktop_app(Some(PathBuf::from(path)));
+        self
+    }
+
+    /// Whether a test or an app put the Claude app bundle somewhere of its own.
+    pub(crate) fn desktop_app_moved(&self) -> bool {
+        self.desktop_app.as_deref()
+            != crate::host::OS
+                .claude_desktop_app()
+                .map(std::path::Path::new)
+    }
+
+    /// Whether the Claude app is installed where this context says, as its bundle's own
+    /// manifest shows.
+    pub(crate) fn desktop_installed(&self) -> bool {
+        self.desktop_app
+            .as_ref()
+            .is_some_and(|app| app.join("Contents/Info.plist").is_file())
+    }
+
+    /// The program inside the Claude app bundle this context names. `None` where the
+    /// system runs no Claude app.
+    pub(crate) fn desktop_program(&self) -> Option<&std::path::Path> {
+        self.desktop_app_binary.as_deref()
     }
 
     /// Where Codex keeps its login. Empty means unset, as Codex reads it.
@@ -373,11 +459,13 @@ impl Context {
         self
     }
 
-    /// The program named for this tool, found or not.
+    /// The program named for this tool, found or not. Claude Desktop has none on a system
+    /// that runs no Claude app, and the empty path stands for it there.
     pub fn program_for(&self, tool: ProviderId) -> &std::path::Path {
         match tool {
             ProviderId::Claude => &self.claude_program,
             ProviderId::Codex => &self.codex_program,
+            ProviderId::Desktop => self.desktop_program().unwrap_or(std::path::Path::new("")),
         }
     }
 
@@ -386,6 +474,9 @@ impl Context {
         match tool {
             ProviderId::Claude => self.claude_program = program,
             ProviderId::Codex => self.codex_program = program,
+            // Claude Desktop is found in its bundle, which the context already names, and
+            // never on a search path.
+            ProviderId::Desktop => {}
         }
     }
 
@@ -427,6 +518,8 @@ impl Context {
                 .filter(|named| !named.is_empty())
                 .map_or_else(|| PathBuf::from(tool.program()), PathBuf::from)
         };
+        let (desktop_app, desktop_app_binary) =
+            desktop_app(env.path("PITBOARD_CLAUDE_DESKTOP_APP").map(PathBuf::from));
         Context {
             pitboard_home: env.pitboard_home(),
             home,
@@ -446,6 +539,13 @@ impl Context {
             hover_rest: matches!(env.text("CLAUDE_CODE_HOVER_REST"), Some("1" | "true")),
             codex_home: owned("CODEX_HOME").filter(|v| !v.is_empty()),
             codex_program: program(ProviderId::Codex),
+            desktop_dir: env
+                .path("PITBOARD_CLAUDE_DESKTOP_DIR")
+                .filter(|dir| !dir.is_empty())
+                .map(PathBuf::from),
+            desktop_app,
+            desktop_app_binary,
+            web_base: owned("PITBOARD_CLAUDE_WEB_BASE").filter(|v| !v.is_empty()),
             schedule_program: None,
             // Unset is nowhere, as it is to the shell: nothing is found on an empty `PATH`.
             search_path: Some(env.path("PATH").unwrap_or_default().to_os_string()),
@@ -454,6 +554,8 @@ impl Context {
             host: crate::host::current(),
             api: Arc::new(Anthropic),
             openai: Arc::new(OpenAiNetwork),
+            safe_storage: crate::host::safe_storage(),
+            web: Arc::new(ClaudeAi),
         }
     }
 
@@ -464,7 +566,20 @@ impl Context {
     #[doc(hidden)]
     pub fn with_scripted_api(mut self, api: Arc<crate::api::scripted::ScriptedApi>) -> Context {
         self.api = api.clone();
-        self.openai = api;
+        self.openai = api.clone();
+        self.web = api;
+        self
+    }
+
+    /// Read Claude Desktop's key from a script, which a test needs to say what macOS
+    /// answered without anybody's real key being read.
+    #[cfg(any(test, feature = "test-support"))]
+    #[doc(hidden)]
+    pub fn with_scripted_safe_storage(
+        mut self,
+        storage: Arc<crate::api::scripted::ScriptedSafeStorage>,
+    ) -> Context {
+        self.safe_storage = storage;
         self
     }
 
@@ -505,6 +620,91 @@ mod tests {
             "empty is set, and pins the default slot"
         );
         assert_eq!(ctx.claude_program, PathBuf::from("claude"));
+    }
+
+    /// Claude Desktop is looked for in the system's own place for it unless a test or an
+    /// app names another, and empty names nothing. A Mac starts the program inside the
+    /// bundle; Linux runs no Claude app, so it names none there, and no program even in a
+    /// bundle somebody named.
+    #[test]
+    fn claude_desktop_is_looked_for_where_the_context_says() {
+        use crate::host::{OS, Os};
+        use crate::provider::ProviderId;
+        let program = |app: &str| match OS {
+            Os::MacOs => PathBuf::from(app).join("Contents/MacOS/Claude"),
+            Os::Linux => PathBuf::new(),
+        };
+        let own = OS.claude_desktop_app().map(PathBuf::from);
+        let ctx = Context::new(PathBuf::from("/home/x"));
+        assert_eq!(ctx.desktop_dir, None);
+        assert_eq!(ctx.desktop_app, own);
+        assert!(!ctx.desktop_app_moved());
+        assert_eq!(
+            ctx.program_for(ProviderId::Desktop),
+            own.as_deref()
+                .map_or_else(PathBuf::new, |app| program(app.to_str().unwrap()))
+        );
+        let moved = ctx
+            .with_desktop_dir("/scratch/claude-desktop".into())
+            .with_desktop_app("/scratch/Claude.app".into());
+        assert_eq!(
+            moved.desktop_dir,
+            Some(PathBuf::from("/scratch/claude-desktop"))
+        );
+        assert_eq!(
+            moved.desktop_app,
+            Some(PathBuf::from("/scratch/Claude.app"))
+        );
+        assert!(moved.desktop_app_moved());
+        assert_eq!(
+            moved.program_for(ProviderId::Desktop),
+            program("/scratch/Claude.app")
+        );
+        let unset = moved
+            .with_desktop_dir(String::new())
+            .with_desktop_app(String::new());
+        assert_eq!(unset.desktop_dir, None, "empty means unset");
+        assert_eq!(unset.desktop_app, own, "empty means unset");
+    }
+
+    /// The command line reads Claude Desktop's two variables the way the app is given them,
+    /// so both look at the same Claude, and an empty one is unset.
+    #[test]
+    fn the_desktop_variables_are_read() {
+        use crate::host::{OS, Os};
+        use crate::provider::ProviderId;
+        let env: Environment = [
+            ("HOME", "/scratch"),
+            ("PITBOARD_CLAUDE_DESKTOP_DIR", "/scratch/support"),
+            ("PITBOARD_CLAUDE_DESKTOP_APP", "/scratch/Claude.app"),
+        ]
+        .into_iter()
+        .collect();
+        let ctx = Context::for_command_line(&env);
+        assert_eq!(ctx.desktop_dir, Some(PathBuf::from("/scratch/support")));
+        assert_eq!(ctx.desktop_app, Some(PathBuf::from("/scratch/Claude.app")));
+        assert_eq!(
+            ctx.program_for(ProviderId::Desktop),
+            match OS {
+                Os::MacOs => Path::new("/scratch/Claude.app/Contents/MacOS/Claude"),
+                Os::Linux => Path::new(""),
+            }
+        );
+        let empty: Environment = [
+            ("HOME", "/scratch"),
+            ("PITBOARD_CLAUDE_DESKTOP_DIR", ""),
+            ("PITBOARD_CLAUDE_DESKTOP_APP", ""),
+        ]
+        .into_iter()
+        .collect();
+        let unset = Context::for_command_line(&empty);
+        assert_eq!(unset.desktop_dir, None, "empty is unset");
+        assert_eq!(
+            unset.desktop_app,
+            OS.claude_desktop_app().map(PathBuf::from),
+            "empty is unset"
+        );
+        assert!(!unset.desktop_app_moved());
     }
 
     #[test]

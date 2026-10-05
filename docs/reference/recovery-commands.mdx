@@ -19,6 +19,8 @@ Usage: pitboard abandon [OPTIONS]
 
 The accounts the switch was moving from and to keep their [parked logins](/concepts/switching#parked-logins). For OpenAI's Codex CLI, `abandon` drops a parked login that copies the login in use.
 
+A Claude Desktop switch keeps its own record, `~/.pitboard/desktop/journal.json`. `abandon` deletes it and moves nothing, so each item stays in Claude's data folder or in its park. A park the record named and no account names stays where it is, and `pitboard doctor` lists it. When both records exist, `abandon` deletes the one for Claude Code or Codex first: run it again for Claude Desktop's. For a Claude Desktop record, the count in its output is of files and folders, not logins.
+
 `abandon` refuses while `CLAUDE_CODE_CUSTOM_OAUTH_URL` is set, in the environment or in Claude Code's settings, even for a Codex switch. It exits 3 with the error `custom_oauth_endpoint`.
 
 ```sh

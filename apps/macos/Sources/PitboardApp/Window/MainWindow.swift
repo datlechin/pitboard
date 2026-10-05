@@ -45,9 +45,7 @@ struct MainWindow: View {
             }
             Button("Cancel", role: .cancel) { model.closeQuitQuestion() }
         } message: { quitting in
-            Text(
-                "\(quitting.name) keeps using the account it started with until it quits. "
-                    + "Pitboard quits it, switches, and opens it again.")
+            Text(quitQuestion(name: quitting.name, to: split(quitting.qualified).label))
         }
         // A request for the window from the menu or the model can want a pane: a sheet is
         // about accounts, and so is a notice. Asked for when the window opens as well, since

@@ -54,6 +54,12 @@ rustls = { version = "0.23", default-features = false, features = ["ring", "std"
 # IDNA, for a host that is not plain ASCII. pitboard-sites splits a link itself, as
 # Foundation does, since the WHATWG standard url follows reads some links otherwise.
 url = "2.5"
+# Claude Desktop's cookies, decrypted only for live usage a person turned on. ring is
+# already here for TLS and gives PBKDF2; AES-128 itself is the RustCrypto block cipher,
+# with CBC written out beside it. zeroize wipes the key and the session once read.
+ring = { version = "0.17", default-features = false }
+aes = { version = "0.8", features = ["zeroize"] }
+zeroize = "1"
 
 [workspace.lints.rust]
 unsafe_op_in_unsafe_fn = "deny"

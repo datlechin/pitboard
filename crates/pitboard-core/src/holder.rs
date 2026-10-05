@@ -124,6 +124,70 @@ pub(crate) fn find(ctx: &Context, program: &str, holders: &[Holder]) -> Option<V
         .map(|processes| classify(&processes, holders))
 }
 
+/// What is running from inside a tree login's bundle, by kind. `None` where the process
+/// list could not be read, which a caller about to move the login counts as running.
+pub(crate) fn find_within(
+    ctx: &Context,
+    tree: &dyn crate::provider::TreeLogin,
+) -> Option<Vec<Holding>> {
+    ctx.host()
+        .processes_within(tree.bundle(ctx), tree.excluded())
+        .map(|processes| classify(&processes, tree.holders()))
+}
+
+/// The live process a tree login's lock in `root` names, if it has one and that process is
+/// running the app's program. A lock Pitboard cannot read is an error, never "nobody". No
+/// lock is `None`, which says nothing: Claude Desktop 2.19675.0 keeps no `SingletonLock`
+/// (experiment E14), so for it the process list is the only sign the app is open.
+///
+/// An app that crashed leaves its lock behind, and the system can give its pid to anything
+/// after, so a process running another program does not hold the lock. One whose program
+/// cannot be told is counted, since it may.
+pub(crate) fn lock_holder(
+    ctx: &Context,
+    tree: &dyn crate::provider::TreeLogin,
+    root: &Path,
+) -> std::io::Result<Option<u32>> {
+    let Some(lock) = tree.singleton_lock() else {
+        return Ok(None);
+    };
+    let Some(pid) = singleton_pid(&root.join(lock))?.filter(|&pid| ctx.host().pid_alive(pid))
+    else {
+        return Ok(None);
+    };
+    let bundle = tree.bundle(ctx);
+    let reused = match (bundle.program(), ctx.host().program_of(pid)) {
+        (Some(program), Some(path)) => path.file_name().is_none_or(|name| name != program),
+        _ => false,
+    };
+    Ok((!reused).then_some(pid))
+}
+
+/// The process Chromium's `SingletonLock` at `path` names: a link whose target is
+/// `<hostname>-<pid>`. `None` where there is no lock. Something there that names no
+/// process is an error, never "nobody", since a lock Pitboard cannot read may still be
+/// held.
+fn singleton_pid(path: &Path) -> std::io::Result<Option<u32>> {
+    let target = match std::fs::read_link(path) {
+        Ok(target) => target,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(e) => return Err(e),
+    };
+    // A hostname can have dashes in it, and a pid cannot.
+    target
+        .to_str()
+        .and_then(|target| target.rsplit_once('-'))
+        .and_then(|(_, pid)| pid.parse::<u32>().ok())
+        .filter(|&pid| pid != 0)
+        .map(Some)
+        .ok_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("{} names no process", path.display()),
+            )
+        })
+}
+
 impl Holding {
     /// How many things are running: processes for a counted kind, one for the rest.
     fn things(&self) -> usize {
@@ -281,6 +345,127 @@ mod tests {
             .iter()
             .map(|h| (h.holder.kind, h.pids.clone()))
             .collect()
+    }
+
+    /// A test or an app that moved both Claude's bundle and its data folder is asked about
+    /// its own bundle only, whatever it is called: the person's own Claude holds nothing of
+    /// a folder elsewhere. Moving only one of them leaves the real folder or the real app in
+    /// play, so every bundle called `Claude.app` still counts.
+    #[test]
+    fn a_dead_singleton_lock_does_not_count() {
+        let host = crate::host::current();
+        let dir = std::env::temp_dir().join(format!(
+            "pitboard-singleton-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let lock = dir.join("SingletonLock");
+        assert_eq!(singleton_pid(&lock).unwrap(), None, "no lock, nobody");
+
+        let mut gone = std::process::Command::new("true").spawn().unwrap();
+        let dead = gone.id();
+        gone.wait().unwrap();
+        std::os::unix::fs::symlink(format!("my-mac.local-{dead}"), &lock).unwrap();
+        assert_eq!(singleton_pid(&lock).unwrap(), Some(dead));
+        assert!(!host.pid_alive(dead));
+
+        std::fs::remove_file(&lock).unwrap();
+        std::os::unix::fs::symlink(format!("my-mac-2-{}", std::process::id()), &lock).unwrap();
+        assert_eq!(singleton_pid(&lock).unwrap(), Some(std::process::id()));
+        assert!(host.pid_alive(std::process::id()));
+
+        // Something there that names no process is not read as nobody.
+        for target in ["nonsense", "host-", "host-12x"] {
+            std::fs::remove_file(&lock).unwrap();
+            std::os::unix::fs::symlink(target, &lock).unwrap();
+            assert!(singleton_pid(&lock).is_err(), "{target}");
+        }
+        std::fs::remove_file(&lock).unwrap();
+        std::fs::write(&lock, b"").unwrap();
+        assert!(singleton_pid(&lock).is_err());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_moved_bundle_and_folder_are_held_only_by_that_bundle() {
+        use crate::host::memory::MemoryHost;
+        use crate::provider::desktop::DESKTOP;
+        let mem = MemoryHost::new();
+        let real = mem.runs_within("/Applications/Claude.app/Contents/MacOS/Claude");
+        let base = Context::new(PathBuf::from("/nowhere")).with_memory_stores(mem.clone());
+        for ctx in [
+            base.clone(),
+            base.clone().with_desktop_app("/scratch/Claude.app".into()),
+            base.clone()
+                .with_desktop_dir("/scratch/claude-desktop".into()),
+        ] {
+            let found = find_within(&ctx, &DESKTOP).expect("readable");
+            assert_eq!(kinds(&found), [("claude_desktop_app", vec![real])]);
+        }
+
+        let moved = base
+            .with_desktop_dir("/scratch/claude-desktop".into())
+            .with_desktop_app("/scratch/Test Claude.app".into());
+        assert_eq!(find_within(&moved, &DESKTOP), Some(Vec::new()));
+        let own = mem.runs_within("/scratch/Test Claude.app/Contents/MacOS/Claude");
+        mem.runs_within("/scratch/Test Claude.app/Contents/Helpers/chrome-native-host");
+        let found = find_within(&moved, &DESKTOP).expect("readable");
+        assert_eq!(kinds(&found), [("claude_desktop_app", vec![own])]);
+    }
+
+    /// A tree login is held by whatever runs inside its bundle, and by a live process its
+    /// lock names, and by nothing else.
+    #[test]
+    fn a_tree_login_is_held_by_its_bundle_and_its_lock() {
+        use crate::host::memory::MemoryHost;
+        use crate::provider::desktop::DESKTOP;
+        let mem = MemoryHost::new();
+        let ctx = Context::new(PathBuf::from("/nowhere")).with_memory_stores(mem.clone());
+        assert_eq!(find_within(&ctx, &DESKTOP), Some(Vec::new()));
+
+        let app = mem.runs_within("/Applications/Claude.app/Contents/MacOS/Claude");
+        mem.runs_within("/Applications/Claude.app/Contents/Helpers/chrome-native-host");
+        mem.runs_within("/usr/local/bin/claude");
+        let found = find_within(&ctx, &DESKTOP).expect("readable");
+        assert_eq!(kinds(&found), [("claude_desktop_app", vec![app])]);
+
+        mem.process_list_fails();
+        assert_eq!(find_within(&ctx, &DESKTOP), None);
+
+        let dir = std::env::temp_dir().join(format!(
+            "pitboard-lock-holder-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        assert_eq!(lock_holder(&ctx, &DESKTOP, &dir).unwrap(), None);
+        std::os::unix::fs::symlink(format!("mac-{app}"), dir.join("SingletonLock")).unwrap();
+        assert_eq!(lock_holder(&ctx, &DESKTOP, &dir).unwrap(), Some(app));
+        std::fs::remove_file(dir.join("SingletonLock")).unwrap();
+        std::os::unix::fs::symlink("mac-4000000", dir.join("SingletonLock")).unwrap();
+        assert_eq!(lock_holder(&ctx, &DESKTOP, &dir).unwrap(), None);
+
+        // A Claude that crashed leaves its lock, and its pid can be given to anything after.
+        // Only a process running Claude's own program holds the lock.
+        mem.runs_at("zsh", &["/bin/zsh"]);
+        std::fs::remove_file(dir.join("SingletonLock")).unwrap();
+        std::os::unix::fs::symlink("mac-1", dir.join("SingletonLock")).unwrap();
+        assert_eq!(
+            lock_holder(&ctx, &DESKTOP, &dir).unwrap(),
+            None,
+            "pid reused"
+        );
+        // A Claude whose bundle is not where Pitboard looks still holds it.
+        mem.runs_at("zsh", &[]);
+        mem.runs_at(
+            "Claude",
+            &["/Volumes/Apps/Claude Beta.app/Contents/MacOS/Claude"],
+        );
+        assert_eq!(lock_holder(&ctx, &DESKTOP, &dir).unwrap(), Some(1));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

@@ -53,6 +53,34 @@ A running `codex` keeps its account until you restart it. To do that without los
 
 Pitboard switches OpenAI's Codex CLI only when Codex keeps its login in `auth.json` and signs in with ChatGPT; see [Use Pitboard with Codex](/guides/codex#before-you-enrol-a-codex-account).
 
+## Claude Desktop is still open
+
+A Claude Desktop enrolment or switch stops with `app_still_open`:
+
+```text
+Claude is still open, so nothing was moved. Quit Claude (Command-Q), then try again.
+```
+
+Closing Claude's window leaves it running. Quit it with Command-Q, then run the command again. `pitboard doctor` lists what runs from `Claude.app` under `running Claude Desktop`.
+
+The app quits Claude itself, so there it means Claude did not quit within 30 seconds. Answer what Claude asks, or quit it yourself, then try again.
+
+If Pitboard could not list what is running, the command stops with `app_state_unknown` instead and moves nothing; try again in a moment. If Claude was opened while a switch was moving its files, the switch stops with `app_opened_midway`. Nothing is lost: quit Claude, then run the command again, and Pitboard finishes or undoes the interrupted switch first.
+
+## An interrupted Claude Desktop switch is waiting
+
+A command stops with `recovery_waiting`, or `pitboard status` warns of it. A Claude Desktop switch stopped partway, and Pitboard finishes or undoes one only while Claude is closed. Quit Claude, then run the command again. Commands for Claude Code and Codex are not held up by it.
+
+## Pitboard cannot tell whose Claude Desktop session it is
+
+A switch stops with `desktop_identity_unconfirmed`. Claude holds a session Pitboard knows as that label's under another account, so Pitboard cannot yet tell whose it is. A new session under an account Pitboard knows is not refused: Claude renews sessions on its own. Open Claude, check it shows that label's account, quit Claude, then run `pitboard enroll desktop/<label>` with the label the message names.
+
+## Claude Desktop live usage is paused
+
+`pitboard status` says live usage is paused, and `pitboard doctor` warns under `Claude Desktop live usage`. macOS stopped letting Pitboard read Claude's key, or nobody answered its question in time. Whether an update of Claude causes this has not been measured.
+
+If a macOS dialog about `Claude Safe Storage` is still on screen, click **Deny** to close it: Pitboard stopped waiting for an answer, 10 seconds into a read for `status`, and the dialog stayed. In the app, click **Allow Again** in the notice **Live usage for Claude is paused**, then **Continue**. On the command line, run `pitboard desktop live-usage enable` again at the Mac's own screen. When macOS asks, choose **Always Allow**.
+
 ## Usage shows old numbers
 
 Old numbers say when they were measured, as in `measured 14:02, 1m ago`, and may give a reason. For Codex, read OpenAI for Anthropic:

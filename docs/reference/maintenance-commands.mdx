@@ -1,9 +1,9 @@
 ---
 title: "Maintenance commands"
-description: "`renew`, `schedule`, `log`, `uninstall` and `doctor` each get their usage, options, output and an example."
+description: "`renew`, `schedule`, `log`, `uninstall`, `doctor` and `desktop live-usage` each get their usage, options, output and an example."
 ---
 
-`renew` and `schedule` keep [parked logins](/concepts/switching#parked-logins), the logins Pitboard holds for accounts not in use, alive. `log` lists what Pitboard changed, `uninstall` removes Pitboard's files and `doctor` checks the machine. Each command also takes `--json` and `--help`, described in [Global options](/reference/commands#global-options), so the options tables leave them out.
+`renew` and `schedule` keep [parked logins](/concepts/switching#parked-logins), the logins Pitboard holds for accounts not in use, alive. `log` lists what Pitboard changed, `uninstall` removes Pitboard's files and `doctor` checks the machine. `desktop live-usage` turns on usage from claude.ai for Claude Desktop accounts. Each command also takes `--json` and `--help`, described in [Global options](/reference/commands#global-options), so the options tables leave them out.
 
 ## `renew`
 
@@ -24,6 +24,8 @@ Without `--offline`, `pitboard status` also renews, but only parked logins whose
 Pitboard never renews the login a tool is using. Renewing a parked login that copies it would use up the refresh token the tool holds, so `renew` drops that parked login instead. The account needs no sign-in, because the tool holds the same login.
 
 A parked login the service refuses is dropped, and its account needs a sign-in again. A parked login the service could not renew, because the service was unreachable or asked for less traffic, is tried again next time.
+
+A parked Claude Desktop login cannot be renewed. `renew` sends nothing for it and prints a line of its own with the date its sign-in lapses, as in `desktop/work: not renewable; its sign-in lapses 2026-10-30`. To keep that account, switch to it before then. With `--json`, its outcome is `not_renewable` with `expires_at`.
 
 `renew` prints one of these lines, and exits with status 0 even when nothing could be renewed. **Renew Now** in the app's settings shows the same lines:
 
@@ -112,7 +114,7 @@ The log holds labels, codes and times, and no email addresses. It holds an accou
 
 | Verb | Written when | Subject and outcome |
 | --- | --- | --- |
-| `use` | A switch | The label switched to. `already_active` when that account was already in use. |
+| `use` | A switch | The label switched to. `already_active` when that account was already in use. `desktop -> signed out` for `pitboard use desktop --signed-out`, and `already_signed_out` when nobody was signed in to Claude Desktop. |
 | `enroll` | An enrolment, with or without `--sign-in` | The label. `label_unusable` when the label was refused. |
 | `forget` | An account is forgotten | The label |
 | `rename` | A label changes | The label before and after, as in `wrong -> right` |
@@ -121,10 +123,11 @@ The log holds labels, codes and times, and no email addresses. It holds an accou
 | `adopt` | `pitboard adopt` takes over a directory another computer wrote | None |
 | `uninstall` | `pitboard uninstall` runs and `~/.pitboard` is still there afterwards | None. `parks_pending_removal` when a parked login could not be deleted. |
 | `renew` | `renew`, daily renewal, `status` or the app tries to renew a due parked login | The label. The outcome is `renewed`, `parked_login_refused`, `renewal_deferred` or an error code. |
-| `recover` | An interrupted switch is finished or undone before another change | The label the switch was to. The outcome is `interrupted_switch_finished` or `interrupted_switch_undone`. |
+| `recover` | An interrupted switch, Claude Desktop's included, is finished or undone before another change | The label the switch was to. The outcome is `interrupted_switch_finished` or `interrupted_switch_undone`. |
 | `reclaim` | A parked login is given back to its account, or discarded | The label with `ok`, or the parked login's name with `discarded` |
 | `schedule` | Daily renewal is turned on or off, or the app repairs a schedule that an app of 0.3.0 or earlier wrote | `install`, `uninstall` or `repair` |
 | `config` | A Claude Code switch removes keys that name the previous account from Claude Code's config | The names of the keys, with the outcome `dropped` |
+| `live_usage` | `pitboard desktop live-usage enable` or `disable` runs | `enable` or `disable` |
 
 ```sh
 pitboard log -n 3
@@ -160,6 +163,8 @@ The login each tool is using stays in place. On macOS, `uninstall` also leaves a
 
 It removes the schedule only when Pitboard's directory is `~/.pitboard`. With `PITBOARD_HOME` set to another directory, it deletes that directory and leaves the schedule, which `pitboard schedule uninstall` removes. The question and the output still say `~/.pitboard`.
 
+`uninstall` deletes parked Claude Desktop logins too. It leaves the files a Claude Desktop switch set aside, and any Claude Desktop park no account names. Those may be the only copy of something. It keeps `~/.pitboard` around them. While a Claude Desktop switch is unfinished and Claude is open, it fails with `recovery_waiting` and deletes nothing.
+
 `uninstall` refuses to run while `CLAUDE_CODE_CUSTOM_OAUTH_URL` is set, in the environment or in Claude Code's settings, and fails with `custom_oauth_endpoint`. With that variable set, Claude Code keeps its login under a name Pitboard does not read.
 
 In a terminal, it asks first:
@@ -188,6 +193,7 @@ It can also print these lines:
 | --- | --- |
 | `` Left 1 parked login(s) that `pitboard repair` found and this Pitboard did not write, because they may be another Pitboard's. `` | On macOS, when it left parked logins another Pitboard may own. |
 | `` 1 could not be deleted, so ~/.pitboard was kept; run `pitboard uninstall` again. `` | A parked login could not be deleted. It takes the place of the last line. |
+| `Kept /Users/me/.pitboard/desktop/strays: it holds Claude Desktop data Pitboard never deletes. Look through it, then remove it yourself.` | Claude Desktop files were left. With `--json`, `home_removed` is `false`. |
 
 See [Remove Pitboard](/install/remove).
 
@@ -223,6 +229,8 @@ The last line sums up, in the same words as the line over the checks in the app'
 Codex's checks come last, under the heading `Codex`. They appear when Codex's directory (`~/.codex`, or `CODEX_HOME`) exists or a Codex account is enrolled.
 
 With a Codex account enrolled, `codex_backend` fails when Codex keeps its login anywhere but `auth.json`. `codex_login` warns when Codex is signed in with an API key. With none enrolled, both are `ok` in those cases. A login in `auth.json` that Pitboard cannot read fails `codex_login` either way.
+
+Claude Desktop's checks come after Codex's, under the heading `Claude Desktop`. They appear when Claude Desktop is installed, a Claude Desktop account is enrolled or Pitboard holds Claude Desktop files.
 
 When Codex's checks appear and Claude Code is absent, `doctor` leaves out most of Claude Code's checks. Claude Code is absent when it has no config file, no `claude` program and no login, and no Claude Code account is enrolled.
 
@@ -261,6 +269,60 @@ When Codex's checks appear and Claude Code is absent, `doctor` leaves out most o
   | `codex_dormant_account` | `account codex/<label>` | As `dormant_account`, for each Codex account. |
   | `codex_version` | `Codex build` | The installed Codex version, and the one Pitboard was checked against. Always `ok`. |
   | `codex_running` | `running Codex` | What runs `codex` as you, by kind, with process IDs: `codex` sessions, the ChatGPT app, Codex's background app server and Codex in an editor. Its advice says what makes each take a switch. Always `ok`. |
+  | `desktop_version` | `Claude Desktop build` | The installed Claude Desktop version matches the one Pitboard's facts were read from. Always `ok`. |
+  | `desktop_version_unverified` | `Claude Desktop build` | In place of `desktop_version` when the installed version differs. Always warns. |
+  | `desktop_cookies` | `Claude Desktop cookies` | The version of Claude's cookie database is one Pitboard reads. |
+  | `desktop_format_unknown` | `Claude Desktop cookies` | In place of `desktop_cookies` when the version is another. Always fails. |
+  | `desktop_different_volume` | `Claude Desktop volume` | Only when Claude's data folder and Pitboard's parks are on different volumes. Always fails. |
+  | `desktop_parks_not_private` | `Claude Desktop parks` | Only when others can reach the directory holding Claude Desktop parks. Always fails. |
+  | `desktop_orphan_park` | `Claude Desktop parks` | Only when a Claude Desktop park is named by no account. Always warns. |
+  | `desktop_parked_login` | `account desktop/<label>` | One per Claude Desktop account. Its park is there, can be read, and how long its sign-in has left. |
+  | `desktop_park_expires_soon` | `account desktop/<label>` | In place of `desktop_parked_login` when the sign-in lapses within 7 days. Always warns. |
+  | `desktop_park_expired` | `account desktop/<label>` | In place of `desktop_parked_login` when the sign-in has lapsed. Always warns. |
+  | `desktop_strays_kept` | `Claude Desktop strays` | Only when a switch set files aside, with how many and their size. Always `ok`. |
+  | `desktop_recovery_pending` | `interrupted Claude Desktop switch` | Only when a Claude Desktop switch did not finish. Always warns. |
+  | `desktop_running` | `running Claude Desktop` | What runs from `Claude.app`, with process IDs. Always `ok`. |
+  | `desktop_live_usage` | `Claude Desktop live usage` | Whether live usage is on. |
+  | `desktop_live_usage_needs_approval` | `Claude Desktop live usage` | In place of `desktop_live_usage` when it is on and macOS has not let Pitboard read Claude's key. Always warns. |
+  | `desktop_session_twins_differ` | `Claude Desktop session` | Only when Claude's two copies of the session cookie differ. Always `ok`. |
 </Accordion>
 
 See [Troubleshooting](/troubleshooting#check-first).
+
+## `desktop live-usage`
+
+```text
+Ask claude.ai how much each Claude Desktop account has left, which needs Claude's key. Off until you turn it on; switching accounts never needs it
+
+Usage: pitboard desktop live-usage [OPTIONS] <COMMAND>
+```
+
+| Command | Description |
+| --- | --- |
+| `enable` | Read Claude's key once, which macOS asks your login password for, and ask claude.ai from then on |
+| `disable` | Stop asking claude.ai, and forget the key |
+| `status` | Say whether it is on, and whether macOS lets Pitboard read the key |
+
+Until live usage is on, `status` reads Claude Desktop's usage from Claude's own history and sends claude.ai nothing. `enable` reads Claude's encryption key, the keychain item `Claude Safe Storage`, and checks it opens Claude's session. Pitboard keeps the key in memory only and writes it nowhere. In a terminal, `enable` first says why. [Security and privacy](/security#claudes-encryption-key) says what this read means.
+
+`enable` needs someone at the Mac's own screen to answer macOS, and waits 2 minutes for an answer. From a shell that cannot show macOS's dialog, after **Deny**, or with nobody answering, it fails with `live_usage_not_allowed`; SSH has not been measured. After **Always Allow**, a background shell read the key with nobody at the Mac.
+
+| Output | When |
+| --- | --- |
+| `Live usage is on.` | `enable` read the key. |
+| `Live usage is off. Claude Desktop's usage is read from its own history, and Pitboard has forgotten Claude's key.` | `disable` ran. |
+| `Live usage is on: Claude Desktop's usage is asked of claude.ai, last answered 5m ago.` | `status`, with live usage on. |
+| ``Live usage is off: Claude Desktop's usage is read from its own history. Turn it on with `pitboard desktop live-usage enable`.`` | `status`, with live usage off. |
+| ``Live usage is paused: macOS has not let Pitboard read Claude's key. Run `pitboard desktop live-usage enable` to ask again.`` | Live usage is on, and macOS stopped letting Pitboard read the key. |
+
+With `--json`, `command` is `desktop` and `data.live_usage` holds the fields [JSON output](/reference/json-output#status-data) lists.
+
+```sh
+pitboard desktop live-usage status
+```
+
+```text
+Live usage is off: Claude Desktop's usage is read from its own history. Turn it on with `pitboard desktop live-usage enable`.
+```
+
+See [Use Pitboard with Claude Desktop](/guides/claude-desktop#see-usage-from-claudeai).

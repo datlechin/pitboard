@@ -57,6 +57,16 @@ private final class StubCore: Core, @unchecked Sendable {
     func tools() -> [Tool] { bothTools }
     func installed() async -> [Tool] { found }
     func searchPath() async -> String? { nil }
+    func switchToSignedOut(_ provider: String) async throws -> Switched {
+        throw PitboardError.Failed(
+            code: "unsupported", cause: nil, message: "not in this test", warnings: [])
+    }
+    func awaitingSignIn() async -> Awaiting? { nil }
+    func liveUsage() async -> LiveUsageState {
+        LiveUsageState(enabled: false, approval: "unknown", reason: nil, lastOkAt: nil)
+    }
+    func enableLiveUsage() async throws -> LiveUsageState { await liveUsage() }
+    func disableLiveUsage() async throws -> LiveUsageState { await liveUsage() }
 }
 
 /// A sign-in the browser has already finished: it says nothing, and finishing it enrols what

@@ -5,13 +5,15 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-/// `pitboard doctor --json`, with `vars` set besides, and the envelope it printed.
-fn doctor(home: &Path, config_dir: Option<&str>, vars: &[(&str, &Path)]) -> serde_json::Value {
+/// `pitboard doctor --json`, with `vars` set besides, and every home it reads in `home`.
+fn command(home: &Path, config_dir: Option<&str>, vars: &[(&str, &Path)]) -> Command {
     let mut command = Command::new(env!("CARGO_BIN_EXE_pitboard"));
     // Nothing real is read, and nothing Pitboard reads is taken from whoever runs the tests.
     // The slot under test is the default one, so the keychain account is a name nobody has
     // and the lookup finds no item; Codex gets a home of its own; and PATH holds only the
-    // system's directories, so no installed `claude` or `codex` is resolved either.
+    // system's directories, so no installed `claude` or `codex` is resolved either. Claude
+    // Desktop's data folder and app are pointed at places that do not exist, so neither the
+    // person's own data nor their install is read.
     for name in pitboard_core::testing::variables() {
         command.env_remove(name);
     }
@@ -21,6 +23,8 @@ fn doctor(home: &Path, config_dir: Option<&str>, vars: &[(&str, &Path)]) -> serd
         .env("USER", "pitboard-test-nobody")
         .env("PITBOARD_HOME", home.join("pitboard"))
         .env("CODEX_HOME", home.join("codex"))
+        .env("PITBOARD_CLAUDE_DESKTOP_DIR", home.join("claude-desktop"))
+        .env("PITBOARD_CLAUDE_DESKTOP_APP", home.join("Claude.app"))
         .env("PATH", "/usr/bin:/bin");
     if let Some(v) = config_dir {
         command.env("CLAUDE_CONFIG_DIR", v);
@@ -28,7 +32,14 @@ fn doctor(home: &Path, config_dir: Option<&str>, vars: &[(&str, &Path)]) -> serd
     for (name, value) in vars {
         command.env(name, value);
     }
-    let out = command.output().expect("run Pitboard");
+    command
+}
+
+/// `pitboard doctor --json`, with `vars` set besides, and the envelope it printed.
+fn doctor(home: &Path, config_dir: Option<&str>, vars: &[(&str, &Path)]) -> serde_json::Value {
+    let out = command(home, config_dir, vars)
+        .output()
+        .expect("run Pitboard");
     let envelope: serde_json::Value =
         serde_json::from_slice(&out.stdout).expect("doctor --json should be valid JSON");
     assert_eq!(envelope["v"], 1, "the contract version must be present");
@@ -38,6 +49,27 @@ fn doctor(home: &Path, config_dir: Option<&str>, vars: &[(&str, &Path)]) -> serd
 
 fn environment(home: &Path, config_dir: Option<&str>) -> serde_json::Value {
     doctor(home, config_dir, &[])["data"]["environment"].clone()
+}
+
+/// Doctor reads Claude Desktop's data folder and app too, so they are pointed into the
+/// scratch home as well, whatever the environment running the suite says: neither exists
+/// there, so the person's own Claude is never read.
+#[test]
+fn doctor_reads_no_real_claude_desktop() {
+    let home = scratch("desktop");
+    let command = command(&home, None, &[]);
+    for name in ["PITBOARD_CLAUDE_DESKTOP_DIR", "PITBOARD_CLAUDE_DESKTOP_APP"] {
+        let set = command
+            .get_envs()
+            .find(|(k, _)| *k == name)
+            .and_then(|(_, v)| v)
+            .unwrap_or_else(|| panic!("{name} is not pointed anywhere"));
+        assert!(
+            Path::new(set).starts_with(&home),
+            "{name} is {set:?}, outside the scratch home"
+        );
+    }
+    let _ = std::fs::remove_dir_all(&home);
 }
 
 fn scratch(name: &str) -> PathBuf {

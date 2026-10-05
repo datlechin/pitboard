@@ -22,6 +22,10 @@ struct MenuBarContent: View {
         Section {
             Button("Add Account…") { model.present(.add(provider: nil)) }
                 .keyboardShortcut("n")
+            // An add left halfway leaves Claude signed out, which is worth a way back.
+            if model.desktopAwaiting != nil {
+                Button("Finish Adding a Claude Account…") { model.finishDesktopAddAsked() }
+            }
             Button {
                 Task { await model.refresh(asked: true) }
             } label: {

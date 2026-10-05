@@ -21,6 +21,7 @@ Run a command as `pitboard <command>`. The following table lists each `<command>
 | `log` | What Pitboard has changed, and when | [Maintenance commands](/reference/maintenance-commands#log) |
 | `uninstall` | Delete every parked login this Pitboard wrote, the daily renewal schedule and Pitboard's own files | [Maintenance commands](/reference/maintenance-commands#uninstall) |
 | `rename` | Change the label an account is enrolled under | [Account commands](/reference/account-commands#rename) |
+| `desktop` | Claude Desktop's own settings | [Maintenance commands](/reference/maintenance-commands#desktop-live-usage) |
 | `doctor` | Check that what Pitboard relies on still holds on this machine | [Maintenance commands](/reference/maintenance-commands#doctor) |
 | `statusline` | One line for Claude Code's status bar; reads its session JSON on stdin | [Integration commands](/reference/integration-commands#statusline) |
 | `completions` | Print a shell completion script | [Integration commands](/reference/integration-commands#completions) |
@@ -51,27 +52,27 @@ Pitboard refuses a mistyped option or an extra word, as in `pitboard status --ve
 
 ## Labels
 
-A label names one account within its tool. `work` is a Claude Code account and `codex/work` is an account of OpenAI's Codex CLI, so both tools can have a `work`.
+A label names one account within its tool, so each tool can have a `work`. `work` is a Claude Code account, `codex/work` an account of OpenAI's Codex CLI and `desktop/work` a Claude Desktop account.
 
-- A label can start with a tool prefix, `claude/` or `codex/`, in lower case. `claude/work` always names the Claude Code account `work`.
+- A label can start with a tool prefix, `claude/`, `codex/` or `desktop/`, in lower case. `claude/work` always names the Claude Code account `work`.
 - Labels are compared exactly: `Work` and `work` are different labels.
 - A label is one word, with no spaces or control characters. Other characters, such as `é` or `工`, are allowed. The only `/` in a label is the one after the prefix.
 
 Commands read a bare label, one without a prefix, in two ways:
 
-- `pitboard enroll` reads a bare label as Claude Code. A Codex account needs the prefix, as in `codex/work`.
-- `pitboard use`, `pitboard forget` and the first label of `pitboard rename` look for a bare label in both tools. If both tools have it, the command fails and lists both labels with their prefix.
+- `pitboard enroll` reads a bare label as Claude Code. A Codex or Claude Desktop account needs the prefix, as in `codex/work` or `desktop/work`.
+- `pitboard use`, `pitboard forget` and the first label of `pitboard rename` look for a bare label in every tool. If more than one tool has it, the command fails and lists each label with its prefix.
 
 `pitboard rename` keeps an account in its tool: `pitboard rename codex/work job` gives `codex/job`.
 
-Pitboard's messages write a label the way a command takes it: `work` for Claude Code, `codex/work` for Codex, and `claude/work` where both tools have a `work`.
+Pitboard's messages write a label the way a command takes it. That is `work` for Claude Code, `codex/work` for Codex and `desktop/work` for Claude Desktop. It is `claude/work` where another tool also has a `work`.
 
 Pitboard refuses a label that breaks a rule, with one of these messages:
 
 | Rule broken | Message |
 | --- | --- |
 | A space or a control character in the label | `` a label must be one word, such as `personal` or `work` `` |
-| A prefix that is not a tool | `` `codx` is not a tool Pitboard knows. It knows: claude, codex `` |
+| A prefix that is not a tool | `` `codx` is not a tool Pitboard knows. It knows: claude, codex, desktop `` |
 | A prefix with no name | `` `codex/` names a tool but no account. Try `codex/work` `` |
 | A second `/` | `` a label cannot contain `/`: it separates the tool from the name, so at most one belongs in `codex/a/b` `` |
 | A bare label both tools have | `` `work` is enrolled for more than one tool: `claude/work`, `codex/work`. Say which one. `` |
@@ -100,7 +101,7 @@ Pitboard colours output that goes to a terminal, unless `NO_COLOR` is set and no
 | `0` | The command did what was asked. |
 | `1` | A request could not be met, for example because the label is unknown or a service did not answer. |
 | `2` | The command line was wrong: an unknown option, a missing argument, or a label for `pitboard enroll`, or the second label of `pitboard rename`, that breaks the label rules. |
-| `3` | A login or a tool's files are in a state Pitboard will not act on, for example Codex signed in with an API key. `pitboard doctor` also exits 3 when a check fails. |
+| `3` | A login or a tool's files are in a state Pitboard will not act on, for example Codex signed in with an API key, or Claude Desktop still open. `pitboard doctor` also exits 3 when a check fails. |
 
 Declining the question from `pitboard forget` or `pitboard uninstall` prints nothing more, changes nothing and exits 0.
 

@@ -7,6 +7,7 @@
 mod file;
 #[cfg(any(test, feature = "test-support"))]
 pub mod memory;
+pub(crate) mod tree;
 // macOS parks in the login keychain, so there nothing outside the tests opens a vault of
 // files; every other system parks in one.
 #[cfg_attr(target_os = "macos", allow(dead_code))]

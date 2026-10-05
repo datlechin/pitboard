@@ -17,6 +17,19 @@ func resetText(_ window: Limit, at now: Date) -> String {
     window.resetsAt.map { resets(resetsAt: $0, now: Int64(now.timeIntervalSince1970)) } ?? ""
 }
 
+/// Who is signed in, at the start of a sentence: the email, or words for an account with
+/// none, as a Claude Desktop account has, so the sentence never starts with nothing.
+func whoIsSignedIn(_ email: String) -> String {
+    email.isEmpty ? "An account" : email
+}
+
+/// What an account is called where nothing else names it: its label, its email, or words
+/// for an account with neither.
+func accountName(label: String?, email: String) -> String {
+    if let label { return label }
+    return email.isEmpty ? "Unnamed account" : email
+}
+
 /// How the `pitboard` a terminal runs is kept up to date: with the app when it is the one
 /// inside it, and otherwise the way it was installed. No other way of installing it updates
 /// it by itself, and saying it "updates on its own" read as though one did.
@@ -59,6 +72,9 @@ private let english = Locale(identifier: "en_US_POSIX")
 
 /// The tool a bare label means, as the core reads one.
 let defaultProvider = "claude"
+
+/// Claude Desktop, as the core names the tool.
+let desktopProvider = "desktop"
 
 /// A name typed for a new account, with the tool it is for, as the core takes it. The
 /// picker is what says which tool, so a slash typed into the name is the core's to refuse
@@ -116,4 +132,37 @@ func changeCaller(_ caller: String) -> String {
 /// does not parse, rather than nothing.
 func changeDate(_ at: String) -> Date? {
     try? Date(at, strategy: .iso8601)
+}
+
+/// Why an app has to quit before its tool can switch, as the alert that asks says it.
+/// Claude Desktop is not asked about: it is the app being switched, and is quit without it.
+func quitQuestion(name: String, to label: String) -> String {
+    return "\(name) keeps using the account it started with until it quits. Pitboard quits "
+        + "it, switches, and opens it again."
+}
+
+/// When a parked Claude Desktop sign-in lapses. Pitboard cannot renew one, so the date is
+/// the date, and a lapsed one has to be signed in to again in Claude.
+func desktopLapseNote(_ parked: Parked?, now: Date) -> String? {
+    guard let at = parked?.refreshExpiresAt else { return nil }
+    let lapses = Date(timeIntervalSince1970: TimeInterval(at))
+    guard lapses > now else {
+        return "Its sign-in has lapsed. Sign in to it again in Claude to use it."
+    }
+    var style = Date.FormatStyle(timeZone: .current).month(.abbreviated).day()
+    style.locale = english
+    return "Sign-in lapses on \(lapses.formatted(style)). Pitboard cannot renew Claude "
+        + "Desktop sign-ins."
+}
+
+/// Where Claude Desktop's numbers come from, as Settings says it.
+func liveUsageLine(_ state: LiveUsageState) -> String {
+    guard state.enabled else {
+        return "Off. Numbers come from Claude’s own history, without reset times."
+    }
+    switch state.approval {
+    case "granted": return "On. Numbers come from claude.ai."
+    case "needs_approval": return "Paused: macOS stopped letting Pitboard read Claude’s key."
+    default: return "On. Pitboard asks claude.ai at the next read."
+    }
 }

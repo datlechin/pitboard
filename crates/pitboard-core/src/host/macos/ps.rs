@@ -1,6 +1,7 @@
 //! This user's processes on macOS, as `ps` lists them.
 
 use crate::host::Process;
+use crate::host::bundle::{self, Bundle};
 use std::path::PathBuf;
 use std::process::Command;
 use std::time::Duration;
@@ -15,6 +16,32 @@ pub(super) fn processes(program: &str) -> Option<Vec<Process>> {
         return None;
     }
     Some(named(&String::from_utf8_lossy(&out.stdout), program))
+}
+
+/// This user's processes inside `bundle`, by the rule [`bundle::within`] gives, from a
+/// listing that also says each one's parent.
+pub(super) fn processes_within(bundle: Bundle<'_>, excluded: &[&str]) -> Option<Vec<Process>> {
+    let mut ps = Command::new("/bin/ps");
+    ps.args(["-x", "-o", "pid=,ppid=,comm="]);
+    let out = super::helper::output_within(ps, b"", Duration::from_secs(5)).ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    Some(bundle::within(
+        &bundle::listed(&String::from_utf8_lossy(&out.stdout)),
+        bundle,
+        excluded,
+    ))
+}
+
+/// The program process `pid` runs, as `ps` names it: its full path when whatever started
+/// it named one.
+pub(super) fn program_of(pid: u32) -> Option<PathBuf> {
+    let mut ps = Command::new("/bin/ps");
+    ps.args(["-p", &pid.to_string(), "-o", "comm="]);
+    let out = super::helper::output_within(ps, b"", Duration::from_secs(5)).ok()?;
+    let path = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    (out.status.success() && !path.is_empty()).then(|| PathBuf::from(path))
 }
 
 /// The processes in a `ps -o pid=,comm=` listing whose program is called `program`. A path

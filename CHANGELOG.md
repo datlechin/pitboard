@@ -6,6 +6,79 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+Pitboard switches Claude Desktop, Anthropic's app for macOS, between your own accounts, and
+the menu bar app quits Claude around a switch and opens it again.
+
+### Added
+
+- `pitboard enroll desktop/<label>` enrols the account Claude Desktop is signed in to, and
+  `pitboard use desktop/<label>` switches it. Claude Desktop keeps its login in its data
+  folder, so a switch moves the cookie jar, the storage folders that belong to the account
+  and three keys of `config.json` into a park under `~/.pitboard/desktop/parks`, by rename
+  and never by copy, and leaves its caches and settings where they are. Experiments on 4
+  October 2026 found those three, with the files, enough to move each of two accounts
+  whole. Nothing moves while
+  Claude is open: quit it with Command-Q first, and the command line never quits it for you.
+  Switching never reads your keychain.
+  [Use Pitboard with Claude Desktop](https://docs.usepitboard.com/guides/claude-desktop)
+  has the steps.
+- The menu bar app lists Claude Desktop accounts when it finds `Claude.app`, with the date
+  each parked one lapses and where its usage came from. A switch while Claude is open quits
+  Claude the way Command-Q does, switches and opens it again in front for you, without
+  asking first: a question asked in the window, behind Claude, left the menu saying
+  "Switching…". **Add Account** walks through adding a Claude Desktop account in three
+  steps, quitting and opening Claude around each change, and **Put personal Back** undoes it
+  halfway. **Settings** > **General** has **Show live usage**, which explains the keychain
+  prompt before anything is read. When macOS stops letting Pitboard read Claude's key, the
+  app says live usage is paused, once in a notification and in a notice with **Allow Again**.
+- A Claude Desktop switch counts Claude as open when it runs from a copy of `Claude.app`
+  under another name, and is not held up by a `SingletonLock` whose process now runs another
+  program. If Claude is opened while a switch moves its files, the switch stops with
+  `app_opened_midway`; any switch that stops partway warns with `switch_unfinished`, and the
+  app then leaves Claude closed so the next change can finish it. If Pitboard cannot list
+  what is running, it stops with `app_state_unknown`. Account keys Claude wrote to
+  `config.json` while signed out are set aside in `~/.pitboard/desktop/strays`, not
+  overwritten, all in one folder per switch, and enrolling an account again drops its
+  lapsed park, as does switching to the account already in use. A session Pitboard has not
+  seen, under an account it knows, is that account's: Claude renews a session in place,
+  as it did a minute after a switch on 5 October 2026, and its code replaces the account
+  that Log out leaves behind at the next sign-in. A session Pitboard knows as another
+  account's stops with `desktop_identity_unconfirmed` until you enrol that label again.
+- `pitboard use desktop --signed-out` parks the account in use and leaves Claude Desktop
+  signed out, so you can sign in to another account in Claude and enrol it without signing
+  the first one out. Never use Log out in Claude to switch: it ends that session at
+  claude.ai, and Pitboard cannot bring it back (measured on 4 October 2026).
+- `pitboard status` lists Claude Desktop accounts under their own heading, with usage read
+  from Claude's own history, which matched claude.ai's own count when measured, and says
+  when each parked login lapses. With nothing enrolled and Claude Desktop installed, it says
+  how to enrol a Claude Desktop account as well as a Claude Code one. Messages about a
+  Claude Desktop account, which has no email, print no empty brackets.
+- `pitboard desktop live-usage enable` asks claude.ai how much each Claude Desktop account
+  has left, which needs Claude's key from the keychain. claude.ai does not document the
+  request; it and how Pitboard decrypts the session were checked against claude.ai on 4
+  October 2026. It is off until you turn it on, macOS asks for your login password once,
+  and switching never needs it. After **Always Allow**, refreshes need nobody at the Mac.
+  A keychain question nobody answers can stay on screen after Pitboard stops waiting, and
+  its message says to close it with **Deny**. A refresh that stopped waiting does not ask
+  again, but each `enable` that runs out of time, and the app and a command reading at
+  once, can each leave one. Deny and a
+  wrong password are reported alike, since macOS answers both the same way. `disable` turns it
+  off and forgets the key, and `status` says whether it is on. An answer from the keychain
+  Pitboard does not expect pauses it until you allow it again, instead of asking on every
+  refresh.
+- `pitboard renew` lists each parked Claude Desktop login as not renewable, with the date
+  its sign-in lapses, and switches and `status` warn with `park_expires_soon` a week before.
+  A Claude Desktop session lasts about four weeks and Pitboard cannot renew it.
+- `pitboard doctor` has a Claude Desktop section: the app's version against the one
+  Pitboard's facts were read from, the cookie jar's format, the parks and their volume,
+  interrupted switches, what is running and whether live usage is on. It never reads the
+  keychain.
+- The `--json` output gains `desktop` as a tool, `signed_out` on `use`, `next_launch` as an
+  adoption, `not_renewable` with `expires_at` on `renew`, a `desktop` object on `status`,
+  `environment.desktop` on `doctor`, the `desktop` command, and the error, warning and stale
+  codes Claude Desktop needs. [Errors and warnings](https://docs.usepitboard.com/reference/errors)
+  lists them.
+
 ### Changed
 
 - The product is called Pitboard, with a capital P, everywhere it names itself: the app
@@ -55,6 +128,12 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   - A host written partly in full-width letters and partly in escapes, such as
     `ｃ%EF%BD%8Caude.ai`, is claude.ai, as the WHATWG URL standard maps it. Pitboard said
     it was another site.
+- A state file that names a Claude Desktop account stops an older Pitboard with
+  `state_names_unknown_tool`, which says to update it. The file stays at schema 4.
+- An interrupted Claude Desktop switch has its own record,
+  `~/.pitboard/desktop/journal.json`, finished only while Claude is closed. It never blocks a
+  Claude Code or Codex command, and `pitboard abandon` gives it up after any interrupted
+  Claude Code or Codex switch.
 
 ### Fixed
 
