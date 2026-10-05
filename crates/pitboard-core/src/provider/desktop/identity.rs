@@ -4,9 +4,9 @@
 //! `config.json` names. Neither alone is enough: the uuid is what the app last saw, which
 //! Log out leaves behind (experiment E1b), and the session says nothing of whose it is. A
 //! jar with no session is signed out whatever the uuid says. Where no uuid was named, the
-//! app writes the new account's before its session reaches the jar (E4); whether it
-//! replaces a uuid Log out left behind has not been measured, so a session Pitboard has not
-//! seen under a uuid it knows is not taken as that account until somebody confirms it.
+//! app writes the new account's before its session reaches the jar (E4), and the bundle
+//! replaces a uuid Log out left behind by the same write, so a session Pitboard has not
+//! seen under a uuid it knows is that account's: the app renews sessions in place.
 
 use super::cookies;
 use super::paths::{config_file, cookies_db};
@@ -89,11 +89,12 @@ pub(crate) enum LiveOwner {
 }
 
 /// Whose `live` is among `state`'s Claude Desktop accounts. A known uuid under a session
-/// Pitboard has not seen is refused, naming the uuid's label, while the register's
-/// `desktop_uuid_tracks_signin` is unverified: Log out leaves the uuid behind (E1b), and
-/// nobody has seen whether another account's sign-in replaces it, so the session may be
-/// anybody's. Enrolling that label is the confirmation. A session Pitboard knows as another
-/// account's is always refused.
+/// Pitboard has not seen is that account's while the register's
+/// `desktop_uuid_tracks_signin` holds: another account's sign-in would have replaced the
+/// uuid Log out left behind (E1b), and the app renews a session in place. Were it dated
+/// unverified, such a session would be refused, naming the uuid's label, and enrolling that
+/// label would be the confirmation. A session Pitboard knows as another account's is always
+/// refused.
 pub(crate) fn whose(state: &State, live: Option<TreeIdentity>) -> Result<LiveOwner, Error> {
     let Some(live) = live else {
         return Ok(LiveOwner::Nobody);
@@ -402,13 +403,14 @@ mod tests {
         assert!(said.contains("pitboard enroll desktop/work"), "{said}");
     }
 
-    /// Experiment E4 saw the uuid written only where `config.json` named nobody, so a known
-    /// uuid under a session Pitboard has not seen may be the uuid Log out left behind (E1b)
-    /// under another account's sign-in. Until the register's `desktop_uuid_tracks_signin`
-    /// is measured it is refused, naming the uuid's label, which enrolling then confirms.
+    /// Claude replaces an account's session without signing it out: on 5 October 2026 a
+    /// `session_stale_relogin` was met with a new `sessionKey` for the same uuid. The
+    /// register's `desktop_uuid_tracks_signin` says a sign-in by anybody else would have
+    /// replaced the uuid too, so a session Pitboard has not seen under a known uuid is that
+    /// account's, and nothing is written by asking.
     #[test]
-    fn a_new_session_under_a_known_uuid_waits_to_be_confirmed() {
-        assert!(!crate::assumptions::verified(
+    fn a_renewed_session_under_a_known_uuid_is_that_account() {
+        assert!(crate::assumptions::verified(
             ProviderId::Desktop,
             UUID_TRACKS_SIGNIN
         ));
@@ -416,7 +418,9 @@ mod tests {
         state.upsert(enrolled("work", UUID, "aaaa"));
         let before = serde_json::to_string(&state).unwrap();
         match whose(&state, Some(live(UUID, "cccc"))) {
-            Err(Error::DesktopIdentityUnconfirmed { label }) => assert_eq!(label, "work"),
+            Ok(LiveOwner::Enrolled(key)) => {
+                assert_eq!(key, Key::new(ProviderId::Desktop, "work"));
+            }
             other => panic!("{other:?}"),
         }
         assert_eq!(serde_json::to_string(&state).unwrap(), before);

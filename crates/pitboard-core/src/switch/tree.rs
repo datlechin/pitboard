@@ -1221,22 +1221,40 @@ mod tests {
         assert!(tree_journal::pending(&m.ctx).is_none());
     }
 
-    /// A session Pitboard has not seen under `here`'s uuid may be another account signed in
-    /// after Log out left `here`'s uuid behind (E1b): experiment E4 saw the uuid written only
-    /// where none was named. Until that is measured nothing moves, and the refusal names
-    /// `here`, whose enrolling confirms it.
+    /// Claude gave `here` a new session without signing it out, as it does after a
+    /// `session_stale_relogin`. Setting it aside to add another account parks it as `here`'s
+    /// and records the new session, and a switch back finds it whole.
     #[test]
-    fn a_new_session_under_a_known_uuid_moves_nothing() {
-        let m = desktop_machine("resigned");
+    fn a_renewed_session_is_set_aside_as_its_account() {
+        let m = desktop_machine("renewed");
         m.plant_live("here", "v10here-again");
-        let before = m.inodes();
-        let refused = switch_to(&m, "there").expect_err("unconfirmed");
+        let renewed = identity::identify_tree(&m.ctx, &m.support())
+            .expect("a readable folder")
+            .expect("signed in");
+        let (outcome, _) = signing_out(&m).expect("set aside");
         assert!(
-            matches!(&refused, Error::DesktopIdentityUnconfirmed { label } if label == "here"),
-            "{refused:?}"
+            matches!(&outcome, Outcome::SignedOut { from, .. } if from == "desktop/here"),
+            "{outcome:?}"
         );
-        assert_eq!(m.inodes(), before);
-        assert!(tree_journal::pending(&m.ctx).is_none());
+        let state = state::load(&m.ctx).unwrap();
+        assert!(
+            matches!(
+                &state.get(&here(&m)).unwrap().detail,
+                Detail::Desktop { session_fingerprint, .. } if *session_fingerprint == renewed.fingerprint
+            ),
+            "the renewed session is the one recorded"
+        );
+        assert_eq!(m.whole("here"), super::super::harness::Whole::Parked);
+
+        let (back, _) = switch_to(&m, "here").expect("restored");
+        assert!(
+            matches!(&back, Outcome::Installed { to, .. } if to == "desktop/here"),
+            "{back:?}"
+        );
+        let live = identity::identify_tree(&m.ctx, &m.support())
+            .unwrap()
+            .unwrap();
+        assert_eq!(live.fingerprint, renewed.fingerprint);
     }
 
     /// Switching to the account signed in now while it still has a park: the park is an

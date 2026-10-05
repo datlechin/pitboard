@@ -25,7 +25,6 @@ expression: "value[\"data\"][\"environment\"][\"desktop\"]"
     "reason": null
   },
   "unverified_facts": [
-    "desktop_uuid_tracks_signin",
     "desktop_session_sliding",
     "security_reads_do_not_slow_claude",
     "desktop_update_keeps_item"

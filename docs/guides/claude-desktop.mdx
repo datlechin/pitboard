@@ -85,7 +85,7 @@ Never use **Log out** in Claude to add an account or to switch. Logging out ends
 
 - A parked Claude Desktop login cannot be renewed. Its sign-in lasts about 4 weeks, and `pitboard status` shows the date each parked one lapses. Switch to an account before that date to keep it. Pitboard warns 7 days ahead.
 - `pitboard renew` lists each parked Claude Desktop login as not renewable, with the date it lapses.
-- Pitboard reads whose a login is from Claude's files, without the network or the keychain. If Claude holds a session Pitboard has not seen under an account it knows, or a session Pitboard knows as one label's under another account, Pitboard moves nothing and asks you to check the account in Claude and enrol it again. Whether Claude replaces the account that Log out leaves behind has not been measured, so Pitboard does not assume it.
+- Pitboard reads whose a login is from Claude's files, without the network or the keychain. A new session under an account Pitboard knows is that account's, since Claude renews sessions on its own and replaces the account Log out leaves behind at the next sign-in. If Claude holds a session Pitboard knows as one label's under another account, Pitboard moves nothing and asks you to check the account in Claude and enrol it again.
 - Usage comes from Claude's own history, without reset times. Its numbers matched claude.ai's own count for two accounts, measured on 4 October 2026.
 - An interrupted switch waits until Claude is closed. Quit Claude, and Pitboard finishes it before the next change. [Interrupted switches](/concepts/switching#interrupted-switches) explains how.
 

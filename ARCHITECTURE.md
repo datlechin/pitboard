@@ -1019,7 +1019,8 @@ Each experiment dates its register entry with the version:
 - `lastKnownAccountUuid` is written while the app runs, 35 and 15 seconds after launch on two
   sign-ins, before `sessionKey` reaches the jar at 63 and 31 seconds (E4). The jar is flushed
   about every 30 seconds. Both sign-ins started with no uuid in `config.json`, so whether a
-  sign-in replaces the uuid that Log out leaves behind (E1b) is still to be measured (E19).
+  sign-in replaces the uuid that Log out leaves behind (E1b) was read from the bundle
+  instead, on 5 October 2026 (below).
 - A cookie is AES-128-CBC with a key from PBKDF2-SHA1 of the item's password, salt
   `saltysalt`, 1003 rounds, 16 bytes, an IV of sixteen 0x20 bytes, and from meta version 24
   a 32-byte SHA-256 of the host before the value (E5). A `sessionKey` decrypted this way was
@@ -1058,13 +1059,22 @@ Each experiment dates its register entry with the version:
   two processes refreshing at once can each leave one. Reading the item's attributes
   without `-w` never prompted, many times from a background shell (U-K5).
 
+Read on 5 October 2026, from the same build:
+
+- The app replaces an account's `sessionKey` without signing it out. A session Pitboard had
+  just put back met `session_stale_relogin` a second after launch, and 66 seconds later a
+  new `sessionKey` was created under the same `lastKnownAccountUuid`, with no
+  `Login-state transition` in `main.log`.
+- A sign-in replaces a `lastKnownAccountUuid` that Log out left behind. `app.asar` writes
+  the key whenever the account the page reports differs from the one read at launch, the
+  same write E4 timed where none was named. So a session Pitboard has not seen under a uuid
+  it knows is that account's; a session Pitboard knows as another account's still stops
+  with `desktop_identity_unconfirmed`.
+
 Not measured yet, and dated `UNVERIFIED` in the register:
 
 - Whether the session's expiry slides forward with use (E11, E13). Both sessions read on 4
   October 2026 expire on 1 November 2026, so the read that settles it comes after that.
-- Whether a sign-in replaces a `lastKnownAccountUuid` that Log out left behind (E19). Until
-  it is measured, a session Pitboard has not seen under a uuid it knows stops with
-  `desktop_identity_unconfirmed`, and enrolling that label confirms it.
 - Whether reads with Always Allow slow the app down (U-K6; U-K1 read only the stamp), and
   whether an update of the app keeps the item (U-K4).
 

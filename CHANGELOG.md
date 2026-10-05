@@ -40,9 +40,10 @@ the menu bar app quits Claude around a switch and opens it again.
   `config.json` while signed out are set aside in `~/.pitboard/desktop/strays`, not
   overwritten, all in one folder per switch, and enrolling an account again drops its
   lapsed park, as does switching to the account already in use. A session Pitboard has not
-  seen, under an account it knows, stops with `desktop_identity_unconfirmed` until you
-  enrol that label again, because whether Claude replaces the account that Log out leaves
-  behind has not been measured; so does a session Pitboard knows as another account's.
+  seen, under an account it knows, is that account's: Claude renews a session in place,
+  as it did a minute after a switch on 5 October 2026, and its code replaces the account
+  that Log out leaves behind at the next sign-in. A session Pitboard knows as another
+  account's stops with `desktop_identity_unconfirmed` until you enrol that label again.
 - `pitboard use desktop --signed-out` parks the account in use and leaves Claude Desktop
   signed out, so you can sign in to another account in Claude and enrol it without signing
   the first one out. Never use Log out in Claude to switch: it ends that session at

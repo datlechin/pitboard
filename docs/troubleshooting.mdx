@@ -73,7 +73,7 @@ A command stops with `recovery_waiting`, or `pitboard status` warns of it. A Cla
 
 ## Pitboard cannot tell whose Claude Desktop session it is
 
-A switch stops with `desktop_identity_unconfirmed`. Claude holds a session Pitboard has not seen under that label's account, or a session Pitboard knows as that label's under another account, so Pitboard cannot yet tell whose it is. Open Claude, check it shows that label's account, quit Claude, then run `pitboard enroll desktop/<label>` with the label the message names.
+A switch stops with `desktop_identity_unconfirmed`. Claude holds a session Pitboard knows as that label's under another account, so Pitboard cannot yet tell whose it is. A new session under an account Pitboard knows is not refused: Claude renews sessions on its own. Open Claude, check it shows that label's account, quit Claude, then run `pitboard enroll desktop/<label>` with the label the message names.
 
 ## Claude Desktop live usage is paused
 

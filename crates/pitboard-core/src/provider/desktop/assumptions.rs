@@ -4,10 +4,11 @@
 //! folder, its cookie database copied aside, its processes and its keychain item's
 //! attributes. The experiments of 4 October 2026, run on the same build with two real
 //! accounts, settled most of the rest, each entry naming the experiment (E1 to E18 for the
-//! app, U-K1 to U-K5 for the keychain). Four facts still wait for a read: whether the
-//! session's expiry slides, whether a sign-in replaces a uuid Log out left behind, whether
-//! reading the key slows the app, and whether an update keeps the keychain item. Each is dated [`UNVERIFIED`] and names the experiment that will
-//! settle it. Code that can choose between two behaviours on one asks
+//! app, U-K1 to U-K5 for the keychain). Whether a sign-in replaces a uuid Log out left
+//! behind was read from the bundle on 5 October 2026. Three facts still wait for a read:
+//! whether the session's expiry slides, whether reading the key slows the app, and whether
+//! an update keeps the keychain item. Each is dated [`UNVERIFIED`] and names the experiment
+//! that will settle it. Code that can choose between two behaviours on one asks
 //! [`crate::assumptions::verified`] first; code that cannot work at all without one leans on
 //! it as written, and `pitboard doctor` lists it as unverified.
 //!
@@ -203,11 +204,18 @@ pub const ASSUMPTIONS: &[Assumption] = &[
     Assumption {
         name: "desktop_uuid_tracks_signin",
         fact: "where `lastKnownAccountUuid` still names an account that left, as Log out leaves it, another account signing in replaces it before its `sessionKey` reaches the jar",
-        // E4's sign-ins both started with no uuid at all, so they say nothing of a uuid
-        // being replaced.
-        read_from: "not measured yet; experiment E19 settles it: Log out of one account in the app, sign in to another, and read the uuid until the new `sessionKey` reaches the jar",
-        verified_against: UNVERIFIED,
-        depends: "whether a session Pitboard has not seen, under a uuid it knows, is taken as that account; until then it is refused with `desktop_identity_unconfirmed`, and enrolling that label confirms it",
+        read_from: "the bundle's `app.asar` read on 5 October 2026: one handler of the account the page reports writes `lastKnownAccountUuid` whenever a signed-in account's uuid differs from the one it holds, read from `config.json` at launch; Log out reports no uuid, so it keeps the old one (E1b), and the next sign-in replaces it by the same write experiment E4 timed where none was named",
+        verified_against: VERIFIED_AGAINST,
+        depends: "identity::whose, which takes a session Pitboard has not seen, under a uuid it knows, as that account",
+        probe: &[],
+        absent: &[],
+    },
+    Assumption {
+        name: "desktop_session_renewed_in_place",
+        fact: "the app can replace an account's `sessionKey` while it stays signed in to that account, so an enrolled account comes back with a session Pitboard has not seen",
+        read_from: "the app's logs and cookie jar on 5 October 2026: a session Pitboard had just put back was refused with `session_stale_relogin` a second after launch; 66 seconds later `main.log` said `clearing latched session_stale_relogin failures`, a new `sessionKey` was created in that second under the same `lastKnownAccountUuid`, and no `Login-state transition` was logged",
+        verified_against: VERIFIED_AGAINST,
+        depends: "identity::whose, which would otherwise refuse every account whose session the app renewed",
         probe: &[],
         absent: &[],
     },
