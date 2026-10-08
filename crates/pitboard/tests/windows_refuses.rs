@@ -1,8 +1,7 @@
 //! A Windows build of Pitboard changes nothing before its Windows face is built: run as the
 //! command line it is, with every folder Windows names for a person, and every home Pitboard
 //! and the tools read, at scratch folders of this test's own. Apart from the harness the other
-//! tests share, which plants logins the way each system keeps them and runs on Windows from
-//! W13.
+//! tests share, which plants logins the way each system keeps them.
 //!
 //! Which refusal it meets is the build's, and CI's Windows jobs run it against both, each as a
 //! fresh standard user. One opened to Windows before its release (`pitboard_core::release`)

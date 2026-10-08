@@ -461,11 +461,28 @@ pages load, as a browser would.
   links a directory otherwise than a file, says how in its own face and nowhere else. The
   integration tests' harness says what differs by system in
   `crates/pitboard/tests/common/os.rs`, one `match` on `host::OS` for each fact: where
-  Claude Code keeps the login it uses and where Pitboard parks one. Its Windows arms say
-  nothing yet, and stop a test that asks, since no test that plants a login runs on Windows
-  before the harness does. Until then Windows runs `windows_refuses`, which keeps apart from
-  the harness, and a test that cannot pass there until a later pull request says which with
+  Claude Code keeps the login it uses (on Windows the harness assumes `.credentials.json`,
+  as on Linux, pending W22: Claude Code's register has `no_keyring_off_macos` unread on
+  Windows, and which store its Windows build chooses, `windows_backend_choice`, is not read
+  yet, so no test that plants a Claude Code login runs there before W22), where Pitboard
+  parks one (sealed to the person on Windows, which only the core's vault writes, so the
+  harness parks through it), which variables a command is passed on, which folders
+  of a person's account it is given as scratch ones of its own, what its `PATH` holds after
+  the test's programs, what a program's file is called, and how npm lays out a package's
+  program. A test that cannot pass on Windows until a later pull request says which with
   `#[cfg_attr(windows, ignore = "W<n>: …")]`, the one way a test is put off there.
+- No test addresses a name a real login may be kept under. `guard_not_live` refuses by
+  pattern, never by a hash computed for a real home, the families
+  `pitboard_core::provider::names` tells apart, which the measurement probe's leak check
+  reads too: every Claude Code slot, bare or under an account and in each of its pieces,
+  but the one hashed from the test's own folder; Codex's `cli|` and `secrets|` targets; and
+  anything under `Codex MCP Credentials`.
+- No test uses a folder that is, holds or lies in a real login place: the account's own
+  `.claude`, `.claude.json`, `.codex` and Pitboard folder, from the home and the Pitboard
+  folder the system names for the account whatever the environment says (the passwd
+  database, or `FOLDERID_Profile` and `FOLDERID_LocalAppData`), and those the environment
+  the tests were started in names. A folder is compared with each in any case, through
+  every link the file system resolves.
 - Every program the command line's tests and `pitboard-ffi`'s tests start in place of a
   tool, or put where one is looked for, is one compiled program, the `pitboard` crate's
   example `stand-in`, playing the script written beside its copy

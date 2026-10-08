@@ -46,6 +46,7 @@
 pub(crate) mod claude;
 pub(crate) mod codex;
 pub(crate) mod jwt;
+pub mod names;
 mod printed;
 
 use crate::context::Context;

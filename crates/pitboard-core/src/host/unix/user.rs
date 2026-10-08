@@ -42,6 +42,16 @@ fn passwd_home() -> Option<PathBuf> {
     entry(|passwd| path(passwd, passwd.pw_dir))
 }
 
+#[cfg(feature = "test-support")]
+pub(crate) fn accounts_own_home() -> Option<PathBuf> {
+    passwd_home()
+}
+
+#[cfg(feature = "test-support")]
+pub(crate) fn accounts_own_pitboard_home() -> Option<PathBuf> {
+    passwd_home().map(|home| crate::host::default_pitboard_home(&home))
+}
+
 /// Whether `path` is this account's own home, as the passwd database names it, for a build
 /// for tests to refuse to act on. Compared as the file system resolves both, so a link to
 /// the home is the home.

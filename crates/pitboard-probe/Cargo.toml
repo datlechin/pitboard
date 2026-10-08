@@ -29,6 +29,7 @@ path = "src/bin/sparse.rs"
 
 [dependencies]
 clap.workspace = true
+pitboard-core.workspace = true
 hex.workspace = true
 serde_json.workspace = true
 sha2.workspace = true

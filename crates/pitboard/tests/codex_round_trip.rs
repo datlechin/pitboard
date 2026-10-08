@@ -246,10 +246,12 @@ fn a_codex_sign_in_without_codex_says_so_first() {
 ///
 /// Driven through the library, the way the app drives it: the command line looks for a
 /// program on its own `PATH`, where its directory always is.
-///
-/// npm's layout on macOS and Linux. Its Windows counterpart, a `codex.cmd` shim, is W13's.
-#[cfg(unix)]
 #[test]
+#[cfg_attr(
+    windows,
+    ignore = "W19: a sign-in started through npm's codex.cmd, whose interpreter is in no \
+              folder of the search path"
+)]
 fn an_npm_installed_codex_signs_in_from_a_path_without_its_directory() {
     let env = Env::new("codex-npm");
     let program = env.install_fake_npm_codex_login(&codex_login(
@@ -257,25 +259,26 @@ fn an_npm_installed_codex_signs_in_from_a_path_without_its_directory() {
         "p@example.com",
         "codex-refresh-p",
     ));
-    let search = "/usr/bin:/bin";
+    let search = std::env::join_paths(common::os::system_folders()).expect("a search path");
     let alone = std::process::Command::new(&program)
         .arg("login")
         .env_clear()
-        .env("PATH", search)
+        .env("PATH", &search)
         .output()
-        .expect("env runs");
-    assert_eq!(
-        alone.status.code(),
-        Some(127),
-        "the stand-in cannot start from that PATH on its own, so the test would prove nothing"
+        .expect("the program starts");
+    assert!(
+        common::os::found_no_interpreter(alone.status),
+        "the stand-in cannot start from that PATH on its own, so the test would prove \
+         nothing: {alone:?}"
     );
+    let search = search.into_string().expect("a search path in Unicode");
 
     let ctx = pitboard_core::context::Context::new(env.root.clone())
         .with_pitboard_home(env.root.join("pitboard"))
         .with_claude_config_dir(env.root.to_string_lossy().into_owned())
         .with_codex_home(env.codex_home().to_string_lossy().into_owned())
         .with_codex_program(program)
-        .with_search_path(search.into());
+        .with_search_path(search);
     let pitboard = pitboard_core::service::Pitboard::new(ctx);
     let signing_in = pitboard
         .sign_in_watched("codex/personal")

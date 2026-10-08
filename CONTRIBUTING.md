@@ -49,10 +49,15 @@ To work on the app, you need a Mac with Xcode, and its Swift must be 6.2 or late
    it, and look at the diff after. An empty or surprisingly small diff is the symptom.
 
 3. Never write to a keychain item that holds a real login. Each test names its items after
-   itself and calls `common::guard_not_live` before the first write. A Codex test that
-   writes points `CODEX_HOME` at a scratch directory and never writes to `~/.codex`. The
-   one ignored test that reads a real `auth.json` only reads it. Nothing runs `codex login`
-   or `codex logout` against a real home, because both revoke the login stored there.
+   itself and calls `common::guard_not_live` before the first write, which refuses by
+   pattern every name a real login may be kept under, in the keychain and in Windows'
+   Credential Manager: every Claude Code slot but the one hashed from the test's own
+   folder, in any spelling or piece, Codex's `cli|` and `secrets|` targets and anything
+   under `Codex MCP Credentials`. A test writes only `pitboard-citest-*` names, the parks
+   Pitboard names, and its own slot. A Codex test that writes points `CODEX_HOME` at a
+   scratch directory and never writes to `~/.codex`. The one ignored test that reads a real
+   `auth.json` only reads it. Nothing runs `codex login` or `codex logout` against a real
+   home, because both revoke the login stored there.
 
 4. Measure the tool, do not guess at it. Claude Code's behaviour here is undocumented,
    Codex's moves with its source, and both ship several times a week. A claim about either
@@ -345,6 +350,15 @@ elevated terminal, or as an account whose every program runs elevated, as with U
 Control off, the face's `as_the_person_the_gate_lets_a_change_through` and `windows_refuses`
 fail, saying so. A test that cannot pass on Windows until a later pull request says which,
 with `#[cfg_attr(windows, ignore = "W<n>: <what it waits on>")]`, and in no other way.
+
+The integration tests' harness gives every command a test runs a scratch folder of the
+test's own for each folder of a person's account, `USERPROFILE`, `HOME`, `APPDATA` and
+`LOCALAPPDATA`, as for each tool's home, and a `PATH` of the test's own programs and
+Windows' own folders alone, so nothing installed is found. It refuses, here as on every
+system, a scratch folder that is, holds or lies in the account's real `.claude`,
+`.claude.json`, `.codex` or `%LOCALAPPDATA%\Pitboard`, compared in any case and through
+every link; the rest of the profile, where `%TEMP%` is, it allows. Every program it puts in
+place of a tool is the compiled stand-in, named with `.exe`.
 
 From a Mac or Linux, `cargo check --target x86_64-pc-windows-msvc` checks only
 `pitboard-sites` and `pitboard-share-ffi`: ring's build script compiles C against MSVC's

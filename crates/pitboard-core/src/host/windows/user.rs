@@ -33,6 +33,42 @@ pub(crate) fn is_the_accounts_own_home(_path: &std::path::Path) -> bool {
     false
 }
 
+#[cfg(feature = "test-support")]
+pub(crate) fn accounts_own_home() -> Option<PathBuf> {
+    known_folder(&windows_sys::Win32::UI::Shell::FOLDERID_Profile)
+}
+
+#[cfg(feature = "test-support")]
+pub(crate) fn accounts_own_pitboard_home() -> Option<PathBuf> {
+    known_folder(&windows_sys::Win32::UI::Shell::FOLDERID_LocalAppData)
+        .map(|data| data.join("Pitboard"))
+}
+
+// KF_FLAG_DONT_VERIFY: a folder not made yet is still where a login would go.
+#[cfg(any(test, feature = "test-support"))]
+fn known_folder(id: &windows_sys::core::GUID) -> Option<PathBuf> {
+    use std::os::windows::ffi::OsStringExt;
+    use windows_sys::Win32::UI::Shell::{KF_FLAG_DONT_VERIFY, SHGetKnownFolderPath};
+
+    let mut out: windows_sys::core::PWSTR = std::ptr::null_mut();
+    let flags = KF_FLAG_DONT_VERIFY as u32;
+    // SAFETY: `id` is a GUID, the null token asks for this user, and `out` is freed below.
+    let hr = unsafe { SHGetKnownFolderPath(id, flags, std::ptr::null_mut(), &raw mut out) };
+    let path = (hr >= 0 && !out.is_null()).then(|| {
+        let mut len = 0;
+        // SAFETY: on success `out` is a NUL-terminated string, read up to its NUL.
+        while unsafe { *out.add(len) } != 0 {
+            len += 1;
+        }
+        // SAFETY: `out` holds `len` units before its NUL.
+        let wide = unsafe { std::slice::from_raw_parts(out, len) };
+        PathBuf::from(std::ffi::OsString::from_wide(wide))
+    });
+    // SAFETY: `out` is null or the shell's allocation, and CoTaskMemFree takes either.
+    unsafe { windows_sys::Win32::System::Com::CoTaskMemFree(out.cast()) };
+    path
+}
+
 // `_sudo` is unread: Windows' own `sudo` elevates the token of the program it starts.
 pub(crate) fn elevation(_sudo: bool) -> Elevation {
     token::elevation(this_processs_token())
@@ -166,6 +202,15 @@ pub(crate) mod testing {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_profile_and_local_app_data_are_named() {
+        use windows_sys::Win32::UI::Shell::{FOLDERID_LocalAppData, FOLDERID_Profile};
+        for id in [FOLDERID_Profile, FOLDERID_LocalAppData] {
+            let folder = known_folder(&id).expect("a known folder");
+            assert!(folder.is_absolute(), "{}", folder.display());
+        }
+    }
 
     #[test]
     fn the_token_and_the_version_are_read() {

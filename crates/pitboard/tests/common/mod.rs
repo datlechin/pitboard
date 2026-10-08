@@ -11,6 +11,7 @@
 pub mod os;
 
 use os::Kept;
+use pitboard_core::context::Environment;
 use pitboard_core::testing::fs as files;
 use pitboard_core::testing::stand_in::{self, Script, Step};
 
@@ -22,17 +23,11 @@ pub fn put_stand_in(path: &Path, script: &Script) {
         .unwrap_or_else(|e| panic!("no stand-in at {}: {e}", path.display()));
 }
 
-/// What every command a test runs is given of the environment the tests run in: who is
-/// running them, which names their keychain account, and their home, which each tool's own
-/// variable moves away from in [`Env::command`]. Every other variable Pitboard reads is
-/// withheld. One exported in the shell that ran `cargo test`, such as `PITBOARD_CLAUDE`,
-/// would otherwise have a sign-in run the real `claude` with the real home.
-const PASSED_ON: [&str; 2] = ["HOME", "USER"];
-
 /// The variables Pitboard reads that no test takes from whoever runs it, from the core's own
 /// list of what it reads, so a variable added there is withheld here too.
+// An inherited `PITBOARD_CLAUDE` would have a sign-in run the real `claude` on the real home.
 pub fn withheld() -> impl Iterator<Item = &'static str> {
-    pitboard_core::testing::variables().filter(|name| !PASSED_ON.contains(name))
+    pitboard_core::testing::variables().filter(|name| !os::passed_on().contains(name))
 }
 
 /// This test process's own environment, less what is withheld: the machine's real keychain
@@ -43,39 +38,217 @@ pub fn withheld() -> impl Iterator<Item = &'static str> {
 )]
 pub fn ctx() -> pitboard_core::context::Context {
     let passed: pitboard_core::context::Environment = std::env::vars_os()
-        .filter(|(name, _)| !withheld().any(|kept| name == kept))
+        .filter(|(name, _)| !withheld().any(|kept| is(name, kept)))
         .collect();
     pitboard_core::context::Context::for_command_line(&passed)
 }
 
-/// Refuse a service name that this machine's Claude Code would actually read.
-///
-/// A slot hashed from a scratch directory is safe by construction and is exactly what the
-/// round-trip tests need, so the family as a whole is not off limits, only the two names
-/// that resolve to a real login here.
-pub fn guard_not_live(service: &str) {
-    assert_ne!(
-        service,
-        pitboard_core::testing::LIVE_SERVICE,
-        "a test must never address the default credential slot"
-    );
-    assert_ne!(
-        service,
-        pitboard_core::testing::live_service(&ctx()),
-        "a test must never address the slot this machine's Claude Code reads"
-    );
+fn is(name: &std::ffi::OsStr, variable: &str) -> bool {
+    name.to_str()
+        .is_some_and(|name| os::same_variable(name, variable))
+}
+
+fn started_in() -> pitboard_core::context::Context {
+    pitboard_core::context::Context::for_command_line(&Environment::of_this_process())
+}
+
+pub fn real_slots() -> [String; 2] {
+    [
+        pitboard_core::testing::LIVE_SERVICE.to_owned(),
+        pitboard_core::testing::live_service(&started_in()),
+    ]
+}
+
+pub fn refuse_a_real_login_place(scratch: &Path) {
+    let places = pitboard_core::testing::real_login_places(&started_in())
+        .unwrap_or_else(|why| panic!("{why}, so no test can tell its folder from a real login's"));
+    if let Some(place) = places.iter().find(|place| clashes(scratch, place)) {
+        panic!(
+            "a test may not use {} as its own folder: it is, holds or lies in {}",
+            scratch.display(),
+            place.display()
+        );
+    }
+}
+
+fn clashes(scratch: &Path, place: &Path) -> bool {
+    let same = pitboard_core::host::same_path_in_any_case;
+    let (scratch, place) = (resolved(scratch), resolved(place));
+    scratch.ancestors().any(|folder| same(folder, &place))
+        || place.ancestors().any(|folder| same(folder, &scratch))
+}
+
+fn resolved(path: &Path) -> PathBuf {
+    let mut rest = Vec::new();
+    let mut existing = path;
+    loop {
+        if let Ok(found) = std::fs::canonicalize(existing) {
+            return rest
+                .iter()
+                .rev()
+                .fold(found, |found, name| found.join(name));
+        }
+        match (existing.parent(), existing.file_name()) {
+            (Some(parent), Some(name)) => {
+                rest.push(name);
+                existing = parent;
+            }
+            _ => return path.to_path_buf(),
+        }
+    }
 }
 
 #[test]
-fn the_guard_refuses_the_slots_that_hold_a_real_login() {
-    guard_not_live("pitboard-citest-1");
-    guard_not_live("Claude Code-credentials-deadbeef");
+fn a_folder_that_is_holds_or_lies_in_a_login_place_clashes() {
+    let root = std::env::temp_dir().join(format!("pitboard-clash-{}", std::process::id()));
+    let place = root.join("home").join(".claude");
+    std::fs::create_dir_all(&place).unwrap();
+    for scratch in [
+        place.clone(),
+        place.join("inside"),
+        root.join("home"),
+        root.join("home").join(".CLAUDE").join("inside"),
+    ] {
+        assert!(clashes(&scratch, &place), "{}", scratch.display());
+    }
+    for scratch in [root.join("home").join(".claudex"), root.join("elsewhere")] {
+        assert!(!clashes(&scratch, &place), "{}", scratch.display());
+    }
+    std::fs::remove_dir_all(&root).unwrap();
+}
 
-    let caught = std::panic::catch_unwind(|| guard_not_live(pitboard_core::testing::LIVE_SERVICE));
-    assert!(caught.is_err(), "the default slot must be refused");
-    let caught =
-        std::panic::catch_unwind(|| guard_not_live(&pitboard_core::testing::live_service(&ctx())));
-    assert!(caught.is_err(), "this machine's live slot must be refused");
+#[test]
+#[cfg_attr(windows, ignore = "W15: links a test makes on Windows")]
+fn a_link_into_a_login_place_clashes() {
+    let root = std::env::temp_dir().join(format!("pitboard-clash-link-{}", std::process::id()));
+    let place = root.join(".codex");
+    std::fs::create_dir_all(&place).unwrap();
+    files::link_dir(&place, &root.join("through")).unwrap();
+    assert!(clashes(&root.join("through").join("inside"), &place));
+    std::fs::remove_dir_all(&root).unwrap();
+}
+
+#[test]
+fn every_real_login_place_is_refused() {
+    let places = pitboard_core::testing::real_login_places(&started_in()).unwrap();
+    assert!(!places.is_empty());
+    for place in places {
+        let inside = place.join("pitboard-guard");
+        let caught = std::panic::catch_unwind(|| refuse_a_real_login_place(&inside));
+        assert!(caught.is_err(), "{} must be refused", inside.display());
+    }
+}
+
+// By pattern, never by hashing real homes: how Codex spells its home on Windows is unmeasured.
+pub fn guard_not_live(name: &str) {
+    if let Some(why) = refusal(name, None) {
+        panic!("{why}");
+    }
+}
+
+fn refusal(name: &str, own: Option<&str>) -> Option<String> {
+    let family = pitboard_core::provider::names::family(name)?;
+    (!own.is_some_and(|own| spells(name, own))).then(|| {
+        format!(
+            "a test must never address {name:?}, a {} name a real login may be kept under",
+            family.as_str()
+        )
+    })
+}
+
+fn spells(name: &str, own: &str) -> bool {
+    let whole = match name.rsplit_once('#') {
+        Some((whole, piece))
+            if piece == "m"
+                || piece == "p"
+                || (!piece.is_empty() && piece.bytes().all(|b| b.is_ascii_digit())) =>
+        {
+            whole
+        }
+        _ => name,
+    };
+    let slot =
+        whole.split_once('/').map_or(
+            whole,
+            |(slot, account)| if account.contains('/') { whole } else { slot },
+        );
+    slot.eq_ignore_ascii_case(own)
+}
+
+#[test]
+fn the_guard_refuses_every_name_a_real_login_may_be_kept_under() {
+    let mut refused: Vec<String> = [
+        "Claude Code-credentials",
+        "Claude Code-credentials/claude-code-user",
+        "Claude Code-credentials/claude-code-user#0",
+        "Claude Code-credentials/claude-code-user#12",
+        "Claude Code-credentials/claude-code-user#m",
+        "Claude Code-credentials/claude-code-user#p",
+        "Claude Code-credentials-e80beed8",
+        "Claude Code-credentials-e80beed8/claude-code-user#3",
+        "Claude Code-credentials-deadbeef",
+        "claude code-credentials/CLAUDE-CODE-USER",
+        "LegacyGeneric:target=Claude Code-credentials/claude-code-user",
+        "Claude Code-staging-credentials",
+        "cli|1a2b3c4d5e6f7a8b",
+        "CLI|1A2B3C4D5E6F7A8B",
+        "secrets|1a2b3c4d5e6f7a8b",
+        "Codex MCP Credentials",
+        "Codex MCP Credentials/linear",
+        "linear|3f2a.Codex MCP Credentials",
+    ]
+    .map(str::to_owned)
+    .into();
+    for slot in real_slots() {
+        for account in ["claude-code-user", &account()] {
+            refused.push(format!("{slot}/{account}"));
+            for piece in ["#0", "#1", "#m", "#p"] {
+                refused.push(format!("{slot}/{account}{piece}"));
+            }
+        }
+        refused.push(slot);
+    }
+    for name in &refused {
+        let caught = std::panic::catch_unwind(|| guard_not_live(name));
+        assert!(caught.is_err(), "{name} must be refused");
+    }
+    for name in [
+        "pitboard-citest-1",
+        "pitboard-park-0a1b2c3d-1",
+        "GitHub - https://github.com",
+    ] {
+        guard_not_live(name);
+    }
+}
+
+#[test]
+fn a_test_may_address_its_own_slot_alone() {
+    let env = Env::new("own-slot");
+    let own = env.service.clone();
+    for spelling in [
+        own.clone(),
+        own.to_lowercase(),
+        format!("{own}/claude-code-user"),
+        format!("{own}/{}", account()),
+        format!("{own}/claude-code-user#0"),
+        format!("{own}/claude-code-user#7"),
+        format!("{own}/claude-code-user#m"),
+        format!("{own}/claude-code-user#p"),
+        format!("{own}#0"),
+    ] {
+        env.guard(&spelling);
+    }
+    let other = pitboard_core::testing::service_for_dir(&env.root.join("other").to_string_lossy());
+    for name in [
+        other.clone(),
+        format!("{other}/claude-code-user#0"),
+        format!("{own}/claude-code-user/more"),
+        format!("{own}#x"),
+        format!("{own}0"),
+    ] {
+        let caught = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| env.guard(&name)));
+        assert!(caught.is_err(), "{name} must be refused");
+    }
 }
 
 /// The harness stands in for the credential store on two platforms, and each thing it does
@@ -84,6 +257,7 @@ fn the_guard_refuses_the_slots_that_hold_a_real_login() {
 /// went on to watch the opposite of what it meant to. Nothing asserted the harness itself
 /// did what it said, so this does, on whichever platform it is running.
 #[test]
+#[cfg_attr(windows, ignore = "W20: parking logins on Windows")]
 fn the_harness_can_park_a_login_find_it_and_take_it_away() {
     let env = Env::new("harness-round-trip");
     let service = format!(
@@ -103,9 +277,9 @@ fn the_harness_can_park_a_login_find_it_and_take_it_away() {
 /// No test may read a login the person running it is actually using.
 ///
 /// The harness gives Claude Code a scratch config directory and a keychain slot hashed from
-/// it, and `guard_not_live` refuses the two names that could be real. Codex needed the same
-/// and did not have it: `status` reads every tool's live login, so the suite quietly started
-/// reading the developer's own signed-in Codex account and putting it in a snapshot.
+/// it, and `guard_not_live` refuses every other slot. Codex needed the same and did not have
+/// it: `status` reads every tool's live login, so the suite quietly started reading the
+/// developer's own signed-in Codex account and putting it in a snapshot.
 #[test]
 fn every_tool_is_pointed_at_a_scratch_home() {
     let env = Env::new("isolation");
@@ -119,7 +293,14 @@ fn every_tool_is_pointed_at_a_scratch_home() {
             ))
         })
         .collect();
-    for home in ["CLAUDE_CONFIG_DIR", "CODEX_HOME", "PITBOARD_HOME"] {
+    let folders = os::account_folders(&env.root);
+    let homes = ["CLAUDE_CONFIG_DIR", "CODEX_HOME", "PITBOARD_HOME"]
+        .into_iter()
+        .chain(folders.iter().map(|(name, _)| *name));
+    for (_, folder) in &folders {
+        assert!(folder.is_dir(), "{} is not made", folder.display());
+    }
+    for home in homes {
         let set = named.iter().find(|(k, _)| k == home).unwrap_or_else(|| {
             panic!("{home} is not pointed anywhere, so a test reads a real one")
         });
@@ -150,7 +331,7 @@ fn every_tool_is_pointed_at_a_scratch_home() {
         .collect();
     for name in withheld() {
         assert!(
-            given.iter().any(|k| k == name),
+            given.iter().any(|k| os::same_variable(k, name)),
             "{name} is inherited from whoever runs the tests"
         );
     }
@@ -206,11 +387,19 @@ pub fn account() -> String {
 impl Env {
     pub fn new(name: &str) -> Env {
         let root = std::env::temp_dir().join(format!("pitboard-e2e-{}-{name}", std::process::id()));
+        // Before anything there is emptied.
+        refuse_a_real_login_place(&root);
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(&root).unwrap();
+        os::make_account_folders(&root);
 
         let service = pitboard_core::testing::service_for_dir(&root.to_string_lossy());
-        guard_not_live(&service);
+        for real in real_slots() {
+            assert_ne!(
+                service, real,
+                "a test's own slot is one that holds a real login here"
+            );
+        }
 
         let mut server = mockito::Server::new();
         let usage = server
@@ -261,31 +450,52 @@ impl Env {
         self.usage.assert();
     }
 
-    #[allow(
-        clippy::disallowed_methods,
-        reason = "the tests' own PATH, behind the scratch programs a command is given first"
-    )]
+    // std's `Command` folds case on Windows: given `PATH` then `Path`, a child had one, `Path`.
     pub fn command(&self, args: &[&str]) -> Command {
-        let path = format!(
-            "{}:{}",
-            self.root.join("bin").display(),
-            std::env::var("PATH").unwrap_or_default()
-        );
         let mut c = Command::new(env!("CARGO_BIN_EXE_pitboard"));
         for name in withheld() {
             c.env_remove(name);
         }
-        c.args(args)
-            .env("CLAUDE_CONFIG_DIR", &self.root)
-            // Every tool Pitboard reads gets a scratch home of its own, empty unless a
-            // test puts something in it. Without this the suite reads whatever the person
-            // running it happens to be signed in to, which is both a flaky test and a real
-            // login no test may touch.
-            .env("CODEX_HOME", self.codex_home())
-            .env("PITBOARD_HOME", self.root.join("pitboard"))
-            .env("PITBOARD_API_BASE", self.server.url())
-            .env("PATH", path);
+        c.args(args).envs(self.given());
         c
+    }
+
+    // Without these the suite reads whatever login the person running it is signed in to.
+    fn given(&self) -> Vec<(&'static str, std::ffi::OsString)> {
+        let mut given = vec![
+            ("CLAUDE_CONFIG_DIR", self.root.clone().into_os_string()),
+            ("CODEX_HOME", self.codex_home().into_os_string()),
+            ("PITBOARD_HOME", self.root.join("pitboard").into_os_string()),
+            ("PITBOARD_API_BASE", self.server.url().into()),
+            ("PATH", os::search_path(&self.root.join("bin"))),
+        ];
+        given.extend(
+            os::account_folders(&self.root)
+                .into_iter()
+                .map(|(name, folder)| (name, folder.into_os_string())),
+        );
+        given
+    }
+
+    // The runners' `Path` (run 37673429917) stays beside the given `PATH` until W14.
+    #[allow(
+        clippy::disallowed_methods,
+        reason = "the tests' own environment, from which this withholds what Pitboard reads"
+    )]
+    pub fn context(&self) -> pitboard_core::context::Context {
+        let kept = std::env::vars_os().filter(|(name, _)| !withheld().any(|kept| is(name, kept)));
+        let given = self
+            .given()
+            .into_iter()
+            .map(|(name, value)| (std::ffi::OsString::from(name), value));
+        let env: Environment = kept.chain(given).collect();
+        pitboard_core::context::Context::for_command_line(&env)
+    }
+
+    pub fn guard(&self, name: &str) {
+        if let Some(why) = refusal(name, Some(&self.service)) {
+            panic!("{why}");
+        }
     }
 
     /// This test's own `CODEX_HOME`, created because Codex requires the directory to exist.
@@ -364,17 +574,12 @@ impl Env {
         std::fs::create_dir_all(&bin).unwrap();
         let store = match os::claude_code_login() {
             // The item Claude Code makes for the directory, written through `security` as the
-            // script this replaced wrote it. The stand-in refuses the two names that hold a
-            // real login here, the ones `guard_not_live` refuses, before it asks the keychain
-            // anything.
+            // script this replaced wrote it.
             Kept::InKeychain => Step::StoresInKeychain {
                 under: "CLAUDE_CONFIG_DIR".into(),
                 account: account(),
                 contents: credential.into(),
-                never: vec![
-                    pitboard_core::testing::LIVE_SERVICE.into(),
-                    pitboard_core::testing::live_service(&ctx()),
-                ],
+                never: real_slots().into(),
             },
             // 0600, and by the same route Claude Code takes: write, then chmod. A shim
             // that leaves the umask to decide writes a login anybody can read, which
@@ -384,10 +589,11 @@ impl Env {
                 name: ".credentials.json".into(),
                 contents: credential.into(),
             },
+            Kept::Sealed => unreachable!("{SEALS_NOTHING}"),
         };
         let waits = u64::try_from(waiting.as_millis()).expect("a wait a test can make");
         put_stand_in(
-            &bin.join("claude"),
+            &bin.join(os::program("claude")),
             // Talks on stdout like the real one, and can be made to wait like a person does.
             &Script::Plays {
                 args: Some(vec!["auth".into(), "login".into()]),
@@ -406,8 +612,9 @@ impl Env {
     pub fn write_park(&self, service: &str, contents: &str) {
         guard_not_live(service);
         match os::parked_login() {
-            Kept::InKeychain => {
-                pitboard_core::testing::vault_write(&ctx(), service, contents).unwrap();
+            Kept::InKeychain | Kept::Sealed => {
+                pitboard_core::testing::vault_write(&self.context(), service, contents)
+                    .unwrap_or_else(|e| panic!("{service} could not be parked: {e}"));
             }
             // The access Pitboard's own file vault gives, for the same reason: a parked
             // login is a plaintext token and `doctor` fails on one anybody can read.
@@ -421,9 +628,11 @@ impl Env {
 
     pub fn is_parked(&self, service: &str) -> bool {
         match os::parked_login() {
-            Kept::InKeychain => pitboard_core::testing::vault_read(&ctx(), service)
-                .unwrap()
-                .is_some(),
+            Kept::InKeychain | Kept::Sealed => {
+                pitboard_core::testing::vault_read(&self.context(), service)
+                    .unwrap_or_else(|e| panic!("{service} could not be read: {e}"))
+                    .is_some()
+            }
             Kept::InFile => self
                 .root
                 .join(format!("pitboard/vault/{service}.json"))
@@ -440,9 +649,10 @@ impl Env {
     /// switch. Never caught, because CI's Linux leg was being cancelled by a lint failure
     /// before it got this far.
     pub fn delete_park(&self, service: &str) {
+        guard_not_live(service);
         match os::parked_login() {
-            Kept::InKeychain => {
-                let _ = pitboard_core::testing::vault_delete(&ctx(), service);
+            Kept::InKeychain | Kept::Sealed => {
+                let _ = pitboard_core::testing::vault_delete(&self.context(), service);
             }
             Kept::InFile => {
                 let _ =
@@ -454,14 +664,15 @@ impl Env {
     /// Claude Code signed out behind Pitboard's back: its login is gone from where it keeps
     /// it, and nothing else changed.
     pub fn sign_out(&self) {
-        guard_not_live(&self.service);
+        self.guard(&self.service);
         match os::claude_code_login() {
             Kept::InKeychain => {
-                let _ = pitboard_core::testing::vault_delete(&ctx(), &self.service);
+                let _ = pitboard_core::testing::vault_delete(&self.context(), &self.service);
             }
             Kept::InFile => {
                 let _ = std::fs::remove_file(self.live_path());
             }
+            Kept::Sealed => unreachable!("{SEALS_NOTHING}"),
         }
     }
 
@@ -563,45 +774,55 @@ impl Env {
     pub fn install_fake_codex_login(&self, login: &serde_json::Value) {
         let bin = self.root.join("bin");
         std::fs::create_dir_all(&bin).unwrap();
-        let program = bin.join("codex");
+        let program = bin.join(os::program("codex"));
         let _ = std::fs::remove_file(&program);
         put_stand_in(&program, &fake_codex_login(login));
     }
 
     /// `install_fake_codex_login` laid out the way npm installs Codex, in a prefix of this
-    /// test's own that no `PATH` has. Returns `<prefix>/bin/codex`, the program as found.
-    ///
-    /// npm links `<prefix>/bin/codex` to a script inside `lib/node_modules` whose first line
-    /// is `#!/usr/bin/env node`, and puts the `node` that installed it in `<prefix>/bin`.
-    /// Here that is `fakenode`, a stand-in that interprets the script it is given, whose
-    /// script is the stand-in for `codex login`. So a real `node` on this machine can never
-    /// be the one found: the script starts only where `PATH` has its prefix's `bin`.
-    ///
-    /// The layout npm makes on macOS and Linux alone. On Windows npm puts a `codex.cmd`
-    /// shim in the prefix instead, which W13 of the Windows work lays out as a fixture of its
-    /// own.
-    #[cfg(unix)]
+    /// test's own that no `PATH` has. Returns the program as found.
     pub fn install_fake_npm_codex_login(&self, login: &serde_json::Value) -> PathBuf {
         let prefix = self.root.join("npm");
-        let bin = prefix.join("bin");
-        let package = prefix.join("lib/node_modules/@openai/codex/bin");
-        std::fs::create_dir_all(&bin).unwrap();
-        std::fs::create_dir_all(&package).unwrap();
-        put_stand_in(&bin.join("fakenode"), &Script::Interprets);
         let script = serde_json::to_string(&fake_codex_login(login)).expect("a script");
-        stand_in::write_program(
-            &package.join("codex.js"),
-            &format!("#!/usr/bin/env fakenode\n{script}\n"),
-        )
-        .unwrap_or_else(|e| panic!("no codex.js: {e}"));
-        let program = bin.join("codex");
-        let _ = std::fs::remove_file(&program);
-        files::link(
-            Path::new("../lib/node_modules/@openai/codex/bin/codex.js"),
-            &program,
-        )
-        .unwrap();
-        program
+        let script = format!("#!/usr/bin/env fakenode\n{script}\n");
+        let write = |at: &Path, contents: &str| {
+            std::fs::create_dir_all(at.parent().expect("a folder")).unwrap();
+            stand_in::write_program(at, contents)
+                .unwrap_or_else(|e| panic!("nothing at {}: {e}", at.display()));
+        };
+        match os::npm() {
+            os::Npm::LinksTheScript => {
+                let bin = prefix.join("bin");
+                std::fs::create_dir_all(&bin).unwrap();
+                put_stand_in(&bin.join("fakenode"), &Script::Interprets);
+                write(
+                    &prefix.join("lib/node_modules/@openai/codex/bin/codex.js"),
+                    &script,
+                );
+                let program = bin.join("codex");
+                let _ = std::fs::remove_file(&program);
+                files::link(
+                    Path::new("../lib/node_modules/@openai/codex/bin/codex.js"),
+                    &program,
+                )
+                .unwrap();
+                program
+            }
+            os::Npm::WritesAShim => {
+                // Node's Windows installer keeps `node.exe` in its own folder, not npm's prefix.
+                let node = self.root.join("nodejs");
+                std::fs::create_dir_all(&node).unwrap();
+                put_stand_in(&node.join(os::program("fakenode")), &Script::Interprets);
+                let target = ["node_modules", "@openai", "codex", "bin", "codex.js"];
+                write(
+                    &target.iter().fold(prefix.clone(), |at, part| at.join(part)),
+                    &script,
+                );
+                let program = prefix.join("codex.cmd");
+                write(&program, &npm_shim("fakenode", &target.join("\\")));
+                program
+            }
+        }
     }
 
     /// The live Codex login, as this test's `CODEX_HOME` holds it.
@@ -623,15 +844,16 @@ impl Env {
     /// Put a `codex` of this test's own first on `PATH`, laid out the way Codex's standalone
     /// installer lays one out, so whatever reads which Codex is installed reads this one.
     ///
-    /// The `PATH` a test runs with ends with the real one, and the real standalone install
-    /// lives inside the developer's own `~/.codex`, which no test may go near. Running it
-    /// fails loudly: nothing that only asks which version it is ever runs it.
+    /// The `PATH` a test runs with ends with the real one on macOS and Linux, and the real
+    /// standalone install lives inside the developer's own `~/.codex`, which no test may go
+    /// near. Running it fails loudly: nothing that only asks which version it is ever runs it.
     pub fn install_fake_codex(&self, version: &str) {
         let installed = self
             .root
             .join("codex-install/releases")
             .join(format!("{version}-test-target"))
-            .join("bin/codex");
+            .join("bin")
+            .join(os::program("codex"));
         std::fs::create_dir_all(installed.parent().unwrap()).unwrap();
         put_stand_in(
             &installed,
@@ -639,7 +861,7 @@ impl Env {
         );
         let bin = self.root.join("bin");
         std::fs::create_dir_all(&bin).unwrap();
-        let link = bin.join("codex");
+        let link = bin.join(os::program("codex"));
         let _ = std::fs::remove_file(&link);
         files::link(&installed, &link).unwrap();
     }
@@ -696,8 +918,9 @@ impl Env {
                 self.write_live(&body);
                 return;
             }
+            Kept::Sealed => unreachable!("{SEALS_NOTHING}"),
         }
-        guard_not_live(&self.service);
+        self.guard(&self.service);
         let done = Command::new(SECURITY)
             .args([
                 "add-generic-password",
@@ -718,24 +941,28 @@ impl Env {
     }
 
     fn write_live(&self, credential: &str) {
+        self.guard(&self.service);
         match os::claude_code_login() {
             Kept::InKeychain => {
-                pitboard_core::testing::vault_write(&ctx(), &self.service, credential).unwrap();
+                pitboard_core::testing::vault_write(&self.context(), &self.service, credential)
+                    .unwrap();
             }
             // Private, because that is what Claude Code writes: it chmods the plaintext
             // credential after writing it, and a stand-in that leaves the umask to decide
             // is a stand-in for something else. `doctor` reads these modes and fails on a
             // login anybody can read, which is how this was found.
             Kept::InFile => os::write_private(&self.live_path(), credential),
+            Kept::Sealed => unreachable!("{SEALS_NOTHING}"),
         }
     }
 
     pub fn live(&self) -> serde_json::Value {
         let raw = match os::claude_code_login() {
-            Kept::InKeychain => pitboard_core::testing::vault_read(&ctx(), &self.service)
+            Kept::InKeychain => pitboard_core::testing::vault_read(&self.context(), &self.service)
                 .unwrap()
                 .unwrap(),
             Kept::InFile => std::fs::read_to_string(self.live_path()).unwrap(),
+            Kept::Sealed => unreachable!("{SEALS_NOTHING}"),
         };
         serde_json::from_str(&raw).unwrap()
     }
@@ -879,21 +1106,32 @@ fn delete_keychain_item(service: &str) {
         .output();
 }
 
+const SEALS_NOTHING: &str = "Claude Code keeps no login sealed: only Pitboard's vault does";
+
 impl Drop for Env {
     fn drop(&mut self) {
         // A login kept in a file lives under `root`, which the final line removes. One kept
         // in the keychain outlives it, and is deleted by name.
+        // Refused names are left with a warning: a panic while unwinding aborts the test binary.
+        let ours = |service: &&String| {
+            let why = refusal(service, Some(&self.service));
+            if let Some(why) = &why {
+                eprintln!("{why}; left as it is");
+            }
+            why.is_none()
+        };
         match os::parked_login() {
             Kept::InKeychain => {
-                for service in self.parks_named() {
-                    delete_keychain_item(&service);
+                for service in self.parks_named().iter().filter(ours) {
+                    delete_keychain_item(service);
                 }
             }
-            Kept::InFile => {}
+            Kept::InFile | Kept::Sealed => {}
         }
         match os::claude_code_login() {
             Kept::InKeychain => delete_keychain_item(&self.service),
             Kept::InFile => {}
+            Kept::Sealed => unreachable!("{SEALS_NOTHING}"),
         }
         let _ = std::fs::remove_dir_all(&self.root);
     }
@@ -951,6 +1189,33 @@ fn fake_codex_login(login: &serde_json::Value) -> Script {
             Step::Warns("Successfully logged in\n".into()),
         ],
     }
+}
+
+// As cmd-shim 9.0.2's `lib/index.js` writes it, `\r\n` included (read on 8 October 2026).
+fn npm_shim(interpreter: &str, target: &str) -> String {
+    [
+        "@ECHO off",
+        "GOTO start",
+        ":find_dp0",
+        "SET dp0=%~dp0",
+        "EXIT /b",
+        ":start",
+        "SETLOCAL",
+        "CALL :find_dp0",
+        "",
+        &format!(r#"IF EXIST "%dp0%\{interpreter}.exe" ("#),
+        &format!(r#"  SET "_prog=%dp0%\{interpreter}.exe""#),
+        ") ELSE (",
+        &format!(r#"  SET "_prog={interpreter}""#),
+        ")",
+        "",
+        &format!(
+            r#"endLocal & goto #_undefined_# 2>NUL || title %COMSPEC% & set PATHEXT=%PATHEXT:;.JS;=;% & "%_prog%"  "%dp0%\{target}" %*"#
+        ),
+    ]
+    .iter()
+    .map(|line| format!("{line}\r\n"))
+    .collect()
 }
 
 /// Unpadded base64url, which is how every part of a JWT is written.
