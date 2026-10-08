@@ -126,6 +126,7 @@ mod tests {
     /// The seam the rest of this crate's time judgements hang on: what gets written is the
     /// context's idea of now, not the machine's.
     #[test]
+    #[cfg_attr(windows, ignore = "W15: files made private to the person on Windows")]
     fn a_change_is_stamped_with_the_contexts_clock() {
         use crate::time::FixedClock;
         use std::sync::Arc;

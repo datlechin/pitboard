@@ -1550,6 +1550,7 @@ mod tests {
     /// are collected in order, a Codex thread that panicked erased Claude Code's signed-in
     /// row.
     #[test]
+    #[cfg_attr(windows, ignore = "W15: files made private to the person on Windows")]
     fn a_thread_that_stopped_stands_in_for_its_own_tool_only() {
         let home = scratch("panicked");
         let (ctx, _mem, _api) = machine(&home.0, None);
@@ -1598,6 +1599,7 @@ mod tests {
     /// holding the machine's MCP tokens. That is nobody signed in. It used to be sent to
     /// Anthropic to identify, and the row read as Anthropic answering badly.
     #[test]
+    #[cfg_attr(windows, ignore = "W15: files made private to the person on Windows")]
     fn a_document_holding_no_account_is_nothing_signed_in_and_nobody_is_asked() {
         let home = scratch("logged-out");
         let (ctx, _mem, api) = machine(&home.0, None);
@@ -1620,6 +1622,7 @@ mod tests {
     /// the account in use showed as parked with nothing parked, and the advice was to sign
     /// in again.
     #[test]
+    #[cfg_attr(windows, ignore = "W15: files made private to the person on Windows")]
     fn a_login_that_cannot_be_read_is_said_rather_than_read_as_nobody_signed_in() {
         let home = scratch("unreadable");
         let (ctx, mem, api) = machine(&home.0, Some("alpha-uuid"));
@@ -1756,6 +1759,10 @@ mod tests {
     /// morning when every `status` asked about usage with no floor at all. Before there was
     /// a second tool the account always came from Claude Code's config here.
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W16: Pitboard writing, replacing and removing files on Windows"
+    )]
     fn a_failing_identify_still_keeps_the_ask_again_floor() {
         let home = scratch("floor");
         let (ctx, _mem, api) = machine(&home.0, Some("acc-x"));
@@ -1802,6 +1809,7 @@ mod tests {
     /// Offline, each tool is asked for its own record. It used to be Claude Code's config
     /// alone, so on a plane a signed-in Codex account read as parked.
     #[test]
+    #[cfg_attr(windows, ignore = "W21: switching Codex on Windows")]
     fn offline_every_tool_names_its_own_signed_in_account() {
         let home = scratch("offline");
         let (ctx, _mem, api) = machine(&home.0, Some("alpha-uuid"));
@@ -1905,6 +1913,7 @@ mod tests {
     /// the account the tokens belong to and `doctor` failed the login. Online, offline and
     /// doctor now agree on whose it is, and online says Pitboard cannot use it.
     #[test]
+    #[cfg_attr(windows, ignore = "W21: switching Codex on Windows")]
     fn a_codex_login_that_mixes_two_accounts_is_said_rather_than_read_as_nobody() {
         let home = scratch("mixed");
         let (ctx, _mem, api) = machine(&home.0, None);
@@ -1944,6 +1953,7 @@ mod tests {
     /// Signed in with an API key: something is signed in, and it is no account. Not nobody,
     /// and not the account Pitboard last switched to either, whose login the key replaced.
     #[test]
+    #[cfg_attr(windows, ignore = "W21: switching Codex on Windows")]
     fn a_codex_login_with_an_api_key_is_said_and_pinned_on_no_account() {
         let home = scratch("api-key");
         let (ctx, _mem, api) = machine(&home.0, None);
@@ -1973,6 +1983,7 @@ mod tests {
     /// asked for their Codex login to be read or sent anywhere. Until a Codex account is
     /// enrolled, status says nothing about Codex and asks OpenAI nothing.
     #[test]
+    #[cfg_attr(windows, ignore = "W21: switching Codex on Windows")]
     fn a_tool_with_nothing_enrolled_is_neither_read_nor_asked() {
         let home = scratch("not-opted-in");
         let (ctx, _mem, api) = machine(&home.0, None);
@@ -1999,6 +2010,7 @@ mod tests {
     /// then, and Pitboard's record of its last switch stands in for it the way `doctor`
     /// already lets it. Without that, the account in use was told to sign in again.
     #[test]
+    #[cfg_attr(windows, ignore = "W21: switching Codex on Windows")]
     fn a_codex_login_caught_half_written_still_names_the_account_in_use() {
         let home = scratch("half-written");
         let (ctx, _mem, api) = machine(&home.0, None);
@@ -2032,6 +2044,7 @@ mod tests {
     /// `/logout` leaves; one that is not a document of Claude Code's shape at all is a login
     /// Pitboard cannot use, and is said as one.
     #[test]
+    #[cfg_attr(windows, ignore = "W15: files made private to the person on Windows")]
     fn only_a_document_holding_no_login_is_nobody_signed_in() {
         let home = scratch("shapes");
         let (ctx, _mem, api) = machine(&home.0, Some("alpha-uuid"));

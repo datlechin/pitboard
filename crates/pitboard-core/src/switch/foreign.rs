@@ -113,6 +113,10 @@ fn repair_here(m: &Machine) -> Reclaimed {
 /// the next switch away parks the live login in its place. That park was never used here,
 /// so it is still where the other Pitboard left it, and still loads there.
 #[test]
+#[cfg_attr(
+    windows,
+    ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
+)]
 fn a_park_repair_gave_back_outlives_a_switch_away_from_its_account() {
     for make in MACHINES {
         let m = make("foreign-replaced");
@@ -151,6 +155,7 @@ fn a_park_repair_gave_back_outlives_a_switch_away_from_its_account() {
 
 /// Dropping the account that holds one does not delete it either.
 #[test]
+#[cfg_attr(windows, ignore = "W21: switching Codex on Windows")]
 fn forgetting_its_account_leaves_a_park_repair_gave_back() {
     for make in MACHINES {
         let m = make("foreign-forgotten");
@@ -177,6 +182,7 @@ fn forgetting_its_account_leaves_a_park_repair_gave_back() {
 /// Uninstalling deletes what this Pitboard wrote and leaves the rest, and says how many it
 /// left, because somebody told their logins were removed would otherwise not look for them.
 #[test]
+#[cfg_attr(windows, ignore = "W21: switching Codex on Windows")]
 fn uninstalling_leaves_a_park_repair_gave_back_and_says_so() {
     for make in MACHINES {
         let m = make("foreign-uninstalled");
@@ -211,6 +217,10 @@ fn uninstalling_leaves_a_park_repair_gave_back_and_says_so() {
 /// signed in must not stay beside it, and for Claude Code the park is the live login from
 /// now on, so it goes the way every installed park goes.
 #[test]
+#[cfg_attr(
+    windows,
+    ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
+)]
 fn a_park_repair_gave_back_is_deleted_once_a_switch_installs_it() {
     for make in MACHINES {
         let m = make("foreign-installed");
@@ -242,6 +252,7 @@ fn a_park_repair_gave_back_is_deleted_once_a_switch_installs_it() {
 /// A renewal spends the refresh token it presents, so the copy it renewed is used up
 /// whoever wrote it, and what it writes is this Pitboard's own.
 #[test]
+#[cfg_attr(windows, ignore = "W21: switching Codex on Windows")]
 fn a_park_repair_gave_back_is_deleted_once_a_renewal_spends_it() {
     for make in MACHINES {
         let m = make("foreign-renewed");
@@ -271,6 +282,7 @@ fn a_park_repair_gave_back_is_deleted_once_a_renewal_spends_it() {
 /// was saved as used before the answer was written, so giving the fresh one back deletes it
 /// rather than letting it go for a Pitboard that would present a spent token.
 #[test]
+#[cfg_attr(windows, ignore = "W21: switching Codex on Windows")]
 fn a_park_repair_gave_back_is_deleted_once_a_killed_renewal_spends_it() {
     for make in MACHINES {
         let m = make("foreign-renewal-killed");
@@ -309,6 +321,7 @@ fn a_park_repair_gave_back_is_deleted_once_a_killed_renewal_spends_it() {
 /// Refused is not spent: presenting it took nothing from it. The Pitboard that wrote it is
 /// refused the same way and drops it itself.
 #[test]
+#[cfg_attr(windows, ignore = "W21: switching Codex on Windows")]
 fn a_park_repair_gave_back_that_the_service_refuses_is_let_go_and_left() {
     for make in MACHINES {
         let m = make("foreign-refused");
@@ -340,6 +353,10 @@ fn a_park_repair_gave_back_that_the_service_refuses_is_let_go_and_left() {
 /// down, written to, and killed before anything recorded it, it is given back like the
 /// other Pitboard's, and the same switch away deletes it as it always did.
 #[test]
+#[cfg_attr(
+    windows,
+    ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
+)]
 fn a_park_this_pitboard_wrote_down_and_lost_is_still_deleted_when_replaced() {
     for make in MACHINES {
         let m = make("ours-replaced");
@@ -389,6 +406,10 @@ fn lost(m: &Machine, who: &str, document: &Value) -> Park {
 /// down, so it is deleted like any other once it is let go, and `uninstall` leaves nothing
 /// behind and does not say it did.
 #[test]
+#[cfg_attr(
+    windows,
+    ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
+)]
 fn a_park_found_in_a_vault_of_this_homes_own_is_this_pitboards() {
     for make in MACHINES {
         let m = make("found-replaced");

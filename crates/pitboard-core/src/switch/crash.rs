@@ -35,6 +35,10 @@ use std::sync::Arc;
 /// about parking a login, and a tool whose park may never be a copy is exactly the one
 /// where getting it wrong costs most.
 #[test]
+#[cfg_attr(
+    windows,
+    ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
+)]
 fn a_switch_killed_at_any_step_recovers_to_something_whole() {
     type Make = fn(&str) -> super::harness::Machine;
     let machines: [(&str, Make); 2] = [("claude", machine), ("codex", codex_machine)];
@@ -68,6 +72,10 @@ fn a_switch_killed_at_any_step_recovers_to_something_whole() {
 /// and both sides were fingerprinted when the record was written, so the common case is a
 /// comparison and not a round trip. That is what makes a switch recoverable on a plane.
 #[test]
+#[cfg_attr(
+    windows,
+    ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
+)]
 fn a_switch_killed_with_nobody_to_ask_is_recovered_from_the_record() {
     for point in POINTS {
         let m = machine(&format!("offline-{}", point.replace('.', "-")));
@@ -117,6 +125,10 @@ fn a_switch_killed_with_nobody_to_ask_is_recovered_from_the_record() {
 /// matching neither side, which is exactly when there is nothing to read off and Anthropic
 /// has to be asked. With nobody to ask, the only right answer is to change nothing.
 #[test]
+#[cfg_attr(
+    windows,
+    ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
+)]
 fn a_switch_whose_token_rotated_while_it_was_interrupted_still_needs_anthropic() {
     let m = machine("rotated-offline");
     let settled = settle(&m.ctx, Permit::for_a_test(), None)
@@ -166,6 +178,10 @@ fn a_switch_whose_token_rotated_while_it_was_interrupted_still_needs_anthropic()
 /// past both fingerprints, is settled by asking Anthropic, whose answer names the
 /// organisation as well as the person.
 #[test]
+#[cfg_attr(
+    windows,
+    ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
+)]
 fn a_switch_between_two_organisations_is_settled_by_the_organisation_anthropic_names() {
     let m = machine("two-organisations-rotated");
     let team = crate::api::Owner {
@@ -339,6 +355,10 @@ fn everything(m: &super::harness::Machine) -> Everything {
 /// A read that asks nobody says the same wherever the record and the logins tell it, and
 /// nothing where only the service could: never something else, and never with a request.
 #[test]
+#[cfg_attr(
+    windows,
+    ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
+)]
 fn a_read_says_a_switch_is_waiting_exactly_where_settling_it_is_refused() {
     type Make = fn(&str) -> super::harness::Machine;
     let machines: [(&str, Make); 2] = [("claude", machine), ("codex", codex_machine)];
@@ -387,6 +407,10 @@ fn a_read_says_a_switch_is_waiting_exactly_where_settling_it_is_refused() {
 /// in that window, the item is an orphan: never renewed, never deleted, and on macOS not
 /// listable by any tool the user has.
 #[test]
+#[cfg_attr(
+    windows,
+    ignore = "W16: Pitboard writing, replacing and removing files on Windows"
+)]
 fn enrolling_killed_between_the_write_and_the_record_leaves_nothing_unnamed() {
     for point in ["enroll.park_stored", "enroll.park_recorded"] {
         let m = machine(&point.replace('.', "-"));
@@ -420,6 +444,10 @@ fn enrolling_killed_between_the_write_and_the_record_leaves_nothing_unnamed() {
 /// then records it, and parks nothing. Killed after either, the account is signed in with
 /// the login that was written and every other account still has its own.
 #[test]
+#[cfg_attr(
+    windows,
+    ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
+)]
 fn signing_in_again_killed_at_any_step_recovers_to_something_whole() {
     type Make = fn(&str) -> super::harness::Machine;
     let machines: [(&str, Make); 2] = [("claude", machine), ("codex", codex_machine)];
@@ -460,6 +488,10 @@ fn signing_in_again_killed_at_any_step_recovers_to_something_whole() {
 /// after the install, the incoming login is gone, and Pitboard used to print "Switched to
 /// work" and exit 0 over an account that was signed out.
 #[test]
+#[cfg_attr(
+    windows,
+    ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
+)]
 fn a_switch_whose_login_was_removed_again_does_not_report_a_switch() {
     let m = machine("did-not-hold");
     let parked_before = m.mem.vault().services();
@@ -515,6 +547,10 @@ fn a_switch_whose_login_was_removed_again_does_not_report_a_switch() {
 /// intent, so a later run with a store that answers decides. Nothing here is a crash: this
 /// is the ordinary shape of a machine whose keychain is locked.
 #[test]
+#[cfg_attr(
+    windows,
+    ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
+)]
 fn a_switch_that_cannot_read_the_store_back_keeps_every_copy_and_its_record() {
     let m = machine("unverified");
     let before = m.mem.live().peek(&m.service).expect("a live login");
@@ -565,6 +601,10 @@ fn a_switch_that_cannot_read_the_store_back_keeps_every_copy_and_its_record() {
 /// into it, and records it; killed between the write and the record, the copy is an orphan,
 /// and the renewal runs inside every plain `pitboard`.
 #[test]
+#[cfg_attr(
+    windows,
+    ignore = "W16: Pitboard writing, replacing and removing files on Windows"
+)]
 fn renewing_killed_between_the_write_and_the_record_leaves_nothing_unnamed() {
     let m = machine("renew-park-stored");
     // The parked login is due: its access token has lapsed.
@@ -645,6 +685,10 @@ fn renewing_killed_between_the_write_and_the_record_leaves_nothing_unnamed() {
 /// copy, which this once did, left the account nothing that works. The next change gives
 /// it back.
 #[test]
+#[cfg_attr(
+    windows,
+    ignore = "W16: Pitboard writing, replacing and removing files on Windows"
+)]
 fn a_renewal_that_cannot_record_its_answer_keeps_it_for_the_next_run() {
     use crate::host::fs::testing;
     let m = machine("renew-save-fails");
@@ -715,6 +759,10 @@ fn a_renewal_that_cannot_record_its_answer_keeps_it_for_the_next_run() {
 /// Forgetting deletes the account before deleting its park. Killed between the two, the
 /// park is listed for deletion and a later run finishes it.
 #[test]
+#[cfg_attr(
+    windows,
+    ignore = "W16: Pitboard writing, replacing and removing files on Windows"
+)]
 fn forgetting_killed_after_the_record_still_deletes_the_park() {
     let m = machine("forget-recorded");
     let settled = settle(&m.ctx, Permit::for_a_test(), None)

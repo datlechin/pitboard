@@ -338,18 +338,17 @@ account that holds no real login:
 $env:RUSTFLAGS = "-D warnings -C target-feature=+crt-static --cfg pitboard_unreleased_windows"
 cargo clippy --workspace --all-targets --locked
 cargo clippy -p pitboard-ffi --all-targets --locked --features fixture
-cargo test --locked -p pitboard-core --lib -- host::windows host::token host::tests::the_floor release
-cargo test --locked -p pitboard --test windows_refuses
-cargo test --locked -p pitboard-sites -p pitboard-share-ffi
+cargo test --locked
+cargo test --locked -p pitboard-ffi --features fixture
 ```
 
 `RUSTFLAGS` replaces every target's own rustflags, so it names the static C runtime the
-releases are built with. Until the integration tests run on Windows, these are the tests
-that need no part of the Windows face still to be built. They run as the person: from an
-elevated terminal, or as an account whose every program runs elevated, as with User Account
-Control off, the face's `as_the_person_the_gate_lets_a_change_through` and `windows_refuses`
-fail, saying so. A test that cannot pass on Windows until a later pull request says which,
-with `#[cfg_attr(windows, ignore = "W<n>: <what it waits on>")]`, and in no other way.
+releases are built with. The whole suite runs on Windows. A test that cannot pass there
+until a later pull request says which, with `#[cfg_attr(windows, ignore = "W<n>: <what it
+waits on>")]`, and in no other way: no filter and no `--skip`, and libtest lists it as
+ignored with that reason. The tests run as the person: from an elevated terminal, or as an
+account whose every program runs elevated, as with User Account Control off, the face's
+`as_the_person_the_gate_lets_a_change_through` and `windows_refuses` fail, saying so.
 
 The integration tests' harness gives every command a test runs a scratch folder of the
 test's own for each folder of a person's account, `USERPROFILE`, `HOME`, `APPDATA` and
@@ -376,11 +375,23 @@ Windows test as a fresh standard user instead, through
 `.github/scripts/test-as-standard-user.ps1`. The script builds the tests as the job's user,
 makes a local standard user, grants it read and run on the workspace and the target folder,
 and starts each test program as it with its profile loaded and its own profile's variables,
-from a folder of its own, with the variables Cargo gives a test. It takes the grants back and
-removes the user afterwards. Give it what `cargo test` takes, and what the test programs take:
+from a folder of its own, with the variables Cargo gives a test. Before the tests it checks
+that the machine-wide places a tool may take its settings from are absent, so the tests
+read only what they put there: Codex's `%ProgramData%\OpenAI\Codex`, which Codex's register
+names, pending W21, and Claude Code's `C:\Program Files\ClaudeCode` and policy keys, which
+W17 is to read from its Windows build and Claude Code's register does not record yet. After
+them it checks that nothing was left behind, and fails the step if anything was:
+`pitboard-probe credman-names --leak-check`, as the standard user, lists the names of the
+live login families' items and of `pitboard-citest-*` items in its Credential Manager,
+never a blob, and fails on any; no task is in Task Scheduler's `\Pitboard\`; the user's
+real `.claude`, `.claude.json`, `.codex` and `%LOCALAPPDATA%\Pitboard` do not exist; and
+nothing appeared among the job user's own. It takes the grants back and removes the user
+afterwards. Give it what `cargo test` takes, the probe it lists Credential Manager with,
+and what the test programs take:
 
 ```powershell
-./.github/scripts/test-as-standard-user.ps1 -Cargo '--locked -p pitboard-core --lib' -Pass 'host::windows host::token host::tests::the_floor release'
+./.github/scripts/test-as-standard-user.ps1 -Cargo '--locked --workspace' `
+  -Probe target/debug/pitboard-probe.exe
 ```
 
 It makes and removes a Windows account, grants it rights on folders and, where Developer

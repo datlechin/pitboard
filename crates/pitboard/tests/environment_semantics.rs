@@ -132,6 +132,7 @@ fn an_empty_config_dir_is_refused() {
 /// ever run: doctor reads which build each is off the path it resolves to, which is where
 /// each tool's installer puts the version.
 #[test]
+#[cfg_attr(windows, ignore = "W17: finding programs on Windows")]
 fn a_program_the_environment_names_is_the_one_the_command_line_runs() {
     let scratch = scratch("named");
     let home = scratch.home();

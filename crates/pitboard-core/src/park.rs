@@ -257,6 +257,10 @@ mod tests {
     /// a seam this needed a real keychain, so it only ran on one platform and only against
     /// whatever the machine happened to hold.
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W16: Pitboard writing, replacing and removing files on Windows"
+    )]
     fn a_parked_login_reads_back_through_its_fingerprint() {
         let (ctx, mem, _scratch) = machine();
         let name = reserve(&ctx, Permit::for_a_test(), "acc").expect("a free name");
@@ -277,6 +281,10 @@ mod tests {
     /// the account needs signing in to again; a park that cannot be read says nothing about
     /// whether it is there, and telling someone to sign in again would be wrong.
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W16: Pitboard writing, replacing and removing files on Windows"
+    )]
     fn a_park_that_vanished_and_one_that_cannot_be_read_are_different_answers() {
         let (ctx, mem, _scratch) = machine();
         let name = reserve(&ctx, Permit::for_a_test(), "acc").expect("a free name");
@@ -309,6 +317,10 @@ mod tests {
     /// Two parks of one account in the same millisecond must not share a name: reusing one
     /// would destroy the login already there.
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W16: Pitboard writing, replacing and removing files on Windows"
+    )]
     fn a_reserved_name_steps_past_one_that_is_taken() {
         let (ctx, mem, _scratch) = machine();
         let first = reserve(&ctx, Permit::for_a_test(), "acc").expect("a free name");
@@ -320,6 +332,10 @@ mod tests {
     /// A login with nothing to restore is refused before it is written, so the vault never
     /// holds a park that could not be used.
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W16: Pitboard writing, replacing and removing files on Windows"
+    )]
     fn a_login_with_no_refresh_token_is_never_parked() {
         let (ctx, mem, _scratch) = machine();
         let name = reserve(&ctx, Permit::for_a_test(), "acc").expect("a free name");

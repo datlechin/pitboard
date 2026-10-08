@@ -1156,6 +1156,10 @@ fn giving_up_on_a_switch_says_what_was_kept_until_put_away() {
 /// they assume the core says is what it says: the read is not refused, it carries the
 /// refusal the next change would make, and the model offers to give up on it at once.
 #[test]
+#[cfg_attr(
+    windows,
+    ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
+)]
 fn the_cores_own_read_of_a_stuck_switch_offers_to_give_up_on_it() {
     let world = super::testing::World::new("stuck-read");
     world.enrolled("work", "here", 10.0);

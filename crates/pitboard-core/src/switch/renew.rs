@@ -404,6 +404,10 @@ mod tests {
     /// when the login expires. A machine whose clock is wrong must not get an expiry to
     /// match, or every status renews the park again and rotates the refresh chain on a loop.
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W16: Pitboard writing, replacing and removing files on Windows"
+    )]
     fn a_renewed_expiry_is_measured_from_anthropics_clock_not_this_machines() {
         let m = machine("anchored");
         with_park(&m, "work", "old", NOW - 1);
@@ -441,6 +445,10 @@ mod tests {
     /// An answer with no `Date` leaves the local clock as all there is, which is what it
     /// always was.
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W16: Pitboard writing, replacing and removing files on Windows"
+    )]
     fn an_answer_with_no_clock_of_its_own_falls_back_to_this_machines() {
         let m = machine("unanchored");
         with_park(&m, "work", "old", NOW - 1);
@@ -461,6 +469,10 @@ mod tests {
     /// The budget question, asked of the code rather than of a stopwatch: a park whose
     /// access token is still good is not a reason to talk to Anthropic at all.
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W16: Pitboard writing, replacing and removing files on Windows"
+    )]
     fn a_park_that_is_not_due_is_not_asked_about() {
         let m = machine("not-due");
         with_park(&m, "work", "r", NOW + 3600);
@@ -472,6 +484,10 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W16: Pitboard writing, replacing and removing files on Windows"
+    )]
     fn a_due_park_is_renewed_and_the_spent_copy_is_dropped() {
         let m = machine("renewed");
         let before = with_park(&m, "work", "old", NOW - 1);
@@ -499,6 +515,10 @@ mod tests {
     /// The answer that ends a park. The account keeps its label and its email, so the way
     /// back is one sign-in rather than an enrolment.
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W16: Pitboard writing, replacing and removing files on Windows"
+    )]
     fn a_login_anthropic_no_longer_accepts_is_dropped() {
         let m = machine("refused");
         with_park(&m, "work", "old", NOW - 1);
@@ -521,6 +541,10 @@ mod tests {
     /// Being unreachable, or being asked to slow down, must change nothing at all: the park
     /// that is still there is the one thing standing between the user and a browser.
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W16: Pitboard writing, replacing and removing files on Windows"
+    )]
     fn a_renewal_that_could_not_happen_leaves_the_park_alone() {
         for trouble in [Trouble::Offline, Trouble::RateLimited] {
             let m = machine(&format!("deferred-{trouble:?}"));
@@ -548,6 +572,10 @@ mod tests {
     /// not asked: the park stays as it was, and the reason is said. It used to be asked,
     /// and the login was lost.
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W16: Pitboard writing, replacing and removing files on Windows"
+    )]
     fn a_park_that_could_not_be_written_back_is_not_renewed() {
         let mut m = machine("no-argv");
         m.ctx = m.ctx.clone().with_argv_fallback(false);
@@ -576,6 +604,10 @@ mod tests {
 
     /// The same login with the argument line allowed is renewed as usual.
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W16: Pitboard writing, replacing and removing files on Windows"
+    )]
     fn a_park_past_the_ceiling_is_renewed_where_the_argument_line_is_allowed() {
         let m = machine("argv");
         with_park(&m, "work", "old", NOW - 1);
@@ -663,6 +695,10 @@ mod tests {
     /// asks is asked of that home. By hand, the same `PITBOARD_HOME` is refused with
     /// `home_not_absolute`, having asked nobody.
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W16: Pitboard writing, replacing and removing files on Windows"
+    )]
     fn a_run_the_schedule_started_renews_the_default_home_where_pitboard_home_is_not_full() {
         use crate::service::Pitboard;
         for named in ["", "relative"] {
@@ -697,6 +733,10 @@ mod tests {
     /// gives a run of the schedule a home of its own. Nothing here reads or writes the home;
     /// the context is all that is made.
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W25: the task Task Scheduler starts for the schedule"
+    )]
     #[should_panic(expected = "with this account's own home")]
     fn a_run_the_schedule_started_in_a_build_for_tests_never_renews_the_real_home() {
         let own = {
@@ -714,6 +754,10 @@ mod tests {
     /// copy Pitboard holds is dead either way, so it is dropped rather than left to be
     /// offered as a login that cannot work.
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W16: Pitboard writing, replacing and removing files on Windows"
+    )]
     fn a_renewal_whose_answer_cannot_be_stored_drops_the_spent_park() {
         let m = machine("write-lost");
         let before = with_park(&m, "work", "old", NOW - 1);

@@ -604,6 +604,10 @@ mod tests {
     /// in a child: this test binary again, given that row's variables and nothing else of
     /// its kind.
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W14: a Windows environment, whose names are one in any case"
+    )]
     #[allow(
         clippy::disallowed_methods,
         reason = "a child is told which row it checks through its environment"

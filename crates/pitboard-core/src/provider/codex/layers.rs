@@ -740,6 +740,11 @@ mod tests {
 
     const OWN: &str = "/Users/someone/.codex/config.toml";
 
+    // Joined as this host joins a path, which is how `Layer::place` names it.
+    fn etc(name: &str) -> String {
+        Path::new("/etc/codex").join(name).display().to_string()
+    }
+
     /// What each layer holds, by layer, as a test says: unset where it says nothing. A managed
     /// preference is given as it is forced, in base64, and decoded as [`read`] decodes it.
     fn machine(os: Os, holds: &[(Layer, &str)]) -> Store {
@@ -903,12 +908,15 @@ mod tests {
         );
         assert_eq!(
             store.setting(),
-            "pinned to `ephemeral` by /etc/codex/requirements.toml"
+            format!("pinned to `ephemeral` by {}", etc("requirements.toml"))
         );
         assert_eq!(
             store.to_use_the_file(),
-            "No line in your own config.toml can change it: /etc/codex/requirements.toml \
-             pins it, and only an administrator can change that"
+            format!(
+                "No line in your own config.toml can change it: {} pins it, and only an \
+                 administrator can change that",
+                etc("requirements.toml")
+            )
         );
     }
 
@@ -923,7 +931,10 @@ mod tests {
         assert_eq!(store.backend, Backend::Either);
         assert_eq!(
             store.setting(),
-            "`cli_auth_credentials_store = \"auto\"` in /etc/codex/config.toml"
+            format!(
+                "`cli_auth_credentials_store = \"auto\"` in {}",
+                etc("config.toml")
+            )
         );
         assert_eq!(
             store.to_use_the_file(),
@@ -935,8 +946,11 @@ mod tests {
         let store = machine(Os::Linux, &[(Layer::Managed, KEYRING)]);
         assert_eq!(
             store.to_use_the_file(),
-            "/etc/codex/managed_config.toml sets it over your own config.toml, so only an \
-             administrator can change it there to `cli_auth_credentials_store = \"file\"`"
+            format!(
+                "{} sets it over your own config.toml, so only an administrator can change it \
+                 there to `cli_auth_credentials_store = \"file\"`",
+                etc("managed_config.toml")
+            )
         );
     }
 
@@ -958,7 +972,8 @@ mod tests {
                 store.setting(),
                 format!(
                     "`cli_auth_credentials_store = \"keyring\"` in {OWN}, with \
-                     `secret_auth_storage` in /etc/codex/config.toml"
+                     `secret_auth_storage` in {}",
+                    etc("config.toml")
                 )
             );
             assert_eq!(
@@ -1115,8 +1130,11 @@ mod tests {
         });
         assert_eq!(unreadable.backend, Backend::Unknown);
         assert_eq!(
-            unreadable.why_unknown().as_deref(),
-            Some("/etc/codex/requirements.toml cannot be read: denied")
+            unreadable.why_unknown(),
+            Some(format!(
+                "{} cannot be read: denied",
+                etc("requirements.toml")
+            ))
         );
     }
 
@@ -1242,7 +1260,7 @@ mod tests {
         );
         assert_eq!(
             store.setting(),
-            "pinned to `keyring` by /etc/codex/requirements.toml"
+            format!("pinned to `keyring` by {}", etc("requirements.toml"))
         );
     }
 
@@ -1348,6 +1366,7 @@ mod tests {
     /// A sign-in Pitboard runs has no config.toml of its own and the file store on its
     /// command line, so only what an administrator set over that keeps it from the file.
     #[test]
+    #[cfg_attr(windows, ignore = "W21: switching Codex on Windows")]
     fn a_sign_in_takes_the_file_store_unless_an_administrator_set_another() {
         let host = crate::host::memory::MemoryHost::new();
         let ctx = Context::for_unit_test().with_memory_stores(host.clone());
@@ -1374,6 +1393,7 @@ mod tests {
     /// What the host says an administrator set is what is read, at Codex's paths, and a
     /// managed preference is read as the base64 Codex reads it as.
     #[test]
+    #[cfg_attr(windows, ignore = "W21: the layers Codex reads on Windows")]
     fn what_an_administrator_set_is_read_through_the_host() {
         let host = crate::host::memory::MemoryHost::new();
         let ctx = Context::for_unit_test().with_memory_stores(host.clone());

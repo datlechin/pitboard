@@ -808,6 +808,7 @@ mod tests {
     /// A program is looked for where the caller says, not on this process's own `PATH`: an
     /// app opened from Finder has only the system's directories there.
     #[test]
+    #[cfg_attr(windows, ignore = "W17: finding programs on Windows")]
     fn a_program_is_looked_for_on_the_search_path_it_is_given() {
         let prefix = Prefix::new("find");
         let search = format!("/nowhere/at/all::{}", prefix.bin().display());
@@ -823,6 +824,7 @@ mod tests {
     /// A directory named for the program, or a file of that name nobody may run, is passed
     /// over the way `execvp` passes over it, so what is found is what a sign-in can start.
     #[test]
+    #[cfg_attr(windows, ignore = "W17: finding programs on Windows")]
     fn what_cannot_be_run_is_passed_over() {
         let prefix = Prefix::new("decoys");
         let (dirs, files) = prefix.decoys();
@@ -851,6 +853,7 @@ mod tests {
     /// first would only change which `node` an npm install's `env` finds from the one the
     /// person's own terminal finds.
     #[test]
+    #[cfg_attr(windows, ignore = "W17: finding programs on Windows")]
     fn a_sign_in_runs_the_program_found_with_the_search_path_as_it_is() {
         let prefix = Prefix::new("sign-in");
         let search = format!("/nowhere/before:{}", prefix.bin().display());
@@ -871,6 +874,7 @@ mod tests {
     /// puts it starts it: an npm install's script names `node` through `env`, and `node` is
     /// beside it. Named outright on the search path, it runs with that path as it is.
     #[test]
+    #[cfg_attr(windows, ignore = "W17: finding programs on Windows")]
     fn a_program_named_outright_is_run_with_its_own_directory_on_path() {
         let prefix = Prefix::new("named");
         let ctx = Context::new(std::path::PathBuf::from("/nowhere"))

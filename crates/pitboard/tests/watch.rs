@@ -12,6 +12,7 @@ fn envelope(out: &str) -> Value {
 }
 
 #[test]
+#[cfg_attr(windows, ignore = "W22: switching Claude Code on Windows")]
 fn an_account_at_the_share_is_switched_from_once() {
     let env = two_accounts("watch-switches");
     env.an_hour_on();
@@ -58,6 +59,7 @@ fn an_account_at_the_share_is_switched_from_once() {
 }
 
 #[test]
+#[cfg_attr(windows, ignore = "W22: switching Claude Code on Windows")]
 fn below_the_share_nothing_moves_and_the_share_is_the_one_asked_for() {
     let env = two_accounts("watch-below");
     env.an_hour_on();
@@ -82,6 +84,7 @@ fn below_the_share_nothing_moves_and_the_share_is_the_one_asked_for() {
 }
 
 #[test]
+#[cfg_attr(windows, ignore = "W22: switching Claude Code on Windows")]
 fn with_no_account_to_go_to_it_says_so_and_nothing_moves() {
     let env = two_accounts("watch-no-room");
     env.an_hour_on();

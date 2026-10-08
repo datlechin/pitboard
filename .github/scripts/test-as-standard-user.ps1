@@ -2,6 +2,8 @@
 # standard user. Doctests need the toolchain, which that user cannot reach, and are not run.
 param(
     [Parameter(Mandatory)] [string] $Cargo,
+    # Built already, inside the workspace the user is granted read and run on.
+    [Parameter(Mandatory)] [string] $Probe,
     # What goes after `--` on cargo test's command line: test name filters, or '--skip <name>'.
     [string] $Pass = ''
 )
@@ -15,6 +17,40 @@ if (-not ($env:GITHUB_ACTIONS -eq 'true' -and $env:RUNNER_ENVIRONMENT -eq 'githu
 function Split-Words([string] $Text) {
     @($Text -split '\s+' | Where-Object { $_ })
 }
+
+if (-not (Test-Path -LiteralPath $Probe -PathType Leaf)) {
+    throw "no measurement probe at $Probe for the leak check: build it first, with cargo build --locked -p pitboard-probe"
+}
+$probePath = (Resolve-Path -LiteralPath $Probe).Path
+
+# Any of these present would give a test the runner's settings rather than its own.
+function Get-MachineLayers {
+    @(
+        (Join-Path $env:ProgramData 'OpenAI\Codex'),
+        'C:\Program Files\ClaudeCode',
+        'HKLM:\SOFTWARE\Policies\ClaudeCode',
+        'HKCU:\SOFTWARE\Policies\ClaudeCode'
+    ) | Where-Object { Test-Path -LiteralPath $_ }
+}
+
+function Get-LoginPlaces([string] $ProfileDir, [string] $LocalData) {
+    @(
+        (Join-Path $ProfileDir '.claude'),
+        (Join-Path $ProfileDir '.claude.json'),
+        (Join-Path $ProfileDir '.codex'),
+        (Join-Path $LocalData 'Pitboard')
+    )
+}
+
+$layers = @(Get-MachineLayers)
+if ($layers.Count -gt 0) {
+    throw "this runner is not hermetic for the tests, since it holds $($layers -join ', '), from which Codex or Claude Code may take settings on every account"
+}
+Write-Output 'Codex''s %ProgramData%\OpenAI\Codex, Claude Code''s C:\Program Files\ClaudeCode and its policy keys are absent from this runner.'
+# What the job user has already is the image's; only what appears during the run is a leak.
+$jobPlaces = @(Get-LoginPlaces $env:USERPROFILE $env:LOCALAPPDATA)
+$jobPlacesBefore = @($jobPlaces | Where-Object { Test-Path -LiteralPath $_ })
+Write-Output "Of the job user's own login places, $($jobPlacesBefore.Count) of $($jobPlaces.Count) are there before the tests run."
 
 # Start-Process joins its arguments with spaces and quotes nothing.
 $passed = @('--color=never'; Split-Words $Pass)
@@ -177,6 +213,32 @@ try {
         Write-Output '::endgroup::'
         if (-not $ok) { $failed.Add("$what exited $($run.Exit), its last result $(if ($summary) { $summary[-1] } else { 'missing' })") }
     }
+
+    $leaked = [System.Collections.Generic.List[string]]::new()
+    $leaks = Start-AsUser $probePath @('credman-names', '--leak-check') $runDir $userEnv 'leak-check'
+    Write-Output "::group::Credential Manager's live login families and test items, as the standard user: $(if ($leaks.Exit -eq 0) { 'none' } else { 'FOUND OR UNREADABLE' })"
+    Show-Run $leaks
+    Write-Output '::endgroup::'
+    if ($leaks.Exit -ne 0) {
+        $leaked.Add("the leak check found a live login family's or a test's item in the standard user's Credential Manager, or could not list a family (exit $($leaks.Exit))")
+    }
+    # Every task, as the job's user, so a list that cannot be read fails rather than reads empty.
+    $tasks = @(Get-ScheduledTask | Where-Object { $_.TaskPath -like '\Pitboard\*' })
+    if ($tasks.Count -gt 0) { $leaked.Add("Task Scheduler's \Pitboard\ folder holds $($tasks.Count) task(s)") }
+    foreach ($place in (Get-LoginPlaces $profileDir $userEnv.LOCALAPPDATA)) {
+        if (Test-Path -LiteralPath $place) { $leaked.Add("the standard user's real $(Split-Path -Leaf $place) exists") }
+    }
+    $layers = @(Get-MachineLayers)
+    if ($layers.Count -gt 0) { $leaked.Add("the machine's own layers appeared: $($layers -join ', ')") }
+    foreach ($place in $jobPlaces) {
+        if ((Test-Path -LiteralPath $place) -and ($jobPlacesBefore -notcontains $place)) {
+            $leaked.Add("the job user's real $(Split-Path -Leaf $place) appeared")
+        }
+    }
+    if ($leaked.Count -eq 0) {
+        Write-Output 'No login, test item, task or login folder was left behind.'
+    }
+    $failed.AddRange($leaked)
 } finally {
     if ($null -ne $holders) {
         Set-SymlinkHolders $holders

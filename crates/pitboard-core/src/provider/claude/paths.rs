@@ -186,6 +186,7 @@ mod tests {
     /// A bare name is looked up the way a shell looks it up, so Pitboard and the person's
     /// own shell disagree about whether Claude Code is installed only if PATH differs.
     #[test]
+    #[cfg_attr(windows, ignore = "W17: finding programs on Windows")]
     fn a_program_is_found_on_path_and_a_missing_one_is_not() {
         let ctx = Context::new(std::path::PathBuf::from("/home/x"));
         let found = program(&ctx.clone().with_claude_program("ls".into()))
@@ -238,6 +239,7 @@ mod tests {
     /// empty string would make every credential and lock path relative to the working
     /// directory.
     #[test]
+    #[cfg_attr(windows, ignore = "W22: Claude Code's storage folder on Windows")]
     fn an_empty_storage_dir_means_the_default_directory_not_the_current_one() {
         let home = std::path::Path::new("/home/x");
         assert_eq!(storage_dir_from(Some(""), home, "/cfg"), "/home/x/.claude");

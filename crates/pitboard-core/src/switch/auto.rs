@@ -170,6 +170,10 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
+    )]
     fn an_account_at_the_share_is_switched_from_and_the_switch_is_recorded_as_automatic() {
         let (m, _) = nearly_out("auto-switches", 96.0);
         let done = auto(&m).expect("a switch");
@@ -210,6 +214,10 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W16: Pitboard writing, replacing and removing files on Windows"
+    )]
     fn a_limit_below_the_share_takes_no_lock_and_changes_nothing() {
         let (m, _) = nearly_out("auto-below", 94.0);
         let before = m.mem.live().peek(&m.service);
@@ -226,6 +234,10 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W16: Pitboard writing, replacing and removing files on Windows"
+    )]
     fn with_no_account_to_go_to_nothing_moves() {
         let (m, _) = nearly_out("auto-no-room", 97.0);
         measured(&m, "there", 96.0, 30.0);
@@ -241,6 +253,10 @@ mod tests {
     /// Two front ends that decided the same switch make it once: the second finds, under the
     /// lock, that it has been made.
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
+    )]
     fn two_front_ends_that_decided_one_switch_make_it_once() {
         let (m, _) = nearly_out("auto-twice", 96.0);
         let state = state::load(&m.ctx).expect("state");
@@ -273,6 +289,7 @@ mod tests {
     /// Pitboard's record has not caught up with: the switch is not made from the account
     /// that is in use now, which nobody decided to leave.
     #[test]
+    #[cfg_attr(windows, ignore = "W22: switching Claude Code on Windows")]
     fn a_switch_decided_away_from_an_account_no_longer_in_use_is_not_made() {
         let (m, _) = nearly_out("auto-overtaken", 96.0);
         let elsewhere = document("elsewhere-refresh");
@@ -308,6 +325,10 @@ mod tests {
     /// switch stops with nothing installed over it, the account it would have switched to
     /// keeps its parked login, and the next attempt, a minute on, switches.
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
+    )]
     fn a_login_claude_code_renews_partway_through_is_not_written_over() {
         let (m, clock) = nearly_out("auto-renewed-meanwhile", 96.0);
         let renewed = document("here-renewed");
@@ -372,6 +393,10 @@ mod tests {
     /// and however many times that happens, the switch is made once Anthropic answers again,
     /// a little later each time.
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
+    )]
     fn an_outage_does_not_use_up_the_attempts() {
         let (m, clock) = nearly_out("auto-outage", 96.0);
         m.api.token_trouble("access-here-refresh", Trouble::Offline);
@@ -393,6 +418,10 @@ mod tests {
     /// A parked login Anthropic refuses is no switch, and the next attempt goes to another
     /// account with room rather than to the same one again.
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
+    )]
     fn an_account_whose_login_is_refused_is_passed_over_for_the_next() {
         let (m, clock) = nearly_out("auto-refused", 96.0);
         let parked = park::reserve(&m.ctx, Permit::for_a_test(), "other").expect("a name");
@@ -429,6 +458,10 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
+    )]
     fn a_switch_waiting_to_be_finished_is_left_to_the_change_that_finishes_it() {
         let (m, _) = nearly_out("auto-interrupted", 96.0);
         let settled = settle(&m.ctx, Permit::for_a_test(), None)
@@ -454,6 +487,10 @@ mod tests {
     /// Claude Code authenticated some other way uses none of the logins Pitboard moves, so
     /// a switch would change nothing its sessions see.
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W16: Pitboard writing, replacing and removing files on Windows"
+    )]
     fn claude_code_signed_in_some_other_way_is_not_switched() {
         let (m, _) = nearly_out("auto-overridden", 96.0);
         let config = m.ctx_home().join(".claude");
@@ -475,6 +512,10 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W16: Pitboard writing, replacing and removing files on Windows"
+    )]
     fn as_root_nothing_is_switched_or_recorded() {
         let (m, _) = nearly_out("auto-root", 96.0);
         m.mem

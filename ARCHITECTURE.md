@@ -469,8 +469,9 @@ pages load, as a browser would.
   harness parks through it), which variables a command is passed on, which folders
   of a person's account it is given as scratch ones of its own, what its `PATH` holds after
   the test's programs, what a program's file is called, and how npm lays out a package's
-  program. A test that cannot pass on Windows until a later pull request says which with
-  `#[cfg_attr(windows, ignore = "W<n>: …")]`, the one way a test is put off there.
+  program. The whole suite runs on Windows, and a test that cannot pass there until a later
+  pull request says which with `#[cfg_attr(windows, ignore = "W<n>: …")]`, the one way a
+  test is put off there.
 - No test addresses a name a real login may be kept under. `guard_not_live` refuses by
   pattern, never by a hash computed for a real home, the families
   `pitboard_core::provider::names` tells apart, which the measurement probe's leak check
@@ -482,7 +483,10 @@ pages load, as a browser would.
   folder the system names for the account whatever the environment says (the passwd
   database, or `FOLDERID_Profile` and `FOLDERID_LocalAppData`), and those the environment
   the tests were started in names. A folder is compared with each in any case, through
-  every link the file system resolves.
+  every link the file system resolves. CI's Windows legs check after each run, with the
+  probe and as the user the tests ran as, that no item of those families or
+  `pitboard-citest-*` is in its Credential Manager, that Task Scheduler's `\Pitboard\` is
+  empty, and that no real login folder appeared.
 - Every program the command line's tests and `pitboard-ffi`'s tests start in place of a
   tool, or put where one is looked for, is one compiled program, the `pitboard` crate's
   example `stand-in`, playing the script written beside its copy
@@ -1270,6 +1274,12 @@ the only tokens it has been seen to read.
 - Defender's real-time protection is off on windows-2025 and on, with behaviour monitoring
   and tamper protection, on windows-11-arm. winget is on windows-2025 alone, and Scoop on
   neither.
+- As the job's user, in an interactive logon, `credman-names` lists the prefixes of every
+  live login family and `pitboard-*` without an error, and finds no item, on both images.
+  As the fresh standard user, after each Windows test run, it does the same and finds
+  nothing, on both images (run 37762408901). Neither image holds Codex's
+  `%ProgramData%\OpenAI\Codex`, Claude Code's `C:\Program Files\ClaudeCode` or its
+  policy keys.
 
 ### One sign-in at a time
 

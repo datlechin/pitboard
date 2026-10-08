@@ -112,6 +112,7 @@ fn signed_in(name: &str) -> Env {
 /// them. Pitboard reads the variable itself and hands ureq the proxy: ureq read it before,
 /// and a test could neither withhold it nor say which variable applied.
 #[test]
+#[cfg_attr(windows, ignore = "W22: switching Claude Code on Windows")]
 fn requests_go_through_the_proxy_the_environment_names() {
     let proxy = Proxy::start();
     let env = signed_in("proxy-through");
@@ -136,6 +137,7 @@ fn requests_go_through_the_proxy_the_environment_names() {
 /// `ALL_PROXY` is read before `HTTPS_PROXY`, as ureq reads them, whatever the request's
 /// scheme: the proxy it names is the one asked, and the other is never reached.
 #[test]
+#[cfg_attr(windows, ignore = "W22: switching Claude Code on Windows")]
 fn all_proxy_comes_before_https_proxy() {
     let (all, https) = (Proxy::start(), Proxy::start());
     let env = signed_in("proxy-all-first");
@@ -151,6 +153,7 @@ fn all_proxy_comes_before_https_proxy() {
 /// A host `NO_PROXY` names is reached directly: the proxy is asked nothing, and the request
 /// still arrives.
 #[test]
+#[cfg_attr(windows, ignore = "W22: switching Claude Code on Windows")]
 fn a_host_no_proxy_names_is_reached_directly() {
     let proxy = Proxy::start();
     let env = signed_in("proxy-exempt");
@@ -213,6 +216,7 @@ const SOCKS: [(&str, &str); 5] = [
 /// each request with a `socks4a://` or `socks5h://` one with "Connection refused", as ureq
 /// did without its SOCKS feature. While it spoke SOCKS itself, each went through the proxy.
 #[test]
+#[cfg_attr(windows, ignore = "W22: switching Claude Code on Windows")]
 fn every_socks_proxy_is_refused_and_nothing_is_sent() {
     for (scheme, shown) in SOCKS {
         let (proxy, proxy_port) = untouched();
@@ -273,6 +277,7 @@ fn every_socks_proxy_is_refused_and_nothing_is_sent() {
 /// A host `NO_PROXY` names goes out directly with a SOCKS proxy named, as around any other
 /// proxy: the request arrives, and the proxy is not reached.
 #[test]
+#[cfg_attr(windows, ignore = "W22: switching Claude Code on Windows")]
 fn a_host_no_proxy_names_goes_around_a_socks_proxy() {
     for (scheme, _) in SOCKS {
         let (proxy, port) = untouched();

@@ -2399,6 +2399,7 @@ mod tests {
     /// looked at a file's mode. A gatherer that returns an empty list whatever the disk
     /// says would pass every one of those tests.
     #[test]
+    #[cfg_attr(windows, ignore = "W15: files made private to the person on Windows")]
     fn a_world_readable_park_is_found_on_the_disk() {
         use crate::host::fs::testing;
 
@@ -2441,6 +2442,10 @@ mod tests {
     /// mode bit. A backup restore, a `cp -r`, an rsync or a careless umask changes one
     /// quietly, and nothing else in Pitboard would ever mention it.
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W15: who else can read a login on Windows, and the command that makes one private"
+    )]
     fn a_login_anyone_on_this_machine_can_read_is_a_failure() {
         let mut f = facts();
         assert_eq!(check(&evaluate(&f), "private_on_disk").level, Level::Ok);
@@ -2563,6 +2568,10 @@ mod tests {
     /// What the two checks above are given, read off the stores: a login in the file while
     /// the keychain holds another, and nothing where the file is the login or holds none.
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
+    )]
     fn a_login_left_behind_the_keychain_is_found_in_its_file() {
         use crate::host::memory::MemoryHost;
 
@@ -2967,6 +2976,7 @@ mod tests {
     /// What the check above is given, read off a real disk: a schedule written the way
     /// `pitboard schedule install` writes it, whose Pitboard is then taken away.
     #[test]
+    #[cfg_attr(windows, ignore = "W25: Task Scheduler")]
     fn a_schedule_whose_pitboard_is_gone_is_found_on_the_disk() {
         let root = std::env::temp_dir().join(format!(
             "pitboard-doctor-schedule-{}-{:?}",
@@ -3168,6 +3178,7 @@ mod tests {
     /// another password, and none. The report a person pastes hides the proxy's host, as it
     /// does this run's.
     #[test]
+    #[cfg_attr(windows, ignore = "W25: Task Scheduler")]
     fn the_schedules_proxy_is_read_from_what_install_wrote() {
         let root = std::env::temp_dir().join(format!(
             "pitboard-doctor-schedule-proxy-{}-{:?}",
@@ -3724,6 +3735,7 @@ mod tests {
     /// Code's config for every account, a signed-in Codex account read as one with nothing
     /// parked to switch to, and the advice was to sign in again.
     #[test]
+    #[cfg_attr(windows, ignore = "W21: switching Codex on Windows")]
     fn an_account_is_active_by_its_own_tools_record() {
         use crate::host::memory::MemoryHost;
 
@@ -3993,6 +4005,7 @@ mod tests {
     /// What `/etc/codex` and the person's own config say is gathered as Codex reads it, and a
     /// store a requirement pins is said to be one no line of the person's own changes.
     #[test]
+    #[cfg_attr(windows, ignore = "W21: switching Codex on Windows")]
     fn a_store_an_administrator_pinned_is_gathered_and_said() {
         let host = crate::host::memory::MemoryHost::new();
         let ctx = Context::for_unit_test().with_memory_stores(host.clone());
@@ -4161,6 +4174,7 @@ mod tests {
     /// nothing. Only the two directories above the program are looked at, names first, so a
     /// standalone install is named without opening any file inside it.
     #[test]
+    #[cfg_attr(windows, ignore = "W15: files made private to the person on Windows")]
     fn a_version_is_read_out_of_each_way_codex_is_installed() {
         use crate::host::fs::testing;
 
@@ -4219,6 +4233,10 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W15: who else can read a login on Windows, and the command that makes one private"
+    )]
     fn a_codex_login_anybody_can_read_or_nobody_can_parse_is_said() {
         let mut codex = with_codex();
         codex.auth_access = Some(mode(0o644));
@@ -4392,6 +4410,7 @@ mod tests {
     /// What the section is judged on, read off a real disk: a scratch Codex home with a
     /// login in it, in the file Codex keeps it in.
     #[test]
+    #[cfg_attr(windows, ignore = "W21: switching Codex on Windows")]
     fn codex_facts_are_read_off_the_disk() {
         use crate::host::fs::testing;
 
@@ -4655,6 +4674,7 @@ mod tests {
     /// nothing else, since every other check reads under one of the homes. It read Claude
     /// Code's and Pitboard's files under whatever folder it was run from.
     #[test]
+    #[cfg_attr(windows, ignore = "W14: Pitboard's own folder on Windows")]
     fn doctor_checks_nothing_under_a_home_that_is_not_a_full_path() {
         use crate::context::Environment;
         for (pairs, said) in [

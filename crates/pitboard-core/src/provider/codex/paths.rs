@@ -105,6 +105,7 @@ mod tests {
     /// The shipped default is a packaged one rather than a line anybody wrote, so an absent
     /// setting means the file and not "cannot tell".
     #[test]
+    #[cfg_attr(windows, ignore = "W21: switching Codex on Windows")]
     fn no_setting_means_the_file() {
         let dir = scratch("default");
         let ctx = at(&dir, "model = \"gpt-5\"\n");
@@ -116,6 +117,7 @@ mod tests {
     /// Each store is read from the person's own `config.toml` as TOML. A value that is not a
     /// store Codex has stops Codex from starting, so it is no longer taken for the file.
     #[test]
+    #[cfg_attr(windows, ignore = "W21: switching Codex on Windows")]
     fn each_store_is_recognised() {
         let dir = scratch("stores");
         for (written, expected) in [
@@ -141,6 +143,7 @@ mod tests {
     /// A trailing comment is not part of the value. Read as part of it, a keyring store
     /// looked like the default file, and Pitboard would read a file Codex had deleted.
     #[test]
+    #[cfg_attr(windows, ignore = "W21: switching Codex on Windows")]
     fn a_comment_after_the_value_is_not_the_value() {
         let dir = scratch("comment");
         let ctx = at(
@@ -153,6 +156,7 @@ mod tests {
 
     /// A key of the same name inside another table is not the setting.
     #[test]
+    #[cfg_attr(windows, ignore = "W21: switching Codex on Windows")]
     fn only_the_top_level_key_is_the_setting() {
         let dir = scratch("tables");
         for (config, expected, why) in [
@@ -181,6 +185,7 @@ mod tests {
     /// What `/etc/codex` says is read as well as the person's own file, where Pitboard read
     /// only the person's.
     #[test]
+    #[cfg_attr(windows, ignore = "W21: switching Codex on Windows")]
     fn the_system_layers_are_read_as_well_as_the_persons_own() {
         let dir = scratch("system");
         let host = crate::host::memory::MemoryHost::new();

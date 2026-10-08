@@ -33,6 +33,7 @@ fn interrupted_switch(env: &Env) -> String {
 /// alpha is still signed in, so the orphan is a second copy of a login Claude Code keeps
 /// rotating: it must go, not be kept as alpha's way back.
 #[test]
+#[cfg_attr(windows, ignore = "W22: switching Claude Code on Windows")]
 fn a_park_of_a_login_still_signed_in_is_dropped_on_the_next_run() {
     let env = two_accounts("orphan");
     let orphan = interrupted_switch(&env);
@@ -51,6 +52,7 @@ fn a_park_of_a_login_still_signed_in_is_dropped_on_the_next_run() {
 
 /// Killed after the install: beta is live, and the orphan is now alpha's only copy.
 #[test]
+#[cfg_attr(windows, ignore = "W22: switching Claude Code on Windows")]
 fn a_park_the_state_never_recorded_is_kept_once_its_switch_landed() {
     let mut env = two_accounts("landed");
     let orphan = interrupted_switch(&env);
@@ -83,6 +85,7 @@ fn a_park_the_state_never_recorded_is_kept_once_its_switch_landed() {
 /// Recovery that cannot tell what happened must change nothing and keep its record, so a
 /// later run with a working session can finish the job.
 #[test]
+#[cfg_attr(windows, ignore = "W22: switching Claude Code on Windows")]
 fn an_undeterminable_outcome_keeps_the_record_and_changes_nothing() {
     let mut env = two_accounts("undetermined");
     let orphan = interrupted_switch(&env);
@@ -105,6 +108,7 @@ fn an_undeterminable_outcome_keeps_the_record_and_changes_nothing() {
 /// uses, so the app can offer to give up on it as it opens rather than after a switch fails.
 /// The read only says so: the record, the account list and every copy stay as they were.
 #[test]
+#[cfg_attr(windows, ignore = "W22: switching Claude Code on Windows")]
 fn status_says_an_interrupted_switch_it_cannot_finish_is_waiting() {
     let mut env = two_accounts("status-stuck");
     let orphan = interrupted_switch(&env);
@@ -159,6 +163,7 @@ fn status_says_an_interrupted_switch_it_cannot_finish_is_waiting() {
 /// no answer from Anthropic. Where only Anthropic could say whose the login is, as in the
 /// test before this one, it says nothing it cannot know.
 #[test]
+#[cfg_attr(windows, ignore = "W22: switching Claude Code on Windows")]
 fn status_offline_says_an_interrupted_switch_it_can_tell_is_waiting() {
     let env = two_accounts("offline-stuck");
     let orphan = interrupted_switch(&env);
@@ -190,6 +195,7 @@ fn status_offline_says_an_interrupted_switch_it_can_tell_is_waiting() {
 /// `use beta` killed after installing beta's login and before recording it: the state still
 /// says alpha. Forgetting beta must first learn that beta is the one signed in.
 #[test]
+#[cfg_attr(windows, ignore = "W22: switching Claude Code on Windows")]
 fn forgetting_waits_for_an_interrupted_switch_to_be_settled() {
     let mut env = two_accounts("forget-pending");
     let orphan = interrupted_switch(&env);
@@ -213,6 +219,7 @@ fn forgetting_waits_for_an_interrupted_switch_to_be_settled() {
 /// A name nobody enrolled is still refused, but the interrupted switch is settled too, the
 /// way every change settles one, and the envelope carries both.
 #[test]
+#[cfg_attr(windows, ignore = "W22: switching Claude Code on Windows")]
 fn a_mistyped_name_still_settles_an_interrupted_switch() {
     let env = two_accounts("refused-name");
     let orphan = interrupted_switch(&env);
@@ -232,6 +239,7 @@ fn a_mistyped_name_still_settles_an_interrupted_switch() {
 }
 
 #[test]
+#[cfg_attr(windows, ignore = "W22: switching Claude Code on Windows")]
 fn a_damaged_record_is_refused_rather_than_guessed_at() {
     let env = two_accounts("damaged");
     std::fs::write(
@@ -254,6 +262,7 @@ fn a_damaged_record_is_refused_rather_than_guessed_at() {
 /// every command that changes anything stops at that. Giving up is the way out, and it must
 /// delete nothing: which copy is live is exactly what is unknown.
 #[test]
+#[cfg_attr(windows, ignore = "W22: switching Claude Code on Windows")]
 fn giving_up_on_an_unfinishable_switch_keeps_every_login() {
     let mut env = two_accounts("abandon");
     let orphan = interrupted_switch(&env);

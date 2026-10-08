@@ -865,6 +865,10 @@ mod tests {
     /// it, though the read itself records what it measured: taken after, a session's newer
     /// numbers recorded while the read waited counted as seen though nothing showed them.
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
+    )]
     fn a_read_takes_the_stamps_as_they_stood_before_it() {
         let world = World::new("stamps");
         world.enrolled("work", "here", 10.0);

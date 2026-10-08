@@ -385,6 +385,7 @@ mod tests {
 
     /// A schedule the scheduler will not start leaves nothing behind saying renewal is on.
     #[test]
+    #[cfg_attr(windows, ignore = "W25: Task Scheduler")]
     fn a_schedule_the_scheduler_will_not_start_is_not_left_on_disk() {
         let home = Scratch::new("refused");
         let program = home.0.join("bin/pitboard");
@@ -402,6 +403,7 @@ mod tests {
     /// A repair the scheduler will not start leaves the schedule that was there, which is
     /// what the app and doctor then go on reporting.
     #[test]
+    #[cfg_attr(windows, ignore = "W25: Task Scheduler")]
     fn a_repair_the_scheduler_will_not_start_leaves_the_schedule_as_it_was() {
         let home = Scratch::new("repair-refused");
         std::fs::create_dir_all(home.0.join(".pitboard")).expect("a Pitboard home");
@@ -433,6 +435,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(windows, ignore = "W25: Task Scheduler")]
     fn nothing_is_installed_on_a_machine_where_nothing_was_installed() {
         let home = Scratch::new("none");
         let ctx = home.ctx();
@@ -492,6 +495,7 @@ mod tests {
     /// copy, which is there while the app runs and gone once it quits, so being there now
     /// is not enough.
     #[test]
+    #[cfg_attr(windows, ignore = "W25: Task Scheduler")]
     fn a_named_pitboard_that_will_not_be_there_is_refused() {
         let home = Scratch::new("refused");
         let ctx = home.ctx();
@@ -560,6 +564,7 @@ mod tests {
     /// What `pitboard doctor` reads back is what was written, including a path the
     /// scheduler's format has to escape.
     #[test]
+    #[cfg_attr(windows, ignore = "W25: Task Scheduler")]
     fn an_installed_schedule_says_which_pitboard_it_runs() {
         let home = Scratch::new("installed");
         let bundled = home
@@ -582,6 +587,7 @@ mod tests {
     /// every day since. An app that names the command line it comes with puts that in its
     /// place, and every other schedule is left as it is.
     #[test]
+    #[cfg_attr(windows, ignore = "W25: Task Scheduler")]
     fn a_schedule_that_runs_an_app_is_pointed_at_its_command_line() {
         let home = Scratch::new("repair");
         std::fs::create_dir_all(home.0.join(".pitboard")).expect("a Pitboard home");
@@ -667,6 +673,7 @@ mod tests {
     /// A process some other job started is not the schedule's own run, and repairs the way
     /// one opened by hand does.
     #[test]
+    #[cfg_attr(windows, ignore = "W25: Task Scheduler")]
     fn a_process_another_job_started_still_repairs() {
         let home = Scratch::new("another-job");
         std::fs::create_dir_all(home.0.join(".pitboard")).expect("a Pitboard home");
@@ -695,6 +702,7 @@ mod tests {
 
     /// Only what `install` writes is read, and only the way it writes it.
     #[test]
+    #[cfg_attr(windows, ignore = "W25: Task Scheduler")]
     fn a_schedule_pitboard_did_not_write_names_no_program() {
         let home = Scratch::new("foreign");
         let ctx = home.ctx();
@@ -717,6 +725,7 @@ mod tests {
     /// The scheduler starts `renew` with the default home, so a Pitboard pointed anywhere
     /// else leaves the schedule alone.
     #[test]
+    #[cfg_attr(windows, ignore = "W14: Pitboard's own folder on Windows")]
     fn the_schedule_belongs_to_the_default_home_alone() {
         let ctx = Context::new(PathBuf::from("/home/x"));
         assert!(serves(&ctx));
@@ -736,6 +745,7 @@ mod tests {
     /// it spells it, installs as before. Neither `uninstall` nor `repair` is refused for it:
     /// a schedule can always be taken away, from whichever home.
     #[test]
+    #[cfg_attr(windows, ignore = "W25: Task Scheduler")]
     fn a_schedule_is_installed_only_where_pitboard_home_is_the_default_home() {
         let home = Scratch::new("default-home");
         std::fs::create_dir_all(home.0.join(".pitboard")).expect("a Pitboard home");
@@ -785,6 +795,7 @@ mod tests {
     /// The runs then read the same proxy. A reinstall takes the variables of the Pitboard
     /// that runs it, none included. What is written is only the person's to read.
     #[test]
+    #[cfg_attr(windows, ignore = "W25: Task Scheduler")]
     fn a_schedule_is_given_the_proxy_variables_of_whoever_installs_it() {
         let home = Scratch::new("proxy-install");
         std::fs::create_dir_all(home.0.join(".pitboard")).expect("a Pitboard home");
@@ -838,6 +849,7 @@ mod tests {
     /// app's environment names one. Where such a file gives a proxy all the same, as one
     /// edited by hand can, the repair keeps it.
     #[test]
+    #[cfg_attr(windows, ignore = "W25: Task Scheduler")]
     fn a_repair_writes_the_proxy_the_schedules_file_gives_and_never_the_apps() {
         let home = Scratch::new("proxy-repair");
         std::fs::create_dir_all(home.0.join(".pitboard")).expect("a Pitboard home");
@@ -883,6 +895,7 @@ mod tests {
     /// A real context's scheduler is never asked from a test: the system's own service
     /// manager would reach the person's real schedule.
     #[test]
+    #[cfg_attr(windows, ignore = "W25: Task Scheduler")]
     fn a_test_never_reaches_the_systems_own_scheduler() {
         let root = std::env::temp_dir().join(format!(
             "pitboard-schedule-real-{}-{:?}",
