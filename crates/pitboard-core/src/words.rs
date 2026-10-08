@@ -12,6 +12,7 @@
 use crate::doctor::{Level, renewal_due};
 use crate::host::{Os, WINDOWS_FLOOR, token};
 use crate::pace::{Pace, Standing};
+use crate::usage::whole;
 
 const MINUTE: i64 = 60;
 const HOUR: i64 = 60 * MINUTE;
@@ -87,7 +88,7 @@ pub fn limit_name(kind: &str, length_seconds: Option<i64>) -> String {
 /// "96% of its 5-hour limit", or "97% of its weekly Opus limit" for one limit of a model.
 pub fn share_of_limit(limit: &crate::usage::Window) -> String {
     let name = scoped_limit_name(&limit.kind, limit.length_seconds, limit.scope.as_deref());
-    format!("{:.0}% of its {name} limit", limit.percent)
+    format!("{}% of its {name} limit", whole(limit.percent))
 }
 
 /// Why Pitboard does not switch Claude Code by itself where it would have, as a clause that
@@ -124,14 +125,13 @@ pub enum UsageLevel {
 }
 
 /// The step a limit is at, from the share of it used: `percent` as a reading gives it, which
-/// passes 100 when a service reports more used than the limit.
+/// passes 100 when a service reports more used than the limit. Taken as its figure is
+/// drawn, so a limit drawn at 90% is in the colour of 90%.
 pub fn usage_level(percent: f64) -> UsageLevel {
-    if percent >= 90.0 {
-        UsageLevel::Out
-    } else if percent >= 70.0 {
-        UsageLevel::Low
-    } else {
-        UsageLevel::Plenty
+    match whole(percent) {
+        90.. => UsageLevel::Out,
+        70.. => UsageLevel::Low,
+        _ => UsageLevel::Plenty,
     }
 }
 
@@ -150,10 +150,10 @@ pub fn resets(at: i64, now: i64) -> String {
 /// pace", "on pace". Over and under rather than ahead and behind, since ahead reads as good
 /// news and is the warning.
 pub fn pace_column(pace: &Pace) -> String {
-    let points = pace.delta.abs().round();
+    let points = whole(pace.delta.abs());
     match pace.standing {
-        Standing::Over { .. } => format!("{points:.0}% over pace"),
-        Standing::Under => format!("{points:.0}% under pace"),
+        Standing::Over { .. } => format!("{points}% over pace"),
+        Standing::Under => format!("{points}% under pace"),
         Standing::Even => "on pace".into(),
     }
 }
@@ -528,15 +528,15 @@ mod tests {
         );
     }
 
-    /// A limit turns amber at 70% and red at 90%, and stays red past 100%. The steps are
-    /// where its colour changes, so each side of each is checked.
+    /// A limit changes colour at 70% and at 90% as its figure says them, and stays red past
+    /// 100%. The steps are where its colour changes, so each side of each is checked.
     #[test]
     fn a_limits_level_changes_at_seventy_and_at_ninety() {
         assert_eq!(usage_level(0.0), UsageLevel::Plenty);
-        assert_eq!(usage_level(69.9), UsageLevel::Plenty);
-        assert_eq!(usage_level(70.0), UsageLevel::Low);
-        assert_eq!(usage_level(89.9), UsageLevel::Low);
-        assert_eq!(usage_level(90.0), UsageLevel::Out);
+        assert_eq!(usage_level(69.4), UsageLevel::Plenty);
+        assert_eq!(usage_level(69.5), UsageLevel::Low);
+        assert_eq!(usage_level(89.4), UsageLevel::Low);
+        assert_eq!(usage_level(89.5), UsageLevel::Out);
         assert_eq!(usage_level(100.0), UsageLevel::Out);
         assert_eq!(usage_level(130.0), UsageLevel::Out);
     }
@@ -559,6 +559,22 @@ mod tests {
         assert_eq!(resets(86_399), "resets in 23h 59m");
         assert_eq!(resets(86_400), "resets in 1d 0h");
         assert_eq!(resets(2 * 86_400 + 4 * 3600 + 59 * 60), "resets in 2d 4h");
+    }
+
+    /// A limit in a sentence about an automatic switch has the figure it is drawn with.
+    #[test]
+    fn a_share_of_a_limit_is_said_as_it_is_drawn() {
+        let limit = |percent: f64| crate::usage::Window {
+            kind: "session".into(),
+            scope: None,
+            percent,
+            resets_at: None,
+            is_active: true,
+            severity: None,
+            length_seconds: Some(5 * HOUR),
+        };
+        assert_eq!(share_of_limit(&limit(94.5)), "95% of its 5-hour limit");
+        assert_eq!(share_of_limit(&limit(96.4)), "96% of its 5-hour limit");
     }
 
     /// A pace beside its bar is how far from even it is, said so that over reads as the

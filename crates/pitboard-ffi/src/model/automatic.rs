@@ -93,6 +93,21 @@ fn a_limit_at_the_share_asks_the_core_to_switch_and_nothing_else_switches_meanwh
     assert!(machine.posted.is_empty(), "and says nothing");
 }
 
+/// A limit the app draws at 95% is at the share of 95%, as the core judges it.
+#[test]
+fn a_limit_shown_at_the_share_asks_the_core_to_switch() {
+    let mut model = Hand::new();
+    read_preferences(&mut model, true);
+    let mut machine = Machine::reading(Ok(status(vec![work(94.4), personal()])));
+    model.refresh(&mut machine);
+    assert_eq!(model.count(auto_switch), 0, "drawn at 94%");
+
+    machine.answer = Ok(status(vec![work(94.5), personal()]));
+    model.send(Intent::Refresh { asked: false });
+    model.run(&mut machine);
+    assert_eq!(machine.auto_at, [95]);
+}
+
 /// A Codex account at its limit is never switched by itself: a running `codex` never follows
 /// a switch. It is advised on as it always was.
 #[test]

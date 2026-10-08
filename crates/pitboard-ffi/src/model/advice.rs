@@ -5,7 +5,7 @@
 //! told, and the model's state keeps both and says what to post and what to keep.
 
 use crate::{Account, Limit, Status, Tool};
-use pitboard_core::usage::same_reset;
+use pitboard_core::usage::{same_reset, whole};
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
 
@@ -84,7 +84,7 @@ fn spare(window: &Limit, mine: &[&Account], now: i64) -> Option<(String, i64, St
     let room = used(spare, window, now);
     match (&spare.label, &spare.qualified) {
         (Some(label), Some(qualified)) if room < 100.0 => {
-            Some((label.clone(), 100 - room.round() as i64, qualified.clone()))
+            Some((label.clone(), 100 - whole(room), qualified.clone()))
         }
         _ => None,
     }

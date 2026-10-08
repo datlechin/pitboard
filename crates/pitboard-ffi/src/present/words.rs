@@ -8,6 +8,7 @@
 use crate::{Level, Warning};
 use pitboard_core::host::Os;
 use pitboard_core::pace::{Pace, Standing};
+use pitboard_core::usage::whole;
 use unicode_segmentation::UnicodeSegmentation;
 
 const MINUTE: i64 = 60;
@@ -45,12 +46,10 @@ pub(crate) fn bar_name(label: &str) -> String {
     cut
 }
 
-/// A figure as a bar or a line says it: a whole percentage, a half rounded up, as Swift's
-/// `rounded()` rounds it.
+/// A figure as a bar or a line says it, as the command line draws it and the automatic
+/// switch judges it.
 pub(crate) fn figure(percent: f64) -> String {
-    // Saturating, where Swift's `Int(_:)` stops the app on a figure past what fits.
-    let whole = percent.round() as i64;
-    format!("{whole}%")
+    format!("{}%", whole(percent))
 }
 
 /// `numerator / denominator` rounded to the nearest whole, a half to the even one, as
@@ -125,9 +124,9 @@ pub(crate) fn spoken_limit(
     resetting_in: Option<i64>,
     pace: Option<&Pace>,
 ) -> String {
-    let mut used = format!("{name} limit, {} percent used", percent.round() as i64);
+    let mut used = format!("{name} limit, {} percent used", whole(percent));
     if let Some(pace) = pace {
-        let points = pace.delta.abs().round() as i64;
+        let points = whole(pace.delta.abs());
         used.push_str(&match pace.standing {
             Standing::Over { .. } => format!(", {points} percent over an even pace"),
             Standing::Under => format!(", {points} percent under an even pace"),

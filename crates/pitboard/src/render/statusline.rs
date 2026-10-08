@@ -3,6 +3,7 @@
 use crate::ui::{self, BOLD, DIM, paint};
 use pitboard_core::pace::Standing;
 use pitboard_core::statusline::{Paces, Shares, StatusLine};
+use pitboard_core::usage::whole;
 use pitboard_core::words;
 
 /// A limit's share, and where its pace is said, a triangle for it: rising over pace,
@@ -16,7 +17,7 @@ fn share(share: Option<f64>, pace: Option<Standing>) -> String {
         Some(standing @ Standing::Under) => paint(ui::pace(standing), "▼"),
         Some(Standing::Even) | None => String::new(),
     };
-    format!("{}{mark}", paint(ui::level(p), format!("{p:.0}%")))
+    format!("{}{mark}", paint(ui::level(p), format!("{}%", whole(p))))
 }
 
 fn shares(shares: Shares, pace: Paces) -> String {
@@ -88,6 +89,18 @@ mod tests {
             plain(&human(&line)),
             "work 46%·70%  personal 12%·40%  side ?·? (3h 00m)"
         );
+    }
+
+    /// A half is drawn as the app draws it, and as the automatic switch counts it.
+    #[test]
+    fn a_half_is_drawn_as_the_app_draws_it() {
+        let line = StatusLine {
+            current: Some("work".into()),
+            session: shares(94.5, 70.5),
+            pace: Paces::default(),
+            others: Vec::new(),
+        };
+        assert_eq!(plain(&human(&line)), "work 95%·71%");
     }
 
     #[test]

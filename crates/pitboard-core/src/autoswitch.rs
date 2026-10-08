@@ -34,7 +34,7 @@ use crate::provider::ProviderId;
 use crate::service::Permit;
 use crate::state::{Key, State};
 use crate::status::Row;
-use crate::usage::{Snapshot, Window, same_reset};
+use crate::usage::{Snapshot, Window, same_reset, whole};
 use crate::{atomic, home};
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
@@ -72,8 +72,14 @@ impl Threshold {
         self.0
     }
 
+    /// Whether a limit `percent` used has reached the share as it is drawn: one drawn at 95%
+    /// has reached 95%.
+    pub fn reached(self, percent: f64) -> bool {
+        whole(percent) >= i64::from(self.0)
+    }
+
     fn reached_by(self, window: &Window, now: i64) -> bool {
-        window.used(now) >= f64::from(self.0)
+        self.reached(window.used(now))
     }
 }
 
@@ -579,7 +585,7 @@ mod tests {
 
     #[test]
     fn a_limit_below_the_share_is_left_alone_and_one_at_it_switches() {
-        assert_eq!(decided(&[work_at(94.9), spare()]), Decision::Stay);
+        assert_eq!(decided(&[work_at(94.4), spare()]), Decision::Stay);
         let decision = decided(&[work_at(95.0), spare()]);
         assert_eq!(to(&decision), Some("spare"));
         let Decision::Switch(plan) = decision else {
@@ -590,6 +596,13 @@ mod tests {
             ("work", "work")
         );
         assert_eq!(plan.limit.kind, "session");
+    }
+
+    /// The share is judged as the app, `pitboard status` and the status line show it: a
+    /// limit at 94.5 is drawn at 95%, and is at a share of 95%.
+    #[test]
+    fn a_limit_shown_at_the_share_is_at_the_share() {
+        assert_eq!(to(&decided(&[work_at(94.5), spare()])), Some("spare"));
     }
 
     #[test]
@@ -700,6 +713,27 @@ mod tests {
         assert_eq!(
             to(&decided(&[work_at(96.0), full_weekly(), roomy])),
             Some("roomy")
+        );
+    }
+
+    /// An account to go to is judged as the one in use is: a limit drawn at 95% leaves it no
+    /// room.
+    #[test]
+    fn an_account_with_a_limit_shown_at_the_share_is_no_place_to_go() {
+        let spare_at = |weekly: f64| {
+            row(
+                "spare",
+                false,
+                vec![window("session", 0.0), window("weekly_all", weekly)],
+            )
+        };
+        assert!(matches!(
+            decided(&[work_at(96.0), spare_at(94.5)]),
+            Decision::NoRoom { .. }
+        ));
+        assert_eq!(
+            to(&decided(&[work_at(96.0), spare_at(94.4)])),
+            Some("spare")
         );
     }
 

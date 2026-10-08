@@ -100,6 +100,13 @@ pub(crate) fn limit_name(kind: &str) -> &str {
     }
 }
 
+/// A percentage as every front end draws it and the automatic switch judges it: a whole
+/// one, a half rounded up, so a limit drawn at 95% is at 95%. Whether a limit is used up
+/// is not judged by it: that is the service's 100, as read.
+pub fn whole(percent: f64) -> i64 {
+    percent.round() as i64
+}
+
 /// Resets closer together than this are one reset.
 ///
 /// Sources do not agree to the second on when a window resets: Anthropic's answer gives a
@@ -422,6 +429,14 @@ mod tests {
     #[test]
     fn missing_cache_is_not_an_error() {
         assert!(from_config_cache(&serde_json::json!({})).is_none());
+    }
+
+    #[test]
+    fn a_share_is_one_whole_percentage_a_half_rounded_up() {
+        assert_eq!(whole(94.5), 95);
+        assert_eq!(whole(94.49), 94);
+        assert_eq!(whole(104.0), 104);
+        assert_eq!(whole(0.4), 0);
     }
 
     const NOW: i64 = 1_789_935_000;

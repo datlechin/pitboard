@@ -1445,8 +1445,7 @@ impl State {
             })
             .flat_map(|account| account.usage.iter().flat_map(|usage| &usage.windows))
             .any(|limit| {
-                limit.percent >= f64::from(at.percent())
-                    && limit.resets_at.is_none_or(|resets| resets > read.now)
+                at.reached(limit.percent) && limit.resets_at.is_none_or(|resets| resets > read.now)
             });
         if reached {
             self.switching = Some(AUTOMATICALLY.to_owned());

@@ -6,7 +6,7 @@ use pitboard_core::pace::Lasts;
 use pitboard_core::provider::ProviderId;
 use pitboard_core::state::Key;
 use pitboard_core::status::{Report, Row, Stale};
-use pitboard_core::usage::{Snapshot, Source, Window};
+use pitboard_core::usage::{Snapshot, Source, Window, whole};
 use pitboard_core::{time, words};
 use serde_json::{Value, json};
 
@@ -205,7 +205,7 @@ pub fn human(report: &Report) -> String {
                     "    {}  {}  {}  {after}\n",
                     pad(&window_name(w), name_width),
                     ui::bar(w.percent, pace.as_ref(), 10),
-                    paint(ui::level(w.percent), format!("{:>3.0}%", w.percent)),
+                    paint(ui::level(w.percent), format!("{:>3}%", whole(w.percent))),
                 ));
             }
             // The answer to the question the whole tool exists for, where there is one: for
@@ -490,6 +490,19 @@ mod tests {
             "{personal}"
         );
         assert!(!personal.contains("runs out"), "{personal}");
+    }
+
+    /// A limit at 94.5 is the app's 95%, and the automatic switch's.
+    #[test]
+    fn a_half_is_drawn_as_the_app_draws_it() {
+        let mut work = row(Some("work"), true);
+        work.usage = Some(reading(94.5, Source::Live));
+        let text = plain(&human(&report(vec![work])));
+        assert!(
+            text.lines()
+                .any(|l| l.trim_start().starts_with("5h") && l.contains(" 95%")),
+            "{text}"
+        );
     }
 
     /// Under a minute, a limit running out is said in words rather than as "<1m".

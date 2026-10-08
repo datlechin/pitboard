@@ -6,6 +6,14 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Fixed
+
+- The automatic switch switches at the share as shown: a limit the menu shows at 95% counts
+  as 95%, on the account in use and on an account it could go to. It compared the unrounded
+  share, so a limit at 94.5% showed 95% and was not switched from. `pitboard status`,
+  `pitboard watch` and the status line round a half up, as the app does, and a limit changes
+  colour at 70% and at 90% as its figure shows them.
+
 ## [0.9.0] - 2026-10-08
 
 ### Added
