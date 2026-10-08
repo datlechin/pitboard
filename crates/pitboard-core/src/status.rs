@@ -15,7 +15,7 @@ use crate::error::Cause;
 use crate::provider::claude::paths as claude;
 use crate::provider::{ProviderError, ProviderId};
 use crate::state::{Key, Park, State};
-use crate::usage::{Snapshot, Source, merge};
+use crate::usage::{Snapshot, Source};
 use crate::{budget, park, readings};
 use serde_json::Value;
 use std::collections::{BTreeMap, HashMap};
@@ -705,7 +705,7 @@ pub fn gather(ctx: &Context, permit: crate::service::Permit, state: &State, fres
     };
     let rows = assemble(state, &facts, |uuid| remembered.get(uuid).cloned(), now);
     crate::home::remove_retired(ctx, permit);
-    readings::remember(
+    readings::answered(
         ctx,
         permit,
         &rows
@@ -783,9 +783,12 @@ fn assemble(
         .collect();
     // The service's answer folded into what every front end has recorded, or what they
     // recorded where none came. So a row shows the one reading the status lines show, and an
-    // answer that lags a session's latest response cannot take it backwards.
+    // answer that lags a session's latest response cannot take its share back.
     let reading = |id: &str, asked: &Result<Snapshot, Stale>| match asked {
-        Ok(live) => (merge(recall(id).as_ref(), Some(live), now), None),
+        Ok(live) => (
+            Some(crate::usage::answered(recall(id).as_ref(), live, now)),
+            None,
+        ),
         Err(stale) => (recall(id), Some(*stale)),
     };
 
@@ -924,6 +927,8 @@ mod tests {
                 length_seconds: None,
             }],
             observed_at: Some(NOW - 7_200),
+            answered_at: Some(NOW - 7_200),
+            lists_every_limit: true,
             source,
         }
     }
@@ -1154,6 +1159,7 @@ mod tests {
         let s = state(&["work"]);
         let mut answered = reading(14.0, Source::Live);
         answered.observed_at = Some(NOW);
+        answered.answered_at = Some(NOW);
         let f = facts("work-uuid", Ok(answered), vec![Err(Stale::NothingParked)]);
         let recorded = |_: &str| Some(reading(100.0, Source::Remembered));
         let usage = assemble(&s, &f, recorded, NOW)[0].usage.clone().unwrap();
@@ -1415,6 +1421,54 @@ mod tests {
         assert_eq!(rows[1].label, None, "nothing has enrolled the Codex login");
         assert!(rows[1].signed_in);
         assert_eq!(rows[1].usage.as_ref().unwrap().windows[0].percent, 20.0);
+    }
+
+    /// OpenAI's answer does not list every limit, so a window it leaves out stands on a
+    /// Codex row while it runs, in its place.
+    #[test]
+    fn a_codex_row_keeps_a_running_window_openai_left_out() {
+        let s = State {
+            accounts: vec![codex_account("work", "work-acc")],
+            ..State::default()
+        };
+        let window = |kind: &str, percent: f64| Window {
+            kind: kind.into(),
+            scope: None,
+            severity: None,
+            percent,
+            resets_at: Some(NOW + 3_600),
+            is_active: true,
+            length_seconds: None,
+        };
+        let known = Snapshot {
+            windows: vec![window("five_hour", 30.0), window("seven_day", 40.0)],
+            observed_at: Some(NOW - 600),
+            answered_at: Some(NOW - 600),
+            lists_every_limit: false,
+            source: Source::Remembered,
+        };
+        let answer = Snapshot {
+            windows: vec![window("seven_day", 45.0)],
+            observed_at: Some(NOW),
+            answered_at: Some(NOW),
+            lists_every_limit: false,
+            source: Source::Live,
+        };
+        let f = Facts {
+            live: std::iter::once((ProviderId::Codex, live("work-acc", Ok(answer)))).collect(),
+            asked: true,
+            parked_usage: vec![Err(Stale::NothingParked)],
+        };
+        let rows = assemble(&s, &f, |_| Some(known.clone()), NOW);
+        let shares: Vec<(&str, f64)> = rows[0]
+            .usage
+            .as_ref()
+            .unwrap()
+            .windows
+            .iter()
+            .map(|w| (w.kind.as_str(), w.percent))
+            .collect();
+        assert_eq!(shares, [("five_hour", 30.0), ("seven_day", 45.0)]);
     }
 
     /// Grouped by tool in the order every listing uses, signed in first within each, and

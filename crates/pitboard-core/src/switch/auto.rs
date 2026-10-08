@@ -123,7 +123,7 @@ mod tests {
 
     /// What Pitboard has measured of `uuid`'s five-hour and weekly limits.
     fn measured(m: &Machine, uuid: &str, session: f64, weekly: f64) {
-        crate::readings::remember(
+        crate::readings::answered(
             &m.ctx,
             Permit::for_a_test(),
             &[(
@@ -131,6 +131,8 @@ mod tests {
                 Snapshot {
                     windows: vec![window("session", session), window("weekly_all", weekly)],
                     observed_at: Some(NOW),
+                    answered_at: Some(NOW),
+                    lists_every_limit: true,
                     source: Source::Live,
                 },
             )],

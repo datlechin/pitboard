@@ -4,7 +4,6 @@
 
 use crate::time;
 use serde_json::Value;
-use std::cmp::Ordering;
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Window {
@@ -55,6 +54,15 @@ pub enum Source {
 pub struct Snapshot {
     pub windows: Vec<Window>,
     pub observed_at: Option<i64>,
+    /// When the service last answered for this account's own login. Absent from a reading
+    /// an older Pitboard wrote.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub answered_at: Option<i64>,
+    /// Whether `windows` are every limit the account has, so a limit they leave out is one
+    /// it does not have: true of an answer read whole from a service whose answers list
+    /// them all, and of the reading that answer set, since a session never adds a limit.
+    #[serde(default)]
+    pub lists_every_limit: bool,
     pub source: Source,
 }
 
@@ -115,143 +123,121 @@ const SAME_RESET: u64 = 60;
 
 /// Whether two resets of a limit are one: less than `SAME_RESET` apart. Public so that
 /// whatever else tells one window of a limit from its next, such as the app deciding
-/// whether a spent limit was already mentioned, counts them the way readings are merged.
+/// whether a spent limit was already mentioned, counts them the way readings do.
 pub fn same_reset(a: i64, b: i64) -> bool {
     a.abs_diff(b) < SAME_RESET
 }
 
-/// Which of two measurements of one account's limit is the newer: `Greater` when `a` is.
+/// One account's reading once its service has answered `answer` for that account's own
+/// login, as of the answer's `answered_at`.
 ///
-/// A later reset is a later window, whatever its share. Within one window use only rises,
-/// so while the limit stays the same the higher share was measured later. A window whose
-/// reset has passed counts as reset, with nothing used, and one with no reset time is
-/// compared by its share alone.
+/// Where the answer lists every limit the account has
+/// ([`Snapshot::lists_every_limit`]), its windows are the reading's: a limit it leaves out
+/// is gone at once, whatever its reset, and numbers filed under the wrong account go at
+/// that account's first answer. Otherwise each limit it gives replaces the one known, and
+/// one it leaves out stands where it was until an answer taken after its reset; a window
+/// with no reset is not running. An answer taken after everything known is what the limits
+/// are then, and may lower a share, as a banked reset on claude.ai or a plan upgraded in the
+/// middle of a window does.
 ///
-/// No timestamp is needed, which is the point: a Claude Code session passes its limits with
-/// none. They are what its last response said, however long ago that was, and a session
-/// left open passes the same old numbers every time its status line runs. The reset time is
-/// the service's own, and use within a window only rises, so the numbers order themselves.
-///
-/// Both must be the account's own: another account's windows order against its own just as
-/// readily. A session's numbers do not say whose they are, so the status line offers only
-/// what moved between two of a session's runs with the same account named both times, and
-/// leaves out any whose reset shows them to be another account's.
-///
-/// The service can lower a share within a window, as a banked reset does, or a plan upgraded
-/// in the middle of one by raising the limit. Shares cannot show that: the lower share reads
-/// as the older. Only a reading that says when it was taken can, which [`merge`] looks at
-/// before this.
-pub(crate) fn recency(a: &Window, b: &Window, now: i64) -> Ordering {
-    match (a.resets_at, b.resets_at) {
-        (Some(x), Some(y)) if !same_reset(x, y) => x.cmp(&y),
-        _ => a.used(now).total_cmp(&b.used(now)),
+/// Where a session moved a window after the answer was taken, or in the same second, its
+/// higher share stands: it came with a later response than the answer. An answer older
+/// than the last one known changes nothing. A time later than `now` was stamped by a clock
+/// that ran ahead and orders nothing: taken as one, it held back every answer until the
+/// clock caught up.
+pub(crate) fn answered(known: Option<&Snapshot>, answer: &Snapshot, now: i64) -> Snapshot {
+    let Some(known) = known else {
+        return answer.clone();
+    };
+    let stamped = |at: Option<i64>| at.filter(|at| *at <= now);
+    if answer.answered_at < stamped(known.answered_at) {
+        return known.clone();
+    }
+    let moved_since = stamped(known.observed_at) >= answer.answered_at;
+    let higher = |given: &Window| {
+        known
+            .windows
+            .iter()
+            .find(|had| moved_since && had.same_window(given) && had.percent > given.percent)
+    };
+    let take = |given: &Window| match higher(given) {
+        Some(had) => Window {
+            percent: had.percent,
+            severity: had.severity.clone(),
+            ..given.clone()
+        },
+        None => given.clone(),
+    };
+    let windows = if answer.lists_every_limit {
+        answer.windows.iter().map(take).collect()
+    } else {
+        let answer_of = |had: &Window| answer.windows.iter().find(|given| given.same_limit(had));
+        let running = |had: &Window| {
+            had.resets_at
+                .zip(answer.answered_at)
+                .is_some_and(|(reset, taken)| reset > taken)
+        };
+        let added = answer
+            .windows
+            .iter()
+            .filter(|given| !known.windows.iter().any(|had| had.same_limit(given)));
+        known
+            .windows
+            .iter()
+            .filter_map(|had| match answer_of(had) {
+                Some(given) => Some(take(given)),
+                None => running(had).then(|| had.clone()),
+            })
+            .chain(added.map(take))
+            .collect()
+    };
+    Snapshot {
+        windows,
+        observed_at: stamped(known.observed_at).max(answer.observed_at),
+        answered_at: answer.answered_at,
+        lists_every_limit: answer.lists_every_limit,
+        source: answer.source,
     }
 }
 
-/// One account's reading with `offered` folded in, limit by limit: each limit keeps the
-/// newer measurement by [`recency`], taken whole, and on a tie the one already known, so a
-/// repeat changes nothing, whatever name or rounding it came with.
+/// `known` with what a session passed its status line, or `None` where that moves nothing.
 ///
-/// Unless `offered` was taken after everything `known` holds. An answer from the service
-/// says when it was taken, and one taken later than anything that advanced or confirmed
-/// `known` is what the limits were at that time. Where it finds less used, the service
-/// lowered the share, and the lower share is taken. A session's numbers say no time, so they
-/// only ever move a limit forward. The time is the whole reading's, so a session that moved
-/// any limit since the answer was taken, or in the same second, leaves the lower share to the
-/// next answer.
+/// A session says how much of each limit is used and when it resets, and nothing else, so
+/// it only moves a limit the service gave this account. In the same window, a higher share
+/// is taken. Where the window's reset has passed, or none was given, the passed window is
+/// the next one. A window of another reset still ahead is not this account's, and a limit
+/// `known` does not list is not this session's to add: a session never adds a limit and
+/// never founds a reading. A passed window whose reset has passed, or that gives none, says
+/// nothing about now.
 ///
-/// Except where the known window's reset has passed. A tie there is a reading that finds
-/// nothing used since, which is what an account nobody has used since says, with no reset or
-/// with the one that passed. Kept, the old share stood for as long as the account went
-/// unused. So the offered window is taken, or where its reset has passed too, the limit is
-/// recorded as nothing used and no reset, which a repeat then ties with and leaves alone.
-/// Nothing new was measured, so this confirms the reading rather than advancing it.
-///
-/// A limit only one of them measured is kept, because a reading can speak for fewer limits
-/// than there are: a session knows the five-hour and weekly limits and nothing scoped to a
-/// model. One that only `known` has goes once its reset has passed and an answer the
-/// service has just given leaves it out, so a limit the service stops reporting is not shown
-/// for ever. Nothing else takes a limit away: a session leaves out a window whose reset has
-/// passed, and taken for the service no longer reporting it, every reset took the five-hour
-/// limit off the status line, `pitboard status` and the menu bar until the next answer.
-/// Kept, the status line reads it as nothing used.
-///
-/// `observed_at` is the latest time anything confirmed or advanced the reading. One offered
-/// without a time, which is what a session passes, is stamped `now` when it moves something
-/// forward, and vouches for nothing when it only repeats what is known.
-pub(crate) fn merge(
-    known: Option<&Snapshot>,
-    offered: Option<&Snapshot>,
-    now: i64,
-) -> Option<Snapshot> {
-    let Some(offered) = offered else {
-        return known.cloned();
-    };
-    let Some(known) = known else {
-        let mut first = offered.clone();
-        first.observed_at = first.observed_at.or(Some(now));
-        return Some(first);
-    };
-    let answered = offered.source == Source::Live && offered.observed_at.is_some();
-    let taken_since = offered.observed_at > known.observed_at;
-    let (mut advanced, mut confirmed) = (false, false);
-    let mut windows = Vec::new();
-    for had in &known.windows {
-        match offered.windows.iter().find(|w| w.same_limit(had)) {
-            Some(given) => match recency(given, had, now) {
-                Ordering::Less if taken_since => {
-                    advanced = true;
-                    windows.push(given.clone());
-                }
-                Ordering::Less => windows.push(had.clone()),
-                Ordering::Equal if had.resets_at.is_some_and(|at| at <= now) => {
-                    confirmed = true;
-                    windows.push(if given.resets_at.is_none_or(|at| at > now) {
-                        given.clone()
-                    } else {
-                        Window {
-                            percent: 0.0,
-                            resets_at: None,
-                            ..had.clone()
-                        }
-                    });
-                }
-                Ordering::Equal => {
-                    confirmed = true;
-                    windows.push(had.clone());
-                }
-                Ordering::Greater => {
-                    advanced = true;
-                    windows.push(given.clone());
-                }
-            },
-            None if answered && had.resets_at.is_some_and(|at| at <= now) => {}
-            None => windows.push(had.clone()),
-        }
+/// What only the service says stays as it said: the limit's name, whether the account is
+/// working against it, and how long it runs. A share a session moved is one the service has
+/// not graded. A session's numbers carry no time, and moving one means the response that
+/// did it has only just come, so the reading is as of `now`.
+pub(crate) fn moved(known: &Snapshot, passed: &[Window], now: i64) -> Option<Snapshot> {
+    let mut windows = known.windows.clone();
+    let mut changed = false;
+    for given in passed
+        .iter()
+        .filter(|w| w.resets_at.is_some_and(|at| at > now))
+    {
+        let Some(had) = windows.iter_mut().find(|had| had.same_limit(given)) else {
+            continue;
+        };
+        let running = had.resets_at.is_some_and(|at| at > now);
+        had.resets_at = match (had.same_window(given), running) {
+            (true, _) if given.percent > had.percent => had.resets_at,
+            (false, false) => given.resets_at,
+            _ => continue,
+        };
+        had.percent = given.percent;
+        had.severity = None;
+        changed = true;
     }
-    for given in &offered.windows {
-        if !known.windows.iter().any(|w| w.same_limit(given)) {
-            advanced = true;
-            windows.push(given.clone());
-        }
-    }
-    let vouched = advanced || (confirmed && offered.observed_at.is_some());
-    Some(Snapshot {
+    changed.then(|| Snapshot {
         windows,
-        observed_at: if advanced {
-            known
-                .observed_at
-                .max(Some(offered.observed_at.unwrap_or(now)))
-        } else if confirmed {
-            known.observed_at.max(offered.observed_at)
-        } else {
-            known.observed_at
-        },
-        source: if vouched {
-            offered.source
-        } else {
-            known.source
-        },
+        observed_at: Some(now),
+        ..known.clone()
     })
 }
 
@@ -304,12 +290,22 @@ fn window_from_named(kind: &str, v: &Value) -> Option<Window> {
 }
 
 /// A reading taken from Anthropic's usage endpoint just now.
+///
+/// Its `limits` are every limit the account has: read on 8 October 2026 from the answers
+/// Claude Code 2.1.294 kept from `GET /api/oauth/usage` on one machine, where a Team seat's
+/// holds `session` and one model's `weekly_scoped` and no `weekly_all`. The reading says so
+/// only where `limits` held rows and every one was read. A row dropped for a value that
+/// does not normalise is still a limit of the account's, and an answer without `limits`
+/// names the five-hour and weekly limits alone.
 pub fn from_usage_object(u: &Value, observed_at: i64) -> Snapshot {
-    let mut windows: Vec<Window> = u
-        .get("limits")
-        .and_then(Value::as_array)
-        .map(|ls| ls.iter().filter_map(window_from_limit).collect())
-        .unwrap_or_default();
+    let limits = u.get("limits").and_then(Value::as_array);
+    let mut windows: Vec<Window> = limits
+        .into_iter()
+        .flatten()
+        .filter_map(window_from_limit)
+        .collect();
+    let lists_every_limit =
+        !windows.is_empty() && limits.is_some_and(|rows| rows.len() == windows.len());
     if windows.is_empty() {
         for kind in ["five_hour", "seven_day"] {
             if let Some(w) = u.get(kind).and_then(|v| window_from_named(kind, v)) {
@@ -320,6 +316,8 @@ pub fn from_usage_object(u: &Value, observed_at: i64) -> Snapshot {
     Snapshot {
         windows,
         observed_at: Some(observed_at),
+        answered_at: Some(observed_at),
+        lists_every_limit,
         source: Source::Live,
     }
 }
@@ -350,6 +348,8 @@ mod tests {
         let s = from_usage_object(&real_answer(), 1789933772);
         assert_eq!(s.windows.len(), 3);
         assert_eq!(s.observed_at, Some(1789933772));
+        assert_eq!(s.answered_at, Some(1789933772));
+        assert!(s.lists_every_limit);
         assert_eq!(s.source, Source::Live);
         let scoped = s
             .windows
@@ -367,6 +367,7 @@ mod tests {
         assert_eq!(s.windows.len(), 2);
         assert_eq!(s.windows[0].kind, "five_hour");
         assert_eq!(s.windows[0].percent, 62.0);
+        assert!(!s.lists_every_limit, "nothing scoped to a model is named");
     }
 
     #[test]
@@ -374,7 +375,12 @@ mod tests {
         for nonsense in [serde_json::json!(-5), serde_json::json!("75")] {
             let mut answer = real_answer();
             answer["limits"][0]["percent"] = nonsense;
-            assert_eq!(from_usage_object(&answer, 1789933772).windows.len(), 2);
+            let s = from_usage_object(&answer, 1789933772);
+            assert_eq!(s.windows.len(), 2);
+            assert!(
+                !s.lists_every_limit,
+                "the row dropped is a limit all the same"
+            );
         }
     }
 
@@ -410,11 +416,26 @@ mod tests {
         }
     }
 
-    fn reading(windows: Vec<Window>, observed_at: Option<i64>) -> Snapshot {
+    /// Anthropic's answer about an account, listing every limit it has, taken at `at`.
+    fn answer(windows: Vec<Window>, at: i64) -> Snapshot {
         Snapshot {
             windows,
-            observed_at,
+            observed_at: Some(at),
+            answered_at: Some(at),
+            lists_every_limit: true,
             source: Source::Live,
+        }
+    }
+
+    /// What Pitboard holds of an account: last moved or confirmed at `observed_at`, and last
+    /// answered for at `answered_at`.
+    fn held(windows: Vec<Window>, observed_at: i64, answered_at: Option<i64>) -> Snapshot {
+        Snapshot {
+            windows,
+            observed_at: Some(observed_at),
+            answered_at,
+            lists_every_limit: true,
+            source: Source::Remembered,
         }
     }
 
@@ -424,33 +445,6 @@ mod tests {
             .iter()
             .map(|w| (w.kind.as_str(), w.percent))
             .collect()
-    }
-
-    #[test]
-    fn a_later_reset_is_a_newer_window_whatever_its_share() {
-        let full = measured("session", 90.0, Some(NOW + HOUR));
-        let next = measured("session", 2.0, Some(NOW + 6 * HOUR));
-        assert_eq!(recency(&next, &full, NOW), Ordering::Greater);
-        assert_eq!(recency(&full, &next, NOW), Ordering::Less);
-    }
-
-    #[test]
-    fn within_one_window_the_higher_share_is_the_newer() {
-        let earlier = measured("session", 20.0, Some(NOW + HOUR));
-        let later = measured("session", 22.0, Some(NOW + HOUR));
-        assert_eq!(recency(&later, &earlier, NOW), Ordering::Greater);
-        assert_eq!(recency(&earlier, &later, NOW), Ordering::Less);
-    }
-
-    /// Anthropic's answer gives a reset to a fraction of a second, which is dropped, and a
-    /// session is given whole seconds. Taken for a newer window, the session's older 20%
-    /// would win over the 22% the service has just measured.
-    #[test]
-    fn resets_a_second_apart_are_one_window() {
-        let answered = measured("session", 22.0, Some(NOW + HOUR));
-        let passed = measured("five_hour", 20.0, Some(NOW + HOUR + 1));
-        assert_eq!(recency(&passed, &answered, NOW), Ordering::Less);
-        assert_eq!(recency(&answered, &passed, NOW), Ordering::Greater);
     }
 
     /// The rule the app keys what it has told somebody by: resets under a minute apart, in
@@ -468,32 +462,246 @@ mod tests {
         );
     }
 
-    /// A window that has reset has nothing used, however full it was, so any use of the
-    /// limit since is newer, even from a reading that does not say when it resets.
+    /// An answer lists every limit the account has. Kept until its reset, a weekly limit
+    /// 0.9.0 filed under a Team seat, whose answer has no weekly limit for all models, stood
+    /// over every answer about that seat for days.
     #[test]
-    fn a_window_past_its_reset_counts_as_reset() {
-        let over = measured("session", 90.0, Some(NOW - 1));
-        let begun = measured("session", 5.0, None);
-        assert_eq!(recency(&begun, &over, NOW), Ordering::Greater);
-        assert_eq!(recency(&over, &begun, NOW), Ordering::Less);
+    fn an_answer_replaces_every_limit_it_does_not_give() {
+        let known = held(
+            vec![
+                measured("session", 10.0, Some(NOW + HOUR)),
+                measured("weekly_all", 100.0, Some(NOW + 50 * HOUR)),
+            ],
+            NOW - 60,
+            None,
+        );
+        let given = answer(
+            vec![
+                measured("session", 20.0, Some(NOW + HOUR)),
+                Window {
+                    scope: Some("Fable".into()),
+                    ..measured("weekly_scoped", 0.0, Some(NOW + 50 * HOUR))
+                },
+            ],
+            NOW,
+        );
+        let reading = answered(Some(&known), &given, NOW);
+        assert_eq!(
+            shares(&reading),
+            [("session", 20.0), ("weekly_scoped", 0.0)]
+        );
+        assert_eq!(reading.answered_at, Some(NOW));
+        assert_eq!(reading.observed_at, Some(NOW));
     }
 
+    /// Anthropic's answer lists every limit, but Pitboard knows what one left out only where
+    /// it read every row. Taken as the whole list, an answer with a row it could not read
+    /// took a used-up weekly limit off the account.
     #[test]
-    fn a_reading_that_says_no_time_never_moves_a_limit_backwards() {
-        let known = reading(vec![measured("session", 22.0, Some(NOW + HOUR))], Some(NOW));
+    fn a_limit_whose_row_could_not_be_read_is_not_taken_away() {
+        let mut spent = real_answer();
+        spent["limits"][1]["percent"] = serde_json::json!(100);
+        let known = from_usage_object(&spent, NOW - 600);
+        let mut unread = spent.clone();
+        unread["limits"][0]["percent"] = serde_json::json!(70);
+        unread["limits"][1]["percent"] = Value::Null;
+        let reading = answered(Some(&known), &from_usage_object(&unread, NOW), NOW);
+        assert_eq!(
+            shares(&reading),
+            [
+                ("session", 70.0),
+                ("weekly_all", 100.0),
+                ("weekly_scoped", 0.0)
+            ]
+        );
+    }
+
+    /// An answer with no `limits` names the five-hour and weekly limits and nothing scoped to
+    /// a model, so a model's limit it leaves out is one it has no name for.
+    #[test]
+    fn an_answer_in_the_older_shape_takes_no_limit_away() {
+        let mut spent = real_answer();
+        spent["limits"][2]["percent"] = serde_json::json!(100);
+        let known = from_usage_object(&spent, NOW - 600);
+        let mut older = real_answer();
+        older.as_object_mut().unwrap().remove("limits");
+        let reading = answered(Some(&known), &from_usage_object(&older, NOW), NOW);
+        assert_eq!(
+            shares(&reading),
+            [
+                ("five_hour", 62.0),
+                ("seven_day", 48.0),
+                ("weekly_scoped", 100.0)
+            ]
+        );
+    }
+
+    /// A clock that ran ahead stamps a reading later than now. Taken as a later answer, that
+    /// stamp held every answer back until the clock caught up, and a session's share with it.
+    #[test]
+    fn a_reading_stamped_ahead_of_the_clock_holds_no_answer_back() {
+        let known = held(
+            vec![measured("session", 80.0, Some(NOW + 2 * HOUR))],
+            NOW + HOUR,
+            Some(NOW + HOUR),
+        );
+        let given = answer(vec![measured("session", 20.0, Some(NOW + 2 * HOUR))], NOW);
+        let reading = answered(Some(&known), &given, NOW);
+        assert_eq!(shares(&reading), [("session", 20.0)]);
+        assert_eq!(
+            (reading.observed_at, reading.answered_at),
+            (Some(NOW), Some(NOW))
+        );
+    }
+
+    /// Whether OpenAI's null window is one not running is not measured, so a window its
+    /// answer leaves out stands while it runs, and where it was: `pitboard status` and the
+    /// menu list limits in a reading's order. One whose reset has passed, or that has none,
+    /// is not running.
+    #[test]
+    fn a_window_openai_leaves_out_stands_until_its_reset() {
+        let known = held(
+            vec![
+                measured("five_hour", 30.0, Some(NOW + HOUR)),
+                measured("1_day", 60.0, Some(NOW - 60)),
+                measured("2_day", 20.0, None),
+                measured("seven_day", 40.0, Some(NOW + 50 * HOUR)),
+            ],
+            NOW - 600,
+            Some(NOW - 600),
+        );
+        let whole = answer(
+            vec![measured("seven_day", 45.0, Some(NOW + 50 * HOUR))],
+            NOW,
+        );
+        let given = Snapshot {
+            lists_every_limit: false,
+            ..whole.clone()
+        };
+        let reading = answered(Some(&known), &given, NOW);
+        assert_eq!(shares(&reading), [("five_hour", 30.0), ("seven_day", 45.0)]);
+        assert!(!reading.lists_every_limit);
+        assert_eq!(
+            shares(&answered(Some(&known), &whole, NOW)),
+            [("seven_day", 45.0)],
+            "where the answer lists every limit"
+        );
+    }
+
+    /// A session's numbers do not say whose they are. Within a window the service gave this
+    /// account they can only be this account's, and anywhere else they can be anybody's.
+    #[test]
+    fn a_session_moves_a_share_only_inside_a_window_it_was_given() {
+        let known = held(
+            vec![measured("session", 22.0, Some(NOW + HOUR))],
+            NOW - 60,
+            Some(NOW - 60),
+        );
+        let higher = moved(
+            &known,
+            &[measured("five_hour", 25.0, Some(NOW + HOUR))],
+            NOW,
+        )
+        .expect("a share moved");
+        assert_eq!(
+            shares(&higher),
+            [("session", 25.0)],
+            "under the name the service gave it"
+        );
+        assert_eq!(higher.answered_at, Some(NOW - 60), "and no answer since");
+        assert_eq!(
+            moved(
+                &known,
+                &[measured("five_hour", 5.0, Some(NOW + 6 * HOUR))],
+                NOW
+            ),
+            None,
+            "another reset still ahead"
+        );
+        assert_eq!(
+            moved(
+                &known,
+                &[measured("seven_day", 40.0, Some(NOW + 50 * HOUR))],
+                NOW
+            ),
+            None,
+            "a limit the service did not give"
+        );
+    }
+
+    /// A limit's next window starts only once the last has reset, so a session passing one
+    /// after the reset is passing this account's next window. A window with no reset is one
+    /// that is not running.
+    #[test]
+    fn a_session_takes_the_next_window_of_a_limit_whose_reset_has_passed() {
+        let mut over = measured("session", 90.0, Some(NOW - 60));
+        over.severity = Some("warning".into());
+        let not_running = measured("session", 0.0, None);
+        for had in [over, not_running] {
+            let known = held(vec![had.clone()], NOW - HOUR, Some(NOW - HOUR));
+            let next = moved(
+                &known,
+                &[measured("five_hour", 3.0, Some(NOW + 5 * HOUR))],
+                NOW,
+            )
+            .expect("the next window");
+            let window = &next.windows[0];
+            assert_eq!(window.kind, "session", "{had:?}");
+            assert_eq!(
+                (window.percent, window.resets_at),
+                (3.0, Some(NOW + 5 * HOUR))
+            );
+            assert_eq!(window.severity, None, "a share the service has not graded");
+            assert!(window.is_active, "working against it as the service said");
+            assert_eq!(next.observed_at, Some(NOW));
+            assert_eq!(next.answered_at, Some(NOW - HOUR));
+        }
+    }
+
+    /// A session passes the numbers of its last response, however long ago that was. An
+    /// idle one goes on passing a lower share than a busy one has since recorded, and a pane
+    /// left open past a reset goes on passing a window that is over.
+    #[test]
+    fn a_session_never_moves_a_share_back() {
+        let known = held(
+            vec![measured("session", 22.0, Some(NOW + HOUR))],
+            NOW - 60,
+            Some(NOW - 60),
+        );
         for behind in [
             measured("five_hour", 20.0, Some(NOW + HOUR)),
+            measured("five_hour", 22.0, Some(NOW + HOUR)),
             measured("five_hour", 95.0, Some(NOW - 4 * HOUR)),
         ] {
-            let merged = merge(Some(&known), Some(&reading(vec![behind], None)), NOW).unwrap();
-            assert_eq!(shares(&merged), [("session", 22.0)]);
+            assert_eq!(
+                moved(&known, std::slice::from_ref(&behind), NOW),
+                None,
+                "{behind:?}"
+            );
         }
-        let ahead = reading(vec![measured("five_hour", 25.0, Some(NOW + HOUR))], None);
-        let merged = merge(Some(&known), Some(&ahead), NOW).unwrap();
+    }
+
+    /// Anthropic's answer gives a reset to a fraction of a second, which is dropped, and a
+    /// session is given whole seconds. Taken for another window, a session's higher share
+    /// would be taken for another account's.
+    #[test]
+    fn resets_a_second_apart_are_one_window() {
+        let known = held(
+            vec![measured("session", 22.0, Some(NOW + HOUR))],
+            NOW - 60,
+            Some(NOW - 60),
+        );
+        let ahead = moved(
+            &known,
+            &[measured("five_hour", 25.0, Some(NOW + HOUR + 1))],
+            NOW,
+        )
+        .expect("a share moved");
+        assert_eq!(shares(&ahead), [("session", 25.0)]);
         assert_eq!(
-            shares(&merged),
-            [("five_hour", 25.0)],
-            "under the name it came with"
+            ahead.windows[0].resets_at,
+            Some(NOW + HOUR),
+            "the reset is the service's"
         );
     }
 
@@ -504,209 +712,184 @@ mod tests {
     /// day and a half until the reset.
     #[test]
     fn an_answer_taken_after_everything_known_is_what_the_limits_are_now() {
-        let mut known = reading(
+        let known = held(
             vec![
                 measured("session", 0.0, None),
                 measured("weekly_all", 100.0, Some(NOW + 33 * HOUR)),
             ],
+            NOW - HOUR,
             Some(NOW - HOUR),
         );
-        known.source = Source::Remembered;
-        let answered = reading(
+        let given = answer(
             vec![
                 measured("session", 5.0, Some(NOW + 5 * HOUR)),
                 measured("weekly_all", 14.0, Some(NOW + 33 * HOUR)),
             ],
-            Some(NOW),
+            NOW,
         );
-        let merged = merge(Some(&known), Some(&answered), NOW).unwrap();
-        assert_eq!(shares(&merged), [("session", 5.0), ("weekly_all", 14.0)]);
-        assert_eq!(merged.observed_at, answered.observed_at);
-        assert_eq!(merged.source, Source::Live);
+        let reading = answered(Some(&known), &given, NOW);
+        assert_eq!(shares(&reading), [("session", 5.0), ("weekly_all", 14.0)]);
+        assert_eq!(reading.observed_at, Some(NOW));
+        assert_eq!(reading.source, Source::Live);
 
-        let unused = reading(vec![measured("weekly_all", 0.0, None)], Some(NOW));
-        let merged = merge(Some(&known), Some(&unused), NOW).unwrap();
+        let unused = answer(vec![measured("weekly_all", 0.0, None)], NOW);
         assert_eq!(
-            shares(&merged),
-            [("session", 0.0), ("weekly_all", 0.0)],
+            shares(&answered(Some(&known), &unused, NOW)),
+            [("weekly_all", 0.0)],
             "and one that finds nothing used and no window running"
         );
     }
 
-    /// An answer is what the limits were when it was taken. Whatever was recorded since,
-    /// or in the same second, may have come with a later response, so an answer only moves
-    /// such a limit forward.
+    /// An answer is what the limits were when it was taken. A share a session recorded
+    /// since, or in the same second, may have come with a later response.
     #[test]
-    fn an_answer_taken_no_later_than_what_is_known_never_lowers_a_share() {
-        let known = reading(
+    fn an_answer_taken_before_a_session_moved_a_share_does_not_lower_it() {
+        let known = held(
             vec![measured("weekly_all", 100.0, Some(NOW + 33 * HOUR))],
-            Some(NOW - 60),
+            NOW - 60,
+            Some(NOW - 2 * HOUR),
         );
         for taken in [NOW - 60, NOW - HOUR] {
-            let answered = reading(
+            let given = answer(
                 vec![measured("weekly_all", 14.0, Some(NOW + 33 * HOUR))],
-                Some(taken),
+                taken,
             );
-            let merged = merge(Some(&known), Some(&answered), NOW).unwrap();
-            assert_eq!(shares(&merged), [("weekly_all", 100.0)], "taken at {taken}");
+            let reading = answered(Some(&known), &given, NOW);
+            assert_eq!(
+                shares(&reading),
+                [("weekly_all", 100.0)],
+                "taken at {taken}"
+            );
+            assert_eq!(reading.observed_at, Some(NOW - 60));
+            assert_eq!(reading.answered_at, Some(taken));
         }
     }
 
-    /// A session knows the five-hour and weekly limits and nothing scoped to a model, so a
-    /// limit one reading leaves out is not a limit that has gone.
+    /// Two front ends can each have a request out, and the older answer can land last.
     #[test]
-    fn a_limit_only_one_reading_measured_is_kept() {
+    fn an_answer_older_than_the_last_changes_nothing() {
+        let known = held(
+            vec![measured("session", 40.0, Some(NOW + HOUR))],
+            NOW,
+            Some(NOW),
+        );
+        let late = answer(vec![measured("session", 30.0, Some(NOW + HOUR))], NOW - 60);
+        assert_eq!(answered(Some(&known), &late, NOW), known);
+    }
+
+    /// A session knows the five-hour and weekly limits and nothing scoped to a model.
+    #[test]
+    fn a_session_leaves_the_limits_it_does_not_pass_as_they_were() {
         let scoped = Window {
             scope: Some("Fable".into()),
             ..measured("weekly_scoped", 5.0, Some(NOW + 50 * HOUR))
         };
-        let known = reading(
+        let known = held(
             vec![measured("session", 22.0, Some(NOW + HOUR)), scoped],
+            NOW - 60,
             Some(NOW - 60),
         );
-        let offered = reading(
-            vec![
-                measured("five_hour", 25.0, Some(NOW + HOUR)),
-                measured("seven_day", 40.0, Some(NOW + 50 * HOUR)),
-            ],
-            None,
-        );
-        let merged = merge(Some(&known), Some(&offered), NOW).unwrap();
+        let reading = moved(
+            &known,
+            &[measured("five_hour", 25.0, Some(NOW + HOUR))],
+            NOW,
+        )
+        .expect("a share moved");
         assert_eq!(
-            shares(&merged),
-            [
-                ("five_hour", 25.0),
-                ("weekly_scoped", 5.0),
-                ("seven_day", 40.0)
-            ]
+            shares(&reading),
+            [("session", 25.0), ("weekly_scoped", 5.0)]
         );
     }
 
-    /// Kept for ever, a limit the service stopped reporting would be shown for ever. Once
-    /// its window is over, an answer that leaves it out is the service no longer reporting
-    /// it, and there is nothing left in it to show.
+    /// A session leaves out a window whose reset has passed. Taken for the service no
+    /// longer reporting it, every reset took the five-hour limit away until the next answer,
+    /// where it reads as nothing used.
     #[test]
-    fn a_limit_an_answer_leaves_out_goes_once_its_reset_has_passed() {
-        let known = reading(
-            vec![
-                measured("session", 22.0, Some(NOW + HOUR)),
-                measured("weekly_scoped", 5.0, Some(NOW - 1)),
-            ],
-            Some(NOW - 60),
-        );
-        let answered = reading(vec![measured("session", 25.0, Some(NOW + HOUR))], Some(NOW));
-        let merged = merge(Some(&known), Some(&answered), NOW).unwrap();
-        assert_eq!(shares(&merged), [("session", 25.0)]);
-    }
-
-    /// A session says no time and leaves out a window whose reset has passed. Taken for the
-    /// service no longer reporting it, every reset took the five-hour limit away until the
-    /// next answer, where it reads as nothing used.
-    #[test]
-    fn a_reading_that_is_not_an_answer_just_now_never_takes_a_limit_away() {
-        let known = reading(
+    fn a_session_never_takes_a_limit_away() {
+        let known = held(
             vec![
                 measured("session", 40.0, Some(NOW - 10)),
                 measured("weekly_all", 30.0, Some(NOW + 50 * HOUR)),
             ],
+            NOW - HOUR,
             Some(NOW - HOUR),
         );
-        let passed = reading(
-            vec![measured("seven_day", 31.0, Some(NOW + 50 * HOUR))],
-            None,
-        );
-        let merged = merge(Some(&known), Some(&passed), NOW).unwrap();
-        assert_eq!(shares(&merged), [("session", 40.0), ("seven_day", 31.0)]);
-        assert_eq!(merged.windows[0].used(NOW), 0.0);
+        let reading = moved(
+            &known,
+            &[measured("seven_day", 31.0, Some(NOW + 50 * HOUR))],
+            NOW,
+        )
+        .expect("a share moved");
+        assert_eq!(shares(&reading), [("session", 40.0), ("weekly_all", 31.0)]);
+        assert_eq!(reading.windows[0].used(NOW), 0.0);
     }
 
+    /// A reading is founded by the service's answer and by nothing else.
     #[test]
-    fn with_one_side_absent_the_other_stands() {
-        let known = reading(
-            vec![measured("session", 22.0, Some(NOW + HOUR))],
-            Some(NOW - 60),
+    fn a_first_answer_is_the_reading() {
+        let given = answer(vec![measured("session", 22.0, Some(NOW + HOUR))], NOW);
+        assert_eq!(answered(None, &given, NOW), given);
+        assert_eq!(
+            moved(&held(Vec::new(), NOW, None), &given.windows, NOW),
+            None
         );
-        assert_eq!(merge(Some(&known), None, NOW), Some(known.clone()));
-        assert_eq!(merge(None, None, NOW), None);
-
-        let first = merge(None, Some(&reading(known.windows.clone(), None)), NOW).unwrap();
-        assert_eq!(shares(&first), [("session", 22.0)]);
-        assert_eq!(first.observed_at, Some(NOW), "stamped when it arrived");
     }
 
     /// A session passes the numbers of its last response, however long ago that was, and
     /// says nothing about when. Repeating them vouches for nothing; moving one forward means
     /// the response that did it has only just come.
     #[test]
-    fn a_reading_that_says_no_time_is_stamped_only_when_it_moves_something() {
-        let mut known = reading(
+    fn a_reading_is_stamped_when_something_moves_or_the_service_answers() {
+        let known = held(
             vec![measured("session", 22.0, Some(NOW + HOUR))],
+            NOW - 600,
             Some(NOW - 600),
         );
-        known.source = Source::Remembered;
-        let repeated = reading(vec![measured("five_hour", 22.0, Some(NOW + HOUR))], None);
-        let merged = merge(Some(&known), Some(&repeated), NOW).unwrap();
-        assert_eq!(
-            merged.windows, known.windows,
-            "a repeat changes nothing, name and all"
-        );
-        assert_eq!(merged.observed_at, Some(NOW - 600));
-        assert_eq!(
-            merged.source,
-            Source::Remembered,
-            "and it is still what was known"
-        );
+        let repeated = measured("five_hour", 22.0, Some(NOW + HOUR));
+        assert_eq!(moved(&known, &[repeated], NOW), None);
 
-        let moved = reading(vec![measured("five_hour", 23.0, Some(NOW + HOUR))], None);
-        assert_eq!(
-            merge(Some(&known), Some(&moved), NOW).unwrap().observed_at,
-            Some(NOW)
-        );
+        let ahead = measured("five_hour", 23.0, Some(NOW + HOUR));
+        assert_eq!(moved(&known, &[ahead], NOW).unwrap().observed_at, Some(NOW));
 
-        let confirmed = reading(known.windows.clone(), Some(NOW - 5));
-        let merged = merge(Some(&known), Some(&confirmed), NOW).unwrap();
+        let confirmed = answer(known.windows.clone(), NOW - 5);
+        let reading = answered(Some(&known), &confirmed, NOW);
+        assert_eq!(reading.windows, known.windows);
         assert_eq!(
-            merged.observed_at,
-            Some(NOW - 5),
-            "a measured repeat confirms it"
+            (reading.observed_at, reading.answered_at),
+            (Some(NOW - 5), Some(NOW - 5)),
+            "an answer that finds the same confirms it"
         );
-        assert_eq!(merged.source, Source::Live);
+        assert_eq!(reading.source, Source::Live);
     }
 
     /// Asked about an account that has done nothing since its window reset, Anthropic finds
-    /// nothing used and gives no reset, or the one that passed. Kept on that tie, a parked
-    /// account that had run out read as full, marked live, until somebody used it again.
+    /// nothing used and gives no reset, or the one that passed. Kept, a parked account that
+    /// had run out read as full, marked live, until somebody used it again.
     #[test]
-    fn a_window_past_its_reset_is_reset_by_a_reading_that_finds_nothing_used() {
-        let mut known = reading(
+    fn a_window_past_its_reset_is_reset_by_an_answer_that_finds_nothing_used() {
+        let known = held(
             vec![measured("session", 100.0, Some(NOW - HOUR))],
+            NOW - 2 * HOUR,
             Some(NOW - 2 * HOUR),
         );
-        known.source = Source::Remembered;
         for said in [
             measured("session", 0.0, None),
             measured("session", 0.0, Some(NOW - HOUR)),
             measured("five_hour", 0.0, None),
         ] {
-            let offered = reading(vec![said.clone()], Some(NOW - 5));
-            let merged = merge(Some(&known), Some(&offered), NOW).unwrap();
-            assert_eq!(merged.windows[0].percent, 0.0, "{said:?}");
-            assert_eq!(merged.windows[0].resets_at, None, "{said:?}");
-            assert_eq!(merged.source, Source::Live, "and it is what said so");
+            let given = answer(vec![said.clone()], NOW - 5);
+            let reading = answered(Some(&known), &given, NOW);
+            assert_eq!(reading.windows, std::slice::from_ref(&said), "{said:?}");
             assert_eq!(
-                merge(Some(&merged), Some(&offered), NOW).as_ref(),
-                Some(&merged),
+                answered(Some(&reading), &given, NOW),
+                reading,
                 "a repeat changes nothing"
             );
         }
-
-        let untimed = reading(vec![measured("five_hour", 0.0, None)], None);
-        let merged = merge(Some(&known), Some(&untimed), NOW).unwrap();
-        assert_eq!(merged.windows[0].percent, 0.0);
         assert_eq!(
-            merged.observed_at,
-            Some(NOW - 2 * HOUR),
-            "a reading that says no time moved nothing forward"
+            moved(&known, &[measured("five_hour", 0.0, None)], NOW),
+            None,
+            "a session's window with no reset says nothing about now"
         );
     }
 }

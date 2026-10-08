@@ -96,10 +96,11 @@ fn a_change_made_somewhere_else_is_noticed_without_asking_anthropic() {
     assert_eq!(accounts[0].label.as_deref(), Some("work"));
 }
 
-/// Every session's status line records what its session has seen, and a reading only moves
-/// forward. The menu bar read 20% while every status line said 22%, because it only ever
-/// showed what it had asked Anthropic itself. It follows the readings the way it follows a
-/// switch made elsewhere: from what is already known, asking nobody.
+/// Every read records its answers, and every session's status line what its session has
+/// seen where it moves a limit an answer gave. The menu bar read 20% while every status line
+/// said 22%, because it only ever showed what it had asked Anthropic itself. It follows the
+/// readings the way it follows a switch made elsewhere: from what is already known, asking
+/// nobody.
 #[test]
 fn numbers_a_session_recorded_reach_the_menu_bar_without_asking_anyone() {
     let mut model = Hand::new();

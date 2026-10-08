@@ -52,6 +52,8 @@ fn login(m: &Machine, who: &str, refresh: &str) -> Value {
                 crate::usage::Snapshot {
                     windows: Vec::new(),
                     observed_at: Some(NOW),
+                    answered_at: Some(NOW),
+                    lists_every_limit: false,
                     source: crate::usage::Source::Live,
                 },
             );

@@ -531,6 +531,8 @@ mod tests {
             usage: Some(Snapshot {
                 windows,
                 observed_at: Some(NOW),
+                answered_at: Some(NOW),
+                lists_every_limit: true,
                 source: Source::Remembered,
             }),
             stale: None,

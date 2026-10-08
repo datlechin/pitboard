@@ -6,6 +6,18 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Changed
+
+- An answer from Anthropic replaces a Claude Code account's reading whole: a limit the
+  answer does not give is gone at once, whatever its reset, so numbers filed under the wrong
+  account go at that account's next answer. They stayed until their own reset, days for a
+  weekly limit. An answer with a limit Pitboard cannot read, or without Anthropic's list of
+  limits, takes no running limit away. A Claude Code session's numbers only move a limit
+  Anthropic already gave for that account, within its window or in the next one once it has
+  reset, and never add a limit. An account Pitboard has not asked Anthropic about yet gets
+  no reading from a session, and the status line shows the session's own numbers for it,
+  where it showed none until they moved.
+
 ### Removed
 
 - `"source": "claude_code_cache"` in `pitboard status --json`, and `pitboard doctor`'s

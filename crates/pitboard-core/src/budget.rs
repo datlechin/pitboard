@@ -309,6 +309,8 @@ mod tests {
     fn reading(kinds: &[&str]) -> Snapshot {
         Snapshot {
             observed_at: Some(NOW),
+            answered_at: Some(NOW),
+            lists_every_limit: true,
             source: Source::Live,
             windows: kinds
                 .iter()

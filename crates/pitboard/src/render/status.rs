@@ -358,6 +358,8 @@ mod tests {
                 length_seconds: None,
             }],
             observed_at: Some(NOW - 7_200),
+            answered_at: Some(NOW - 7_200),
+            lists_every_limit: true,
             source,
         }
     }

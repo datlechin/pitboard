@@ -463,9 +463,9 @@ impl Pitboard {
 
     /// The status line for Claude Code's session JSON. Reads only files, and writes only
     /// Pitboard's own: what the session passed, for its next run to compare with, and the
-    /// usage readings, which keep what moved since its last run where it is newer. Where
-    /// this process may change nothing it writes neither, and draws the line from the files
-    /// as they are.
+    /// usage readings, which take what moved since its last run where it moves a limit
+    /// Anthropic gave that account. Where this process may change nothing it writes neither,
+    /// and draws the line from the files as they are.
     pub fn statusline(&self, session: &str) -> statusline::StatusLine {
         statusline::read(&self.ctx, self.permit().ok(), session)
     }
@@ -1330,7 +1330,7 @@ mod tests {
     fn what_claude_code_cached_is_never_an_accounts_reading() {
         use crate::switch::harness::{NOW, cache_usage, usage_answer};
         let m = machine("cached-usage");
-        readings::remember(
+        readings::answered(
             &m.ctx,
             Permit::for_a_test(),
             &[(

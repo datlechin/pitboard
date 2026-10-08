@@ -249,6 +249,9 @@ fn ask_usage(
 ///
 /// A window that will not normalise is dropped rather than drawn, the same rule the Claude
 /// Code side has always used: a number nobody can explain is worse than no number.
+///
+/// Either window can be null (`codex_usage_endpoint`), and nothing measured says whether a
+/// null one is not running or was left out, so an answer is not taken to list every limit.
 fn snapshot(body: &Value, now: i64) -> Snapshot {
     let limits = &body["rate_limit"];
     let windows = ["primary_window", "secondary_window"]
@@ -258,6 +261,8 @@ fn snapshot(body: &Value, now: i64) -> Snapshot {
     Snapshot {
         windows,
         observed_at: Some(now),
+        answered_at: Some(now),
+        lists_every_limit: false,
         source: Source::Live,
     }
 }
@@ -418,6 +423,8 @@ mod tests {
         assert!((window.percent - 45.0).abs() < f64::EPSILON);
         assert_eq!(window.resets_at, Some(1_790_628_078));
         assert_eq!(snapshot.source, Source::Live);
+        assert_eq!(snapshot.answered_at, Some(1_790_000_000));
+        assert!(!snapshot.lists_every_limit);
     }
 
     #[test]

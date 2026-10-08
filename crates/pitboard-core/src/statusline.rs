@@ -6,10 +6,10 @@
 //! So this reads only files, with no keychain and no network, and writes two. What the
 //! session passed is kept for its next run to compare with, and what moved since its last
 //! run goes into Pitboard's readings as the account in use's, where it can be that
-//! account's; they keep it only where it is newer than what they have. The account in use
-//! shows its reading with that folded in, so a session left open shows what the busy ones
-//! have recorded since. The other accounts show Pitboard's last reading of them, with its
-//! age once that is worth knowing.
+//! account's; they take it only where it moves a limit Anthropic gave that account. The
+//! account in use shows its reading with that folded in, so a session left open shows what
+//! the busy ones have recorded since. The other accounts show Pitboard's last reading of
+//! them, with its age once that is worth knowing.
 //!
 //! It is Claude Code's status bar, so it is about Claude Code's accounts and nothing else.
 //! The account in use is the one Claude Code's own record names, looked up among Claude
@@ -21,7 +21,7 @@ use crate::pace::Standing;
 use crate::provider::ProviderId;
 use crate::sessions::{Limit, Run};
 use crate::state::State;
-use crate::usage::{Snapshot, Source, Window};
+use crate::usage::{Snapshot, Window};
 use serde_json::Value;
 use std::collections::{BTreeMap, HashMap};
 
@@ -57,7 +57,8 @@ pub struct StatusLine {
     /// The account Claude Code's config names, or `None` when it is not enrolled.
     pub current: Option<String>,
     /// The session's own account: Pitboard's reading of it, with whatever of the session's
-    /// numbers can be this account's folded in where they are newer.
+    /// numbers can be this account's folded in where they move it, or what the session
+    /// passed where Pitboard has no reading of it.
     pub session: Shares,
     /// The session's own account's pace on each of those limits.
     pub pace: Paces,
@@ -68,28 +69,25 @@ pub struct StatusLine {
 const FIVE_HOUR: &[&str] = &["session", "five_hour"];
 const WEEKLY: &[&str] = &["weekly_all", "seven_day"];
 
-/// The limit of a reading called one of `kinds`, for every model.
-fn limit<'a>(reading: &'a Snapshot, kinds: &[&str]) -> Option<&'a Window> {
-    reading
-        .windows
+/// The limit among `windows` called one of `kinds`, for every model.
+fn limit<'a>(windows: &'a [Window], kinds: &[&str]) -> Option<&'a Window> {
+    windows
         .iter()
         .find(|w| w.scope.is_none() && kinds.contains(&w.kind.as_str()))
 }
 
-/// The five-hour and weekly shares of a reading.
-fn shares_of(reading: &Snapshot, now: i64) -> Shares {
-    let share = |kinds| limit(reading, kinds).map(|w| w.used(now));
+/// The five-hour and weekly shares among `windows`.
+fn shares_of(windows: &[Window], now: i64) -> Shares {
+    let share = |kinds| limit(windows, kinds).map(|w| w.used(now));
     Shares {
         five_hour: share(FIVE_HOUR),
         weekly: share(WEEKLY),
     }
 }
 
-/// The five-hour and weekly paces of a reading, as of when it was taken. What a session
-/// passed carries no time, and is the session's latest.
-fn paces_of(reading: &Snapshot, now: i64) -> Paces {
-    let at = reading.observed_at.unwrap_or(now);
-    let pace = |kinds| Some(limit(reading, kinds)?.pace(at, now)?.standing);
+/// The five-hour and weekly paces among `windows`, as of `at`, when they were read.
+fn paces_of(windows: &[Window], at: i64, now: i64) -> Paces {
+    let pace = |kinds| Some(limit(windows, kinds)?.pace(at, now)?.standing);
     Paces {
         five_hour: pace(FIVE_HOUR),
         weekly: pace(WEEKLY),
@@ -97,13 +95,14 @@ fn paces_of(reading: &Snapshot, now: i64) -> Paces {
 }
 
 /// `signed_in` is the id of the account Claude Code's config names, which is only ever
-/// looked up among Claude Code's accounts. `offered` is what the session's numbers came to
-/// as that account's, if anything.
+/// looked up among Claude Code's accounts. `passed` is every limit the session passed, and
+/// `offered` those of them that can be that account's.
 fn line(
     state: &State,
     signed_in: Option<&str>,
     remembered: &HashMap<String, Snapshot>,
-    offered: Option<&Snapshot>,
+    passed: &[Window],
+    offered: &[Window],
     now: i64,
 ) -> StatusLine {
     // Claude Code runs this, so the line is about Claude Code's accounts. Another tool's
@@ -118,7 +117,7 @@ fn line(
             let reading = remembered.get(&account.id);
             Entry {
                 label: account.label.clone(),
-                shares: reading.map_or_else(Shares::default, |r| shares_of(r, now)),
+                shares: reading.map_or_else(Shares::default, |r| shares_of(&r.windows, now)),
                 age: reading
                     .and_then(|r| r.observed_at)
                     .map(|at| now - at)
@@ -127,17 +126,44 @@ fn line(
         })
         .collect();
     let known = signed_in.and_then(|id| remembered.get(id));
-    let in_use = crate::usage::merge(known, offered, now);
+    let moved = known.and_then(|known| crate::usage::moved(known, offered, now));
+    let (windows, at) = match moved.as_ref().or(known) {
+        Some(reading) => (
+            reading.windows.as_slice(),
+            reading.observed_at.unwrap_or(now),
+        ),
+        // Nothing to fold them into: what the session passed is all there is to show, and
+        // it is the session's latest.
+        None => (passed, now),
+    };
     StatusLine {
         current: current.map(|a| a.label.clone()),
-        session: in_use
-            .as_ref()
-            .map_or_else(Shares::default, |r| shares_of(r, now)),
-        pace: in_use
-            .as_ref()
-            .map_or_else(Paces::default, |r| paces_of(r, now)),
+        session: shares_of(windows, now),
+        pace: paces_of(windows, at, now),
         others,
     }
+}
+
+/// One limit a session passed, as a window under the name Claude Code gives it. A session
+/// says how much is used and when the window resets, and nothing else.
+fn window(name: &str, limit: &Limit) -> Window {
+    Window {
+        kind: name.to_owned(),
+        scope: None,
+        percent: limit.used_percentage,
+        resets_at: limit.resets_at,
+        is_active: false,
+        severity: None,
+        length_seconds: crate::usage::anthropic_window_length(name),
+    }
+}
+
+/// Every limit a run passed, as windows.
+fn windows_of(run: &Run) -> Vec<Window> {
+    run.limits
+        .iter()
+        .map(|(name, limit)| window(name, limit))
+        .collect()
 }
 
 /// What this run of a session's status line was given: the account Claude Code's config
@@ -160,13 +186,11 @@ fn run_of(input: &Value, signed_in: Option<&str>) -> Run {
     }
 }
 
-/// What the session passed that can be the account in use's, as a reading to offer it.
-/// Free: these are numbers the session already had, not a question asked of anyone.
+/// What the session passed that can be the account in use's, to offer its reading
+/// ([`crate::usage::moved`] says what it takes). Free: these are numbers the session
+/// already had, not a question asked of anyone.
 ///
-/// It carries no time. The numbers are what the session's last response said, however long
-/// ago that was, so the readings stamp them only when they move something forward.
-///
-/// Nor does it say whose they are. A session passes the numbers of its last response every
+/// They do not say whose they are. A session passes the numbers of its last response every
 /// time its status line runs, and one left idle passes the same ones for as long as it
 /// stays open, whatever the config has named since, by a switch or a `/login`, and whether
 /// or not Pitboard still knows the account they were. A change is what says something. A
@@ -181,21 +205,20 @@ fn run_of(input: &Value, signed_in: Option<&str>) -> Run {
 /// that account's responses however the config reads. A `/login` in Claude Code is followed
 /// as slowly and leaves Pitboard no time to count from, so a window another of Claude
 /// Code's accounts has recorded, and this one has not, is left out too: its reset shows it
-/// to be that account's. And a window whose reset has passed says nothing about now.
-///
-/// A session says how much of each limit is used and when it resets, and nothing else. So a
-/// window is the one Pitboard already has for that limit with those two numbers put in: its
-/// name, and whether the account is working against it, stay as Anthropic said. A share the
-/// session has moved is one Anthropic has not graded.
-fn session_snapshot(
+/// to be that account's.
+fn to_offer(
     run: &Run,
     before: Option<&Run>,
     state: &State,
     remembered: &HashMap<String, Snapshot>,
     now: i64,
-) -> Option<Snapshot> {
-    let signed_in = run.account.as_deref()?;
-    let before = before.filter(|b| b.account == run.account)?;
+) -> Vec<Window> {
+    let (Some(signed_in), Some(before)) = (
+        run.account.as_deref(),
+        before.filter(|b| b.account == run.account),
+    ) else {
+        return Vec::new();
+    };
     let adopting = state
         .by_id(ProviderId::Claude, signed_in)
         .and_then(|account| account.last_used_at)
@@ -203,7 +226,7 @@ fn session_snapshot(
             (0..i64::from(crate::switch::ADOPTION_CEILING_SECONDS)).contains(&(now - at))
         });
     if adopting {
-        return None;
+        return Vec::new();
     }
     let known = remembered.get(signed_in);
     // Claude Code's accounts only: a Codex reading is of other limits, whatever they are
@@ -218,59 +241,25 @@ fn session_snapshot(
     let has = |reading: &Snapshot, window: &Window| {
         reading.windows.iter().any(|had| had.same_window(window))
     };
-    // Passed under the older names, recorded under the ones Anthropic's answer uses, so an
-    // account's reading reads the same whoever took it.
-    let window = |passed: &str, named: &str| -> Option<Window> {
-        let limit = run.limits.get(passed)?;
-        if before.limits.get(passed) == Some(limit) {
-            return None;
-        }
-        let given = Window {
-            kind: named.to_string(),
-            scope: None,
-            severity: None,
-            percent: limit.used_percentage,
-            resets_at: limit.resets_at,
-            is_active: true,
-            length_seconds: crate::usage::anthropic_window_length(named),
-        };
-        let over = given.resets_at.is_some_and(|at| at <= now);
-        let anothers =
-            !known.is_some_and(|k| has(k, &given)) && others.iter().any(|r| has(r, &given));
-        if over || anothers {
-            return None;
-        }
-        Some(
-            match known.and_then(|k| k.windows.iter().find(|h| h.same_limit(&given))) {
-                Some(had) => Window {
-                    percent: given.percent,
-                    resets_at: given.resets_at,
-                    severity: None,
-                    ..had.clone()
-                },
-                None => given,
-            },
-        )
-    };
-    let windows: Vec<Window> = [("five_hour", "session"), ("seven_day", "weekly_all")]
-        .into_iter()
-        .filter_map(|(passed, named)| window(passed, named))
-        .collect();
-    (!windows.is_empty()).then_some(Snapshot {
-        windows,
-        observed_at: None,
-        source: Source::Live,
-    })
+    run.limits
+        .iter()
+        .filter(|(name, limit)| before.limits.get(*name) != Some(*limit))
+        .map(|(name, limit)| window(name, limit))
+        .filter(|given| {
+            known.is_some_and(|k| has(k, given)) || !others.iter().any(|r| has(r, given))
+        })
+        .collect()
 }
 
 /// Reads Claude Code's session JSON. Never fails: a status bar has nowhere to show an
 /// error, so whatever cannot be read is left out.
 ///
 /// It also offers the readings what moved since the session's last run, as the account in
-/// use's wherever it can be that account's, and they keep it where it is newer. So the
-/// accounts a person actually works in stop reading as unknown without anyone running
-/// `pitboard` by hand, and every session and the menu bar show the newest numbers any of
-/// them has seen. It still asks nobody anything: no network, no credential.
+/// use's wherever it can be that account's, and they take it where it moves a limit
+/// Anthropic gave that account. So the accounts a person works in move between Pitboard's
+/// answers without anyone running `pitboard` by hand, and every session and the menu bar
+/// show the newest numbers any of them has seen. It still asks nobody anything: no network,
+/// no credential.
 ///
 /// Without a `permit`, which a run as root or under sudo is not given, it writes nothing:
 /// the session's last run is read and this one is not kept, and the readings are offered
@@ -293,17 +282,18 @@ pub fn read(ctx: &Context, permit: Option<crate::service::Permit>, input: &str) 
             Some(permit) => crate::sessions::exchange(ctx, permit, id, &run),
             None => crate::sessions::last(ctx, id),
         });
-    let offered = session_snapshot(&run, before.as_ref(), &state, &remembered, now);
-    if let (Some(permit), Some(id), Some(offered)) =
-        (permit, signed_in.as_deref(), offered.as_ref())
+    let offered = to_offer(&run, before.as_ref(), &state, &remembered, now);
+    if let (Some(permit), Some(id)) = (permit, signed_in.as_deref())
+        && !offered.is_empty()
     {
-        crate::readings::remember(ctx, permit, &[(id.to_string(), offered.clone())]);
+        crate::readings::moved(ctx, permit, id, &offered);
     }
     line(
         &state,
         signed_in.as_deref(),
         &remembered,
-        offered.as_ref(),
+        &windows_of(&run),
+        &offered,
         now,
     )
 }
@@ -345,7 +335,8 @@ mod tests {
         timed((five, resets_at), (week, resets_at), observed_at)
     }
 
-    /// A reading of the five-hour and weekly limits, each as its share and when it resets.
+    /// Anthropic's answer about the five-hour and weekly limits, each as its share and when it
+    /// resets, taken at `observed_at`.
     fn timed(five_hour: (f64, i64), weekly: (f64, i64), observed_at: i64) -> Snapshot {
         let window = |kind: &str, (percent, resets_at): (f64, i64)| Window {
             kind: kind.into(),
@@ -359,6 +350,8 @@ mod tests {
         Snapshot {
             windows: vec![window("session", five_hour), window("weekly_all", weekly)],
             observed_at: Some(observed_at),
+            answered_at: Some(observed_at),
+            lists_every_limit: true,
             source: Source::Remembered,
         }
     }
@@ -384,18 +377,21 @@ mod tests {
         }})
     }
 
-    /// What `input` offers `work` from a session on it that has just had a response: one
-    /// whose run before named `work` and passed nothing, so everything it passes has moved.
-    fn answered(input: &Value, remembered: &HashMap<String, Snapshot>) -> Option<Snapshot> {
+    /// The line a session on `work` draws from `input` just after a response: its run before
+    /// named `work` and passed nothing, so everything it passes has moved.
+    fn after_a_response(input: &Value, remembered: &HashMap<String, Snapshot>) -> StatusLine {
         let before = Run {
             account: Some("work-uuid".into()),
             limits: BTreeMap::new(),
         };
-        session_snapshot(
-            &run_of(input, Some("work-uuid")),
-            Some(&before),
+        let run = run_of(input, Some("work-uuid"));
+        let offered = to_offer(&run, Some(&before), &state(), remembered, NOW);
+        line(
             &state(),
+            Some("work-uuid"),
             remembered,
+            &windows_of(&run),
+            &offered,
             NOW,
         )
     }
@@ -480,14 +476,7 @@ mod tests {
                 reading(90.0, 88.0, NOW - 3 * 3_600, NOW - 1),
             ),
         ]);
-        let offered = answered(&input, &remembered);
-        let line = line(
-            &state(),
-            Some("work-uuid"),
-            &remembered,
-            offered.as_ref(),
-            NOW,
-        );
+        let line = after_a_response(&input, &remembered);
         assert_eq!(line.current.as_deref(), Some("work"));
         assert_eq!(line.session, shares(46.4, 70.0));
         assert_eq!(
@@ -517,14 +506,7 @@ mod tests {
             "five_hour": {"used_percentage": 46.4, "resets_at": NOW + 600},
             "seven_day": {"used_percentage": 70.0, "resets_at": NOW + 5 * DAY}
         }});
-        let offered = answered(&input, &HashMap::new());
-        let shown = line(
-            &state(),
-            Some("work-uuid"),
-            &HashMap::new(),
-            offered.as_ref(),
-            NOW,
-        );
+        let shown = after_a_response(&input, &HashMap::new());
         assert_eq!(shown.pace.five_hour, Some(Standing::Under));
         assert!(
             matches!(shown.pace.weekly, Some(Standing::Over { .. })),
@@ -532,14 +514,14 @@ mod tests {
             shown.pace
         );
         assert_eq!(
-            line(&state(), None, &HashMap::new(), None, NOW).pace,
+            line(&state(), None, &HashMap::new(), &[], &[], NOW).pace,
             Paces::default()
         );
     }
 
     #[test]
     fn what_is_unknown_is_left_unknown_not_zero() {
-        let line = line(&state(), None, &HashMap::new(), None, NOW);
+        let line = line(&state(), None, &HashMap::new(), &[], &[], NOW);
         assert_eq!(line.current, None);
         assert_eq!(line.session, Shares::default());
         assert!(line.others.iter().all(|e| e.shares == Shares::default()));
@@ -567,12 +549,12 @@ mod tests {
         s.accounts.insert(0, codex("shadow", "work-uuid"));
         s.accounts.push(codex("work", "codex-work"));
 
-        let found = line(&s, Some("work-uuid"), &HashMap::new(), None, NOW);
+        let found = line(&s, Some("work-uuid"), &HashMap::new(), &[], &[], NOW);
         assert_eq!(found.current.as_deref(), Some("work"));
         let others: Vec<&str> = found.others.iter().map(|e| e.label.as_str()).collect();
         assert_eq!(others, ["personal", "side"]);
 
-        let found = line(&s, Some("codex-work"), &HashMap::new(), None, NOW);
+        let found = line(&s, Some("codex-work"), &HashMap::new(), &[], &[], NOW);
         assert_eq!(
             found.current, None,
             "a Codex identity names no Claude Code account"
@@ -589,15 +571,7 @@ mod tests {
             reading(22.0, 6.0, NOW - 60, NOW + 600),
         )]);
         let shown = |input: &Value, remembered: &HashMap<String, Snapshot>| {
-            let offered = answered(input, remembered);
-            line(
-                &state(),
-                Some("work-uuid"),
-                remembered,
-                offered.as_ref(),
-                NOW,
-            )
-            .session
+            after_a_response(input, remembered).session
         };
         assert_eq!(
             shown(&session(20.0, 5.0, NOW + 600), &remembered),
@@ -668,7 +642,7 @@ mod tests {
     fn the_sessions_numbers_are_recorded_when_they_are_newer() {
         let (ctx, _scratch) = machine("records");
         crate::state::save(&ctx, Permit::for_a_test(), &state()).expect("an account index");
-        crate::readings::remember(
+        crate::readings::answered(
             &ctx,
             Permit::for_a_test(),
             &[("work-uuid".into(), reading(22.0, 6.0, NOW - 60, NOW + 600))],
@@ -678,11 +652,11 @@ mod tests {
 
         let busy = run(&ctx, "busy", &session(25.0, 7.0, NOW + 600));
         assert_eq!(busy.session, shares(25.0, 7.0));
-        assert_eq!(shares_of(&recorded(&ctx), NOW), shares(25.0, 7.0));
+        assert_eq!(shares_of(&recorded(&ctx).windows, NOW), shares(25.0, 7.0));
 
         let slow = run(&ctx, "slow", &session(20.0, 5.0, NOW + 600));
         assert_eq!(slow.session, shares(25.0, 7.0));
-        assert_eq!(shares_of(&recorded(&ctx), NOW), shares(25.0, 7.0));
+        assert_eq!(shares_of(&recorded(&ctx).windows, NOW), shares(25.0, 7.0));
     }
 
     /// A session knows how much is used and when it resets. Which limit the account is
@@ -700,7 +674,7 @@ mod tests {
         let mut answered = reading(22.0, 6.0, NOW - 60, NOW + 600);
         answered.windows[0].severity = Some("normal".into());
         answered.windows[0].is_active = true;
-        crate::readings::remember(
+        crate::readings::answered(
             &ctx,
             Permit::for_a_test(),
             &[("work-uuid".into(), answered)],
@@ -739,7 +713,7 @@ mod tests {
         let work = |five: f64, weekly: f64, observed_at: i64| {
             timed((five, NOW + 2 * HOUR), (weekly, NOW + 3 * DAY), observed_at)
         };
-        crate::readings::remember(
+        crate::readings::answered(
             &ctx,
             Permit::for_a_test(),
             &[("work-uuid".into(), work(10.0, 30.0, NOW - 60))],
@@ -758,18 +732,16 @@ mod tests {
                 shares(10.0, 30.0),
                 "the pane shows work's own"
             );
-            assert_eq!(shares_of(&recorded(&ctx), NOW), shares(10.0, 30.0));
+            assert_eq!(shares_of(&recorded(&ctx).windows, NOW), shares(10.0, 30.0));
         }
 
-        let mut answered = work(12.0, 31.0, NOW);
-        answered.source = Source::Live;
-        crate::readings::remember(
+        crate::readings::answered(
             &ctx,
             Permit::for_a_test(),
-            &[("work-uuid".into(), answered)],
+            &[("work-uuid".into(), work(12.0, 31.0, NOW))],
         );
         assert_eq!(
-            shares_of(&recorded(&ctx), NOW),
+            shares_of(&recorded(&ctx).windows, NOW),
             shares(12.0, 31.0),
             "and what Anthropic says about work is taken"
         );
@@ -796,7 +768,7 @@ mod tests {
             (30.0, NOW + 3 * DAY),
             NOW - 2 * HOUR,
         );
-        crate::readings::remember(&ctx, Permit::for_a_test(), &[("work-uuid".into(), works)]);
+        crate::readings::answered(&ctx, Permit::for_a_test(), &[("work-uuid".into(), works)]);
 
         accounts.accounts[0].last_used_at = Some(NOW - HOUR);
         crate::state::save(&ctx, Permit::for_a_test(), &accounts).expect("an account index");
@@ -812,14 +784,9 @@ mod tests {
             shares(10.0, 30.0),
             "the pane shows work's own"
         );
-        let mut answered = timed((12.0, NOW + 2 * HOUR), (31.0, NOW + 3 * DAY), NOW);
-        answered.source = Source::Live;
-        crate::readings::remember(
-            &ctx,
-            Permit::for_a_test(),
-            &[("work-uuid".into(), answered)],
-        );
-        assert_eq!(shares_of(&recorded(&ctx), NOW), shares(12.0, 31.0));
+        let answer = timed((12.0, NOW + 2 * HOUR), (31.0, NOW + 3 * DAY), NOW);
+        crate::readings::answered(&ctx, Permit::for_a_test(), &[("work-uuid".into(), answer)]);
+        assert_eq!(shares_of(&recorded(&ctx).windows, NOW), shares(12.0, 31.0));
     }
 
     /// Claude Code's own `/login` can sign in an account nobody enrolled and back again, and
@@ -834,7 +801,7 @@ mod tests {
         let (ctx, _scratch) = machine("unenrolled");
         crate::state::save(&ctx, Permit::for_a_test(), &state()).expect("an account index");
         let works = timed((10.0, NOW + 2 * HOUR), (30.0, NOW + 3 * DAY), NOW - 60);
-        crate::readings::remember(&ctx, Permit::for_a_test(), &[("work-uuid".into(), works)]);
+        crate::readings::answered(&ctx, Permit::for_a_test(), &[("work-uuid".into(), works)]);
         let guests = passed((97.0, NOW + 4 * HOUR), (80.0, NOW + 6 * DAY));
         sign_in(&ctx, "guest");
         open(&ctx, "pane");
@@ -849,7 +816,7 @@ mod tests {
                 "the pane shows work's own"
             );
         }
-        assert_eq!(shares_of(&recorded(&ctx), NOW), shares(10.0, 30.0));
+        assert_eq!(shares_of(&recorded(&ctx).windows, NOW), shares(10.0, 30.0));
     }
 
     /// A session Pitboard has not seen before passes the numbers of whatever response it had
@@ -864,7 +831,7 @@ mod tests {
         let (ctx, _scratch) = machine("first");
         crate::state::save(&ctx, Permit::for_a_test(), &state()).expect("an account index");
         let works = timed((10.0, NOW + 2 * HOUR), (30.0, NOW + 3 * DAY), NOW - 60);
-        crate::readings::remember(&ctx, Permit::for_a_test(), &[("work-uuid".into(), works)]);
+        crate::readings::answered(&ctx, Permit::for_a_test(), &[("work-uuid".into(), works)]);
 
         let first = run(
             &ctx,
@@ -876,7 +843,7 @@ mod tests {
             shares(10.0, 30.0),
             "the pane shows work's own"
         );
-        assert_eq!(shares_of(&recorded(&ctx), NOW), shares(10.0, 30.0));
+        assert_eq!(shares_of(&recorded(&ctx).windows, NOW), shares(10.0, 30.0));
 
         let next = run(
             &ctx,
@@ -884,7 +851,31 @@ mod tests {
             &passed((12.0, NOW + 2 * HOUR), (31.0, NOW + 3 * DAY)),
         );
         assert_eq!(next.session, shares(12.0, 31.0));
-        assert_eq!(shares_of(&recorded(&ctx), NOW), shares(12.0, 31.0));
+        assert_eq!(shares_of(&recorded(&ctx).windows, NOW), shares(12.0, 31.0));
+    }
+
+    /// Pitboard has no reading of an account it has not asked Anthropic about, and a
+    /// session's numbers found none. The pane shows what its session passed, from its first
+    /// run on and while it passes the same again, where it drew nothing at all.
+    #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W16: Pitboard writing, replacing and removing files on Windows"
+    )]
+    fn a_session_on_an_account_pitboard_has_not_read_shows_its_own_numbers() {
+        let (ctx, _scratch) = machine("unread");
+        crate::state::save(&ctx, Permit::for_a_test(), &state()).expect("an account index");
+        let numbers = passed((12.0, NOW + 2 * HOUR), (31.0, NOW + 3 * DAY));
+        assert_eq!(
+            run(&ctx, "new", &numbers).session,
+            shares(12.0, 31.0),
+            "a session not seen before"
+        );
+        open(&ctx, "pane");
+        for _ in 0..2 {
+            assert_eq!(run(&ctx, "pane", &numbers).session, shares(12.0, 31.0));
+        }
+        assert!(crate::readings::load(&ctx).is_empty());
     }
 
     /// Claude Code's config can name another account between two runs of one session, with
@@ -900,7 +891,7 @@ mod tests {
         let (ctx, _scratch) = machine("changed");
         crate::state::save(&ctx, Permit::for_a_test(), &state()).expect("an account index");
         let works = timed((10.0, NOW + 2 * HOUR), (30.0, NOW + 3 * DAY), NOW - 60);
-        crate::readings::remember(&ctx, Permit::for_a_test(), &[("work-uuid".into(), works)]);
+        crate::readings::answered(&ctx, Permit::for_a_test(), &[("work-uuid".into(), works)]);
         sign_in(&ctx, "personal");
         open(&ctx, "pane");
         run(
@@ -920,7 +911,7 @@ mod tests {
             shares(10.0, 30.0),
             "the pane shows work's own"
         );
-        assert_eq!(shares_of(&recorded(&ctx), NOW), shares(10.0, 30.0));
+        assert_eq!(shares_of(&recorded(&ctx).windows, NOW), shares(10.0, 30.0));
     }
 
     /// For half a minute after a switch a session goes on using the account before, and its
@@ -937,7 +928,7 @@ mod tests {
         switched.accounts[0].last_used_at = Some(NOW - 10);
         crate::state::save(&ctx, Permit::for_a_test(), &switched).expect("an account index");
         let works = timed((10.0, NOW + 2 * HOUR), (30.0, NOW + 3 * DAY), NOW - 60);
-        crate::readings::remember(&ctx, Permit::for_a_test(), &[("work-uuid".into(), works)]);
+        crate::readings::answered(&ctx, Permit::for_a_test(), &[("work-uuid".into(), works)]);
         open(&ctx, "pane");
 
         let unread = passed((95.0, NOW + 4 * HOUR), (60.0, NOW + 5 * DAY));
@@ -947,7 +938,7 @@ mod tests {
             shares(10.0, 30.0),
             "the pane shows work's own"
         );
-        assert_eq!(shares_of(&recorded(&ctx), NOW), shares(10.0, 30.0));
+        assert_eq!(shares_of(&recorded(&ctx).windows, NOW), shares(10.0, 30.0));
 
         switched.accounts[0].last_used_at =
             Some(NOW - i64::from(crate::switch::ADOPTION_CEILING_SECONDS));
@@ -958,7 +949,7 @@ mod tests {
             &passed((12.0, NOW + 2 * HOUR), (31.0, NOW + 3 * DAY)),
         );
         assert_eq!(
-            shares_of(&recorded(&ctx), NOW),
+            shares_of(&recorded(&ctx).windows, NOW),
             shares(12.0, 31.0),
             "and once they have, what they say is"
         );
@@ -977,7 +968,7 @@ mod tests {
         let mut switched = state();
         crate::state::save(&ctx, Permit::for_a_test(), &switched).expect("an account index");
         let works = timed((10.0, NOW + 2 * HOUR), (30.0, NOW + 3 * DAY), NOW - 60);
-        crate::readings::remember(&ctx, Permit::for_a_test(), &[("work-uuid".into(), works)]);
+        crate::readings::answered(&ctx, Permit::for_a_test(), &[("work-uuid".into(), works)]);
         let personals = passed((95.0, NOW + 4 * HOUR), (60.0, NOW + 5 * DAY));
         sign_in(&ctx, "personal");
         run(&at(&ctx, NOW - 60), "pane", &personals);
@@ -991,7 +982,7 @@ mod tests {
             "pane",
             &passed((2.0, NOW + 5 * HOUR), (61.0, NOW + 5 * DAY)),
         );
-        assert_eq!(shares_of(&recorded(&ctx), NOW), shares(10.0, 30.0));
+        assert_eq!(shares_of(&recorded(&ctx).windows, NOW), shares(10.0, 30.0));
     }
 
     /// A `/login` in Claude Code leaves Pitboard no time to count from, and a session takes
@@ -1006,8 +997,20 @@ mod tests {
     fn a_response_from_the_account_before_a_login_is_known_by_its_windows() {
         let (ctx, _scratch) = machine("login");
         crate::state::save(&ctx, Permit::for_a_test(), &state()).expect("an account index");
-        let works = timed((10.0, NOW + 2 * HOUR), (30.0, NOW + 3 * DAY), NOW - 60);
-        crate::readings::remember(&ctx, Permit::for_a_test(), &[("work-uuid".into(), works)]);
+        crate::readings::answered(
+            &ctx,
+            Permit::for_a_test(),
+            &[
+                (
+                    "work-uuid".into(),
+                    timed((10.0, NOW - 60), (30.0, NOW + 3 * DAY), NOW - HOUR),
+                ),
+                (
+                    "personal-uuid".into(),
+                    timed((95.0, NOW + 4 * HOUR), (60.0, NOW + 5 * DAY), NOW - 60),
+                ),
+            ],
+        );
         sign_in(&ctx, "personal");
         open(&ctx, "pane");
         let personals = passed((95.0, NOW + 4 * HOUR), (60.0, NOW + 5 * DAY));
@@ -1020,7 +1023,11 @@ mod tests {
             "pane",
             &passed((96.0, NOW + 4 * HOUR), (61.0, NOW + 5 * DAY)),
         );
-        assert_eq!(shares_of(&recorded(&ctx), NOW), shares(10.0, 30.0));
+        assert_eq!(
+            shares_of(&recorded(&ctx).windows, NOW),
+            shares(0.0, 30.0),
+            "work's five-hour window is over, and the next one is not personal's"
+        );
     }
 
     /// A window whose reset has passed says nothing about now, and a pane left open past it
@@ -1034,14 +1041,16 @@ mod tests {
     fn a_window_past_its_reset_is_not_recorded() {
         let (ctx, _scratch) = machine("passed");
         crate::state::save(&ctx, Permit::for_a_test(), &state()).expect("an account index");
+        let works = timed((50.0, NOW - 60), (30.0, NOW + 3 * DAY), NOW - HOUR);
+        crate::readings::answered(&ctx, Permit::for_a_test(), &[("work-uuid".into(), works)]);
         open(&ctx, "pane");
         run(
             &ctx,
             "pane",
             &passed((90.0, NOW - 60), (40.0, NOW + 3 * DAY)),
         );
-        let kinds: Vec<String> = recorded(&ctx).windows.into_iter().map(|w| w.kind).collect();
-        assert_eq!(kinds, ["weekly_all"]);
+        let said: Vec<f64> = recorded(&ctx).windows.iter().map(|w| w.percent).collect();
+        assert_eq!(said, [50.0, 40.0]);
     }
 
     /// A session can hold a response from just before its five-hour window reset, one that
@@ -1059,7 +1068,7 @@ mod tests {
         let (ctx, _scratch) = machine("reset");
         crate::state::save(&ctx, Permit::for_a_test(), &state()).expect("an account index");
         let works = timed((40.0, NOW - 10), (30.0, NOW + 3 * DAY), NOW - HOUR);
-        crate::readings::remember(&ctx, Permit::for_a_test(), &[("work-uuid".into(), works)]);
+        crate::readings::answered(&ctx, Permit::for_a_test(), &[("work-uuid".into(), works)]);
         let floor = crate::budget::floor_for(Some(&recorded(&ctx)));
         run(
             &at(&ctx, NOW - 60),
@@ -1073,7 +1082,7 @@ mod tests {
             &passed((41.0, NOW - 10), (31.0, NOW + 3 * DAY)),
         );
         assert_eq!(shown.session, shares(0.0, 31.0));
-        assert_eq!(shares_of(&recorded(&ctx), NOW), shares(0.0, 31.0));
+        assert_eq!(shares_of(&recorded(&ctx).windows, NOW), shares(0.0, 31.0));
         let offline = crate::status::gather_offline(&ctx, &state());
         let row = offline
             .rows
@@ -1097,7 +1106,7 @@ mod tests {
     fn a_session_still_records_its_own_accounts_next_window() {
         let (ctx, _scratch) = machine("next");
         crate::state::save(&ctx, Permit::for_a_test(), &state()).expect("an account index");
-        crate::readings::remember(
+        crate::readings::answered(
             &ctx,
             Permit::for_a_test(),
             &[
@@ -1122,7 +1131,7 @@ mod tests {
             &passed((2.0, NOW + 5 * HOUR), (41.0, NOW + 3 * DAY)),
         );
         assert_eq!(shown.session, shares(2.0, 41.0));
-        assert_eq!(shares_of(&recorded(&ctx), NOW), shares(2.0, 41.0));
+        assert_eq!(shares_of(&recorded(&ctx).windows, NOW), shares(2.0, 41.0));
     }
 
     /// Two accounts' windows can reset within a minute of each other. When the account in
@@ -1135,7 +1144,7 @@ mod tests {
     fn a_window_both_accounts_have_is_still_offered() {
         let (ctx, _scratch) = machine("coincident");
         crate::state::save(&ctx, Permit::for_a_test(), &state()).expect("an account index");
-        crate::readings::remember(
+        crate::readings::answered(
             &ctx,
             Permit::for_a_test(),
             &[
@@ -1160,6 +1169,6 @@ mod tests {
             &passed((25.0, NOW + 2 * HOUR), (31.0, NOW + 3 * DAY)),
         );
         assert_eq!(shown.session, shares(25.0, 31.0));
-        assert_eq!(shares_of(&recorded(&ctx), NOW), shares(25.0, 31.0));
+        assert_eq!(shares_of(&recorded(&ctx).windows, NOW), shares(25.0, 31.0));
     }
 }

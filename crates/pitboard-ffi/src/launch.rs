@@ -791,11 +791,12 @@ impl AppCore {
     /// When Pitboard's usage readings last changed, in epoch milliseconds, or 0 when there
     /// are none, or where nothing may be read here.
     ///
-    /// Every session's status line records what that session has seen, and a reading only
-    /// moves forward, so what is remembered is the newest any front end has. The model polls
-    /// this beside `changed_at`, and when it moves, takes the numbers from `status_offline`:
-    /// no network, and no keychain unless an interrupted switch is waiting. Only the numbers:
-    /// a reading moving says nothing about who is signed in, which is `changed_at`'s to say.
+    /// Every read records its answers, and every session's status line what that session has
+    /// seen where it moves a limit an answer gave, so what is remembered is the newest any
+    /// front end has. The model polls this beside `changed_at`, and when it moves, takes the
+    /// numbers from `status_offline`: no network, and no keychain unless an interrupted
+    /// switch is waiting. Only the numbers: a reading moving says nothing about who is signed
+    /// in, which is `changed_at`'s to say.
     pub(crate) fn readings_changed_at(&self) -> i64 {
         self.readable()
             .map_or(0, |made| made.core.readings_changed_at())

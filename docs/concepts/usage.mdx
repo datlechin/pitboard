@@ -33,9 +33,13 @@ Every 2 seconds, both also look for a switch made elsewhere or numbers that othe
 
 The command line and the app record into one reading per account and show it. Claude Code's status line does too, for Claude Code accounts.
 
-A reading only moves forward. A later reset is a newer window. A session's numbers do not say when they were measured, so within one window, the higher percentage from a session is the newer.
+Pitboard's own answer from a service replaces the limits it gives in the account's reading, and can lower a percentage. So when a limit falls in the middle of its window, after a banked reset on claude.ai or a plan upgrade, Pitboard shows the lower percentage the next time it asks. The app asks every 5 minutes.
 
-Pitboard's own answer from a service does say when it was taken. One taken after everything recorded for the account replaces it, even with a lower percentage. So when a limit falls in the middle of its window, after a banked reset on claude.ai or a plan upgrade, Pitboard shows the lower percentage the next time it asks. The app asks every 5 minutes.
+Anthropic's answer lists every limit an account has, so a limit it leaves out is gone. Where Pitboard cannot read every limit in an answer, it keeps a limit the answer leaves out until it resets.
+
+OpenAI's answer has room for two windows, either of which can be empty. What an empty one means is not known, so Pitboard keeps a window OpenAI leaves out until it resets.
+
+A session's numbers do not say when they were measured or whose they are. They only move a limit the account's last answer gave. Within that limit's window, the higher percentage is the newer, so a percentage a session recorded after the answer was taken stands. Once the window resets, Pitboard takes a session's numbers for the next window. A session never adds a limit.
 
 ## Pace
 

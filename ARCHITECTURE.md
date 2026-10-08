@@ -139,6 +139,20 @@ pages load, as a browser would.
     rate taken across fourteen days of readings in `readings/`, through every reset in
     them; `home::remove_retired` deletes the files that kept, and the folder where nothing
     else is in it.
+  - `usage.rs` and `readings.rs`: an account's usage, and `usage.json`, the one reading of
+    each account that every front end records into and shows. The service's answer about an
+    account founds its reading and replaces what it gives (`usage::answered`), and a share a
+    session moved after the answer was taken stands. Anthropic's answer lists every limit an
+    account has, so where `usage::from_usage_object` read every row of its `limits`, the
+    answer says so (`Snapshot::lists_every_limit`) and a limit it does not give is gone at
+    once. Any other answer leaves a window it does not give standing, in its place, until
+    its reset: one with a row that did not normalise, one in the older named shape, and
+    every one of OpenAI's, which gives two windows, either of them null, with nothing
+    measured to say what a null one is. A Claude Code session's numbers only move a limit
+    an answer gave (`usage::moved`): a higher share in the same window, or the next window
+    once the last has reset. They never add a limit or found a reading, since they do not
+    say whose they are. A reading's `answered_at` is when its service last answered, absent
+    from one an older Pitboard wrote.
   - `status.rs`, `doctor.rs`, `statusline.rs` and `schedule.rs` serve the commands of the
     same names. A row's numbers in `status.rs` are its service's answer folded into the
     reading every front end records in `usage.json`, or that reading alone where no answer
@@ -833,6 +847,9 @@ pages load, as a browser would.
 - Nothing outside `pitboard-core` writes Pitboard's index. Every change goes through
   `switch`, which records what it is about to do first and finishes an interrupted change
   before starting another.
+- An answer from Anthropic that Pitboard read whole replaces a Claude Code account's
+  reading, and a session only moves that reading, within the limits the answer gave. So
+  numbers filed under the wrong account go at that account's next answer.
 - Pitboard switches by itself only for a front end somebody asked to: the app with its
   setting on, or `pitboard watch` running. It never switches Codex by itself, since a
   running `codex` never follows a switch. The status line and the daily renewal schedule

@@ -1366,6 +1366,8 @@ impl World {
                     length_seconds: Some(18_000),
                 }],
                 observed_at: Some(now),
+                answered_at: Some(now),
+                lists_every_limit: true,
                 source: pitboard_core::usage::Source::Live,
             },
         );
@@ -1429,6 +1431,8 @@ impl World {
             pitboard_core::usage::Snapshot {
                 windows: Vec::new(),
                 observed_at: Some(now),
+                answered_at: Some(now),
+                lists_every_limit: false,
                 source: pitboard_core::usage::Source::Live,
             },
         );
