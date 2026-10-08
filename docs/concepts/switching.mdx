@@ -58,6 +58,10 @@ On one Mac with Claude Code 2.1.278, switches 8, 20 and 28 seconds into a sessio
 
 Until a session follows, it keeps using the account it is leaving. So when Pitboard switches by itself, it switches before a limit, not at it. Whether a request under way at the moment of a switch finishes has not been measured.
 
+On macOS, `~/.claude/.credentials.json` can sit behind the keychain, left by a sign-in where the keychain was locked. A session then keeps the login it holds while the file is there, whatever the file holds. This was read in Claude Code 2.1.294, and not measured. It reads the keychain again about 5 minutes before that login expires, to renew it, and takes the account switched to then. So while the file is there, an open session follows a switch at its next renewal, or when you start it again. A switch says so in place of the 33 seconds. Each change and each read but `pitboard status --offline` warn with `fallback_login`. Sessions started after the switch use the account switched to.
+
+Until it follows, `/status` in that session already names the account switched to, since it reads Claude Code's config, which a switch rewrites. `/usage` and every request still use the login the session holds.
+
 Claude Code sessions, and the daemon that refreshes their login, take the same Claude Code lock as a switch. Each reads the login again under the lock, so none can write the previous account back.
 
 Everything that runs Codex holds its login in memory until it stops. Each of these needs to be started again: a `codex` session, the ChatGPT app, Codex's background app server and Codex in an editor.

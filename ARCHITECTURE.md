@@ -37,7 +37,9 @@ pages load, as a browser would.
   - `provider/`: one module per tool, `claude` and `codex`, each implementing the
     `Provider` trait in `provider/mod.rs`. The trait covers where the tool keeps its login,
     whose it is, how to renew it, what it has left and what its sign-in prints, which
-    `provider::sign_in_view` reads for both apps. Each module's `assumptions.rs` is
+    `provider::sign_in_view` reads for both apps, and when a session already running takes
+    a switch made now (`Adoption`), which for Claude Code turns on whether a file sits behind
+    the keychain (`behind`). Each module's `assumptions.rs` is
     that tool's register of facts, with a table saying what each fact is on macOS, Linux
     and Windows. `provider/codex/holders.rs` names where a running
     `codex` can be, and what makes each take a switch. `provider/codex/layers.rs` reads
@@ -842,6 +844,14 @@ pages load, as a browser would.
   it. Every switch reads the live login back rather than trusting its own write.
 - Pitboard never answers a failed keychain write by writing Claude Code's plaintext file.
   That demotion is Claude Code's to make.
+- While Claude Code's `.credentials.json` sits behind the keychain, with a login in it,
+  none, or what Pitboard cannot read, a session already running keeps its account after a
+  switch until its login is next renewed. Pitboard tells the file by a look at it, as the
+  session does, not by reading it. A switch, by hand or by itself, says so in place of a
+  number of seconds (`Adoption::AtRenewal`), and every read that reads the keychain and
+  every change warns while the file is there (`fallback_login`). The automatic switch still
+  switches: new sessions take the account switched to at once, and running ones at their
+  next renewal. A read and a switch never touch the file.
 - A Codex login is moved, never copied (`ParkSemantics::MoveOnly`). The parked login is
   read back before the incoming login is written. Codex's own sign-in and sign-out revoke
   the stored refresh token, so two usable copies of one login must never be at rest.
@@ -997,8 +1007,11 @@ On 8 and 9 October 2026 Claude Code 2.1.294 was read again: its macOS build on t
 its `linux-x64`, `win32-x64` and `win32-arm64` builds on the 9th, as bytes on a Mac, and
 none was run. All four are built from commit 8f033c6. For each fact read from them, the code
 it names was compared with the macOS build's token by token, minified names apart, and is
-the same in all four: `usage_cache_stamp_is_the_configs`. The checker finds every fact each
-build was read for.
+the same in all four: `usage_cache_stamp_is_the_configs`,
+`status_reads_the_config_usage_the_token` and `fallback_file_pins_session_login`. The last
+is read on macOS alone: on Linux the file is Claude Code's only store, and on Windows it is
+too unless Credential Manager is turned on, which W22 reads. The checker finds every fact
+each build was read for.
 
 `.github/workflows/conformance.yml` checks the newest builds of each tool against its
 register on Mondays and Thursdays, or a version given by hand. It reads four builds of each
@@ -1428,7 +1441,18 @@ runtime Claude Code ships in. The one real change, in 2.1.281, is how a locked k
 treated, and only the macOS build shows it. The run reads both builds since.
 
 - A running session serves its login from a 30 second cache, so it picks up a switch within
-  about 33 seconds.
+  about 33 seconds, where no `.credentials.json` sits behind the keychain.
+- Read on 8 October 2026 from the macOS build of 2.1.294, and on 9 October from its Linux
+  and Windows builds, whose code here is the same, and not measured against a running
+  session: before each request a session looks at `.credentials.json`, by its modification
+  time alone. Where it is not there, or the look fails, the session reads the keychain
+  through its 30 second cache. Where it is there, whatever it holds, `{}` included, and
+  whether or not it can be read, the session keeps the login it holds while that login is
+  usable. It reads again when the file's modification time changes, after a 401, at its own
+  sign-in, and 5 minutes before its login expires, when it takes the store's login where it
+  differs. So while the file sits behind the keychain, a session already running keeps its
+  account after a switch until its login is next renewed or it is started again. On Linux
+  the file is the store, and a switch's write changes its modification time.
 - Every write of the login takes proper-lockfile's directory lock at
   `<storage dir>/.storage-write`: stale after 15000 ms, ten retries, 100 ms to 1000 ms of
   backoff. `lock.rs` carries the same numbers.
@@ -1469,8 +1493,8 @@ treated, and only the macOS build shows it. The run reads both builds since.
 - A keychain write that lands deletes `.credentials.json` only when the keychain held
   nothing before it. Once both hold a login, the file's outlives every token refresh, every
   sign-in from a desktop session and every switch, and a session that cannot read the
-  keychain signs in with it. `doctor` names it as `fallback_login`, and every change to a
-  Claude Code account warns while it is there.
+  keychain signs in with it. `doctor` names it as `fallback_login`, and every read that
+  reads the keychain and every change warns while it is there.
 - While the keychain is locked, a session keeps serving the login it last read, cached again
   every 30 seconds, and follows no switch. One that has read none reads the keychain as
   empty and signs in with the file, or is signed out.
@@ -1555,9 +1579,21 @@ treated, and only the macOS build shows it. The run reads both builds since.
   Pitboard takes no usage from the cache. Taken as the reading of the account in use, it
   showed the previous account's numbers after a switch, and the automatic switch acted on
   them.
+- Read on the same days from the same four builds, whose code here is the same: `/status`
+  prints the email and organisation of the config's `oauthAccount`, and a running session
+  reads the config again within about a second of a change. `/usage` shows the numbers of
+  the session's last response, or, where it has none, the config's usage cache where its
+  stamp is the config's account and it is under an hour old. It then answers from that
+  cache where the cache is under 60 seconds old and newer than the session's last response,
+  and otherwise asks with the login the session holds. So a session that has not taken a
+  switch names the account switched to in `/status`, while `/usage` and every request go on
+  with the login it holds. What a switch says of running sessions names no account for that
+  reason.
 
-Not measured. Switching by itself rests on the session cache's 33 seconds. These were not
-measured, and the register cannot hold them, since every fact in it is read from a build:
+Not measured. Switching by itself rests on the session cache's 33 seconds, measured on
+2.1.278, and, while a file sits behind the keychain, on a reading of 2.1.294 that no running
+session has been measured against. These were not measured, and the register cannot hold
+them, since every fact in it is read from a build:
 
 - Whether a request a session has under way at the moment of a switch finishes, on either
   account.

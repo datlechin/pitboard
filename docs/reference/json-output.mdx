@@ -114,7 +114,7 @@ The `data` of each command, in the order of `pitboard --help`:
 | `watch` | One envelope for each event: `event`, `threshold` and the fields of that event, as [Watch events](/reference/json-output#watch-events) lists. |
 | `generate` (`completions` and `manpage`) | `{}` |
 
-`adoption` says how sessions already running pick up a switch. For Claude Code it is `{"follows":"polling","within_seconds":33}`, and `adoption_ceiling_seconds` is `33`. For Codex it is `{"follows":"restart","program":"codex"}`, and `adoption_ceiling_seconds` is `null`.
+`adoption` says how sessions already running pick up a switch. For Claude Code it is `{"follows":"polling","within_seconds":33}`, and `adoption_ceiling_seconds` is `33`. On macOS, while `~/.claude/.credentials.json` sits behind the keychain, it is `{"follows":"renewal","path":"/Users/you/.claude/.credentials.json"}`, and `adoption_ceiling_seconds` is `null`: open sessions follow when their login is next renewed. For Codex it is `{"follows":"restart","program":"codex"}`, and `adoption_ceiling_seconds` is `null`.
 
 ## Status data
 
@@ -180,7 +180,7 @@ The other fields are these:
 | `from` | string | The Claude Code account in use, by its label as `pitboard use` takes it. |
 | `to` | string | The account switched to, by its label. |
 | `limit` | object | The limit of `from` that reached the share, as Pitboard last read it: `kind`, `scope`, `percent` and `resets_at`, as in [Status data](/reference/json-output#status-data). A limit reaches the share at its whole percentage, a half rounded up, so `percent` can be up to half a point under `threshold`, such as `94.5` for `95`. |
-| `adoption` | object | How sessions already running pick up the switch: `{"follows":"polling","within_seconds":33}`, as for `use`. |
+| `adoption` | object | How sessions already running pick up the switch: `{"follows":"polling","within_seconds":33}`, or `{"follows":"renewal","path":...}` while a login file sits behind the keychain, as for `use`. |
 | `reason` | string | Why Pitboard does not switch. |
 
 `reason` is one of these:

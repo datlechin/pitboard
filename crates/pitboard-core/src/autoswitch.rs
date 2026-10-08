@@ -6,7 +6,9 @@
 //! use reaches a share they chose, 95% unless they chose otherwise. Before the limit and not
 //! at it: a session already running follows a switch within about half a minute
 //! ([`crate::switch::ADOPTION_CEILING_SECONDS`]), and one that has reached its limit has
-//! already stopped.
+//! already stopped. While a file sits behind the keychain, a running session follows only
+//! at its login's next renewal, and a switch is still made, for every session started after
+//! it and for each running one then; the switch says so.
 //!
 //! Asked for, and never by default: the menu bar app's setting, or `pitboard watch` running
 //! in a terminal. This is the one part of Pitboard that picks an account without anybody

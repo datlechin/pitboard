@@ -172,6 +172,17 @@ pub const PER_SYSTEM: &[PerSystem] = &[
         windows: NO_KEYCHAIN_ON_WINDOWS,
     },
     PerSystem {
+        name: "fallback_file_pins_session_login",
+        macos: Read("2.1.294"),
+        linux: NO_KEYCHAIN_ON_LINUX,
+        windows: Pending {
+            by: &["W22"],
+            reads: "windows_file_adoption: how soon a running session takes a new \
+                    `.credentials.json` on Windows, where it is the store and where it sits \
+                    behind Credential Manager",
+        },
+    },
+    PerSystem {
         name: "login_is_one_organisation",
         macos: Read("2.1.294"),
         linux: Read("2.1.294"),
@@ -185,6 +196,12 @@ pub const PER_SYSTEM: &[PerSystem] = &[
     },
     PerSystem {
         name: "usage_cache_stamp_is_the_configs",
+        macos: Read("2.1.294"),
+        linux: Read("2.1.294"),
+        windows: Read("2.1.294"),
+    },
+    PerSystem {
+        name: "status_reads_the_config_usage_the_token",
         macos: Read("2.1.294"),
         linux: Read("2.1.294"),
         windows: Read("2.1.294"),
@@ -314,14 +331,16 @@ pub const ASSUMPTIONS: &[Assumption] = &[
     Assumption {
         name: "credential_cache",
         fact: "a running session serves the credential from a 30 second cache, so a swap is \
-               picked up within about 33 seconds. The 30 seconds are unchanged in 2.1.284; its \
-               re-checks after 1, 3 and 10 seconds, behind `tengu_streamed_thimble` from \
-               2.1.281, can only shorten that",
+               picked up within about 33 seconds, only where no `.credentials.json` is behind \
+               the keychain; see `fallback_file_pins_session_login`. The 30 seconds are \
+               unchanged in 2.1.284; its re-checks after 1, 3 and 10 seconds, behind \
+               `tengu_streamed_thimble` from 2.1.281, can only shorten that",
         read_from: "the keychain backend's cache, and measured against a running session",
         // The 33 seconds were measured against a running 2.1.278; nothing later was run.
         verified_against: "2.1.278",
-        depends: "switch::ADOPTION_CEILING_SECONDS, and autoswitch, which switches before a \
-                  limit rather than at it so a session already running follows in time",
+        depends: "switch::ADOPTION_CEILING_SECONDS and Claude's adoption where nothing is \
+                  behind the keychain, and autoswitch, which switches before a limit rather \
+                  than at it so a session already running follows in time",
         probe: &[],
         absent: &[],
     },
@@ -537,7 +556,8 @@ pub const ASSUMPTIONS: &[Assumption] = &[
                     twice, and the app's two switches after the first went on reading and \
                     writing the keychain item",
         verified_against: "2.1.294",
-        depends: "doctor's fallback_login check and the warning a change gives about it",
+        depends: "doctor's fallback_login check and the warning every read and every change \
+                  give about it",
         probe: &["plaintext_fallback_used"],
         absent: &[],
     },
@@ -552,9 +572,42 @@ pub const ASSUMPTIONS: &[Assumption] = &[
                     null",
         verified_against: "2.1.294",
         depends: "doctor's fallback_login check, whose advice is to delete the file, and the \
-                  warning a change gives while it is there",
+                  warning every read and every change give while it is there",
         // Behaviour, with no literal of its own.
         probe: &[],
+        absent: &[],
+    },
+    Assumption {
+        name: "fallback_file_pins_session_login",
+        fact: "before a session makes a request it looks at `.credentials.json` in its storage \
+               directory, by its modification time alone. Where the file is not there, or the \
+               look fails, it drops the login it holds and reads the keychain through its 30 \
+               second cache. Where it is there, whatever it holds and whether or not it can be \
+               read, the session keeps the login it holds while that login is usable: it reads \
+               again where the file's modification time has changed, at most every 30 seconds \
+               where that login is gone or its refresh token is empty or known dead, after a \
+               401, and at its own sign-in, and 5 minutes before the login expires it reads \
+               the store and takes the login there where it differs. So while the file sits \
+               behind the keychain, a session already running keeps the account it is on \
+               after a switch until its login is next renewed, or until it is started again. \
+               Read, not measured against a running session",
+        read_from: "the check before each API client, which stats the file, compares its \
+                    modification time with the one it last saw, reads through the keychain \
+                    cache where the stat fails, and otherwise keeps a usable login, reading \
+                    again at most every 30 seconds for one that is not; the renewal check 5 \
+                    minutes before expiry, which reads the store first and takes its login \
+                    where it differs; and the 401 handlers",
+        // Read on 2026-10-08 from the macOS build and on 2026-10-09 from the Linux x64,
+        // Windows x64 and Windows arm64 builds of 2.1.294, whose code here is the same. On
+        // Linux the file is the only store, and on Windows it is unless Credential Manager
+        // is turned on, by `tengu_windows_credman` or `CLAUDE_CODE_FORCE_WINDOWS_CREDMAN`.
+        verified_against: "2.1.294",
+        depends: "Claude's adoption, by which a switch says that running sessions take it at \
+                  their login's next renewal while the file is behind the keychain; Claude's \
+                  behind, which tells the file by a look and says nothing where the look fails; \
+                  and the fallback_login warning and check, which say so of a file with no \
+                  login in it, or one Pitboard cannot read, too",
+        probe: &["lastCredentialsMtimeMs", "lastUnusableTokenRecheckAt"],
         absent: &[],
     },
     Assumption {
@@ -618,6 +671,30 @@ pub const ASSUMPTIONS: &[Assumption] = &[
         ],
         absent: &[],
     },
+    Assumption {
+        name: "status_reads_the_config_usage_the_token",
+        fact: "`/status` prints the config's `oauthAccount` email and organisation, and a \
+               running session reads the config again within about a second of a change. \
+               `/usage` shows the session's header snapshot, or without one the config's usage \
+               cache where its stamp is the config's account and it is under an hour old; it \
+               then answers from that cache where it is under 60 seconds old and newer than \
+               the session's last header reading, and otherwise asks with the login the \
+               session holds. So a session that has not taken a switch names the account \
+               switched to in `/status`, while `/usage` and every request go on with the login \
+               it holds",
+        read_from: "`/status`'s account rows, which read the config's `oauthAccount`; the \
+                    config's freshness watch and its 1000 ms poll; the `/usage` screen, which \
+                    seeds itself from the session's header snapshot or the cache, and the \
+                    usage read it starts",
+        // Read on 2026-10-08 from the macOS build and on 2026-10-09 from the Linux x64,
+        // Windows x64 and Windows arm64 builds of 2.1.294, whose code here is the same.
+        verified_against: "2.1.294",
+        depends: "what a switch says of sessions already running while a file is behind the \
+                  keychain, which names the file and no account: `/status` in one of them \
+                  names the account switched to",
+        probe: &["Usage read answered from a snapshot"],
+        absent: &[],
+    },
 ];
 
 #[cfg(test)]
@@ -647,6 +724,7 @@ mod tests {
                 "login_is_one_organisation",
                 "config_may_name_no_organisation",
                 "usage_cache_stamp_is_the_configs",
+                "status_reads_the_config_usage_the_token",
             ]
         );
         for name in [

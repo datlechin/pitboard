@@ -7,7 +7,7 @@ use super::{api, paths};
 use crate::context::Context;
 use crate::host::Os;
 use crate::provider::{
-    Adoption, Credential, Expiry, Identity, Isolation, LiveStore, ParkSemantics, Provider,
+    Adoption, Behind, Credential, Expiry, Identity, Isolation, LiveStore, ParkSemantics, Provider,
     ProviderError, ProviderId, SignInView, jwt,
 };
 use crate::service::Permit;
@@ -304,7 +304,7 @@ impl Provider for Codex {
     }
 
     /// Codex keeps its login in one store, with nothing behind it.
-    fn fallback_login(&self, _ctx: &Context) -> Option<std::path::PathBuf> {
+    fn behind(&self, _ctx: &Context) -> Option<Behind> {
         None
     }
 
@@ -316,7 +316,7 @@ impl Provider for Codex {
     /// again, and what starts it again depends on where it runs, which is [`holders`].
     ///
     /// [`holders`]: super::holders::HOLDERS
-    fn adoption(&self) -> Adoption {
+    fn adoption(&self, _behind: Option<&Behind>) -> Adoption {
         Adoption::RestartRequired {
             program: "codex",
             holders: super::holders::HOLDERS,
@@ -771,7 +771,7 @@ mod tests {
     #[test]
     fn nothing_follows_a_codex_switch_and_a_park_is_never_a_copy() {
         assert!(matches!(
-            Codex.adoption(),
+            Codex.adoption(None),
             Adoption::RestartRequired {
                 program: "codex",
                 ..

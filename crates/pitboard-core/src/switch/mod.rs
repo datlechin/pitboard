@@ -52,10 +52,11 @@ use journal::{Journal, clear_journal, reconcile, write_journal};
 use serde_json::Value;
 use std::path::PathBuf;
 
-/// Claude Code serves the credential from a 30 second cache whose clock restarts on every
-/// read or write, so a session picks up a swap within about 30 seconds of its last read
-/// rather than of its start. Measured over three runs on one machine: swapping at t+8, t+20
-/// and t+28 seconds took effect at t+32.3, t+33.5 and t+32.95 from process start.
+/// Claude Code serves the credential from a 30 second cache, so a session already running
+/// picks up a swap within about 33 seconds, wherever no `.credentials.json` sits behind the
+/// keychain (the register's `credential_cache`). Measured over three runs on one machine
+/// with 2.1.278: swapping at t+8, t+20 and t+28 seconds took effect at t+32.3, t+33.5 and
+/// t+32.95 from process start.
 pub const ADOPTION_CEILING_SECONDS: u32 = 33;
 
 #[derive(Debug)]
@@ -67,8 +68,10 @@ pub enum Outcome {
         to: String,
         parked: Park,
         /// When a session already running will be using the incoming login, as this tool
-        /// answers it. Carried rather than read from a constant, because the honest answer
-        /// for two of the three tools is that nothing follows until they are restarted.
+        /// answers it on this machine once the switch is made. Carried rather than read from
+        /// a constant, because the honest answer for two of the three tools is that nothing
+        /// follows until they are restarted, and for Claude Code it turns on what sits
+        /// behind the keychain.
         adoption: provider::Adoption,
     },
     /// Not a failure: the state the caller asked for already holds.
@@ -581,7 +584,7 @@ fn switch_held(
     Ok((
         Outcome::Switched {
             provider: key.provider,
-            adoption: tool.adoption(),
+            adoption: tool.adoption(tool.behind(ctx).as_ref()),
             from,
             to,
             parked,
@@ -700,7 +703,9 @@ pub(crate) enum StillHolding {
 /// What is running `which`'s tool with the login it started with, by kind, as the process
 /// list says.
 pub(crate) fn still_holding(ctx: &Context, which: ProviderId) -> StillHolding {
-    match provider::of(which).adoption() {
+    // What sits behind a store only delays sessions that follow by themselves, which hold
+    // nothing here, so it is not read.
+    match provider::of(which).adoption(None) {
         provider::Adoption::RestartRequired { program, holders } => {
             match holder::find(ctx, program, holders) {
                 None => StillHolding::Unknown,
@@ -708,7 +713,9 @@ pub(crate) fn still_holding(ctx: &Context, which: ProviderId) -> StillHolding {
                 Some(holding) => StillHolding::These(holding),
             }
         }
-        provider::Adoption::PollingWithin(_) => StillHolding::Nothing,
+        provider::Adoption::PollingWithin(_) | provider::Adoption::AtRenewal { .. } => {
+            StillHolding::Nothing
+        }
     }
 }
 

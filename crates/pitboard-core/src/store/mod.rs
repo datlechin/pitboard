@@ -279,24 +279,29 @@ pub fn resolve(live: &Live, service: &str) -> Result<Backend, Error> {
     })
 }
 
-/// What the backends after the one holding `service` hold under it, in chain order.
-fn behind_in(chain: &[&dyn RawStore], service: &str) -> Result<Vec<String>, Error> {
+/// What the backends after the one holding `service` hold under it, in chain order: one
+/// entry for each whose own `contains` says it is there, with what reading it gave.
+fn behind_in(chain: &[&dyn RawStore], service: &str) -> Result<Vec<Result<String, Error>>, Error> {
     let mut behind = Vec::new();
     let mut in_use = false;
     for backend in chain {
-        if in_use {
-            behind.extend(backend.read(service)?);
-        } else {
+        if !in_use {
             in_use = backend.contains(service)?;
+        } else if backend.contains(service)? {
+            // Gone between the look and the read: not there.
+            behind.extend(backend.read(service).transpose());
         }
     }
     Ok(behind)
 }
 
-/// Logins in the backends after the one holding the login in use: what a reader that cannot
-/// reach that backend signs in with instead, and what no write to it reaches. Empty where
-/// the login in use is in the last backend, or nowhere.
-pub fn behind(live: &Live, service: &str) -> Result<Vec<String>, Error> {
+/// What the backends after the one holding the login in use hold, whole, a login or not:
+/// what a reader that cannot reach that backend signs in with instead, and what no write to
+/// it reaches. A backend is in it wherever its own look says it is there, so a file is in
+/// it holding `{}`, nothing at all, or what cannot be read, as a file that is not text or
+/// that this user may not read: its read is then the error. Empty where the login in use is
+/// in the last backend, or nowhere.
+pub fn behind(live: &Live, service: &str) -> Result<Vec<Result<String, Error>>, Error> {
     with_live(live, |chain| behind_in(chain, service))
 }
 
@@ -401,22 +406,56 @@ mod tests {
         let keychain = store(Backend::Keychain);
         let plaintext = store(Backend::File);
         let chain: [&dyn RawStore; 2] = [&keychain, &plaintext];
-        assert_eq!(behind_in(&chain, "svc").unwrap(), Vec::<String>::new());
+        let held = |chain: &[&dyn RawStore]| -> Vec<String> {
+            behind_in(chain, "svc")
+                .unwrap()
+                .into_iter()
+                .map(|read| read.expect("readable"))
+                .collect()
+        };
+        assert_eq!(held(&chain), Vec::<String>::new());
 
         plaintext.plant("svc", "left");
         assert_eq!(
-            behind_in(&chain, "svc").unwrap(),
+            held(&chain),
             Vec::<String>::new(),
             "the file is the login when the keychain holds none"
         );
 
         keychain.plant("svc", "in use");
-        assert_eq!(behind_in(&chain, "svc").unwrap(), ["left"]);
+        assert_eq!(held(&chain), ["left"]);
 
         keychain.fault("svc", Fault::Locked);
         assert!(
             matches!(behind_in(&chain, "svc"), Err(Error::Locked)),
             "which backend is in use cannot be told, so neither can what is behind it"
+        );
+    }
+
+    /// Claude Code tells a file behind the keychain by a look at it, not by reading it
+    /// (`fallback_file_pins_session_login`), so neither does this. A file that is there and
+    /// cannot be read is behind, with why it cannot be read, and not a chain that cannot be
+    /// told. A real file, since what a look and a read each say of one is the point.
+    #[test]
+    fn a_file_that_cannot_be_read_is_still_behind() {
+        let dir = std::env::temp_dir().join(format!(
+            "pitboard-store-behind-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join(".credentials.json");
+        std::fs::write(&path, [0xff, 0xfe, 0x00]).unwrap();
+        let keychain = holding(Backend::Keychain, "svc", "in use");
+        let file = PlainFile::at(path);
+        let chain: [&dyn RawStore; 2] = [&keychain, &file];
+
+        let behind = behind_in(&chain, "svc").expect("which backend is in use is told");
+        let _ = std::fs::remove_dir_all(&dir);
+        assert!(
+            matches!(behind.as_slice(), [Err(Error::Unreadable(_))]),
+            "{behind:?}"
         );
     }
 

@@ -536,20 +536,31 @@ fn use_account(pitboard: &Pitboard, label: &str) -> Report {
 /// follow, where they do, said as a sentence and for `--json`.
 ///
 /// The tool's own answer, not a constant. A number of seconds is only ever shown for a tool
-/// that really does follow on its own within them, and a tool that needs restarting has no
-/// number at all rather than a zero that reads as "at once".
+/// that really does follow on its own within them, and one whose sessions follow at their
+/// login's next renewal, or that needs restarting, has no number at all rather than a zero
+/// that reads as "at once".
 fn followed(
     provider: pitboard_core::provider::ProviderId,
     adoption: &Adoption,
 ) -> (Option<u32>, String, Value) {
-    match *adoption {
+    match adoption {
         Adoption::PollingWithin(seconds) => (
-            Some(seconds),
+            Some(*seconds),
             format!(
                 "{} sessions already running follow within {seconds} seconds.\n",
                 provider.name()
             ),
             json!({ "follows": "polling", "within_seconds": seconds }),
+        ),
+        Adoption::AtRenewal { file } => (
+            None,
+            format!(
+                "{} sessions already running {}: {} is there. `pitboard doctor` says more.\n",
+                provider.name(),
+                pitboard_core::words::kept_until_renewed(),
+                file.display()
+            ),
+            json!({ "follows": "renewal", "path": file }),
         ),
         Adoption::RestartRequired { program, .. } => (
             None,
@@ -1075,6 +1086,29 @@ mod tests {
             Cli::try_parse_from(["pitboard", "use", "work", "--json"])
                 .unwrap()
                 .json
+        );
+    }
+
+    /// A switch made while `.credentials.json` sits behind the keychain says when running
+    /// sessions take it, and why, with no number of seconds: when a session's login is next
+    /// renewed is the session's.
+    #[test]
+    fn a_switch_sessions_take_at_renewal_says_so_with_no_seconds() {
+        let file = std::path::PathBuf::from("/Users/x/.claude/.credentials.json");
+        let (seconds, follows, adoption) = followed(
+            pitboard_core::provider::ProviderId::Claude,
+            &Adoption::AtRenewal { file },
+        );
+        assert_eq!(seconds, None);
+        assert_eq!(
+            follows,
+            "Claude Code sessions already running keep the account they are on until their \
+             login is next renewed, or until they are started again: \
+             /Users/x/.claude/.credentials.json is there. `pitboard doctor` says more.\n"
+        );
+        assert_eq!(
+            adoption,
+            json!({"follows": "renewal", "path": "/Users/x/.claude/.credentials.json"})
         );
     }
 

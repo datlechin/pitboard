@@ -86,6 +86,9 @@ pub(crate) struct Change {
 pub(crate) enum Adoption {
     /// On its own, within this many seconds.
     Follows { within_seconds: u32 },
+    /// On its own, when its login is next renewed, because the file at `path` sits behind
+    /// the store the switch wrote.
+    Renewal { path: String },
     /// Never: `program` has to be quit and started again.
     Restart { program: String },
 }
@@ -306,6 +309,9 @@ fn adoption_of(adoption: pitboard_core::provider::Adoption) -> Adoption {
     match adoption {
         pitboard_core::provider::Adoption::PollingWithin(seconds) => Adoption::Follows {
             within_seconds: seconds,
+        },
+        pitboard_core::provider::Adoption::AtRenewal { file } => Adoption::Renewal {
+            path: file.display().to_string(),
         },
         pitboard_core::provider::Adoption::RestartRequired { program, .. } => Adoption::Restart {
             program: program.into(),

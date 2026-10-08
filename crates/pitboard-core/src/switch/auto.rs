@@ -216,6 +216,48 @@ mod tests {
         );
     }
 
+    /// A file behind the keychain holds sessions already running to their account until
+    /// their login is next renewed, and holding back would leave every session, new ones
+    /// too, on the account at the share. So the automatic switch switches, and says when
+    /// running sessions take it, and that the file is there.
+    #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
+    )]
+    #[cfg_attr(
+        target_os = "linux",
+        ignore = "on Linux the file is Claude Code's only store, never behind a keychain"
+    )]
+    fn with_a_file_behind_the_keychain_the_automatic_switch_switches_and_says_so() {
+        let (m, _) = nearly_out("auto-file-behind", 96.0);
+        let file = crate::provider::claude::live::credential_file(&m.ctx);
+        m.mem
+            .file_at(file.clone())
+            .plant(&m.service, &document("left-by-a-sign-in").to_string());
+
+        let done = auto(&m).expect("a switch");
+        let Auto::Switched { to, adoption, .. } = done.value else {
+            panic!("a switch, not {:?}", done.value);
+        };
+        assert_eq!(to, "there");
+        assert_eq!(adoption, crate::provider::Adoption::AtRenewal { file });
+        assert_eq!(live_refresh(&m).as_deref(), Some("there-refresh"));
+        assert_eq!(
+            done.warnings
+                .iter()
+                .filter(|w| w.code() == "fallback_login")
+                .count(),
+            1,
+            "{:?}",
+            done.warnings
+        );
+        assert_eq!(
+            logged(&m),
+            [("auto-switch".into(), "there".into(), "ok".into())]
+        );
+    }
+
     #[test]
     #[cfg_attr(
         windows,

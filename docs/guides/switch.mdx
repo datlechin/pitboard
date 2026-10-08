@@ -46,6 +46,8 @@ If a check fails, Pitboard says what to do, and the tool keeps its account. If t
 
 A Claude Code session that is already open follows the switch within about 33 seconds, with no restart. After a switch in the app, a notice in the Pitboard window counts down those seconds. For why it takes that long, see [How switching works](/concepts/switching#open-sessions).
 
+On macOS, `~/.claude/.credentials.json` can sit behind the keychain. While it does, an open session keeps its account until its login is next renewed, or until you start it again. The switch says so and names the file, and the app counts nothing down. Sessions you start after the switch use the account you switched to. To have open sessions follow within 33 seconds again, see [Claude Code over SSH uses another account](/troubleshooting#claude-code-over-ssh-uses-another-account).
+
 Everything that runs Codex keeps the account it started with until it is started again. How you start it again depends on what runs it:
 
 | What runs Codex | To use the account you switched to |

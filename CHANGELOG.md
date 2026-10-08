@@ -8,6 +8,19 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Changed
 
+- While `~/.claude/.credentials.json` is behind the keychain on macOS, a switch, by hand or
+  by itself, says that Claude Code sessions already running keep the account they are on
+  until their login is next renewed or they are started again, and names the file, in place
+  of 33 seconds. The automatic switch still switches: sessions started after it take the
+  account at once. `pitboard use --json` gives `"adoption": {"follows": "renewal", "path":
+  ...}` with `adoption_ceiling_seconds` `null`, and the app counts nothing down. Read in
+  Claude Code 2.1.294, not measured: a running session keeps its login while the file is
+  there, whatever it holds. So every `pitboard status` without `--offline` and every read
+  of the app warns with `fallback_login` while the file is there, as every change did, and
+  so does a file with no login in it or one Pitboard cannot read, which pin sessions too.
+  `pitboard doctor`'s `fallback login` check says the same, and the app's notice is titled
+  **A login file is left behind the keychain**. The app's setting promises 33 seconds only
+  while no read has found the file.
 - An answer from Anthropic replaces a Claude Code account's reading whole: a limit the
   answer does not give is gone at once, whatever its reset, so numbers filed under the wrong
   account go at that account's next answer. They stayed until their own reset, days for a

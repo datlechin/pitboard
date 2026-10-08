@@ -61,18 +61,32 @@ pub(crate) fn chain(ctx: &Context) -> Live {
     }
 }
 
-/// The login in `.credentials.json` while the keychain holds the one in use: what a Claude
-/// Code that cannot read the keychain signs in with instead, as one started over SSH does.
-/// Claude Code deletes the file after a keychain write only where the keychain held nothing
-/// before (the register's `fallback_outlives_keychain_writes`), so a login a sign-in left
-/// there while the keychain was locked stays through every switch. A file that is not JSON,
-/// or holds no account's login, signs nobody in.
-pub(crate) fn fallback_login(ctx: &Context) -> Result<Option<Value>, Error> {
-    let behind = store::behind(&chain(ctx), &claude::live_service(ctx))?;
-    Ok(behind
-        .iter()
-        .filter_map(|raw| serde_json::from_str::<Value>(raw).ok())
-        .find(|document| document.get("claudeAiOauth").is_some()))
+/// What reading `.credentials.json` gives while the keychain holds the login in use: what it
+/// holds, whole, or why it cannot be read where it is there. `None` where it is not there or
+/// is the store in use. Claude Code deletes the file after a keychain write only where the
+/// keychain held nothing before (the register's `fallback_outlives_keychain_writes`), so
+/// what a sign-in left there while the keychain was locked stays through every switch. A
+/// session that cannot read the keychain, as one started over SSH, signs in with a login in
+/// it, and one already running keeps its own while the file is there, whatever it holds and
+/// whether or not it can be read: it looks at the file, and never reads it to decide
+/// (`fallback_file_pins_session_login`).
+///
+/// `None` too where whether it is there cannot be told: the keychain cannot be read, which
+/// reading the login in use says as well, or the file cannot even be looked at, which
+/// Claude Code's own look cannot either, and takes for a file that is not there.
+pub(crate) fn behind(ctx: &Context) -> Option<Result<String, Error>> {
+    store::behind(&chain(ctx), &claude::live_service(ctx))
+        .ok()?
+        .into_iter()
+        .next()
+}
+
+/// The login in what `.credentials.json` holds, where it holds one. A file that is not
+/// JSON, or holds no account's login, signs nobody in.
+pub(crate) fn login_in(held: &str) -> Option<Value> {
+    serde_json::from_str::<Value>(held)
+        .ok()
+        .filter(|document| document.get("claudeAiOauth").is_some())
 }
 
 /// The credential Claude Code left for a config directory during a private sign-in: the

@@ -106,7 +106,7 @@ pub struct Facts {
     /// Whether this process runs as the person themselves, as the host says, which is what
     /// the gate every change passes asks.
     pub elevation: crate::host::Elevation,
-    /// A login left in Claude Code's fallback file behind the one in the keychain.
+    /// Claude Code's fallback file, where it is behind the keychain holding the login in use.
     pub fallback_login: Option<FallbackLogin>,
     pub floor: crate::host::Floor,
     pub now: i64,
@@ -252,12 +252,13 @@ pub enum Unreadable {
     Broken(String),
 }
 
-/// A login left in Claude Code's plaintext fallback file while the keychain holds the one
-/// in use.
+/// Claude Code's plaintext fallback file, there while the keychain holds the login in use.
 pub struct FallbackLogin {
     pub path: PathBuf,
-    /// A handle on its refresh token, never the token. Empty where it holds none.
-    pub fingerprint: String,
+    /// A handle on the refresh token of the login it holds, never the token: `None` where
+    /// it holds no login, empty where that login has no refresh token, and why where what
+    /// it holds cannot be read.
+    pub fingerprint: Result<Option<String>, store::Error>,
 }
 
 impl ParkFact {
@@ -385,13 +386,18 @@ pub fn gather(ctx: &Context) -> Facts {
     }
 }
 
-/// The login left in Claude Code's fallback file, where there is one. A chain that cannot
-/// be read says nothing of what is behind it, and the `credential_store` check says why.
+/// Claude Code's fallback file, where it is behind the keychain, and the login it holds.
+/// Where whether it is there cannot be told, nothing is said of it: a keychain that cannot
+/// be read is the `credential_store` check's to say, and a file that cannot even be looked
+/// at is one Claude Code's own look takes for not there.
 fn fallback_login(ctx: &Context) -> Option<FallbackLogin> {
-    let document = claude_live::fallback_login(ctx).ok()??;
+    let held = claude_live::behind(ctx)?;
     Some(FallbackLogin {
         path: claude_live::credential_file(ctx),
-        fingerprint: crate::provider::claude::document::fingerprint_of(&document),
+        fingerprint: held.map(|held| {
+            claude_live::login_in(&held)
+                .map(|document| crate::provider::claude::document::fingerprint_of(&document))
+        }),
     })
 }
 
@@ -627,11 +633,12 @@ fn codex_package_version(path: &std::path::Path) -> Option<String> {
 /// Every `codex` running as this user, by kind, asked the way a switch asks so the two
 /// cannot disagree.
 fn running_codex(ctx: &Context) -> Option<Vec<crate::holder::Holding>> {
-    match crate::provider::of(ProviderId::Codex).adoption() {
+    match crate::provider::of(ProviderId::Codex).adoption(None) {
         crate::provider::Adoption::RestartRequired { program, holders } => {
             crate::holder::find(ctx, program, holders)
         }
-        crate::provider::Adoption::PollingWithin(_) => Some(Vec::new()),
+        crate::provider::Adoption::PollingWithin(_)
+        | crate::provider::Adoption::AtRenewal { .. } => Some(Vec::new()),
     }
 }
 
@@ -1178,12 +1185,19 @@ fn judge_credential(facts: &Facts) -> Check {
                 "Unlock it with `security unlock-keychain`, or run Pitboard from a desktop \
                  session. Until then a Claude Code session here keeps the login it last read \
                  and follows no switch{}",
-                match &facts.fallback_login {
-                    Some(left) => format!(
-                        ", and one started here signs in with the login in {}.",
-                        left.path.display()
+                match facts
+                    .fallback_login
+                    .as_ref()
+                    .map(|left| (left.path.display(), &left.fingerprint))
+                {
+                    Some((path, Ok(Some(_)))) => {
+                        format!(", and one started here signs in with the login in {path}.")
+                    }
+                    Some((path, Err(_))) => format!(
+                        ", and whether one started here signs in with what {path} holds cannot \
+                         be told, since Pitboard could not read it."
                     ),
-                    None => ", and one started here is signed out.".into(),
+                    Some((_, Ok(None))) | None => ", and one started here is signed out.".into(),
                 }
             ),
         ),
@@ -1196,32 +1210,57 @@ fn judge_credential(facts: &Facts) -> Check {
     }
 }
 
-/// A login left in the fallback file behind the keychain's.
+/// The fallback file behind the keychain, with a login in it, none, or what cannot be read.
 ///
 /// Read in 2.1.294: a sign-in where the keychain is locked writes its login to the file and
 /// leaves the keychain's in place (`locked_sign_in_writes_fallback`), and a keychain write
 /// deletes the file only where the keychain held nothing before
 /// (`fallback_outlives_keychain_writes`). So the file stays through every switch, and a
-/// session that cannot read the keychain signs in with it whatever Pitboard switched to.
+/// session that cannot read the keychain signs in with a login in it whatever Pitboard
+/// switched to. A session already running watches the file by a look at it, whatever it
+/// holds and whether or not it can be read, and while it is there takes a switch only at
+/// its login's next renewal (`fallback_file_pins_session_login`).
 fn judge_fallback_login(facts: &Facts) -> Option<Check> {
     let left = facts.fallback_login.as_ref()?;
     let path = left.path.display();
-    let fingerprint = if left.fingerprint.is_empty() {
-        "none"
-    } else {
-        left.fingerprint.as_str()
-    };
-    Some(warn(
-        "fallback_login",
-        "fallback login",
-        format!("{path}  ·  refresh {fingerprint}"),
-        format!(
-            "Claude Code signs in with this wherever it cannot read the keychain, such as in a \
-             session started over SSH, and no switch reaches it. A sign-in made where the \
-             keychain could not be read leaves one, as `/login` over SSH does. Deleting it \
-             leaves one login for every session: `rm {path}`."
+    let running = format!(
+        "While it is there, Claude Code sessions already running at a switch {}.",
+        words::kept_until_renewed()
+    );
+    let (detail, advice) = match &left.fingerprint {
+        Ok(Some(fingerprint)) => (
+            format!(
+                "{path}  ·  refresh {}",
+                if fingerprint.is_empty() {
+                    "none"
+                } else {
+                    fingerprint.as_str()
+                }
+            ),
+            format!(
+                "Claude Code signs in with this wherever it cannot read the keychain, such as \
+                 in a session started over SSH, and no switch reaches it. A sign-in made where \
+                 the keychain could not be read leaves one, as `/login` over SSH does. \
+                 {running} Deleting it leaves one login for every session: `rm {path}`."
+            ),
         ),
-    ))
+        Ok(None) => (
+            format!("{path}  ·  no login in it"),
+            format!(
+                "It holds no Claude Code login. {running} Deleting it lets them follow a \
+                 switch: `rm {path}`."
+            ),
+        ),
+        Err(e) => (
+            format!("{path}  ·  not read: {e}"),
+            format!(
+                "Pitboard could not read it, so whether it holds a login, which a session that \
+                 cannot read the keychain signs in with, cannot be told. {running} Deleting it \
+                 lets them follow a switch, and takes whatever it holds with it: `rm {path}`."
+            ),
+        ),
+    };
+    Some(warn("fallback_login", "fallback login", detail, advice))
 }
 
 /// A parked login this close to expiring is worth renewing now.
@@ -1517,10 +1556,16 @@ fn exempting(proxy: &ProxyFact) -> Option<String> {
 /// needs the answer.
 ///
 /// Where Pitboard does not read every layer, it says which it did not read beside that
-/// answer, since a layer it did not read could still set something else.
+/// answer, since a layer it did not read could still set something else. Where a file sits
+/// behind the keychain, a session already running takes the stored login only when it next
+/// reads it, at its login's renewal, which the `fallback_login` check says.
 fn judge_auth(facts: &Facts) -> Check {
     if facts.auth_overrides.is_empty() {
-        let read = "the stored login, which is what Pitboard moves";
+        let read = if facts.fallback_login.is_some() {
+            "the stored login, which is what Pitboard moves, once a session reads it again"
+        } else {
+            "the stored login, which is what Pitboard moves"
+        };
         return ok(
             "auth_source",
             "what a session authenticates with",
@@ -2123,12 +2168,13 @@ fn redaction_for(ctx: &Context, facts: &Facts) -> crate::redact::Sheet {
     {
         sheet = sheet.hide(fingerprint, "login");
     }
-    if let Some(left) = facts
+    if let Some(fingerprint) = facts
         .fallback_login
         .as_ref()
-        .filter(|left| !left.fingerprint.is_empty())
+        .and_then(|left| left.fingerprint.as_ref().ok().cloned().flatten())
+        .filter(|fingerprint| !fingerprint.is_empty())
     {
-        sheet = sheet.hide(left.fingerprint.clone(), "login");
+        sheet = sheet.hide(fingerprint, "login");
     }
     for park in &facts.parks {
         if let Some(held) = &park.park {
@@ -2490,7 +2536,7 @@ mod tests {
         // with it, and the advice says so.
         f.fallback_login = Some(FallbackLogin {
             path: f.credential_file.clone(),
-            fingerprint: "0123456789abcdef".into(),
+            fingerprint: Ok(Some("0123456789abcdef".into())),
         });
         let advice = check(&evaluate(&f), "credential").advice.clone();
         assert!(
@@ -2508,7 +2554,7 @@ mod tests {
 
         f.fallback_login = Some(FallbackLogin {
             path: f.credential_file.clone(),
-            fingerprint: "0123456789abcdef".into(),
+            fingerprint: Ok(Some("0123456789abcdef".into())),
         });
         let checks = evaluate(&f);
         let said = check(&checks, "fallback_login");
@@ -2520,6 +2566,10 @@ mod tests {
         );
         assert!(
             said.advice.contains("over SSH")
+                && said.advice.contains(
+                    "While it is there, Claude Code sessions already running at a switch keep \
+                     the account they are on until their login is next renewed"
+                )
                 && said
                     .advice
                     .contains("`rm /home/x/.claude/.credentials.json`"),
@@ -2529,8 +2579,92 @@ mod tests {
         assert!(healthy(&checks), "nothing Pitboard does is stopped by it");
     }
 
-    /// What the two checks above are given, read off the stores: a login in the file while
-    /// the keychain holds another, and nothing where the file is the login or holds none.
+    /// A running session watches the file by its being there, so one with no login in it
+    /// holds sessions to their account after a switch all the same. It is said, with what
+    /// lets them follow, and the login check's advice does not send a session to it.
+    #[test]
+    fn a_file_behind_the_keychain_with_no_login_in_it_is_said_with_what_it_holds_back() {
+        let mut f = facts();
+        f.fallback_login = Some(FallbackLogin {
+            path: f.credential_file.clone(),
+            fingerprint: Ok(None),
+        });
+        let checks = evaluate(&f);
+        let said = check(&checks, "fallback_login");
+        assert_eq!(said.level, Level::Warn);
+        assert_eq!(
+            said.detail,
+            "/home/x/.claude/.credentials.json  ·  no login in it"
+        );
+        assert_eq!(
+            said.advice,
+            "It holds no Claude Code login. While it is there, Claude Code sessions already \
+             running at a switch keep the account they are on until their login is next \
+             renewed, or until they are started again. Deleting it lets them follow a switch: \
+             `rm /home/x/.claude/.credentials.json`."
+        );
+        assert!(
+            check(&checks, "auth_source")
+                .detail
+                .ends_with(", once a session reads it again"),
+            "{}",
+            check(&checks, "auth_source").detail
+        );
+
+        f.credential = Err(store::Error::Locked);
+        let advice = check(&evaluate(&f), "credential").advice.clone();
+        assert!(
+            advice.ends_with("one started here is signed out."),
+            "{advice}"
+        );
+    }
+
+    /// A running session looks at the file and never reads it to decide, so one Pitboard
+    /// cannot read holds sessions to their account after a switch all the same. It is said
+    /// with why, without guessing whether a login is in it, and so is the login check's
+    /// advice for a session that cannot read the keychain.
+    #[test]
+    fn a_file_behind_the_keychain_that_cannot_be_read_is_said_with_why() {
+        let mut f = facts();
+        f.fallback_login = Some(FallbackLogin {
+            path: f.credential_file.clone(),
+            fingerprint: Err(store::Error::Unreadable(
+                "cannot read /home/x/.claude/.credentials.json: Permission denied".into(),
+            )),
+        });
+        let checks = evaluate(&f);
+        let said = check(&checks, "fallback_login");
+        assert_eq!(said.level, Level::Warn);
+        assert_eq!(
+            said.detail,
+            "/home/x/.claude/.credentials.json  ·  not read: the credential store could not be \
+             read: cannot read /home/x/.claude/.credentials.json: Permission denied"
+        );
+        assert_eq!(
+            said.advice,
+            "Pitboard could not read it, so whether it holds a login, which a session that \
+             cannot read the keychain signs in with, cannot be told. While it is there, Claude \
+             Code sessions already running at a switch keep the account they are on until \
+             their login is next renewed, or until they are started again. Deleting it lets \
+             them follow a switch, and takes whatever it holds with it: `rm \
+             /home/x/.claude/.credentials.json`."
+        );
+        assert!(healthy(&checks), "nothing Pitboard does is stopped by it");
+
+        f.credential = Err(store::Error::Locked);
+        let advice = check(&evaluate(&f), "credential").advice.clone();
+        assert!(
+            advice.ends_with(
+                "whether one started here signs in with what /home/x/.claude/.credentials.json \
+                 holds cannot be told, since Pitboard could not read it."
+            ),
+            "{advice}"
+        );
+    }
+
+    /// What the checks above are given, read off the stores: the file while the keychain
+    /// holds the login in use, with the login in it, none, or why it cannot be read, and
+    /// nothing where the file is the store in use.
     #[test]
     #[cfg_attr(
         windows,
@@ -2538,6 +2672,7 @@ mod tests {
     )]
     fn a_login_left_behind_the_keychain_is_found_in_its_file() {
         use crate::host::memory::MemoryHost;
+        use crate::store::memory::Fault;
 
         let host = MemoryHost::new();
         let ctx = Context::for_unit_test().with_memory_stores(Arc::clone(&host));
@@ -2551,12 +2686,31 @@ mod tests {
         file.plant(&service, &login("left"));
         let found = fallback_login(&ctx).expect("a login behind the keychain's");
         assert_eq!(found.path, claude_live::credential_file(&ctx));
-        assert_eq!(found.fingerprint, store::fingerprint("left"));
+        assert_eq!(
+            found.fingerprint.expect("readable"),
+            Some(store::fingerprint("left"))
+        );
 
         file.plant(&service, &json!({"mcpOAuth": {}}).to_string());
-        assert!(fallback_login(&ctx).is_none(), "what `/logout` leaves");
+        let found = fallback_login(&ctx).expect("what `/logout` leaves is still there");
+        assert_eq!(
+            found.fingerprint.expect("readable"),
+            None,
+            "and holds no login"
+        );
 
         file.plant(&service, &login("left"));
+        file.fault(
+            &service,
+            Fault::UnreadableContents("permission denied".into()),
+        );
+        let found = fallback_login(&ctx).expect("what cannot be read is still there");
+        assert!(
+            matches!(found.fingerprint, Err(store::Error::Unreadable(_))),
+            "and what it holds is not guessed"
+        );
+        file.heal(&service);
+
         host.live().delete_everything();
         assert!(
             fallback_login(&ctx).is_none(),

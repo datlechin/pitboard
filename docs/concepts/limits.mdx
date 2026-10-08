@@ -13,7 +13,7 @@ These are rules, not gaps.
 
 Pitboard switches by itself only when you ask it to, and only Claude Code. You ask by turning on **Switch Claude Code automatically** in **Settings** > **General**, or by running `pitboard watch` in a terminal. The setting is off until you turn it on, and nothing starts `pitboard watch` for you.
 
-Pitboard then switches once a limit of the Claude Code account in use reaches a share you choose, 95% by default. It switches before the limit, not at it, because [open sessions](/concepts/switching#open-sessions) keep the account they leave for up to about 33 seconds.
+Pitboard then switches once a limit of the Claude Code account in use reaches a share you choose, 95% by default. It switches before the limit, not at it, because [open sessions](/concepts/switching#open-sessions) keep the account they leave for up to about 33 seconds. While a login file sits behind the keychain, they keep it until their next login renewal. Pitboard still switches then, for the sessions started after it.
 
 It never switches Codex by itself. A running `codex` keeps its account until it is started again, so a switch would not reach the session it was meant to help.
 

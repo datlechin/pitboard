@@ -7,7 +7,7 @@ use crate::doctor::{self, Diagnosis};
 use crate::error::{Error, Result};
 use crate::holder::{self, capitalised};
 use crate::host::{Elevation, Floor};
-use crate::provider::ProviderId;
+use crate::provider::{Held, ProviderId};
 use crate::state::{self, Account, Key};
 use crate::switch::{self, Enrolled, Outcome, Recovered, Renewal, Settled, SignIn};
 use crate::{audit, readings, schedule, status, statusline};
@@ -97,11 +97,14 @@ pub enum Warning {
         tool: ProviderId,
         names: Vec<String>,
     },
-    /// The tool keeps another login in a file behind the store in use, which a session that
-    /// cannot read that store signs in with, and which no switch reaches.
+    /// A file of the tool's sits behind the store in use. While it is there a session
+    /// already running keeps its account after a switch until its login is next renewed.
+    /// Where it holds a login, a session that cannot read that store signs in with it, and
+    /// no switch reaches it.
     FallbackLogin {
         tool: ProviderId,
         path: std::path::PathBuf,
+        held: Held,
     },
     /// The login was too large for `security`'s stdin, so it went on the argument line.
     WrittenOnTheCommandLine {
@@ -241,13 +244,45 @@ impl fmt::Display for Warning {
                 names.join(" and "),
                 tool.name()
             ),
-            Warning::FallbackLogin { tool, path } => write!(
+            Warning::FallbackLogin {
+                tool,
+                path,
+                held: Held::Login,
+            } => write!(
                 f,
-                "{} holds another {} login, which a session that cannot read the keychain, \
-                 such as one started over SSH, signs in with. No switch reaches it; `pitboard \
-                 doctor` says what to do.",
-                path.display(),
-                tool.name()
+                "{path} holds another {tool} login, which a session that cannot read the \
+                 keychain, such as one started over SSH, signs in with. No switch reaches it. \
+                 While it is there, {tool} sessions already running at a switch {running}. \
+                 `pitboard doctor` says what to do.",
+                path = path.display(),
+                tool = tool.name(),
+                running = crate::words::kept_until_renewed(),
+            ),
+            Warning::FallbackLogin {
+                tool,
+                path,
+                held: Held::NoLogin,
+            } => write!(
+                f,
+                "{path} is there with no {tool} login in it. While it is, {tool} sessions \
+                 already running at a switch {running}. Deleting it lets them follow a switch: \
+                 `rm {path}`.",
+                path = path.display(),
+                tool = tool.name(),
+                running = crate::words::kept_until_renewed(),
+            ),
+            Warning::FallbackLogin {
+                tool,
+                path,
+                held: Held::Unreadable,
+            } => write!(
+                f,
+                "{path} is there, and Pitboard could not read it. While it is, {tool} sessions \
+                 already running at a switch {running}. `pitboard doctor` says why, and what to \
+                 do.",
+                path = path.display(),
+                tool = tool.name(),
+                running = crate::words::kept_until_renewed(),
             ),
             Warning::SessionsStillRunning { from, holding } => write!(
                 f,
@@ -386,6 +421,10 @@ impl Pitboard {
     /// signed in from each tool's login rather than from Pitboard's record, and the change
     /// that finishes it says what it found.
     ///
+    /// A file behind a tool's store is said as a change says it, since while it is there
+    /// every switch reaches running sessions only at their login's next renewal, and a read
+    /// is where somebody looks before they switch.
+    ///
     /// Where this process may change nothing, it answers what [`status_offline`] answers,
     /// with a `read_only` warning that says why: renewing a parked login rotates its refresh
     /// token, a live read records what it measured, and neither may happen then.
@@ -427,6 +466,11 @@ impl Pitboard {
                 Renewal::Renewed | Renewal::Deferred => {}
             }
         }
+        warnings.extend(
+            ProviderId::ALL
+                .iter()
+                .filter_map(|&tool| self.left_behind(tool)),
+        );
         Ok(Done {
             value: report,
             warnings,
@@ -446,7 +490,8 @@ impl Pitboard {
     /// since the switch stopped is one only Anthropic can say whose it is, and then nothing
     /// is said. Telling reads the tool's login and the copy the switch parked, which on
     /// macOS are keychain items, and only while a switch is waiting: otherwise one look at
-    /// whether its record is there is the whole of it.
+    /// whether its record is there is the whole of it. So nothing is said of a file behind
+    /// the keychain, which only a read of the keychain can tell.
     ///
     /// [`status`]: Pitboard::status
     pub fn status_offline(&self) -> Result<Done<status::Report>> {
@@ -887,6 +932,17 @@ impl Pitboard {
         )
     }
 
+    /// What a file behind `tool`'s store says, where one is there. It reads that store, so a
+    /// read that asks nobody does not ask it.
+    fn left_behind(&self, tool: ProviderId) -> Option<Warning> {
+        let behind = crate::provider::of(tool).behind(&self.ctx)?;
+        Some(Warning::FallbackLogin {
+            tool,
+            path: behind.path,
+            held: behind.held,
+        })
+    }
+
     /// Settles, runs the change, and records it in the audit log.
     ///
     /// `tool` is the tool whose login the change is about, where it is about one: its own
@@ -915,9 +971,7 @@ impl Pitboard {
             if !names.is_empty() {
                 warnings.push(Warning::AuthOverridden { tool, names });
             }
-            if let Some(path) = crate::provider::of(tool).fallback_login(&self.ctx) {
-                warnings.push(Warning::FallbackLogin { tool, path });
-            }
+            warnings.extend(self.left_behind(tool));
         }
         if let Some(r) = recovered {
             audit::record(&self.ctx, permit, "recover", &r.to, r.code());
@@ -1107,9 +1161,8 @@ mod tests {
     )]
     fn a_switch_says_a_login_is_left_where_it_does_not_reach() {
         let m = machine("switch-fallback-login");
-        let left = crate::provider::claude::live::credential_file(&m.ctx);
-        m.mem.file_at(left.clone()).plant(
-            &crate::provider::claude::paths::live_service(&m.ctx),
+        let left = plant_behind(
+            &m,
             &crate::switch::harness::document("left-by-a-sign-in").to_string(),
         );
         let switched = Pitboard::new(m.ctx.clone())
@@ -1140,6 +1193,158 @@ mod tests {
                     .all(|w| w.code() != "fallback_login"),
                 "{tool}: {:?}",
                 switched.warnings
+            );
+        }
+    }
+
+    /// Plants `contents` in Claude Code's `.credentials.json` behind the keychain, as a
+    /// sign-in where the keychain could not be read leaves it, and gives back its path.
+    fn plant_behind(m: &Machine, contents: &str) -> std::path::PathBuf {
+        let left = crate::provider::claude::live::credential_file(&m.ctx);
+        m.mem.file_at(left.clone()).plant(
+            &crate::provider::claude::paths::live_service(&m.ctx),
+            contents,
+        );
+        left
+    }
+
+    /// While a file sits behind the keychain, running sessions keep their account after a
+    /// switch until their login is next renewed, so a read says it is there, as a change
+    /// does, and not only somebody about to switch hears of it. A read that asks nobody
+    /// reads no keychain, and says nothing of what is behind one. Codex has no store behind
+    /// its own.
+    #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
+    )]
+    fn a_read_says_a_file_is_behind_the_keychain() {
+        let m = machine("read-fallback-login");
+        let left = plant_behind(
+            &m,
+            &crate::switch::harness::document("left-by-a-sign-in").to_string(),
+        );
+        let pitboard = Pitboard::new(m.ctx.clone());
+
+        let read = pitboard.status(false).expect("a read");
+        let said: Vec<String> = read
+            .warnings
+            .iter()
+            .filter(|w| w.code() == "fallback_login")
+            .map(ToString::to_string)
+            .collect();
+        assert_eq!(said.len(), 1, "{:?}", read.warnings);
+        assert!(
+            said[0].starts_with(&format!(
+                "{} holds another Claude Code login",
+                left.display()
+            )),
+            "{}",
+            said[0]
+        );
+        assert!(
+            said[0].contains(
+                "sessions already running at a switch keep the account they are on until \
+                 their login is next renewed, or until they are started again"
+            ),
+            "{}",
+            said[0]
+        );
+        let offline = pitboard.status_offline().expect("a read of what is known");
+        assert!(
+            offline
+                .warnings
+                .iter()
+                .all(|w| w.code() != "fallback_login"),
+            "{:?}",
+            offline.warnings
+        );
+
+        for (tool, make) in MACHINES {
+            let m = make(&format!("read-nothing-left-{tool}"));
+            let read = Pitboard::new(m.ctx.clone()).status(false).expect("a read");
+            assert!(
+                read.warnings.iter().all(|w| w.code() != "fallback_login"),
+                "{tool}: {:?}",
+                read.warnings
+            );
+        }
+    }
+
+    /// A running session watches the file by its being there, whatever it holds, so one
+    /// with no login in it holds sessions to their account all the same, and is said too:
+    /// in words that say so, and with what lets them follow.
+    #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
+    )]
+    fn an_empty_file_behind_the_keychain_is_said_too() {
+        let m = machine("read-empty-fallback");
+        let left = plant_behind(&m, "{}");
+        let pitboard = Pitboard::new(m.ctx.clone());
+
+        for warnings in [
+            pitboard.status(false).expect("a read").warnings,
+            pitboard.switch_to("there").expect("a switch").warnings,
+        ] {
+            let said: Vec<String> = warnings
+                .iter()
+                .filter(|w| w.code() == "fallback_login")
+                .map(ToString::to_string)
+                .collect();
+            assert_eq!(
+                said,
+                [format!(
+                    "{path} is there with no Claude Code login in it. While it is, Claude \
+                     Code sessions already running at a switch keep the account they are on \
+                     until their login is next renewed, or until they are started again. \
+                     Deleting it lets them follow a switch: `rm {path}`.",
+                    path = left.display()
+                )],
+                "{warnings:?}"
+            );
+        }
+    }
+
+    /// A running session looks at the file and never reads it to decide, so one Pitboard
+    /// cannot read, as one that is not text or that this user may not read, holds sessions
+    /// to their account all the same. It is said, in words that do not guess what it holds.
+    #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
+    )]
+    fn a_file_behind_the_keychain_that_cannot_be_read_is_said_too() {
+        let m = machine("read-unreadable-fallback");
+        let left = plant_behind(&m, "{}");
+        m.mem.file_at(left.clone()).fault(
+            &crate::provider::claude::paths::live_service(&m.ctx),
+            crate::store::memory::Fault::UnreadableContents(
+                "stream did not contain valid UTF-8".into(),
+            ),
+        );
+        let pitboard = Pitboard::new(m.ctx.clone());
+
+        for warnings in [
+            pitboard.status(false).expect("a read").warnings,
+            pitboard.switch_to("there").expect("a switch").warnings,
+        ] {
+            let said: Vec<String> = warnings
+                .iter()
+                .filter(|w| w.code() == "fallback_login")
+                .map(ToString::to_string)
+                .collect();
+            assert_eq!(
+                said,
+                [format!(
+                    "{} is there, and Pitboard could not read it. While it is, Claude Code \
+                     sessions already running at a switch keep the account they are on until \
+                     their login is next renewed, or until they are started again. `pitboard \
+                     doctor` says why, and what to do.",
+                    left.display()
+                )],
+                "{warnings:?}"
             );
         }
     }

@@ -2205,7 +2205,9 @@ impl State {
     ///
     /// What the switch means for sessions already running depends on the tool. One that
     /// follows by itself gets when it will have; one that never does gets said so, since a
-    /// countdown there would promise something that is not going to happen.
+    /// countdown there would promise something that is not going to happen. One that follows
+    /// at its login's next renewal gets neither: when that happens is up to the session, and
+    /// the switch's warning about the file that holds it back says the rest.
     fn switched(
         &mut self,
         qualified: &str,
@@ -2266,6 +2268,7 @@ impl State {
                     Adoption::Follows { within_seconds } => {
                         (Some(now.epoch() + i64::from(within_seconds)), None)
                     }
+                    Adoption::Renewal { .. } => (None, None),
                     Adoption::Restart { program } => (
                         None,
                         Some(RestartNeeded {

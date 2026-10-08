@@ -34,6 +34,8 @@ An account asked about recently is not asked again until its numbers could have 
 
 `status` exits 0 even when a service cannot be reached, and the account's last line says why. It exits 1 only when Pitboard cannot load its account list.
 
+While `~/.claude/.credentials.json` sits behind the keychain on macOS, `status` warns with `fallback_login`, whatever the file holds. `--offline` reads no keychain, so it does not. See [Claude Code over SSH uses another account](/troubleshooting#claude-code-over-ssh-uses-another-account).
+
 When an interrupted switch is waiting that the next change cannot finish, `status` warns with `recovery_undetermined` and the message that change would stop with. It finishes nothing; see [Recover after a crash, a restore or a move](/troubleshooting/recovery#an-interrupted-switch-cannot-be-finished). `--offline` gives the same warning wherever it can tell without asking Anthropic. It cannot tell when Claude Code renewed its login after the switch stopped, because only Anthropic can say whose that login is.
 
 To see the last numbers measured, without asking anyone:
@@ -138,7 +140,7 @@ Before anything moves, Pitboard checks that the parked login belongs to that acc
 
 If the account is already in use, `use` prints `work is already signed in.` and moves no login.
 
-After a switch, it prints `Switched to work; personal is parked.` and one more line. For Claude Code, that line is `Claude Code sessions already running follow within 33 seconds.` For Codex, it is the second line of the following example.
+After a switch, it prints `Switched to work; personal is parked.` and one more line. For Claude Code, that line is `Claude Code sessions already running follow within 33 seconds.` On macOS, while `~/.claude/.credentials.json` sits behind the keychain, it is ``Claude Code sessions already running keep the account they are on until their login is next renewed, or until they are started again: /Users/you/.claude/.credentials.json is there. `pitboard doctor` says more.`` instead. See [Open sessions](/concepts/switching#open-sessions). For Codex, it is the second line of the following example.
 
 For every error a switch can end with, and what to do about each, see [Error and warning codes](/reference/errors).
 
@@ -266,7 +268,7 @@ A switch is the one `pitboard use` makes, with the same checks and journal. [`pi
 | Output | When |
 | --- | --- |
 | `Watching Claude Code. Pitboard switches to another of your accounts once a limit of the one in use reaches 95%. Stop with Ctrl-C.` | `watch` starts. |
-| `Switched Claude Code from work to personal: work has used 96% of its 5-hour limit. Claude Code sessions already running follow within 33 seconds.` | It switched. |
+| `Switched Claude Code from work to personal: work has used 96% of its 5-hour limit. Claude Code sessions already running follow within 33 seconds.` | It switched. While a login file sits behind the keychain, the last sentence says when open sessions follow instead, as for `use`. |
 | `work has used 97% of its 5-hour limit, and no other Claude Code account has room below 95% in every limit.` | A limit reached the share, and no other account has room. Nothing moves. |
 | `work has used 96% of its 5-hour limit. Pitboard is not switching: <reason>.` | A limit reached the share and another account has room, but something stops the switch. |
 

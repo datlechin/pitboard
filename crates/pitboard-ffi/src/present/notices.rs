@@ -272,8 +272,9 @@ pub(crate) fn run_out_notice(advice: &Advice) -> RunOutNotice {
 
 /// What Pitboard switched by itself, posted since nobody was there to ask for it: "Switched
 /// Claude Code to home", and "work had used 96% of its 5-hour limit. Sessions already running
-/// follow within 33 seconds." It has nothing to switch to: the account left has reached the
-/// share it was switched away at.
+/// follow within 33 seconds.", or, while a file sits behind the keychain, when they do
+/// instead. It has nothing to switch to: the account left has reached the share it was
+/// switched away at.
 pub(crate) fn auto_switched_notice(
     from: &str,
     to: &str,
@@ -285,6 +286,10 @@ pub(crate) fn auto_switched_notice(
         Adoption::Follows { within_seconds } => {
             format!("Sessions already running follow within {within_seconds} seconds.")
         }
+        Adoption::Renewal { path } => format!(
+            "Sessions already running {}: {path} is there.",
+            said::kept_until_renewed()
+        ),
         Adoption::Restart { program } => {
             format!("Restart any running `{program}` for this to take effect.")
         }

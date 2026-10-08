@@ -49,6 +49,8 @@ If the warning says Claude Code's config could not be updated, the switch worked
 
 A session started over SSH, or one where the keychain is locked, does not follow a switch. See [Claude Code over SSH uses another account](#claude-code-over-ssh-uses-another-account).
 
+If the switch said that open sessions keep their account until their login is next renewed, `~/.claude/.credentials.json` is behind the keychain. Each session follows when it next renews its login, or when you start it again. To have sessions follow within 33 seconds again, delete the file as the same section says.
+
 ## A running codex still uses the old account
 
 A running `codex` keeps its account until you restart it. To do that without losing a login, see [Switch accounts](/guides/switch#what-happens-to-open-sessions).
@@ -86,15 +88,17 @@ As read in Claude Code 2.1.294, a session keeps the login it last read while the
 
 ## Claude Code over SSH uses another account
 
-A Claude Code session started over SSH can use another account than the one Pitboard shows, and stay on it after every switch. `pitboard doctor` warns with `fallback login`, and each change to a Claude Code account warns with `fallback_login`.
+A Claude Code session started over SSH can use another account than the one Pitboard shows, and stay on it after every switch. `pitboard doctor` warns with `fallback login`, and each `pitboard status` without `--offline`, each read in the app and each change warns with `fallback_login`.
 
 The cause is a `/login` run where the keychain was locked. As read in Claude Code 2.1.294, it writes the login to `~/.claude/.credentials.json` and leaves the keychain's in place. Claude Code deletes that file only when it writes the keychain while the keychain is empty, so the file outlives every switch. A session that cannot read the keychain signs in with the file.
+
+While the file is there, sessions that read the keychain also stop following a switch within 33 seconds. Each keeps its account until its login is next renewed, or until it is started again. A file with no login in it, such as `{}`, does the same, and `pitboard doctor` says `no login in it`. So does a file Pitboard cannot read, and `pitboard doctor` says why.
 
 To have one login everywhere:
 
 <Steps>
   <Step title="Delete the file">
-    Run `rm ~/.claude/.credentials.json`, or the path the warning names. A session that was using it is signed out.
+    Run `rm ~/.claude/.credentials.json`, or the path the warning names. A session that was using it is signed out. Open sessions that read the keychain follow the next switch within 33 seconds.
   </Step>
   <Step title="Reach the keychain">
     Run `security unlock-keychain ~/Library/Keychains/login.keychain-db` in the same session, or start the session from a desktop terminal. It then uses the account Pitboard switched to.

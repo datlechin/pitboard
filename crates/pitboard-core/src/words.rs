@@ -111,6 +111,14 @@ pub fn not_switching(why: &crate::autoswitch::Skip) -> String {
     }
 }
 
+/// What sessions already running do after a switch while a file sits behind the store they
+/// read, as the register's `fallback_file_pins_session_login` reads Claude Code 2.1.294. The
+/// rest of the sentence, and its subject, are each place's own.
+pub fn kept_until_renewed() -> &'static str {
+    "keep the account they are on until their login is next renewed, or until they are \
+     started again"
+}
+
 /// How much of a limit is used, in three steps. The command line's colours and the app's
 /// tints change where these do, and the words always say the number itself, because not
 /// everybody sees a colour.

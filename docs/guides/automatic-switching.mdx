@@ -82,6 +82,8 @@ Pitboard does not switch in these cases:
 
 The app says why in a notification titled **Claude Code was not switched**. When a try fails, it posts **Pitboard could not switch Claude Code**. The app and `pitboard watch` say each once until the next switch.
 
+A login file behind the keychain, `~/.claude/.credentials.json` on macOS, does not stop a switch. Sessions started after the switch use the account switched to at once, and open ones when their login is next renewed. The switch's notification and line say so in place of the 33 seconds. See [Open sessions](/concepts/switching#open-sessions).
+
 ## Keep the numbers fresh
 
 Pitboard decides from usage it has already read, sending no request. The app and `pitboard watch` read every account every 5 minutes, less often while Anthropic rate limits usage checks. A session using its account fast can pass the share and reach the limit between two reads.
@@ -90,6 +92,6 @@ Add `pitboard statusline` to Claude Code, as [Show usage in Claude Code's status
 
 ## What is not known
 
-The 33 seconds were measured with Claude Code 2.1.278. Two things were not measured: whether a request under way during a switch finishes, and what Claude Code does at a limit.
+The 33 seconds were measured with Claude Code 2.1.278. What an open session does while a login file sits behind the keychain was read in Claude Code 2.1.294 and not measured. Two things were not measured: whether a request under way during a switch finishes, and what Claude Code does at a limit.
 
 For what each switch costs, see [What a switch costs you](/concepts/limits#what-a-switch-costs-you).

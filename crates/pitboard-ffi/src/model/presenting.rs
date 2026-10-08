@@ -1501,6 +1501,80 @@ fn a_switch_names_its_tool_only_beside_another() {
     );
 }
 
+/// While a file sits behind the keychain, Claude Code sessions already running take a switch
+/// at their login's next renewal, which is theirs to know and no moment to count down to. The
+/// switch's notice counts down to nothing, and the warning every read carries while the file
+/// is there says when they follow, once, in a notice of its own. The notification of a
+/// switch made by itself says it in place of a countdown.
+#[test]
+fn a_switch_that_sessions_take_at_renewal_counts_down_nothing() {
+    let path = "/Users/x/.claude/.credentials.json";
+    let left = warning(
+        "fallback_login",
+        &format!("{path} is there with no Claude Code login in it."),
+    );
+    let mut model = at_noon();
+    let mut machine = Machine::reading(Ok(warned(
+        vec![
+            account(Some("work")).signed_in().build(),
+            account(Some("personal")).build(),
+        ],
+        vec![left.clone()],
+    )));
+    model.refresh(&mut machine);
+    machine.switched = Ok(crate::Switched {
+        outcome: crate::Switch::Switched {
+            provider: "claude".into(),
+            from: "personal".into(),
+            to: "work".into(),
+            adoption: crate::Adoption::Renewal { path: path.into() },
+        },
+        warnings: vec![left.clone()],
+    });
+    switch(&mut model, &mut machine, "claude/work");
+
+    let shown = model.shown();
+    assert_eq!(shown.last_switches[0].follows_at, None);
+    assert_eq!(shown.last_switches[0].restart, None);
+    let [switched, left_behind] = shown.notices.as_slice() else {
+        panic!("{:?}", shown.notices);
+    };
+    assert_eq!(
+        *switched,
+        notice(
+            "switch/claude",
+            Severity::Info,
+            "Switched to work",
+            &[],
+            vec![dismiss(Intent::DismissSwitch {
+                provider: "claude".into(),
+            })],
+        )
+    );
+    assert_eq!(left_behind.severity, Severity::Warning);
+    assert_eq!(
+        left_behind.title,
+        "A login file is left behind the keychain"
+    );
+    assert_eq!(left_behind.lines, [left.message]);
+    assert_eq!(left_behind.until, None);
+    assert_eq!(
+        crate::present::auto_switched_notice(
+            "personal",
+            "work",
+            "96% of its 5-hour limit",
+            &crate::Adoption::Renewal { path: path.into() },
+            NOON,
+        )
+        .body,
+        format!(
+            "personal had used 96% of its 5-hour limit. Sessions already running keep the \
+             account they are on until their login is next renewed, or until they are started \
+             again: {path} is there."
+        )
+    );
+}
+
 /// A running `codex` never picks a switch up, so a countdown would promise what does not
 /// happen. The notice is a warning that says to start its sessions again, or, once the core
 /// has counted them, the core's own warning, which says the same with the count.

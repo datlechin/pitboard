@@ -201,10 +201,27 @@ pub(crate) fn machine(seen: &Seen) -> MachineShown {
     }
 }
 
-/// Switching Claude Code by itself, from the app's preferences.
+/// Switching Claude Code by itself, from the app's preferences. How soon running sessions
+/// follow is promised only while the last read found no file behind the keychain.
 fn auto_switch(seen: &Seen) -> AutoSwitchShown {
     let state = seen.state;
     let at = state.preferences.threshold().percent();
+    let follows = if state
+        .warnings
+        .iter()
+        .any(|warning| warning.code == "fallback_login")
+    {
+        format!(
+            "While a login file is left behind the keychain, Claude Code sessions already \
+             running {}.",
+            pitboard_core::words::kept_until_renewed()
+        )
+    } else {
+        format!(
+            "Sessions already running follow within about {} seconds.",
+            pitboard_core::switch::ADOPTION_CEILING_SECONDS
+        )
+    };
     AutoSwitchShown {
         on: state.preferences.auto_switch,
         at,
@@ -215,10 +232,8 @@ fn auto_switch(seen: &Seen) -> AutoSwitchShown {
         note: format!(
             "Pitboard switches Claude Code to another of your accounts with room below \
              {at}% in every limit, once a limit of the one in use reaches {at}%, while the app \
-             is open. Sessions already running follow within about {} seconds. It never \
-             switches back by itself, and never switches Codex: a running codex keeps its \
-             account until restarted.",
-            pitboard_core::switch::ADOPTION_CEILING_SECONDS
+             is open. {follows} It never switches back by itself, and never switches Codex: a \
+             running codex keeps its account until restarted."
         ),
     }
 }

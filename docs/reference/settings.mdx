@@ -35,7 +35,7 @@ For which account and which limit the item shows, see [Menu bar item](/reference
 
 ### Switch Claude Code automatically
 
-Off by default. While it is on, the app switches Claude Code to another of your accounts before the account in use runs out. It switches once a limit of that account reaches the share **Switch when a limit reaches** sets. It acts before the limit because running Claude Code sessions take up to about 33 seconds to follow a switch.
+Off by default. While it is on, the app switches Claude Code to another of your accounts before the account in use runs out. It switches once a limit of that account reaches the share **Switch when a limit reaches** sets. It acts before the limit because running Claude Code sessions take up to about 33 seconds to follow a switch. While a login file is left behind the keychain, they follow only when their login is next renewed. The setting's note then says so in place of the 33 seconds. The app still switches then, for the sessions started after it.
 
 The app switches only while it is open. It switches only to an account that has used less than that share of every limit it has. It never switches back by itself, and never switches Codex, since a running `codex` keeps its account until it is started again.
 

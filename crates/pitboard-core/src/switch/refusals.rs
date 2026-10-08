@@ -217,3 +217,59 @@ fn a_login_pitboard_cannot_find_is_not_the_same_as_nobody_being_signed_in() {
         "got {failed:?}"
     );
 }
+
+/// While `.credentials.json` sits behind the keychain, a session already running keeps the
+/// login it holds until that login is next renewed, whatever the file holds, as the
+/// register's `fallback_file_pins_session_login` reads 2.1.294: it looks at the file and
+/// never reads it to decide. A switch says so, naming the file, in place of the 33 seconds
+/// it takes without one, also where Pitboard cannot read what the file holds.
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
+)]
+#[cfg_attr(
+    target_os = "linux",
+    ignore = "on Linux the file is Claude Code's only store, never behind a keychain"
+)]
+fn a_switch_with_a_file_behind_the_keychain_says_sessions_take_it_at_renewal() {
+    let switched = |m: &super::harness::Machine| {
+        let settled = settle(&m.ctx, Permit::for_a_test(), None)
+            .expect("nothing to recover")
+            .0;
+        switch(settled, &m.key("there")).expect("a switch").0
+    };
+
+    let m = machine("adoption-nothing-behind");
+    assert!(
+        matches!(
+            switched(&m),
+            Outcome::Switched {
+                adoption: provider::Adoption::PollingWithin(33),
+                ..
+            }
+        ),
+        "nothing behind the keychain"
+    );
+
+    for (name, unreadable) in [
+        ("adoption-file-behind", false),
+        ("adoption-unreadable-behind", true),
+    ] {
+        let m = machine(name);
+        let file = provider::claude::live::credential_file(&m.ctx);
+        let behind = m.mem.file_at(file.clone());
+        behind.plant(&m.service, "{}");
+        if unreadable {
+            behind.fault(
+                &m.service,
+                crate::store::memory::Fault::UnreadableContents("permission denied".into()),
+            );
+        }
+        let outcome = switched(&m);
+        let Outcome::Switched { adoption, .. } = outcome else {
+            panic!("{name}: a switch, not {outcome:?}");
+        };
+        assert_eq!(adoption, provider::Adoption::AtRenewal { file }, "{name}");
+    }
+}

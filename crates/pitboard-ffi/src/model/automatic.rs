@@ -178,6 +178,40 @@ fn a_switch_it_made_is_said_and_taken_as_a_switch_somebody_asked_for() {
     );
 }
 
+/// The setting promises that running sessions follow within 33 seconds only while the last
+/// read found no file behind the keychain; with one there, it says they keep their account
+/// until their login is next renewed.
+#[test]
+fn the_setting_promises_33_seconds_only_while_no_file_is_behind_the_keychain() {
+    let mut model = Hand::new();
+    let mut machine = Machine::reading(Ok(status(vec![work(40.0), personal()])));
+    model.refresh(&mut machine);
+    let note = model.shown().machine.auto_switch.note;
+    assert!(
+        note.contains("Sessions already running follow within about 33 seconds."),
+        "{note}"
+    );
+
+    machine.answer = Ok(super::testing::warned(
+        vec![work(40.0), personal()],
+        vec![super::testing::warning(
+            "fallback_login",
+            "/Users/x/.claude/.credentials.json is there with no Claude Code login in it.",
+        )],
+    ));
+    model.refresh(&mut machine);
+    let note = model.shown().machine.auto_switch.note;
+    assert!(!note.contains("33 seconds"), "{note}");
+    assert!(
+        note.contains(
+            "While a login file is left behind the keychain, Claude Code sessions already \
+             running keep the account they are on until their login is next renewed, or until \
+             they are started again."
+        ),
+        "{note}"
+    );
+}
+
 /// A reason it did not switch is said once, not at every look while the numbers stand.
 #[test]
 fn a_reason_it_did_not_switch_is_said_once() {

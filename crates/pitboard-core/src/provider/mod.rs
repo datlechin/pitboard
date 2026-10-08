@@ -251,15 +251,20 @@ pub enum ProviderError {
 
 /// When a session that is already running picks a switch up.
 ///
-/// Measured, not assumed, and it differs enough between tools that a single number would be
-/// a lie for two of the three. Claude Code serves its credential from a 30 second cache, so
-/// a session follows on its own. Codex caches for the life of the process, watches no file
+/// Measured or read, not assumed, and it differs enough between tools that a single number
+/// would be a lie for two of the three. Claude Code serves its credential from a 30 second
+/// cache, so a session follows on its own, unless a file sits behind the keychain, which it
+/// watches in place of the store. Codex caches for the life of the process, watches no file
 /// and refuses a reload whose account id has changed; Gemini caches its client for the
 /// process with no expiry. Neither ever notices.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Adoption {
     /// A session already running follows within this many seconds, with no action.
     PollingWithin(u32),
+    /// A session already running keeps the login it holds until that login is next renewed,
+    /// or until it is started again, because `file` sits behind the store the switch wrote.
+    /// Never rendered as a countdown: when a session's login is renewed is the session's.
+    AtRenewal { file: std::path::PathBuf },
     /// Nothing follows until the program is started again. Never rendered as a countdown.
     ///
     /// `holders` names every kind of process that runs `program`, most particular first and
@@ -269,6 +274,27 @@ pub enum Adoption {
         program: &'static str,
         holders: &'static [crate::holder::Holder],
     },
+}
+
+/// A file of a tool's behind the store that holds the login in use, which no switch reaches.
+/// What it holds can matter less than that it is there: a session can watch it by a look,
+/// whatever is in it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Behind {
+    pub path: std::path::PathBuf,
+    pub held: Held,
+}
+
+/// What a file behind a tool's store holds, as far as Pitboard can read it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Held {
+    /// A login of the tool's, which a session that cannot read that store signs in with.
+    Login,
+    /// No login of the tool's.
+    NoLogin,
+    /// It is there, and cannot be read, as a file that is not text or that this user may
+    /// not read.
+    Unreadable,
 }
 
 /// Whether a parked copy may exist while the same account is still live.
@@ -505,13 +531,15 @@ pub(crate) trait Provider: Send + Sync + std::fmt::Debug {
     /// shell environment at all, gets the same answer as the command line.
     fn overridden_by(&self, ctx: &Context) -> Vec<String>;
 
-    /// The file holding a login of the tool's behind the store in use: what a session that
-    /// cannot read that store signs in with instead, and what no switch reaches. `None`
-    /// where there is none, and where that cannot be told, which `doctor` says.
-    fn fallback_login(&self, ctx: &Context) -> Option<std::path::PathBuf>;
+    /// The file behind the store in use, wherever a look says it is there, whatever it
+    /// holds. `None` where there is none, and where whether there is one cannot be told: the
+    /// store in use cannot be read, which reading the login in it says as well, or the file
+    /// cannot even be looked at, which the tool's own look cannot either.
+    fn behind(&self, ctx: &Context) -> Option<Behind>;
 
-    /// When a running session follows a switch. A fact about the tool, not a setting.
-    fn adoption(&self) -> Adoption;
+    /// When a running session follows a switch made with `behind` behind the store the
+    /// switch writes. A fact about the tool, not a setting.
+    fn adoption(&self, behind: Option<&Behind>) -> Adoption;
 
     /// Whether a park may coexist with the same account still live.
     fn park_semantics(&self) -> ParkSemantics;
@@ -727,7 +755,7 @@ mod tests {
     fn claude_code_follows_a_switch_on_its_own_and_tolerates_a_copy() {
         let claude = of(ProviderId::Claude);
         assert_eq!(
-            claude.adoption(),
+            claude.adoption(None),
             Adoption::PollingWithin(33),
             "measured: a session serves its credential from a 30 second cache"
         );
@@ -748,7 +776,7 @@ mod tests {
     /// what is true.
     #[test]
     fn a_restart_is_not_a_countdown_of_zero() {
-        let restart = of(ProviderId::Codex).adoption();
+        let restart = of(ProviderId::Codex).adoption(None);
         assert_ne!(restart, Adoption::PollingWithin(0));
         assert!(matches!(Adoption::PollingWithin(33), Adoption::PollingWithin(s) if s == 33));
     }
