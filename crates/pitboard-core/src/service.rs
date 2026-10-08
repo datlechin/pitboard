@@ -150,6 +150,16 @@ pub enum Warning {
     /// stops at it until it can be finished or is given up on. The refusal that change would
     /// make, said by a read so that nobody has to make a change to find out.
     SwitchStuck(Error),
+    /// A sign-in outside Pitboard replaced the only login of `label`, and Pitboard holds none
+    /// for it: said by every read until it is signed in again, put in use again or forgotten.
+    /// `now` is whose login the tool has stored instead, as last recorded, which every switch
+    /// changes. `id` is the account's, which stays while the words do not.
+    LoginReplaced {
+        tool: ProviderId,
+        id: String,
+        label: String,
+        now: Stored,
+    },
     /// This process may change nothing, because it runs as root or under sudo, or elevated on
     /// Windows, or nobody could tell whether it does, so a read answers from what Pitboard
     /// last measured: it renews nothing, asks nobody and writes nothing. `why` is how it runs,
@@ -190,6 +200,7 @@ impl Warning {
                 "sessions_unknown"
             }
             Warning::SignInParkedNotInUse { .. } => "sign_in_parked_not_in_use",
+            Warning::LoginReplaced { .. } => "login_replaced",
             Warning::ReadOnly { .. } | Warning::ReadOnlyBelowTheFloor { .. } => "read_only",
         }
     }
@@ -333,6 +344,28 @@ impl fmt::Display for Warning {
                 tool.name(),
                 tool.login_command()
             ),
+            Warning::LoginReplaced {
+                tool, label, now, ..
+            } => {
+                write!(
+                    f,
+                    "`{label}`'s login was replaced by a sign-in outside Pitboard"
+                )?;
+                let tool = tool.name();
+                match now {
+                    Stored::Account(now) => write!(f, ": {tool} now has `{now}`'s login stored,")?,
+                    Stored::Unenrolled(email) => {
+                        write!(f, ": {tool} now has {email}'s login stored,")?;
+                    }
+                    Stored::Nothing => write!(f, ": {tool} now has no login stored,")?,
+                    Stored::Unknown => write!(f, ",")?,
+                }
+                write!(
+                    f,
+                    " and Pitboard holds no login for `{label}`. Run `pitboard enroll {label} \
+                     --sign-in` to sign in to it again."
+                )
+            }
             Warning::ReadOnly { why } => {
                 read_only(f, &crate::words::elevated(crate::host::OS, *why))
             }
@@ -341,6 +374,46 @@ impl fmt::Display for Warning {
             }
         }
     }
+}
+
+/// Whose login a tool has stored, as Pitboard last recorded it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Stored {
+    /// An enrolled account's, by the name to type for it.
+    Account(String),
+    /// The login of an account nobody enrolled, by its email.
+    Unenrolled(String),
+    /// None.
+    Nothing,
+    /// Nothing is recorded of the tool's store here.
+    Unknown,
+}
+
+/// What a read says for as long as it stands, from Pitboard's own record alone: each account
+/// whose only login a sign-in outside Pitboard replaced.
+fn standing(state: &state::State) -> Vec<Warning> {
+    state
+        .accounts
+        .iter()
+        .filter(|account| account.replaced_at.is_some() && account.parked.is_none())
+        .map(|account| {
+            let tool = account.provider();
+            let now = match state.in_use(tool) {
+                None => Stored::Unknown,
+                Some(record) => match (&record.owner, state.account_in_use(tool)) {
+                    (None, _) => Stored::Nothing,
+                    (Some(_), Some(now)) => Stored::Account(state.typed(&now.key())),
+                    (Some(owner), None) => Stored::Unenrolled(owner.email.clone()),
+                },
+            };
+            Warning::LoginReplaced {
+                tool,
+                id: account.id.clone(),
+                label: state.typed(&account.key()),
+                now,
+            }
+        })
+        .collect()
 }
 
 fn read_only(f: &mut fmt::Formatter<'_>, said: &crate::words::ChangesNothing) -> fmt::Result {
@@ -425,6 +498,10 @@ impl Pitboard {
     /// every switch reaches running sessions only at their login's next renewal, and a read
     /// is where somebody looks before they switch.
     ///
+    /// Whose login each tool has stored is recorded where the read found it changed, as
+    /// [`switch::identify::record_read`] says, before the report is made, so a sign-in outside
+    /// Pitboard that replaced the only login of an account is said from that read on.
+    ///
     /// Where this process may change nothing, it answers what [`status_offline`] answers,
     /// with a `read_only` warning that says why: renewing a parked login rotates its refresh
     /// token, a live read records what it measured, and neither may happen then.
@@ -446,14 +523,19 @@ impl Pitboard {
         // Unreadable is not the same as empty: reporting it as empty would say the enrolled
         // logins are gone.
         let state = state::load(&self.ctx)?;
-        // Alongside the report rather than before it. Where only the service can say whose
-        // the live login is, both ask it, and asked one after the other, a service that did
-        // not answer held the read for its timeout twice.
-        let (stuck, report) = std::thread::scope(|scope| {
+        // Alongside the answers rather than before them. Where only the service can say
+        // whose the live login is, both ask it, and asked one after the other, a service that
+        // did not answer held the read for its timeout twice.
+        let (stuck, answers) = std::thread::scope(|scope| {
             let stuck = scope.spawn(|| switch::stuck(&self.ctx, &state, switch::Asking::Service));
-            let report = status::gather(&self.ctx, permit, &state, fresh);
-            (stuck.join().ok().flatten(), report)
+            let answers = status::ask(&self.ctx, &state, fresh);
+            (stuck.join().ok().flatten(), answers)
         });
+        switch::identify::record_read(&self.ctx, permit, &answers.found);
+        // Again, so the rows and what stands are of whose login each tool has stored as it
+        // was just recorded.
+        let state = state::load(&self.ctx)?;
+        let report = status::report(&self.ctx, permit, &state, answers);
         let mut warnings: Vec<Warning> = stuck.map(Warning::SwitchStuck).into_iter().collect();
         for (key, outcome) in renewed {
             audit::record(&self.ctx, permit, "renew", &key.typed(), outcome.code());
@@ -471,6 +553,7 @@ impl Pitboard {
                 .iter()
                 .filter_map(|&tool| self.left_behind(tool)),
         );
+        warnings.extend(standing(&state));
         Ok(Done {
             value: report,
             warnings,
@@ -491,7 +574,9 @@ impl Pitboard {
     /// is said. Telling reads the tool's login and the copy the switch parked, which on
     /// macOS are keychain items, and only while a switch is waiting: otherwise one look at
     /// whether its record is there is the whole of it. So nothing is said of a file behind
-    /// the keychain, which only a read of the keychain can tell.
+    /// the keychain, which only a read of the keychain can tell. What Pitboard's own record
+    /// holds is said as [`status`] says it: an account whose only login was replaced outside
+    /// Pitboard.
     ///
     /// [`status`]: Pitboard::status
     pub fn status_offline(&self) -> Result<Done<status::Report>> {
@@ -499,6 +584,7 @@ impl Pitboard {
         let warnings = switch::stuck(&self.ctx, &state, switch::Asking::Nobody)
             .map(Warning::SwitchStuck)
             .into_iter()
+            .chain(standing(&state))
             .collect();
         Ok(Done {
             value: status::gather_offline(&self.ctx, &state),
@@ -1039,7 +1125,9 @@ impl Audited for switch::Removed {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::switch::harness::{Machine, codex_machine, hold, machine};
+    use crate::switch::harness::{
+        Machine, codex_machine, hold, in_use_lines, machine, signed_in_outside, state_file,
+    };
     use std::collections::BTreeMap;
     use std::sync::Arc;
 
@@ -1564,6 +1652,342 @@ mod tests {
                 .collect();
             assert_eq!(shares, [10.0], "{how}");
         }
+    }
+
+    /// A login Anthropic has named is known by its refresh token's fingerprint from then on,
+    /// so a read asks whose it is only once the login has changed. It asked on every read,
+    /// one round trip more each time for an answer it already had.
+    #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
+    )]
+    fn a_login_already_identified_is_not_asked_about_again() {
+        use crate::api::scripted::Asked;
+        let m = machine("read-known-login");
+
+        Pitboard::new(m.ctx.clone()).status(false).expect("a read");
+
+        let asked = m.api.asked();
+        assert!(
+            !asked.contains(&Asked::Owner("access-here-refresh".into())),
+            "{asked:?}"
+        );
+        assert!(
+            asked.contains(&Asked::Usage("access-here-refresh".into())),
+            "what it has left is still asked: {asked:?}"
+        );
+    }
+
+    /// A sign-in outside Pitboard replaced the only login of the account in use. The first
+    /// read records it and the activity log says so once; every read after, the one that
+    /// asks nobody too, says it until that account is signed in again or forgotten, and its
+    /// row says why it has nothing parked. It read as `nothing parked`, and nothing said what
+    /// had happened.
+    #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
+    )]
+    fn a_sign_in_outside_pitboard_is_said_recorded_and_shown_on_its_row() {
+        use crate::switch::harness::NOW;
+        let m = signed_in_outside("read-signed-in-outside");
+        let pitboard = Pitboard::new(m.ctx.clone());
+        let replaced = "`here`'s login was replaced by a sign-in outside Pitboard: Claude Code \
+                        now has `elsewhere`'s login stored, and Pitboard holds no login for \
+                        `here`. Run `pitboard enroll here --sign-in` to sign in to it again.";
+        let row = |read: &Done<status::Report>, label: &str| {
+            read.value
+                .rows
+                .iter()
+                .find(|row| row.label.as_deref() == Some(label))
+                .map(|row| (row.signed_in, row.stale))
+        };
+
+        let read = pitboard.status(false).expect("a read");
+
+        let state = state::load(&m.ctx).expect("state");
+        assert_eq!(
+            state
+                .account_in_use(ProviderId::Claude)
+                .map(|account| account.label.as_str()),
+            Some("elsewhere")
+        );
+        let account = |label: &str| state.get(&m.key(label)).expect("enrolled");
+        assert_eq!(account("here").replaced_at, Some(NOW));
+        assert_eq!(account("elsewhere").last_used_at, Some(NOW));
+        assert!(account("there").parked.is_some(), "`there` keeps its park");
+        assert_eq!(
+            row(&read, "elsewhere").map(|(signed_in, _)| signed_in),
+            Some(true)
+        );
+        assert_eq!(
+            row(&read, "here"),
+            Some((false, Some(status::Stale::LoginReplaced)))
+        );
+        assert_eq!(said(&read), [("login_replaced", replaced.to_string())]);
+        let noticed = [
+            ("elsewhere".to_string(), "signed_in_outside".to_string()),
+            ("here".to_string(), "login_replaced".to_string()),
+        ];
+        assert_eq!(in_use_lines(&m), noticed);
+
+        let recorded = state_file(&m);
+        let again = pitboard.status(false).expect("a second read");
+        assert_eq!(said(&again), [("login_replaced", replaced.to_string())]);
+        assert_eq!(in_use_lines(&m), noticed, "recorded once");
+        assert_eq!(state_file(&m), recorded, "and written once");
+
+        let offline = pitboard.status_offline().expect("a read of what is known");
+        assert_eq!(said(&offline), [("login_replaced", replaced.to_string())]);
+    }
+
+    /// What a replaced login is said to have been replaced with is what the record holds of
+    /// the store: an account nobody enrolled, by its email, no login at all, or nothing where
+    /// nothing is recorded of the store.
+    #[test]
+    fn a_replaced_login_says_what_the_store_holds_instead_as_far_as_it_is_known() {
+        use crate::in_use::InUse;
+        use crate::switch::harness::{account, owner};
+        let mut state = state::State::default();
+        state.accounts.push(account("here", "here", None));
+        state.accounts[0].replaced_at = Some(1);
+        let said = |state: &state::State| -> Vec<String> {
+            standing(state).iter().map(ToString::to_string).collect()
+        };
+        let then = "and Pitboard holds no login for `here`. Run `pitboard enroll here \
+                    --sign-in` to sign in to it again.";
+
+        let somebody = InUse {
+            owner: Some(owner("new")),
+            login: "new-login".into(),
+            known_at: 1,
+            named: None,
+        };
+        state
+            .in_use
+            .insert(ProviderId::Claude.code().into(), somebody);
+        assert_eq!(
+            said(&state),
+            [format!(
+                "`here`'s login was replaced by a sign-in outside Pitboard: Claude Code now has \
+                 new@example.com's login stored, {then}"
+            )]
+        );
+
+        state.in_use.insert(
+            ProviderId::Claude.code().into(),
+            crate::switch::identify::nobody(None, 1).expect("a store holding no login"),
+        );
+        assert_eq!(
+            said(&state),
+            [format!(
+                "`here`'s login was replaced by a sign-in outside Pitboard: Claude Code now has \
+                 no login stored, {then}"
+            )]
+        );
+
+        state.in_use.clear();
+        assert_eq!(
+            said(&state),
+            [format!(
+                "`here`'s login was replaced by a sign-in outside Pitboard, {then}"
+            )]
+        );
+
+        state.accounts[0].parked = Some(crate::state::Park {
+            service: "pitboard-park-here-1".into(),
+            parked_at: 1,
+            refresh_fingerprint: "f".into(),
+            access_expires_at: None,
+            refresh_expires_at: None,
+        });
+        assert!(
+            said(&state).is_empty(),
+            "a login parked for it is a way back"
+        );
+    }
+
+    /// A read that finds what the record already says writes nothing, so several front ends
+    /// reading one machine never take turns rewriting its account index.
+    #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
+    )]
+    fn a_read_that_finds_nothing_new_writes_nothing() {
+        let m = machine("read-nothing-new");
+        let pitboard = Pitboard::new(m.ctx.clone());
+        let before = state_file(&m);
+
+        pitboard.status(false).expect("a read");
+        pitboard.status(false).expect("another read");
+
+        assert_eq!(state_file(&m), before);
+        assert!(in_use_lines(&m).is_empty());
+    }
+
+    /// Each `CLAUDE_CONFIG_DIR` has a login of its own stored, and Pitboard keeps whose for
+    /// each. A read under another one leaves this one's record, so a sign-in outside Pitboard
+    /// here is still found by the next read here, and reads taking turns under the two write
+    /// nothing once each has its record.
+    #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
+    )]
+    fn a_read_under_another_claude_config_dir_keeps_this_ones_record() {
+        use crate::switch::harness::{NOW, account, document, owner};
+        let m = machine("read-two-slots");
+        m.api
+            .owned_by("access-elsewhere-refresh", owner("elsewhere"));
+        m.api.owned_by("access-there-other", owner("there"));
+        let mut state = state::load(&m.ctx).expect("state");
+        state.accounts.push(account("elsewhere", "elsewhere", None));
+        state::save(&m.ctx, Permit::for_a_test(), &state).expect("saved");
+        let other = m
+            .ctx
+            .clone()
+            .with_claude_config_dir(m.ctx_home().join("other").to_string_lossy().into_owned());
+        m.mem.live().plant(
+            &crate::provider::claude::paths::live_service(&other),
+            &document("there-other").to_string(),
+        );
+
+        Pitboard::new(other.clone())
+            .status(false)
+            .expect("a read under the other");
+        m.sign_in(&document("elsewhere-refresh"));
+        Pitboard::new(m.ctx.clone())
+            .status(false)
+            .expect("a read here");
+
+        let state = state::load(&m.ctx).expect("state");
+        assert_eq!(
+            state.get(&m.key("here")).expect("enrolled").replaced_at,
+            Some(NOW)
+        );
+        assert_eq!(
+            in_use_lines(&m),
+            [
+                ("elsewhere".to_string(), "signed_in_outside".to_string()),
+                ("here".to_string(), "login_replaced".to_string()),
+            ]
+        );
+
+        let recorded = state_file(&m);
+        for ctx in [&other, &m.ctx, &other] {
+            Pitboard::new(ctx.clone()).status(false).expect("a read");
+        }
+        assert_eq!(state_file(&m), recorded, "reads taking turns write nothing");
+    }
+
+    /// `here` is signed in under two `CLAUDE_CONFIG_DIR`s, and a sign-in outside Pitboard
+    /// replaces its login under one. Its login under the other is still stored, so no read
+    /// says it was replaced, least of all one under the slot where it is in use. Once the
+    /// other slot's is replaced too, it is.
+    #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
+    )]
+    fn a_login_still_stored_under_another_claude_config_dir_is_not_said_replaced() {
+        use crate::switch::harness::{NOW, account, document, owner};
+        let m = machine("read-two-slots-one-account");
+        m.api.owned_by("access-here-other", owner("here"));
+        m.api
+            .owned_by("access-elsewhere-refresh", owner("elsewhere"));
+        let mut state = state::load(&m.ctx).expect("state");
+        state.accounts.push(account("elsewhere", "elsewhere", None));
+        state::save(&m.ctx, Permit::for_a_test(), &state).expect("saved");
+        let other = m
+            .ctx
+            .clone()
+            .with_claude_config_dir(m.ctx_home().join("other").to_string_lossy().into_owned());
+        let plant_there = |login: &str| {
+            m.mem.live().plant(
+                &crate::provider::claude::paths::live_service(&other),
+                &document(login).to_string(),
+            );
+        };
+        let replaced = |read: &Done<status::Report>| {
+            said(read)
+                .into_iter()
+                .filter(|(code, _)| *code == "login_replaced")
+                .count()
+        };
+
+        plant_there("here-other");
+        Pitboard::new(other.clone())
+            .status(false)
+            .expect("a read under the other");
+        plant_there("elsewhere-refresh");
+        let there = Pitboard::new(other.clone())
+            .status(false)
+            .expect("a read under the other after a sign-in there");
+        let here = Pitboard::new(m.ctx.clone())
+            .status(false)
+            .expect("a read here");
+
+        assert_eq!((replaced(&there), replaced(&here)), (0, 0));
+        assert_eq!(
+            state::load(&m.ctx)
+                .expect("state")
+                .get(&m.key("here"))
+                .expect("enrolled")
+                .replaced_at,
+            None
+        );
+        assert_eq!(
+            in_use_lines(&m),
+            [("elsewhere".to_string(), "signed_in_outside".to_string())]
+        );
+
+        m.sign_in(&document("elsewhere-refresh"));
+        let gone = Pitboard::new(m.ctx.clone())
+            .status(false)
+            .expect("a read here after a sign-in here");
+
+        assert_eq!(replaced(&gone), 1);
+        assert_eq!(
+            state::load(&m.ctx)
+                .expect("state")
+                .get(&m.key("here"))
+                .expect("enrolled")
+                .replaced_at,
+            Some(NOW)
+        );
+        assert_eq!(
+            in_use_lines(&m)[1..],
+            [
+                ("elsewhere".to_string(), "signed_in_outside".to_string()),
+                ("here".to_string(), "login_replaced".to_string()),
+            ]
+        );
+    }
+
+    /// Claude Code's config names `here` and Pitboard finds no login where it reads: the
+    /// login is somewhere Pitboard does not look, which is not a sign-out. A read records
+    /// nothing, and says of no account that its login was replaced.
+    #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
+    )]
+    fn a_read_that_cannot_find_the_login_claude_code_names_records_nothing() {
+        let m = machine("read-login-elsewhere");
+        m.mem.live().delete_everything();
+        let before = state_file(&m);
+
+        let read = Pitboard::new(m.ctx.clone()).status(false).expect("a read");
+
+        assert_eq!(state_file(&m), before);
+        assert!(in_use_lines(&m).is_empty());
+        let said = said(&read);
+        assert!(
+            !said.iter().any(|(code, _)| *code == "login_replaced"),
+            "{said:?}"
+        );
     }
 
     /// A tool whose login names its own account is identified from the login, which asks

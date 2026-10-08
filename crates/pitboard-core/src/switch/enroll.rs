@@ -11,7 +11,7 @@
 //! A sign-in to the account signed in now keeps the same rule. That account is not parked,
 //! so its new login is put in use the way a switch puts one there, in place of the old.
 
-use super::{Error, Readied, Result, Settled, identify_document, nothing_signed_in, purge};
+use super::{Error, Readied, Result, Settled, identify, identify_document, purge};
 use crate::api::Owner;
 use crate::context::Context;
 use crate::in_use::{self, InUse};
@@ -452,19 +452,18 @@ fn record_current(ctx: &Context, permit: Permit, key: &Key, state: &mut State) -
     let which = key.provider;
     let label = key.label.as_str();
     // Through the store itself rather than the provider's reading of it, so a locked
-    // keychain says so in the store's own words instead of reading as a strange login.
-    let store = super::live_store(ctx, which)?;
-    let named = in_use::named(ctx, which);
-    let live =
-        store::read(&store.chain, &store.service)?.ok_or_else(|| nothing_signed_in(ctx, which))?;
-    // A document with no account in it is nobody signed in: Claude Code's after a
-    // `/logout` still holds the machine's MCP tokens.
-    match provider::of(which).slice(&live) {
-        Err(provider::ProviderError::NoLogin { .. }) => return Err(nothing_signed_in(ctx, which)),
-        Err(other) => return Err(super::shape(which, other)),
-        Ok(_) => {}
-    }
-    let owner = identify_document(ctx, which, &live)?;
+    // keychain says so in the store's own words instead of reading as a strange login. A
+    // document with no account in it is nobody signed in: Claude Code's after a `/logout`
+    // still holds the machine's MCP tokens.
+    let (stored, found) = identify::look(ctx, state, which)?;
+    let identify::Live::Login {
+        document: live,
+        owner,
+        ..
+    } = stored
+    else {
+        return Err(Error::LiveCredentialAbsent { tool: which });
+    };
     claim(state, key, &owner)?;
     let existing = state.get(key);
     let parked = existing.and_then(|a| a.parked.clone());
@@ -479,14 +478,10 @@ fn record_current(ctx: &Context, permit: Permit, key: &Key, state: &mut State) -
         last_used_at,
         &live,
     ));
-    let found = InUse {
-        owner: Some(owner.clone()),
-        login: provider::of(which).fingerprint(&live),
-        known_at: ctx.now(),
-        named,
-    };
-    state.identified(which, found, ctx.now());
+    // Recorded once the account is enrolled, so the activity log names it.
+    let (_, noticed) = identify::record(state, which, found, ctx.now());
     state::save(ctx, permit, state)?;
+    identify::write_down(ctx, permit, &noticed);
     Ok(Enrolled::Current { email: owner.email })
 }
 
@@ -504,7 +499,7 @@ fn from_sign_in(
 ) -> Result<(Enrolled, Vec<Warning>)> {
     let owner = identify_document(ctx, login.provider, &login.document)?;
     claim(state, key, &owner)?;
-    match signed_in_now(ctx, key.provider, &owner) {
+    match signed_in_now(ctx, login.permit, state, key.provider, &owner) {
         SignedInNow::Theirs(live, first) => {
             install_signed_in(ctx, key, state, login, &owner, &live, &first)
         }
@@ -530,8 +525,9 @@ fn from_sign_in(
 
 /// Whose the tool's live login is, as far as a sign-in to `owner`'s account needs to know.
 ///
-/// Read the way a switch reads it. Writing over a login whose account is not known could
-/// lose that account's only login, so only a login known to be `owner`'s is written over.
+/// Read and recorded the way a switch reads it. Writing over a login whose account is not
+/// known could lose that account's only login, so only a login known to be `owner`'s is
+/// written over.
 enum SignedInNow {
     /// `owner`'s: where it is, and what it held.
     Theirs(provider::LiveStore, Value),
@@ -541,16 +537,19 @@ enum SignedInNow {
     Untold(Error),
 }
 
-fn signed_in_now(ctx: &Context, which: ProviderId, owner: &Owner) -> SignedInNow {
-    let read = super::live_store(ctx, which)
-        .and_then(|live| super::read_live(ctx, which, &live).map(|(_, first)| (live, first)));
-    let (live, first) = match read {
-        Ok(read) => read,
-        Err(Error::LiveCredentialAbsent { .. }) => return SignedInNow::NotTheirs,
-        Err(other) => return SignedInNow::Untold(other),
-    };
-    match identify_document(ctx, which, &first) {
-        Ok(found) if found.same_login(owner) => SignedInNow::Theirs(live, first),
+fn signed_in_now(
+    ctx: &Context,
+    permit: Permit,
+    state: &mut State,
+    which: ProviderId,
+    owner: &Owner,
+) -> SignedInNow {
+    match identify::now(ctx, permit, state, which) {
+        Ok(identify::Live::Login {
+            store,
+            document,
+            owner: found,
+        }) if found.same_login(owner) => SignedInNow::Theirs(store, document),
         Ok(_) => SignedInNow::NotTheirs,
         Err(e) => SignedInNow::Untold(e),
     }
@@ -1101,8 +1100,9 @@ mod tests {
 
     /// Writing over a login whose account nobody can name could lose that account's only
     /// login, so a sign-in to `here` while the login in use cannot be told apart is parked
-    /// beside it, as it always was. For Claude Code that is Anthropic refusing or not
-    /// answering about the login in use; for Codex, a login whose ID token cannot be read.
+    /// beside it, as it always was. Each is a login renewed since its account was last
+    /// named, so its fingerprint names nobody: for Claude Code one Anthropic refuses or does
+    /// not answer about, for Codex one whose ID token cannot be read.
     #[test]
     #[cfg_attr(windows, ignore = "W21: switching Codex on Windows")]
     fn a_login_in_use_whose_account_cannot_be_told_is_not_written_over() {
@@ -1112,11 +1112,12 @@ mod tests {
             ("offline", Trouble::Offline),
         ] {
             let m = machine(&format!("untold-{name}"));
-            m.api.token_trouble("access-here-refresh", trouble);
+            m.sign_in(&harness::document("here-renewed"));
+            m.api.token_trouble("access-here-renewed", trouble);
             cases.push((format!("claude, {name}"), m));
         }
         let m = codex_machine("untold");
-        let mut unreadable = codex_login("here", "here-refresh");
+        let mut unreadable = codex_login("here", "here-renewed");
         unreadable["tokens"]["id_token"] = "not a token".into();
         m.sign_in(&unreadable);
         cases.push(("codex".into(), m));
@@ -1157,6 +1158,45 @@ mod tests {
         }
     }
 
+    /// Claude Code's config names `here` and Pitboard finds no login where it reads: the
+    /// login is somewhere Pitboard does not look, so whose it is cannot be told, and `here`
+    /// is still the account Pitboard last saw in use. A sign-in to `here` is parked and said
+    /// as for any login whose account cannot be told, and the record still names `here`.
+    #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
+    )]
+    fn a_sign_in_while_the_login_claude_code_names_cannot_be_found_is_parked_and_said() {
+        let m = machine("untold-elsewhere");
+        m.mem.live().delete_everything();
+
+        let (enrolled, warnings) =
+            enrolled_as(&m, "here", signed_in(&m, "here", "here-refresh-2")).expect("parked");
+
+        assert!(matches!(enrolled, Enrolled::Renewed { .. }), "{enrolled:?}");
+        let said: Vec<String> = warnings
+            .iter()
+            .filter(|w| w.code() == "sign_in_parked_not_in_use")
+            .map(ToString::to_string)
+            .collect();
+        assert_eq!(said.len(), 1, "{warnings:?}");
+        assert!(
+            said[0]
+                .contains("its config names here@example.com, and Pitboard cannot find that login"),
+            "{}",
+            said[0]
+        );
+        assert_eq!(
+            state::load(&m.ctx)
+                .expect("state")
+                .account_in_use(ProviderId::Claude)
+                .map(Account::key),
+            Some(m.key("here"))
+        );
+        assert!(harness::in_use_lines(&m).is_empty());
+    }
+
     /// Only the account Pitboard last saw in use is warned about. Signing in again to a
     /// parked account renews its park whoever is signed in, as it always did.
     #[test]
@@ -1166,8 +1206,9 @@ mod tests {
     )]
     fn a_sign_in_to_a_parked_account_is_not_warned_about_the_login_in_use() {
         let m = machine("untold-parked");
+        m.sign_in(&harness::document("here-renewed"));
         m.api
-            .token_trouble("access-here-refresh", Trouble::Unauthorized);
+            .token_trouble("access-here-renewed", Trouble::Unauthorized);
 
         let (enrolled, warnings) =
             enrolled_as(&m, "there", signed_in(&m, "there", "there-refresh-2"))
@@ -1225,14 +1266,16 @@ mod tests {
             let key = m.key("here");
             let login = signed_in(&m, "here", "here-refresh-2");
             let owner = identify_document(&m.ctx, m.which, &login.document).expect("whose");
-            let SignedInNow::Theirs(live, first) = signed_in_now(&m.ctx, m.which, &owner) else {
+            let mut state = state::load(&m.ctx).expect("state");
+            let SignedInNow::Theirs(live, first) =
+                signed_in_now(&m.ctx, Permit::for_a_test(), &mut state, m.which, &owner)
+            else {
                 panic!("{tool}: `here` is signed in");
             };
 
             m.sign_in(&login_of(&m, "other", "other-refresh"));
             let vault = m.mem.vault().services();
             let recorded = serde_json::to_value(state::load(&m.ctx).expect("state")).unwrap();
-            let mut state = state::load(&m.ctx).expect("state");
             let refused =
                 install_signed_in(&m.ctx, &key, &mut state, &login, &owner, &live, &first)
                     .expect_err("refused");

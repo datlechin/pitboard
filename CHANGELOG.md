@@ -43,6 +43,14 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   until Pitboard next asks Anthropic about that account. [Which account it switches
   to](https://docs.usepitboard.com/guides/automatic-switching#which-account-it-switches-to)
   says which readings may leave a limit out, and the one limit they may still leave out.
+- A read and a switch ask Anthropic whose Claude Code's stored login is only once that login
+  has changed since Anthropic last named it, by its refresh token's fingerprint. So a switch
+  away from the login Anthropic last named no longer stops at `session_expired` where only
+  that login's access token has lapsed. A read records whose login each tool has stored
+  where it found that changed, with a record for each `CLAUDE_CONFIG_DIR` and `CODEX_HOME`
+  it reads under. It no longer asks the usage of a login Anthropic could not name that time,
+  which it asked under the account Claude Code's config named, so the numbers of a login a
+  sign-in replaced could be filed under the account it replaced.
 
 ### Removed
 
@@ -51,6 +59,12 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Fixed
 
+- A sign-in outside Pitboard that replaces the only login of the account in use is said on
+  every read until that account is signed in to again or forgotten. `pitboard status`
+  shows `login replaced outside Pitboard` beside it, `--json` gives it the `stale` code
+  `login_replaced` and the read the warning `login_replaced`, the app posts it once for each
+  account, and `pitboard log` records it as `in-use`, with the account then in use. It read
+  as `nothing parked`, and nothing said what had happened.
 - An account on a plan with fewer limits, such as a Team seat with no weekly limit for all
   models, is a place for the automatic switch to go and for the app to offer. A limit an
   account does not have counted as spent, so a seat was never chosen once a personal

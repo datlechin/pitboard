@@ -19,7 +19,7 @@ For where parked logins are kept and why they expire, see [Security and privacy]
 
 Pitboard moves no login until it knows whose it is.
 
-For Claude Code, it asks Anthropic, because the account Claude Code's config file names can be a day out of date. For Codex, it reads the account from the login's ID token.
+For Claude Code, it asks Anthropic, because the account Claude Code's config file names can be a day out of date. For Codex, it reads the account from the login's ID token. It records the answer with a fingerprint of the login's refresh token, and asks again only about a login with another fingerprint: one the tool renewed, or one a sign-in outside Pitboard put there.
 
 It records a fingerprint of each parked login's refresh token, and refuses a parked login that no longer matches.
 

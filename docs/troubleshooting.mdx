@@ -27,6 +27,14 @@ For every check, see [Maintenance commands](/reference/maintenance-commands#doct
 
 To fix it, see [Sign in to an account again](/guides/sign-in-again). To prevent it, see [Keep parked logins alive](/guides/renewal).
 
+## An account reads `login replaced outside Pitboard`
+
+`pitboard status` shows `login replaced outside Pitboard · pitboard enroll work --sign-in` beside `work`, and each read warns with `login_replaced`. The app posts **A login was replaced outside Pitboard**.
+
+A sign-in outside Pitboard, such as `/login` in Claude Code or `codex login`, wrote another login over the one `work` had in use. Pitboard parks the login in use only when it switches away from it, so it held no copy of that one, and nothing brings it back. The warning names whose login the tool has stored in its place. `pitboard log` records when Pitboard found it, with the verb `in-use`.
+
+To use `work` again, sign in to it: see [Sign in to an account again](/guides/sign-in-again). The warning stops once you do, or once you forget `work`. **Add Account** in the app and `pitboard enroll <label> --sign-in` sign in to another account without touching the login in use.
+
 ## Pitboard cannot confirm which account is signed in
 
 If the message says `Pitboard could not confirm`, check the connection and run the command again.

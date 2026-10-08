@@ -209,6 +209,37 @@ pub(crate) fn machine(name: &str) -> Machine {
     }
 }
 
+/// [`machine`], where `elsewhere`, enrolled with nothing parked, has since signed in to
+/// Claude Code outside Pitboard over `here`, whose only login that was.
+pub(crate) fn signed_in_outside(name: &str) -> Machine {
+    let m = machine(name);
+    m.api
+        .owned_by("access-elsewhere-refresh", owner("elsewhere"));
+    let mut state = state::load(&m.ctx).expect("state");
+    state.accounts.push(account("elsewhere", "elsewhere", None));
+    state::save(&m.ctx, Permit::for_a_test(), &state).expect("saved");
+    m.sign_in(&document("elsewhere-refresh"));
+    m
+}
+
+/// The activity log's `in-use` lines, as subject and outcome.
+pub(crate) fn in_use_lines(m: &Machine) -> Vec<(String, String)> {
+    crate::audit::read(&m.ctx, 100)
+        .into_iter()
+        .filter(|entry| entry.verb == "in-use")
+        .map(|entry| (entry.subject, entry.outcome))
+        .collect()
+}
+
+/// `state.json` as it is on disk, with when it was last written.
+pub(crate) fn state_file(m: &Machine) -> (Vec<u8>, std::time::SystemTime) {
+    let path = crate::home::dir(&m.ctx).join("state.json");
+    let written = std::fs::metadata(&path)
+        .and_then(|meta| meta.modified())
+        .expect("a state file");
+    (std::fs::read(&path).expect("a state file"), written)
+}
+
 /// Where OpenAI puts its own claims in a standard token.
 const OPENAI: &str = "https://api.openai.com/auth";
 
@@ -249,17 +280,19 @@ pub(crate) fn codex_access(refresh: &str) -> String {
     crate::provider::jwt::unsigned(&json!({"exp": NOW + 10 * 86_400, "for": refresh}))
 }
 
-pub(crate) fn codex_account(label: &str, uuid: &str, parked: Option<Park>) -> Account {
+/// `who`'s Codex account, as enrolling it from [`codex_login`] writes one: its ChatGPT
+/// account is its workspace, as Codex's own claims give it.
+pub(crate) fn codex_account(label: &str, who: &str, parked: Option<Park>) -> Account {
     Account {
         last_used_at: None,
         replaced_at: None,
         label: label.into(),
-        id: uuid.into(),
-        account_uuid: uuid.into(),
-        email: format!("{uuid}@example.com"),
+        id: codex_id(who),
+        account_uuid: codex_id(who),
+        email: format!("{who}@example.com"),
         parked,
         detail: crate::state::Detail::Codex {
-            workspace_id: None,
+            workspace_id: Some(who.into()),
             plan: Some("pro".into()),
         },
     }
@@ -319,12 +352,10 @@ pub(crate) fn codex_machine(name: &str) -> Machine {
     .expect("parked");
 
     let mut state = State::default();
+    state.accounts.push(codex_account("here", "here", None));
     state
         .accounts
-        .push(codex_account("here", &codex_id("here"), None));
-    state
-        .accounts
-        .push(codex_account("there", &codex_id("there"), Some(parked)));
+        .push(codex_account("there", "there", Some(parked)));
     record_in_use(
         &machine.ctx,
         &mut state,

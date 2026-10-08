@@ -6,7 +6,7 @@
 //! reported a switch; the person found out the next time they ran `claude`, by which point
 //! the login they had left was parked and the one they had arrived at did not work.
 
-use super::harness::{machine, owner, recover};
+use super::harness::{in_use_lines, machine, owner, recover, state_file};
 use super::*;
 use crate::api::scripted::Trouble;
 use crate::service::Permit;
@@ -177,6 +177,30 @@ fn a_park_that_answers_for_its_own_account_is_installed() {
     );
 }
 
+/// The login going out is the one Anthropic last named for the store, by its refresh
+/// token's fingerprint, so only the login going in is asked about. The login going out was
+/// asked about on every switch, which also refused to move a login whose session had lapsed
+/// though its account was known.
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
+)]
+fn a_switch_from_a_login_already_identified_asks_only_about_the_login_going_in() {
+    let m = machine("known-going-out");
+    let settled = settle(&m.ctx, Permit::for_a_test(), None)
+        .expect("nothing to recover")
+        .0;
+    let (outcome, _) = switch(settled, &m.key("there")).expect("a switch");
+    assert!(matches!(outcome, Outcome::Switched { .. }), "{outcome:?}");
+    assert_eq!(
+        m.api.asked(),
+        [crate::api::scripted::Asked::Owner(
+            "access-there-refresh".into()
+        )]
+    );
+}
+
 /// Two situations with one message until now. Nobody signed in is an ordinary state with an
 /// ordinary answer. Claude Code's config naming somebody as signed in while Pitboard finds
 /// no login anywhere it looks means Pitboard is looking in the wrong place, and writing a
@@ -188,6 +212,7 @@ fn a_login_pitboard_cannot_find_is_not_the_same_as_nobody_being_signed_in() {
 
     // Claude Code's config still says who is signed in; the login is not in any store.
     m.mem.live().delete_everything();
+    let recorded = state_file(&m);
     let settled = settle(&m.ctx, Permit::for_a_test(), None)
         .expect("nothing to recover")
         .0;
@@ -201,6 +226,9 @@ fn a_login_pitboard_cannot_find_is_not_the_same_as_nobody_being_signed_in() {
         other => panic!("got {other:?}"),
     }
     assert_eq!(failed.code(), "live_credential_elsewhere");
+    // Nothing is known of whose login the store holds, so nothing is recorded of it.
+    assert_eq!(state_file(&m), recorded);
+    assert!(crate::audit::read(&m.ctx, 100).is_empty());
 
     // With nothing in the config either, nobody is signed in and that is all it says.
     std::fs::write(m.ctx_home().join(".claude.json"), "{}").expect("a config");
@@ -215,6 +243,14 @@ fn a_login_pitboard_cannot_find_is_not_the_same_as_nobody_being_signed_in() {
     assert!(
         matches!(failed, Error::LiveCredentialAbsent { .. }),
         "got {failed:?}"
+    );
+    // A sign-out outside Pitboard, which took the only login `here` had.
+    assert_eq!(
+        in_use_lines(&m),
+        [
+            (String::new(), "signed_out_outside".to_string()),
+            ("here".to_string(), "login_replaced".to_string()),
+        ]
     );
 }
 

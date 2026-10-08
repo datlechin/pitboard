@@ -118,6 +118,7 @@ The log holds labels, codes and times, and no email addresses. It holds an accou
 | --- | --- | --- |
 | `use` | A switch you make, in the app or with `pitboard use` | The label switched to. `already_active` when that account was already in use. |
 | `auto-switch` | Pitboard switches Claude Code by itself, from the app or `pitboard watch`, or a switch it tries fails. Deciding not to switch writes no line. | The label switched to, or tried. `ok`, or the code of the error that stopped the switch. |
+| `in-use` | A read or a change finds that the login a tool has stored changed outside Pitboard, by a sign-in or a sign-out in the tool | `signed_in_outside`, with the label of the account whose login the tool has stored, or none for an account Pitboard has not enrolled. `signed_out_outside`, with none, when the tool has no login stored. While Claude Code's config still names an account, Pitboard cannot tell that from a login kept where it does not read, and writes no line. `login_replaced`, with the label of the account whose only login was replaced. |
 | `enroll` | An enrolment, with or without `--sign-in` | The label. `label_unusable` when the label was refused. |
 | `forget` | An account is forgotten | The label |
 | `rename` | A label changes | The label before and after, as in `wrong -> right` |

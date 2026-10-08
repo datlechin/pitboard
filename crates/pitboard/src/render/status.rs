@@ -63,6 +63,10 @@ fn standing(row: &Row, now: i64) -> String {
     match &row.parked {
         // Its login may be the one in use that could not be read; the line under it says so.
         None if row.stale == Some(Stale::LoginUnreadable) => paint(WARN, "login could not be read"),
+        None if row.stale == Some(Stale::LoginReplaced) => paint(
+            WARN,
+            format!("login replaced outside Pitboard · {sign_in_again}"),
+        ),
         None => paint(WARN, format!("nothing parked · {sign_in_again}")),
         Some(p) if !p.restorable_at(now) => paint(BAD, format!("login expired · {sign_in_again}")),
         Some(p) => match p.refresh_expires_at {
@@ -777,6 +781,26 @@ mod tests {
         let line = text.lines().find(|l| l.contains(" beta ")).expect(&text);
         assert!(line.contains("login could not be read"), "{line}");
         assert!(!line.contains("--sign-in"), "{line}");
+    }
+
+    /// An account whose only login a sign-in outside Pitboard replaced says so beside it,
+    /// with what signs it in again, where it said only that nothing was parked.
+    #[test]
+    fn a_login_replaced_outside_pitboard_says_so_and_how_to_sign_in_again() {
+        let mut replaced = row(Some("beta"), false);
+        replaced.parked = None;
+        replaced.stale = Some(Stale::LoginReplaced);
+        let text = plain(&human(&report(vec![row(Some("alpha"), true), replaced])));
+        let line = text.lines().find(|l| l.contains(" beta ")).expect(&text);
+        assert!(
+            line.contains("login replaced outside Pitboard · pitboard enroll beta --sign-in"),
+            "{line}"
+        );
+        assert!(!line.contains("nothing parked"), "{line}");
+        assert!(
+            text.contains("its login was replaced by a sign-in outside Pitboard; sign in again"),
+            "{text}"
+        );
     }
 
     /// A login that was read and is not one account's, such as an API key, says it cannot

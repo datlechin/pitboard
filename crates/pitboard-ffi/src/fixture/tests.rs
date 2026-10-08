@@ -834,7 +834,9 @@ fn giving_up_on_the_interrupted_switch_happens_once() {
 
 /// The log keeps what changed newest last, and names Claude Code's accounts bare and any
 /// other tool's with the tool, as the command line types them. The core logs a switch as
-/// `use`, where the Swift fixture wrote `switch`.
+/// `use`, where the Swift fixture wrote `switch`. Work signed in to Claude Code after old was
+/// enrolled privately with nothing signed in, and enrolling work found that, which the log
+/// keeps as `in-use` once work is enrolled, under its label.
 ///
 /// FixtureTests.swift's theLogRecordsChangesNewestLastAsTheyAreTyped, but for when the
 /// account index last changed, which is kept to the second, so a change within the second
@@ -857,6 +859,7 @@ fn the_log_records_changes_newest_last_as_they_are_typed() {
         [
             "cli enroll old",
             "cli enroll codex/main",
+            "cli in-use work",
             "cli enroll work",
             "app enroll personal",
             "app enroll codex/spare",

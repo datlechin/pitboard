@@ -101,10 +101,10 @@ pub struct Account {
     #[serde(default)]
     pub last_used_at: Option<i64>,
     /// When the account's only login was replaced by a sign-in outside Pitboard, in epoch
-    /// seconds: its tool's store held that login with nothing parked for it, and its service
-    /// then named another account's login there, or none. Pitboard keeps no copy of a login
-    /// in use, so nothing brings it back. Cleared once the account holds a parked login or is
-    /// in use again.
+    /// seconds: its tool's store held that login with nothing parked for it and no other
+    /// slot's record naming it, and its service then named another account's login there, or
+    /// none. Pitboard keeps no copy of a login in use, so nothing brings it back. Cleared once
+    /// the account holds a parked login or is in use again.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub replaced_at: Option<i64>,
     /// Which tool's login this is, and whatever only that tool keeps.
@@ -223,7 +223,8 @@ pub struct State {
     pub schema: u32,
     pub machine: String,
     pub accounts: Vec<Account>,
-    /// Whose login each tool has stored, as its service last said, by the tool's code.
+    /// Whose login each tool has stored, as its service last said, by the tool's code: the
+    /// record of the credential slot `slot` names for that tool.
     ///
     /// Until schema 6 the account Pitboard last switched to stood in for this, as `active`.
     /// A sign-in outside Pitboard left that naming an account whose login was gone, and
@@ -235,6 +236,11 @@ pub struct State {
     /// live one, so a record made in one slot says nothing about another.
     #[serde(default)]
     pub slot: BTreeMap<String, String>,
+    /// The record of each other slot a tool was read in, by the tool's code and then the
+    /// slot. [`load`] puts the slot it reads in place of the one `slot` names, so a read or a
+    /// change in one slot keeps every other slot's record for when that slot is read again.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub other_slots: BTreeMap<String, BTreeMap<String, InUse>>,
     /// Parked items no account refers to any more. Listed in the same save that drops them
     /// and removed once deleted, so a delete that fails or is interrupted is retried.
     #[serde(default)]
@@ -257,6 +263,7 @@ impl Default for State {
             accounts: Vec::new(),
             in_use: BTreeMap::new(),
             slot: BTreeMap::new(),
+            other_slots: BTreeMap::new(),
             discarded: Vec::new(),
             foreign: Vec::new(),
         }
@@ -281,9 +288,9 @@ impl State {
     ///
     /// A record that agrees with `found` is kept as it is, with when it was first said.
     /// Where the login is another account's than before, that account came to be in use at
-    /// `at`, and the one before lost the login it had in use. With nothing parked for it,
-    /// that was its only login, gone to a sign-in outside Pitboard: a switch parks the login
-    /// it moves out first.
+    /// `at`, and the one before lost the login it had in use. With nothing parked for it and
+    /// no other slot's record naming it, that was its only login, gone to a sign-in outside
+    /// Pitboard: a switch parks the login it moves out first.
     pub fn identified(&mut self, which: ProviderId, found: InUse, at: i64) -> Identified {
         let before = self.in_use.get(which.code());
         if before.is_some_and(|known| known.agrees(which, &found)) {
@@ -297,6 +304,7 @@ impl State {
         if before.and_then(|known| known.account(which)) != found.account(which) {
             if let Some(previous) = was
                 .as_ref()
+                .filter(|owner| !self.stored_in_another_slot(which, owner))
                 .and_then(|owner| self.account_of_mut(which, owner))
                 && previous.parked.is_none()
             {
@@ -321,13 +329,42 @@ impl State {
         }
     }
 
-    /// The credential slot this tool's `in_use` was recorded for.
-    pub fn slot_for(&self, provider: ProviderId) -> Option<&str> {
-        self.slot.get(provider.code()).map(String::as_str)
+    /// Whether another slot's record says `which` has `owner`'s login stored there, which a
+    /// change in this slot leaves where it is.
+    fn stored_in_another_slot(&self, which: ProviderId, owner: &Owner) -> bool {
+        let account = Some(new_id(which, owner));
+        self.other_slots.get(which.code()).is_some_and(|records| {
+            records
+                .values()
+                .any(|record| record.account(which) == account)
+        })
     }
 
-    pub fn set_slot(&mut self, provider: ProviderId, slot: String) {
-        self.slot.insert(provider.code().to_string(), slot);
+    /// Make `which`'s record the one of `slot`. Where it is of another slot, that one waits
+    /// with the other slots' records, and the record `slot` was last given, where there is
+    /// one, comes back. A record with no slot named is taken as `slot`'s, as it always was.
+    fn in_slot(&mut self, which: ProviderId, slot: String) {
+        let code = which.code();
+        if let Some(recorded) = self.slot.get(code).filter(|recorded| **recorded != slot) {
+            let others = self.other_slots.entry(code.to_string()).or_default();
+            if let Some(record) = self.in_use.remove(code) {
+                others.insert(recorded.clone(), record);
+            }
+            if let Some(record) = others.remove(&slot) {
+                self.in_use.insert(code.to_string(), record);
+            }
+            if others.is_empty() {
+                self.other_slots.remove(code);
+            }
+        }
+        self.slot.insert(code.to_string(), slot);
+    }
+
+    /// Forget whose login every tool has stored, in every slot.
+    pub fn forget_in_use(&mut self) {
+        self.in_use.clear();
+        self.slot.clear();
+        self.other_slots.clear();
     }
 
     /// The account's name as a command would take it here: bare for the tool a bare name
@@ -625,17 +662,11 @@ pub(crate) fn load_any_machine(ctx: &Context) -> Result<(State, bool)> {
     })?;
     let here = state.machine == machine_id();
     let mut state = state;
-    // Whose login a tool has stored is a fact about one slot. Read from another, the record
-    // says nothing. Per tool, so a changed `CLAUDE_CONFIG_DIR` says nothing about Codex's
-    // record, nor `CODEX_HOME` about Claude Code's.
+    // Whose login a tool has stored is a fact about one slot. Per tool, so a changed
+    // `CLAUDE_CONFIG_DIR` says nothing about Codex's record, nor `CODEX_HOME` about Claude
+    // Code's.
     for &tool in ProviderId::ALL {
-        let slot = crate::provider::of(tool).slot(ctx);
-        if state
-            .slot_for(tool)
-            .is_some_and(|recorded| recorded != slot)
-        {
-            state.in_use.remove(tool.code());
-        }
+        state.in_slot(tool, crate::provider::of(tool).slot(ctx));
     }
     Ok((state, here))
 }
@@ -776,7 +807,7 @@ pub(crate) fn save(ctx: &Context, permit: Permit, state: &State) -> Result<()> {
     home::check_location(&home::dir(ctx))?;
     let mut state = state.clone();
     for &tool in ProviderId::ALL {
-        state.set_slot(tool, crate::provider::of(tool).slot(ctx));
+        state.in_slot(tool, crate::provider::of(tool).slot(ctx));
     }
     let state = &state;
     let path = file(ctx);
@@ -793,7 +824,8 @@ pub(crate) fn save(ctx: &Context, permit: Permit, state: &State) -> Result<()> {
 mod tests {
     /// CLAUDE_CONFIG_DIR picks which keychain item is the live one, and one state file
     /// serves every slot on a machine. A record of whose login one slot holds says nothing
-    /// about another, so it is not carried over, and says nothing about Codex's at all.
+    /// about another, so it is not carried over, and says nothing about Codex's at all. It is
+    /// kept for when its slot is read again, whatever another slot records meanwhile.
     #[test]
     #[cfg_attr(
         windows,
@@ -830,6 +862,22 @@ mod tests {
             moved.in_use(ProviderId::Codex),
             Some(&codex),
             "Codex's slot did not move"
+        );
+
+        let mut moved = moved;
+        let there = InUse::of(&moved.accounts[0], "g", 200);
+        moved.identified(ProviderId::Claude, there.clone(), 200);
+        save(&elsewhere, Permit::for_a_test(), &moved).expect("saved");
+        assert_eq!(
+            load(&here).unwrap().in_use(ProviderId::Claude),
+            Some(&found),
+            "this slot's record is kept while another slot records its own"
+        );
+        save(&here, Permit::for_a_test(), &load(&here).unwrap()).expect("saved");
+        assert_eq!(
+            load(&elsewhere).unwrap().in_use(ProviderId::Claude),
+            Some(&there),
+            "and so is the other's"
         );
         let _ = std::fs::remove_dir_all(&home);
     }
@@ -1433,6 +1481,50 @@ mod tests {
             None,
             "in use again"
         );
+    }
+
+    /// An account signed in under two `CLAUDE_CONFIG_DIR`s keeps its login in the other when
+    /// a sign-in to another account replaces it in this one, so it lost nothing. Once no
+    /// slot's record names it, the login replaced was its only one.
+    #[test]
+    fn a_login_another_slot_still_holds_is_not_the_only_one() {
+        let mut s = State::default();
+        s.upsert(account("work", None));
+        s.upsert(account("personal", None));
+        let said = |s: &State, label: &str, login: &str, at: i64| {
+            InUse::of(s.get(&claude(label)).unwrap(), login, at)
+        };
+        let other = |s: &mut State, record: InUse| {
+            s.other_slots
+                .entry(ProviderId::Claude.code().into())
+                .or_default()
+                .insert("Claude Code-credentials-other".into(), record);
+        };
+        let work_there = said(&s, "work", "work-there", 50);
+        other(&mut s, work_there);
+        let work = said(&s, "work", "work-login", 100);
+        s.identified(ProviderId::Claude, work, 100);
+
+        let personal = said(&s, "personal", "personal-login", 200);
+        let identified = s.identified(ProviderId::Claude, personal, 200);
+
+        assert_eq!(identified.replaced, None);
+        assert_eq!(s.get(&claude("work")).unwrap().replaced_at, None);
+
+        let work = said(&s, "work", "work-login-2", 300);
+        s.identified(ProviderId::Claude, work, 300);
+        let personal_there = said(&s, "personal", "personal-there", 350);
+        other(&mut s, personal_there);
+        let personal = said(&s, "personal", "personal-login", 400);
+        let identified = s.identified(ProviderId::Claude, personal, 400);
+
+        assert_eq!(
+            identified.replaced,
+            Some(Replaced {
+                key: claude("work")
+            })
+        );
+        assert_eq!(s.get(&claude("work")).unwrap().replaced_at, Some(400));
     }
 
     #[test]

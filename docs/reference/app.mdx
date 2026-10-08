@@ -140,6 +140,8 @@ The **Activity** pane lists the last 500 changes Pitboard made, newest first, fr
 
 **Automatic switch** is a switch Pitboard made or tried by itself before a Claude Code account ran out. Its **Account** is the account it switched to, or tried to. Its **Asked By** is **Pitboard app** for the app's own, and **Command line** for `pitboard watch`. A look that finds nothing to switch adds no line.
 
+**Login in use changed** is a change Pitboard found made outside it, such as `/login` in Claude Code. Its **Result** is **Signed in outside** with the account signed in, **Signed out outside** with none, or **Login replaced** with the account whose only login went.
+
 ### This Mac pane
 
 The **This Mac** pane runs the same checks as [`pitboard doctor`](/reference/maintenance-commands#doctor) each time you open it. A line over them sums them up as the last line of `pitboard doctor` does, such as **One thing is worth looking at.** Each check shows a green, orange or red symbol, what it found and, if it did not pass, what to do. **Check Again** (Command-R) runs them again.
@@ -383,7 +385,7 @@ Clicking the Dock icon brings back a minimised window. Opening Pitboard again fr
 
 ## Notifications
 
-The app posts a notification when the account in use runs out of a limit. With [**Switch Claude Code automatically**](/reference/settings#switch-claude-code-automatically) on, it also posts one after each switch it makes by itself. It posts one too when something stops such a switch, or such a switch fails.
+The app posts a notification when the account in use runs out of a limit. With [**Switch Claude Code automatically**](/reference/settings#switch-claude-code-automatically) on, it also posts one after each switch it makes by itself. It posts one too when something stops such a switch, or such a switch fails. It posts one when a sign-in outside Pitboard replaces the only login of an account.
 
 In these examples, `work` is the account in use:
 
@@ -393,8 +395,11 @@ In these examples, `work` is the account in use:
 | **Switched Claude Code to personal** | The app switched Claude Code from `work` to `personal` by itself. | **work had used 96% of its 5-hour limit. Sessions already running follow within 33 seconds.**, or, while a login file is left behind the keychain, **work had used 96% of its 5-hour limit. Sessions already running keep the account they are on until their login is next renewed, or until they are started again: /Users/you/.claude/.credentials.json is there.** | None |
 | **Claude Code was not switched** | A limit of `work` reached the share in **Switch when a limit reaches**, and one of the [reasons](#when-the-app-switches-by-itself) stops the switch. | **work has used 96% of its 5-hour limit.**, then the reason | None |
 | **Pitboard could not switch Claude Code** | An automatic switch failed. | Why it failed, in the words of the error | None |
+| **A login was replaced outside Pitboard** | A read finds that a sign-in outside Pitboard, such as `/login` in Claude Code, replaced the only login of `work`. | **`work`'s login was replaced by a sign-in outside Pitboard: Claude Code now has `personal`'s login stored, and Pitboard holds no login for `work`.**, then the command that signs in to `work` again | None |
 
 Only **work has no 5-hour limit left** has a subtitle: **Claude Code** or **Codex**, once both tools have accounts. Clicking a notification itself does nothing. Notifications play no sound and set no badge. The first time the app posts one, macOS asks whether to allow notifications.
+
+The app posts **A login was replaced outside Pitboard** once for each account while its reads say it, also when a switch since changes whose login Claude Code has stored. It posts it once more if a read stops saying it and a later one says it again, or after the app is opened again.
 
 ### When an account runs out
 

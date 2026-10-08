@@ -233,6 +233,7 @@ A switch prints this on one line:
 | `session_expired` | The login in use has expired. The tool renews it the next time it runs. | `` Claude Code's session has expired; `claude` renews it `` |
 | `parked_access_expired` | The parked login's access token has expired and could not be renewed this time. | None |
 | `nothing_parked` | The account has no parked login. | None |
+| `login_replaced` | The account has no parked login, because a sign-in outside Pitboard replaced the only login it had, the one its tool had stored. | `its login was replaced by a sign-in outside Pitboard; sign in again` |
 | `park_unreadable` | The parked login could not be read. | `` its parked login cannot be read; run `pitboard doctor` `` |
 | `rate_limited` | The service asked for fewer usage requests, so Pitboard waits before asking again. | `Anthropic is rate limiting usage checks` |
 | `unreachable` | The service could not be reached. | `Anthropic could not be reached` |

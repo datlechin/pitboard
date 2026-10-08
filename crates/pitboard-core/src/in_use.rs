@@ -56,7 +56,8 @@ pub struct Identified {
 }
 
 /// An account whose only login is gone: its tool's store held that login with nothing parked
-/// for the account, and its service then named another account's login there, or none.
+/// for the account and no other slot's record naming it, and its service then named another
+/// account's login there, or none.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Replaced {
     pub key: Key,

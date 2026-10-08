@@ -97,8 +97,18 @@ pub(crate) fn restart_line(last: &LastSwitch) -> Option<String> {
     Some(words::restart_notice(&restart.program, &restart.from))
 }
 
-/// A stable mark for a warning's message, so its notice keeps its identity from one snapshot
-/// to the next and two messages of one code are two notices: FNV-1a, which needs no seed.
+/// What a warning's notice is known by from one snapshot to the next: the account it stands
+/// for, where its words change while it stands, and otherwise its words, so two messages of
+/// one code are two notices.
+fn warning_id(warning: &Warning) -> String {
+    let mark = warning
+        .account
+        .clone()
+        .unwrap_or_else(|| mark(&warning.message));
+    format!("warning/{}/{mark}", warning.code)
+}
+
+/// A stable mark for a warning's message: FNV-1a, which needs no seed.
 fn mark(message: &str) -> String {
     let hash = message
         .bytes()
@@ -185,8 +195,12 @@ pub(crate) fn notices(seen: &Seen, footing: &Footing) -> Vec<PanelNotice> {
         if shown.contains(&warning) || (state.stuck && warning.code == "recovery_undetermined") {
             continue;
         }
-        let mut id = format!("warning/{}/{}", warning.code, mark(&warning.message));
-        let twice = ids.iter().filter(|seen| seen.starts_with(&id)).count();
+        let mut id = warning_id(warning);
+        let copy = format!("{id}/");
+        let twice = ids
+            .iter()
+            .filter(|seen| **seen == id || seen.starts_with(&copy))
+            .count();
         if twice > 0 {
             id = format!("{id}/{twice}");
         }
@@ -311,6 +325,19 @@ pub(crate) fn auto_skipped_notice(from: &str, used: &str, code: &str, why: &str)
         title: "Claude Code was not switched".into(),
         subtitle: None,
         body: format!("{from} has used {used}. {}.", capitalised(why)),
+        switch_to: None,
+    }
+}
+
+/// A warning that stands until somebody acts, posted once while it does, since nobody may
+/// have the window open: a login replaced outside Pitboard. Titled and identified as its
+/// notice in the window is, and said in the core's words.
+pub(crate) fn standing_notice(warning: &Warning) -> RunOutNotice {
+    RunOutNotice {
+        id: warning_id(warning),
+        title: words::warning_heading(warning).into(),
+        subtitle: None,
+        body: warning.message.clone(),
         switch_to: None,
     }
 }

@@ -9,6 +9,7 @@ use super::testing::{
     offline_read, percent, refusal, status, warned, warning,
 };
 use super::{Intent, ReadFailure};
+use crate::Warning;
 use std::time::Duration;
 
 /// AppModelTests.swift's aReadFillsInTheTitleAndTheRows. The title is said with the menu
@@ -231,6 +232,111 @@ fn a_failed_read_shows_its_own_warnings_rather_than_the_last_ones() {
     assert_eq!(
         shown.read_failure.map(|f| f.message).as_deref(),
         Some("Anthropic could not be reached")
+    );
+}
+
+/// What a read says while a sign-in outside Pitboard has replaced the only login of `who`,
+/// with Claude Code holding `now`'s, as the core words it and names the account.
+fn replaced(who: &str, now: &str) -> Warning {
+    Warning {
+        account: Some(format!("claude:{who}")),
+        ..warning(
+            "login_replaced",
+            &format!(
+                "`{who}`'s login was replaced by a sign-in outside Pitboard: Claude Code now has \
+                 `{now}`'s login stored, and Pitboard holds no login for `{who}`. Run `pitboard \
+                 enroll {who} --sign-in` to sign in to it again."
+            ),
+        )
+    }
+}
+
+/// A sign-in outside Pitboard that replaced the only login of an account is said on every
+/// read until it is put right, and posted once while it stands, since nobody may have the
+/// window open: a read that carries it again posts nothing, and one after it went and came
+/// back posts it again.
+#[test]
+fn a_login_replaced_outside_is_posted_once_while_it_stands() {
+    let replaced = replaced("work", "home");
+    let accounts = || vec![claude("home", true, 5.0), claude("work", false, 0.0)];
+    let mut model = Hand::new();
+    let mut machine = Machine::reading(Ok(warned(accounts(), vec![replaced.clone()])));
+
+    model.refresh(&mut machine);
+    let posted: Vec<(&str, &str, Option<&str>)> = machine
+        .posted
+        .iter()
+        .map(|notice| {
+            (
+                notice.title.as_str(),
+                notice.body.as_str(),
+                notice.switch_to.as_deref(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        posted,
+        [(
+            "A login was replaced outside Pitboard",
+            replaced.message.as_str(),
+            None
+        )]
+    );
+
+    model.send(Intent::Refresh { asked: true });
+    model.run(&mut machine);
+    assert_eq!(machine.posted.len(), 1, "once while it stands");
+
+    machine.answer = Ok(warned(accounts(), Vec::new()));
+    model.send(Intent::Refresh { asked: true });
+    model.run(&mut machine);
+    machine.answer = Ok(warned(accounts(), vec![replaced]));
+    model.send(Intent::Refresh { asked: true });
+    model.run(&mut machine);
+    assert_eq!(machine.posted.len(), 2, "and again once it is back");
+}
+
+/// What a replaced login's words say Claude Code holds now changes with every switch made
+/// since, and it is still the one account's login replaced, which was posted already.
+/// Another account replaced is posted on its own.
+#[test]
+fn a_login_replaced_outside_is_posted_once_whatever_is_stored_since() {
+    let accounts = || {
+        vec![
+            claude("home", false, 5.0),
+            claude("spare", true, 0.0),
+            claude("work", false, 0.0),
+        ]
+    };
+    let mut model = Hand::new();
+    let mut machine = Machine::reading(Ok(warned(accounts(), vec![replaced("work", "home")])));
+    model.refresh(&mut machine);
+    assert_eq!(machine.posted.len(), 1);
+
+    machine.answer = Ok(warned(accounts(), vec![replaced("work", "spare")]));
+    model.send(Intent::Refresh { asked: true });
+    model.run(&mut machine);
+    assert_eq!(
+        machine.posted.len(),
+        1,
+        "the same account's login, posted once"
+    );
+
+    let both = vec![replaced("work", "spare"), replaced("home", "spare")];
+    machine.answer = Ok(warned(accounts(), both.clone()));
+    model.send(Intent::Refresh { asked: true });
+    model.run(&mut machine);
+    let posted: Vec<(&str, &str)> = machine
+        .posted
+        .iter()
+        .map(|notice| (notice.id.as_str(), notice.body.as_str()))
+        .collect();
+    assert_eq!(
+        posted[1..],
+        [(
+            "warning/login_replaced/claude:home",
+            both[1].message.as_str()
+        )]
     );
 }
 

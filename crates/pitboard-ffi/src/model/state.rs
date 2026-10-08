@@ -777,6 +777,9 @@ pub(crate) struct State {
     /// model started, or since the last switch it made, by what it was: each reason it did
     /// not switch and each refusal, said once rather than at every look.
     auto_told: BTreeSet<String>,
+    /// The accounts whose login was replaced outside Pitboard that the last read said and a
+    /// notification has told about, by `Account.id`.
+    replaced_told: BTreeSet<String>,
     /// Whether the last switch by itself was refused, so the next waits for the app's next
     /// read rather than for every number a session records: each refusal is a line in the
     /// activity log.
@@ -842,6 +845,7 @@ impl State {
             advice: Vec::new(),
             told_this_launch: Told::new(),
             auto_told: BTreeSet::new(),
+            replaced_told: BTreeSet::new(),
             auto_refused: false,
             told: Told::new(),
             preferences: Preferences::default(),
@@ -1965,6 +1969,7 @@ impl State {
                     .iter()
                     .any(|w| w.code == "recovery_undetermined");
                 self.forget_switches_undone(&read);
+                self.tell_replaced(&read.warnings, jobs);
                 self.warnings = read.warnings.clone();
                 self.auto_refused = false;
                 self.advise(&read, jobs);
@@ -2012,6 +2017,29 @@ impl State {
                 }
             }
         }
+    }
+
+    /// A login replaced outside Pitboard is said by every read until it is put right, and
+    /// posted once for its account while it stands, since nobody may have the window open to
+    /// see it: again only once a read no longer says it and a later one does. Its words name
+    /// whose login is stored now, which every switch changes, so it is known by its account.
+    fn tell_replaced(&mut self, warnings: &[Warning], jobs: &mut Vec<Job>) {
+        let replaced: Vec<(&str, &Warning)> = warnings
+            .iter()
+            .filter(|warning| warning.code == "login_replaced")
+            .filter_map(|warning| Some((warning.account.as_deref()?, warning)))
+            .collect();
+        for (account, warning) in &replaced {
+            if !self.replaced_told.contains(*account) {
+                jobs.push(Job::Post {
+                    notice: crate::present::standing_notice(warning),
+                });
+            }
+        }
+        self.replaced_told = replaced
+            .into_iter()
+            .map(|(account, _)| account.to_owned())
+            .collect();
     }
 
     /// What is already known came in, or could not be read.

@@ -1,10 +1,11 @@
 //! Moving the signed-in identity from one enrolled account to another.
 //!
 //! Two rules set the order of every step. Which account the outgoing login belongs to is
-//! asked of Anthropic, never read from Claude Code's config, which can lag the login by a
-//! day: a login filed under the wrong account takes both accounts with it. And additive
-//! writes become durable before destructive ones, so a run that dies midway leaves a spare
-//! copy, never a missing one.
+//! asked of Anthropic, or known by its refresh token's fingerprint from an earlier answer
+//! about that login, never read from Claude Code's config, which can lag the login by a day:
+//! a login filed under the wrong account takes both accounts with it. And additive writes
+//! become durable before destructive ones, so a run that dies midway leaves a spare copy,
+//! never a missing one.
 
 use crate::provider;
 use crate::provider::ProviderId;
@@ -18,6 +19,7 @@ mod foreign;
 mod forget;
 #[cfg(test)]
 pub(crate) mod harness;
+pub(crate) mod identify;
 mod journal;
 #[cfg(test)]
 mod refusals;
@@ -254,16 +256,21 @@ pub(super) fn identify_document(
     provider::of(which)
         .identify(ctx, &credential)
         .map(api::Owner::from)
-        .map_err(|e| match e {
-            provider::ProviderError::Unauthorized => Error::SessionExpired { tool: which },
-            other @ (provider::ProviderError::ShapeUnexpected { .. }
-            | provider::ProviderError::Unsupported { .. }) => shape(which, other),
-            other => Error::IdentityUnverifiable {
-                tool: which,
-                cause: crate::error::Cause::of_provider(&other),
-                detail: other.to_string(),
-            },
-        })
+        .map_err(|e| unidentified(which, e))
+}
+
+/// Why nobody could say whose a login of `which` is, as a change refuses over it.
+fn unidentified(which: ProviderId, error: provider::ProviderError) -> Error {
+    match error {
+        provider::ProviderError::Unauthorized => Error::SessionExpired { tool: which },
+        other @ (provider::ProviderError::ShapeUnexpected { .. }
+        | provider::ProviderError::Unsupported { .. }) => shape(which, other),
+        other => Error::IdentityUnverifiable {
+            tool: which,
+            cause: crate::error::Cause::of_provider(&other),
+            detail: other.to_string(),
+        },
+    }
 }
 
 /// Nothing is signed in to this tool, said the way the tool's own files explain it.
@@ -292,14 +299,21 @@ fn read_live(
     which: ProviderId,
     live: &provider::LiveStore,
 ) -> Result<(String, Value)> {
-    let raw = store::read_raw(&live.chain, &live.service)?
-        .ok_or_else(|| nothing_signed_in(ctx, which))?;
+    read_stored(which, live)?.ok_or_else(|| nothing_signed_in(ctx, which))
+}
+
+/// [`read_live`], with `None` where nothing is signed in: nothing stored, or a document with
+/// no account's login in it, as Claude Code's `/logout` leaves.
+fn read_stored(which: ProviderId, live: &provider::LiveStore) -> Result<Option<(String, Value)>> {
+    let Some(raw) = store::read_raw(&live.chain, &live.service)? else {
+        return Ok(None);
+    };
     let document = serde_json::from_str(&raw)
         .map_err(|e| Error::Store(store::Error::Malformed(e.to_string())))?;
     match provider::of(which).slice(&document) {
-        Err(provider::ProviderError::NoLogin { .. }) => Err(nothing_signed_in(ctx, which)),
+        Err(provider::ProviderError::NoLogin { .. }) => Ok(None),
         Err(other) => Err(shape(which, other)),
-        Ok(_) => Ok((raw, document)),
+        Ok(_) => Ok(Some((raw, document))),
     }
 }
 
@@ -333,28 +347,19 @@ fn switch_held(
             label: key.typed(),
             enrolled: state.labels(key.provider),
         })?;
-    let live = live_store(ctx, key.provider)?;
-
-    // Asked before taking the tool's own lock so a round trip does not hold up its writes,
-    // then confirmed under the lock.
-    let named = in_use::named(ctx, key.provider);
-    let (_, first) = read_live(ctx, key.provider, &live)?;
-    let outgoing = identify_document(ctx, key.provider, &first)?;
-    // Whose login the store holds, as its service just said. Kept with whatever is saved
-    // next, so the record names the account a switch moves out of when it records the one
-    // it moves to, whatever it named before.
-    let found = InUse {
-        owner: Some(outgoing.clone()),
-        login: tool.fingerprint(&first),
-        known_at: ctx.now(),
-        named,
+    // Known before taking the tool's own lock so a round trip does not hold up its writes,
+    // then confirmed under the lock. Recorded at once, so the record names the account a
+    // switch moves out of when it records the one it moves to, whatever it named before.
+    let identify::Live::Login {
+        store: live,
+        document: first,
+        owner: outgoing,
+    } = identify::now(ctx, permit, &mut state, key.provider)?
+    else {
+        return Err(Error::LiveCredentialAbsent { tool: key.provider });
     };
-    let identified = state.identified(key.provider, found, ctx.now());
 
     if target.owned_by(&outgoing) {
-        if identified.changed {
-            state::save(ctx, permit, &state)?;
-        }
         return Ok((
             Outcome::AlreadyActive {
                 label: state.typed(key),

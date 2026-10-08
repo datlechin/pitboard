@@ -34,7 +34,7 @@ fn id(m: &Machine, who: &str) -> String {
 fn enrolled(m: &Machine, who: &str, parked: Option<Park>) -> Account {
     match m.which {
         ProviderId::Claude => account(who, who, parked),
-        ProviderId::Codex => codex_account(who, &codex_id(who), parked),
+        ProviderId::Codex => codex_account(who, who, parked),
     }
 }
 

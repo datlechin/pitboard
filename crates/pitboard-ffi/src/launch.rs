@@ -63,8 +63,22 @@ fn warnings(found: &[service::Warning]) -> Vec<Warning> {
         .map(|w| Warning {
             code: w.code().to_string(),
             message: w.to_string(),
+            account: match w {
+                service::Warning::LoginReplaced { tool, id, .. } => Some(account_id(*tool, id)),
+                _ => None,
+            },
         })
         .collect()
+}
+
+/// An account's `Account.id`: its tool and what the core files it under, or the tool alone
+/// for a login that belongs to no account the core can name.
+fn account_id(tool: ProviderId, id: &str) -> String {
+    if id.is_empty() {
+        format!("{}:login", tool.code())
+    } else {
+        format!("{}:{id}", tool.code())
+    }
 }
 
 /// One change Pitboard made, as `pitboard log` shows them.
@@ -245,11 +259,7 @@ fn account(row: status::Row, now: i64) -> Account {
     let key = row.key();
     let unplaced = row.unplaced();
     Account {
-        id: if row.id.is_empty() {
-            format!("{}:login", row.provider.code())
-        } else {
-            format!("{}:{}", row.provider.code(), row.id)
-        },
+        id: account_id(row.provider, &row.id),
         provider: row.provider.code().into(),
         qualified: key.map(|k| k.qualified()),
         unplaced,

@@ -1809,6 +1809,44 @@ fn two_warnings_alike_are_two_notices() {
     assert_ne!(shown.notices[0].id, shown.notices[1].id);
 }
 
+/// A warning about one account keeps its notice by that account while its words change, and
+/// one account's id beginning another's does not make the second a copy of the first.
+#[test]
+fn a_warning_about_an_account_is_its_notice_by_that_account() {
+    let replaced = |account: &str, now: &str| Warning {
+        account: Some(account.into()),
+        ..warning(
+            "login_replaced",
+            &format!("Claude Code now has `{now}`'s login stored"),
+        )
+    };
+    let mut model = at_noon();
+    let mut machine = Machine::reading(Ok(warned(
+        vec![account(Some("work")).signed_in().build()],
+        vec![
+            replaced("claude:here2", "work"),
+            replaced("claude:here", "work"),
+        ],
+    )));
+    model.refresh(&mut machine);
+    let expected = [
+        "warning/login_replaced/claude:here2",
+        "warning/login_replaced/claude:here",
+    ];
+    assert_eq!(ids(&model.shown()), expected);
+
+    machine.answer = Ok(warned(
+        vec![account(Some("work")).signed_in().build()],
+        vec![
+            replaced("claude:here2", "spare"),
+            replaced("claude:here", "spare"),
+        ],
+    ));
+    model.send(Intent::Refresh { asked: true });
+    model.run(&mut machine);
+    assert_eq!(ids(&model.shown()), expected);
+}
+
 /// Giving up on an interrupted switch deletes nothing, and says so, with how many logins were
 /// kept, until somebody puts it away.
 ///

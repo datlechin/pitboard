@@ -286,6 +286,7 @@ mod tests {
             warnings: vec![crate::Warning {
                 code: "auth_overridden".into(),
                 message: "ANTHROPIC_API_KEY is set".into(),
+                account: None,
             }],
         });
         assert_eq!(alert.title, "Couldn’t switch to personal");

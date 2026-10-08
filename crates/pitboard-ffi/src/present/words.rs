@@ -203,6 +203,7 @@ pub(crate) fn warning_heading(warning: &Warning) -> &'static str {
         "interrupted_switch_finished" => "An interrupted switch was finished",
         "interrupted_switch_undone" => "An interrupted switch was undone",
         "recovery_undetermined" => "An interrupted switch is waiting",
+        "login_replaced" => "A login was replaced outside Pitboard",
         _ => "Pitboard has a warning",
     }
 }
@@ -377,6 +378,7 @@ pub(crate) fn change_verb(verb: &str) -> String {
         "repair" => "Repair".into(),
         "adopt" => "Adopt".into(),
         "uninstall" => "Uninstall".into(),
+        "in-use" => "Login in use changed".into(),
         _ => readable(verb),
     }
 }
@@ -988,10 +990,12 @@ mod tests {
                 "An interrupted switch was undone",
             ),
             ("recovery_undetermined", "An interrupted switch is waiting"),
+            ("login_replaced", "A login was replaced outside Pitboard"),
         ];
         let warning = |code: &str| Warning {
             code: code.into(),
             message: String::new(),
+            account: None,
         };
         for (code, heading) in headings {
             assert_eq!(warning_heading(&warning(code)), heading, "{code}");
@@ -1115,6 +1119,16 @@ mod tests {
     #[test]
     fn a_switch_made_by_itself_is_named_as_one() {
         assert_eq!(change_verb("auto-switch"), "Automatic switch");
+    }
+
+    /// What Pitboard found changed outside it in whose login a tool has stored, which the core
+    /// logs as `in-use`, is named for what happened, since its subject is the account signed
+    /// in on one line and the account whose login went on another, and said as it ended.
+    #[test]
+    fn a_change_found_outside_pitboard_is_named_for_what_happened() {
+        assert_eq!(change_verb("in-use"), "Login in use changed");
+        assert_eq!(change_outcome("signed_in_outside"), "Signed in outside");
+        assert_eq!(change_outcome("login_replaced"), "Login replaced");
     }
 
     /// A change that worked says so in a word, and one that did not says what stopped it,

@@ -270,7 +270,7 @@ public sealed class ModelTests
     [TestMethod]
     public void ASnapshotCarriesWhatASwitchSaid()
     {
-        var stillRunning = new Warning("sessions_still_running", "2 `codex` sessions are still running");
+        var stillRunning = new Warning("sessions_still_running", "2 `codex` sessions are still running", Account: null);
         var switched = new LastSwitch(
             Provider: "codex", To: "codex/work", FollowsAt: null,
             Restart: new RestartNeeded(Program: "codex", From: "personal"), Said: null, Warnings: [stillRunning]);

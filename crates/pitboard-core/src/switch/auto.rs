@@ -349,7 +349,8 @@ mod tests {
 
     /// The account signed in changed since the look, by a sign-in in Claude Code that
     /// Pitboard's record has not caught up with: the switch is not made from the account
-    /// that is in use now, which nobody decided to leave.
+    /// that is in use now, which nobody decided to leave. Whose login the switch found is
+    /// recorded, and the activity log says what changed outside Pitboard.
     #[test]
     #[cfg_attr(windows, ignore = "W22: switching Claude Code on Windows")]
     fn a_switch_decided_away_from_an_account_no_longer_in_use_is_not_made() {
@@ -368,9 +369,17 @@ mod tests {
 
         assert!(matches!(auto(&m).expect("no failure").value, Auto::Idle));
         assert_eq!(m.live(), Some(elsewhere), "the login in use stays in use");
-        assert!(
-            crate::audit::read(&m.ctx, 100).is_empty(),
-            "nothing happened, so nothing is recorded"
+        assert_eq!(
+            super::super::harness::in_use_lines(&m),
+            [
+                ("elsewhere".to_string(), "signed_in_outside".to_string()),
+                ("here".to_string(), "login_replaced".to_string()),
+            ]
+        );
+        assert_eq!(
+            crate::audit::read(&m.ctx, 100).len(),
+            2,
+            "and nothing else, since no switch was made"
         );
         let state = state::load(&m.ctx).expect("state");
         assert!(
@@ -451,9 +460,10 @@ mod tests {
         hold(&m, "after the next attempt");
     }
 
-    /// Anthropic out of reach as the switch asks whose the login in use is: nothing moves,
+    /// Anthropic out of reach as the switch asks whose the login going in is: nothing moves,
     /// and however many times that happens, the switch is made once Anthropic answers again,
-    /// a little later each time.
+    /// a little later each time. The login going out is known by its fingerprint and needs
+    /// no answer.
     #[test]
     #[cfg_attr(
         windows,
@@ -461,14 +471,15 @@ mod tests {
     )]
     fn an_outage_does_not_use_up_the_attempts() {
         let (m, clock) = nearly_out("auto-outage", 96.0);
-        m.api.token_trouble("access-here-refresh", Trouble::Offline);
+        m.api
+            .token_trouble("access-there-refresh", Trouble::Offline);
         for wait in [60, 120, 240, 480] {
             let failed = auto(&m).expect_err("Anthropic is out of reach");
             assert_eq!(failed.error.code(), "identity_unverifiable");
             assert_eq!(live_refresh(&m).as_deref(), Some("here-refresh"));
             clock.advance(wait);
         }
-        m.api.owned_by("access-here-refresh", owner("here"));
+        m.api.owned_by("access-there-refresh", owner("there"));
         assert!(matches!(
             auto(&m).expect("a switch").value,
             Auto::Switched { .. }

@@ -166,6 +166,10 @@ pub fn pitboard_directory(environment: HashMap<String, String>) -> String {
 pub struct Warning {
     pub code: String,
     pub message: String,
+    /// The account a warning that stands until it is put right is about, as `Account.id`
+    /// names it, where its words change while it stands: `login_replaced` names whose login
+    /// the tool has stored now, which every switch changes. `None` for every other warning.
+    pub account: Option<String>,
 }
 
 /// An interrupted switch that was given up on, keeping every login it named.

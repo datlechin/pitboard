@@ -95,7 +95,17 @@ pages load, as a browser would.
   - `switch/`: every change to Pitboard's index (switching, by hand or by itself in
     `auto.rs`, enrolling, adopting, renaming, forgetting, renewing, repairing, abandoning
     and uninstalling), and the journal that
-    finishes an interrupted switch. With `test-support`, a context may hold a
+    finishes an interrupted switch. `identify.rs` says whose login each tool has stored:
+    the record's owner where the login's refresh token has the fingerprint the record was
+    made for, which asks nobody, and the tool's service otherwise (`whose`). A store with
+    no login is recorded as holding none only where the tool's own record names nobody
+    either; where it names somebody, the login is somewhere Pitboard does not look, and
+    nothing is recorded. A change records what it finds under the lock it holds (`now`, or
+    `look` then `record` where enrolling the account found names it first); a read records
+    it afterwards (`record_read`), only where it changed, only where it takes the lock
+    without waiting, never while a switch waits to be finished, and only where the store
+    still holds the login it asked about. Each writes an `in-use` line in the activity log
+    for what changed outside Pitboard. With `test-support`, a context may hold a
     `SignInScript`, which plays a tool's own sign-in in place of its program, for a test or
     a fixture that may start none; everything around it is the core's own.
   - `state.rs`: `state.json`, the index of accounts and where each one's login is parked.
@@ -103,7 +113,8 @@ pages load, as a browser would.
     fingerprint of that login and the account the tool's own record named then. It is
     `state.json`'s `in_use`, written through `State::identified` by a switch, first for the
     login it finds in the store and then for the one it installs, by enrolling the account
-    signed in, by a sign-in put in use and by finishing an interrupted switch.
+    signed in, by a sign-in put in use, by finishing an interrupted switch, and by a read
+    that finds it changed.
   - `autoswitch.rs`: switching Claude Code by itself, for a front end somebody asked to: the
     app with its setting on, or `pitboard watch`. `Threshold` is the share a limit switches
     at, 50 to 99, 95 unless chosen. `decide` is the rule, from the readings Pitboard already
@@ -168,7 +179,10 @@ pages load, as a browser would.
   - `status.rs`, `doctor.rs`, `statusline.rs` and `schedule.rs` serve the commands of the
     same names. A row's numbers in `status.rs` are its service's answer folded into the
     reading every front end records in `usage.json`, or that reading alone where no answer
-    came, and never a tool's own cache (see [Claude Code](#claude-code)). `schedule.rs`
+    came, and never a tool's own cache (see [Claude Code](#claude-code)). A read asks first
+    (`ask`), and makes its rows (`report`) once whose each login is has been recorded, so an
+    account whose only login a sign-in outside Pitboard replaced reads `login_replaced`
+    from that read on. The usage of a login nobody could name is not asked. `schedule.rs`
     decides what daily renewal runs and whose it is, and refuses a program in the temporary
     copy macOS runs an app from, by `in_a_temporary_copy`, which an app asks of the command
     line inside it too; the host's scheduler writes it.
@@ -233,34 +247,35 @@ pages load, as a browser would.
   - `model/` is the app model the macOS app shows and the Windows app is to show. An app
     makes a `PitboardModel`, sends it an `Intent` for each thing asked of it, and its
     `ModelListener` is told of each numbered `Snapshot`; its `AppControl` quits and opens
-    other apps, and its `Notifications` posts what has run out. `state.rs` holds what the
-    model knows and decides what follows each message, `advice.rs` which account to offer
-    once the one in use has run out, `preferences.rs` what the app's own preferences are,
-    `machine.rs` what the model knows of this machine rather than its accounts, and
-    `windows.rs` the account windows' bookkeeping; `lanes.rs` runs what it decides, on a
-    lane of reads, which reads the schedule, doctor's checks and the log too, a lane of
-    changes, one at a time, which also repairs and changes the schedule and renews, a lane
-    that lists processes and asks the app's `AppControl` about other apps, a lane that asks
-    what is installed and looks for the `pitboard` a terminal runs, a thread of its own for
-    each sign-in, a lane that types a code back to one or stops it, a lane that reads and
-    writes what the model keeps, in Pitboard's directory and the windows' records in the
-    app's own, and one that posts through the app's `Notifications`, and tells the listener
-    on a thread of its own; `mod.rs` holds the exported types and the actor thread that owns
-    the state. So far the model reads the accounts, looks every two seconds for a change
-    made elsewhere, asks which tools are installed, switches, quits the app holding a tool's
-    login when the person lets it, gives up on a stuck switch, keeps what each tool's last
-    switch said, runs each tool's own sign-in, enrols the login signed in now, renames and
-    forgets, keeps the sheet over the main window, says which account to switch to once the
-    one in use has run out, notified once for each reset, keeps the app's own preferences,
-    and keeps the daily renewal schedule, renews now, makes doctor's checks, reads the
-    activity log and finds the `pitboard` a terminal runs. It keeps the account windows'
-    books too: which store is whose and each window's last page, which windows close and
-    which stores go after a read, the link waiting for an account, with the wait before it
-    can be opened, and the downloads. Its tests are files of their own there:
-    `reading.rs`, `switching.rs`, `signing.rs`, `changing.rs`, `advising.rs`, `keeping.rs`,
-    `maintaining.rs`, `presenting.rs`, `windowing.rs` and `cadence.rs` drive the state by
-    hand, `lanes.rs` has the lanes' own, and `threaded.rs` drives the model through its
-    threads over the real core.
+    other apps, and its `Notifications` posts what has run out and a login replaced outside
+    Pitboard. `state.rs` holds what the model knows and decides what follows each message,
+    `advice.rs` which account to offer once the one in use has run out, `preferences.rs`
+    what the app's own preferences are, `machine.rs` what the model knows of this machine
+    rather than its accounts, and `windows.rs` the account windows' bookkeeping; `lanes.rs`
+    runs what it decides, on a lane of reads, which reads the schedule, doctor's checks and
+    the log too, a lane of changes, one at a time, which also repairs and changes the
+    schedule and renews, a lane that lists processes and asks the app's `AppControl` about
+    other apps, a lane that asks what is installed and looks for the `pitboard` a terminal
+    runs, a thread of its own for each sign-in, a lane that types a code back to one or
+    stops it, a lane that reads and writes what the model keeps, in Pitboard's directory and
+    the windows' records in the app's own, and one that posts through the app's
+    `Notifications`, and tells the listener on a thread of its own; `mod.rs` holds the
+    exported types and the actor thread that owns the state. So far the model reads the
+    accounts, looks every two seconds for a change made elsewhere, asks which tools are
+    installed, switches, quits the app holding a tool's login when the person lets it, gives
+    up on a stuck switch, keeps what each tool's last switch said, runs each tool's own
+    sign-in, enrols the login signed in now, renames and forgets, keeps the sheet over the
+    main window, says which account to switch to once the one in use has run out, notified
+    once for each reset, keeps the app's own preferences, and keeps the daily renewal
+    schedule, renews now, makes doctor's checks, reads the activity log and finds the
+    `pitboard` a terminal runs. It keeps the account windows' books too: which store is
+    whose and each window's last page, which windows close and which stores go after a read,
+    the link waiting for an account, with the wait before it can be opened, and the
+    downloads. Its tests are files of their own there: `reading.rs`, `switching.rs`,
+    `signing.rs`, `changing.rs`, `advising.rs`, `keeping.rs`, `maintaining.rs`,
+    `presenting.rs`, `windowing.rs` and `cadence.rs` drive the state by hand, `lanes.rs` has
+    the lanes' own, and `threaded.rs` drives the model through its threads over the real
+    core.
   - `present/` makes each `Snapshot` from the model's state: `present` takes the state and
     the moment, and builds every sentence and row the menu bar, the menu and the window
     show, so a view decides nothing. `accounts.rs` is the menu bar's words and the
@@ -690,6 +705,12 @@ pages load, as a browser would.
   button; a reason it did not switch, and a refusal, are said once each until it next
   switches, and never in an alert, since nobody asked. The setting is kept in `app.json`
   with the other preferences, and taken only once they are read.
+- A login replaced outside Pitboard, which every read says until it is put right
+  (`login_replaced`), is posted once for each account while the reads that ask say it, and
+  again only once one has stopped saying it and a later one says it, or after the app is
+  opened again. What was posted is kept by the account the warning is about (`Warning`'s
+  `account`), since its words name whose login is stored now, which every switch changes,
+  and not across launches.
 - Every other change this app makes to the account index holds it as a switch does, and the
   poll leaves the index alone meanwhile: naming the login signed in now, a sign-in's
   enrolment, a rename, forgetting, giving up on an interrupted switch and renewing parked
@@ -860,8 +881,10 @@ pages load, as a browser would.
 - A Codex login is moved, never copied (`ParkSemantics::MoveOnly`). The parked login is
   read back before the incoming login is written. Codex's own sign-in and sign-out revoke
   the stored refresh token, so two usable copies of one login must never be at rest.
-- No login moves until Pitboard knows whose it is. A Claude Code login's account is asked of
-  Anthropic; a Codex login's is read from its ID token.
+- No login moves until Pitboard knows whose it is: asked of its service, which for a Codex
+  login is its ID token, or known by its refresh token's fingerprint from an earlier answer
+  about that very login. A login with no refresh token has no fingerprint and is always
+  asked about.
 - Pitboard never renews the login in use. That is the tool's own job, and a second renewer
   would break it.
 - Nothing outside `pitboard-core` writes Pitboard's index. Every change goes through
@@ -948,11 +971,23 @@ place of the account Pitboard last switched to (`active`). A tool's record holds
 service named, the fingerprint of the login it named it for, when, and the account the tool's
 own record named then. A switch first records the login it finds in the store, then the one
 it installs. Enrolling the account signed in, a sign-in put in use and finishing an
-interrupted switch record theirs. Each goes through `State::identified`. Where the owner
-changes and the account before it has nothing parked, that account's only login is gone, and
-the account says when (`replaced_at`) until it holds a parked login or is in use again. As
-`active` was, a tool's record is dropped when read under another `CLAUDE_CONFIG_DIR` or
-`CODEX_HOME`.
+interrupted switch record theirs, and a read records what it finds where that changed. Each
+goes through `State::identified`. Where the owner changes and the account before it has
+nothing parked and no other slot's record names it, that account's only login is gone, and
+the account says when (`replaced_at`) until it holds a parked login or is in use again: its
+row reads `login_replaced`, and every read warns with `login_replaced`. Adopting a directory
+from another computer clears it, with the records, since both were of that computer's
+stores.
+
+Each `CLAUDE_CONFIG_DIR` or `CODEX_HOME` names a store of its own, its credential slot, so a
+tool has a record for each slot it was read under. `in_use` holds the one of the slot `slot`
+names; the others wait in `other_slots`, by slot, and `load` puts the slot it reads in place
+of the one `slot` names. `active` was dropped when read under another slot, and only a
+change wrote the file. A read records what it finds, so two front ends under two slots take
+turns writing it, and a record one of them dropped would leave the next read under the other
+nothing to tell a sign-in outside Pitboard by. An account another slot's record names still
+has a login stored there, so a sign-in that replaces its login in one slot leaves it that
+one, and nothing says it was replaced.
 
 A schema 5 file comes forward with each tool's `active` label as that account's record, with
 no login and `known_at` 0: nothing established which login the store held. A label naming no
