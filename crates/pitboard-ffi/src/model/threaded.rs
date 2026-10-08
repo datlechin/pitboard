@@ -1728,6 +1728,36 @@ fn the_machine_is_kept_over_the_real_core() {
     model.shutdown();
 }
 
+/// An account 0.8.0 enrolled keeps its window and the sign-in in it: the window's store is
+/// derived from the account's id, which an account enrolled then keeps.
+#[test]
+fn an_account_enrolled_by_0_8_0_keeps_its_window() {
+    let world = World::new("windows-0-8-0");
+    world.enrolled("work", "here", 10.0);
+    let file = world.pitboard_dir().join("state.json");
+    let mut written: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&file).expect("the account index"))
+            .expect("JSON");
+    written["schema"] = 4.into();
+    written["accounts"][0]
+        .as_object_mut()
+        .expect("an account")
+        .remove("id");
+    std::fs::write(&file, written.to_string()).expect("written as 0.8.0 writes it");
+
+    let accounts = world.core().status(false).expect("a read").accounts;
+    let stores: Vec<String> = crate::account_windows::window_accounts(accounts)
+        .into_iter()
+        .map(|window| window.store)
+        .collect();
+    assert_eq!(
+        stores,
+        [crate::account_windows::store_id(
+            (&pitboard_sites::CLAUDE).into(),
+            "here".into()
+        )]
+    );
+}
 /// The account windows' records, kept by the lanes in a directory of the app's own, here the
 /// scratch home's: what the app's earlier store held is taken once, in its own upper case, and
 /// written private to its owner; a store no enrolled account derives is asked of the app and
@@ -1744,10 +1774,11 @@ fn the_windows_records_are_kept_in_the_apps_own_directory() {
     let directory = world.dir("Application Support").join("app");
     let file = directory.join("windows.json");
     let key = world.pitboard_dir().to_string_lossy().into_owned();
-    let store = |uuid: &str| {
-        crate::account_windows::store_id((&pitboard_sites::CLAUDE).into(), uuid.into())
+    let store = |label: &str| {
+        let enrolled = world.elsewhere().account(label).expect("enrolled");
+        crate::account_windows::store_id((&pitboard_sites::CLAUDE).into(), enrolled.id)
     };
-    let (work, spare) = (store("here"), store("there"));
+    let (work, spare) = (store("work"), store("spare"));
     let gone = "00000000-0000-4000-8000-000000000001";
     let read = || std::fs::read_to_string(&file).unwrap_or_default();
     let told = Arc::new(Told::default());
@@ -1870,12 +1901,15 @@ fn the_windows_records_are_not_written_where_pitboard_may_change_nothing() {
 
     let world = World::new("windows-elevated");
     world.enrolled("work", "here", 10.0);
+    let work = crate::account_windows::store_id(
+        (&pitboard_sites::CLAUDE).into(),
+        world.elsewhere().account("work").expect("enrolled").id,
+    );
     world
         .host
         .runs_with(pitboard_core::host::Elevation::Elevated { why: "as root" });
     let directory = world.dir("Application Support").join("app");
     let key = world.pitboard_dir().to_string_lossy().into_owned();
-    let work = crate::account_windows::store_id((&pitboard_sites::CLAUDE).into(), "here".into());
     let gone = "00000000-0000-4000-8000-000000000001";
     let told = Arc::new(Told::default());
     let model = PitboardModel::over(

@@ -306,6 +306,7 @@ pub fn json(report: &Report) -> Value {
             "label": r.label,
             "email": r.email,
             "account_uuid": r.account_uuid,
+            "organization_uuid": r.organization_uuid,
             "signed_in": r.signed_in,
             "switchable": r.switchable(report.now),
             "parked": r.parked.as_ref().map(|p| json!({
@@ -382,7 +383,9 @@ mod tests {
             provider: ProviderId::Claude,
             label: label.map(str::to_owned),
             email: format!("{name}@example.com"),
+            id: format!("{name}-uuid"),
             account_uuid: format!("{name}-uuid"),
+            organization_uuid: Some("org".into()),
             signed_in,
             parked: (!signed_in).then(|| parked(NOW + 20 * 86_400)),
             usage: Some(reading(30.0, Source::Live)),

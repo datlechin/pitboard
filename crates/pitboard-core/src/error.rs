@@ -319,11 +319,11 @@ pub enum Error {
     ParkedLoginExpired { label: String },
 
     #[error(
-        "{email} is signed in but not enrolled, so it cannot be parked. \
+        "{who} is signed in but not enrolled, so it cannot be parked. \
          Run `pitboard enroll {}` for it first.",
         Key::new(*tool, "<label>").typed()
     )]
-    LiveAccountNotEnrolled { tool: ProviderId, email: String },
+    LiveAccountNotEnrolled { tool: ProviderId, who: String },
 
     #[error(
         "{email} is already enrolled as `{label}`. To add a different account, run \
@@ -336,8 +336,8 @@ pub enum Error {
         label: String,
     },
 
-    #[error("`{label}` already refers to {email}. Choose a different label.")]
-    LabelTaken { label: String, email: String },
+    #[error("`{label}` already refers to {who}. Choose a different label.")]
+    LabelTaken { label: String, who: String },
 
     #[error(
         "`{typed}` is not a tool Pitboard knows. It knows: {}.",
@@ -445,11 +445,11 @@ pub enum Error {
     ParkedLoginRefused { tool: ProviderId, label: String },
 
     #[error(
-        "`{label}`'s parked login belongs to {email}, not to the account Pitboard has \
+        "`{label}`'s parked login belongs to {who}, not to the account Pitboard has \
          under that label. Nothing was moved. Run `pitboard doctor`, then \
          `pitboard enroll {label} --sign-in` to replace it."
     )]
-    ParkedLoginBelongsElsewhere { label: String, email: String },
+    ParkedLoginBelongsElsewhere { label: String, who: String },
 
     #[error(
         "signed in as `{to}`, and the login was gone again before Pitboard finished. {}",
@@ -848,7 +848,7 @@ mod tests {
             Error::ParkedLoginExpired { label: "x".into() },
             Error::LabelTaken {
                 label: "x".into(),
-                email: "e".into(),
+                who: "e".into(),
             },
             Error::SwitchRolledBack {
                 from: "x".into(),
@@ -920,7 +920,7 @@ mod tests {
             .to_string(),
             Error::LiveAccountNotEnrolled {
                 tool: ProviderId::Claude,
-                email: "a@b.c".into(),
+                who: "a@b.c".into(),
             }
             .to_string(),
             Error::SignInNotKept {
@@ -1024,13 +1024,13 @@ mod tests {
     fn enrolment_advice_keeps_the_tool() {
         let codex = Error::LiveAccountNotEnrolled {
             tool: ProviderId::Codex,
-            email: "a@b.c".into(),
+            who: "a@b.c".into(),
         }
         .to_string();
         assert!(codex.contains("pitboard enroll codex/<label>"), "{codex}");
         let claude = Error::LiveAccountNotEnrolled {
             tool: ProviderId::Claude,
-            email: "a@b.c".into(),
+            who: "a@b.c".into(),
         }
         .to_string();
         assert!(claude.contains("pitboard enroll <label>"), "{claude}");

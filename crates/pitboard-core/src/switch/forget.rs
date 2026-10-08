@@ -18,11 +18,11 @@ pub fn forget(settled: Settled, key: &Key) -> Result<(String, Vec<Warning>)> {
     // forgetting the account that is actually in use throws away the only record of it.
     // Asked of the tool's own files, so it answers offline: Claude Code's config, or a
     // Codex login's own claims.
-    let live_uuid = provider::of(key.provider)
+    let live = provider::of(key.provider)
         .recorded_identity(&ctx)
-        .map(|found| found.account_id);
-    let signed_in = match (&live_uuid, state.get(key)) {
-        (Some(uuid), Some(account)) => &account.account_uuid == uuid,
+        .map(crate::api::Owner::from);
+    let signed_in = match (&live, state.get(key)) {
+        (Some(owner), Some(account)) => account.owned_by(owner),
         // No live identity to compare against, so Pitboard's own record of the last switch
         // is all there is.
         _ => state.active_for(key.provider) == Some(key.label.as_str()),
@@ -37,8 +37,8 @@ pub fn forget(settled: Settled, key: &Key) -> Result<(String, Vec<Warning>)> {
     })?;
     state::save(&ctx, permit, &state)?;
     crate::fault::point("forget.recorded");
-    crate::readings::forget(&ctx, permit, &account.account_uuid);
-    crate::budget::forget(&ctx, permit, &account.account_uuid);
+    crate::readings::forget(&ctx, permit, &account.id);
+    crate::budget::forget(&ctx, permit, &account.id);
     let pending = purge(&ctx, permit, &mut state);
     Ok((
         account.email,
@@ -47,4 +47,64 @@ pub fn forget(settled: Settled, key: &Key) -> Result<(String, Vec<Warning>)> {
             .into_iter()
             .collect(),
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::harness::{Machine, in_organisation, machine};
+    use super::*;
+    use crate::service::Permit;
+
+    /// `here` in a second organisation beside the first, with Claude Code's config naming
+    /// `here` in `org`, or in no organisation at all.
+    fn two_organisations(name: &str, org: Option<&str>) -> Machine {
+        let m = machine(name);
+        let mut state = state::load(&m.ctx).expect("state");
+        state.upsert(in_organisation("team", "here", "org-team", None));
+        state::save(&m.ctx, Permit::for_a_test(), &state).expect("saved");
+        let mut account = serde_json::json!({
+            "accountUuid": "here",
+            "emailAddress": "here@example.com",
+        });
+        if let Some(org) = org {
+            account["organizationUuid"] = org.into();
+        }
+        std::fs::write(
+            m.ctx_home().join(".claude.json"),
+            serde_json::json!({ "oauthAccount": account }).to_string(),
+        )
+        .expect("a Claude Code config");
+        m
+    }
+
+    fn forgotten(m: &Machine, label: &str) -> Result<(String, Vec<Warning>)> {
+        let settled = super::super::settle(&m.ctx, Permit::for_a_test(), Some(m.which))
+            .expect("nothing to recover")
+            .0;
+        forget(settled, &m.key(label))
+    }
+
+    /// The login in use is the organisation Claude Code's config names, not every account
+    /// of the person it names.
+    #[test]
+    fn the_account_in_use_is_told_by_its_organisation() {
+        let m = two_organisations("forget-by-organisation", Some("org-team"));
+        assert!(matches!(
+            forgotten(&m, "team"),
+            Err(Error::CannotForgetActiveAccount { .. })
+        ));
+        forgotten(&m, "here").expect("the other organisation's login is not in use");
+    }
+
+    /// A config naming no organisation does not say which of the person's logins is in
+    /// use, so Pitboard's record of its last switch decides, as it does with no config.
+    #[test]
+    fn a_config_naming_no_organisation_leaves_it_to_the_last_switch() {
+        let m = two_organisations("forget-no-organisation", None);
+        assert!(matches!(
+            forgotten(&m, "here"),
+            Err(Error::CannotForgetActiveAccount { .. })
+        ));
+        forgotten(&m, "team").expect("not the account last switched to");
+    }
 }

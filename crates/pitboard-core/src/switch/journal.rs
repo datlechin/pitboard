@@ -25,9 +25,12 @@ pub(super) struct Journal {
     pub(super) provider: ProviderId,
     pub(super) started_at: i64,
     pub(super) from_label: String,
-    pub(super) from_uuid: String,
+    /// The accounts' ids, under the names a record has always given them.
+    #[serde(rename = "from_uuid")]
+    pub(super) from_id: String,
     pub(super) to_label: String,
-    pub(super) to_uuid: String,
+    #[serde(rename = "to_uuid")]
+    pub(super) to_id: String,
     pub(super) park_service: String,
     /// The park being installed, so recovery consumes exactly that copy.
     pub(super) incoming_service: String,
@@ -136,7 +139,7 @@ pub(super) fn clear_journal(ctx: &Context, permit: Permit) {
 struct Found {
     /// The park the record reserved: written, never written, or `None` if unreadable.
     parked: Option<Option<Value>>,
-    /// The account the live login belongs to, or `None` if that cannot be learned.
+    /// The id of the account the live login belongs to, or `None` if that cannot be learned.
     live_owner: Option<String>,
 }
 
@@ -157,16 +160,16 @@ fn repair_for(state: &State, journal: &Journal, found: &Found) -> Option<Repair>
     let parked = found.parked.as_ref()?;
     let owner = found.live_owner.as_deref()?;
     let mut repair = Repair {
-        landed: owner == journal.to_uuid,
+        landed: owner == journal.to_id,
         ..Repair::default()
     };
-    if owner == journal.from_uuid {
+    if owner == journal.from_id {
         repair.drop = parked.is_some();
     } else if let Some(oauth) = parked
         && !state.references(&journal.park_service)
     {
         repair.hold = Some((
-            journal.from_uuid.clone(),
+            journal.from_id.clone(),
             park::describe(
                 journal.provider,
                 &journal.park_service,
@@ -182,9 +185,9 @@ fn apply(state: &mut State, journal: &Journal, repair: Repair) {
     if repair.drop {
         state.discard(&journal.park_service);
     }
-    if let Some((uuid, park)) = repair.hold {
+    if let Some((id, park)) = repair.hold {
         match state
-            .by_uuid(journal.provider, &uuid)
+            .by_id(journal.provider, &id)
             .map(crate::state::Account::key)
         {
             Some(key) => state.park(&key, park),
@@ -208,7 +211,7 @@ fn read_park(ctx: &Context, service: &str) -> Option<Option<Value>> {
 
 /// Whose the live login is, as far as the record and the login itself can say.
 enum Owner {
-    /// This account's.
+    /// The account's under this id.
     Is(String),
     /// Nobody can say, for this reason.
     Unknown(String),
@@ -225,19 +228,25 @@ fn live_owner(ctx: &Context, journal: &Journal) -> Owner {
         Err(e) => Owner::Unknown(e.to_string()),
         Ok(None) => Owner::Unknown("nothing is signed in".into()),
         Ok(Some(live)) => match live_owner_by_fingerprint(journal, &live.raw) {
-            Some(uuid) => Owner::Is(uuid),
+            Some(id) => Owner::Is(id),
             None => Owner::Unasked(live.raw),
         },
     }
 }
 
-/// Whose the live login is, with the service asked where only it can say.
-fn ask(ctx: &Context, which: ProviderId, owner: Owner) -> std::result::Result<String, String> {
+/// The id of the account whose the live login is, with the service asked where only it
+/// can say.
+fn ask(
+    ctx: &Context,
+    state: &State,
+    which: ProviderId,
+    owner: Owner,
+) -> std::result::Result<String, String> {
     match owner {
-        Owner::Is(uuid) => Ok(uuid),
+        Owner::Is(id) => Ok(id),
         Owner::Unknown(why) => Err(why),
         Owner::Unasked(live) => identify_document(ctx, which, &live)
-            .map(|owner| owner.account_uuid)
+            .map(|owner| state.id_of(which, &owner))
             .map_err(|e| e.to_string()),
     }
 }
@@ -266,9 +275,9 @@ fn live_owner_by_fingerprint(journal: &Journal, live: &Value) -> Option<String> 
         return None;
     }
     if found == journal.to_fingerprint {
-        Some(journal.to_uuid.clone())
+        Some(journal.to_id.clone())
     } else if found == journal.from_fingerprint {
-        Some(journal.from_uuid.clone())
+        Some(journal.from_id.clone())
     } else {
         None
     }
@@ -317,7 +326,7 @@ pub(super) fn abandon(
         state.discard(&journal.park_service);
     } else if let Some(Some(document)) = read_park(ctx, &journal.park_service)
         && let Some(key) = state
-            .by_uuid(journal.provider, &journal.from_uuid)
+            .by_id(journal.provider, &journal.from_id)
             .map(crate::state::Account::key)
     {
         state.park(
@@ -335,7 +344,7 @@ pub(super) fn abandon(
     if incoming.is_some_and(|document| park::is_live_twin(ctx, journal.provider, &document)) {
         state.discard(&journal.incoming_service);
     } else if state
-        .by_uuid(journal.provider, &journal.to_uuid)
+        .by_id(journal.provider, &journal.to_id)
         .and_then(|a| a.parked.as_ref())
         .is_some()
     {
@@ -428,7 +437,7 @@ pub(super) fn reconcile(
     else {
         return Ok(None);
     };
-    let owner = ask(ctx, journal.provider, owner);
+    let owner = ask(ctx, state, journal.provider, owner);
     let repair = decide(state, &journal, parked, owner)?;
     let finished = repair.landed;
     apply(state, &journal, repair);
@@ -472,7 +481,7 @@ pub(super) fn refusal(ctx: &Context, state: &State, asking: Asking) -> Option<Er
     {
         return None;
     }
-    let owner = ask(ctx, journal.provider, owner);
+    let owner = ask(ctx, state, journal.provider, owner);
     decide(state, &journal, parked, owner).err()
 }
 
@@ -484,14 +493,38 @@ mod tests {
     const PARK: &str = "pitboard-park-from-uuid-1700000000000";
     const INCOMING: &str = "pitboard-park-to-uuid-1690000000000";
 
+    /// A record as 0.8.0 writes it. An account enrolled then kept its account uuid as its
+    /// id, so what the record names is still each account's id.
+    #[test]
+    fn a_record_0_8_0_wrote_names_each_side_by_its_id() {
+        let written: Journal = serde_json::from_value(serde_json::json!({
+            "provider": "claude",
+            "started_at": 1_700_000_000,
+            "from_label": "from",
+            "from_uuid": "from-uuid",
+            "to_label": "to",
+            "to_uuid": "to-uuid",
+            "park_service": PARK,
+            "incoming_service": INCOMING,
+            "from_fingerprint": "f",
+            "to_fingerprint": "t",
+            "slot": "Claude Code-credentials"
+        }))
+        .expect("still read");
+        assert_eq!(
+            (written.from_id.as_str(), written.to_id.as_str()),
+            ("from-uuid", "to-uuid")
+        );
+    }
+
     fn journal() -> Journal {
         Journal {
             provider: ProviderId::Claude,
             started_at: 1_700_000_000,
             from_label: "from".into(),
-            from_uuid: "from-uuid".into(),
+            from_id: "from-uuid".into(),
             to_label: "to".into(),
-            to_uuid: "to-uuid".into(),
+            to_id: "to-uuid".into(),
             park_service: PARK.into(),
             incoming_service: INCOMING.into(),
             from_fingerprint: "ffffffffffffffff".into(),
@@ -530,6 +563,7 @@ mod tests {
         Account {
             last_used_at: None,
             label: label.into(),
+            id: format!("{label}-uuid"),
             account_uuid: format!("{label}-uuid"),
             email: format!("{label}@example.com"),
             detail: state::Detail::Claude {

@@ -750,6 +750,21 @@ impl Env {
         serde_json::from_str(&raw).unwrap()
     }
 
+    /// What Claude Code's `label` is filed under: its parked logins, its readings and a
+    /// switch's record name it by this.
+    pub fn account_id(&self, label: &str) -> String {
+        self.state()["accounts"]
+            .as_array()
+            .and_then(|accounts| {
+                accounts
+                    .iter()
+                    .find(|a| a["provider"] == "claude" && a["label"] == label)
+            })
+            .and_then(|account| account["id"].as_str())
+            .unwrap_or_else(|| panic!("no Claude Code account `{label}`"))
+            .to_owned()
+    }
+
     /// Change the account index the way only time or another tool would.
     pub fn edit_state(&self, edit: impl FnOnce(&mut serde_json::Value)) {
         let mut state = self.state();
@@ -757,10 +772,10 @@ impl Env {
         std::fs::write(self.root.join("pitboard/state.json"), state.to_string()).unwrap();
     }
 
-    /// What Pitboard has measured of each account's five-hour and weekly limits, by the
-    /// letter its id was made from, written where every front end records what it measured.
-    /// Each limit resets an hour and a day from now.
-    pub fn measured(&self, shares: &[(char, f64, f64)]) {
+    /// What Pitboard has measured of each Claude Code account's five-hour and weekly limits,
+    /// by label, written where every front end records what it measured. Each limit resets
+    /// an hour and a day from now.
+    pub fn measured(&self, shares: &[(&str, f64, f64)]) {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .expect("after 1970")
@@ -776,18 +791,18 @@ impl Env {
         };
         let readings: serde_json::Map<String, serde_json::Value> = shares
             .iter()
-            .map(|&(who, session, weekly)| {
-                let uuid = self.uuid(who);
+            .map(|&(label, session, weekly)| {
+                let id = self.account_id(label);
                 let reading = serde_json::json!({
                     "windows": [
                         window("session", session, 3600),
                         window("weekly_all", weekly, 86_400),
                     ],
                     "observed_at": now,
-                    "account_uuid": uuid,
+                    "account_uuid": id,
                     "source": "live",
                 });
-                (uuid, reading)
+                (id, reading)
             })
             .collect();
         std::fs::write(

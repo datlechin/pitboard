@@ -254,12 +254,9 @@ fn apply(
 
     // The old refresh token may already be spent, so the answer is written at once, and a
     // second time under another name if the first write fails.
-    let uuid = state
-        .get(key)
-        .map(|a| a.account_uuid.clone())
-        .unwrap_or_default();
+    let id = state.get(key).map(|a| a.id.clone()).unwrap_or_default();
     let store = || {
-        park::reserve(ctx, permit, &uuid)
+        park::reserve(ctx, permit, &id)
             .and_then(|service| park::store_at(ctx, permit, key.provider, &service, &next))
     };
     let parked = match store().or_else(|_| store()) {
@@ -371,6 +368,7 @@ mod tests {
         state.accounts.push(Account {
             last_used_at: None,
             label: label.into(),
+            id: "acc".into(),
             account_uuid: "acc".into(),
             email: "me@example.com".into(),
             detail: state::Detail::Claude {

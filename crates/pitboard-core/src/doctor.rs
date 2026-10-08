@@ -271,14 +271,15 @@ fn park_facts(ctx: &Context, state: &State) -> Vec<ParkFact> {
     // that has accounts here. Offline for every tool: Claude Code's config, a Codex login's
     // own claims. Deciding it from Claude Code's config alone read a signed-in Codex
     // account as one with nothing parked to switch to.
-    let recorded: std::collections::BTreeMap<ProviderId, Option<String>> = ProviderId::ALL
-        .iter()
-        .filter(|&&which| state.accounts.iter().any(|a| a.provider() == which))
-        .map(|&which| {
-            let found = crate::provider::of(which).recorded_identity(ctx);
-            (which, found.map(|id| id.account_id))
-        })
-        .collect();
+    let recorded: std::collections::BTreeMap<ProviderId, Option<crate::api::Owner>> =
+        ProviderId::ALL
+            .iter()
+            .filter(|&&which| state.accounts.iter().any(|a| a.provider() == which))
+            .map(|&which| {
+                let found = crate::provider::of(which).recorded_identity(ctx);
+                (which, found.map(crate::api::Owner::from))
+            })
+            .collect();
     state
         .accounts
         .iter()
@@ -289,8 +290,8 @@ fn park_facts(ctx: &Context, state: &State) -> Vec<ParkFact> {
             last_used_at: a.last_used_at,
             // What the account's own tool says, when it says anything. Pitboard's own
             // record of its last switch says nothing about a sign-in made elsewhere.
-            active: match recorded.get(&a.provider()).and_then(Option::as_deref) {
-                Some(uuid) => a.account_uuid == uuid,
+            active: match recorded.get(&a.provider()).and_then(Option::as_ref) {
+                Some(owner) => a.owned_by(owner),
                 None => state.active_for(a.provider()) == Some(a.label.as_str()),
             },
             park: a.parked.clone(),
@@ -1362,12 +1363,12 @@ fn judge_asking(facts: &Facts) -> Check {
     // Which services Pitboard asks, named by the tools that have accounts here, and which
     // of them are being held back: a hold is a service's answer, so blaming the wrong one
     // sends somebody to look at a service that is answering normally.
-    let tool_of = |uuid: &str| {
+    let tool_of = |id: &str| {
         facts
             .state
             .as_ref()
             .ok()
-            .and_then(|s| s.owner_of_park(uuid))
+            .and_then(|s| s.owner_of_park(id))
             .map(crate::state::Account::provider)
     };
     let services = |tools: &mut Vec<ProviderId>| {
@@ -2583,6 +2584,7 @@ mod tests {
         let state = State {
             accounts: vec![crate::state::Account {
                 label: "work".into(),
+                id: "work-uuid".into(),
                 account_uuid: "work-uuid".into(),
                 email: "work@example.com".into(),
                 parked: parked("work", Some(NOW + 20 * 86_400)).park,
@@ -3738,6 +3740,7 @@ mod tests {
         let account =
             |label: &str, uuid: &str, detail: crate::state::Detail| crate::state::Account {
                 label: label.into(),
+                id: uuid.into(),
                 account_uuid: uuid.into(),
                 email: format!("{label}@example.com"),
                 parked: None,

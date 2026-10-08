@@ -184,7 +184,7 @@ impl AccountMade {
                 .map(|label| format!("{}/{label}", self.provider)),
             unplaced: false,
             email: format!("{}@example.com", self.label.as_deref().unwrap_or(&uuid)),
-            account_uuid: uuid,
+            account_id: uuid,
             signed_in: self.signed_in,
             switchable: self
                 .switchable
@@ -213,7 +213,7 @@ pub(crate) fn unplaced(provider: &str, signed_in: bool) -> Account {
         qualified: None,
         unplaced: true,
         email: String::new(),
-        account_uuid: String::new(),
+        account_id: String::new(),
         signed_in,
         switchable: false,
         parked: None,

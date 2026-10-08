@@ -171,6 +171,24 @@ pub const PER_SYSTEM: &[PerSystem] = &[
         linux: NO_KEYCHAIN_ON_LINUX,
         windows: NO_KEYCHAIN_ON_WINDOWS,
     },
+    PerSystem {
+        name: "login_is_one_organisation",
+        macos: Read("2.1.294"),
+        linux: Read("2.1.294"),
+        windows: Read("2.1.294"),
+    },
+    PerSystem {
+        name: "config_may_name_no_organisation",
+        macos: Read("2.1.294"),
+        linux: Read("2.1.294"),
+        windows: Read("2.1.294"),
+    },
+    PerSystem {
+        name: "usage_cache_names_the_account_alone",
+        macos: Read("2.1.294"),
+        linux: Read("2.1.294"),
+        windows: Read("2.1.294"),
+    },
 ];
 
 pub const ASSUMPTIONS: &[Assumption] = &[
@@ -539,6 +557,55 @@ pub const ASSUMPTIONS: &[Assumption] = &[
         probe: &[],
         absent: &[],
     },
+    Assumption {
+        name: "login_is_one_organisation",
+        fact: "a login is one account in one organisation. Anthropic's account uuid is the \
+               person, and a sign-in is made for one of their organisations: the authorize \
+               address takes `orgUUID`, and with `forceLoginOrgUUID` set a token whose \
+               organisation `/api/oauth/validate` names otherwise is refused. Claude Code tells \
+               logins apart by `accountUuid` and `organizationUuid` together, so a sign-in to \
+               another organisation of the same person is an `account_switch`. Usage is asked \
+               with the token alone, so it is that organisation's",
+        read_from: "the sign-in's authorize address and its forceLoginOrgUUID check, the \
+                    comparison a sign-in and `/login` make of the account before and after, \
+                    and the usage request's headers",
+        verified_against: "2.1.294",
+        depends: "state::Account::owned_by and state::new_id: which enrolled account a login \
+                  is, and what a new one is filed under",
+        probe: &[
+            "searchParams.append(\"orgUUID\"",
+            "Your authentication token belongs to organization",
+            "\"same_account\":\"account_switch\"",
+            "Account changed via /login",
+        ],
+        absent: &[],
+    },
+    Assumption {
+        name: "config_may_name_no_organisation",
+        fact: "`oauthAccount` names the organisation of the login in use, from the profile, \
+               whose shape requires `organization.uuid`. A sign-in that could not read the \
+               profile writes it from the token's own account instead, whose organisation can \
+               be absent, and Claude Code then reads none",
+        read_from: "the sign-in's fallback to `tokenAccount` when the profile cannot be \
+                    fetched, and the readers that stand `acct:` in for a missing organisation",
+        verified_against: "2.1.294",
+        depends: "Claude's recorded_identity, which names no login when the config names no \
+                  organisation",
+        probe: &["tokenAccount", "acct:${"],
+        absent: &[],
+    },
+    Assumption {
+        name: "usage_cache_names_the_account_alone",
+        fact: "`cachedUsageUtilization` keeps `fetchedAtMs`, the config's `accountUuid` and \
+               `utilization`, and no organisation. Every sign-in clears it, as a logout does, \
+               so between two sign-ins it is one login's",
+        read_from: "where it is written after a usage request, and the reset a sign-in and a \
+                    logout both run first",
+        verified_against: "2.1.294",
+        depends: "status, which reads it for the login in use only, matched by account uuid",
+        probe: &["cachedUsageUtilization=void 0"],
+        absent: &[],
+    },
 ];
 
 #[cfg(test)]
@@ -546,8 +613,7 @@ mod tests {
     use super::*;
     use crate::assumptions::Platform;
 
-    /// The facts the Windows builds of 2.1.289 were read for, and those they were not, by
-    /// name. Read on Windows, the keychain facts would report the keychain gone, and
+    /// The facts the Windows builds were read for, and those they were not, by name. Read on Windows, the keychain facts would report the keychain gone, and
     /// `no_keyring_off_macos` a keyring arrived.
     #[test]
     fn windows_reads_the_facts_its_build_was_read_for() {
@@ -566,6 +632,9 @@ mod tests {
                 "oauth_client",
                 "sign_in_output",
                 "sign_in_takes_another_code",
+                "login_is_one_organisation",
+                "config_may_name_no_organisation",
+                "usage_cache_names_the_account_alone",
             ]
         );
         for name in [

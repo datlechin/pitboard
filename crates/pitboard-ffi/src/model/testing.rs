@@ -70,7 +70,7 @@ pub(super) fn account(
         qualified: label.map(|label| format!("{provider}/{label}")),
         unplaced: false,
         email: format!("{uuid}@example.com"),
-        account_uuid: uuid.into(),
+        account_id: uuid.into(),
         signed_in,
         switchable: !signed_in && label.is_some(),
         parked: None,

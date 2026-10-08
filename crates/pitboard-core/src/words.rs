@@ -224,6 +224,20 @@ pub fn renewal_note(due: usize, renewed: usize) -> String {
     }
 }
 
+/// A login as a message names it: by its email, and as another organisation's, or for
+/// Codex another workspace's, where the account it is told apart from has that email too.
+pub fn login(tool: crate::provider::ProviderId, email: &str, shares_email: bool) -> String {
+    use crate::provider::ProviderId;
+    if !shares_email {
+        return email.to_owned();
+    }
+    let group = match tool {
+        ProviderId::Claude => "organisation",
+        ProviderId::Codex => "workspace",
+    };
+    format!("{email} in another {group}")
+}
+
 /// The line under doctor's checks, or over them in the app. Checks that only warn are
 /// counted as worth looking at. One that fails outweighs every warning: the line then
 /// counts what is broken and says not to switch accounts, since a check fails only when

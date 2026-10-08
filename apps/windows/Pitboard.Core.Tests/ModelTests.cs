@@ -83,7 +83,7 @@ public sealed class ModelTests
     {
         var work = new Account(
             Id: "claude:work", Provider: "claude", Label: "work", Qualified: "claude/work",
-            Unplaced: false, Email: "work@example.com", AccountUuid: "work", SignedIn: true,
+            Unplaced: false, Email: "work@example.com", AccountId: "work", SignedIn: true,
             Switchable: false, Parked: null,
             Usage: new Usage(
                 Source.Live, At,
@@ -348,7 +348,7 @@ public sealed class ModelTests
                 new Account(
                     Id: "claude:work", Provider: "claude", Label: "work", Qualified: "claude/work",
                     Unplaced: false, Email: "work@example.com",
-                    AccountUuid: "4f3c2a10-8b7e-4d2a-9c1e-5a6b7c8d9e0f", SignedIn: true, Switchable: false,
+                    AccountId: "4f3c2a10-8b7e-4d2a-9c1e-5a6b7c8d9e0f", SignedIn: true, Switchable: false,
                     Parked: null, Usage: null, Stale: null, StaleExplanation: null),
             ])[0];
         var link = PitboardFfiMethods.SiteLink("https://claude.ai/chat/x");
@@ -600,7 +600,7 @@ public sealed class ModelTests
             [
                 new Account(
                     Id: "codex:spare", Provider: "codex", Label: "spare", Qualified: "codex/spare",
-                    Unplaced: false, Email: "spare@example.com", AccountUuid: "spare", SignedIn: false,
+                    Unplaced: false, Email: "spare@example.com", AccountId: "spare", SignedIn: false,
                     Switchable: true, Parked: null, Usage: null, Stale: null, StaleExplanation: null),
             ])[0];
         var spare = new AccountItem(

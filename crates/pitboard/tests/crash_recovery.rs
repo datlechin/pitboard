@@ -11,7 +11,7 @@ use common::{Env, two_accounts};
 
 /// A switch from alpha to beta that died after parking alpha and before installing beta.
 fn interrupted_switch(env: &Env) -> String {
-    let orphan = format!("pitboard-park-{}-1789900000000", env.uuid('a'));
+    let orphan = format!("pitboard-park-{}-1789900000000", env.account_id("alpha"));
     env.write_park(
         &orphan,
         &serde_json::json!({"accessToken": "access-refresh-a", "refreshToken": "refresh-a"})
@@ -20,9 +20,9 @@ fn interrupted_switch(env: &Env) -> String {
     let journal = serde_json::json!({
         "started_at": 1_789_900_000,
         "from_label": "alpha",
-        "from_uuid": env.uuid('a'),
+        "from_uuid": env.account_id("alpha"),
         "to_label": "beta",
-        "to_uuid": env.uuid('b'),
+        "to_uuid": env.account_id("beta"),
         "park_service": orphan,
         "incoming_service": env.parked_service("beta").unwrap(),
     });

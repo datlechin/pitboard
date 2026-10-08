@@ -64,6 +64,23 @@ pub struct Owner {
     pub organization_uuid: String,
 }
 
+impl Owner {
+    /// Whether `other` is this login: the same account in the same organisation.
+    pub fn same_login(&self, other: &Owner) -> bool {
+        self.account_uuid == other.account_uuid && self.organization_uuid == other.organization_uuid
+    }
+}
+
+impl From<crate::provider::Identity> for Owner {
+    fn from(found: crate::provider::Identity) -> Owner {
+        Owner {
+            account_uuid: found.account_id,
+            email: found.email,
+            organization_uuid: found.group.unwrap_or_default(),
+        }
+    }
+}
+
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum ApiError {

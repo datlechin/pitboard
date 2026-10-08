@@ -40,6 +40,11 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   menu, as **weekly 73% (runs out in 11h 05m)**. An account not in use no longer says how
   long it lasts. In `--json`, `lasts` keeps its fields and is worked out this way, and for
   an account not in use it is the first reset.
+- `pitboard status --json` gives each account `organization_uuid`, the Claude organisation
+  its login belongs to. `account_uuid` stays the Anthropic account UUID.
+- The account index is schema 5. An earlier Pitboard cannot read it once this one has, so
+  update the command line and the app together. Accounts already enrolled keep their parked
+  logins, readings and claude.ai windows.
 
 ### Removed
 
@@ -59,6 +64,11 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   **Needs signing in again**. After a `/login` where the keychain was locked, Claude Code's
   config named another account, and this one was told to sign in again although its login
   was still in the keychain.
+- One person's Claude accounts in two organisations, such as a claude.ai plan and a Team
+  plan, are two accounts, each with its own label and limits. Pitboard told them apart by
+  the Anthropic account alone, so the second was refused as already enrolled, a switch to it
+  said the first was in use, and both showed one account's usage. Claude Code 2.1.294 tells
+  logins apart by account and organisation together.
 
 ## [0.8.0] - 2026-10-08
 

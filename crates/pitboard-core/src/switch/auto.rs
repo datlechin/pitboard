@@ -37,13 +37,13 @@ pub(crate) fn automatically(
         Decision::Switch(again) if again.same(plan) => {}
         _ => return Ok((Auto::Idle, Vec::new())),
     }
-    let to_uuid = state
+    let to_id = state
         .get(&plan.to)
-        .map(|account| account.account_uuid.clone())
+        .map(|account| account.id.clone())
         .unwrap_or_default();
     ledger.attempt(plan, now);
     ledger.save(ctx, permit)?;
-    match switch_held(state, ctx, permit, &plan.to, Some(&plan.from_uuid)) {
+    match switch_held(state, ctx, permit, &plan.to, Some(&plan.from_id)) {
         Ok((
             Outcome::Switched {
                 from, to, adoption, ..
@@ -71,7 +71,7 @@ pub(crate) fn automatically(
         }
         Err(error) => {
             if over_the_account_switched_to(&error) {
-                ledger.pass_over(plan, &to_uuid);
+                ledger.pass_over(plan, &to_id);
                 let _ = ledger.save(ctx, permit);
             } else if mended_by_waiting(&error) {
                 ledger.waited(plan);

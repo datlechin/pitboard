@@ -78,7 +78,7 @@ private func status(_ labels: String..., now: Int64 = 0, measured: Int64? = nil)
             Account(
                 id: "claude:\(label)", provider: "claude", label: label,
                 qualified: "claude/\(label)", unplaced: false, email: "\(label)@example.com",
-                accountUuid: label, signedIn: label == labels.first, switchable: true,
+                accountId: label, signedIn: label == labels.first, switchable: true,
                 parked: nil,
                 usage: measured.map { Usage(source: .live, observedAt: $0, windows: []) },
                 stale: nil, staleExplanation: nil)

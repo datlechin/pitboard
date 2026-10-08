@@ -96,9 +96,9 @@ fn paces_of(reading: &Snapshot, now: i64) -> Paces {
     }
 }
 
-/// `signed_in` is the account Claude Code's config names, which is an identity in Claude
-/// Code's namespace and is only ever looked up there. `offered` is what the session's
-/// numbers came to as that account's, if anything.
+/// `signed_in` is the id of the account Claude Code's config names, which is only ever
+/// looked up among Claude Code's accounts. `offered` is what the session's numbers came to
+/// as that account's, if anything.
 fn line(
     state: &State,
     signed_in: Option<&str>,
@@ -108,14 +108,14 @@ fn line(
 ) -> StatusLine {
     // Claude Code runs this, so the line is about Claude Code's accounts. Another tool's
     // account is not something this session could switch to.
-    let current = signed_in.and_then(|uuid| state.by_uuid(ProviderId::Claude, uuid));
+    let current = signed_in.and_then(|id| state.by_id(ProviderId::Claude, id));
     let others = state
         .accounts
         .iter()
         .filter(|a| a.provider() == ProviderId::Claude)
-        .filter(|a| current.is_none_or(|c| c.account_uuid != a.account_uuid))
+        .filter(|a| current.is_none_or(|c| c.id != a.id))
         .map(|account| {
-            let reading = remembered.get(&account.account_uuid);
+            let reading = remembered.get(&account.id);
             Entry {
                 label: account.label.clone(),
                 shares: reading.map_or_else(Shares::default, |r| shares_of(r, now)),
@@ -126,7 +126,7 @@ fn line(
             }
         })
         .collect();
-    let known = signed_in.and_then(|uuid| remembered.get(uuid));
+    let known = signed_in.and_then(|id| remembered.get(id));
     let in_use = crate::usage::merge(known, offered, now);
     StatusLine {
         current: current.map(|a| a.label.clone()),
@@ -197,7 +197,7 @@ fn session_snapshot(
     let signed_in = run.account.as_deref()?;
     let before = before.filter(|b| b.account == run.account)?;
     let adopting = state
-        .by_uuid(ProviderId::Claude, signed_in)
+        .by_id(ProviderId::Claude, signed_in)
         .and_then(|account| account.last_used_at)
         .is_some_and(|at| {
             (0..i64::from(crate::switch::ADOPTION_CEILING_SECONDS)).contains(&(now - at))
@@ -212,8 +212,8 @@ fn session_snapshot(
         .accounts
         .iter()
         .filter(|a| a.provider() == ProviderId::Claude)
-        .filter(|a| a.account_uuid != signed_in)
-        .filter_map(|a| remembered.get(&a.account_uuid))
+        .filter(|a| a.id != signed_in)
+        .filter_map(|a| remembered.get(&a.id))
         .collect();
     let has = |reading: &Snapshot, window: &Window| {
         reading.windows.iter().any(|had| had.same_window(window))
@@ -283,7 +283,7 @@ pub fn read(ctx: &Context, permit: Option<crate::service::Permit>, input: &str) 
     // something a status bar can afford to read after every message.
     let signed_in = crate::provider::of(ProviderId::Claude)
         .recorded_identity(ctx)
-        .map(|id| id.account_id);
+        .map(|found| state.id_of(ProviderId::Claude, &crate::api::Owner::from(found)));
     let now = ctx.now();
     let remembered = crate::readings::load(ctx);
     let run = run_of(&input, signed_in.as_deref());
@@ -295,10 +295,10 @@ pub fn read(ctx: &Context, permit: Option<crate::service::Permit>, input: &str) 
             None => crate::sessions::last(ctx, id),
         });
     let offered = session_snapshot(&run, before.as_ref(), &state, &remembered, now);
-    if let (Some(permit), Some(uuid), Some(offered)) =
+    if let (Some(permit), Some(id), Some(offered)) =
         (permit, signed_in.as_deref(), offered.as_ref())
     {
-        crate::readings::remember(ctx, permit, &[(uuid.to_string(), offered.clone())]);
+        crate::readings::remember(ctx, permit, &[(id.to_string(), offered.clone())]);
     }
     line(
         &state,
@@ -327,6 +327,7 @@ mod tests {
         let account = |label: &str| Account {
             last_used_at: None,
             label: label.into(),
+            id: format!("{label}-uuid"),
             account_uuid: format!("{label}-uuid"),
             email: format!("{label}@example.com"),
             detail: crate::state::Detail::Claude {
@@ -555,6 +556,7 @@ mod tests {
         let codex = |label: &str, uuid: &str| Account {
             last_used_at: None,
             label: label.into(),
+            id: uuid.into(),
             account_uuid: uuid.into(),
             email: format!("{label}@example.com"),
             detail: crate::state::Detail::Codex {
@@ -617,12 +619,49 @@ mod tests {
         assert_eq!(shown(&session(90.0, 5.0, NOW - 1), &next), shares(1.0, 6.0));
     }
 
+    /// The config names the organisation as well as the person, and the line is about the
+    /// account in that organisation, with the person's other one beside it.
+    #[test]
+    fn the_account_in_use_is_the_one_in_the_organisation_the_config_names() {
+        let (ctx, _scratch) = machine("organisations");
+        let mut accounts = state();
+        accounts.upsert(Account {
+            last_used_at: None,
+            label: "team".into(),
+            id: "work-uuid_team-org".into(),
+            account_uuid: "work-uuid".into(),
+            email: "work@example.com".into(),
+            detail: crate::state::Detail::Claude {
+                organization_uuid: "team-org".into(),
+                oauth_account: json!({}),
+            },
+            parked: None,
+        });
+        crate::state::save(&ctx, Permit::for_a_test(), &accounts).expect("an account index");
+        std::fs::write(
+            ctx.home().join(".claude.json"),
+            json!({"oauthAccount": {
+                "accountUuid": "work-uuid",
+                "emailAddress": "work@example.com",
+                "organizationUuid": "team-org",
+            }})
+            .to_string(),
+        )
+        .expect("a Claude Code config");
+
+        let shown = run(&ctx, "pane", &json!({}));
+        assert_eq!(shown.current.as_deref(), Some("team"));
+        let others: Vec<&str> = shown.others.iter().map(|e| e.label.as_str()).collect();
+        assert_eq!(others, ["work", "personal", "side"]);
+    }
+
     /// Offered whenever a response moves it, however recently something was recorded, and
     /// kept only when it is newer. It used to be recorded only when what was remembered was
     /// a quarter of an hour old, and then over whatever was there.
     #[test]
     fn the_sessions_numbers_are_recorded_when_they_are_newer() {
         let (ctx, _scratch) = machine("records");
+        crate::state::save(&ctx, Permit::for_a_test(), &state()).expect("an account index");
         crate::readings::remember(
             &ctx,
             Permit::for_a_test(),
@@ -647,6 +686,7 @@ mod tests {
     #[test]
     fn a_session_moves_the_numbers_and_leaves_what_only_anthropic_says() {
         let (ctx, _scratch) = machine("leaves");
+        crate::state::save(&ctx, Permit::for_a_test(), &state()).expect("an account index");
         let mut answered = reading(22.0, 6.0, NOW - 60, NOW + 600);
         answered.windows[0].severity = Some("normal".into());
         answered.windows[0].is_active = true;

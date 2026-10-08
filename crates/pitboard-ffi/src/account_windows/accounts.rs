@@ -49,7 +49,7 @@ pub enum SiteMenu {
 pub(crate) fn windows(accounts: &[Account]) -> Vec<WindowAccount> {
     let placed: Vec<(&pitboard_sites::Site, &Account, &str)> = accounts
         .iter()
-        .filter(|account| !account.unplaced && !account.account_uuid.is_empty())
+        .filter(|account| !account.unplaced && !account.account_id.is_empty())
         .filter_map(|account| Some((account, account.label.as_deref()?)))
         .flat_map(|(account, label)| {
             pitboard_sites::Site::of_provider(&account.provider)
@@ -66,7 +66,7 @@ pub(crate) fn windows(accounts: &[Account]) -> Vec<WindowAccount> {
                 site: site.into(),
                 label: label.to_owned(),
                 email: account.email.clone(),
-                store: stores::derive(site.store_name, &account.account_uuid),
+                store: stores::derive(site.store_name, &account.account_id),
                 in_use: account.signed_in,
                 title: if shared {
                     format!("{label} ({})", site.name())
@@ -89,7 +89,7 @@ pub(crate) fn windows_of_account(account: &Account, accounts: &[Account]) -> Vec
                 site.host == window.site.host
                     && stores::same(
                         &window.store,
-                        &stores::derive(site.store_name, &account.account_uuid),
+                        &stores::derive(site.store_name, &account.account_id),
                     )
             })
         })
@@ -184,7 +184,7 @@ pub(crate) mod tests {
             qualified: label.map(|label| format!("{provider}/{label}")),
             unplaced: false,
             email: format!("{}@example.com", label.unwrap_or(uuid)),
-            account_uuid: uuid.into(),
+            account_id: uuid.into(),
             signed_in: false,
             switchable: label.is_some(),
             parked: None,
@@ -203,7 +203,7 @@ pub(crate) mod tests {
             qualified: None,
             unplaced: true,
             email: String::new(),
-            account_uuid: String::new(),
+            account_id: String::new(),
             switchable: false,
             ..account(None, provider, "")
         }

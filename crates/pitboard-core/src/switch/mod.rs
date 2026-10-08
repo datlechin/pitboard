@@ -249,11 +249,7 @@ pub(super) fn identify_document(
     let credential = provider::Credential::new(which, document.clone());
     provider::of(which)
         .identify(ctx, &credential)
-        .map(|found| api::Owner {
-            account_uuid: found.account_id,
-            email: found.email,
-            organization_uuid: found.group.unwrap_or_default(),
-        })
+        .map(api::Owner::from)
         .map_err(|e| match e {
             provider::ProviderError::Unauthorized => Error::SessionExpired { tool: which },
             other @ (provider::ProviderError::ShapeUnexpected { .. }
@@ -340,7 +336,7 @@ fn switch_held(
     let (_, first) = read_live(ctx, key.provider, &live)?;
     let outgoing = identify_document(ctx, key.provider, &first)?;
 
-    if outgoing.account_uuid == target.account_uuid {
+    if target.owned_by(&outgoing) {
         if state.active_for(key.provider) != Some(label.as_str()) {
             state.set_active(key.provider, Some(label.to_string()));
             state.used(key, ctx.now());
@@ -353,15 +349,22 @@ fn switch_held(
             Vec::new(),
         ));
     }
-    if expected.is_some_and(|expected| expected != outgoing.account_uuid) {
+    if expected.is_some_and(|expected| expected != state.id_of(key.provider, &outgoing)) {
         return Err(Error::SwitchOvertaken);
     }
-    let outgoing_key = state
-        .by_uuid(key.provider, &outgoing.account_uuid)
-        .map(Account::key)
+    let (outgoing_key, outgoing_id) = state
+        .account_of(key.provider, &outgoing)
+        .map(|account| (account.key(), account.id.clone()))
         .ok_or_else(|| Error::LiveAccountNotEnrolled {
             tool: key.provider,
-            email: outgoing.email.clone(),
+            who: crate::words::login(
+                key.provider,
+                &outgoing.email,
+                state
+                    .accounts
+                    .iter()
+                    .any(|a| a.provider() == key.provider && a.email == outgoing.email),
+            ),
         })?;
     let (from, to) = (state.typed(&outgoing_key), state.typed(key));
     let held = target.parked.clone().ok_or_else(|| Error::NothingParked {
@@ -382,15 +385,7 @@ fn switch_held(
         before,
         next,
         on_the_command_line,
-    } = ready(
-        ctx,
-        key.provider,
-        &live,
-        &first,
-        &outgoing.account_uuid,
-        &incoming,
-        &to,
-    )?;
+    } = ready(ctx, key.provider, &live, &first, &outgoing, &incoming, &to)?;
 
     // The outgoing login's park has a ceiling of its own on a machine whose vault is the
     // keychain, and it is asked about now, while refusing still changes nothing. The name
@@ -400,10 +395,10 @@ fn switch_held(
         ctx,
         key.provider,
         &from,
-        &park::service_name(&outgoing.account_uuid, ctx.now_millis()),
+        &park::service_name(&outgoing_id, ctx.now_millis()),
         &tool.slice(&before).map_err(|e| shape(key.provider, e))?,
     )?;
-    let park_service = park::reserve(ctx, permit, &outgoing.account_uuid)?;
+    let park_service = park::reserve(ctx, permit, &outgoing_id)?;
     write_journal(
         ctx,
         permit,
@@ -411,9 +406,9 @@ fn switch_held(
             provider: key.provider,
             started_at: ctx.now(),
             from_label: outgoing_key.label.clone(),
-            from_uuid: outgoing.account_uuid.clone(),
+            from_id: outgoing_id,
             to_label: label.to_string(),
-            to_uuid: target.account_uuid.clone(),
+            to_id: target.id.clone(),
             park_service: park_service.clone(),
             incoming_service: held.service.clone(),
             // Which side the live credential came from, answerable without asking anyone.
@@ -472,7 +467,7 @@ fn switch_held(
             .flatten()
             .and_then(|raw| serde_json::from_str::<Value>(&raw).ok())
             .and_then(|document| identify_document(ctx, key.provider, &document).ok())
-            .is_some_and(|found| found.account_uuid == outgoing.account_uuid);
+            .is_some_and(|found| found.same_login(&outgoing));
         if still_outgoing {
             state.discard(&parked.service);
         }
@@ -626,7 +621,7 @@ fn ready(
     which: ProviderId,
     live: &provider::LiveStore,
     first: &Value,
-    signed_in: &str,
+    signed_in: &api::Owner,
     incoming: &Value,
     label: &str,
 ) -> Result<Readied> {
@@ -635,7 +630,7 @@ fn ready(
     // A refresh keeps the account, so an unchanged share of the document needs no second
     // question. A sign-in between the two reads would not keep it.
     if tool.slice(&before).ok() != tool.slice(first).ok()
-        && identify_document(ctx, which, &before)?.account_uuid != signed_in
+        && !identify_document(ctx, which, &before)?.same_login(signed_in)
     {
         return Err(Error::SignedInAccountChanged);
     }
@@ -740,12 +735,19 @@ fn prove_incoming(
     let label = state.typed(key);
     if held.askable_at(ctx.now()) {
         let credential = provider::Credential::new(key.provider, incoming.clone());
-        match provider::of(key.provider).verify(ctx, &credential) {
-            Ok(found) if found.account_id == target.account_uuid => return Ok((held, incoming)),
+        match provider::of(key.provider)
+            .verify(ctx, &credential)
+            .map(api::Owner::from)
+        {
+            Ok(found) if target.owned_by(&found) => return Ok((held, incoming)),
             Ok(other) => {
                 return Err(Error::ParkedLoginBelongsElsewhere {
                     label,
-                    email: other.email,
+                    who: crate::words::login(
+                        key.provider,
+                        &other.email,
+                        other.email == target.email,
+                    ),
                 });
             }
             // The access token has lapsed earlier than the recorded expiry said it would.

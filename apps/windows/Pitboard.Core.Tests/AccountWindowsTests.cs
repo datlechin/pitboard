@@ -15,7 +15,7 @@ public sealed class AccountWindowsTests
         new(
             Id: $"{provider}:{uuid}", Provider: provider, Label: label,
             Qualified: $"{provider}/{label}", Unplaced: false, Email: $"{label}@example.com",
-            AccountUuid: uuid, SignedIn: false, Switchable: true, Parked: null, Usage: null,
+            AccountId: uuid, SignedIn: false, Switchable: true, Parked: null, Usage: null,
             Stale: null, StaleExplanation: null);
 
     /// <summary>

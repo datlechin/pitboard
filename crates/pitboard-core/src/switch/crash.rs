@@ -17,7 +17,8 @@
 //! instruction a person is ever given.
 
 use super::harness::{
-    NOW, POINTS, codex_machine, document, hold, login_of, machine, owner, recover, signed_in,
+    NOW, POINTS, codex_machine, document, hold, in_organisation, login_of, machine, owner, recover,
+    signed_in,
 };
 use super::*;
 use crate::api::scripted::{ScriptedApi, Trouble};
@@ -157,6 +158,64 @@ fn a_switch_whose_token_rotated_while_it_was_interrupted_still_needs_anthropic()
     assert!(
         journal::pending(&ctx),
         "and the record is kept for a later run"
+    );
+}
+
+/// One person's two organisations are two accounts with one account uuid between them. A
+/// switch from one to the other, interrupted once the new login is in and then rotated
+/// past both fingerprints, is settled by asking Anthropic, whose answer names the
+/// organisation as well as the person.
+#[test]
+fn a_switch_between_two_organisations_is_settled_by_the_organisation_anthropic_names() {
+    let m = machine("two-organisations-rotated");
+    let team = crate::api::Owner {
+        account_uuid: "here".into(),
+        email: "here@example.com".into(),
+        organization_uuid: "org-team".into(),
+    };
+    m.api.owned_by("access-team-refresh", team.clone());
+    let mut state = crate::state::load(&m.ctx).expect("state");
+    let team_id = crate::state::new_id(crate::provider::ProviderId::Claude, &team);
+    let service =
+        crate::park::reserve(&m.ctx, Permit::for_a_test(), &team_id).expect("a free name");
+    let parked = crate::park::store_at(
+        &m.ctx,
+        Permit::for_a_test(),
+        crate::provider::ProviderId::Claude,
+        &service,
+        &super::harness::oauth("team-refresh", 30),
+    )
+    .expect("parked");
+    state.upsert(in_organisation("team", "here", "org-team", Some(parked)));
+    crate::state::save(&m.ctx, Permit::for_a_test(), &state).expect("saved");
+
+    let settled = settle(&m.ctx, Permit::for_a_test(), None)
+        .expect("nothing to recover yet")
+        .0;
+    let to_team = crate::state::Key::new(crate::provider::ProviderId::Claude, "team");
+    let died = fault::killing("switch.installed", || switch(settled, &to_team));
+    assert_eq!(died.unwrap_err(), "switch.installed");
+    m.mem.live().plant(
+        &m.service,
+        &json!({"claudeAiOauth": {
+            "refreshToken": "rotated-since",
+            "accessToken": "access-team-refresh",
+            "expiresAt": (NOW + 3600) * 1000,
+            "refreshTokenExpiresAt": (NOW + 30 * 86_400) * 1000,
+        }})
+        .to_string(),
+    );
+
+    let (settled, recovered) = settle(&m.ctx, Permit::for_a_test(), None).expect("settled");
+    assert!(
+        recovered.is_some_and(|r| r.finished),
+        "the switch had landed"
+    );
+    assert_eq!(
+        settled
+            .state
+            .active_for(crate::provider::ProviderId::Claude),
+        Some("team")
     );
 }
 

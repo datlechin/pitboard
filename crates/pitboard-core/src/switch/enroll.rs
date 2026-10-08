@@ -428,14 +428,14 @@ pub fn enroll(
 /// another label.
 fn claim(state: &State, key: &Key, owner: &Owner) -> Result<()> {
     if let Some(taken) = state.get(key)
-        && taken.account_uuid != owner.account_uuid
+        && !taken.owned_by(owner)
     {
         return Err(Error::LabelTaken {
             label: key.typed(),
-            email: taken.email.clone(),
+            who: crate::words::login(key.provider, &taken.email, taken.email == owner.email),
         });
     }
-    if let Some(existing) = state.by_uuid(key.provider, &owner.account_uuid)
+    if let Some(existing) = state.account_of(key.provider, owner)
         && existing.label != key.label
     {
         return Err(Error::AlreadyEnrolled {
@@ -468,7 +468,15 @@ fn record_current(ctx: &Context, permit: Permit, key: &Key, state: &mut State) -
     let parked = existing.and_then(|a| a.parked.clone());
     // Enrolling the account that is signed in is using it.
     let last_used_at = Some(ctx.now());
-    state.upsert(account(which, label, &owner, parked, last_used_at, &live));
+    state.upsert(account(
+        which,
+        state.id_of(which, &owner),
+        label,
+        &owner,
+        parked,
+        last_used_at,
+        &live,
+    ));
     state.set_active(which, Some(label.to_string()));
     state::save(ctx, permit, state)?;
     Ok(Enrolled::Current { email: owner.email })
@@ -532,7 +540,7 @@ fn signed_in_now(ctx: &Context, which: ProviderId, owner: &Owner) -> InUse {
         Err(other) => return InUse::Untold(other),
     };
     match identify_document(ctx, which, &first) {
-        Ok(found) if found.account_uuid == owner.account_uuid => InUse::Theirs(live, first),
+        Ok(found) if found.same_login(owner) => InUse::Theirs(live, first),
         Ok(_) => InUse::NotTheirs,
         Err(e) => InUse::Untold(e),
     }
@@ -586,14 +594,12 @@ fn install_signed_in(
         next,
         on_the_command_line,
         ..
-    } = super::ready(ctx, which, live, first, &owner.account_uuid, &slice, &name).map_err(|e| {
-        match e {
-            Error::SignedInAccountChanged => not_kept(format!(
-                "{} was signed in to another account meanwhile",
-                which.name()
-            )),
-            other => other,
-        }
+    } = super::ready(ctx, which, live, first, owner, &slice, &name).map_err(|e| match e {
+        Error::SignedInAccountChanged => not_kept(format!(
+            "{} was signed in to another account meanwhile",
+            which.name()
+        )),
+        other => other,
     })?;
 
     let written = on_the_command_line.into_iter().collect::<Vec<_>>();
@@ -635,6 +641,7 @@ fn install_signed_in(
     let parked = state.get(key).and_then(|a| a.parked.clone());
     state.upsert(account(
         which,
+        state.id_of(which, owner),
         &key.label,
         owner,
         parked,
@@ -716,6 +723,7 @@ fn park_signed_in(
 ) -> Result<(Enrolled, Vec<Warning>)> {
     let permit = login.permit;
     let label = key.label.as_str();
+    let id = state.id_of(login.provider, owner);
     let slice = provider::of(login.provider)
         .slice(&login.document)
         .map_err(|e| super::shape(login.provider, e))?;
@@ -723,10 +731,10 @@ fn park_signed_in(
         ctx,
         login.provider,
         &key.typed(),
-        &park::service_name(&owner.account_uuid, ctx.now_millis()),
+        &park::service_name(&id, ctx.now_millis()),
         &slice,
     )?;
-    let service = park::reserve(ctx, permit, &owner.account_uuid)?;
+    let service = park::reserve(ctx, permit, &id)?;
     let fresh = park::store_at(ctx, permit, key.provider, &service, &slice)?;
     // The window the roadmap named: the login is in the vault and nothing on the machine
     // says so yet.
@@ -737,6 +745,7 @@ fn park_signed_in(
     let last_used_at = existing.and_then(|a| a.last_used_at);
     state.upsert(account(
         login.provider,
+        id,
         label,
         owner,
         previous,
@@ -767,6 +776,7 @@ fn park_signed_in(
 /// already said, which costs nothing to read and explains a limit somebody is surprised by.
 fn account(
     which: ProviderId,
+    id: String,
     label: &str,
     owner: &Owner,
     parked: Option<Park>,
@@ -798,6 +808,7 @@ fn account(
     Account {
         last_used_at,
         label: label.to_string(),
+        id,
         account_uuid: owner.account_uuid.clone(),
         email: owner.email.clone(),
         parked,
@@ -811,8 +822,8 @@ mod tests {
     use crate::api::scripted::Trouble;
     use crate::store::memory::Fault;
     use crate::switch::harness::{
-        Machine, NOW, codex_id, codex_login, codex_machine, hold, login_of, machine, oauth, renews,
-        signed_in,
+        self, Machine, NOW, codex_id, codex_login, codex_machine, hold, login_of, machine, oauth,
+        renews, signed_in,
     };
     use crate::switch::{Due, Outcome, renew_due, settle, switch};
     use crate::time::FixedClock;
@@ -843,6 +854,86 @@ mod tests {
             .expect("state")
             .get(&m.key(label))
             .and_then(|a| a.parked.clone())
+    }
+
+    /// `here` in another organisation, signed in through `refresh`.
+    fn here_in(m: &Machine, org: &str, refresh: &str) -> SignIn {
+        m.api.owned_by(
+            &format!("access-{refresh}"),
+            Owner {
+                account_uuid: "here".into(),
+                email: "here@example.com".into(),
+                organization_uuid: org.into(),
+            },
+        );
+        planted(
+            &m.ctx,
+            Permit::for_a_test(),
+            ProviderId::Claude,
+            harness::document(refresh),
+        )
+        .expect("a sign-in")
+    }
+
+    /// One Anthropic account in two organisations is two logins, each on its own plan. The
+    /// account uuid is the person in both, and identified by it alone the second was
+    /// refused as already enrolled, and a switch to it said the first was already in use.
+    #[test]
+    fn one_account_in_two_organisations_is_two_logins() {
+        let m = machine("two-organisations");
+        let (enrolled, _) = enrolled_as(&m, "team", here_in(&m, "org-team", "team-refresh"))
+            .expect("the other organisation is a login of its own");
+        assert!(
+            matches!(enrolled, Enrolled::SignedIn { .. }),
+            "{enrolled:?}"
+        );
+
+        let state = state::load(&m.ctx).expect("state");
+        let here = state.get(&m.key("here")).expect("here");
+        let team = state.get(&m.key("team")).expect("team");
+        assert_eq!(here.account_uuid, team.account_uuid, "one person");
+        assert_eq!(team.id, "here_org-team");
+        assert!(
+            team.parked
+                .as_ref()
+                .is_some_and(|p| p.service.starts_with("pitboard-park-here_org-team-")),
+            "{:?}",
+            team.parked
+        );
+        assert_eq!(
+            team.claude().expect("Claude").oauth_account["accountUuid"],
+            "here",
+            "Claude Code's config is given the account uuid it knows"
+        );
+
+        let settled = settle(&m.ctx, Permit::for_a_test(), Some(m.which))
+            .expect("nothing to recover")
+            .0;
+        let (outcome, _) = switch(settled, &m.key("team")).expect("a switch");
+        assert!(matches!(outcome, Outcome::Switched { .. }), "{outcome:?}");
+        assert!(in_use(&m, "team-refresh"));
+        assert!(
+            park_of(&m, "here").is_some_and(|p| p.service.starts_with("pitboard-park-here-1")),
+            "the first organisation's login is parked under the id it was enrolled with"
+        );
+
+        let again = enrolled_as(&m, "personal", here_in(&m, "org-team", "team-again"))
+            .expect_err("the same organisation is the same login");
+        assert!(matches!(again, Error::AlreadyEnrolled { .. }), "{again}");
+    }
+
+    /// Both logins are the same person's, so naming the one that holds a label by its email
+    /// alone names the one being enrolled too.
+    #[test]
+    fn a_label_another_organisation_holds_is_said_to_be_that() {
+        let m = machine("label-in-another-organisation");
+        let refused = enrolled_as(&m, "here", here_in(&m, "org-team", "team-refresh"))
+            .expect_err("`here` is the first organisation's");
+        assert_eq!(
+            refused.to_string(),
+            "`here` already refers to here@example.com in another organisation. Choose a \
+             different label."
+        );
     }
 
     /// Somebody signs in again to the account in use, whose login is broken or about to

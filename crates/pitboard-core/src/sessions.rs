@@ -36,7 +36,7 @@ pub(crate) struct Limit {
 /// What one run of a session's status line was given.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub(crate) struct Run {
-    /// The account Claude Code's config named, if it named one.
+    /// The id of the account Claude Code's config named, if it named one.
     pub account: Option<String>,
     /// Each limit the session passed, by the name Claude Code gives it.
     pub limits: BTreeMap<String, Limit>,

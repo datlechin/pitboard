@@ -444,7 +444,7 @@ fn codex_signed_in_with_an_api_key() {
 fn watch() {
     let env = two_accounts("contract-watch");
     env.an_hour_on();
-    env.measured(&[('a', 96.0, 20.0), ('b', 10.0, 30.0)]);
+    env.measured(&[("alpha", 96.0, 20.0), ("beta", 10.0, 30.0)]);
     let (value, code) = json(&env, &["watch", "--once"]);
     contract!("watch_switched", value, code);
     let (value, code) = json(&env, &["watch", "--once"]);

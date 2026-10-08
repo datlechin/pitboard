@@ -175,7 +175,12 @@ pub struct Row {
     /// could not pin on any account (see [`Row::unplaced`]).
     pub label: Option<String>,
     pub email: String,
+    /// What the account's readings and budget are filed under. Empty where
+    /// [`Row::account_uuid`] is.
+    pub id: String,
     pub account_uuid: String,
+    /// The Claude organisation the login is for. `None` for another tool's account.
+    pub organization_uuid: Option<String>,
     pub signed_in: bool,
     pub parked: Option<Park>,
     pub usage: Option<Snapshot>,
@@ -266,10 +271,10 @@ struct LiveLogin {
     /// the other says the account in use is gone. `Some(Err)` is a login whose owner could
     /// not be learned this time, and says why.
     signed_in: Option<Result<Owner, String>>,
-    /// The account the tool's own local record names, where it keeps one. It can be behind
-    /// the login it describes, so it never decides a switch; it keeps the row that is
-    /// signed in from reading as though nobody is, when the service cannot be asked.
-    recorded_uuid: Option<String>,
+    /// The id of the account the tool's own local record names, where it keeps one. It can
+    /// be behind the login it describes, so it never decides a switch; it keeps the row
+    /// that is signed in from reading as though nobody is, when the service cannot be asked.
+    recorded_id: Option<String>,
     usage: Option<Result<Snapshot, Stale>>,
     /// There is a login and Pitboard cannot use it: it could not be read, or it was read and
     /// is not one account's login. A tool in this state whose record names none of its
@@ -351,16 +356,19 @@ fn in_use(state: &State) -> Vec<ProviderId> {
 
 pub fn gather_offline(ctx: &Context, state: &State) -> Report {
     let tools = in_use(state);
-    let recorded: BTreeMap<ProviderId, crate::provider::Identity> = tools
+    let recorded: BTreeMap<ProviderId, Owner> = tools
         .iter()
-        .filter_map(|&which| Some((which, crate::provider::of(which).recorded_identity(ctx)?)))
+        .filter_map(|&which| {
+            let found = crate::provider::of(which).recorded_identity(ctx)?;
+            Some((which, Owner::from(found)))
+        })
         .collect();
     let facts = Facts {
         live: tools
             .iter()
             .map(|&which| {
                 let login = LiveLogin {
-                    recorded_uuid: recorded.get(&which).map(|id| id.account_id.clone()),
+                    recorded_id: recorded.get(&which).map(|owner| state.id_of(which, owner)),
                     usage: Some(Err(Stale::NotAsked)),
                     ..LiveLogin::default()
                 };
@@ -388,16 +396,10 @@ pub fn gather_offline(ctx: &Context, state: &State) -> Report {
             |uuid| remembered.get(uuid).cloned(),
             ctx.now(),
         ),
-        signed_in: recorded.get(&crate::label::DEFAULT).map_or_else(
-            || Err("not asked".into()),
-            |id| {
-                Ok(Owner {
-                    account_uuid: id.account_id.clone(),
-                    email: id.email.clone(),
-                    organization_uuid: id.group.clone().unwrap_or_default(),
-                })
-            },
-        ),
+        signed_in: recorded
+            .get(&crate::label::DEFAULT)
+            .cloned()
+            .ok_or_else(|| "not asked".into()),
     }
 }
 
@@ -430,7 +432,7 @@ fn to_api(error: crate::provider::ProviderError) -> ApiError {
 fn ask_usage(
     ctx: &Context,
     which: ProviderId,
-    account_uuid: Option<&str>,
+    id: Option<&str>,
     document: &Value,
     signed_in: bool,
     remembered: Option<&Snapshot>,
@@ -438,8 +440,8 @@ fn ask_usage(
 ) -> Asked {
     // An account Pitboard cannot name cannot be budgeted for; it is asked about, which is
     // what always happened.
-    if let Some(uuid) = account_uuid
-        && let Some(held) = budget::may_ask(ctx, uuid, remembered, fresh)
+    if let Some(id) = id
+        && let Some(held) = budget::may_ask(ctx, id, remembered, fresh)
     {
         let stale = match held {
             budget::Held::Fresh => Stale::AskedRecently,
@@ -467,7 +469,7 @@ fn ask_usage(
         return (Err(Stale::ParkUnreadable), None);
     }
     let answer = answer.map_err(to_api);
-    let learned = account_uuid.and_then(|uuid| {
+    let learned = id.and_then(|id| {
         let outcome = match &answer {
             Ok(_) => budget::Outcome::Answered,
             Err(api::ApiError::RateLimited { retry_after }) => {
@@ -480,7 +482,7 @@ fn ask_usage(
             // to wait: waiting fixes neither.
             Err(_) => return None,
         };
-        Some((uuid.to_string(), outcome))
+        Some((id.to_string(), outcome))
     });
     (answer.map_err(|e| Stale::of(&e, signed_in)), learned)
 }
@@ -492,28 +494,28 @@ fn ask_usage(
 /// is locked for the moment, and saying it is gone sends somebody to sign in again for
 /// nothing. It used to be read as exactly that.
 ///
-/// `active` is the account Pitboard last recorded as signed in to this tool, which stands
-/// in for the tool's own record when the login cannot be read at all. Codex keeps no
+/// The account `state` last recorded as signed in to this tool stands in for the tool's own
+/// record when the login cannot be read at all. Codex keeps no
 /// record apart from the login itself, so without this a Codex login caught half written
 /// named nobody, and the account in use was told to sign in again while `doctor`, reading
 /// the same machine, called it signed in.
 fn ask_live(
     ctx: &Context,
+    state: &State,
     which: ProviderId,
     read: &Result<Option<Value>, ProviderError>,
-    active: Option<&str>,
     remembered: &HashMap<String, Snapshot>,
     fresh: bool,
 ) -> Answered {
     let tool = crate::provider::of(which);
-    let own_record = || tool.recorded_identity(ctx).map(|id| id.account_id);
+    let own_record = || recorded_id(ctx, state, which);
     let document = match read {
         Ok(Some(document)) => document,
         Ok(None) => return (LiveLogin::default(), None),
         Err(error) => {
             let unreadable = LiveLogin {
                 signed_in: Some(Err(error.to_string())),
-                recorded_uuid: own_record().or_else(|| active.map(str::to_owned)),
+                recorded_id: own_record().or_else(|| active_id(state, which).map(str::to_owned)),
                 usage: Some(Err(Stale::LoginUnreadable)),
                 out_of_reach: true,
             };
@@ -538,7 +540,7 @@ fn ask_live(
         Err(unusable) => {
             let login = LiveLogin {
                 signed_in: Some(Err(unusable.to_string())),
-                recorded_uuid: own_record(),
+                recorded_id: own_record(),
                 usage: Some(Err(Stale::LoginUnusable)),
                 out_of_reach: true,
             };
@@ -550,11 +552,7 @@ fn ask_live(
     // belongs to, it is not a measurement, and a switch needs it.
     let owner = tool
         .identify(ctx, &credential)
-        .map(|found| Owner {
-            account_uuid: found.account_id,
-            email: found.email,
-            organization_uuid: found.group.unwrap_or_default(),
-        })
+        .map(Owner::from)
         .map_err(|e| to_api(e).to_string());
     // The tool's own record, for when its service could not say whose the login is. It
     // stands in twice: to keep the signed-in row signed in, and to key the budget. Without
@@ -565,23 +563,23 @@ fn ask_live(
         Ok(_) => None,
         Err(_) => own_record(),
     };
-    let uuid = owner
+    let id = owner
         .as_ref()
         .ok()
-        .map(|o| o.account_uuid.clone())
+        .map(|o| state.id_of(which, o))
         .or_else(|| recorded.clone());
     let (usage, learned) = ask_usage(
         ctx,
         which,
-        uuid.as_deref(),
+        id.as_deref(),
         document,
         true,
-        uuid.as_deref().and_then(|u| remembered.get(u)),
+        id.as_deref().and_then(|id| remembered.get(id)),
         fresh,
     );
     let login = LiveLogin {
         signed_in: Some(owner),
-        recorded_uuid: recorded,
+        recorded_id: recorded,
         usage: Some(usage),
         out_of_reach: false,
     };
@@ -596,6 +594,7 @@ fn ask_live(
 /// panicked quietly erased Claude Code's signed-in row.
 fn settle(
     ctx: &Context,
+    state: &State,
     answers: Vec<(ProviderId, std::thread::Result<Answered>)>,
 ) -> (
     BTreeMap<ProviderId, LiveLogin>,
@@ -609,9 +608,7 @@ fn settle(
             // it, the same as when its service cannot be reached.
             let interrupted = LiveLogin {
                 signed_in: Some(Err("the check did not finish".into())),
-                recorded_uuid: crate::provider::of(which)
-                    .recorded_identity(ctx)
-                    .map(|id| id.account_id),
+                recorded_id: recorded_id(ctx, state, which),
                 usage: Some(Err(Stale::Interrupted)),
                 out_of_reach: false,
             };
@@ -654,9 +651,8 @@ pub fn gather(ctx: &Context, permit: crate::service::Permit, state: &State, fres
                 .map(|(which, read)| {
                     let remembered = &remembered;
                     let which = *which;
-                    let active = active_uuid(state, which);
                     let handle =
-                        scope.spawn(move || ask_live(ctx, which, read, active, remembered, fresh));
+                        scope.spawn(move || ask_live(ctx, state, which, read, remembered, fresh));
                     (which, handle)
                 })
                 .collect();
@@ -670,10 +666,10 @@ pub fn gather(ctx: &Context, permit: crate::service::Permit, state: &State, fres
                         Ok(document) => ask_usage(
                             ctx,
                             account.provider(),
-                            Some(&account.account_uuid),
+                            Some(&account.id),
                             document,
                             false,
-                            remembered.get(&account.account_uuid),
+                            remembered.get(&account.id),
                             fresh,
                         ),
                     })
@@ -690,7 +686,7 @@ pub fn gather(ctx: &Context, permit: crate::service::Permit, state: &State, fres
                     .collect(),
             )
         });
-    let (live, live_learned) = settle(ctx, answers);
+    let (live, live_learned) = settle(ctx, state, answers);
 
     // Once, from one thread. Every account's record lives in one file, so a thread each
     // reading it, changing one entry and writing it back would erase what the others
@@ -725,7 +721,7 @@ pub fn gather(ctx: &Context, permit: crate::service::Permit, state: &State, fres
                 r.usage
                     .as_ref()
                     .filter(|u| u.source == Source::Live)
-                    .map(|u| (r.account_uuid.clone(), u.clone()))
+                    .map(|u| (r.id.clone(), u.clone()))
             })
             .collect::<Vec<_>>(),
     );
@@ -746,11 +742,18 @@ pub fn gather(ctx: &Context, permit: crate::service::Permit, state: &State, fres
 }
 
 /// The account Pitboard last recorded as signed in to this tool, by its id.
-fn active_uuid(state: &State, which: ProviderId) -> Option<&str> {
+fn active_id(state: &State, which: ProviderId) -> Option<&str> {
     let label = state.active_for(which)?;
     state
         .get(&Key::new(which, label))
-        .map(|account| account.account_uuid.as_str())
+        .map(|account| account.id.as_str())
+}
+
+/// The id of the account the tool's own record names as signed in.
+fn recorded_id(ctx: &Context, state: &State, which: ProviderId) -> Option<String> {
+    crate::provider::of(which)
+        .recorded_identity(ctx)
+        .map(|found| state.id_of(which, &Owner::from(found)))
 }
 
 /// Where a tool comes in a listing: the order [`ProviderId::ALL`] gives them.
@@ -770,16 +773,21 @@ fn assemble(
     // Per tool, because an account is signed in to its own tool or to nothing. Comparing
     // every account against one machine-wide answer would have marked a Codex account
     // signed in because a Claude Code account with the same uuid was.
-    let live_uuid = |which: ProviderId| -> Option<&str> {
-        let live = facts.live_for(which)?;
-        match (&live.signed_in, facts.asked) {
-            (Some(Ok(owner)), _) => Some(owner.account_uuid.as_str()),
-            // Unreachable, unreadable, or never asked. The service decides who is signed
-            // in; without its answer, the tool's own local record is the only one there is.
-            (Some(Err(_)), _) | (None, false) => live.recorded_uuid.as_deref(),
-            (None, true) => None,
-        }
-    };
+    let live_ids: BTreeMap<ProviderId, String> = ProviderId::ALL
+        .iter()
+        .filter_map(|&which| {
+            let live = facts.live_for(which)?;
+            let id = match (&live.signed_in, facts.asked) {
+                (Some(Ok(owner)), _) => Some(state.id_of(which, owner)),
+                // Unreachable, unreadable, or never asked. The service decides who is
+                // signed in; without its answer, the tool's own local record is the only
+                // one there is.
+                (Some(Err(_)), _) | (None, false) => live.recorded_id.clone(),
+                (None, true) => None,
+            }?;
+            Some((which, id))
+        })
+        .collect();
     // Claude Code's cache counts only for Claude Code's accounts, and only when it was
     // measured for the account in question.
     let cached_for = |which: ProviderId, uuid: &str| {
@@ -792,8 +800,8 @@ fn assemble(
     // end has recorded. So a row shows the one reading the status lines show, and neither
     // an answer that lags a session's latest response nor a cache that moves only when
     // Claude Code asks can take it backwards.
-    let reading = |uuid: &str, asked: &Result<Snapshot, Stale>, cached: Option<Snapshot>| {
-        let recalled = recall(uuid);
+    let reading = |id: &str, asked: &Result<Snapshot, Stale>, cached: Option<Snapshot>| {
+        let recalled = recall(id);
         match asked {
             Ok(live) => (merge(recalled.as_ref(), Some(live), now), None),
             Err(stale) => (merge(recalled.as_ref(), cached.as_ref(), now), Some(*stale)),
@@ -805,9 +813,9 @@ fn assemble(
         .iter()
         .zip(&facts.parked_usage)
         .map(|(account, parked)| {
-            let uuid = account.account_uuid.as_str();
+            let id = account.id.as_str();
             let which = account.provider();
-            let signed_in = live_uuid(which) == Some(uuid);
+            let signed_in = live_ids.get(&which).is_some_and(|live| live == id);
             let live_unreadable = facts
                 .live_for(which)
                 .is_some_and(|live| live.usage() == Err(Stale::LoginUnreadable));
@@ -815,22 +823,24 @@ fn assemble(
                 let live = facts
                     .live_for(which)
                     .map_or(Err(Stale::NothingSignedIn), LiveLogin::usage);
-                reading(uuid, &live, cached_for(which, uuid))
+                reading(id, &live, cached_for(which, &account.account_uuid))
             } else if account.parked.is_none()
                 && live_unreadable
                 && state.active_for(which) == Some(account.label.as_str())
             {
                 // Nothing parked because Pitboard put its login in use, and that login is
                 // the one that could not be read: unknown, not gone.
-                reading(uuid, &Err(Stale::LoginUnreadable), None)
+                reading(id, &Err(Stale::LoginUnreadable), None)
             } else {
-                reading(uuid, parked, None)
+                reading(id, parked, None)
             };
             Row {
                 provider: which,
                 label: Some(account.label.clone()),
                 email: account.email.clone(),
+                id: account.id.clone(),
                 account_uuid: account.account_uuid.clone(),
+                organization_uuid: account.claude().map(|c| c.organization_uuid.to_owned()),
                 signed_in,
                 parked: account.parked.clone(),
                 usage,
@@ -848,22 +858,20 @@ fn assemble(
             continue;
         };
         if let Some(Ok(owner)) = &live.signed_in {
-            if rows
-                .iter()
-                .any(|r| r.provider == which && r.account_uuid == owner.account_uuid)
-            {
+            let id = state.id_of(which, owner);
+            if rows.iter().any(|r| r.provider == which && r.id == id) {
                 continue;
             }
-            let (usage, stale) = reading(
-                &owner.account_uuid,
-                &live.usage(),
-                cached_for(which, &owner.account_uuid),
-            );
+            let (usage, stale) =
+                reading(&id, &live.usage(), cached_for(which, &owner.account_uuid));
             rows.push(Row {
                 provider: which,
                 label: None,
                 email: owner.email.clone(),
+                id,
                 account_uuid: owner.account_uuid.clone(),
+                organization_uuid: (which == ProviderId::Claude)
+                    .then(|| owner.organization_uuid.clone()),
                 signed_in: true,
                 parked: None,
                 usage,
@@ -883,7 +891,9 @@ fn assemble(
                 provider: which,
                 label: None,
                 email: String::new(),
+                id: String::new(),
                 account_uuid: String::new(),
+                organization_uuid: None,
                 signed_in: false,
                 parked: None,
                 usage: None,
@@ -953,6 +963,7 @@ mod tests {
         Account {
             last_used_at: None,
             label: label.into(),
+            id: format!("{label}-uuid"),
             account_uuid: format!("{label}-uuid"),
             email: format!("{label}@example.com"),
             detail: crate::state::Detail::Claude {
@@ -1006,7 +1017,7 @@ mod tests {
                 ProviderId::Claude,
                 LiveLogin {
                     signed_in: Some(Err("could not reach Anthropic: offline".into())),
-                    recorded_uuid: Some("alpha-uuid".into()),
+                    recorded_id: Some("alpha-uuid".into()),
                     usage: Some(Err(Stale::Unreachable)),
                     out_of_reach: false,
                 },
@@ -1423,6 +1434,7 @@ mod tests {
         Account {
             last_used_at: None,
             label: label.into(),
+            id: uuid.into(),
             account_uuid: uuid.into(),
             email: format!("{label}@example.com"),
             detail: crate::state::Detail::Codex {
@@ -1548,6 +1560,7 @@ mod tests {
         let panicked: Box<dyn std::any::Any + Send> = Box::new("boom");
         let (settled, learned) = settle(
             &ctx,
+            &state(&["alpha"]),
             vec![
                 (ProviderId::Claude, Ok(claude_answer)),
                 (ProviderId::Codex, Err(panicked)),
@@ -1591,9 +1604,9 @@ mod tests {
         let logged_out = json!({"mcpOAuth": {"some-server": {"token": "unrelated"}}});
         let (login, learned) = ask_live(
             &ctx,
+            &State::default(),
             ProviderId::Claude,
             &Ok(Some(logged_out)),
-            None,
             &HashMap::new(),
             true,
         );
@@ -1655,7 +1668,7 @@ mod tests {
         let facts = only_claude(
             LiveLogin {
                 signed_in: Some(Err("the keychain is locked".into())),
-                recorded_uuid: Some("alpha-uuid".into()),
+                recorded_id: Some("alpha-uuid".into()),
                 usage: Some(Err(Stale::LoginUnreadable)),
                 out_of_reach: true,
             },
@@ -1746,24 +1759,26 @@ mod tests {
     fn a_failing_identify_still_keeps_the_ask_again_floor() {
         let home = scratch("floor");
         let (ctx, _mem, api) = machine(&home.0, Some("acc-x"));
+        let nothing_enrolled = State::default();
+        let filed = nothing_enrolled.id_of(ProviderId::Claude, &owner("acc-x"));
         api.token_trouble("access-x", Trouble::Offline);
         budget::record(
             &ctx,
             Permit::for_a_test(),
-            &[("acc-x".into(), budget::Outcome::Answered)],
+            &[(filed.clone(), budget::Outcome::Answered)],
         );
         let login = json!({"claudeAiOauth": {"accessToken": "access-x"}});
 
         let (live, learned) = ask_live(
             &ctx,
+            &nothing_enrolled,
             ProviderId::Claude,
             &Ok(Some(login.clone())),
-            None,
             &HashMap::new(),
             false,
         );
         assert_eq!(live.usage().err(), Some(Stale::AskedRecently));
-        assert_eq!(live.recorded_uuid.as_deref(), Some("acc-x"));
+        assert_eq!(live.recorded_id.as_deref(), Some(filed.as_str()));
         assert!(learned.is_none());
         assert_eq!(
             api.asked(),
@@ -1774,17 +1789,14 @@ mod tests {
         // Asked for anyway, what is learned is kept under the same account.
         let (live, learned) = ask_live(
             &ctx,
+            &nothing_enrolled,
             ProviderId::Claude,
             &Ok(Some(login)),
-            None,
             &HashMap::new(),
             true,
         );
         assert_eq!(live.usage().err(), Some(Stale::Unreachable));
-        assert_eq!(
-            learned,
-            Some(("acc-x".to_string(), budget::Outcome::Unreachable))
-        );
+        assert_eq!(learned, Some((filed, budget::Outcome::Unreachable)));
     }
 
     /// Offline, each tool is asked for its own record. It used to be Claude Code's config
@@ -2023,12 +2035,14 @@ mod tests {
     fn only_a_document_holding_no_login_is_nobody_signed_in() {
         let home = scratch("shapes");
         let (ctx, _mem, api) = machine(&home.0, Some("alpha-uuid"));
+        let mut last_switched_to_beta = state(&["alpha", "beta"]);
+        last_switched_to_beta.set_active(ProviderId::Claude, Some("beta".into()));
         let ask = |document: Value| {
             ask_live(
                 &ctx,
+                &last_switched_to_beta,
                 ProviderId::Claude,
                 &Ok(Some(document)),
-                Some("beta-uuid"),
                 &HashMap::new(),
                 true,
             )
@@ -2044,11 +2058,65 @@ mod tests {
         assert!(unusable.out_of_reach);
         assert_eq!(unusable.usage().err(), Some(Stale::LoginUnusable));
         assert_eq!(
-            unusable.recorded_uuid.as_deref(),
+            unusable.recorded_id.as_deref(),
             Some("alpha-uuid"),
             "Claude Code's config, never Pitboard's record of its last switch"
         );
         assert_eq!(api.calls(), 0);
+    }
+
+    /// One person's two organisations are two rows, and the one in use is the organisation
+    /// Anthropic names.
+    #[test]
+    fn the_row_in_use_is_the_organisation_anthropic_names() {
+        let in_organisation = |label: &str, id: &str, organization: &str| Account {
+            id: id.into(),
+            account_uuid: "acc".into(),
+            detail: crate::state::Detail::Claude {
+                organization_uuid: organization.into(),
+                oauth_account: json!({}),
+            },
+            ..account(label)
+        };
+        let state = State {
+            accounts: vec![
+                in_organisation("work", "acc", "org-a"),
+                in_organisation("team", "acc_org-b", "org-b"),
+            ],
+            ..State::default()
+        };
+        let facts = only_claude(
+            LiveLogin {
+                signed_in: Some(Ok(Owner {
+                    account_uuid: "acc".into(),
+                    email: "acc@example.com".into(),
+                    organization_uuid: "org-b".into(),
+                })),
+                usage: Some(Ok(reading(30.0, Source::Live, None))),
+                ..LiveLogin::default()
+            },
+            vec![Err(Stale::NothingParked), Err(Stale::NothingParked)],
+        );
+
+        let rows = assemble(&state, &facts, nothing_remembered, NOW);
+        let said: Vec<(Option<&str>, &str, Option<&str>, bool)> = rows
+            .iter()
+            .map(|r| {
+                (
+                    r.label.as_deref(),
+                    r.id.as_str(),
+                    r.organization_uuid.as_deref(),
+                    r.signed_in,
+                )
+            })
+            .collect();
+        assert_eq!(
+            said,
+            [
+                (Some("team"), "acc_org-b", Some("org-b"), true),
+                (Some("work"), "acc", Some("org-a"), false),
+            ]
+        );
     }
 
     /// A front end is told which rows are a login Pitboard could not pin on any account,
@@ -2059,7 +2127,9 @@ mod tests {
             provider: ProviderId::Codex,
             label: None,
             email: String::new(),
+            id: String::new(),
             account_uuid: String::new(),
+            organization_uuid: None,
             signed_in: false,
             parked: None,
             usage: None,

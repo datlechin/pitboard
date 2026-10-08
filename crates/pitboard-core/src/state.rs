@@ -5,6 +5,7 @@
 //! machine: presenting a refresh token another machine has since rotated ends the login on
 //! both.
 
+use crate::api::Owner;
 use crate::context::Context;
 use crate::error::{Error, Result};
 use crate::provider::ProviderId;
@@ -15,7 +16,7 @@ use serde_json::Value;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
-const SCHEMA: u32 = 4;
+const SCHEMA: u32 = 5;
 
 /// A login held for an account while another is signed in. There is at most one per
 /// account: once installed it is Claude Code's again, and Claude Code rotates it from then
@@ -78,6 +79,11 @@ pub struct ClaudeDetail<'a> {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Account {
     pub label: String,
+    /// What Pitboard files the account's parked logins, readings, budget and windows under.
+    /// Set at enrolment and never changed, so none of them has to move.
+    pub id: String,
+    /// The account as its tool names it: Anthropic's account uuid, which is the person and
+    /// not the login, or Codex's ChatGPT account joined with the person in it.
     pub account_uuid: String,
     pub email: String,
     pub parked: Option<Park>,
@@ -159,6 +165,19 @@ impl Account {
             Detail::Claude { .. } => ProviderId::Claude,
             Detail::Codex { .. } => ProviderId::Codex,
         }
+    }
+
+    /// Whether `owner`'s login is this account's.
+    pub fn owned_by(&self, owner: &Owner) -> bool {
+        self.account_uuid == owner.account_uuid
+            && match &self.detail {
+                // One person in two organisations holds two logins, each on its own plan.
+                Detail::Claude {
+                    organization_uuid, ..
+                } => *organization_uuid == owner.organization_uuid,
+                // Codex's account id already joins the workspace with the person in it.
+                Detail::Codex { .. } => true,
+            }
     }
 
     /// Claude Code's extras, or `None` when this account belongs to another tool.
@@ -287,21 +306,34 @@ impl State {
         self.accounts.iter().find(|a| a.is(key))
     }
 
-    /// This tool's account with this identity.
-    pub fn by_uuid(&self, provider: ProviderId, uuid: &str) -> Option<&Account> {
+    /// This tool's account holding `owner`'s login.
+    pub fn account_of(&self, provider: ProviderId, owner: &Owner) -> Option<&Account> {
         self.accounts
             .iter()
-            .find(|a| a.provider() == provider && a.account_uuid == uuid)
+            .find(|a| a.provider() == provider && a.owned_by(owner))
+    }
+
+    /// What `owner`'s login is filed under: its account's id, or the one it would be
+    /// enrolled with.
+    pub fn id_of(&self, provider: ProviderId, owner: &Owner) -> String {
+        self.account_of(provider, owner)
+            .map_or_else(|| new_id(provider, owner), |a| a.id.clone())
+    }
+
+    /// This tool's account filed under `id`.
+    pub fn by_id(&self, provider: ProviderId, id: &str) -> Option<&Account> {
+        self.accounts
+            .iter()
+            .find(|a| a.provider() == provider && a.id == id)
     }
 
     /// The account a parked item was written for.
     ///
-    /// A park's name carries the account's identity and not its tool, because names were
-    /// fixed before there was a second tool and every item already on a machine is filed
-    /// under one. The identities cannot collide in practice: Claude Code's and Codex's are
-    /// UUIDs, and Gemini's is Google's numeric subject.
-    pub fn owner_of_park(&self, uuid: &str) -> Option<&Account> {
-        self.accounts.iter().find(|a| a.account_uuid == uuid)
+    /// A park's name carries the account's id and not its tool, because names were fixed
+    /// before there was a second tool and every item already on a machine is filed under
+    /// one. The ids cannot collide in practice: each is built from its tool's UUIDs.
+    pub fn owner_of_park(&self, id: &str) -> Option<&Account> {
+        self.accounts.iter().find(|a| a.id == id)
     }
 
     fn get_mut(&mut self, key: &Key) -> Option<&mut Account> {
@@ -402,9 +434,14 @@ impl State {
         if from.label != to
             && let Some(taken) = self.get(&target)
         {
+            let renamed = self.get(from).map(|a| a.email.as_str());
             return Err(Error::LabelTaken {
                 label: target.typed(),
-                email: taken.email.clone(),
+                who: crate::words::login(
+                    from.provider,
+                    &taken.email,
+                    renamed == Some(taken.email.as_str()),
+                ),
             });
         }
         if self.active_for(from.provider) == Some(from.label.as_str()) {
@@ -430,6 +467,16 @@ impl State {
             self.set_active(key.provider, None);
         }
         Some(account)
+    }
+}
+
+/// The id a login is enrolled with. Claude's joins the organisation, since Anthropic's
+/// account uuid is the person and each of their organisations is a login of its own. `_`
+/// is in neither uuid, and is safe in a park's name and a readings file.
+pub fn new_id(provider: ProviderId, owner: &Owner) -> String {
+    match provider {
+        ProviderId::Claude => format!("{}_{}", owner.account_uuid, owner.organization_uuid),
+        ProviderId::Codex => owner.account_uuid.clone(),
     }
 }
 
@@ -547,16 +594,19 @@ fn unknown_tool(document: &Value) -> Option<String> {
 /// routes, so on one machine an older Pitboard will meet a file a newer one wrote. Reading
 /// forwards is what this is for; reading backwards is not possible, and says so.
 fn migrate(document: &mut serde_json::Value, path: &std::path::Path) -> Result<()> {
-    // Each future bump adds an arm that rewrites the document and falls through to the
-    // next, so a file two versions behind is brought all the way forward in one read.
+    // Each bump adds a step after the ones before it, so a file two versions behind is
+    // brought all the way forward in one read.
     let found = document
         .get("schema")
         .and_then(serde_json::Value::as_u64)
         .unwrap_or_default() as u32;
     match found {
         SCHEMA => Ok(()),
-        3 => {
-            three_to_four(document);
+        3 | 4 => {
+            if found == 3 {
+                three_to_four(document);
+            }
+            four_to_five(document);
             Ok(())
         }
         // Nothing released wrote 1 or 2: the schema reached 3 before the first release.
@@ -597,6 +647,23 @@ fn three_to_four(document: &mut serde_json::Value) {
             _ => serde_json::json!({}),
         };
     }
+    document["schema"] = serde_json::json!(4);
+}
+
+/// Schema 4 filed every account under its tool's account id, and Anthropic's is the person:
+/// one person in two organisations was one account. Schema 5 gives each account an id of
+/// its own, and an account already enrolled keeps the one everything is filed under, so
+/// no park, reading or window has to move.
+fn four_to_five(document: &mut serde_json::Value) {
+    if let Some(accounts) = document.get_mut("accounts").and_then(Value::as_array_mut) {
+        for account in accounts {
+            if let Some(fields) = account.as_object_mut()
+                && let Some(id) = fields.get("account_uuid").cloned()
+            {
+                fields.insert("id".into(), id);
+            }
+        }
+    }
     document["schema"] = serde_json::json!(SCHEMA);
 }
 
@@ -636,6 +703,7 @@ mod tests {
         state.accounts.push(Account {
             last_used_at: None,
             label: "work".into(),
+            id: "acc".into(),
             account_uuid: "acc".into(),
             email: "a@b.c".into(),
             detail: Detail::Claude {
@@ -719,6 +787,7 @@ mod tests {
         migrate(&mut document, std::path::Path::new("/tmp/state.json")).expect("still current");
         let state: State = serde_json::from_value(document).expect("still parses");
         assert_eq!(state.get(&claude("work")).unwrap().email, "a@b.c");
+        assert_eq!(state.get(&claude("work")).unwrap().id, "acc-1");
         assert_eq!(state.active_for(ProviderId::Claude), Some("work"));
     }
 
@@ -740,9 +809,9 @@ mod tests {
             "slot": "Claude Code-credentials",
             "discarded": []
         });
-        migrate(&mut once, std::path::Path::new("/tmp/state.json")).expect("3 to 4");
+        migrate(&mut once, std::path::Path::new("/tmp/state.json")).expect("3 to 5");
         let mut twice = once.clone();
-        migrate(&mut twice, std::path::Path::new("/tmp/state.json")).expect("4 is current");
+        migrate(&mut twice, std::path::Path::new("/tmp/state.json")).expect("5 is current");
         assert_eq!(once, twice, "a second migration must change nothing");
         assert_eq!(once["active"], serde_json::json!({"claude": "work"}));
         assert_eq!(
@@ -750,6 +819,8 @@ mod tests {
             serde_json::json!({"claude": "Claude Code-credentials"})
         );
         assert_eq!(once["accounts"][0]["provider"], "claude");
+        assert_eq!(once["accounts"][0]["id"], "acc-1");
+        assert_eq!(once["schema"], SCHEMA);
     }
 
     /// Schema 3 had no `active` at all when nothing had been switched to, and a migration
@@ -765,6 +836,120 @@ mod tests {
         assert!(state.active.is_empty() && state.slot.is_empty());
     }
 
+    /// A file as 0.8.0 writes it. Each account keeps the id its parks, readings and windows
+    /// are already filed under.
+    #[test]
+    fn the_format_0_8_0_writes_keeps_every_account_where_it_is_filed() {
+        let mut document = serde_json::json!({
+            "schema": 4,
+            "machine": machine_id(),
+            "accounts": [
+                {
+                    "label": "work",
+                    "account_uuid": "acc-1",
+                    "email": "a@b.c",
+                    "parked": {
+                        "service": "pitboard-park-acc-1-1789935600123",
+                        "parked_at": 1_789_935_600,
+                        "refresh_fingerprint": "abcd",
+                        "access_expires_at": 1_789_999_999,
+                        "refresh_expires_at": 1_792_000_000
+                    },
+                    "last_used_at": 1_789_935_000,
+                    "provider": "claude",
+                    "organization_uuid": "org-1",
+                    "oauth_account": {
+                        "accountUuid": "acc-1",
+                        "emailAddress": "a@b.c",
+                        "organizationUuid": "org-1"
+                    }
+                },
+                {
+                    "label": "work",
+                    "account_uuid": "team_user-1",
+                    "email": "a@b.c",
+                    "parked": null,
+                    "last_used_at": null,
+                    "provider": "codex",
+                    "workspace_id": "team",
+                    "plan": "team"
+                }
+            ],
+            "active": {"claude": "work", "codex": "work"},
+            "slot": {"claude": "Claude Code-credentials", "codex": "/home/a/.codex"},
+            "discarded": [],
+            "foreign": []
+        });
+        migrate(&mut document, std::path::Path::new("/tmp/state.json")).expect("4 to 5");
+        let state: State = serde_json::from_value(document).expect("parses");
+
+        let work = state.get(&claude("work")).unwrap();
+        assert_eq!(
+            (work.id.as_str(), work.account_uuid.as_str()),
+            ("acc-1", "acc-1")
+        );
+        let codex = state.get(&Key::new(ProviderId::Codex, "work")).unwrap();
+        assert_eq!(codex.id, "team_user-1");
+        assert_eq!(
+            state.owner_of_park("acc-1").map(Account::key),
+            Some(work.key())
+        );
+        let signed_in = Owner {
+            account_uuid: "acc-1".into(),
+            email: "a@b.c".into(),
+            organization_uuid: "org-1".into(),
+        };
+        assert_eq!(
+            state.id_of(ProviderId::Claude, &signed_in),
+            "acc-1",
+            "the login it was enrolled with is still found by its organisation"
+        );
+    }
+
+    /// Anthropic's account uuid is the person. Their logins to two organisations are two
+    /// accounts, and a third organisation's is neither.
+    #[test]
+    fn one_person_in_two_organisations_is_two_accounts() {
+        let in_org = |label: &str, id: &str, org: &str| Account {
+            last_used_at: None,
+            label: label.into(),
+            id: id.into(),
+            account_uuid: "acc".into(),
+            email: "a@b.c".into(),
+            detail: Detail::Claude {
+                organization_uuid: org.into(),
+                oauth_account: serde_json::json!({}),
+            },
+            parked: None,
+        };
+        let mut state = State::default();
+        state.upsert(in_org("work", "acc", "org-a"));
+        state.upsert(in_org("team", "acc_org-b", "org-b"));
+        let signed_in = |org: &str| Owner {
+            account_uuid: "acc".into(),
+            email: "a@b.c".into(),
+            organization_uuid: org.into(),
+        };
+        let label_of = |org: &str| {
+            state
+                .account_of(ProviderId::Claude, &signed_in(org))
+                .map(|a| a.label.as_str())
+        };
+
+        assert_eq!(label_of("org-a"), Some("work"));
+        assert_eq!(label_of("org-b"), Some("team"));
+        assert_eq!(label_of("org-c"), None);
+        assert_eq!(
+            state.id_of(ProviderId::Claude, &signed_in("org-c")),
+            "acc_org-c"
+        );
+        assert!(
+            state
+                .account_of(ProviderId::Codex, &signed_in("org-a"))
+                .is_none()
+        );
+    }
+
     /// `Detail` is flattened and tagged, which is the whole reason the migration has
     /// nothing to move. If it ever stopped sitting beside `label` in the file, every
     /// account already written would stop loading.
@@ -772,6 +957,7 @@ mod tests {
     fn a_providers_own_fields_sit_beside_the_shared_ones() {
         let account = Account {
             label: "work".into(),
+            id: "acc".into(),
             account_uuid: "acc".into(),
             email: "a@b.c".into(),
             parked: None,
@@ -907,6 +1093,7 @@ mod tests {
         Account {
             last_used_at: None,
             label: label.into(),
+            id: format!("{label}-uuid"),
             account_uuid: format!("{label}-uuid"),
             email: format!("{label}@example.com"),
             detail: Detail::Claude {
@@ -1043,7 +1230,7 @@ mod tests {
     #[test]
     fn a_state_file_from_before_foreign_parks_were_recorded_still_loads() {
         let written = serde_json::json!({
-            "schema": SCHEMA,
+            "schema": 4,
             "machine": machine_id(),
             "accounts": [{
                 "label": "work", "account_uuid": "acc-1", "email": "a@b.c",
@@ -1102,6 +1289,7 @@ mod tests {
         Account {
             last_used_at: None,
             label: label.into(),
+            id: format!("codex-{label}-uuid"),
             account_uuid: format!("codex-{label}-uuid"),
             email: format!("{label}@openai.example"),
             detail: Detail::Codex {

@@ -15,8 +15,8 @@ For each exit status, see [Exit codes](/reference/commands#exit-codes). In the t
 | Code | Exit | Meaning | What to do |
 | --- | --- | --- | --- |
 | `account_unknown` | 1 | No account is enrolled under that label. The message lists the labels that are. | Check the label. To add the account, run `pitboard enroll <label> --sign-in`. |
-| `label_taken` | 1 | The label already belongs to another account of the same tool. | Choose a different label. |
-| `already_enrolled` | 1 | The account is already enrolled under another label, which the message names. | Use that label. To add a different account, run `pitboard enroll <label> --sign-in`. |
+| `label_taken` | 1 | The label already belongs to another account of the same tool. When that account has the same email in another organisation or workspace, the message says so. | Choose a different label. |
+| `already_enrolled` | 1 | The account is already enrolled under another label, which the message names. The same email in another organisation or workspace is another account. | Use that label. To add a different account, run `pitboard enroll <label> --sign-in`. |
 | `label_ambiguous` | 1 | A label without `claude/` or `codex/` in front, such as `work`, names an account in each tool. | Add the tool, as in `claude/work` or `codex/work`. |
 | `provider_unknown` | 1 | A label given to `use` or `forget`, or the first label given to `rename`, starts with a tool Pitboard does not know, such as `codx/work`. | Start the label with `claude/` or `codex/`, or leave the tool out. |
 | `live_account_not_enrolled` | 1 | The account in use is not enrolled, so a switch cannot [park](/concepts/switching#parked-logins) its login. | Enrol it first with `pitboard enroll <label>`, or `pitboard enroll codex/<label>` for OpenAI's Codex CLI. |

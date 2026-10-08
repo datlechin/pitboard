@@ -26,7 +26,7 @@ func account(
     return Account(
         id: "\(provider):\(uuid)", provider: provider, label: label,
         qualified: label.map { "\(provider)/\($0)" }, unplaced: false,
-        email: email ?? "\(label ?? uuid)@example.com", accountUuid: uuid, signedIn: signedIn,
+        email: email ?? "\(label ?? uuid)@example.com", accountId: uuid, signedIn: signedIn,
         switchable: switchable ?? (!signedIn && label != nil), parked: nil,
         usage: Usage(source: .live, observedAt: 0, windows: []), stale: nil,
         staleExplanation: nil)

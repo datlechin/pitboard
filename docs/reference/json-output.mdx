@@ -135,7 +135,8 @@ Each object in `accounts` has these fields:
 | --- | --- | --- |
 | `label` | string or null | The label without its tool, such as `work`, or `null` for a login nobody enrolled. |
 | `email` | string | The account's email address. Empty when Pitboard could not tell whose login it is. |
-| `account_uuid` | string | The account id. Empty in the same case. |
+| `account_uuid` | string | The account id. Empty in the same case. For Claude Code it is the Anthropic account UUID, which one person's accounts in two organisations share. |
+| `organization_uuid` | string or null | The Claude organisation the login belongs to. `null` for Codex and for a login Pitboard could not read. |
 | `signed_in` | boolean | `true` for the account its tool is using. |
 | `switchable` | boolean | `true` when `pitboard use` can switch to it: it is not in use, and its parked login can still be restored. |
 | `parked` | object or null | The parked login's `parked_at`, `access_expires_at` and `refresh_expires_at`. `null` when nothing is parked. Each expiry is `null` when unknown, and `refresh_expires_at` is always `null` for Codex. |

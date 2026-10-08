@@ -248,7 +248,9 @@ pub struct Account {
     /// could not read, or one it cannot switch, such as an API key. Not an account to enrol.
     pub unplaced: bool,
     pub email: String,
-    pub account_uuid: String,
+    /// What Pitboard files the account under, which its windows' stores derive from. Empty
+    /// for a login Pitboard cannot place.
+    pub account_id: String,
     pub signed_in: bool,
     /// Whether switching to it would work now.
     pub switchable: bool,

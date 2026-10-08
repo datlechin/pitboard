@@ -115,7 +115,7 @@ fn retry_after(waits: u32) -> i64 {
 pub struct Plan {
     /// The account in use, and its id, which the switch checks is still the one signed in.
     pub from: Key,
-    pub from_uuid: String,
+    pub from_id: String,
     /// The account to switch to.
     pub to: Key,
     /// The limit of `from` that reached the share, as last read.
@@ -127,7 +127,7 @@ impl Plan {
     /// limit, however far that limit has moved since.
     pub(crate) fn same(&self, other: &Plan) -> bool {
         self.from == other.from
-            && self.from_uuid == other.from_uuid
+            && self.from_id == other.from_id
             && self.to == other.to
             && self.limit.same_limit(&other.limit)
             && same_reset(
@@ -293,7 +293,7 @@ pub(crate) fn decide(
         .get(&from)
         .and_then(|account| account.last_used_at)
         .is_some_and(|at| (0..SETTLING_SECONDS).contains(&(now - at)));
-    let tried = ledger.tried(&current.account_uuid, limit);
+    let tried = ledger.tried(&current.id, limit);
     let waiting = tried.is_some_and(|tried| {
         tried.switched || tried.attempts >= ATTEMPTS || now - tried.at < retry_after(tried.waits)
     });
@@ -305,7 +305,7 @@ pub(crate) fn decide(
         .iter()
         .filter(claude)
         .filter(|row| row.switchable(now))
-        .filter(|row| !passed_over.contains(&row.account_uuid))
+        .filter(|row| !passed_over.contains(&row.id))
         .filter_map(|row| Some((row, room(row, reading, limit, threshold, now)?)))
         .min_by(|(_, (a, a_most)), (_, (b, b_most))| {
             a.total_cmp(b).then_with(|| a_most.total_cmp(b_most))
@@ -313,7 +313,7 @@ pub(crate) fn decide(
     match best.and_then(|(row, _)| row.key()) {
         Some(to) => Decision::Switch(Plan {
             from,
-            from_uuid: current.account_uuid.clone(),
+            from_id: current.id.clone(),
             to,
             limit: limit.clone(),
         }),
@@ -362,9 +362,9 @@ fn path(ctx: &Context) -> PathBuf {
 }
 
 /// A limit of an account, by the names a limit goes by.
-fn entry(account_uuid: &str, limit: &Window) -> String {
+fn entry(id: &str, limit: &Window) -> String {
     [
-        account_uuid,
+        id,
         crate::usage::limit_name(&limit.kind),
         limit.scope.as_deref().unwrap_or_default(),
     ]
@@ -401,9 +401,9 @@ impl Ledger {
     }
 
     /// What was tried for this window of `limit`, where anything was.
-    fn tried(&self, account_uuid: &str, limit: &Window) -> Option<&Tried> {
+    fn tried(&self, id: &str, limit: &Window) -> Option<&Tried> {
         self.limits
-            .get(&entry(account_uuid, limit))
+            .get(&entry(id, limit))
             .filter(|tried| same_reset(tried.resets_at, limit.resets_at.unwrap_or(0)))
     }
 
@@ -411,7 +411,7 @@ impl Ledger {
         let resets_at = plan.limit.resets_at.unwrap_or(0);
         let tried = self
             .limits
-            .entry(entry(&plan.from_uuid, &plan.limit))
+            .entry(entry(&plan.from_id, &plan.limit))
             .or_default();
         if !same_reset(tried.resets_at, resets_at) {
             *tried = Tried {
@@ -444,11 +444,11 @@ impl Ledger {
 
     /// The switch for `plan` was refused over the account it would have switched to, and
     /// the next goes to another.
-    pub(crate) fn pass_over(&mut self, plan: &Plan, to_uuid: &str) {
+    pub(crate) fn pass_over(&mut self, plan: &Plan, to_id: &str) {
         let tried = self.trying(plan);
         tried.waits = 0;
-        if !tried.passed_over.iter().any(|uuid| uuid == to_uuid) {
-            tried.passed_over.push(to_uuid.to_owned());
+        if !tried.passed_over.iter().any(|id| id == to_id) {
+            tried.passed_over.push(to_id.to_owned());
         }
     }
 }
@@ -511,7 +511,9 @@ mod tests {
             provider: ProviderId::Claude,
             label: Some(label.into()),
             email: format!("{label}@example.com"),
+            id: label.into(),
             account_uuid: label.into(),
+            organization_uuid: Some("org".into()),
             signed_in,
             parked: (!signed_in).then(|| Park {
                 service: format!("pitboard-park-{label}-1"),
@@ -584,7 +586,7 @@ mod tests {
             unreachable!()
         };
         assert_eq!(
-            (plan.from.label.as_str(), plan.from_uuid.as_str()),
+            (plan.from.label.as_str(), plan.from_id.as_str()),
             ("work", "work")
         );
         assert_eq!(plan.limit.kind, "session");

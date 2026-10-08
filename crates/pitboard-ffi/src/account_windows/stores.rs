@@ -11,15 +11,15 @@ const NAMESPACE: [u8; 16] = [
     0x67, 0x4b, 0x09, 0xf3, 0x8d, 0x37, 0x4e, 0x48, 0xa3, 0x61, 0x5a, 0xf2, 0xa6, 0x85, 0x67, 0x73,
 ];
 
-/// The store of the window of the account `account_uuid` names on a site whose store name is
+/// The store of the window of the account `account_id` names on a site whose store name is
 /// `store_name`: a version 5 UUID (RFC 9562, SHA-1) of `<store name>:<account id>` in
 /// Pitboard's namespace, the account id in lower case, written in lower case.
 ///
 /// Each character of the account id is lowered alone, as Swift's `lowercased()` lowered it
 /// for every store released. `str::to_lowercase` follows Unicode's rule for a sigma that ends
 /// a word, which Swift does not, so it would hash `ΟΔΟΣ` otherwise.
-pub(crate) fn derive(store_name: &str, account_uuid: &str) -> String {
-    let lowered: String = account_uuid.chars().flat_map(char::to_lowercase).collect();
+pub(crate) fn derive(store_name: &str, account_id: &str) -> String {
+    let lowered: String = account_id.chars().flat_map(char::to_lowercase).collect();
     let mut hash = Sha1::new();
     hash.update(NAMESPACE);
     hash.update(format!("{store_name}:{lowered}"));
@@ -45,7 +45,7 @@ pub(crate) fn same(one: &str, other: &str) -> bool {
     one.eq_ignore_ascii_case(other)
 }
 
-/// The store that keeps the data of the window of the account `account_uuid` names on `site`,
+/// The store that keeps the data of the window of the account `account_id` names on `site`,
 /// which is also the window's identity: one window per account. A version 5 UUID of
 /// `<store name>:<account id>` in Pitboard's namespace, in lower case, which WebKit and
 /// WebView2 can each name a store by.
@@ -56,8 +56,8 @@ pub(crate) fn same(one: &str, other: &str) -> bool {
 /// identifier. The account id is not secret; the hash keeps it out of folder names and saved
 /// windows.
 #[uniffi::export]
-pub fn store_id(site: Site, account_uuid: String) -> String {
-    derive(&site.store_name, &account_uuid)
+pub fn store_id(site: Site, account_id: String) -> String {
+    derive(&site.store_name, &account_id)
 }
 
 #[cfg(test)]

@@ -248,6 +248,7 @@ pub(crate) fn codex_account(label: &str, uuid: &str, parked: Option<Park>) -> Ac
     Account {
         last_used_at: None,
         label: label.into(),
+        id: uuid.into(),
         account_uuid: uuid.into(),
         email: format!("{uuid}@example.com"),
         parked,
@@ -393,6 +394,7 @@ pub(crate) fn account(label: &str, uuid: &str, parked: Option<Park>) -> Account 
     Account {
         last_used_at: None,
         label: label.into(),
+        id: uuid.into(),
         account_uuid: uuid.into(),
         email: format!("{uuid}@example.com"),
         parked,
@@ -403,6 +405,26 @@ pub(crate) fn account(label: &str, uuid: &str, parked: Option<Park>) -> Account 
                 "emailAddress": format!("{uuid}@example.com"),
                 "organizationUuid": format!("org-{uuid}"),
             }),
+        },
+    }
+}
+
+/// `who`'s login to the organisation `org`, enrolled as `label` by this version.
+pub(crate) fn in_organisation(label: &str, who: &str, org: &str, parked: Option<Park>) -> Account {
+    let owner = Owner {
+        organization_uuid: org.into(),
+        ..owner(who)
+    };
+    Account {
+        last_used_at: None,
+        label: label.into(),
+        id: crate::state::new_id(ProviderId::Claude, &owner),
+        account_uuid: owner.account_uuid,
+        email: owner.email,
+        parked,
+        detail: crate::state::Detail::Claude {
+            organization_uuid: owner.organization_uuid,
+            oauth_account: json!({"accountUuid": who, "organizationUuid": org}),
         },
     }
 }

@@ -200,9 +200,9 @@ fn adopt(
     raw: &str,
     written_here: bool,
 ) -> Option<String> {
-    let (uuid, at_millis) = park::parts_of(service)?;
+    let (id, at_millis) = park::parts_of(service)?;
     let oauth = serde_json::from_str::<serde_json::Value>(raw).ok()?;
-    let account = state.owner_of_park(&uuid)?;
+    let account = state.owner_of_park(&id)?;
     let key = account.key();
     let park = park::describe(key.provider, service, at_millis / 1000, &oauth);
     if park.refresh_fingerprint.is_empty() || !park.restorable_at(ctx.now()) {
@@ -306,6 +306,7 @@ mod tests {
         crate::state::Account {
             last_used_at: None,
             label: label.into(),
+            id: uuid.into(),
             account_uuid: uuid.into(),
             email: format!("{uuid}@example.com"),
             detail: crate::state::Detail::Claude {

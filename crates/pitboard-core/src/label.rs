@@ -206,6 +206,7 @@ mod tests {
         };
         Account {
             label: label.into(),
+            id: format!("{}-{label}", provider.code()),
             account_uuid: format!("{}-{label}", provider.code()),
             email: format!("{label}@example.com"),
             parked: None,

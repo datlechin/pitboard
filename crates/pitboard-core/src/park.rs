@@ -11,8 +11,8 @@ use serde_json::Value;
 
 const PREFIX: &str = "pitboard-park-";
 
-pub fn service_name(account_uuid: &str, at_millis: i64) -> String {
-    format!("{PREFIX}{account_uuid}-{at_millis}")
+pub fn service_name(id: &str, at_millis: i64) -> String {
+    format!("{PREFIX}{id}-{at_millis}")
 }
 
 /// A name Pitboard made, rather than one Claude Code did. Nothing deletes an item without
@@ -21,21 +21,21 @@ pub fn is_park_name(service: &str) -> bool {
     parts_of(service).is_some()
 }
 
-/// The account and the moment a name carries. An account uuid contains dashes, so the
+/// The account id and the moment a name carries. An account id contains dashes, so the
 /// moment is taken from the end.
 pub fn parts_of(service: &str) -> Option<(String, i64)> {
     let rest = service.strip_prefix(PREFIX)?;
-    let (uuid, millis) = rest.rsplit_once('-')?;
+    let (id, millis) = rest.rsplit_once('-')?;
     let at_millis: i64 = millis.parse().ok()?;
-    (!uuid.is_empty()).then(|| (uuid.to_string(), at_millis))
+    (!id.is_empty()).then(|| (id.to_string(), at_millis))
 }
 
 /// Claim a free name before writing to it, so the caller can record it first and recovery
 /// can find a park left by a run that died. Reusing a name would destroy the park there.
-pub fn reserve(ctx: &Context, permit: Permit, account_uuid: &str) -> Result<String> {
+pub fn reserve(ctx: &Context, permit: Permit, id: &str) -> Result<String> {
     let start = ctx.now_millis();
     for offset in 0..1_000 {
-        let candidate = service_name(account_uuid, start + offset);
+        let candidate = service_name(id, start + offset);
         if store::vault_read(ctx, &candidate)?.is_none() {
             // Written down before anything is written into it, so a run killed between the
             // two leaves a name the next command can resolve rather than a login nothing

@@ -15,7 +15,7 @@ fn envelope(out: &str) -> Value {
 fn an_account_at_the_share_is_switched_from_once() {
     let env = two_accounts("watch-switches");
     env.an_hour_on();
-    env.measured(&[('a', 96.0, 20.0), ('b', 10.0, 30.0)]);
+    env.measured(&[("alpha", 96.0, 20.0), ("beta", 10.0, 30.0)]);
 
     let (out, err, code) = env.run(&["watch", "--once", "--json"]);
     assert_eq!(code, 0, "{err}");
@@ -61,7 +61,7 @@ fn an_account_at_the_share_is_switched_from_once() {
 fn below_the_share_nothing_moves_and_the_share_is_the_one_asked_for() {
     let env = two_accounts("watch-below");
     env.an_hour_on();
-    env.measured(&[('a', 90.0, 20.0), ('b', 10.0, 30.0)]);
+    env.measured(&[("alpha", 90.0, 20.0), ("beta", 10.0, 30.0)]);
     let (out, err, code) = env.run(&["watch", "--once"]);
     assert_eq!(
         (code, out.as_str()),
@@ -85,7 +85,7 @@ fn below_the_share_nothing_moves_and_the_share_is_the_one_asked_for() {
 fn with_no_account_to_go_to_it_says_so_and_nothing_moves() {
     let env = two_accounts("watch-no-room");
     env.an_hour_on();
-    env.measured(&[('a', 97.0, 20.0), ('b', 10.0, 99.0)]);
+    env.measured(&[("alpha", 97.0, 20.0), ("beta", 10.0, 99.0)]);
     let (out, err, code) = env.run(&["watch", "--once"]);
     assert_eq!(code, 0, "{err}");
     assert_eq!(

@@ -120,14 +120,18 @@ impl Provider for Claude {
         Some(PathBuf::from(claude::storage_dir(ctx)).join(".storage-write"))
     }
 
-    /// The identity cached in Claude Code's config, which it refreshes about once a day.
+    /// The identity cached in Claude Code's config, which it refreshes about once a day. One
+    /// that names no organisation does not say which of the person's logins is in use.
     fn recorded_identity(&self, ctx: &Context) -> Option<Identity> {
         let config = claude::load_config(ctx).ok()?;
         let found = claude::identity(&config)?;
+        if found.organization_uuid.is_empty() {
+            return None;
+        }
         Some(Identity {
             account_id: found.account_uuid,
             email: found.email,
-            group: Some(found.organization_uuid).filter(|o| !o.is_empty()),
+            group: Some(found.organization_uuid),
         })
     }
 
@@ -405,6 +409,43 @@ mod tests {
             assert_eq!(read.url.as_deref(), Some(ADDRESS), "{printed:?}");
             assert!(read.wants_code);
         }
+    }
+
+    /// Claude Code keeps the token's own account when the profile could not be read, and
+    /// that can name no organisation.
+    #[test]
+    fn a_config_that_names_no_organisation_names_no_login() {
+        let home = std::env::temp_dir().join(format!(
+            "pitboard-config-org-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let _ = std::fs::remove_dir_all(&home);
+        std::fs::create_dir_all(&home).unwrap();
+        let ctx = Context::new(home.clone());
+        let config = |account: Value| {
+            std::fs::write(
+                home.join(".claude.json"),
+                serde_json::json!({ "oauthAccount": account }).to_string(),
+            )
+            .unwrap();
+        };
+
+        config(serde_json::json!({"accountUuid": "acc", "emailAddress": "a@b.c"}));
+        assert_eq!(Claude.recorded_identity(&ctx), None);
+
+        config(serde_json::json!({
+            "accountUuid": "acc", "emailAddress": "a@b.c", "organizationUuid": "org"
+        }));
+        assert_eq!(
+            Claude.recorded_identity(&ctx),
+            Some(Identity {
+                account_id: "acc".into(),
+                email: "a@b.c".into(),
+                group: Some("org".into()),
+            })
+        );
+        let _ = std::fs::remove_dir_all(&home);
     }
 
     /// The prompt looked for is one the conformance run reads out of every build, so a

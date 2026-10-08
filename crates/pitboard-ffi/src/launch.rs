@@ -242,10 +242,10 @@ fn account(row: status::Row, now: i64) -> Account {
     let key = row.key();
     let unplaced = row.unplaced();
     Account {
-        id: if row.account_uuid.is_empty() {
+        id: if row.id.is_empty() {
             format!("{}:login", row.provider.code())
         } else {
-            format!("{}:{}", row.provider.code(), row.account_uuid)
+            format!("{}:{}", row.provider.code(), row.id)
         },
         provider: row.provider.code().into(),
         qualified: key.map(|k| k.qualified()),
@@ -282,7 +282,7 @@ fn account(row: status::Row, now: i64) -> Account {
         }),
         label: row.label,
         email: row.email,
-        account_uuid: row.account_uuid,
+        account_id: row.id,
         signed_in: row.signed_in,
     }
 }

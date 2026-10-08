@@ -24,6 +24,7 @@ expression: "serde_json :: json! ({ \"exit\" : code, \"envelope\" : value })"
           "label": "alpha",
           "email": "a@example.com",
           "account_uuid": "2b118e99-a111-4111-8111-111111111111",
+          "organization_uuid": "2b118e99-o111-4111-8111-111111111111",
           "signed_in": true,
           "switchable": false,
           "parked": null,
@@ -62,6 +63,7 @@ expression: "serde_json :: json! ({ \"exit\" : code, \"envelope\" : value })"
           "label": "beta",
           "email": "b@example.com",
           "account_uuid": "2b118e99-b111-4111-8111-111111111111",
+          "organization_uuid": "2b118e99-p111-4111-8111-111111111111",
           "signed_in": false,
           "switchable": true,
           "parked": {

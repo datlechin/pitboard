@@ -64,6 +64,8 @@ Pitboard runs the tool's own sign-in in a separate directory, so the account in 
 
 If the browser signs you in as an account already enrolled, Pitboard refuses and names its label. For what `--sign-in` runs, see [Account commands](/reference/account-commands#enroll).
 
+Each organisation your Anthropic account belongs to is its own account, with its own limits. Enrol each under its own label, and sign in to that organisation when the browser opens. Two ChatGPT workspaces of one person are two accounts in the same way.
+
 <Warning>
   Do not add an account with Claude Code's `/login` or with `codex login`. Both replace the login in use without Pitboard parking it, so the account that was in use needs a browser sign-in again. `codex login` also revokes the login it replaces.
 </Warning>

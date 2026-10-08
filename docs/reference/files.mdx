@@ -40,7 +40,7 @@ Only files in `vault/` and `signin/` can hold a login. To delete the directory, 
 
 On macOS, each parked login is an item in your default keychain, named `pitboard-park-<account id>-<time>`. Its keychain account is the one Claude Code's item uses, usually your user name from `USER`.
 
-`<account id>` is a Claude Code account's Anthropic UUID or, for OpenAI's Codex CLI, is built from the account's ChatGPT ids. `<time>` is when the login was parked or last renewed, in milliseconds since 1 January 1970.
+`<account id>` is the id Pitboard keeps for the account. For Claude Code, it is the Anthropic account UUID and the organisation UUID joined with `_`, and an account enrolled by Pitboard 0.8.0 or earlier keeps its account UUID alone. For OpenAI's Codex CLI, it is built from the account's ChatGPT ids. `<time>` is when the login was parked or last renewed, in milliseconds since 1 January 1970.
 
 On Linux, each parked login is a file in `~/.pitboard/vault/`, named `pitboard-park-<account id>-<time>.json`.
 

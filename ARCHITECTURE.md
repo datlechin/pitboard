@@ -850,9 +850,8 @@ The app and the command line inside it update together. A command line installed
 way updates by its own route. So on one machine, an older Pitboard can meet a file a newer
 one wrote.
 
-Reading forwards is `state::migrate`. Each schema bump adds an arm that rewrites the
-document and falls through to the next. A file two versions behind comes forward in one
-read.
+Reading forwards is `state::migrate`. Each schema bump adds a step after the ones before
+it, so a file two versions behind comes forward in one read.
 
 Reading backwards is not possible. The older Pitboard refuses the file and says to update
 it. A bump needs a test that loads a file the previous version wrote.
@@ -860,6 +859,13 @@ it. A bump needs a test that loads a file the previous version wrote.
 Schema 4 records each account's tool, and which account is signed in for each tool. A
 schema 3 file is brought forward on its first read, with no keychain item or vault file
 touched.
+
+Schema 5 gives each account an `id`, set at enrolment and never changed. Its parked logins,
+readings, usage history, budget and windows are filed under it. A login is matched to its
+account by its tool's identity, which for Claude Code is the account and the organisation
+together (`Account::owned_by`), so one person's two organisations are two accounts. An
+account brought forward from schema 4 keeps its account uuid as its `id`, and nothing filed
+under it moves.
 
 A file naming a tool this build does not know is reported as written by a newer Pitboard,
 not as corrupt. The advice for a corrupt file is to delete it, and following that here would
@@ -1040,8 +1046,9 @@ rests on are under [WebKit and SwiftUI](#webkit-and-swiftui) and
 
 ### What must stay true
 
-- One store per account, derived from the account. A window's store is a version 5 UUID of
-  `<store name>:<account id>` in a fixed namespace, which `store_id` writes in lower case.
+- One store per account, derived from the account's `id`, which never changes. A window's
+  store is a version 5 UUID of `<store name>:<account id>` in a fixed namespace, which
+  `store_id` writes in lower case.
   It is also the window's value, so there is one window per account, and a rename keeps its
   sign-in. The namespace and the store names, `claude` and `codex`, never change: a change
   would leave every window without its data, and the next sweep would delete that data.
