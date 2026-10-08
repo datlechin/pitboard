@@ -190,10 +190,40 @@ jobs:
         shell: pwsh
         run: >
           ./.github/scripts/test-as-standard-user.ps1 -Cargo '--locked -p pitboard-core --lib'
-          -Pass 'host::windows release'
+          -Pass 'host::windows host::token host::tests::the_floor release'
       - name: windows_refuses, opened, as a standard user
         shell: pwsh
         run: ./.github/scripts/test-as-standard-user.ps1 -Cargo '--locked -p pitboard --test windows_refuses'
+      # Runs the opened pitboard.exe the step above built.
+      - name: An opened build refuses a change as the elevated job user
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $exe = (Resolve-Path 'target\debug\pitboard.exe').Path
+          $root = Join-Path $env:RUNNER_TEMP 'elevated-refusal'
+          $folders = 'USERPROFILE', 'HOME', 'APPDATA', 'LOCALAPPDATA', 'CODEX_HOME', 'CLAUDE_CONFIG_DIR', 'PITBOARD_HOME'
+          foreach ($folder in $folders) {
+            $path = Join-Path $root $folder
+            New-Item -ItemType Directory -Force -Path $path | Out-Null
+            Set-Item -Path "env:$folder" -Value $path
+          }
+          foreach ($command in @(@('use', 'x', '--json'), @('renew', '--json'))) {
+            $printed = & $exe @command | Out-String
+            $exit = $LASTEXITCODE
+            $refusal = ($printed | ConvertFrom-Json).error
+            if ($exit -ne 1 -or $refusal.code -ne 'elevated') {
+              throw "pitboard $($command -join ' ') exited $exit with $($refusal.code)`: $printed"
+            }
+            if ($refusal.message -notmatch 'as every program this Windows account starts does') {
+              throw "the job user's token is not split, so the refusal names every program: $($refusal.message)"
+            }
+            Write-Output "pitboard $($command -join ' '): $($refusal.message)"
+          }
+          foreach ($folder in $folders) {
+            $left = @(Get-ChildItem -Force -Path (Join-Path $root $folder))
+            if ($left.Count -ne 0) { throw "$folder holds $($left.Name -join ', ')" }
+          }
+          exit 0
       - name: The crates that read links, as a standard user
         shell: pwsh
         run: ./.github/scripts/test-as-standard-user.ps1 -Cargo '--locked -p pitboard-sites -p pitboard-share-ffi'

@@ -1156,7 +1156,8 @@ mod tests {
             assert!(
                 checks
                     .iter()
-                    .all(|check| ["elevated", "homes"].contains(&check.code.as_str())),
+                    .all(|check| ["system_too_old", "elevated", "homes"]
+                        .contains(&check.code.as_str())),
                 "nothing else is checked"
             );
         }

@@ -35,6 +35,7 @@ mod macos;
 #[cfg(any(test, feature = "test-support"))]
 pub mod memory;
 pub(crate) mod program;
+pub(crate) mod token;
 #[cfg(unix)]
 mod unix;
 #[cfg(windows)]
@@ -254,10 +255,31 @@ pub enum Elevation {
     /// As the person themselves.
     Normal,
     /// With rights that are not the person's own. `why` says how, in words that follow
-    /// "Pitboard runs": `as root`, or `with sudo`.
+    /// "Pitboard runs", such as `as root`, `with sudo` or `as administrator`.
     Elevated { why: &'static str },
     /// The system could not say, which Pitboard takes as a reason to change nothing.
     Unknown,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Floor {
+    Met,
+    Below { build: u32 },
+    Unknown,
+}
+
+// Windows 11 24H2's build, which Windows Server 2025 shares.
+pub const WINDOWS_FLOOR: u32 = 26100;
+
+#[cfg(any(windows, test))]
+pub(crate) fn windows_floor(version: Option<(u32, u32, u32)>) -> Floor {
+    match version {
+        None => Floor::Unknown,
+        Some((major, minor, build)) if (major, minor, build) >= (10, 0, WINDOWS_FLOOR) => {
+            Floor::Met
+        }
+        Some((_, _, build)) => Floor::Below { build },
+    }
 }
 
 /// One process this user is running, and where its program runs from.
@@ -322,6 +344,8 @@ pub(crate) trait Host: Send + Sync + std::fmt::Debug {
     /// the answer can be in the environment this process was started with, such as the
     /// `SUDO_UID` sudo sets.
     fn elevation(&self, ctx: &Context) -> Elevation;
+
+    fn floor(&self) -> Floor;
 
     /// The file at `path`, outside every home, that only an administrator writes, such as
     /// Codex's `/etc/codex/requirements.toml`. Which file is the tool's to say.
@@ -492,8 +516,7 @@ mod tests {
 
     /// This system's host reads sudo from the environment the context was read from, which
     /// is where sudo says it, and root from the process itself. Set but empty, `SUDO_UID`
-    /// says nothing, as every variable Pitboard reads that way. Windows' face cannot tell
-    /// either until W12 reads the process's token.
+    /// says nothing, as every variable Pitboard reads that way.
     #[test]
     fn the_host_reads_sudo_from_the_context_and_root_from_the_process() {
         let under = |value: &str| {
@@ -507,7 +530,7 @@ mod tests {
             under("501"),
             match OS {
                 Os::MacOs | Os::Linux => Elevation::Elevated { why: "with sudo" },
-                Os::Windows => Elevation::Unknown,
+                Os::Windows => user::elevation(false),
             }
         );
         let ctx = Context::for_unit_test();
@@ -517,5 +540,32 @@ mod tests {
             "withheld from a unit test, so only root is read"
         );
         assert_eq!(under(""), user::elevation(false));
+    }
+
+    // 22631 is Windows 11 23H2, and 19045 Windows 10 22H2.
+    #[test]
+    fn the_floor_is_windows_11_24h2_with_server_2025_counted() {
+        for met in [(10, 0, 26100), (10, 0, 26200), (10, 0, 27000), (11, 0, 100)] {
+            assert_eq!(windows_floor(Some(met)), Floor::Met, "{met:?}");
+        }
+        for (version, build) in [
+            ((10, 0, 26099), 26099),
+            ((10, 0, 22631), 22631),
+            ((10, 0, 19045), 19045),
+            ((6, 3, 9600), 9600),
+        ] {
+            assert_eq!(
+                windows_floor(Some(version)),
+                Floor::Below { build },
+                "{version:?}"
+            );
+        }
+        assert_eq!(windows_floor(None), Floor::Unknown);
+        assert_eq!(WINDOWS_FLOOR, 26100);
+    }
+
+    #[test]
+    fn the_floor_is_met_on_the_systems_the_tests_run_on() {
+        assert_eq!(current().floor(), Floor::Met);
     }
 }

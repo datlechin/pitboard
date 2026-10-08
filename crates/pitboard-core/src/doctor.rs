@@ -108,6 +108,7 @@ pub struct Facts {
     pub elevation: crate::host::Elevation,
     /// A login left in Claude Code's fallback file behind the one in the keychain.
     pub fallback_login: Option<FallbackLogin>,
+    pub floor: crate::host::Floor,
     pub now: i64,
 }
 
@@ -379,6 +380,7 @@ pub fn gather(ctx: &Context) -> Facts {
         in_the_app: ctx.caller == "app",
         elevation: ctx.host().elevation(ctx),
         fallback_login: fallback_login(ctx),
+        floor: ctx.host().floor(),
         now: ctx.now(),
     }
 }
@@ -633,23 +635,40 @@ fn running_codex(ctx: &Context) -> Option<Vec<crate::holder::Holding>> {
     }
 }
 
-/// The check that fails where this process runs as root or under sudo, or nobody could
-/// tell whether it does, since then Pitboard changes nothing: `None` where it runs as the
-/// person themselves.
-fn elevated(elevation: crate::host::Elevation) -> Option<Check> {
-    let detail = match elevation {
+/// The check that fails where this process runs as root or under sudo, or elevated on
+/// Windows, or nobody could tell whether it does, since then Pitboard changes nothing: `None`
+/// where it runs as the person themselves.
+fn elevated(os: Os, elevation: crate::host::Elevation) -> Option<Check> {
+    let said = match elevation {
         crate::host::Elevation::Normal => return None,
-        crate::host::Elevation::Elevated { why } => format!("Pitboard runs {why}"),
-        crate::host::Elevation::Unknown => {
-            "Pitboard cannot tell whether it runs as root or with sudo".to_string()
-        }
+        crate::host::Elevation::Elevated { why } => crate::words::elevated(os, Some(why)),
+        crate::host::Elevation::Unknown => crate::words::elevated(os, None),
     };
     Some(fail(
         "elevated",
         "runs as",
-        detail,
-        "Pitboard changes nothing this way: it reads, and renews and writes nothing. Run it \
-         as yourself.",
+        said.because,
+        format!(
+            "Pitboard changes nothing this way: it reads, and renews and writes nothing. {}",
+            said.way_out
+        ),
+    ))
+}
+
+fn too_old(floor: crate::host::Floor) -> Option<Check> {
+    let said = match floor {
+        crate::host::Floor::Met => return None,
+        crate::host::Floor::Below { build } => crate::words::too_old(Some(build)),
+        crate::host::Floor::Unknown => crate::words::too_old(None),
+    };
+    Some(fail(
+        "system_too_old",
+        "runs on",
+        said.because,
+        format!(
+            "Pitboard changes nothing here: it reads, and renews and writes nothing. {}",
+            said.way_out
+        ),
     ))
 }
 
@@ -706,11 +725,9 @@ pub fn evaluate(facts: &Facts) -> Vec<Check> {
     let codex_here = facts.codex.present || facts.codex.enrolled > 0;
     let claude_here = facts.claude_present || !codex_here;
 
-    // First, because it is why every change here is refused, whatever else holds. Said only
-    // where it fails: a person running Pitboard as themselves has nothing to read about it.
-    if let Some(check) = elevated(facts.elevation) {
-        checks.push(check);
-    }
+    // First, in the order the gate asks them: they are why every change here is refused.
+    checks.extend(too_old(facts.floor));
+    checks.extend(elevated(facts.os, facts.elevation));
 
     if let Some(tool) = facts.os.secrets_tool() {
         checks.push(match &facts.security_tool {
@@ -2072,8 +2089,9 @@ fn unplaced(ctx: &Context, variable: &str, path: &std::path::Path) -> Diagnosis 
          everything it reads is under these folders.",
     );
     Diagnosis {
-        checks: elevated(ctx.host().elevation(ctx))
+        checks: too_old(ctx.host().floor())
             .into_iter()
+            .chain(elevated(crate::host::OS, ctx.host().elevation(ctx)))
             .chain(std::iter::once(homes))
             .collect(),
         environment: json!({}),
@@ -2250,6 +2268,7 @@ mod tests {
             in_the_app: false,
             elevation: crate::host::Elevation::Normal,
             fallback_login: None,
+            floor: crate::host::Floor::Met,
             now: NOW,
         }
     }
@@ -4552,6 +4571,75 @@ mod tests {
             "Pitboard's own still is"
         );
         assert!(checks.iter().any(|c| c.code.starts_with("codex_")));
+    }
+
+    #[test]
+    fn windows_is_told_how_it_runs_and_which_build_it_needs() {
+        let mut facts = facts();
+        facts.os = Os::Windows;
+        let refusing = |facts: &Facts| -> Vec<(&'static str, String, String)> {
+            evaluate(facts)
+                .into_iter()
+                .filter(|c| ["elevated", "system_too_old"].contains(&c.code))
+                .map(|c| (c.code, c.detail, c.advice))
+                .collect()
+        };
+        assert!(refusing(&facts).is_empty());
+
+        facts.elevation = crate::host::Elevation::Elevated {
+            why: crate::host::token::AS_ADMINISTRATOR,
+        };
+        assert_eq!(
+            refusing(&facts),
+            [(
+                "elevated",
+                "Pitboard runs as administrator".to_string(),
+                "Pitboard changes nothing this way: it reads, and renews and writes nothing. Run \
+                 it from a terminal that is not elevated (not Run as administrator)."
+                    .to_string()
+            )]
+        );
+
+        facts.elevation = crate::host::Elevation::Elevated {
+            why: crate::host::token::IN_EVERY_PROGRAM,
+        };
+        facts.floor = crate::host::Floor::Below { build: 22631 };
+        assert_eq!(
+            refusing(&facts),
+            [
+                (
+                    "system_too_old",
+                    "Pitboard runs on Windows build 22631, older than Windows 11 24H2 (build \
+                     26100)"
+                        .to_string(),
+                    "Pitboard changes nothing here: it reads, and renews and writes nothing. It \
+                     changes things on Windows 11 24H2 and later, and on Windows Server 2025: \
+                     update Windows to use it here."
+                        .to_string()
+                ),
+                (
+                    "elevated",
+                    "Pitboard runs elevated, as every program this Windows account starts does"
+                        .to_string(),
+                    "Pitboard changes nothing this way: it reads, and renews and writes nothing. \
+                     That is so with User Account Control off and in the built-in Administrator \
+                     account: run it from a standard account, or turn User Account Control on."
+                        .to_string()
+                ),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_home_that_is_not_a_full_path_still_hears_why_nothing_changes() {
+        use crate::context::Environment;
+        let env: Environment = [("HOME", "")].into_iter().collect();
+        let host = crate::host::memory::MemoryHost::new();
+        host.runs_on(crate::host::Floor::Below { build: 22631 });
+        host.runs_with(crate::host::Elevation::Unknown);
+        let ctx = Context::for_command_line(&env).with_memory_stores(host);
+        let codes: Vec<&str> = run(&ctx).checks.iter().map(|c| c.code).collect();
+        assert_eq!(codes, ["system_too_old", "elevated", "homes"]);
     }
 
     /// With neither tool present, a new machine is told what to do first, as it always was.

@@ -230,6 +230,7 @@ fn ends_watching(error: &Error) -> bool {
     matches!(
         error,
         Error::Elevated { .. }
+            | Error::SystemTooOld { .. }
             | Error::WindowsNotReleased
             | Error::HomeNotAbsolute { .. }
             | Error::HomeUnwritable { .. }
@@ -268,6 +269,8 @@ mod tests {
         };
         assert!(ends_watching(&unwritable));
         assert!(ends_watching(&Error::Elevated { why: None }));
+        assert!(ends_watching(&Error::SystemTooOld { build: Some(22631) }));
+        assert!(ends_watching(&Error::SystemTooOld { build: None }));
         assert!(!ends_watching(&Error::SignedInAccountChanged));
         assert!(!ends_watching(&Error::ParkedLoginExpired {
             label: "spare".into()

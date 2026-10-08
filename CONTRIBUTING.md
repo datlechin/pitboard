@@ -125,7 +125,8 @@ only user is root, fails most of the integration tests in `crates/pitboard/tests
 `crates/pitboard-ffi/src/launch.rs`, which make the app's core on the real machine as the
 app does, fail with `elevated`. The other unit tests and the fixtures run on `MemoryHost`,
 which runs as the person unless a test says otherwise. Run the tests as a user of your own,
-never as root on a machine that holds logins.
+never as root on a machine that holds logins. On Windows the same goes for an elevated
+terminal: [Windows](#windows) says how the tests run there.
 
 A unit test reaches no real home. `Context::for_unit_test` points every home, `HOME`,
 Pitboard's directory, Claude Code's config directory and Codex's, at one folder of that
@@ -316,28 +317,34 @@ A build for working on Pitboard on Windows is opened to it before its release wi
 feature, because crates.io lists a published crate's features and anybody could turn one on
 with `cargo install`. No release, script or package ever passes it. The core's own unit
 tests are opened by `cfg(test)`. An opened build reaches the Windows face,
-`crates/pitboard-core/src/host/windows`, which refuses whatever is not built yet through
-errors its callers already have: nobody can tell whether it runs elevated, so every change
-is refused, and no file is made, no process listed and no store read.
+`crates/pitboard-core/src/host/windows`. It reads this process's token and the build of
+Windows, and refuses every change from an elevated terminal (`elevated`) or on a build older
+than Windows 11 24H2's 26100 (`system_too_old`), which Windows Server 2025 shares. As the
+person, on 24H2 or later, a change passes that gate and meets the parts not built yet, which
+refuse through errors their callers already have: no file is made, no process listed and no
+store read.
 
 On Windows 11 24H2 or later, x64 or ARM64, with Rust's MSVC toolchain, and on ARM64 the
 clang ring compiles its C with there, follow [AGENTS.md](AGENTS.md#on-windows), then run, in
-PowerShell:
+PowerShell from a terminal that is not elevated (not Run as administrator), as a Windows
+account that holds no real login:
 
 ```powershell
 $env:RUSTFLAGS = "-D warnings -C target-feature=+crt-static --cfg pitboard_unreleased_windows"
 cargo clippy --workspace --all-targets --locked
 cargo clippy -p pitboard-ffi --all-targets --locked --features fixture
-cargo test --locked -p pitboard-core --lib -- host::windows release
+cargo test --locked -p pitboard-core --lib -- host::windows host::token host::tests::the_floor release
 cargo test --locked -p pitboard --test windows_refuses
 cargo test --locked -p pitboard-sites -p pitboard-share-ffi
 ```
 
 `RUSTFLAGS` replaces every target's own rustflags, so it names the static C runtime the
 releases are built with. Until the integration tests run on Windows, these are the tests
-that need no part of the Windows face still to be built. A test that cannot pass on Windows
-until a later pull request says which, with `#[cfg_attr(windows, ignore = "W<n>: <what it
-waits on>")]`, and in no other way.
+that need no part of the Windows face still to be built. They run as the person: from an
+elevated terminal, or as an account whose every program runs elevated, as with User Account
+Control off, the face's `as_the_person_the_gate_lets_a_change_through` and `windows_refuses`
+fail, saying so. A test that cannot pass on Windows until a later pull request says which,
+with `#[cfg_attr(windows, ignore = "W<n>: <what it waits on>")]`, and in no other way.
 
 From a Mac or Linux, `cargo check --target x86_64-pc-windows-msvc` checks only
 `pitboard-sites` and `pitboard-share-ffi`: ring's build script compiles C against MSVC's
@@ -359,13 +366,15 @@ from a folder of its own, with the variables Cargo gives a test. It takes the gr
 removes the user afterwards. Give it what `cargo test` takes, and what the test programs take:
 
 ```powershell
-./.github/scripts/test-as-standard-user.ps1 -Cargo '--locked -p pitboard-core --lib' -Pass 'host::windows release'
+./.github/scripts/test-as-standard-user.ps1 -Cargo '--locked -p pitboard-core --lib' -Pass 'host::windows host::token host::tests::the_floor release'
 ```
 
 It makes and removes a Windows account, grants it rights on folders and, where Developer
 Mode is off, changes who holds the symbolic-link right, so it is for CI's disposable runners
 only, never a machine of your own: it refuses to run anywhere but a GitHub-hosted runner, as
-`runner-facts.ps1` does.
+`runner-facts.ps1` does. One step runs as the job's user on purpose: the opened `pitboard.exe`
+refuses `use` and `renew` there with `elevated`, in the words for an account whose every
+program runs elevated, and writes nothing.
 
 ## Tool registers
 

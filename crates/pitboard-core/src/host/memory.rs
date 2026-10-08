@@ -5,7 +5,7 @@
 //! no test ever ran Claude Code's own slot hashing on the sign-in path: the double answered
 //! the question the code was supposed to answer.
 
-use super::{Administered, Elevation, Host, Process, Scheduler};
+use super::{Administered, Elevation, Floor, Host, Process, Scheduler};
 use crate::context::Context;
 use crate::service::Permit;
 use crate::store::memory::MemoryStore;
@@ -88,6 +88,7 @@ pub struct MemoryHost {
     unscheduled: AtomicBool,
     /// Whether this process runs as the person, as this machine says it does.
     elevation: Mutex<Elevation>,
+    floor: Mutex<Floor>,
     /// The files only an administrator writes, by path, as a test said. Unset otherwise.
     administered: Mutex<HashMap<PathBuf, Administered>>,
     /// The managed preferences a profile forces, by domain and key, as a test said.
@@ -109,6 +110,7 @@ impl Default for MemoryHost {
             refuse_start,
             unscheduled: AtomicBool::new(false),
             elevation: Mutex::new(Elevation::Normal),
+            floor: Mutex::new(Floor::Met),
             administered: Mutex::new(HashMap::new()),
             forced: Mutex::new(HashMap::new()),
         }
@@ -194,6 +196,13 @@ impl MemoryHost {
             .expect("a poisoned test host is a failed test") = elevation;
     }
 
+    pub fn runs_on(&self, floor: Floor) {
+        *self
+            .floor
+            .lock()
+            .expect("a poisoned test host is a failed test") = floor;
+    }
+
     /// Say an administrator wrote `contents` to the file at `path`, outside every home, such
     /// as Codex's `/etc/codex/requirements.toml`. Nothing is written anywhere.
     pub fn administers(&self, path: impl Into<PathBuf>, contents: &str) {
@@ -271,6 +280,13 @@ impl Host for MemoryHost {
     fn elevation(&self, _ctx: &Context) -> Elevation {
         *self
             .elevation
+            .lock()
+            .expect("a poisoned test host is a failed test")
+    }
+
+    fn floor(&self) -> Floor {
+        *self
+            .floor
             .lock()
             .expect("a poisoned test host is a failed test")
     }

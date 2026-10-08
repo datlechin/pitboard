@@ -10,6 +10,7 @@
 //! `time::moment`, and the app in the format its Mac is set to.
 
 use crate::doctor::{Level, renewal_due};
+use crate::host::{Os, WINDOWS_FLOOR, token};
 use crate::pace::{Pace, Standing};
 
 const MINUTE: i64 = 60;
@@ -259,6 +260,89 @@ pub fn doctor_summary(levels: impl IntoIterator<Item = Level>) -> String {
     }
 }
 
+pub(crate) struct ChangesNothing {
+    pub(crate) refusal: String,
+    // No full stop: a read's warning goes on from it with ", so it changes nothing".
+    pub(crate) because: String,
+    pub(crate) way_out: &'static str,
+    pub(crate) to_ask_again: &'static str,
+}
+
+// On macOS and Linux root and sudo share one refusal, since the way out is the same.
+pub(crate) fn elevated(os: Os, why: Option<&'static str>) -> ChangesNothing {
+    let because = |cannot_tell: &str| match why {
+        Some(why) => format!("Pitboard runs {why}"),
+        None => format!("Pitboard cannot tell whether it runs {cannot_tell}"),
+    };
+    match os {
+        Os::MacOs | Os::Linux => ChangesNothing {
+            refusal: match why {
+                Some(_) => "Pitboard changes nothing when it runs as root or with sudo. Run it as \
+                            yourself."
+                    .into(),
+                None => "Pitboard changes nothing when it cannot tell whether it runs as root or \
+                         with sudo. Run it as yourself."
+                    .into(),
+            },
+            because: because("as root or with sudo"),
+            way_out: "Run it as yourself.",
+            to_ask_again: "Run it as yourself to ask again.",
+        },
+        Os::Windows => {
+            let (way_out, to_ask_again) = match why {
+                Some(token::IN_EVERY_PROGRAM) => (
+                    "That is so with User Account Control off and in the built-in Administrator \
+                     account: run it from a standard account, or turn User Account Control on.",
+                    "Run it from a standard account, or with User Account Control on, to ask \
+                     again.",
+                ),
+                _ => (
+                    "Run it from a terminal that is not elevated (not Run as administrator).",
+                    "Run it from a terminal that is not elevated to ask again.",
+                ),
+            };
+            ChangesNothing {
+                refusal: match why {
+                    Some(why) => format!("Pitboard changes nothing when it runs {why}. {way_out}"),
+                    None => format!(
+                        "Pitboard changes nothing when it cannot tell whether it runs elevated. \
+                         {way_out}"
+                    ),
+                },
+                because: because("elevated"),
+                way_out,
+                to_ask_again,
+            }
+        }
+    }
+}
+
+pub(crate) fn too_old(build: Option<u32>) -> ChangesNothing {
+    let way_out = "It changes things on Windows 11 24H2 and later, and on Windows Server 2025: \
+                   update Windows to use it here.";
+    let to_ask_again = "Update Windows to ask again.";
+    match build {
+        Some(build) => ChangesNothing {
+            refusal: format!("Pitboard changes nothing on Windows build {build}. {way_out}"),
+            because: format!(
+                "Pitboard runs on Windows build {build}, older than Windows 11 24H2 (build \
+                 {WINDOWS_FLOOR})"
+            ),
+            way_out,
+            to_ask_again,
+        },
+        None => ChangesNothing {
+            refusal: format!(
+                "Pitboard changes nothing when it cannot tell which build of Windows it runs \
+                 on. {way_out}"
+            ),
+            because: "Pitboard cannot tell which build of Windows it runs on".into(),
+            way_out,
+            to_ask_again,
+        },
+    }
+}
+
 /// Things one after another, as a sentence lists them: "a", "a and b", "a, b and c".
 pub(crate) fn listed(mut items: Vec<String>) -> String {
     match items.len() {
@@ -287,6 +371,111 @@ mod tests {
         ] {
             assert!(!not_switching(&why).contains("pitboard "), "{why:?}");
         }
+    }
+
+    #[test]
+    fn root_and_sudo_are_told_to_run_it_as_themselves() {
+        for os in [Os::MacOs, Os::Linux] {
+            for why in ["as root", "with sudo"] {
+                let said = elevated(os, Some(why));
+                assert_eq!(
+                    said.refusal,
+                    "Pitboard changes nothing when it runs as root or with sudo. Run it as \
+                     yourself."
+                );
+                assert_eq!(said.because, format!("Pitboard runs {why}"));
+                assert_eq!(said.way_out, "Run it as yourself.");
+                assert_eq!(said.to_ask_again, "Run it as yourself to ask again.");
+            }
+            let unknown = elevated(os, None);
+            assert_eq!(
+                unknown.refusal,
+                "Pitboard changes nothing when it cannot tell whether it runs as root or with \
+                 sudo. Run it as yourself."
+            );
+            assert_eq!(
+                unknown.because,
+                "Pitboard cannot tell whether it runs as root or with sudo"
+            );
+        }
+    }
+
+    #[test]
+    fn an_elevated_windows_run_is_told_which_terminal_to_use() {
+        let terminal = "Run it from a terminal that is not elevated (not Run as administrator).";
+        for (why, refusal) in [
+            (
+                Some(token::AS_ADMINISTRATOR),
+                "Pitboard changes nothing when it runs as administrator.",
+            ),
+            (
+                Some(token::AS_A_SERVICE_ACCOUNT),
+                "Pitboard changes nothing when it runs as a service account.",
+            ),
+            (
+                None,
+                "Pitboard changes nothing when it cannot tell whether it runs elevated.",
+            ),
+        ] {
+            let said = elevated(Os::Windows, why);
+            assert_eq!(said.refusal, format!("{refusal} {terminal}"), "{why:?}");
+            assert_eq!(said.way_out, terminal, "{why:?}");
+            assert_eq!(
+                said.to_ask_again,
+                "Run it from a terminal that is not elevated to ask again."
+            );
+        }
+        assert_eq!(
+            elevated(Os::Windows, Some(token::AS_ADMINISTRATOR)).because,
+            "Pitboard runs as administrator"
+        );
+        assert_eq!(
+            elevated(Os::Windows, None).because,
+            "Pitboard cannot tell whether it runs elevated"
+        );
+
+        let always = elevated(Os::Windows, Some(token::IN_EVERY_PROGRAM));
+        assert_eq!(
+            always.refusal,
+            "Pitboard changes nothing when it runs elevated, as every program this Windows \
+             account starts does. That is so with User Account Control off and in the \
+             built-in Administrator account: run it from a standard account, or turn User \
+             Account Control on."
+        );
+        assert_eq!(
+            always.because,
+            "Pitboard runs elevated, as every program this Windows account starts does"
+        );
+        assert_eq!(
+            always.to_ask_again,
+            "Run it from a standard account, or with User Account Control on, to ask again."
+        );
+    }
+
+    #[test]
+    fn an_old_windows_is_told_which_it_needs() {
+        let old = too_old(Some(22631));
+        assert_eq!(
+            old.refusal,
+            "Pitboard changes nothing on Windows build 22631. It changes things on Windows 11 \
+             24H2 and later, and on Windows Server 2025: update Windows to use it here."
+        );
+        assert_eq!(
+            old.because,
+            "Pitboard runs on Windows build 22631, older than Windows 11 24H2 (build 26100)"
+        );
+        assert_eq!(old.to_ask_again, "Update Windows to ask again.");
+        let unknown = too_old(None);
+        assert_eq!(
+            unknown.refusal,
+            "Pitboard changes nothing when it cannot tell which build of Windows it runs on. \
+             It changes things on Windows 11 24H2 and later, and on Windows Server 2025: update \
+             Windows to use it here."
+        );
+        assert_eq!(
+            unknown.because,
+            "Pitboard cannot tell which build of Windows it runs on"
+        );
     }
 
     #[test]

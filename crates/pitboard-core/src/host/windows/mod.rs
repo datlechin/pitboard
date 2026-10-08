@@ -1,6 +1,6 @@
-//! Windows, before its face is written: every answer here refuses, through an error or an
-//! answer its callers already have, so that nothing of Windows is read or changed by a part
-//! that is not built yet.
+//! Windows, while its face is being written: every answer not written yet refuses, through an
+//! error or an answer its callers already have, so that nothing of Windows is read or changed
+//! by a part that is not built yet.
 //!
 //! A Windows build of a 0.x release refuses before it gets here ([`crate::release`]). A build
 //! opened to Windows, for working on Pitboard and for CI, reaches this face, and finds:
@@ -11,8 +11,6 @@
 //! - no process list (W18), so a switch says nobody can tell what still runs a tool, and
 //!   every process may still be running;
 //! - no scheduler (W25);
-//! - whether this process runs as the person unknown (W12), which the one gate every change
-//!   passes refuses, so no change is made;
 //! - no home of the account's own (W14), which is refused as a home that is not a full path;
 //! - no file made, private or not, and no access read (W15, W16);
 //! - no program found (W17), and no `PATH` of a login shell, which Windows does not have.
@@ -25,7 +23,7 @@ pub(crate) mod proc;
 pub(crate) mod user;
 
 use super::administered::Administered;
-use super::{Elevation, Host, LoginPath, Os, Process, Scheduler};
+use super::{Elevation, Floor, Host, LoginPath, Os, Process, Scheduler};
 use crate::context::{Context, Environment};
 use crate::store::{Backend, PlainFile, RawStore, Unbuilt};
 use std::path::PathBuf;
@@ -52,8 +50,7 @@ impl Host for Windows {
     }
 
     /// A file is read as on every system. Nothing writes one through this face: every way to
-    /// write it needs a file made, which [`fs`] refuses, and the gate's proof, which the
-    /// unknown elevation refuses.
+    /// write it needs a file made, which [`fs`] refuses.
     fn file(&self, path: PathBuf) -> Box<dyn RawStore> {
         Box::new(PlainFile::at(path))
     }
@@ -87,6 +84,10 @@ impl Host for Windows {
 
     fn elevation(&self, ctx: &Context) -> Elevation {
         user::elevation(ctx.sudo())
+    }
+
+    fn floor(&self) -> Floor {
+        user::floor()
     }
 
     /// Windows has no managed preferences: what an administrator sets for Codex there is in
@@ -221,17 +222,17 @@ mod tests {
         ));
     }
 
-    /// Whether this process runs as the person cannot be told, under sudo or not, and the
-    /// one gate every change passes refuses it.
     #[test]
-    fn elevation_is_unknown_and_refused() {
+    fn as_the_person_the_gate_lets_a_change_through() {
         let ctx = ctx();
-        assert_eq!(ctx.host().elevation(&ctx), Elevation::Unknown);
-        assert_eq!(user::elevation(true), Elevation::Unknown);
-        assert!(matches!(
-            crate::service::gate(&ctx),
-            Err(crate::error::Error::Elevated { why: None })
-        ));
+        assert_eq!(
+            ctx.host().elevation(&ctx),
+            Elevation::Normal,
+            "Pitboard's tests run as the person: run them from a terminal that is not elevated"
+        );
+        assert_eq!(user::elevation(true), Elevation::Normal);
+        assert_eq!(ctx.host().floor(), Floor::Met);
+        assert!(crate::service::gate(&ctx).is_ok());
     }
 
     /// No file is made, private or not, and no access is read, until W15 and W16; and no
