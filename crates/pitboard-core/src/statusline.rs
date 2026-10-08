@@ -315,6 +315,7 @@ mod tests {
     fn state() -> State {
         let account = |label: &str| Account {
             last_used_at: None,
+            replaced_at: None,
             label: label.into(),
             id: format!("{label}-uuid"),
             account_uuid: format!("{label}-uuid"),
@@ -535,6 +536,7 @@ mod tests {
     fn another_tools_accounts_are_not_on_claude_codes_line() {
         let codex = |label: &str, uuid: &str| Account {
             last_used_at: None,
+            replaced_at: None,
             label: label.into(),
             id: uuid.into(),
             account_uuid: uuid.into(),
@@ -603,6 +605,7 @@ mod tests {
         let mut accounts = state();
         accounts.upsert(Account {
             last_used_at: None,
+            replaced_at: None,
             label: "team".into(),
             id: "work-uuid_team-org".into(),
             account_uuid: "work-uuid".into(),

@@ -45,6 +45,7 @@ pub use uninstall::{Removed, uninstall};
 
 use crate::context::Context;
 use crate::error::{Error, Result};
+use crate::in_use::{self, InUse};
 use crate::service::{Permit, Warning};
 use crate::state::{Account, Key, Park, State};
 use crate::{api, fault, holder, home, lock, park, pending, state, store};
@@ -336,13 +337,22 @@ fn switch_held(
 
     // Asked before taking the tool's own lock so a round trip does not hold up its writes,
     // then confirmed under the lock.
+    let named = in_use::named(ctx, key.provider);
     let (_, first) = read_live(ctx, key.provider, &live)?;
     let outgoing = identify_document(ctx, key.provider, &first)?;
+    // Whose login the store holds, as its service just said. Kept with whatever is saved
+    // next, so the record names the account a switch moves out of when it records the one
+    // it moves to, whatever it named before.
+    let found = InUse {
+        owner: Some(outgoing.clone()),
+        login: tool.fingerprint(&first),
+        known_at: ctx.now(),
+        named,
+    };
+    let identified = state.identified(key.provider, found, ctx.now());
 
     if target.owned_by(&outgoing) {
-        if state.active_for(key.provider) != Some(label.as_str()) {
-            state.set_active(key.provider, Some(label.to_string()));
-            state.used(key, ctx.now());
+        if identified.changed {
             state::save(ctx, permit, &state)?;
         }
         return Ok((
@@ -536,8 +546,13 @@ fn switch_held(
     }
 
     state.discard(&held.service);
-    state.set_active(key.provider, Some(label.to_string()));
-    state.used(key, ctx.now());
+    let installed = InUse {
+        owner: Some(target.owner()),
+        login: tool.fingerprint(&incoming),
+        known_at: ctx.now(),
+        named: in_use::naming(key.provider, &target.owner()),
+    };
+    state.identified(key.provider, installed, ctx.now());
     state::save(ctx, permit, &state)?;
     fault::point("switch.recorded");
     drop(guard);
@@ -882,6 +897,56 @@ mod tests {
 
     fn failing(message: &str) -> store::Error {
         store::Error::Write(message.into())
+    }
+
+    /// After a sign-in outside Pitboard the record can still name the account a switch goes
+    /// to. The switch moves the store from the login it found there, so the account it goes
+    /// to comes to be in use then, and the login it found is the one parked.
+    #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
+    )]
+    fn a_switch_after_a_sign_in_outside_puts_the_account_it_goes_to_in_use() {
+        let m = harness::machine("records-both-logins");
+        let mut state = state::load(&m.ctx).expect("state");
+        let before = InUse::of(
+            state.get(&m.key("there")).expect("enrolled"),
+            "signed-in-over",
+            harness::NOW - 3600,
+        );
+        state
+            .in_use
+            .insert(ProviderId::Claude.code().into(), before);
+        state::save(&m.ctx, Permit::for_a_test(), &state).expect("saved");
+
+        let settled = settle(&m.ctx, Permit::for_a_test(), None)
+            .expect("nothing to recover")
+            .0;
+        switch(settled, &m.key("there")).expect("switched");
+
+        let state = state::load(&m.ctx).expect("state");
+        let there = state.get(&m.key("there")).expect("enrolled");
+        assert_eq!(
+            there.last_used_at,
+            Some(harness::NOW),
+            "in use from this switch"
+        );
+        assert_eq!(
+            state.in_use(ProviderId::Claude).map(|r| r.login.as_str()),
+            Some(
+                provider::of(ProviderId::Claude)
+                    .fingerprint(&harness::oauth("there-refresh", 30))
+                    .as_str()
+            )
+        );
+        assert!(
+            state
+                .get(&m.key("here"))
+                .expect("enrolled")
+                .parked
+                .is_some()
+        );
     }
 
     #[test]

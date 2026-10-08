@@ -55,6 +55,7 @@ pub mod budget;
 pub mod context;
 pub mod doctor;
 pub mod error;
+pub mod in_use;
 pub mod label;
 pub mod pace;
 pub mod provider;

@@ -191,7 +191,12 @@ pub(crate) fn machine(name: &str) -> Machine {
     let mut state = State::default();
     state.accounts.push(account("here", "here", None));
     state.accounts.push(account("there", "there", Some(parked)));
-    state.set_active(ProviderId::Claude, Some("here".into()));
+    record_in_use(
+        &ctx,
+        &mut state,
+        ProviderId::Claude,
+        &document("here-refresh"),
+    );
     state::save(&ctx, Permit::for_a_test(), &state).expect("saved");
 
     Machine {
@@ -247,6 +252,7 @@ pub(crate) fn codex_access(refresh: &str) -> String {
 pub(crate) fn codex_account(label: &str, uuid: &str, parked: Option<Park>) -> Account {
     Account {
         last_used_at: None,
+        replaced_at: None,
         label: label.into(),
         id: uuid.into(),
         account_uuid: uuid.into(),
@@ -319,9 +325,31 @@ pub(crate) fn codex_machine(name: &str) -> Machine {
     state
         .accounts
         .push(codex_account("there", &codex_id("there"), Some(parked)));
-    state.set_active(ProviderId::Codex, Some("here".into()));
+    record_in_use(
+        &machine.ctx,
+        &mut state,
+        ProviderId::Codex,
+        &codex_login("here", "here-refresh"),
+    );
     state::save(&machine.ctx, Permit::for_a_test(), &state).expect("saved");
     machine
+}
+
+/// `here`'s login on `login`, recorded as its service said it now, with what the tool's own
+/// record names: what enrolling `here` while signed in records. When `here` came to be in use
+/// stays unrecorded, so no test starts inside the minutes the automatic switch leaves an
+/// account to settle.
+fn record_in_use(ctx: &Context, state: &mut State, which: ProviderId, login: &Value) {
+    let here = state
+        .get(&Key::new(which, "here"))
+        .expect("`here` is enrolled");
+    let found = crate::in_use::InUse {
+        owner: Some(here.owner()),
+        login: crate::provider::of(which).fingerprint(login),
+        known_at: NOW,
+        named: crate::in_use::named(ctx, which),
+    };
+    state.in_use.insert(which.code().to_string(), found);
 }
 
 /// A login of the account `who` as this machine's tool writes one, with the service taught
@@ -415,6 +443,7 @@ pub(crate) fn cache_usage(m: &Machine, answer: Value) {
 pub(crate) fn account(label: &str, uuid: &str, parked: Option<Park>) -> Account {
     Account {
         last_used_at: None,
+        replaced_at: None,
         label: label.into(),
         id: uuid.into(),
         account_uuid: uuid.into(),
@@ -439,6 +468,7 @@ pub(crate) fn in_organisation(label: &str, who: &str, org: &str, parked: Option<
     };
     Account {
         last_used_at: None,
+        replaced_at: None,
         label: label.into(),
         id: crate::state::new_id(ProviderId::Claude, &owner),
         account_uuid: owner.account_uuid,

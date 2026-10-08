@@ -14,6 +14,7 @@
 use super::{Error, Readied, Result, Settled, identify_document, nothing_signed_in, purge};
 use crate::api::Owner;
 use crate::context::Context;
+use crate::in_use::{self, InUse};
 use crate::provider::{self, ProviderId};
 use crate::service::{Permit, Warning};
 use crate::state::{Account, Key, Park, State};
@@ -453,6 +454,7 @@ fn record_current(ctx: &Context, permit: Permit, key: &Key, state: &mut State) -
     // Through the store itself rather than the provider's reading of it, so a locked
     // keychain says so in the store's own words instead of reading as a strange login.
     let store = super::live_store(ctx, which)?;
+    let named = in_use::named(ctx, which);
     let live =
         store::read(&store.chain, &store.service)?.ok_or_else(|| nothing_signed_in(ctx, which))?;
     // A document with no account in it is nobody signed in: Claude Code's after a
@@ -477,7 +479,13 @@ fn record_current(ctx: &Context, permit: Permit, key: &Key, state: &mut State) -
         last_used_at,
         &live,
     ));
-    state.set_active(which, Some(label.to_string()));
+    let found = InUse {
+        owner: Some(owner.clone()),
+        login: provider::of(which).fingerprint(&live),
+        known_at: ctx.now(),
+        named,
+    };
+    state.identified(which, found, ctx.now());
     state::save(ctx, permit, state)?;
     Ok(Enrolled::Current { email: owner.email })
 }
@@ -497,14 +505,16 @@ fn from_sign_in(
     let owner = identify_document(ctx, login.provider, &login.document)?;
     claim(state, key, &owner)?;
     match signed_in_now(ctx, key.provider, &owner) {
-        InUse::Theirs(live, first) => {
+        SignedInNow::Theirs(live, first) => {
             install_signed_in(ctx, key, state, login, &owner, &live, &first)
         }
-        InUse::NotTheirs => park_signed_in(ctx, key, state, login, &owner),
-        InUse::Untold(why) => {
+        SignedInNow::NotTheirs => park_signed_in(ctx, key, state, login, &owner),
+        SignedInNow::Untold(why) => {
             // Somebody signing in to the account Pitboard last saw in use most likely wants
             // its broken login replaced, and parking is not that, so it is said.
-            let last_in_use = state.active_for(key.provider) == Some(key.label.as_str());
+            let last_in_use = state
+                .account_in_use(key.provider)
+                .is_some_and(|account| account.is(key));
             let (enrolled, mut warnings) = park_signed_in(ctx, key, state, login, &owner)?;
             if last_in_use {
                 warnings.push(Warning::SignInParkedNotInUse {
@@ -522,7 +532,7 @@ fn from_sign_in(
 ///
 /// Read the way a switch reads it. Writing over a login whose account is not known could
 /// lose that account's only login, so only a login known to be `owner`'s is written over.
-enum InUse {
+enum SignedInNow {
     /// `owner`'s: where it is, and what it held.
     Theirs(provider::LiveStore, Value),
     /// Another account's, or nobody's.
@@ -531,18 +541,18 @@ enum InUse {
     Untold(Error),
 }
 
-fn signed_in_now(ctx: &Context, which: ProviderId, owner: &Owner) -> InUse {
+fn signed_in_now(ctx: &Context, which: ProviderId, owner: &Owner) -> SignedInNow {
     let read = super::live_store(ctx, which)
         .and_then(|live| super::read_live(ctx, which, &live).map(|(_, first)| (live, first)));
     let (live, first) = match read {
         Ok(read) => read,
-        Err(Error::LiveCredentialAbsent { .. }) => return InUse::NotTheirs,
-        Err(other) => return InUse::Untold(other),
+        Err(Error::LiveCredentialAbsent { .. }) => return SignedInNow::NotTheirs,
+        Err(other) => return SignedInNow::Untold(other),
     };
     match identify_document(ctx, which, &first) {
-        Ok(found) if found.same_login(owner) => InUse::Theirs(live, first),
-        Ok(_) => InUse::NotTheirs,
-        Err(e) => InUse::Untold(e),
+        Ok(found) if found.same_login(owner) => SignedInNow::Theirs(live, first),
+        Ok(_) => SignedInNow::NotTheirs,
+        Err(e) => SignedInNow::Untold(e),
     }
 }
 
@@ -578,6 +588,7 @@ fn install_signed_in(
     let permit = login.permit;
     let which = key.provider;
     let name = state.typed(key);
+    let named = in_use::named(ctx, which);
     // Said as a sign-in's failure rather than a switch's: the new login goes with the
     // sign-in, so nothing was lost is not true of it, and the way on is signing in again.
     let not_kept = |detail: String| Error::SignInNotKept {
@@ -648,7 +659,13 @@ fn install_signed_in(
         Some(ctx.now()),
         &login.document,
     ));
-    state.set_active(which, Some(key.label.clone()));
+    let installed = InUse {
+        owner: Some(owner.clone()),
+        login: provider::of(which).fingerprint(&slice),
+        known_at: ctx.now(),
+        named,
+    };
+    state.identified(which, installed, ctx.now());
     state::save(ctx, permit, state)?;
     crate::fault::point("enroll.recorded");
     drop(guard);
@@ -807,6 +824,7 @@ fn account(
     };
     Account {
         last_used_at,
+        replaced_at: None,
         label: label.to_string(),
         id,
         account_uuid: owner.account_uuid.clone(),
@@ -974,7 +992,11 @@ mod tests {
             assert_eq!(m.mem.vault().services(), vault, "{tool}: nothing is parked");
             assert!(park_of(&m, "here").is_none(), "{tool}");
             let state = state::load(&m.ctx).expect("state");
-            assert_eq!(state.active_for(m.which), Some("here"), "{tool}");
+            assert_eq!(
+                state.account_in_use(m.which).map(|a| a.label.as_str()),
+                Some("here"),
+                "{tool}"
+            );
             assert_eq!(
                 state.get(&m.key("here")).and_then(|a| a.last_used_at),
                 Some(NOW),
@@ -1168,7 +1190,7 @@ mod tests {
             let m = make("first-in-use");
             let mut state = state::load(&m.ctx).expect("state");
             state.accounts.retain(|a| a.label != "here");
-            state.set_active(m.which, None);
+            state.in_use.remove(m.which.code());
             state::save(&m.ctx, Permit::for_a_test(), &state).expect("saved");
 
             let (enrolled, _) =
@@ -1181,7 +1203,11 @@ mod tests {
             );
             assert!(in_use(&m, "here-refresh-2"), "{tool}");
             let state = state::load(&m.ctx).expect("state");
-            assert_eq!(state.active_for(m.which), Some("personal"), "{tool}");
+            assert_eq!(
+                state.account_in_use(m.which).map(|a| a.label.as_str()),
+                Some("personal"),
+                "{tool}"
+            );
             hold(&m, &format!("{tool}, after enrolling the account in use"));
         }
     }
@@ -1199,7 +1225,7 @@ mod tests {
             let key = m.key("here");
             let login = signed_in(&m, "here", "here-refresh-2");
             let owner = identify_document(&m.ctx, m.which, &login.document).expect("whose");
-            let InUse::Theirs(live, first) = signed_in_now(&m.ctx, m.which, &owner) else {
+            let SignedInNow::Theirs(live, first) = signed_in_now(&m.ctx, m.which, &owner) else {
                 panic!("{tool}: `here` is signed in");
             };
 

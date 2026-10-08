@@ -489,11 +489,11 @@ fn ask_usage(
 /// is locked for the moment, and saying it is gone sends somebody to sign in again for
 /// nothing. It used to be read as exactly that.
 ///
-/// The account `state` last recorded as signed in to this tool stands in for the tool's own
-/// record when the login cannot be read at all. Codex keeps no
-/// record apart from the login itself, so without this a Codex login caught half written
-/// named nobody, and the account in use was told to sign in again while `doctor`, reading
-/// the same machine, called it signed in.
+/// The account whose login `state` last recorded in the tool's store stands in for the
+/// tool's own record when the login cannot be read at all. Codex keeps no record apart from
+/// the login itself, so without this a Codex login caught half written named nobody, and the
+/// account in use was told to sign in again while `doctor`, reading the same machine, called
+/// it signed in.
 fn ask_live(
     ctx: &Context,
     state: &State,
@@ -510,7 +510,11 @@ fn ask_live(
         Err(error) => {
             let unreadable = LiveLogin {
                 signed_in: Some(Err(error.to_string())),
-                recorded_id: own_record().or_else(|| active_id(state, which).map(str::to_owned)),
+                recorded_id: own_record().or_else(|| {
+                    state
+                        .account_in_use(which)
+                        .map(|account| account.id.clone())
+                }),
                 usage: Some(Err(Stale::LoginUnreadable)),
                 out_of_reach: true,
             };
@@ -734,14 +738,6 @@ pub fn gather(ctx: &Context, permit: crate::service::Permit, state: &State, fres
     }
 }
 
-/// The account Pitboard last recorded as signed in to this tool, by its id.
-fn active_id(state: &State, which: ProviderId) -> Option<&str> {
-    let label = state.active_for(which)?;
-    state
-        .get(&Key::new(which, label))
-        .map(|account| account.id.as_str())
-}
-
 /// The id of the account the tool's own record names as signed in.
 fn recorded_id(ctx: &Context, state: &State, which: ProviderId) -> Option<String> {
     crate::provider::of(which)
@@ -810,10 +806,12 @@ fn assemble(
                 reading(id, &live)
             } else if account.parked.is_none()
                 && live_unreadable
-                && state.active_for(which) == Some(account.label.as_str())
+                && state
+                    .account_in_use(which)
+                    .is_some_and(|in_use| in_use.id == account.id)
             {
-                // Nothing parked because Pitboard put its login in use, and that login is
-                // the one that could not be read: unknown, not gone.
+                // Nothing parked because its login is the one Pitboard last recorded the store
+                // holding, and that login is the one that could not be read: unknown, not gone.
                 reading(id, &Err(Stale::LoginUnreadable))
             } else {
                 reading(id, parked)
@@ -897,6 +895,7 @@ mod tests {
     use super::*;
     use crate::api::scripted::{Asked as Question, ScriptedApi, Trouble};
     use crate::host::memory::MemoryHost;
+    use crate::in_use::InUse;
     use crate::service::Permit;
     use crate::state::Account;
     use crate::store::memory::Fault;
@@ -946,6 +945,7 @@ mod tests {
     fn account(label: &str) -> Account {
         Account {
             last_used_at: None,
+            replaced_at: None,
             label: label.into(),
             id: format!("{label}-uuid"),
             account_uuid: format!("{label}-uuid"),
@@ -1371,6 +1371,7 @@ mod tests {
     fn codex_account(label: &str, uuid: &str) -> Account {
         Account {
             last_used_at: None,
+            replaced_at: None,
             label: label.into(),
             id: uuid.into(),
             account_uuid: uuid.into(),
@@ -1622,16 +1623,17 @@ mod tests {
         assert_eq!(api.calls(), 0, "a login nobody could read was sent nowhere");
     }
 
-    /// While the login in use cannot be read, the account Pitboard last switched to has
-    /// nothing parked because its login is the one Pitboard put in use, which may be exactly
+    /// While the login in use cannot be read, the account whose login Pitboard last recorded
+    /// in use has nothing parked because that login is the one in use, which may be exactly
     /// where it was. A `/login` where the keychain is locked moves Claude Code's record to
     /// another account and leaves that login in the keychain, so the record's account reads
     /// as signed in and this one was told to sign in again.
     #[test]
-    fn the_account_last_switched_to_is_not_sent_to_sign_in_while_the_login_cannot_be_read() {
+    fn the_account_last_recorded_in_use_is_not_sent_to_sign_in_while_the_login_cannot_be_read() {
         let mut s = state(&["alpha", "beta"]);
         s.accounts[1].parked = None;
-        s.set_active(ProviderId::Claude, Some("beta".into()));
+        let beta = InUse::of(&s.accounts[1], "beta-refresh", NOW);
+        s.identified(ProviderId::Claude, beta, NOW);
         let facts = only_claude(
             LiveLogin {
                 signed_in: Some(Err("the keychain is locked".into())),
@@ -1849,16 +1851,17 @@ mod tests {
         .to_string()
     }
 
-    /// Two Codex accounts, `a` parked and `b` the one Pitboard last switched to, which has
-    /// no park because a Codex park is moved rather than copied.
-    fn codex_a_parked_b_active() -> State {
+    /// Two Codex accounts, `a` parked and `b` the one whose login Pitboard last recorded in
+    /// use, which has no park because a Codex park is moved rather than copied.
+    fn codex_a_parked_b_in_use() -> State {
         let mut b = codex_account("b", "acc-B");
         b.parked = None;
         let mut s = State {
             accounts: vec![codex_account("a", "acc-A"), b],
             ..State::default()
         };
-        s.set_active(ProviderId::Codex, Some("b".into()));
+        let b = InUse::of(&s.accounts[1], "refresh-acc-B", NOW);
+        s.identified(ProviderId::Codex, b, NOW);
         s
     }
 
@@ -1881,7 +1884,7 @@ mod tests {
         let home = scratch("mixed");
         let (ctx, _mem, api) = machine(&home.0, None);
         plant_codex(&ctx, &codex_login("acc-A", "acc-B"));
-        let s = codex_a_parked_b_active();
+        let s = codex_a_parked_b_in_use();
 
         let report = gather(&ctx, Permit::for_a_test(), &s, true);
         let a = codex_row(&report, "a");
@@ -1914,7 +1917,8 @@ mod tests {
     }
 
     /// Signed in with an API key: something is signed in, and it is no account. Not nobody,
-    /// and not the account Pitboard last switched to either, whose login the key replaced.
+    /// and not the account whose login Pitboard last recorded in use either, which the key
+    /// replaced.
     #[test]
     #[cfg_attr(windows, ignore = "W21: switching Codex on Windows")]
     fn a_codex_login_with_an_api_key_is_said_and_pinned_on_no_account() {
@@ -1924,7 +1928,7 @@ mod tests {
             &ctx,
             &json!({"auth_mode": "apikey", "OPENAI_API_KEY": "sk-not-a-real-key"}).to_string(),
         );
-        let s = codex_a_parked_b_active();
+        let s = codex_a_parked_b_in_use();
 
         let report = gather(&ctx, Permit::for_a_test(), &s, true);
         assert!(
@@ -1970,8 +1974,8 @@ mod tests {
 
     /// Codex writes its login with a plain truncating write, so a read can catch it half
     /// written. Codex keeps no record apart from the login, so its own record names nobody
-    /// then, and Pitboard's record of its last switch stands in for it the way `doctor`
-    /// already lets it. Without that, the account in use was told to sign in again.
+    /// then, and Pitboard's record of whose login is stored stands in for it the way
+    /// `doctor` already lets it. Without that, the account in use was told to sign in again.
     #[test]
     #[cfg_attr(windows, ignore = "W21: switching Codex on Windows")]
     fn a_codex_login_caught_half_written_still_names_the_account_in_use() {
@@ -1979,12 +1983,12 @@ mod tests {
         let (ctx, _mem, api) = machine(&home.0, None);
         let whole = codex_login("acc-B", "acc-B");
         plant_codex(&ctx, &whole[..whole.len() / 2]);
-        let s = codex_a_parked_b_active();
+        let s = codex_a_parked_b_in_use();
         crate::state::save(&ctx, Permit::for_a_test(), &s).expect("an account list");
 
         let report = gather(&ctx, Permit::for_a_test(), &s, true);
         let b = codex_row(&report, "b");
-        assert!(b.signed_in, "the account Pitboard last switched to");
+        assert!(b.signed_in, "the account Pitboard last recorded in use");
         assert_eq!(b.stale, Some(Stale::LoginUnreadable));
         assert!(!codex_row(&report, "a").signed_in);
         assert!(
@@ -2011,12 +2015,13 @@ mod tests {
     fn only_a_document_holding_no_login_is_nobody_signed_in() {
         let home = scratch("shapes");
         let (ctx, _mem, api) = machine(&home.0, Some("alpha-uuid"));
-        let mut last_switched_to_beta = state(&["alpha", "beta"]);
-        last_switched_to_beta.set_active(ProviderId::Claude, Some("beta".into()));
+        let mut beta_in_use = state(&["alpha", "beta"]);
+        let beta = InUse::of(&beta_in_use.accounts[1], "beta-refresh", NOW);
+        beta_in_use.identified(ProviderId::Claude, beta, NOW);
         let ask = |document: Value| {
             ask_live(
                 &ctx,
-                &last_switched_to_beta,
+                &beta_in_use,
                 ProviderId::Claude,
                 &Ok(Some(document)),
                 &HashMap::new(),
@@ -2036,7 +2041,7 @@ mod tests {
         assert_eq!(
             unusable.recorded_id.as_deref(),
             Some("alpha-uuid"),
-            "Claude Code's config, never Pitboard's record of its last switch"
+            "Claude Code's config, never Pitboard's record of whose login is stored"
         );
         assert_eq!(api.calls(), 0);
     }

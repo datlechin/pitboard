@@ -99,6 +99,11 @@ pages load, as a browser would.
     `SignInScript`, which plays a tool's own sign-in in place of its program, for a test or
     a fixture that may start none; everything around it is the core's own.
   - `state.rs`: `state.json`, the index of accounts and where each one's login is parked.
+  - `in_use.rs`: whose login each tool has stored, as its service last said, with the
+    fingerprint of that login and the account the tool's own record named then. It is
+    `state.json`'s `in_use`, written through `State::identified` by a switch, first for the
+    login it finds in the store and then for the one it installs, by enrolling the account
+    signed in, by a sign-in put in use and by finishing an interrupted switch.
   - `autoswitch.rs`: switching Claude Code by itself, for a front end somebody asked to: the
     app with its setting on, or `pitboard watch`. `Threshold` is the share a limit switches
     at, 50 to 99, 95 unless chosen. `decide` is the rule, from the readings Pitboard already
@@ -914,8 +919,8 @@ pages load, as a browser would.
 
 ## The state file
 
-`~/.pitboard/state.json` is Pitboard's index: which accounts it knows, and where each one's
-login is parked. It carries a `schema` number.
+`~/.pitboard/state.json` is Pitboard's index: which accounts it knows, where each one's login
+is parked, and whose login each tool has stored. It carries a `schema` number.
 
 The app and the command line inside it update together. A command line installed another
 way updates by its own route. So on one machine, an older Pitboard can meet a file a newer
@@ -927,9 +932,9 @@ it, so a file two versions behind comes forward in one read.
 Reading backwards is not possible. The older Pitboard refuses the file and says to update
 it. A bump needs a test that loads a file the previous version wrote.
 
-Schema 4 records each account's tool, and which account is signed in for each tool. A
-schema 3 file is brought forward on its first read, with no keychain item or vault file
-touched.
+Schema 4 records each account's tool, and for each tool the account Pitboard last switched
+to. A schema 3 file is brought forward on its first read, with no keychain item or vault
+file touched.
 
 Schema 5 gives each account an `id`, set at enrolment and never changed. Its parked logins,
 readings, usage history, budget and windows are filed under it. A login is matched to its
@@ -937,6 +942,23 @@ account by its tool's identity, which for Claude Code is the account and the org
 together (`Account::owned_by`), so one person's two organisations are two accounts. An
 account brought forward from schema 4 keeps its account uuid as its `id`, and nothing filed
 under it moves.
+
+Schema 6 records whose login each tool has stored, as its service last said (`in_use`), in
+place of the account Pitboard last switched to (`active`). A tool's record holds the owner the
+service named, the fingerprint of the login it named it for, when, and the account the tool's
+own record named then. A switch first records the login it finds in the store, then the one
+it installs. Enrolling the account signed in, a sign-in put in use and finishing an
+interrupted switch record theirs. Each goes through `State::identified`. Where the owner
+changes and the account before it has nothing parked, that account's only login is gone, and
+the account says when (`replaced_at`) until it holds a parked login or is in use again. As
+`active` was, a tool's record is dropped when read under another `CLAUDE_CONFIG_DIR` or
+`CODEX_HOME`.
+
+A schema 5 file comes forward with each tool's `active` label as that account's record, with
+no login and `known_at` 0: nothing established which login the store held. A label naming no
+account names nobody. Schema 6 is a bump rather than a field beside `active`, so an older app
+or `pitboard watch` running beside a newer one refuses the file and says to update, and does
+not go on deciding who is in use from Claude Code's config.
 
 A file naming a tool this build does not know is reported as written by a newer Pitboard,
 not as corrupt. The advice for a corrupt file is to delete it, and following that here would

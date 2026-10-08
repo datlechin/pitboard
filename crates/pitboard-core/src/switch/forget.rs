@@ -13,9 +13,9 @@ pub fn forget(settled: Settled, key: &Key) -> Result<(String, Vec<Warning>)> {
         ctx,
         permit,
     } = settled;
-    // Who is signed in is a fact about the machine. Pitboard's record of its last switch
-    // is stale the moment someone signs in with the tool's own login command, and
-    // forgetting the account that is actually in use throws away the only record of it.
+    // Who is signed in is a fact about the machine. Pitboard's own record of it is stale
+    // the moment someone signs in with the tool's own login command, and forgetting the
+    // account that is actually in use throws away the only record of it.
     // Asked of the tool's own files, so it answers offline: Claude Code's config, or a
     // Codex login's own claims.
     let live = provider::of(key.provider)
@@ -23,9 +23,11 @@ pub fn forget(settled: Settled, key: &Key) -> Result<(String, Vec<Warning>)> {
         .map(crate::api::Owner::from);
     let signed_in = match (&live, state.get(key)) {
         (Some(owner), Some(account)) => account.owned_by(owner),
-        // No live identity to compare against, so Pitboard's own record of the last switch
-        // is all there is.
-        _ => state.active_for(key.provider) == Some(key.label.as_str()),
+        // No live identity to compare against, so whose login Pitboard last recorded the
+        // store holding is all there is.
+        _ => state
+            .account_in_use(key.provider)
+            .is_some_and(|account| account.is(key)),
     };
     if signed_in {
         return Err(Error::CannotForgetActiveAccount { label: key.typed() });
@@ -101,18 +103,18 @@ mod tests {
     }
 
     /// A config naming no organisation does not say which of the person's logins is in
-    /// use, so Pitboard's record of its last switch decides, as it does with no config.
+    /// use, so Pitboard's record of whose login is stored decides, as it does with no config.
     #[test]
     #[cfg_attr(
         windows,
         ignore = "W16: Pitboard writing, replacing and removing files on Windows"
     )]
-    fn a_config_naming_no_organisation_leaves_it_to_the_last_switch() {
+    fn a_config_naming_no_organisation_leaves_it_to_the_record() {
         let m = two_organisations("forget-no-organisation", None);
         assert!(matches!(
             forgotten(&m, "here"),
             Err(Error::CannotForgetActiveAccount { .. })
         ));
-        forgotten(&m, "team").expect("not the account last switched to");
+        forgotten(&m, "team").expect("not the account recorded in use");
     }
 }

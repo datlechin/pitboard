@@ -67,7 +67,7 @@ Once both tools have accounts, the app and the command line list each tool's acc
     | `ready` alone | You can switch to the account. Codex accounts show this, because Codex states no expiry. |
     | `ready · expires in 2d 3h · pitboard enroll work --sign-in` | You can switch to the account, but its parked login expires in under 3 days. Run `pitboard renew` to renew it, or the command shown to sign in to it again. To renew parked logins every day, see [Keep parked logins alive](/guides/renewal). |
     | `login expired` or `nothing parked`, then a command | Pitboard holds no parked login it can use for the account. Run the command shown, or see [Sign in to an account again](/guides/sign-in-again). |
-    | `login could not be read` | The tool's login could not be read, and it may be this account's, which Pitboard last switched to. Run `pitboard doctor`. |
+    | `login could not be read` | The tool's login could not be read, and it may be this account's, whose login Pitboard last recorded the tool holding. Run `pitboard doctor`. |
     | `signed in · not enrolled: pitboard enroll <label>` | The tool is signed in to an account Pitboard has not enrolled. Run the command with a label you choose in place of `<label>`. |
     | `5h`, `week` | The five-hour limit and the weekly limit. A limit for one model adds the model's name. |
     | `██████░░░░   59%` | How much of the limit is used: green under 70%, yellow from 70%, red from 90%. |

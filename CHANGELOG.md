@@ -8,6 +8,11 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Changed
 
+- The account index is schema 6. It records whose login Claude Code and Codex each have
+  stored, as Anthropic or the login itself last said, with which login that was, in place
+  of the account Pitboard last switched to. An earlier Pitboard cannot read it once this
+  one has, and says to update, so update the command line and the app together. A status
+  line still running an earlier `pitboard` shows `unenrolled` until that one is updated.
 - While `~/.claude/.credentials.json` is behind the keychain on macOS, a switch, by hand or
   by itself, says that Claude Code sessions already running keep the account they are on
   until their login is next renewed or they are started again, and names the file, in place

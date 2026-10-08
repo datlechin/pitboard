@@ -367,6 +367,7 @@ mod tests {
         let mut state = State::default();
         state.accounts.push(Account {
             last_used_at: None,
+            replaced_at: None,
             label: label.into(),
             id: "acc".into(),
             account_uuid: "acc".into(),

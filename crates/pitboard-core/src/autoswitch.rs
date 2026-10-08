@@ -870,14 +870,17 @@ mod tests {
     fn an_account_just_put_in_use_is_left_to_settle() {
         let rows = [work_at(96.0), spare()];
         let mut state = state_of(&rows);
-        let work = Key::new(ProviderId::Claude, "work");
-        state.used(&work, NOW - SETTLING_SECONDS + 1);
+        let put_in_use = |state: &mut State, at| {
+            let work = state.accounts.iter_mut().find(|a| a.label == "work");
+            work.expect("enrolled").last_used_at = Some(at);
+        };
+        put_in_use(&mut state, NOW - SETTLING_SECONDS + 1);
         let ledger = Ledger::default();
         assert_eq!(
             decide(&state, &rows, &ledger, Threshold::DEFAULT, NOW),
             Decision::Stay
         );
-        state.used(&work, NOW - SETTLING_SECONDS);
+        put_in_use(&mut state, NOW - SETTLING_SECONDS);
         assert_eq!(
             to(&decide(&state, &rows, &ledger, Threshold::DEFAULT, NOW)),
             Some("spare")

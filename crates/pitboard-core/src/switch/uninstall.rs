@@ -55,7 +55,7 @@ pub fn uninstall(settled: Settled) -> Result<Removed> {
     for key in state.accounts.iter().map(Account::key).collect::<Vec<_>>() {
         state.remove(&key);
     }
-    state.active.clear();
+    state.in_use.clear();
     state::save(&ctx, permit, &state)?;
     let pending = purge(&ctx, permit, &mut state);
     // The sweep in settle has already resolved every outstanding name, so what is left

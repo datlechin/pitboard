@@ -977,6 +977,16 @@ impl Env {
         serde_json::from_str(&raw).unwrap()
     }
 
+    /// The label of `tool`'s account whose login Pitboard last recorded `tool`'s store
+    /// holding.
+    pub fn in_use(&self, tool: &str) -> Option<String> {
+        let state: pitboard_core::state::State = serde_json::from_value(self.state()).unwrap();
+        let which = pitboard_core::provider::ProviderId::parse(tool).unwrap();
+        state
+            .account_in_use(which)
+            .map(|account| account.label.clone())
+    }
+
     /// What Claude Code's `label` is filed under: its parked logins, its readings and a
     /// switch's record name it by this.
     pub fn account_id(&self, label: &str) -> String {

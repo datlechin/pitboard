@@ -90,7 +90,7 @@ fn a_full_switch_moves_the_identity_and_nothing_else() {
     );
     assert_eq!(config["numStartups"], 7, "machine state must survive");
 
-    assert_eq!(env.state()["active"]["claude"], "beta");
+    assert_eq!(env.in_use("claude").as_deref(), Some("beta"));
     assert!(
         env.parked_service("alpha").is_some(),
         "the outgoing account is parked at the moment it is replaced"
@@ -284,7 +284,7 @@ fn renaming_keeps_the_login_and_the_new_label_switches() {
         assert_eq!(code, 0, "{err}");
         assert!(out.contains(&format!("Renamed {from} to {to}")), "{out}");
     }
-    assert_eq!(env.state()["active"]["claude"], "personal");
+    assert_eq!(env.in_use("claude").as_deref(), Some("personal"));
     assert_eq!(env.parked_service("work"), Some(beta_park.clone()));
     assert!(env.is_parked(&beta_park), "a rename deletes nothing");
 

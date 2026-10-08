@@ -228,7 +228,7 @@ A switch prints this on one line:
 | `stale` | Meaning | Text |
 | --- | --- | --- |
 | `nothing_signed_in` | Nothing is signed in to the tool. | `nothing is signed in` |
-| `login_unreadable` | The tool's login is there but could not be read. Also on the account Pitboard last switched the tool to, where it has nothing parked, since its login may be the one that could not be read. | `` Claude Code's login could not be read; run `pitboard doctor` `` |
+| `login_unreadable` | The tool's login is there but could not be read. Also on the account whose login Pitboard last recorded the tool holding, where it has nothing parked, since its login may be the one that could not be read. | `` Claude Code's login could not be read; run `pitboard doctor` `` |
 | `login_unusable` | The tool's login is not one Pitboard can park or switch, such as one made with an API key. | `` Claude Code's login is not one Pitboard can park or switch; run `pitboard doctor` `` |
 | `session_expired` | The login in use has expired. The tool renews it the next time it runs. | `` Claude Code's session has expired; `claude` renews it `` |
 | `parked_access_expired` | The parked login's access token has expired and could not be renewed this time. | None |

@@ -236,7 +236,7 @@ pub struct ParkFact {
     /// account of the same name, since a bare one would then be ambiguous.
     pub name: String,
     pub active: bool,
-    /// When this account was last switched to, where that is recorded.
+    /// When this account last came to be in use, where that is recorded.
     pub last_used_at: Option<i64>,
     pub park: Option<Park>,
     /// Why it cannot be read back, if it cannot.
@@ -290,11 +290,13 @@ fn park_facts(ctx: &Context, state: &State) -> Vec<ParkFact> {
             label: a.label.clone(),
             name: state.typed(&a.key()),
             last_used_at: a.last_used_at,
-            // What the account's own tool says, when it says anything. Pitboard's own
-            // record of its last switch says nothing about a sign-in made elsewhere.
+            // What the account's own tool says, when it says anything. Pitboard's own record
+            // says nothing about a sign-in made since it was written.
             active: match recorded.get(&a.provider()).and_then(Option::as_ref) {
                 Some(owner) => a.owned_by(owner),
-                None => state.active_for(a.provider()) == Some(a.label.as_str()),
+                None => state
+                    .account_in_use(a.provider())
+                    .is_some_and(|account| account.is(&a.key())),
             },
             park: a.parked.clone(),
             unreadable: a.parked.as_ref().and_then(|p| {
@@ -2735,6 +2737,7 @@ mod tests {
                 email: "work@example.com".into(),
                 parked: parked("work", Some(NOW + 20 * 86_400)).park,
                 last_used_at: None,
+                replaced_at: None,
                 detail: crate::state::Detail::Claude {
                     organization_uuid: "org".into(),
                     oauth_account: json!({}),
@@ -3894,6 +3897,7 @@ mod tests {
                 email: format!("{label}@example.com"),
                 parked: None,
                 last_used_at: None,
+                replaced_at: None,
                 detail,
             };
         let claude = || crate::state::Detail::Claude {
@@ -3912,7 +3916,8 @@ mod tests {
             ],
             ..State::default()
         };
-        state.set_active(ProviderId::Codex, Some("home".into()));
+        let home = crate::in_use::InUse::of(&state.accounts[2], "home-refresh", NOW);
+        state.identified(ProviderId::Codex, home, NOW);
         let active = |facts: &[ParkFact]| -> Vec<String> {
             facts
                 .iter()
@@ -3921,7 +3926,7 @@ mod tests {
                 .collect()
         };
 
-        // Nothing signed in to Codex: Pitboard's own record of its last switch stands in.
+        // Nothing signed in to Codex: Pitboard's own record of whose login is stored stands in.
         assert_eq!(active(&park_facts(&ctx, &state)), ["alpha", "codex/home"]);
 
         // Codex's login names `work`, whatever Pitboard last recorded.

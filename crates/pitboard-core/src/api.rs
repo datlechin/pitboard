@@ -57,7 +57,7 @@ const TIMEOUT: Duration = Duration::from_secs(5);
 /// Who a token belongs to, as the server sees it. Unlike a refresh-token fingerprint, this
 /// does not change when Claude Code rotates the token, and unlike Claude Code's config, it
 /// cannot lag behind the credential.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Owner {
     pub account_uuid: String,
     pub email: String,

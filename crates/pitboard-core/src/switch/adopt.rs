@@ -60,7 +60,7 @@ pub fn adopt(ctx: &Context, permit: Permit) -> Result<Option<Adopted>> {
     for service in &parks {
         state.release(service);
     }
-    state.active.clear();
+    state.in_use.clear();
     state.slot.clear();
     state.machine = state::machine_id();
     state::save(ctx, permit, &state)?;
@@ -77,6 +77,7 @@ pub fn adopt(ctx: &Context, permit: Permit) -> Result<Option<Adopted>> {
 mod tests {
     use super::*;
     use crate::host::memory::MemoryHost;
+    use crate::in_use::InUse;
     use crate::provider::ProviderId;
     use crate::state::{Account, State};
     use crate::time::{Clock, FixedClock};
@@ -127,6 +128,7 @@ mod tests {
         };
         state.accounts.push(Account {
             last_used_at: None,
+            replaced_at: None,
             label: "work".into(),
             id: "acc".into(),
             account_uuid: "acc".into(),
@@ -142,7 +144,8 @@ mod tests {
                 &oauth(),
             )),
         });
-        state.set_active(ProviderId::Claude, Some("work".into()));
+        let found = InUse::of(&state.accounts[0], "r", NOW);
+        state.identified(ProviderId::Claude, found, NOW);
         let raw = serde_json::to_string(&state).expect("serialisable");
         std::fs::write(crate::home::dir(ctx).join("state.json"), raw).expect("written");
         service.to_string()
@@ -189,8 +192,8 @@ mod tests {
             "and the copy that came with it is deleted rather than left to be presented"
         );
         assert!(
-            state.active.is_empty(),
-            "who was signed in was true elsewhere"
+            state.in_use.is_empty(),
+            "whose login was stored was true elsewhere"
         );
     }
 
@@ -204,6 +207,7 @@ mod tests {
         let mut state = State::default();
         state.accounts.push(Account {
             last_used_at: None,
+            replaced_at: None,
             label: "work".into(),
             id: "acc".into(),
             account_uuid: "acc".into(),
