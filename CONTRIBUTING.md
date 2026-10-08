@@ -350,6 +350,23 @@ leave every folder they are pointed at empty. `windows_refuses` runs against a b
 the cfg as well, which refuses every one of its commands that way. `windows-msrv` checks the
 workspace there with Rust 1.91.
 
+The job's own user is elevated on both images, in every program it starts, so CI runs every
+Windows test as a fresh standard user instead, through
+`.github/scripts/test-as-standard-user.ps1`. The script builds the tests as the job's user,
+makes a local standard user, grants it read and run on the workspace and the target folder,
+and starts each test program as it with its profile loaded and its own profile's variables,
+from a folder of its own, with the variables Cargo gives a test. It takes the grants back and
+removes the user afterwards. Give it what `cargo test` takes, and what the test programs take:
+
+```powershell
+./.github/scripts/test-as-standard-user.ps1 -Cargo '--locked -p pitboard-core --lib' -Pass 'host::windows release'
+```
+
+It makes and removes a Windows account, grants it rights on folders and, where Developer
+Mode is off, changes who holds the symbolic-link right, so it is for CI's disposable runners
+only, never a machine of your own: it refuses to run anywhere but a GitHub-hosted runner, as
+`runner-facts.ps1` does.
+
 ## Tool registers
 
 Each tool's register is `crates/pitboard-core/src/provider/<tool>/assumptions.rs`. What a

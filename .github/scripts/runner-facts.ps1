@@ -22,6 +22,11 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 
+# A GitHub-hosted runner is thrown away after the job.
+if (-not ($env:GITHUB_ACTIONS -eq 'true' -and $env:RUNNER_ENVIRONMENT -eq 'github-hosted')) {
+    throw 'runner-facts.ps1 runs only on a GitHub-hosted runner: it makes a Windows account, mounts disks and turns on Developer Mode and the symbolic-link right for a run'
+}
+
 $Probe = (Resolve-Path -Path $Probe).Path
 $scratch = Join-Path $env:RUNNER_TEMP 'pitboard-probe-scratch'
 New-Item -ItemType Directory -Force -Path $scratch | Out-Null
