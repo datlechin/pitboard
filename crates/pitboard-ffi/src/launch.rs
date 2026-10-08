@@ -262,7 +262,6 @@ fn account(row: status::Row, now: i64) -> Account {
         usage: row.usage.map(|u| Usage {
             source: match u.source {
                 usage::Source::Live => Source::Live,
-                usage::Source::ClaudeCodeCache => Source::ClaudeCodeCache,
                 usage::Source::Remembered => Source::Remembered,
             },
             observed_at: u.observed_at,

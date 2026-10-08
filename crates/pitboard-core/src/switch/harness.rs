@@ -293,7 +293,6 @@ pub(crate) fn codex_machine(name: &str) -> Machine {
             crate::usage::Snapshot {
                 windows: Vec::new(),
                 observed_at: Some(NOW),
-                account_uuid: None,
                 source: crate::usage::Source::Live,
             },
         );
@@ -388,6 +387,27 @@ pub(crate) fn window(kind: &str, percent: f64) -> crate::usage::Window {
         severity: None,
         length_seconds: crate::usage::anthropic_window_length(kind),
     }
+}
+
+/// Anthropic's usage answer for a five-hour limit `percent` used, resetting an hour from now,
+/// in the shape `GET /api/oauth/usage` gives it and Claude Code caches it.
+pub(crate) fn usage_answer(percent: f64) -> Value {
+    let resets_at = jiff::Timestamp::from_second(NOW + 3600).expect("a time");
+    json!({"limits": [{"kind": "session", "percent": percent, "resets_at": resets_at.to_string()}]})
+}
+
+/// Claude Code's usage cache, put in its config as 2.1.294 writes one: stamped with `here`,
+/// the account the config names, whichever login `answer` was asked with.
+pub(crate) fn cache_usage(m: &Machine, answer: Value) {
+    let path = m.root.join(".claude.json");
+    let mut config: Value =
+        serde_json::from_str(&std::fs::read_to_string(&path).expect("a config")).expect("JSON");
+    config["cachedUsageUtilization"] = json!({
+        "fetchedAtMs": NOW * 1000,
+        "accountUuid": "here",
+        "utilization": answer,
+    });
+    std::fs::write(&path, config.to_string()).expect("the config is written");
 }
 
 pub(crate) fn account(label: &str, uuid: &str, parked: Option<Park>) -> Account {

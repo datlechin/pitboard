@@ -309,7 +309,6 @@ mod tests {
     fn reading(kinds: &[&str]) -> Snapshot {
         Snapshot {
             observed_at: Some(NOW),
-            account_uuid: None,
             source: Source::Live,
             windows: kinds
                 .iter()

@@ -146,7 +146,7 @@ Each object in `accounts` has these fields:
 | `provider` | string | `claude` or `codex`. |
 | `qualified` | string or null | The label with its tool, such as `claude/work`. `null` for a login nobody enrolled. |
 
-In `usage`, `source` is `live` when Pitboard asked the service this time. It is `claude_code_cache` for a reading copied from Claude Code's own cache, and `remembered` for the last reading Pitboard took itself.
+In `usage`, `source` is `live` when Pitboard asked the service this time, and `remembered` for the last reading Pitboard took itself.
 
 Each object in `windows` is one limit:
 

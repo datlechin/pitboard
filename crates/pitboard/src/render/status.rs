@@ -87,10 +87,6 @@ fn provenance(usage: &Snapshot, now: i64) -> Option<String> {
     let at = usage.observed_at?;
     match usage.source {
         Source::Live => None,
-        Source::ClaudeCodeCache => Some(format!(
-            "from Claude Code, measured {}",
-            time::moment(at, now)
-        )),
         Source::Remembered => Some(format!(
             "measured {}, {} ago",
             time::moment(at, now),
@@ -362,7 +358,6 @@ mod tests {
                 length_seconds: None,
             }],
             observed_at: Some(NOW - 7_200),
-            account_uuid: None,
             source,
         }
     }

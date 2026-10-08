@@ -17,7 +17,7 @@ use crate::provider::claude::paths as claude;
 use crate::provider::claude::slot;
 use crate::provider::codex::paths as codex;
 use crate::state::{Park, State};
-use crate::{home, park, store, switch, time, usage, words};
+use crate::{home, park, store, switch, time, words};
 use serde_json::{Value, json};
 use std::path::PathBuf;
 
@@ -900,41 +900,6 @@ pub fn evaluate(facts: &Facts) -> Vec<Check> {
     checks.push(judge_credential(facts));
     checks.extend(judge_fallback_login(facts));
 
-    checks.push(
-        match (
-            facts
-                .config
-                .as_ref()
-                .ok()
-                .and_then(usage::from_config_cache),
-            &facts.identity,
-        ) {
-            (Some(s), Some(id)) if s.account_uuid.as_deref() == Some(id.account_uuid.as_str()) => {
-                ok(
-                    "usage_cache",
-                    "usage cache",
-                    format!("{} windows, measured for this account", s.windows.len()),
-                )
-            }
-            (Some(_), Some(_)) => warn(
-                "usage_cache",
-                "usage cache",
-                "cached for a different account",
-                "Its numbers are ignored rather than shown, which is why status may look empty.",
-            ),
-            (Some(s), None) => ok(
-                "usage_cache",
-                "usage cache",
-                format!("{} windows", s.windows.len()),
-            ),
-            (None, _) => ok(
-                "usage_cache",
-                "usage cache",
-                "absent; Claude Code writes it after a call that reports usage",
-            ),
-        },
-    );
-
     checks.push(match &facts.home_access {
         None => ok(
             "home",
@@ -1098,7 +1063,6 @@ const CLAUDE_CODES_OWN: &[&str] = &[
     "credential_store",
     "credential",
     "fallback_login",
-    "usage_cache",
     "storage_v5",
     "daemon",
     "claude_version",

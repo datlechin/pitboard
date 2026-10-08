@@ -184,7 +184,7 @@ pub const PER_SYSTEM: &[PerSystem] = &[
         windows: Read("2.1.294"),
     },
     PerSystem {
-        name: "usage_cache_names_the_account_alone",
+        name: "usage_cache_stamp_is_the_configs",
         macos: Read("2.1.294"),
         linux: Read("2.1.294"),
         windows: Read("2.1.294"),
@@ -595,15 +595,27 @@ pub const ASSUMPTIONS: &[Assumption] = &[
         absent: &[],
     },
     Assumption {
-        name: "usage_cache_names_the_account_alone",
-        fact: "`cachedUsageUtilization` keeps `fetchedAtMs`, the config's `accountUuid` and \
-               `utilization`, and no organisation. Every sign-in clears it, as a logout does, \
-               so between two sign-ins it is one login's",
-        read_from: "where it is written after a usage request, and the reset a sign-in and a \
-                    logout both run first",
+        name: "usage_cache_stamp_is_the_configs",
+        fact: "`cachedUsageUtilization` is written after `GET /api/oauth/usage`, which a \
+               session asks with the login it holds, and stamped with the config's \
+               `accountUuid`, read before the request and again before the write. Nothing \
+               compares the stamp with the login: a session still holding the login it had \
+               before a switch writes that login's numbers under the account the config names \
+               since. Claude Code's own readers compare the stamp with the config alone, and \
+               clear the cache where the two differ. A sign-in clears it, as a logout does",
+        read_from: "the usage read, which takes the config's `accountUuid` before it asks with \
+                    the session's credentials, the cache's writer, which writes only where the \
+                    config still names that account, the cache's two readers, and the reset \
+                    a sign-in and a logout both run",
+        // Read on 2026-10-08 from the macOS build and on 2026-10-09 from the Linux x64,
+        // Windows x64 and Windows arm64 builds of 2.1.294, whose code here is the same.
         verified_against: "2.1.294",
-        depends: "status, which reads it for the login in use only, matched by account uuid",
-        probe: &["cachedUsageUtilization=void 0"],
+        depends: "status, which takes no usage from it, and the automatic switch, which \
+                  decides from status's offline rows",
+        probe: &[
+            "cachedUsageUtilization:{fetchedAtMs:Date.now(),",
+            "cachedUsageUtilization=void 0",
+        ],
         absent: &[],
     },
 ];
@@ -634,7 +646,7 @@ mod tests {
                 "sign_in_takes_another_code",
                 "login_is_one_organisation",
                 "config_may_name_no_organisation",
-                "usage_cache_names_the_account_alone",
+                "usage_cache_stamp_is_the_configs",
             ]
         );
         for name in [

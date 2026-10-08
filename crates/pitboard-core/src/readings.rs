@@ -99,7 +99,6 @@ fn fold(all: &mut HashMap<String, Snapshot>, readings: &[(String, Snapshot)], no
             continue;
         };
         // What it is once stored, as `load` says of everything here.
-        next.account_uuid = Some(uuid.clone());
         next.source = Source::Remembered;
         if all.get(uuid) != Some(&next) {
             all.insert(uuid.clone(), next);
@@ -163,7 +162,6 @@ mod tests {
                 length_seconds: Some(5 * 3_600),
             }],
             observed_at,
-            account_uuid: None,
             source: Source::Live,
         }
     }

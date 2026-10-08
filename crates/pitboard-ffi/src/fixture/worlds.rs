@@ -397,7 +397,6 @@ impl Machine {
         usage::Snapshot {
             windows,
             observed_at: Some(self.now),
-            account_uuid: None,
             source: usage::Source::Live,
         }
     }

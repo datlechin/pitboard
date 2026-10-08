@@ -47,8 +47,6 @@ pub fn anthropic_window_length(kind: &str) -> Option<i64> {
 pub enum Source {
     /// Asked of Anthropic just now.
     Live,
-    /// Copied from Claude Code's own cache, which it refreshes only when it asks.
-    ClaudeCodeCache,
     /// The last live reading Pitboard took itself.
     Remembered,
 }
@@ -57,7 +55,6 @@ pub enum Source {
 pub struct Snapshot {
     pub windows: Vec<Window>,
     pub observed_at: Option<i64>,
-    pub account_uuid: Option<String>,
     pub source: Source,
 }
 
@@ -155,13 +152,13 @@ pub(crate) fn recency(a: &Window, b: &Window, now: i64) -> Ordering {
 /// newer measurement by [`recency`], taken whole, and on a tie the one already known, so a
 /// repeat changes nothing, whatever name or rounding it came with.
 ///
-/// Unless `offered` was taken after everything `known` holds. An answer from the
-/// service, or Claude Code's cache of one, says when it was taken, and one taken later than
-/// anything that advanced or confirmed `known` is what the limits were at that time. Where
-/// it finds less used, the service lowered the share, and the lower share is taken. A
-/// session's numbers say no time, so they only ever move a limit forward. The time is the
-/// whole reading's, so a session that moved any limit since the answer was taken, or in the
-/// same second, leaves the lower share to the next answer.
+/// Unless `offered` was taken after everything `known` holds. An answer from the service
+/// says when it was taken, and one taken later than anything that advanced or confirmed
+/// `known` is what the limits were at that time. Where it finds less used, the service
+/// lowered the share, and the lower share is taken. A session's numbers say no time, so they
+/// only ever move a limit forward. The time is the whole reading's, so a session that moved
+/// any limit since the answer was taken, or in the same second, leaves the lower share to the
+/// next answer.
 ///
 /// Except where the known window's reset has passed. A tie there is a reading that finds
 /// nothing used since, which is what an account nobody has used since says, with no reset or
@@ -250,10 +247,6 @@ pub(crate) fn merge(
         } else {
             known.observed_at
         },
-        account_uuid: known
-            .account_uuid
-            .clone()
-            .or_else(|| offered.account_uuid.clone()),
         source: if vouched {
             offered.source
         } else {
@@ -310,8 +303,8 @@ fn window_from_named(kind: &str, v: &Value) -> Option<Window> {
     })
 }
 
-/// The API answer and Claude Code's cached copy of it share this shape.
-fn windows_of(u: &Value) -> Vec<Window> {
+/// A reading taken from Anthropic's usage endpoint just now.
+pub fn from_usage_object(u: &Value, observed_at: i64) -> Snapshot {
     let mut windows: Vec<Window> = u
         .get("limits")
         .and_then(Value::as_array)
@@ -324,69 +317,40 @@ fn windows_of(u: &Value) -> Vec<Window> {
             }
         }
     }
-    windows
-}
-
-/// A reading taken from Anthropic's usage endpoint just now.
-pub fn from_usage_object(u: &Value, observed_at: i64) -> Snapshot {
     Snapshot {
-        windows: windows_of(u),
+        windows,
         observed_at: Some(observed_at),
-        account_uuid: None,
         source: Source::Live,
     }
-}
-
-/// Claude Code's own cache. It records the account it was measured for, so a reading for
-/// another account can be told apart and ignored.
-pub fn from_config_cache(config: &Value) -> Option<Snapshot> {
-    let c = config.get("cachedUsageUtilization")?;
-    Some(Snapshot {
-        windows: windows_of(c.get("utilization")?),
-        observed_at: c
-            .get("fetchedAtMs")
-            .and_then(Value::as_i64)
-            .map(|ms| ms / 1000),
-        account_uuid: c
-            .get("accountUuid")
-            .and_then(Value::as_str)
-            .map(str::to_owned),
-        source: Source::ClaudeCodeCache,
-    })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    /// Trimmed from this machine's real `~/.claude.json`.
-    fn real_config() -> Value {
-        serde_json::json!({"cachedUsageUtilization": {
-        "fetchedAtMs": 1789933772292i64,
-        "accountUuid": "1f0e2d3c-4b5a-4968-8776-a5b4c3d2e1f0",
-        "utilization": {
-            "five_hour": {"utilization": 62, "resets_at": "2026-09-20T22:20:00.095287+00:00"},
-            "seven_day": {"utilization": 48, "resets_at": "2026-09-27T02:00:00.095306+00:00"},
-            "limits": [
-                {"kind": "session", "group": "session", "percent": 62,
-                 "resets_at": "2026-09-20T22:20:00.095287+00:00", "scope": null, "is_active": true},
-                {"kind": "weekly_all", "group": "weekly", "percent": 48,
-                 "resets_at": "2026-09-27T02:00:00.095306+00:00", "scope": null, "is_active": false},
-                {"kind": "weekly_scoped", "group": "weekly", "percent": 0,
-                 "resets_at": "2026-09-27T02:00:00+00:00",
-                 "scope": {"model": {"id": null, "display_name": "Fable"}}, "is_active": false}
-            ]}}})
+    /// An answer of Anthropic's usage endpoint as Claude Code kept it in this machine's
+    /// `~/.claude.json`, trimmed.
+    fn real_answer() -> Value {
+        serde_json::json!({
+        "five_hour": {"utilization": 62, "resets_at": "2026-09-20T22:20:00.095287+00:00"},
+        "seven_day": {"utilization": 48, "resets_at": "2026-09-27T02:00:00.095306+00:00"},
+        "limits": [
+            {"kind": "session", "group": "session", "percent": 62,
+             "resets_at": "2026-09-20T22:20:00.095287+00:00", "scope": null, "is_active": true},
+            {"kind": "weekly_all", "group": "weekly", "percent": 48,
+             "resets_at": "2026-09-27T02:00:00.095306+00:00", "scope": null, "is_active": false},
+            {"kind": "weekly_scoped", "group": "weekly", "percent": 0,
+             "resets_at": "2026-09-27T02:00:00+00:00",
+             "scope": {"model": {"id": null, "display_name": "Fable"}}, "is_active": false}
+        ]})
     }
 
     #[test]
-    fn reads_the_real_cache_shape() {
-        let s = from_config_cache(&real_config()).expect("should parse");
+    fn reads_the_real_answers_shape() {
+        let s = from_usage_object(&real_answer(), 1789933772);
         assert_eq!(s.windows.len(), 3);
-        assert_eq!(
-            s.account_uuid.as_deref(),
-            Some("1f0e2d3c-4b5a-4968-8776-a5b4c3d2e1f0")
-        );
         assert_eq!(s.observed_at, Some(1789933772));
+        assert_eq!(s.source, Source::Live);
         let scoped = s
             .windows
             .iter()
@@ -397,12 +361,9 @@ mod tests {
 
     #[test]
     fn falls_back_to_the_named_windows_when_limits_is_missing() {
-        let mut c = real_config();
-        c["cachedUsageUtilization"]["utilization"]
-            .as_object_mut()
-            .unwrap()
-            .remove("limits");
-        let s = from_config_cache(&c).unwrap();
+        let mut answer = real_answer();
+        answer.as_object_mut().unwrap().remove("limits");
+        let s = from_usage_object(&answer, 1789933772);
         assert_eq!(s.windows.len(), 2);
         assert_eq!(s.windows[0].kind, "five_hour");
         assert_eq!(s.windows[0].percent, 62.0);
@@ -411,24 +372,19 @@ mod tests {
     #[test]
     fn a_nonsense_percentage_is_dropped_rather_than_drawn() {
         for nonsense in [serde_json::json!(-5), serde_json::json!("75")] {
-            let mut c = real_config();
-            c["cachedUsageUtilization"]["utilization"]["limits"][0]["percent"] = nonsense;
-            assert_eq!(from_config_cache(&c).unwrap().windows.len(), 2);
+            let mut answer = real_answer();
+            answer["limits"][0]["percent"] = nonsense;
+            assert_eq!(from_usage_object(&answer, 1789933772).windows.len(), 2);
         }
     }
 
     #[test]
     fn an_exceeded_limit_is_kept_not_dropped() {
-        let mut c = real_config();
-        c["cachedUsageUtilization"]["utilization"]["limits"][0]["percent"] = serde_json::json!(104);
-        let s = from_config_cache(&c).unwrap();
+        let mut answer = real_answer();
+        answer["limits"][0]["percent"] = serde_json::json!(104);
+        let s = from_usage_object(&answer, 1789933772);
         assert_eq!(s.windows.len(), 3);
         assert_eq!(s.windows[0].percent, 104.0);
-    }
-
-    #[test]
-    fn missing_cache_is_not_an_error() {
-        assert!(from_config_cache(&serde_json::json!({})).is_none());
     }
 
     #[test]
@@ -458,7 +414,6 @@ mod tests {
         Snapshot {
             windows,
             observed_at,
-            account_uuid: None,
             source: Source::Live,
         }
     }
@@ -549,13 +504,14 @@ mod tests {
     /// day and a half until the reset.
     #[test]
     fn an_answer_taken_after_everything_known_is_what_the_limits_are_now() {
-        let known = reading(
+        let mut known = reading(
             vec![
                 measured("session", 0.0, None),
                 measured("weekly_all", 100.0, Some(NOW + 33 * HOUR)),
             ],
             Some(NOW - HOUR),
         );
+        known.source = Source::Remembered;
         let answered = reading(
             vec![
                 measured("session", 5.0, Some(NOW + 5 * HOUR)),
@@ -563,19 +519,10 @@ mod tests {
             ],
             Some(NOW),
         );
-        let mut cached = reading(answered.windows.clone(), Some(NOW - 5));
-        cached.source = Source::ClaudeCodeCache;
-        for offered in [answered, cached] {
-            let merged = merge(Some(&known), Some(&offered), NOW).unwrap();
-            assert_eq!(
-                shares(&merged),
-                [("session", 5.0), ("weekly_all", 14.0)],
-                "{:?}",
-                offered.source
-            );
-            assert_eq!(merged.observed_at, offered.observed_at);
-            assert_eq!(merged.source, offered.source);
-        }
+        let merged = merge(Some(&known), Some(&answered), NOW).unwrap();
+        assert_eq!(shares(&merged), [("session", 5.0), ("weekly_all", 14.0)]);
+        assert_eq!(merged.observed_at, answered.observed_at);
+        assert_eq!(merged.source, Source::Live);
 
         let unused = reading(vec![measured("weekly_all", 0.0, None)], Some(NOW));
         let merged = merge(Some(&known), Some(&unused), NOW).unwrap();
@@ -654,8 +601,7 @@ mod tests {
 
     /// A session says no time and leaves out a window whose reset has passed. Taken for the
     /// service no longer reporting it, every reset took the five-hour limit away until the
-    /// next answer, where it reads as nothing used. Claude Code's cache is an answer as of
-    /// whenever Claude Code last asked, so it takes nothing away either.
+    /// next answer, where it reads as nothing used.
     #[test]
     fn a_reading_that_is_not_an_answer_just_now_never_takes_a_limit_away() {
         let known = reading(
@@ -669,18 +615,9 @@ mod tests {
             vec![measured("seven_day", 31.0, Some(NOW + 50 * HOUR))],
             None,
         );
-        let mut cached = reading(passed.windows.clone(), Some(NOW - 5));
-        cached.source = Source::ClaudeCodeCache;
-        for offered in [passed, cached] {
-            let merged = merge(Some(&known), Some(&offered), NOW).unwrap();
-            assert_eq!(
-                shares(&merged),
-                [("session", 40.0), ("seven_day", 31.0)],
-                "{:?}",
-                offered.source
-            );
-            assert_eq!(merged.windows[0].used(NOW), 0.0);
-        }
+        let merged = merge(Some(&known), Some(&passed), NOW).unwrap();
+        assert_eq!(shares(&merged), [("session", 40.0), ("seven_day", 31.0)]);
+        assert_eq!(merged.windows[0].used(NOW), 0.0);
     }
 
     #[test]
@@ -726,38 +663,36 @@ mod tests {
             Some(NOW)
         );
 
-        let mut confirmed = reading(known.windows.clone(), Some(NOW - 5));
-        confirmed.source = Source::ClaudeCodeCache;
+        let confirmed = reading(known.windows.clone(), Some(NOW - 5));
         let merged = merge(Some(&known), Some(&confirmed), NOW).unwrap();
         assert_eq!(
             merged.observed_at,
             Some(NOW - 5),
             "a measured repeat confirms it"
         );
-        assert_eq!(merged.source, Source::ClaudeCodeCache);
+        assert_eq!(merged.source, Source::Live);
     }
 
     /// Asked about an account that has done nothing since its window reset, Anthropic finds
-    /// nothing used and gives no reset, or the one that passed, and Claude Code's cache says
-    /// the same offline. Kept on that tie, a parked account that had run out read as full,
-    /// marked live, until somebody used it again.
+    /// nothing used and gives no reset, or the one that passed. Kept on that tie, a parked
+    /// account that had run out read as full, marked live, until somebody used it again.
     #[test]
     fn a_window_past_its_reset_is_reset_by_a_reading_that_finds_nothing_used() {
-        let known = reading(
+        let mut known = reading(
             vec![measured("session", 100.0, Some(NOW - HOUR))],
             Some(NOW - 2 * HOUR),
         );
-        for (said, source) in [
-            (measured("session", 0.0, None), Source::Live),
-            (measured("session", 0.0, Some(NOW - HOUR)), Source::Live),
-            (measured("five_hour", 0.0, None), Source::ClaudeCodeCache),
+        known.source = Source::Remembered;
+        for said in [
+            measured("session", 0.0, None),
+            measured("session", 0.0, Some(NOW - HOUR)),
+            measured("five_hour", 0.0, None),
         ] {
-            let mut offered = reading(vec![said], Some(NOW - 5));
-            offered.source = source;
+            let offered = reading(vec![said.clone()], Some(NOW - 5));
             let merged = merge(Some(&known), Some(&offered), NOW).unwrap();
-            assert_eq!(merged.windows[0].percent, 0.0, "{source:?}");
-            assert_eq!(merged.windows[0].resets_at, None, "{source:?}");
-            assert_eq!(merged.source, source, "and it is what said so");
+            assert_eq!(merged.windows[0].percent, 0.0, "{said:?}");
+            assert_eq!(merged.windows[0].resets_at, None, "{said:?}");
+            assert_eq!(merged.source, Source::Live, "and it is what said so");
             assert_eq!(
                 merge(Some(&merged), Some(&offered), NOW).as_ref(),
                 Some(&merged),

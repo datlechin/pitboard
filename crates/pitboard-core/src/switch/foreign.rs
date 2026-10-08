@@ -52,7 +52,6 @@ fn login(m: &Machine, who: &str, refresh: &str) -> Value {
                 crate::usage::Snapshot {
                     windows: Vec::new(),
                     observed_at: Some(NOW),
-                    account_uuid: None,
                     source: crate::usage::Source::Live,
                 },
             );

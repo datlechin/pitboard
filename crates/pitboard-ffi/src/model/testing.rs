@@ -1366,7 +1366,6 @@ impl World {
                     length_seconds: Some(18_000),
                 }],
                 observed_at: Some(now),
-                account_uuid: None,
                 source: pitboard_core::usage::Source::Live,
             },
         );
@@ -1430,7 +1429,6 @@ impl World {
             pitboard_core::usage::Snapshot {
                 windows: Vec::new(),
                 observed_at: Some(now),
-                account_uuid: None,
                 source: pitboard_core::usage::Source::Live,
             },
         );

@@ -140,9 +140,12 @@ pages load, as a browser would.
     them; `home::remove_retired` deletes the files that kept, and the folder where nothing
     else is in it.
   - `status.rs`, `doctor.rs`, `statusline.rs` and `schedule.rs` serve the commands of the
-    same names. `schedule.rs` decides what daily renewal runs and whose it is, and refuses a
-    program in the temporary copy macOS runs an app from, by `in_a_temporary_copy`, which an
-    app asks of the command line inside it too; the host's scheduler writes it.
+    same names. A row's numbers in `status.rs` are its service's answer folded into the
+    reading every front end records in `usage.json`, or that reading alone where no answer
+    came, and never a tool's own cache (see [Claude Code](#claude-code)). `schedule.rs`
+    decides what daily renewal runs and whose it is, and refuses a program in the temporary
+    copy macOS runs an app from, by `in_a_temporary_copy`, which an app asks of the command
+    line inside it too; the host's scheduler writes it.
   - `words.rs`: the sentences and column words Pitboard says in more than one place, each
     a function of typed values: spans of time, a limit's names, when it resets, its pace and
     when it runs out, a parked login's life, a renewal run and doctor's summary. It also holds
@@ -968,6 +971,13 @@ Windows build was run:
 - The same run read the macOS and Linux builds of both versions, and every fact read there
   still holds. Claude Code 2.1.110 and Codex 0.99.0 still go red.
 
+On 8 and 9 October 2026 Claude Code 2.1.294 was read again: its macOS build on the 8th, and
+its `linux-x64`, `win32-x64` and `win32-arm64` builds on the 9th, as bytes on a Mac, and
+none was run. All four are built from commit 8f033c6. For each fact read from them, the code
+it names was compared with the macOS build's token by token, minified names apart, and is
+the same in all four: `usage_cache_stamp_is_the_configs`. The checker finds every fact each
+build was read for.
+
 `.github/workflows/conformance.yml` checks the newest builds of each tool against its
 register on Mondays and Thursdays, or a version given by hand. It reads four builds of each
 tool, `linux-x64`, `darwin-arm64`, `win32-x64` and `win32-arm64`, all on Linux. Its most
@@ -1513,6 +1523,16 @@ treated, and only the macOS build shows it. The run reads both builds since.
   reads the file and the slot as Claude Code does. The win32-x64 build's JavaScript refuses
   a relative config dir itself in one of its features: "the configuration home
   (CLAUDE_CONFIG_DIR) is not an absolute path".
+- Read on 8 October 2026 from the macOS build of 2.1.294, and on 9 October from its Linux
+  and Windows builds, whose code here is the same: Claude Code fills `cachedUsageUtilization`
+  in its config with the answer to a usage request made with the login its session holds,
+  and stamps it with the `accountUuid` the config names. Nothing compares the two. A session
+  that has not yet taken a switch writes the numbers of the account switched away from under
+  the account switched to. Of five caches captured on one machine on 8 October, four held
+  the numbers of another login than the account they named, one with no switch near it. So
+  Pitboard takes no usage from the cache. Taken as the reading of the account in use, it
+  showed the previous account's numbers after a switch, and the automatic switch acted on
+  them.
 
 Not measured. Switching by itself rests on the session cache's 33 seconds. These were not
 measured, and the register cannot hold them, since every fact in it is read from a build:

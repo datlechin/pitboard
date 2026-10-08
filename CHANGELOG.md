@@ -6,8 +6,19 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Removed
+
+- `"source": "claude_code_cache"` in `pitboard status --json`, and `pitboard doctor`'s
+  `usage_cache` check. Breaking for a script that reads either.
+
 ### Fixed
 
+- An account just switched to no longer shows the previous account's usage from Claude
+  Code's usage cache, and the automatic switch no longer acts on that cache. Claude Code
+  2.1.294 stamps the cache with the account its config names, while the numbers in it are
+  those of the login its session holds, which can still be the one switched away from.
+  Pitboard no longer reads it: between its own answers from Anthropic, an account shows the
+  last reading Pitboard or a status line recorded.
 - The automatic switch switches at the share as shown: a limit the menu shows at 95% counts
   as 95%, on the account in use and on an account it could go to. It compared the unrounded
   share, so a limit at 94.5% showed 95% and was not switched from. `pitboard status`,

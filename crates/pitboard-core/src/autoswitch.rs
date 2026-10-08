@@ -531,7 +531,6 @@ mod tests {
             usage: Some(Snapshot {
                 windows,
                 observed_at: Some(NOW),
-                account_uuid: Some(label.into()),
                 source: Source::Remembered,
             }),
             stale: None,

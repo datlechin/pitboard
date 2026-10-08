@@ -259,7 +259,6 @@ fn session_snapshot(
     (!windows.is_empty()).then_some(Snapshot {
         windows,
         observed_at: None,
-        account_uuid: None,
         source: Source::Live,
     })
 }
@@ -360,7 +359,6 @@ mod tests {
         Snapshot {
             windows: vec![window("session", five_hour), window("weekly_all", weekly)],
             observed_at: Some(observed_at),
-            account_uuid: None,
             source: Source::Remembered,
         }
     }

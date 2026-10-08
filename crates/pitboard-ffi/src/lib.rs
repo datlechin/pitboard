@@ -191,7 +191,6 @@ pub enum Schedule {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
 pub enum Source {
     Live,
-    ClaudeCodeCache,
     Remembered,
 }
 

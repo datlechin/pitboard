@@ -110,7 +110,9 @@ fn over_the_account_switched_to(error: &Error) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::super::harness::{Machine, NOW, document, hold, machine, owner, window};
+    use super::super::harness::{
+        Machine, NOW, cache_usage, document, hold, machine, owner, usage_answer, window,
+    };
     use super::super::*;
     use crate::api::scripted::Trouble;
     use crate::autoswitch::{Auto, RETRY_SECONDS, Skip, Threshold};
@@ -129,7 +131,6 @@ mod tests {
                 Snapshot {
                     windows: vec![window("session", session), window("weekly_all", weekly)],
                     observed_at: Some(NOW),
-                    account_uuid: Some(uuid.to_owned()),
                     source: Source::Live,
                 },
             )],
@@ -248,6 +249,23 @@ mod tests {
         assert_eq!((from.as_str(), limit.kind.as_str()), ("here", "session"));
         assert_eq!(m.mem.live().peek(&m.service), before);
         assert!(logged(&m).is_empty());
+    }
+
+    /// Claude Code stamps its usage cache with the account its config names, whichever login
+    /// it asked with, so after a switch it can hold the numbers of the account switched away
+    /// from under the name of the one switched to. Taken as `here`'s, a full five-hour limit
+    /// in it switched `here` away at 10%.
+    #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W16: Pitboard writing, replacing and removing files on Windows"
+    )]
+    fn a_usage_cache_in_claude_codes_config_moves_nothing() {
+        let (m, _) = nearly_out("auto-cache", 10.0);
+        cache_usage(&m, usage_answer(100.0));
+        let looked = auto(&m).expect("a look").value;
+        assert!(matches!(looked, Auto::Idle), "{looked:?}");
+        assert_eq!(live_refresh(&m).as_deref(), Some("here-refresh"));
     }
 
     /// Two front ends that decided the same switch make it once: the second finds, under the

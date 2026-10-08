@@ -1318,6 +1318,49 @@ mod tests {
         assert_eq!(said(&read), [], "only Anthropic could tell");
     }
 
+    /// Claude Code 2.1.294 stamps its usage cache with the account its config names, and
+    /// asks with the login its session holds, which can still be the account switched away
+    /// from. Four of five caches captured on one machine were another login's numbers, so
+    /// no read takes a reading from it, whether or not Anthropic answered this time.
+    #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
+    )]
+    fn what_claude_code_cached_is_never_an_accounts_reading() {
+        use crate::switch::harness::{NOW, cache_usage, usage_answer};
+        let m = machine("cached-usage");
+        readings::remember(
+            &m.ctx,
+            Permit::for_a_test(),
+            &[(
+                "here".into(),
+                crate::usage::from_usage_object(&usage_answer(10.0), NOW),
+            )],
+        );
+        cache_usage(&m, usage_answer(100.0));
+        let pitboard = Pitboard::new(m.ctx.clone());
+        for (how, read) in [
+            ("offline", pitboard.status_offline()),
+            ("online", pitboard.status(false)),
+        ] {
+            let read = read.expect("a read");
+            let here = read
+                .value
+                .rows
+                .iter()
+                .find(|row| row.label.as_deref() == Some("here"))
+                .expect("here's row");
+            let shares: Vec<f64> = here
+                .usage
+                .iter()
+                .flat_map(|usage| &usage.windows)
+                .map(|window| window.percent)
+                .collect();
+            assert_eq!(shares, [10.0], "{how}");
+        }
+    }
+
     /// A tool whose login names its own account is identified from the login, which asks
     /// nobody, so a read that sends no request can still tell whether the next change
     /// finishes its switch. Here Codex has renewed its login since the switch stopped, so the

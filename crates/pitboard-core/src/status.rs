@@ -1,9 +1,9 @@
 //! `pitboard status`: who is signed in, what each account has left, and which accounts can
 //! be switched to.
 //!
-//! Numbers are asked of each tool's own service rather than read from a tool's cache, which
-//! only moves when the tool itself asks. Every account is asked at once, so the command
-//! costs one round trip, not one per account.
+//! Numbers are asked of each tool's own service and never read from a tool's cache. Claude
+//! Code's is stamped with the account its config names, whichever login it was asked with.
+//! Every account is asked at once, so the command costs one round trip, not one per account.
 //!
 //! Every row says which tool it belongs to. There is no such thing as "the account signed
 //! in on this machine": each tool has a live login of its own or none, and a row is about
@@ -294,7 +294,6 @@ struct Facts {
     asked: bool,
     /// One per enrolled account, in order.
     parked_usage: Vec<Result<Snapshot, Stale>>,
-    claude_code_cache: Option<Snapshot>,
 }
 
 impl Facts {
@@ -381,10 +380,6 @@ pub fn gather_offline(ctx: &Context, state: &State) -> Report {
             .iter()
             .map(|_| Err(Stale::NotAsked))
             .collect(),
-        claude_code_cache: claude::load_config(ctx)
-            .ok()
-            .as_ref()
-            .and_then(crate::usage::from_config_cache),
     };
     let remembered = readings::load(ctx);
     Report {
@@ -639,7 +634,6 @@ pub fn gather(ctx: &Context, permit: crate::service::Permit, state: &State, fres
         .iter()
         .map(|a| parked_document(ctx, &a.key(), a.parked.as_ref(), now))
         .collect();
-    let config = claude::load_config(ctx).ok();
     let remembered = readings::load(ctx);
 
     let (answers, parked_asked): (Vec<(ProviderId, std::thread::Result<Answered>)>, Vec<Asked>) =
@@ -708,7 +702,6 @@ pub fn gather(ctx: &Context, permit: crate::service::Permit, state: &State, fres
         live,
         asked: true,
         parked_usage: parked_asked.into_iter().map(|(usage, _)| usage).collect(),
-        claude_code_cache: config.as_ref().and_then(crate::usage::from_config_cache),
     };
     let rows = assemble(state, &facts, |uuid| remembered.get(uuid).cloned(), now);
     crate::home::remove_retired(ctx, permit);
@@ -788,24 +781,12 @@ fn assemble(
             Some((which, id))
         })
         .collect();
-    // Claude Code's cache counts only for Claude Code's accounts, and only when it was
-    // measured for the account in question.
-    let cached_for = |which: ProviderId, uuid: &str| {
-        facts
-            .claude_code_cache
-            .clone()
-            .filter(|c| which == ProviderId::Claude && c.account_uuid.as_deref() == Some(uuid))
-    };
-    // What was asked, or Claude Code's cache when nothing was, folded into what every front
-    // end has recorded. So a row shows the one reading the status lines show, and neither
-    // an answer that lags a session's latest response nor a cache that moves only when
-    // Claude Code asks can take it backwards.
-    let reading = |id: &str, asked: &Result<Snapshot, Stale>, cached: Option<Snapshot>| {
-        let recalled = recall(id);
-        match asked {
-            Ok(live) => (merge(recalled.as_ref(), Some(live), now), None),
-            Err(stale) => (merge(recalled.as_ref(), cached.as_ref(), now), Some(*stale)),
-        }
+    // The service's answer folded into what every front end has recorded, or what they
+    // recorded where none came. So a row shows the one reading the status lines show, and an
+    // answer that lags a session's latest response cannot take it backwards.
+    let reading = |id: &str, asked: &Result<Snapshot, Stale>| match asked {
+        Ok(live) => (merge(recall(id).as_ref(), Some(live), now), None),
+        Err(stale) => (recall(id), Some(*stale)),
     };
 
     let mut rows: Vec<Row> = state
@@ -823,16 +804,16 @@ fn assemble(
                 let live = facts
                     .live_for(which)
                     .map_or(Err(Stale::NothingSignedIn), LiveLogin::usage);
-                reading(id, &live, cached_for(which, &account.account_uuid))
+                reading(id, &live)
             } else if account.parked.is_none()
                 && live_unreadable
                 && state.active_for(which) == Some(account.label.as_str())
             {
                 // Nothing parked because Pitboard put its login in use, and that login is
                 // the one that could not be read: unknown, not gone.
-                reading(id, &Err(Stale::LoginUnreadable), None)
+                reading(id, &Err(Stale::LoginUnreadable))
             } else {
-                reading(id, parked, None)
+                reading(id, parked)
             };
             Row {
                 provider: which,
@@ -862,8 +843,7 @@ fn assemble(
             if rows.iter().any(|r| r.provider == which && r.id == id) {
                 continue;
             }
-            let (usage, stale) =
-                reading(&id, &live.usage(), cached_for(which, &owner.account_uuid));
+            let (usage, stale) = reading(&id, &live.usage());
             rows.push(Row {
                 provider: which,
                 label: None,
@@ -932,7 +912,7 @@ mod tests {
         }
     }
 
-    fn reading(percent: f64, source: Source, account: Option<&str>) -> Snapshot {
+    fn reading(percent: f64, source: Source) -> Snapshot {
         Snapshot {
             windows: vec![Window {
                 kind: "session".into(),
@@ -944,7 +924,6 @@ mod tests {
                 length_seconds: None,
             }],
             observed_at: Some(NOW - 7_200),
-            account_uuid: account.map(str::to_owned),
             source,
         }
     }
@@ -1002,7 +981,6 @@ mod tests {
             live: std::iter::once((ProviderId::Claude, live)).collect(),
             asked: true,
             parked_usage: parked,
-            claude_code_cache: None,
         }
     }
 
@@ -1025,7 +1003,6 @@ mod tests {
             .collect(),
             asked: true,
             parked_usage: vec![Err(Stale::Unreachable), Err(Stale::Unreachable)],
-            claude_code_cache: None,
         };
         let rows = assemble(&state, &facts, nothing_remembered, NOW);
         let a = rows
@@ -1100,44 +1077,25 @@ mod tests {
     }
 
     #[test]
-    fn a_live_reading_wins_over_claude_codes_cache() {
+    fn an_expired_session_shows_what_was_remembered_and_says_why() {
         let s = state(&["work"]);
-        let mut f = facts(
-            "work-uuid",
-            Ok(reading(30.0, Source::Live, None)),
-            vec![Err(Stale::NothingParked)],
-        );
-        f.claude_code_cache = Some(reading(2.0, Source::ClaudeCodeCache, Some("work-uuid")));
-        let rows = assemble(&s, &f, nothing_remembered, NOW);
-        let usage = rows[0].usage.as_ref().unwrap();
-        assert_eq!(usage.source, Source::Live);
-        assert_eq!(usage.windows[0].percent, 30.0);
-        assert_eq!(rows[0].stale, None);
-    }
-
-    #[test]
-    fn an_expired_session_falls_back_to_claude_codes_cache_and_says_why() {
-        let s = state(&["work"]);
-        let mut f = facts(
+        let f = facts(
             "work-uuid",
             Err(Stale::SessionExpired),
             vec![Err(Stale::NothingParked)],
         );
-        f.claude_code_cache = Some(reading(2.0, Source::ClaudeCodeCache, Some("work-uuid")));
-        let rows = assemble(&s, &f, nothing_remembered, NOW);
-        assert_eq!(
-            rows[0].usage.as_ref().unwrap().source,
-            Source::ClaudeCodeCache
-        );
+        let recorded = |_: &str| Some(reading(22.0, Source::Remembered));
+        let rows = assemble(&s, &f, recorded, NOW);
+        let usage = rows[0].usage.as_ref().unwrap();
+        assert_eq!(usage.windows[0].percent, 22.0);
+        assert_eq!(usage.source, Source::Remembered);
         assert_eq!(rows[0].stale, Some(Stale::SessionExpired));
     }
 
-    /// What the menu bar shows between its own reads, and all it shows offline. Claude Code's
-    /// cache moves only when Claude Code asks, and every session records its numbers into
-    /// Pitboard's readings, so showing the cache over them had the menu bar disagree with
-    /// every status line on the machine.
+    /// What the menu bar shows between its own reads, and all it shows offline: the reading
+    /// every front end and every session's status line records into, so all of them agree.
     #[test]
-    fn offline_the_account_in_use_shows_the_newer_of_claude_codes_cache_and_the_readings() {
+    fn offline_the_account_in_use_shows_the_readings() {
         let s = state(&["work"]);
         let mut f = facts(
             "work-uuid",
@@ -1145,22 +1103,13 @@ mod tests {
             vec![Err(Stale::NothingParked)],
         );
         f.asked = false;
-        f.claude_code_cache = Some(reading(20.0, Source::ClaudeCodeCache, Some("work-uuid")));
-        let recorded = |_: &str| Some(reading(22.0, Source::Remembered, Some("work-uuid")));
+        let recorded = |_: &str| Some(reading(22.0, Source::Remembered));
         let rows = assemble(&s, &f, recorded, NOW);
+        assert!(rows[0].signed_in);
         let usage = rows[0].usage.as_ref().unwrap();
         assert_eq!(usage.windows[0].percent, 22.0);
         assert_eq!(usage.source, Source::Remembered);
         assert_eq!(rows[0].stale, Some(Stale::NotAsked));
-
-        f.claude_code_cache = Some(reading(25.0, Source::ClaudeCodeCache, Some("work-uuid")));
-        let rows = assemble(&s, &f, recorded, NOW);
-        let usage = rows[0].usage.as_ref().unwrap();
-        assert_eq!(
-            usage.windows[0].percent, 25.0,
-            "and the cache where it is newer"
-        );
-        assert_eq!(usage.source, Source::ClaudeCodeCache);
     }
 
     /// Anthropic's usage answer can be behind the numbers a session has had in its latest
@@ -1171,11 +1120,11 @@ mod tests {
         let s = state(&["work"]);
         let f = facts(
             "work-uuid",
-            Ok(reading(20.0, Source::Live, None)),
+            Ok(reading(20.0, Source::Live)),
             vec![Err(Stale::NothingParked)],
         );
         let recorded = |_: &str| {
-            let mut since = reading(22.0, Source::Remembered, Some("work-uuid"));
+            let mut since = reading(22.0, Source::Remembered);
             since.observed_at = Some(NOW - 60);
             Some(since)
         };
@@ -1185,7 +1134,7 @@ mod tests {
 
         let f = facts(
             "work-uuid",
-            Ok(reading(30.0, Source::Live, None)),
+            Ok(reading(30.0, Source::Live)),
             vec![Err(Stale::NothingParked)],
         );
         let usage = assemble(&s, &f, recorded, NOW)[0].usage.clone().unwrap();
@@ -1203,25 +1152,13 @@ mod tests {
     #[test]
     fn a_live_reading_taken_after_what_was_recorded_is_shown_however_low() {
         let s = state(&["work"]);
-        let mut answered = reading(14.0, Source::Live, None);
+        let mut answered = reading(14.0, Source::Live);
         answered.observed_at = Some(NOW);
         let f = facts("work-uuid", Ok(answered), vec![Err(Stale::NothingParked)]);
-        let recorded = |_: &str| Some(reading(100.0, Source::Remembered, Some("work-uuid")));
+        let recorded = |_: &str| Some(reading(100.0, Source::Remembered));
         let usage = assemble(&s, &f, recorded, NOW)[0].usage.clone().unwrap();
         assert_eq!(usage.windows[0].percent, 14.0);
         assert_eq!(usage.source, Source::Live);
-    }
-
-    #[test]
-    fn claude_codes_cache_for_another_account_is_never_shown_as_this_one() {
-        let s = state(&["work"]);
-        let mut f = facts(
-            "work-uuid",
-            Err(Stale::Unreachable),
-            vec![Err(Stale::NothingParked)],
-        );
-        f.claude_code_cache = Some(reading(99.0, Source::ClaudeCodeCache, Some("someone-else")));
-        assert!(assemble(&s, &f, nothing_remembered, NOW)[0].usage.is_none());
     }
 
     #[test]
@@ -1229,11 +1166,8 @@ mod tests {
         let s = state(&["work", "personal"]);
         let f = facts(
             "work-uuid",
-            Ok(reading(30.0, Source::Live, None)),
-            vec![
-                Err(Stale::NothingParked),
-                Ok(reading(12.0, Source::Live, None)),
-            ],
+            Ok(reading(30.0, Source::Live)),
+            vec![Err(Stale::NothingParked), Ok(reading(12.0, Source::Live))],
         );
         let rows = assemble(&s, &f, nothing_remembered, NOW);
         let personal = rows
@@ -1304,12 +1238,11 @@ mod tests {
         let s = state(&["work", "personal"]);
         let f = facts(
             "work-uuid",
-            Ok(reading(30.0, Source::Live, None)),
+            Ok(reading(30.0, Source::Live)),
             vec![Err(Stale::NothingParked), Err(Stale::ParkedAccessExpired)],
         );
-        let remembered = |uuid: &str| {
-            (uuid == "personal-uuid").then(|| reading(44.0, Source::Remembered, Some(uuid)))
-        };
+        let remembered =
+            |uuid: &str| (uuid == "personal-uuid").then(|| reading(44.0, Source::Remembered));
         let rows = assemble(&s, &f, remembered, NOW);
         let personal = rows
             .iter()
@@ -1324,7 +1257,7 @@ mod tests {
         let s = state(&["alpha", "beta"]);
         let f = facts(
             "beta-uuid",
-            Ok(reading(5.0, Source::Live, None)),
+            Ok(reading(5.0, Source::Live)),
             vec![Err(Stale::NothingParked), Err(Stale::NothingParked)],
         );
         let rows = assemble(&s, &f, nothing_remembered, NOW);
@@ -1424,7 +1357,6 @@ mod tests {
             live: BTreeMap::new(),
             asked: true,
             parked_usage: vec![Err(Stale::Unreachable)],
-            claude_code_cache: None,
         };
         let rows = assemble(&s, &f, nothing_remembered, NOW);
         assert_eq!(rows[0].explanation(), Some("OpenAI could not be reached"));
@@ -1463,18 +1395,17 @@ mod tests {
             live: [
                 (
                     ProviderId::Claude,
-                    live("same-uuid", Ok(reading(10.0, Source::Live, None))),
+                    live("same-uuid", Ok(reading(10.0, Source::Live))),
                 ),
                 (
                     ProviderId::Codex,
-                    live("same-uuid", Ok(reading(20.0, Source::Live, None))),
+                    live("same-uuid", Ok(reading(20.0, Source::Live))),
                 ),
             ]
             .into_iter()
             .collect(),
             asked: true,
             parked_usage: vec![Err(Stale::NothingParked)],
-            claude_code_cache: None,
         };
         let rows = assemble(&s, &f, nothing_remembered, NOW);
         assert_eq!(rows.len(), 2, "one row per tool");
@@ -1498,18 +1429,17 @@ mod tests {
             live: [
                 (
                     ProviderId::Claude,
-                    live("beta-uuid", Ok(reading(5.0, Source::Live, None))),
+                    live("beta-uuid", Ok(reading(5.0, Source::Live))),
                 ),
                 (
                     ProviderId::Codex,
-                    live("home-acc", Ok(reading(6.0, Source::Live, None))),
+                    live("home-acc", Ok(reading(6.0, Source::Live))),
                 ),
             ]
             .into_iter()
             .collect(),
             asked: true,
             parked_usage: vec![Err(Stale::NothingParked); 4],
-            claude_code_cache: None,
         };
         let order: Vec<(ProviderId, String, bool)> = assemble(&s, &f, nothing_remembered, NOW)
             .into_iter()
@@ -1526,25 +1456,6 @@ mod tests {
         );
     }
 
-    /// Claude Code's cache is a Claude Code account's numbers and nobody else's, however
-    /// the identities happen to line up.
-    #[test]
-    fn claude_codes_cache_is_never_shown_for_another_tools_account() {
-        let mut s = State::default();
-        s.accounts.push(codex_account("work", "work-acc"));
-        let mut f = Facts {
-            live: std::iter::once((ProviderId::Codex, live("work-acc", Err(Stale::Unreachable))))
-                .collect(),
-            asked: true,
-            parked_usage: vec![Err(Stale::NothingParked)],
-            claude_code_cache: None,
-        };
-        f.claude_code_cache = Some(reading(77.0, Source::ClaudeCodeCache, Some("work-acc")));
-        let rows = assemble(&s, &f, nothing_remembered, NOW);
-        assert!(rows[0].signed_in);
-        assert!(rows[0].usage.is_none(), "{:?}", rows[0].usage);
-    }
-
     /// A thread that panicked stands in for its own tool and nobody else's. It used to be
     /// filed under Claude Code whichever tool it had been asking about, and since answers
     /// are collected in order, a Codex thread that panicked erased Claude Code's signed-in
@@ -1555,7 +1466,7 @@ mod tests {
         let home = scratch("panicked");
         let (ctx, _mem, _api) = machine(&home.0, None);
         let claude_answer: Answered = (
-            live("alpha-uuid", Ok(reading(30.0, Source::Live, None))),
+            live("alpha-uuid", Ok(reading(30.0, Source::Live))),
             Some(("alpha-uuid".into(), budget::Outcome::Answered)),
         );
         let panicked: Box<dyn std::any::Any + Send> = Box::new("boom");
@@ -1584,7 +1495,6 @@ mod tests {
             live: settled,
             asked: true,
             parked_usage: vec![Err(Stale::NothingParked), Err(Stale::NothingParked)],
-            claude_code_cache: None,
         };
         let rows = assemble(&s, &f, nothing_remembered, NOW);
         let alpha = rows
@@ -1688,7 +1598,7 @@ mod tests {
 
         // Once the login can be read, nothing parked means what it says.
         let readable = only_claude(
-            live("alpha-uuid", Ok(reading(5.0, Source::Live, None))),
+            live("alpha-uuid", Ok(reading(5.0, Source::Live))),
             vec![Err(Stale::NotAsked), Err(Stale::NothingParked)],
         );
         let rows = assemble(&s, &readable, nothing_remembered, NOW);
@@ -1715,7 +1625,7 @@ mod tests {
             live: [
                 (
                     ProviderId::Claude,
-                    live("alpha-uuid", Ok(reading(5.0, Source::Live, None))),
+                    live("alpha-uuid", Ok(reading(5.0, Source::Live))),
                 ),
                 (ProviderId::Codex, unreadable()),
             ]
@@ -1723,7 +1633,6 @@ mod tests {
             .collect(),
             asked: true,
             parked_usage: vec![Err(Stale::NothingParked); parked],
-            claude_code_cache: None,
         };
 
         let claude_only = state(&["alpha"]);
@@ -2105,7 +2014,7 @@ mod tests {
                     email: "acc@example.com".into(),
                     organization_uuid: "org-b".into(),
                 })),
-                usage: Some(Ok(reading(30.0, Source::Live, None))),
+                usage: Some(Ok(reading(30.0, Source::Live))),
                 ..LiveLogin::default()
             },
             vec![Err(Stale::NothingParked), Err(Stale::NothingParked)],
