@@ -1,7 +1,5 @@
 //! Naming a process token's elevation, so block A1 and the runner facts classify a token the
-//! one way W12 later will: a full, high-integrity or service token is "elevated" and refuses
-//! a change, a limited or standard one is "not elevated" and may proceed, and a token the
-//! probe could not read in full is "unknown", which W12 refuses too.
+//! one way Pitboard's Windows face does, in `pitboard-core`'s `host/token.rs`.
 //!
 //! The naming is pure; the Windows reader hands it what it could read, each part `None` when
 //! that read failed.
@@ -50,7 +48,7 @@ pub fn integrity_word(rid: u32) -> &'static str {
     }
 }
 
-/// How W12 will read a token.
+/// How Pitboard reads a token.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Reading {
     /// A change is refused. The reason names what made it elevated.
@@ -94,9 +92,9 @@ pub struct TokenFacts {
     pub integrity_rid: Option<u32>,
 }
 
-/// Classify a token the way W12 will. Any sign of elevation wins, read or not the rest; then
-/// a part that could not be read makes it unknown; only a token read in full with no sign
-/// of elevation is not elevated.
+/// Classify a token the way Pitboard does. Any sign of elevation wins, read or not the rest;
+/// then a part that could not be read makes it unknown; only a token read in full with no
+/// sign of elevation is not elevated.
 pub fn reading(t: TokenFacts) -> Reading {
     if t.user_is_service == Some(true) {
         return Reading::Elevated("a service account");
@@ -106,9 +104,6 @@ pub fn reading(t: TokenFacts) -> Reading {
     }
     if t.elevation_type == Some(ElevationType::Full) {
         return Reading::Elevated("a full token");
-    }
-    if t.integrity_rid.is_some_and(|rid| rid >= 0x3000) {
-        return Reading::Elevated("a high or system integrity token");
     }
     if t.user_is_service.is_none() {
         return Reading::Unknown("the token's user could not be read");
@@ -183,14 +178,24 @@ mod tests {
     }
 
     #[test]
-    fn a_full_flagged_or_high_integrity_token_is_elevated() {
+    fn a_full_or_flagged_token_is_elevated() {
         assert!(reading(read_in_full(2, false)).is_elevated());
         assert!(reading(read_in_full(3, true)).is_elevated());
+    }
+
+    #[test]
+    fn the_integrity_level_decides_nothing() {
         let high = TokenFacts {
             integrity_rid: Some(0x3000),
             ..read_in_full(1, false)
         };
-        assert!(reading(high).is_elevated());
+        assert_eq!(reading(high), Reading::NotElevated);
+        let unread = TokenFacts {
+            integrity_rid: None,
+            ..read_in_full(1, false)
+        };
+        assert_eq!(reading(unread), Reading::NotElevated);
+        assert!(reading(read_in_full(1, true)).is_elevated());
     }
 
     #[test]

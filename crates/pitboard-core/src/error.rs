@@ -585,11 +585,15 @@ pub enum Error {
     )]
     SignInInProgress,
 
-    /// This process runs as root or under sudo, or the system could not say whether it
-    /// does, so Pitboard changes nothing: the one gate every change passes refused it. `why`
-    /// is how it runs, as the host said it, and `None` where the host could not say.
-    #[error("{}", elevated(*why))]
+    /// This process runs as root or under sudo, or elevated on Windows, or the system could
+    /// not say whether it does, so Pitboard changes nothing: the one gate every change passes
+    /// refused it. `why` is how it runs, as the host said it, and `None` where the host could
+    /// not say.
+    #[error("{}", crate::words::elevated(crate::host::OS, *why).refusal)]
     Elevated { why: Option<&'static str> },
+
+    #[error("{}", crate::words::too_old(*build).refusal)]
+    SystemTooOld { build: Option<u32> },
 
     /// This is a Windows build of a release made before Pitboard for Windows is released, so
     /// it does nothing ([`crate::release`]). Kept once Windows is released, where it never
@@ -681,6 +685,7 @@ impl Error {
             RenewalFailed { .. } => "renewal_failed",
             SignInInProgress => "sign_in_in_progress",
             Elevated { .. } => "elevated",
+            SystemTooOld { .. } => "system_too_old",
             WindowsNotReleased => "windows_not_released",
             Usage(_) => "usage",
             Store(e) => e.code(),
@@ -736,20 +741,6 @@ impl Error {
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
-
-/// What the gate says when it refuses: the same for root and for sudo, since the way out is
-/// the same.
-fn elevated(why: Option<&str>) -> &'static str {
-    match why {
-        Some(_) => {
-            "Pitboard changes nothing when it runs as root or with sudo. Run it as yourself."
-        }
-        None => {
-            "Pitboard changes nothing when it cannot tell whether it runs as root or with sudo. \
-             Run it as yourself."
-        }
-    }
-}
 
 /// What Pitboard says of a home that is not a full path: which variable named it, and what
 /// it holds.
@@ -860,6 +851,9 @@ mod tests {
                 label: "x".into(),
                 detail: "d".into(),
             },
+            Error::Elevated { why: None },
+            Error::SystemTooOld { build: Some(22631) },
+            Error::WindowsNotReleased,
         ];
         let mut codes: Vec<&str> = samples.iter().map(Error::code).collect();
         codes.sort_unstable();

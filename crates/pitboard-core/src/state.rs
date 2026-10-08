@@ -691,6 +691,10 @@ mod tests {
     /// serves every slot on a machine. A record of what was switched to in one slot says
     /// nothing about another, so it is not carried over.
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W16: Pitboard writing, replacing and removing files on Windows"
+    )]
     fn what_was_active_in_another_slot_is_not_claimed_here() {
         let home = std::env::temp_dir().join(format!("pitboard-slots-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&home);
@@ -731,6 +735,10 @@ mod tests {
     /// `CLAUDE_CONFIG_DIR` picks Claude Code's keychain item. A record made under one home
     /// says nothing about another, and says nothing about Claude Code's at all.
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W16: Pitboard writing, replacing and removing files on Windows"
+    )]
     fn another_codex_home_is_another_codex_slot() {
         let home = std::env::temp_dir().join(format!(
             "pitboard-codex-slots-{}-{:?}",

@@ -14,6 +14,10 @@ use crate::service::Permit;
 /// The account is kept, the label is kept, and the copy that cannot work is dropped, so the
 /// way back is one sign-in rather than an enrolment.
 #[test]
+#[cfg_attr(
+    windows,
+    ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
+)]
 fn a_parked_login_anthropic_refuses_is_not_installed() {
     let m = machine("refused-park");
     m.api
@@ -77,6 +81,10 @@ fn a_parked_login_anthropic_refuses_is_not_installed() {
 /// A park filed under the wrong label is the failure the identity check exists to prevent,
 /// caught on the way in rather than after both accounts have moved.
 #[test]
+#[cfg_attr(
+    windows,
+    ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
+)]
 fn a_parked_login_that_belongs_to_another_account_is_refused() {
     let m = machine("misfiled-park");
     m.api
@@ -109,6 +117,10 @@ fn a_parked_login_that_belongs_to_another_account_is_refused() {
 /// With nobody to ask about the login going in, the answer is to do nothing. The login that
 /// is working is worth more than the switch.
 #[test]
+#[cfg_attr(
+    windows,
+    ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
+)]
 fn a_switch_will_not_install_a_login_it_could_not_ask_about() {
     let m = machine("offline-in");
     m.api
@@ -140,6 +152,10 @@ fn a_switch_will_not_install_a_login_it_could_not_ask_about() {
 /// The ordinary path, kept honest: a park that answers for the account it is filed under is
 /// installed, and asking about it costs one round trip and no writes.
 #[test]
+#[cfg_attr(
+    windows,
+    ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
+)]
 fn a_park_that_answers_for_its_own_account_is_installed() {
     let m = machine("proved");
     let settled = settle(&m.ctx, Permit::for_a_test(), None)
@@ -166,6 +182,7 @@ fn a_park_that_answers_for_its_own_account_is_installed() {
 /// no login anywhere it looks means Pitboard is looking in the wrong place, and writing a
 /// login there would put it where nobody reads.
 #[test]
+#[cfg_attr(windows, ignore = "W22: switching Claude Code on Windows")]
 fn a_login_pitboard_cannot_find_is_not_the_same_as_nobody_being_signed_in() {
     let m = machine("elsewhere");
 

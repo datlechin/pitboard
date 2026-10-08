@@ -20,6 +20,7 @@ use crate::{AppCore, Made};
 use pitboard_core::api::Owner;
 use pitboard_core::app::AppFile;
 use pitboard_core::context::Context;
+use pitboard_core::host::{OS, Os};
 use pitboard_core::provider::ProviderId;
 use pitboard_core::service;
 use pitboard_core::state::Key;
@@ -271,8 +272,8 @@ impl Machine {
             .with_user("dana".into())
             // Nothing on this machine's own `PATH` is ever found.
             .with_search_path(String::new())
-            .with_claude_program(root.join("tools").join("claude"))
-            .with_codex_program(root.join("tools").join("codex"))
+            .with_claude_program(Machine::program_in(&root, ProviderId::Claude))
+            .with_codex_program(Machine::program_in(&root, ProviderId::Codex))
             .with_schedule_program(Machine::helper_in(&root))
             .with_memory_stores(Arc::clone(&host))
             .with_scripted_api(Arc::clone(&api));
@@ -305,6 +306,16 @@ impl Machine {
     /// The machine's home.
     pub(crate) fn home(&self) -> PathBuf {
         self.root().join("home")
+    }
+
+    // Windows runs a file by its extension, so this matches what `refusing_program` writes.
+    fn program_in(root: &Path, tool: ProviderId) -> PathBuf {
+        let name = tool.program();
+        root.join("tools").join(match OS {
+            Os::MacOs | Os::Linux => name.to_owned(),
+            Os::Windows if cfg!(test) => format!("{name}.exe"),
+            Os::Windows => format!("{name}.cmd"),
+        })
     }
 
     /// The command line inside a stand-in app in the fixture's folder, which the schedule
@@ -726,7 +737,7 @@ pub(crate) fn make(world: World, folder: Folder) -> Result<Launched, Unmade> {
 /// schedule's scheduler starts nothing. Were one run, it would refuse and do nothing.
 fn install(machine: &Machine, tools: &[ProviderId]) -> Result<(), Unmade> {
     for &tool in tools {
-        never_run(&machine.root().join("tools").join(tool.program()))?;
+        never_run(&Machine::program_in(machine.root(), tool))?;
     }
     never_run(&machine.helper())?;
     std::fs::create_dir_all(machine.bin())?;
@@ -761,7 +772,11 @@ fn refusing_program(path: &Path) -> Result<(), Unmade> {
 /// where it is run.
 #[cfg(not(test))]
 fn refusing_program(path: &Path) -> Result<(), Unmade> {
-    std::fs::write(path, "#!/bin/sh\nexit 64\n")?;
+    let script = match OS {
+        Os::MacOs | Os::Linux => "#!/bin/sh\nexit 64\n",
+        Os::Windows => "@exit /b 64\r\n",
+    };
+    std::fs::write(path, script)?;
     Ok(files::make_runnable(path)?)
 }
 

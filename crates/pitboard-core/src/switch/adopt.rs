@@ -149,6 +149,10 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W16: Pitboard writing, replacing and removing files on Windows"
+    )]
     fn a_home_from_another_machine_keeps_its_accounts_and_loses_its_logins() {
         let (ctx, mem, _scratch) = machine("takeover");
         let service = from_elsewhere(&ctx, &mem);
@@ -191,6 +195,10 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W16: Pitboard writing, replacing and removing files on Windows"
+    )]
     fn adopting_a_home_that_is_already_this_machines_does_nothing() {
         let (ctx, _mem, _scratch) = machine("nothing-to-do");
         let mut state = State::default();
@@ -217,6 +225,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(windows, ignore = "W15: files made private to the person on Windows")]
     fn adopting_an_empty_home_is_not_an_error() {
         let (ctx, _mem, _scratch) = machine("empty");
         assert_eq!(adopt(&ctx, Permit::for_a_test()).expect("adopting"), None);

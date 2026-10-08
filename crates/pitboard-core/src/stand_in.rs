@@ -759,6 +759,7 @@ mod tests {
     /// as `codex login` and Claude Code leave one. Where the variable is unset or empty,
     /// nothing is written and it exits 65.
     #[test]
+    #[cfg_attr(windows, ignore = "W15: files made private to the person on Windows")]
     fn a_login_is_written_where_the_environment_says_and_nowhere_else() {
         let scratch = Scratch::new("login");
         let script = plays(
@@ -963,12 +964,15 @@ mod tests {
         let scratch = Scratch::new("built");
         let test = scratch
             .0
-            .join("debug/deps/switch_round_trip-0123456789abcdef");
+            .join("debug")
+            .join("deps")
+            .join("switch_round_trip-0123456789abcdef");
         let missing = built_for(&test).expect_err("nothing is built");
         let said = missing.to_string();
         let at = scratch
             .0
-            .join("debug/examples")
+            .join("debug")
+            .join("examples")
             .join(format!("stand-in{}", std::env::consts::EXE_SUFFIX));
         assert!(
             said.contains("`cargo build -p pitboard --example stand-in`"),

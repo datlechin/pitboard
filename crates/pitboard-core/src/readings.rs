@@ -185,6 +185,10 @@ mod tests {
     /// The owner's panes: a busy one had recorded 22% when an idle one, still holding the
     /// 20% of its last response, ran after it. Whoever writes last, the 22% stands.
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W16: Pitboard writing, replacing and removing files on Windows"
+    )]
     fn a_reading_never_moves_backwards_whoever_writes_last() {
         let (ctx, _scratch) = machine("backwards");
         remember(
@@ -216,6 +220,10 @@ mod tests {
     /// A status line runs in every open session, as often as every second, and what it
     /// offers is mostly what is already here.
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W16: Pitboard writing, replacing and removing files on Windows"
+    )]
     fn a_reading_that_changes_nothing_leaves_the_file_alone() {
         let (ctx, _scratch) = machine("unchanged");
         remember(
@@ -246,6 +254,10 @@ mod tests {
     /// so the 100% stands until Pitboard's next answer from Anthropic, which can. From there
     /// sessions move the lower share forward again.
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W16: Pitboard writing, replacing and removing files on Windows"
+    )]
     fn a_banked_reset_is_recorded_by_the_next_answer_and_followed_by_sessions() {
         let (ctx, _scratch) = machine("banked");
         let weekly = |ctx: &Context| load(ctx)["work"].windows[0].percent;
@@ -284,6 +296,10 @@ mod tests {
     /// finds nothing used is recorded once, and every read after it that finds the same
     /// leaves the file alone.
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W16: Pitboard writing, replacing and removing files on Windows"
+    )]
     fn a_window_past_its_reset_is_recorded_reset_once() {
         let (ctx, _scratch) = machine("reset");
         let mut full = reading("session", 100.0, Some(NOW - 7_200));

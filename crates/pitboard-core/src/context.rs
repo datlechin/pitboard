@@ -631,6 +631,7 @@ mod tests {
     /// refused as one whose home is not a full path. It was read as unset, which pointed
     /// Pitboard at `~/.claude`, where no Claude Code started with it keeps anything.
     #[test]
+    #[cfg_attr(windows, ignore = "W14: Pitboard's own folder on Windows")]
     fn an_explicit_context_reads_claude_codes_settings_the_way_the_environment_does() {
         let ctx = Context::new(PathBuf::from("/home/x"))
             .with_claude_config_dir(String::new())
@@ -717,6 +718,7 @@ mod tests {
     /// The command line reads the environment it is handed rather than this process's, so
     /// every variable can be tried without changing what the tests themselves run in.
     #[test]
+    #[cfg_attr(windows, ignore = "W14: Pitboard's own folder on Windows")]
     fn the_command_line_reads_the_environment_it_is_given() {
         let env: Environment = [
             ("HOME", "/Users/x"),
@@ -766,6 +768,7 @@ mod tests {
     /// is where the app has always looked. The command line took an empty path instead, and
     /// so kept its files in `.pitboard` wherever it was run from.
     #[test]
+    #[cfg_attr(windows, ignore = "W14: the account's own home on Windows")]
     fn without_home_the_home_is_the_accounts_own() {
         let _real = crate::host::user::testing::reaching_the_real_home();
         let own = crate::host::user::home().expect("this account has a home");

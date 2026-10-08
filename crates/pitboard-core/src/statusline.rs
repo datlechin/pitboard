@@ -622,6 +622,10 @@ mod tests {
     /// The config names the organisation as well as the person, and the line is about the
     /// account in that organisation, with the person's other one beside it.
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W16: Pitboard writing, replacing and removing files on Windows"
+    )]
     fn the_account_in_use_is_the_one_in_the_organisation_the_config_names() {
         let (ctx, _scratch) = machine("organisations");
         let mut accounts = state();
@@ -659,6 +663,10 @@ mod tests {
     /// kept only when it is newer. It used to be recorded only when what was remembered was
     /// a quarter of an hour old, and then over whatever was there.
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W16: Pitboard writing, replacing and removing files on Windows"
+    )]
     fn the_sessions_numbers_are_recorded_when_they_are_newer() {
         let (ctx, _scratch) = machine("records");
         crate::state::save(&ctx, Permit::for_a_test(), &state()).expect("an account index");
@@ -684,6 +692,10 @@ mod tests {
     /// recorded as a session's guess, a weekly limit at 70% took the menu bar from the
     /// five-hour limit that binds.
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W16: Pitboard writing, replacing and removing files on Windows"
+    )]
     fn a_session_moves_the_numbers_and_leaves_what_only_anthropic_says() {
         let (ctx, _scratch) = machine("leaves");
         crate::state::save(&ctx, Permit::for_a_test(), &state()).expect("an account index");
@@ -719,6 +731,10 @@ mod tests {
     /// as the account switched to, their later resets stood over every answer Anthropic gave
     /// about it until its own windows reset: days, for the weekly limit.
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W16: Pitboard writing, replacing and removing files on Windows"
+    )]
     fn a_session_holding_the_account_before_a_switch_is_not_recorded_as_the_one_after() {
         let (ctx, _scratch) = machine("switched");
         crate::state::save(&ctx, Permit::for_a_test(), &state()).expect("an account index");
@@ -765,6 +781,10 @@ mod tests {
     /// its windows to be its own. An idle session still holding its numbers had them recorded
     /// as the account in use, over what Anthropic went on to say, until those windows reset.
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W16: Pitboard writing, replacing and removing files on Windows"
+    )]
     fn a_session_holding_a_forgotten_accounts_numbers_is_not_recorded_as_the_one_in_use() {
         let (ctx, _scratch) = machine("forgotten");
         let mut accounts = state();
@@ -808,6 +828,10 @@ mod tests {
     /// Pitboard has no reading of an account it does not know to tell its windows by. An idle
     /// session holding that account's numbers had them recorded as the one signed in after.
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W16: Pitboard writing, replacing and removing files on Windows"
+    )]
     fn a_session_holding_an_unenrolled_accounts_numbers_is_not_recorded_after_a_login() {
         let (ctx, _scratch) = machine("unenrolled");
         crate::state::save(&ctx, Permit::for_a_test(), &state()).expect("an account index");
@@ -834,6 +858,10 @@ mod tests {
     /// last, which can be any account's: it may have been open since before a switch. They
     /// are left out, and what its next response moves is this account's.
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W16: Pitboard writing, replacing and removing files on Windows"
+    )]
     fn a_session_seen_for_the_first_time_offers_nothing_until_its_next_response() {
         let (ctx, _scratch) = machine("first");
         crate::state::save(&ctx, Permit::for_a_test(), &state()).expect("an account index");
@@ -866,6 +894,10 @@ mod tests {
     /// been on either. One on the account before whose five-hour window had just reset has a
     /// window no reading has, so nothing else shows whose it is.
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W16: Pitboard writing, replacing and removing files on Windows"
+    )]
     fn what_a_session_passes_as_the_account_named_changes_is_not_recorded() {
         let (ctx, _scratch) = machine("changed");
         crate::state::save(&ctx, Permit::for_a_test(), &state()).expect("an account index");
@@ -897,6 +929,10 @@ mod tests {
     /// responses are that account's. One nothing has read has no windows to know them by,
     /// so only the time says so.
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W16: Pitboard writing, replacing and removing files on Windows"
+    )]
     fn nothing_is_recorded_while_sessions_are_still_taking_up_a_switch() {
         let (ctx, _scratch) = machine("adopting");
         let mut switched = state();
@@ -934,6 +970,10 @@ mod tests {
     /// can run twice within it: once idle, as the config changes under it, and again with a
     /// response the account before served it.
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W16: Pitboard writing, replacing and removing files on Windows"
+    )]
     fn nothing_is_recorded_in_the_second_the_account_is_put_to_use() {
         let (ctx, _scratch) = machine("same-second");
         let mut switched = state();
@@ -961,6 +1001,10 @@ mod tests {
     /// before's with the account after named both times. Where Pitboard has read the
     /// account before, its windows show whose the response is.
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W16: Pitboard writing, replacing and removing files on Windows"
+    )]
     fn a_response_from_the_account_before_a_login_is_known_by_its_windows() {
         let (ctx, _scratch) = machine("login");
         crate::state::save(&ctx, Permit::for_a_test(), &state()).expect("an account index");
@@ -985,6 +1029,10 @@ mod tests {
     /// can be holding any account's. Recorded, it put the share of a window that was over
     /// into a reading, where the menu bar and the command line showed it.
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W16: Pitboard writing, replacing and removing files on Windows"
+    )]
     fn a_window_past_its_reset_is_not_recorded() {
         let (ctx, _scratch) = machine("passed");
         crate::state::save(&ctx, Permit::for_a_test(), &state()).expect("an account index");
@@ -1005,6 +1053,10 @@ mod tests {
     /// the weekly window left to time it by, the app waited a hundred minutes to ask again
     /// rather than three.
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W16: Pitboard writing, replacing and removing files on Windows"
+    )]
     fn a_window_that_resets_stays_in_the_reading_with_nothing_used() {
         let (ctx, _scratch) = machine("reset");
         crate::state::save(&ctx, Permit::for_a_test(), &state()).expect("an account index");
@@ -1040,6 +1092,10 @@ mod tests {
     /// account has is this account's own. It is how a session records the window after one
     /// that ran out, before anybody has asked Anthropic.
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W16: Pitboard writing, replacing and removing files on Windows"
+    )]
     fn a_session_still_records_its_own_accounts_next_window() {
         let (ctx, _scratch) = machine("next");
         crate::state::save(&ctx, Permit::for_a_test(), &state()).expect("an account index");
@@ -1074,6 +1130,10 @@ mod tests {
     /// Two accounts' windows can reset within a minute of each other. When the account in
     /// use has that window too, the session's numbers can be its own, and they are offered.
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W16: Pitboard writing, replacing and removing files on Windows"
+    )]
     fn a_window_both_accounts_have_is_still_offered() {
         let (ctx, _scratch) = machine("coincident");
         crate::state::save(&ctx, Permit::for_a_test(), &state()).expect("an account index");

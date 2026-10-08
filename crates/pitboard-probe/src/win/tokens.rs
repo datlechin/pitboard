@@ -1,4 +1,4 @@
-//! A1 and the runner facts: the process token as W12 will read it, the owner a file made
+//! A1 and the runner facts: the process token as Pitboard reads it, the owner a file made
 //! with it gets, and a Safer normal-user token computed from it (the CI fallback the check
 //! asks about: it must read as not elevated, and a program started with it must run).
 
@@ -22,7 +22,7 @@ use windows_sys::Win32::System::Threading::{
     CREATE_NO_WINDOW, GetCurrentProcess, OpenProcessToken,
 };
 
-/// What W12 will read from a token, with every principal named by relation.
+/// What Pitboard reads from a token, with every principal named by relation.
 pub fn describe(token: &Token) -> Value {
     let facts = token.facts();
     let reading = elevation::reading(facts);

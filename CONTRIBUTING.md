@@ -49,10 +49,15 @@ To work on the app, you need a Mac with Xcode, and its Swift must be 6.2 or late
    it, and look at the diff after. An empty or surprisingly small diff is the symptom.
 
 3. Never write to a keychain item that holds a real login. Each test names its items after
-   itself and calls `common::guard_not_live` before the first write. A Codex test that
-   writes points `CODEX_HOME` at a scratch directory and never writes to `~/.codex`. The
-   one ignored test that reads a real `auth.json` only reads it. Nothing runs `codex login`
-   or `codex logout` against a real home, because both revoke the login stored there.
+   itself and calls `common::guard_not_live` before the first write, which refuses by
+   pattern every name a real login may be kept under, in the keychain and in Windows'
+   Credential Manager: every Claude Code slot but the one hashed from the test's own
+   folder, in any spelling or piece, Codex's `cli|` and `secrets|` targets and anything
+   under `Codex MCP Credentials`. A test writes only `pitboard-citest-*` names, the parks
+   Pitboard names, and its own slot. A Codex test that writes points `CODEX_HOME` at a
+   scratch directory and never writes to `~/.codex`. The one ignored test that reads a real
+   `auth.json` only reads it. Nothing runs `codex login` or `codex logout` against a real
+   home, because both revoke the login stored there.
 
 4. Measure the tool, do not guess at it. Claude Code's behaviour here is undocumented,
    Codex's moves with its source, and both ship several times a week. A claim about either
@@ -125,7 +130,8 @@ only user is root, fails most of the integration tests in `crates/pitboard/tests
 `crates/pitboard-ffi/src/launch.rs`, which make the app's core on the real machine as the
 app does, fail with `elevated`. The other unit tests and the fixtures run on `MemoryHost`,
 which runs as the person unless a test says otherwise. Run the tests as a user of your own,
-never as root on a machine that holds logins.
+never as root on a machine that holds logins. On Windows the same goes for an elevated
+terminal: [Windows](#windows) says how the tests run there.
 
 A unit test reaches no real home. `Context::for_unit_test` points every home, `HOME`,
 Pitboard's directory, Claude Code's config directory and Codex's, at one folder of that
@@ -316,28 +322,42 @@ A build for working on Pitboard on Windows is opened to it before its release wi
 feature, because crates.io lists a published crate's features and anybody could turn one on
 with `cargo install`. No release, script or package ever passes it. The core's own unit
 tests are opened by `cfg(test)`. An opened build reaches the Windows face,
-`crates/pitboard-core/src/host/windows`, which refuses whatever is not built yet through
-errors its callers already have: nobody can tell whether it runs elevated, so every change
-is refused, and no file is made, no process listed and no store read.
+`crates/pitboard-core/src/host/windows`. It reads this process's token and the build of
+Windows, and refuses every change from an elevated terminal (`elevated`) or on a build older
+than Windows 11 24H2's 26100 (`system_too_old`), which Windows Server 2025 shares. As the
+person, on 24H2 or later, a change passes that gate and meets the parts not built yet, which
+refuse through errors their callers already have: no file is made, no process listed and no
+store read.
 
 On Windows 11 24H2 or later, x64 or ARM64, with Rust's MSVC toolchain, and on ARM64 the
 clang ring compiles its C with there, follow [AGENTS.md](AGENTS.md#on-windows), then run, in
-PowerShell:
+PowerShell from a terminal that is not elevated (not Run as administrator), as a Windows
+account that holds no real login:
 
 ```powershell
 $env:RUSTFLAGS = "-D warnings -C target-feature=+crt-static --cfg pitboard_unreleased_windows"
 cargo clippy --workspace --all-targets --locked
 cargo clippy -p pitboard-ffi --all-targets --locked --features fixture
-cargo test --locked -p pitboard-core --lib -- host::windows release
-cargo test --locked -p pitboard --test windows_refuses
-cargo test --locked -p pitboard-sites -p pitboard-share-ffi
+cargo test --locked
+cargo test --locked -p pitboard-ffi --features fixture
 ```
 
 `RUSTFLAGS` replaces every target's own rustflags, so it names the static C runtime the
-releases are built with. Until the integration tests run on Windows, these are the tests
-that need no part of the Windows face still to be built. A test that cannot pass on Windows
+releases are built with. The whole suite runs on Windows. A test that cannot pass there
 until a later pull request says which, with `#[cfg_attr(windows, ignore = "W<n>: <what it
-waits on>")]`, and in no other way.
+waits on>")]`, and in no other way: no filter and no `--skip`, and libtest lists it as
+ignored with that reason. The tests run as the person: from an elevated terminal, or as an
+account whose every program runs elevated, as with User Account Control off, the face's
+`as_the_person_the_gate_lets_a_change_through` and `windows_refuses` fail, saying so.
+
+The integration tests' harness gives every command a test runs a scratch folder of the
+test's own for each folder of a person's account, `USERPROFILE`, `HOME`, `APPDATA` and
+`LOCALAPPDATA`, as for each tool's home, and a `PATH` of the test's own programs and
+Windows' own folders alone, so nothing installed is found. It refuses, here as on every
+system, a scratch folder that is, holds or lies in the account's real `.claude`,
+`.claude.json`, `.codex` or `%LOCALAPPDATA%\Pitboard`, compared in any case and through
+every link; the rest of the profile, where `%TEMP%` is, it allows. Every program it puts in
+place of a tool is the compiled stand-in, named with `.exe`.
 
 From a Mac or Linux, `cargo check --target x86_64-pc-windows-msvc` checks only
 `pitboard-sites` and `pitboard-share-ffi`: ring's build script compiles C against MSVC's
@@ -349,6 +369,37 @@ for that machine, that `--version` answers, that the program carries its C runti
 leave every folder they are pointed at empty. `windows_refuses` runs against a build without
 the cfg as well, which refuses every one of its commands that way. `windows-msrv` checks the
 workspace there with Rust 1.91.
+
+The job's own user is elevated on both images, in every program it starts, so CI runs every
+Windows test as a fresh standard user instead, through
+`.github/scripts/test-as-standard-user.ps1`. The script builds the tests as the job's user,
+makes a local standard user, grants it read and run on the workspace and the target folder,
+and starts each test program as it with its profile loaded and its own profile's variables,
+from a folder of its own, with the variables Cargo gives a test. Before the tests it checks
+that the machine-wide places a tool may take its settings from are absent, so the tests
+read only what they put there: Codex's `%ProgramData%\OpenAI\Codex`, which Codex's register
+names, pending W21, and Claude Code's `C:\Program Files\ClaudeCode` and policy keys, which
+W17 is to read from its Windows build and Claude Code's register does not record yet. After
+them it checks that nothing was left behind, and fails the step if anything was:
+`pitboard-probe credman-names --leak-check`, as the standard user, lists the names of the
+live login families' items and of `pitboard-citest-*` items in its Credential Manager,
+never a blob, and fails on any; no task is in Task Scheduler's `\Pitboard\`; the user's
+real `.claude`, `.claude.json`, `.codex` and `%LOCALAPPDATA%\Pitboard` do not exist; and
+nothing appeared among the job user's own. It takes the grants back and removes the user
+afterwards. Give it what `cargo test` takes, the probe it lists Credential Manager with,
+and what the test programs take:
+
+```powershell
+./.github/scripts/test-as-standard-user.ps1 -Cargo '--locked --workspace' `
+  -Probe target/debug/pitboard-probe.exe
+```
+
+It makes and removes a Windows account, grants it rights on folders and, where Developer
+Mode is off, changes who holds the symbolic-link right, so it is for CI's disposable runners
+only, never a machine of your own: it refuses to run anywhere but a GitHub-hosted runner, as
+`runner-facts.ps1` does. One step runs as the job's user on purpose: the opened `pitboard.exe`
+refuses `use` and `renew` there with `elevated`, in the words for an account whose every
+program runs elevated, and writes nothing.
 
 ## Tool registers
 

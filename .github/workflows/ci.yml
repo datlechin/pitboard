@@ -70,7 +70,7 @@ jobs:
             triple: aarch64-pc-windows-msvc
             machine: ARM64
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 60
+    timeout-minutes: 90
     env:
       # RUSTFLAGS replaces every target's own rustflags, so the static C runtime a Windows
       # release is built with is named here. The cfg opens the build to Windows before Windows
@@ -172,25 +172,62 @@ jobs:
           # The runner ends a PowerShell step with the last program's exit code, which here is
           # a refusal's.
           exit 0
+      # Built first: every test step below lists Credential Manager with it for the leak check.
+      - run: cargo build --locked -p pitboard-probe
+      # Tests from here run as a fresh standard user: the job's user is elevated in every program.
       # windows_refuses as it runs against a build that is not opened: every one of its
       # changes and reads refuses with windows_not_released, and every folder stays empty.
-      - env:
+      - name: windows_refuses, not opened, as a standard user
+        shell: pwsh
+        env:
           RUSTFLAGS: -D warnings -C target-feature=+crt-static
           CARGO_TARGET_DIR: target/gated
-        run: cargo test --locked -p pitboard --test windows_refuses
+        run: >
+          ./.github/scripts/test-as-standard-user.ps1 -Cargo '--locked -p pitboard --test windows_refuses'
+          -Probe target/debug/pitboard-probe.exe
       - run: cargo clippy --workspace --all-targets --locked
       - run: cargo clippy -p pitboard-ffi --all-targets --locked --features fixture
-      # Until the integration tests run here (W13), these are the tests that need no part of
-      # the Windows face not built yet: the gate, the face's own refusals, a Windows build run
-      # in scratch folders, and the two crates that read links and touch nothing.
-      - run: cargo test --locked -p pitboard-core --lib -- host::windows release
-      - run: cargo test --locked -p pitboard --test windows_refuses
-      - run: cargo test --locked -p pitboard-sites -p pitboard-share-ffi
-      # The measurement probe (W11). It is built on both legs, so a Windows API it calls that
-      # moved is caught here, and its tests run as on every system. It is never built by
-      # release.yml (publish = false).
-      - run: cargo build --locked -p pitboard-probe
-      - run: cargo test --locked -p pitboard-probe
+      # No filter and no --skip: a test that waits for a later pull request says so in its attribute.
+      - name: The workspace's tests, as a standard user
+        shell: pwsh
+        run: >
+          ./.github/scripts/test-as-standard-user.ps1 -Cargo '--locked --workspace'
+          -Probe target/debug/pitboard-probe.exe
+      - name: pitboard-ffi with its fixtures, as a standard user
+        shell: pwsh
+        run: >
+          ./.github/scripts/test-as-standard-user.ps1 -Cargo '--locked -p pitboard-ffi --features fixture'
+          -Probe target/debug/pitboard-probe.exe
+      # Runs the opened pitboard.exe the workspace's tests built.
+      - name: An opened build refuses a change as the elevated job user
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $exe = (Resolve-Path 'target\debug\pitboard.exe').Path
+          $root = Join-Path $env:RUNNER_TEMP 'elevated-refusal'
+          $folders = 'USERPROFILE', 'HOME', 'APPDATA', 'LOCALAPPDATA', 'CODEX_HOME', 'CLAUDE_CONFIG_DIR', 'PITBOARD_HOME'
+          foreach ($folder in $folders) {
+            $path = Join-Path $root $folder
+            New-Item -ItemType Directory -Force -Path $path | Out-Null
+            Set-Item -Path "env:$folder" -Value $path
+          }
+          foreach ($command in @(@('use', 'x', '--json'), @('renew', '--json'))) {
+            $printed = & $exe @command | Out-String
+            $exit = $LASTEXITCODE
+            $refusal = ($printed | ConvertFrom-Json).error
+            if ($exit -ne 1 -or $refusal.code -ne 'elevated') {
+              throw "pitboard $($command -join ' ') exited $exit with $($refusal.code)`: $printed"
+            }
+            if ($refusal.message -notmatch 'as every program this Windows account starts does') {
+              throw "the job user's token is not split, so the refusal names every program: $($refusal.message)"
+            }
+            Write-Output "pitboard $($command -join ' '): $($refusal.message)"
+          }
+          foreach ($folder in $folders) {
+            $left = @(Get-ChildItem -Force -Path (Join-Path $root $folder))
+            if ($left.Count -ne 0) { throw "$folder holds $($left.Name -join ', ')" }
+          }
+          exit 0
       # What the owner's VM session runs: the probe's four programs and the gated
       # pitboard.exe a 0.x release is built as, which refuses everything. The VM fetches
       # nothing itself, so the owner copies these in. Uploaded before the runner facts, so a

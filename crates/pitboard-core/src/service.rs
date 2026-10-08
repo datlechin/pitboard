@@ -6,7 +6,7 @@ use crate::context::Context;
 use crate::doctor::{self, Diagnosis};
 use crate::error::{Error, Result};
 use crate::holder::{self, capitalised};
-use crate::host::Elevation;
+use crate::host::{Elevation, Floor};
 use crate::provider::ProviderId;
 use crate::state::{self, Account, Key};
 use crate::switch::{self, Enrolled, Outcome, Recovered, Renewal, Settled, SignIn};
@@ -39,19 +39,26 @@ impl Permit {
 }
 
 /// The one gate every change passes: whether this process may change anything here, as the
-/// host says. A process that runs as root or under sudo changes nothing, and nor does one
-/// the host cannot place: a file it wrote would be root's, and a keychain item might be,
-/// where the person's own runs might never read, replace or remove it again.
+/// host says. A process that runs as root or under sudo, or elevated on Windows, changes
+/// nothing, and nor does one the host cannot place: a file it wrote would be root's or the
+/// administrators', and a keychain item might be, where the person's own runs might never
+/// read, replace or remove it again.
 ///
 /// Nor does one whose environment names a home that is empty or relative
 /// ([`crate::home::check_absolute`]): what it wrote would land under whichever folder it
 /// was run from. Asked after elevation, so `sudo` is what a run under it is told first.
 ///
-/// Before either, a build that may do nothing at all changes nothing: a Windows build of a
+/// Before those, a build that may do nothing at all changes nothing: a Windows build of a
 /// release made before Pitboard for Windows is released ([`crate::release`]). So no writer
-/// and no token exchange runs there, even for a caller that forgot to ask.
+/// and no token exchange runs there, even for a caller that forgot to ask. Then a Windows
+/// older than 11 24H2 ([`Floor`]): asked before elevation, which cannot change it.
 pub(crate) fn gate(ctx: &Context) -> Result<Permit> {
     crate::release::check()?;
+    match ctx.host().floor() {
+        Floor::Met => {}
+        Floor::Below { build } => return Err(Error::SystemTooOld { build: Some(build) }),
+        Floor::Unknown => return Err(Error::SystemTooOld { build: None }),
+    }
     match ctx.host().elevation(ctx) {
         Elevation::Normal => {}
         Elevation::Elevated { why } => return Err(Error::Elevated { why: Some(why) }),
@@ -140,16 +147,27 @@ pub enum Warning {
     /// stops at it until it can be finished or is given up on. The refusal that change would
     /// make, said by a read so that nobody has to make a change to find out.
     SwitchStuck(Error),
-    /// This process may change nothing, because it runs as root or under sudo, or nobody
-    /// could tell whether it does, so a read answers from what Pitboard last measured: it
-    /// renews nothing, asks nobody and writes nothing. `why` is how it runs, as the host
-    /// said it, and `None` where the host could not say.
+    /// This process may change nothing, because it runs as root or under sudo, or elevated on
+    /// Windows, or nobody could tell whether it does, so a read answers from what Pitboard
+    /// last measured: it renews nothing, asks nobody and writes nothing. `why` is how it runs,
+    /// as the host said it, and `None` where the host could not say.
     ReadOnly {
         why: Option<&'static str>,
+    },
+    ReadOnlyBelowTheFloor {
+        build: Option<u32>,
     },
 }
 
 impl Warning {
+    fn read_only(refused: &Error) -> Option<Warning> {
+        match *refused {
+            Error::Elevated { why } => Some(Warning::ReadOnly { why }),
+            Error::SystemTooOld { build } => Some(Warning::ReadOnlyBelowTheFloor { build }),
+            _ => None,
+        }
+    }
+
     /// Stable, for a program to branch on.
     pub fn code(&self) -> &'static str {
         match self {
@@ -169,7 +187,7 @@ impl Warning {
                 "sessions_unknown"
             }
             Warning::SignInParkedNotInUse { .. } => "sign_in_parked_not_in_use",
-            Warning::ReadOnly { .. } => "read_only",
+            Warning::ReadOnly { .. } | Warning::ReadOnlyBelowTheFloor { .. } => "read_only",
         }
     }
 }
@@ -280,17 +298,23 @@ impl fmt::Display for Warning {
                 tool.name(),
                 tool.login_command()
             ),
-            Warning::ReadOnly { why } => write!(
-                f,
-                "{}, so it changes nothing: these are the numbers it last measured, and it \
-                 renews no parked login and asks nobody. Run it as yourself to ask again.",
-                match why {
-                    Some(why) => format!("Pitboard runs {why}"),
-                    None => "Pitboard cannot tell whether it runs as root or with sudo".into(),
-                }
-            ),
+            Warning::ReadOnly { why } => {
+                read_only(f, &crate::words::elevated(crate::host::OS, *why))
+            }
+            Warning::ReadOnlyBelowTheFloor { build } => {
+                read_only(f, &crate::words::too_old(*build))
+            }
         }
     }
+}
+
+fn read_only(f: &mut fmt::Formatter<'_>, said: &crate::words::ChangesNothing) -> fmt::Result {
+    write!(
+        f,
+        "{}, so it changes nothing: these are the numbers it last measured, and it renews no \
+         parked login and asks nobody. {}",
+        said.because, said.to_ask_again
+    )
 }
 
 #[derive(Debug)]
@@ -370,12 +394,14 @@ impl Pitboard {
     pub fn status(&self, fresh: bool) -> Result<Done<status::Report>> {
         let permit = match self.permit() {
             Ok(permit) => permit,
-            Err(Error::Elevated { why }) => {
+            Err(refused) => {
+                let Some(warning) = Warning::read_only(&refused) else {
+                    return Err(refused);
+                };
                 let mut read = self.status_offline()?;
-                read.warnings.push(Warning::ReadOnly { why });
+                read.warnings.push(warning);
                 return Ok(read);
             }
-            Err(other) => return Err(other),
         };
         let renewed = switch::renew_parked(&self.ctx, permit);
         // Unreadable is not the same as empty: reporting it as empty would say the enrolled
@@ -1075,6 +1101,10 @@ mod tests {
     /// session that cannot read the keychain signs in with and no switch reaches. Codex has
     /// no store behind the one in use, so nothing is said of it.
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
+    )]
     fn a_switch_says_a_login_is_left_where_it_does_not_reach() {
         let m = machine("switch-fallback-login");
         let left = crate::provider::claude::live::credential_file(&m.ctx);
@@ -1119,6 +1149,10 @@ mod tests {
     /// status` never said it at all. A read says it now, in the words of the refusal, and
     /// changes nothing: the record is kept for whatever finishes it or gives up on it.
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
+    )]
     fn a_read_says_an_interrupted_switch_it_cannot_finish_is_waiting() {
         for (tool, make) in MACHINES {
             let m = stuck(make, &format!("read-stuck-{tool}"));
@@ -1146,6 +1180,10 @@ mod tests {
     /// Where only the service can say whose the live login is, a read asks it, as the next
     /// change would.
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
+    )]
     fn a_read_asks_whose_the_login_is_where_only_the_service_can_say() {
         let m = stuck_unless_asked("read-stuck-asked");
         let pitboard = Pitboard::new(m.ctx.clone());
@@ -1170,6 +1208,10 @@ mod tests {
     /// about. The rows already say who is signed in, from the tool's login and not from
     /// Pitboard's record, and the change that finishes it says what it found.
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
+    )]
     fn a_read_says_nothing_of_a_switch_the_next_change_finishes() {
         for (tool, make) in MACHINES {
             let m = interrupted(make, &format!("read-settles-{tool}"));
@@ -1190,6 +1232,10 @@ mod tests {
     /// settled under one as anywhere else, and given up on as anywhere else: giving up
     /// refused it, so the read offered a way out that could not be taken.
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
+    )]
     fn a_read_says_a_switch_is_waiting_only_where_a_change_would_stop_at_it() {
         for (tool, make) in MACHINES {
             let m = stuck(make, &format!("read-stuck-custom-{tool}"));
@@ -1238,6 +1284,10 @@ mod tests {
     /// the refusal, and changes nothing. Where only Anthropic could say whose the login is,
     /// it does not say what it cannot know.
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
+    )]
     fn a_read_that_asks_nobody_says_a_switch_is_waiting_wherever_it_can_tell() {
         for (tool, make) in MACHINES {
             let m = stuck(make, &format!("known-stuck-{tool}"));
@@ -1275,6 +1325,7 @@ mod tests {
     /// read. `doctor` and the read that asks nobody said nothing of it, as though only OpenAI
     /// could say whose the login is.
     #[test]
+    #[cfg_attr(windows, ignore = "W21: switching Codex on Windows")]
     fn whose_a_codex_login_is_is_told_without_asking_anyone() {
         let m = interrupted(codex_machine, "codex-renewed-since");
         m.sign_in(&crate::switch::harness::codex_login(
@@ -1313,6 +1364,7 @@ mod tests {
     /// Pitboard cannot read it back. Pitboard used to read only `$CODEX_HOME/config.toml`, and
     /// started the sign-in.
     #[test]
+    #[cfg_attr(windows, ignore = "W21: switching Codex on Windows")]
     fn a_codex_store_a_requirement_pins_is_refused_before_a_sign_in() {
         let m = codex_machine("codex-pinned");
         // Named where nothing is, so a sign-in that got past the refusal would find no
@@ -1370,6 +1422,10 @@ mod tests {
     /// one: the refusal, and the way out. Where only the service could tell, it says what
     /// it always said, that a switch did not finish.
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
+    )]
     fn doctor_says_a_switch_is_stuck_where_it_can_tell_without_asking() {
         for (tool, make) in MACHINES {
             let m = stuck(make, &format!("doctor-stuck-{tool}"));
@@ -1428,6 +1484,10 @@ mod tests {
     /// all anybody was told. It is settled now, recorded the way any recovery is, and
     /// reported beside the refusal.
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
+    )]
     fn a_change_refused_over_its_name_still_recovers_an_interrupted_switch() {
         for (tool, make) in MACHINES {
             for (change, verb, code, audited, refuse) in REFUSALS {
@@ -1460,6 +1520,7 @@ mod tests {
     /// A mistyped name with nothing to recover takes no lock and writes nothing but its
     /// line in the audit log.
     #[test]
+    #[cfg_attr(windows, ignore = "W21: switching Codex on Windows")]
     fn a_change_refused_over_its_name_with_nothing_interrupted_changes_nothing() {
         for (tool, make) in MACHINES {
             for (change, verb, code, audited, refuse) in REFUSALS {
@@ -1488,6 +1549,10 @@ mod tests {
     /// parking a login too big for `security`'s standard input puts it on the argument line.
     /// The change then fails, and that is still said beside the failure.
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
+    )]
     fn a_new_login_parked_after_it_did_not_hold_says_how_it_was_parked() {
         for (tool, make) in MACHINES {
             let m = make(&format!("not-installed-said-{tool}"));
@@ -1510,6 +1575,10 @@ mod tests {
     /// change: the recovery of a Claude Code switch, and not of a Codex one. What it stops
     /// is left for a later run, and the refusal is reported as it always was.
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
+    )]
     fn a_custom_claude_endpoint_stops_only_the_recovery_of_a_claude_code_switch() {
         let codex = interrupted(codex_machine, "refused-custom-codex");
         let mut ctx = codex.ctx.clone();
@@ -1536,13 +1605,54 @@ mod tests {
         );
     }
 
-    /// Every way the host can say this process may change nothing: as root, under sudo,
-    /// and with rights nobody could tell.
-    const REFUSED_AS: [Elevation; 3] = [
-        Elevation::Elevated { why: "as root" },
-        Elevation::Elevated { why: "with sudo" },
-        Elevation::Unknown,
+    #[derive(Debug, Clone, Copy)]
+    enum Refused {
+        As(Elevation),
+        On(Floor),
+    }
+
+    const REFUSED: [Refused; 6] = [
+        Refused::As(Elevation::Elevated { why: "as root" }),
+        Refused::As(Elevation::Elevated { why: "with sudo" }),
+        Refused::As(Elevation::Elevated {
+            why: crate::host::token::AS_A_SERVICE_ACCOUNT,
+        }),
+        Refused::As(Elevation::Unknown),
+        Refused::On(Floor::Below { build: 22631 }),
+        Refused::On(Floor::Unknown),
     ];
+
+    impl Refused {
+        fn said_by(self, m: &Machine) {
+            match self {
+                Refused::As(elevation) => m.mem.runs_with(elevation),
+                Refused::On(floor) => m.mem.runs_on(floor),
+            }
+        }
+
+        fn lifted(m: &Machine) {
+            m.mem.runs_with(Elevation::Normal);
+            m.mem.runs_on(Floor::Met);
+        }
+
+        fn code(self) -> &'static str {
+            match self {
+                Refused::As(_) => "elevated",
+                Refused::On(_) => "system_too_old",
+            }
+        }
+
+        fn words(self) -> crate::words::ChangesNothing {
+            match self {
+                Refused::As(Elevation::Elevated { why }) => {
+                    crate::words::elevated(crate::host::OS, Some(why))
+                }
+                Refused::As(_) => crate::words::elevated(crate::host::OS, None),
+                Refused::On(Floor::Below { build }) => crate::words::too_old(Some(build)),
+                Refused::On(_) => crate::words::too_old(None),
+            }
+        }
+    }
 
     /// What one change came to, as a change refused at the gate is reported: its error,
     /// and the warnings found on the way, of which there must be none.
@@ -1557,7 +1667,7 @@ mod tests {
 
     /// Every change a front end can ask for, by its name. `enroll_signed_in` is asked apart,
     /// since it takes a sign-in made before.
-    const CHANGES: [(&str, Change); 15] = [
+    const CHANGES: [(&str, Change); 16] = [
         ("switch_to", |p, m| {
             p.switch_to(&m.key("there").typed()).err()
         }),
@@ -1583,6 +1693,9 @@ mod tests {
             failed(p.keep_app_file(crate::app::AppFile::Preferences, "{}"))
         }),
         ("uninstall", |p, _| p.uninstall().err()),
+        ("auto_switch", |p, _| {
+            p.auto_switch(crate::autoswitch::Threshold::DEFAULT).err()
+        }),
     ];
 
     /// Everything on a machine a change could leave different: every directory and file
@@ -1629,69 +1742,100 @@ mod tests {
 
     /// Running as root or under sudo, Pitboard changed things as root: a state file, a
     /// schedule or a lock it made was root's, and a park might be, where the person's own
-    /// runs might never read or replace it again. Every change is refused now, at one gate, before it
-    /// reads, locks or records anything, and leaves the machine byte for byte as it was,
-    /// the audit log included. The machine has an interrupted switch waiting, which every
+    /// runs might never read or replace it again. Every change is refused now, at one gate,
+    /// before it reads, locks or records anything, and leaves the machine byte for byte as it
+    /// was, the audit log included. The machine has an interrupted switch waiting, which every
     /// change that settles would otherwise finish, and asks nobody.
     #[test]
-    fn every_change_is_refused_where_pitboard_runs_as_root_or_with_sudo_and_changes_nothing() {
+    #[cfg_attr(
+        windows,
+        ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
+    )]
+    fn every_change_is_refused_where_pitboard_may_change_nothing_and_changes_nothing() {
         for (tool, make) in MACHINES {
-            for elevation in REFUSED_AS {
+            for refused in REFUSED {
                 for (change, run) in CHANGES {
-                    let at = format!("{tool}, {change}, {elevation:?}");
+                    let at = format!("{tool}, {change}, {refused:?}");
                     let m = interrupted(make, &format!("gate-{tool}-{change}"));
-                    m.mem.runs_with(elevation);
+                    refused.said_by(&m);
                     let (before, asked) = (everything(&m), m.api.calls());
 
                     let failed = run(&Pitboard::new(m.ctx.clone()), &m)
                         .unwrap_or_else(|| panic!("{at}: refused"));
 
-                    assert_eq!(failed.error.code(), "elevated", "{at}: {}", failed.error);
+                    assert_eq!(
+                        failed.error.code(),
+                        refused.code(),
+                        "{at}: {}",
+                        failed.error
+                    );
                     assert!(failed.warnings.is_empty(), "{at}: {:?}", failed.warnings);
                     assert!(everything(&m) == before, "{at}: nothing changes");
                     assert_eq!(m.api.calls(), asked, "{at}: nobody is asked");
                 }
 
-                let at = format!("{tool}, enroll_signed_in, {elevation:?}");
+                let at = format!("{tool}, enroll_signed_in, {refused:?}");
                 let m = interrupted(make, &format!("gate-{tool}-enroll-signed-in"));
                 let login = crate::switch::harness::signed_in(&m, "new", "new-refresh");
-                m.mem.runs_with(elevation);
+                refused.said_by(&m);
                 let before = everything(&m);
                 let failed = Pitboard::new(m.ctx.clone())
                     .enroll_signed_in(&m.key("new").typed(), login)
                     .expect_err("refused");
-                assert_eq!(failed.error.code(), "elevated", "{at}");
+                assert_eq!(failed.error.code(), refused.code(), "{at}");
                 assert!(everything(&m) == before, "{at}: nothing changes");
             }
         }
     }
 
-    /// The gate's refusal says what to do, the same for root and for sudo, and says it
-    /// apart where nobody could tell.
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W16: Pitboard writing, replacing and removing files on Windows"
+    )]
     fn the_gate_says_why_it_refuses_and_lets_a_person_through() {
         let m = machine("gate-words");
         let pitboard = Pitboard::new(m.ctx.clone());
         assert!(pitboard.permit().is_ok(), "as the person");
-        for elevation in REFUSED_AS {
-            m.mem.runs_with(elevation);
-            let refused = pitboard.permit().expect_err("refused");
-            assert_eq!(refused.code(), "elevated");
-            assert_eq!(refused.exit_code(), 1);
-            assert_eq!(
-                refused.to_string(),
-                match elevation {
-                    Elevation::Unknown => {
-                        "Pitboard changes nothing when it cannot tell whether it runs as root \
-                         or with sudo. Run it as yourself."
-                    }
-                    _ => {
-                        "Pitboard changes nothing when it runs as root or with sudo. Run it \
-                         as yourself."
-                    }
-                },
-            );
+        for refused in REFUSED {
+            refused.said_by(&m);
+            let refusal = pitboard.permit().expect_err("refused");
+            assert_eq!(refusal.code(), refused.code(), "{refused:?}");
+            assert_eq!(refusal.exit_code(), 1, "{refused:?}");
+            assert_eq!(refusal.to_string(), refused.words().refusal, "{refused:?}");
+            Refused::lifted(&m);
+            assert!(pitboard.permit().is_ok(), "{refused:?}: lifted");
         }
+    }
+
+    #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W16: Pitboard writing, replacing and removing files on Windows"
+    )]
+    fn the_gate_lets_windows_11_24h2_through_and_says_an_older_one_first() {
+        let m = machine("gate-floor");
+        let pitboard = Pitboard::new(m.ctx.clone());
+        for build in [26100, 26200] {
+            m.mem
+                .runs_on(crate::host::windows_floor(Some((10, 0, build))));
+            assert!(pitboard.permit().is_ok(), "{build}");
+        }
+        m.mem
+            .runs_on(crate::host::windows_floor(Some((10, 0, 22631))));
+        let refused = pitboard.permit().expect_err("refused");
+        assert_eq!(refused.code(), "system_too_old");
+        assert_eq!(
+            refused.to_string(),
+            crate::words::too_old(Some(22631)).refusal
+        );
+        m.mem.runs_with(Elevation::Elevated { why: "as root" });
+        let first = pitboard.permit().expect_err("refused");
+        assert_eq!(
+            first.code(),
+            "system_too_old",
+            "the system before how it runs"
+        );
     }
 
     /// An empty or relative `HOME` made every path under it lead into the folder Pitboard
@@ -1700,6 +1844,7 @@ mod tests {
     /// every read of the accounts, with `home_not_absolute`, and nothing changes. Asked of
     /// the gate and the reads first, which change nothing whatever they answer.
     #[test]
+    #[cfg_attr(windows, ignore = "W21: switching Codex on Windows")]
     fn every_change_and_read_is_refused_where_the_home_is_not_a_full_path() {
         for home in ["", "relative"] {
             for (tool, make) in MACHINES {
@@ -1762,10 +1907,11 @@ mod tests {
     /// renews nothing, asks nobody and writes nothing. A park whose access has lapsed is
     /// there to be renewed, so a read that renewed would show it.
     #[test]
+    #[cfg_attr(windows, ignore = "W21: switching Codex on Windows")]
     fn a_read_where_pitboard_may_change_nothing_asks_nobody_and_says_why() {
         for (tool, make) in MACHINES {
-            for elevation in REFUSED_AS {
-                let at = format!("{tool}, {elevation:?}");
+            for refused in REFUSED {
+                let at = format!("{tool}, {refused:?}");
                 let m = make(&format!("gate-read-{tool}"));
                 let later = m
                     .ctx
@@ -1774,7 +1920,7 @@ mod tests {
                         crate::switch::harness::NOW + 11 * 86_400,
                     )));
                 let pitboard = Pitboard::new(later);
-                m.mem.runs_with(elevation);
+                refused.said_by(&m);
                 let (before, asked) = (everything(&m), m.api.calls());
 
                 let read = pitboard.status(false).expect("a read");
@@ -1787,15 +1933,14 @@ mod tests {
                 assert_eq!(codes.last(), Some(&"read_only"), "{at}");
                 assert_eq!(read.warnings.len(), known.warnings.len() + 1, "{at}");
                 let said = read.warnings.last().expect("said").to_string();
-                match elevation {
-                    Elevation::Elevated { why } => assert!(
-                        said.starts_with(&format!("Pitboard runs {why}, so it changes nothing")),
-                        "{at}: {said}"
-                    ),
-                    _ => assert!(said.starts_with("Pitboard cannot tell"), "{at}: {said}"),
-                }
+                let words = refused.words();
+                assert!(
+                    said.starts_with(&format!("{}, so it changes nothing", words.because)),
+                    "{at}: {said}"
+                );
+                assert!(said.ends_with(words.to_ask_again), "{at}: {said}");
 
-                m.mem.runs_with(Elevation::Normal);
+                Refused::lifted(&m);
                 let live = pitboard.status(false).expect("a read");
                 assert!(m.api.calls() > asked, "{at}: as the person, it asks");
                 assert!(
@@ -1810,6 +1955,10 @@ mod tests {
     /// too. Where this process may change nothing it draws the same line from the files as
     /// they are, and writes neither.
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W16: Pitboard writing, replacing and removing files on Windows"
+    )]
     fn the_status_line_where_pitboard_may_change_nothing_draws_the_same_line_and_writes_nothing() {
         let session = serde_json::json!({
             "session_id": "a-session",
@@ -1819,23 +1968,20 @@ mod tests {
             },
         })
         .to_string();
-        for elevation in REFUSED_AS {
+        for refused in REFUSED {
             let m = machine("gate-statusline");
             let pitboard = Pitboard::new(m.ctx.clone());
-            m.mem.runs_with(elevation);
+            refused.said_by(&m);
             let before = everything(&m);
 
-            let refused = pitboard.statusline(&session);
+            let drawn = pitboard.statusline(&session);
 
-            assert!(
-                everything(&m) == before,
-                "{elevation:?}: nothing is written"
-            );
-            m.mem.runs_with(Elevation::Normal);
-            assert_eq!(pitboard.statusline(&session), refused, "{elevation:?}");
+            assert!(everything(&m) == before, "{refused:?}: nothing is written");
+            Refused::lifted(&m);
+            assert_eq!(pitboard.statusline(&session), drawn, "{refused:?}");
             assert!(
                 crate::home::dir(&m.ctx).join("sessions.json").exists(),
-                "{elevation:?}: as the person, the session is kept"
+                "{refused:?}: as the person, the session is kept"
             );
         }
     }
@@ -1844,10 +1990,11 @@ mod tests {
     /// run that could not renew read as one where nothing was due. Refused, it says so, and
     /// asks nobody, with a park that is due to be renewed.
     #[test]
+    #[cfg_attr(windows, ignore = "W21: switching Codex on Windows")]
     fn a_renewal_where_pitboard_may_change_nothing_is_refused_and_asks_nobody() {
         for (tool, make) in MACHINES {
-            for elevation in REFUSED_AS {
-                let at = format!("{tool}, {elevation:?}");
+            for refused in REFUSED {
+                let at = format!("{tool}, {refused:?}");
                 let m = make(&format!("gate-renew-{tool}"));
                 crate::switch::harness::renews(&m, "there-refresh", "there-refresh-2");
                 let later = m
@@ -1857,16 +2004,16 @@ mod tests {
                         crate::switch::harness::NOW + 11 * 86_400,
                     )));
                 let pitboard = Pitboard::new(later);
-                m.mem.runs_with(elevation);
+                refused.said_by(&m);
                 let (before, asked) = (everything(&m), m.api.calls());
 
-                let refused = pitboard.renew().expect_err("refused");
+                let refusal = pitboard.renew().expect_err("refused");
 
-                assert_eq!(refused.code(), "elevated", "{at}");
+                assert_eq!(refusal.code(), refused.code(), "{at}");
                 assert!(everything(&m) == before, "{at}: nothing changes");
                 assert_eq!(m.api.calls(), asked, "{at}: nobody is asked");
 
-                m.mem.runs_with(Elevation::Normal);
+                Refused::lifted(&m);
                 let renewed = pitboard.renew().expect("as the person, it renews");
                 let codes: Vec<&str> = renewed.iter().map(|(_, r)| r.code()).collect();
                 assert_eq!(codes, ["renewed"], "{at}");
@@ -1877,35 +2024,45 @@ mod tests {
     /// `doctor` says why every change is refused, first, as a check that fails, and says
     /// nothing of it where Pitboard runs as the person.
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W16: Pitboard writing, replacing and removing files on Windows"
+    )]
     fn doctor_says_why_pitboard_changes_nothing() {
         let m = machine("gate-doctor");
         let pitboard = Pitboard::new(m.ctx.clone());
-        assert!(
-            !pitboard
-                .doctor()
-                .checks
+        let refusing = |checks: &[doctor::Check]| -> Vec<&'static str> {
+            checks
                 .iter()
-                .any(|c| c.code == "elevated"),
+                .map(|c| c.code)
+                .filter(|code| ["elevated", "system_too_old"].contains(code))
+                .collect()
+        };
+        assert!(
+            refusing(&pitboard.doctor().checks).is_empty(),
             "as the person"
         );
-        for elevation in REFUSED_AS {
-            m.mem.runs_with(elevation);
+        for refused in REFUSED {
+            refused.said_by(&m);
             let checks = pitboard.doctor().checks;
             let check = checks.first().expect("checks");
-            assert_eq!(check.code, "elevated", "{elevation:?}");
-            assert_eq!(check.level, doctor::Level::Fail, "{elevation:?}");
-            assert_eq!(
-                check.detail,
-                match elevation {
-                    Elevation::Elevated { why } => format!("Pitboard runs {why}"),
-                    _ => "Pitboard cannot tell whether it runs as root or with sudo".into(),
-                }
-            );
+            let words = refused.words();
+            assert_eq!(check.code, refused.code(), "{refused:?}");
+            assert_eq!(check.level, doctor::Level::Fail, "{refused:?}");
+            assert_eq!(check.detail, words.because, "{refused:?}");
             assert!(
-                check.advice.ends_with("Run it as yourself."),
-                "{}",
+                check.advice.starts_with("Pitboard changes nothing ")
+                    && check.advice.ends_with(words.way_out),
+                "{refused:?}: {}",
                 check.advice
             );
+            Refused::lifted(&m);
         }
+        m.mem.runs_on(Floor::Below { build: 22631 });
+        m.mem.runs_with(Elevation::Unknown);
+        assert_eq!(
+            refusing(&pitboard.doctor().checks),
+            ["system_too_old", "elevated"]
+        );
     }
 }

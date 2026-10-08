@@ -282,6 +282,10 @@ mod tests {
     /// shell's `PATH`, where a version manager or an npm prefix puts it, then where its
     /// installer does.
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W17: where an app finds programs on Windows, whose PATH no login shell builds"
+    )]
     fn a_program_is_found_by_its_variable_then_the_login_shell_then_its_installer() {
         let home = env(&[("HOME", "/Users/x")]);
         let here: Vec<PathBuf> = [
@@ -461,6 +465,10 @@ mod tests {
     /// A relative entry on the login shell's `PATH` names a directory relative to wherever
     /// the shell was, which is not where this app is, so it is not looked in.
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W17: where an app finds programs on Windows, whose PATH no login shell builds"
+    )]
     fn a_relative_entry_is_not_looked_in() {
         let looked = RefCell::new(Vec::new());
         let _ = AppContext::read(
@@ -482,6 +490,10 @@ mod tests {
     /// Pitboard may, and a program started from there would have it asked on its behalf.
     /// Linux guards none.
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W17: where an app finds programs on Windows, whose PATH no login shell builds"
+    )]
     fn a_guarded_folder_on_the_path_is_not_looked_in() {
         let entries = [
             "/Users/x/Documents/bin",
@@ -608,6 +620,7 @@ mod tests {
     /// own, the way Homebrew makes one, is the app's own however many links it takes to get
     /// there. A directory, a file nobody can run and a link to nothing are not a `pitboard`.
     #[test]
+    #[cfg_attr(windows, ignore = "W17: finding programs on Windows")]
     fn the_first_pitboard_found_says_whose_it_is() {
         let scratch = Scratch::new();
         let empty = scratch.dir("empty");
@@ -696,6 +709,10 @@ mod tests {
     /// there yet, and the file private to its owner, whole: read back as it was written, and
     /// in its place what was written last. Nothing kept reads as nothing.
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W16: Pitboard writing, replacing and removing files on Windows"
+    )]
     fn an_apps_file_is_kept_private_in_pitboards_directory() {
         let root = std::env::temp_dir().join(format!("pitboard-app-file-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
@@ -753,6 +770,10 @@ mod tests {
     /// directories made private where they are not there, the file private and whole, and
     /// nothing kept read as nothing, while a file that cannot be read is an error.
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W16: Pitboard writing, replacing and removing files on Windows"
+    )]
     fn a_file_kept_elsewhere_is_kept_as_pitboards_own() {
         let root =
             std::env::temp_dir().join(format!("pitboard-app-elsewhere-{}", std::process::id()));

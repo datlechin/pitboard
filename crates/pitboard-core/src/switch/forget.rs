@@ -87,6 +87,10 @@ mod tests {
     /// The login in use is the organisation Claude Code's config names, not every account
     /// of the person it names.
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W16: Pitboard writing, replacing and removing files on Windows"
+    )]
     fn the_account_in_use_is_told_by_its_organisation() {
         let m = two_organisations("forget-by-organisation", Some("org-team"));
         assert!(matches!(
@@ -99,6 +103,10 @@ mod tests {
     /// A config naming no organisation does not say which of the person's logins is in
     /// use, so Pitboard's record of its last switch decides, as it does with no config.
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W16: Pitboard writing, replacing and removing files on Windows"
+    )]
     fn a_config_naming_no_organisation_leaves_it_to_the_last_switch() {
         let m = two_organisations("forget-no-organisation", None);
         assert!(matches!(

@@ -22,6 +22,7 @@ const CHILD: &str = "PITBOARD_TEST_INHERITED_CHILD";
 const NAME: &str = "a_sign_in_never_runs_the_program_the_tests_environment_names";
 
 #[test]
+#[cfg_attr(windows, ignore = "W22: switching Claude Code on Windows")]
 #[allow(
     clippy::disallowed_methods,
     reason = "the child is told it is the child through its environment"
@@ -106,6 +107,7 @@ fn signing_in_runs_the_stand_in() {
 const PROXIED: &str = "a_command_never_goes_through_the_proxy_the_tests_environment_names";
 
 #[test]
+#[cfg_attr(windows, ignore = "W22: switching Claude Code on Windows")]
 #[allow(
     clippy::disallowed_methods,
     reason = "the child is told it is the child through its environment"

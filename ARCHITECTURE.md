@@ -50,10 +50,11 @@ pages load, as a browser would.
     all read it, so they cannot disagree.
   - `host/`: the machine, behind one seam. The `Host` trait is what a test replaces: the
     system's store of secrets, files, the vault, this user's processes, the scheduler,
-    whether this process runs as the person (`elevation`), and what an administrator set
-    for a program outside every home (`administered_file`, and `managed_preference`, which
-    `macos/preferences.rs` reads), reached through `Context` and faked by
-    `host/memory.rs`, which plays every answer. The real hosts read nothing an
+    whether this process runs as the person (`elevation`), whether the system is one
+    Pitboard changes things on by its version (`floor`, `host::Floor`), and what an
+    administrator set for a program outside every home (`administered_file`, and
+    `managed_preference`, which `macos/preferences.rs` reads), reached through `Context`
+    and faked by `host/memory.rs`, which plays every answer. The real hosts read nothing an
     administrator set in a build for tests (`host/administered.rs`). `fs`, `proc` and `user` are
     plain functions for what the system does whoever asks: private files and directories,
     every other change to the disk, whether a process is alive, the login name, whether
@@ -67,12 +68,16 @@ pages load, as a browser would.
     through `security`, `ps`, launchd) or `linux/` (`/proc`, systemd), each with what
     `unix/` holds for both, or `windows/`, the face that refuses whatever of Windows is not
     built yet: no store of secrets, a vault of `store::Backend::Unknown` whose every call
-    cannot be read, no process list, no scheduler, an elevation nobody can tell, no home of
-    the account's own, no file made and no program found. A fact that differs by system is
-    a `match` on `host::OS`, such as the folders macOS asks about before an app may look in
-    them, or `default_pitboard_home`, where Pitboard keeps its files for a home when
-    `PITBOARD_HOME` names nowhere else. `same_path_in_any_case` is how Windows compares
-    paths, for the core and the apps alike.
+    cannot be read, no process list, no scheduler, no home of the account's own, no file
+    made and no program found. What it does read is this process's token, through
+    windows-sys (`windows/user.rs`), which `token.rs` makes an `Elevation` of, and the build
+    `RtlGetVersion` gives, which `host::windows_floor` holds against 26100, the build of
+    Windows 11 24H2 and Windows Server 2025. `token.rs` is compiled on every system, so how a
+    token reads is tested everywhere, and `words.rs` says each system's refusal from a
+    `host::Os`. A fact that differs by system is a `match` on `host::OS`, such as the
+    folders macOS asks about before an app may look in them, or `default_pitboard_home`,
+    where Pitboard keeps its files for a home when `PITBOARD_HOME` names nowhere else.
+    `same_path_in_any_case` is how Windows compares paths, for the core and the apps alike.
   - `release.rs`: whether this build may do anything on its system. A Windows build of a
     0.x release may not, unless it was compiled with `--cfg pitboard_unreleased_windows`,
     which CI's Windows jobs set and no release does; macOS and Linux always may.
@@ -456,11 +461,32 @@ pages load, as a browser would.
   links a directory otherwise than a file, says how in its own face and nowhere else. The
   integration tests' harness says what differs by system in
   `crates/pitboard/tests/common/os.rs`, one `match` on `host::OS` for each fact: where
-  Claude Code keeps the login it uses and where Pitboard parks one. Its Windows arms say
-  nothing yet, and stop a test that asks, since no test that plants a login runs on Windows
-  before the harness does. Until then Windows runs `windows_refuses`, which keeps apart from
-  the harness, and a test that cannot pass there until a later pull request says which with
-  `#[cfg_attr(windows, ignore = "W<n>: …")]`, the one way a test is put off there.
+  Claude Code keeps the login it uses (on Windows the harness assumes `.credentials.json`,
+  as on Linux, pending W22: Claude Code's register has `no_keyring_off_macos` unread on
+  Windows, and which store its Windows build chooses, `windows_backend_choice`, is not read
+  yet, so no test that plants a Claude Code login runs there before W22), where Pitboard
+  parks one (sealed to the person on Windows, which only the core's vault writes, so the
+  harness parks through it), which variables a command is passed on, which folders
+  of a person's account it is given as scratch ones of its own, what its `PATH` holds after
+  the test's programs, what a program's file is called, and how npm lays out a package's
+  program. The whole suite runs on Windows, and a test that cannot pass there until a later
+  pull request says which with `#[cfg_attr(windows, ignore = "W<n>: …")]`, the one way a
+  test is put off there.
+- No test addresses a name a real login may be kept under. `guard_not_live` refuses by
+  pattern, never by a hash computed for a real home, the families
+  `pitboard_core::provider::names` tells apart, which the measurement probe's leak check
+  reads too: every Claude Code slot, bare or under an account and in each of its pieces,
+  but the one hashed from the test's own folder; Codex's `cli|` and `secrets|` targets; and
+  anything under `Codex MCP Credentials`.
+- No test uses a folder that is, holds or lies in a real login place: the account's own
+  `.claude`, `.claude.json`, `.codex` and Pitboard folder, from the home and the Pitboard
+  folder the system names for the account whatever the environment says (the passwd
+  database, or `FOLDERID_Profile` and `FOLDERID_LocalAppData`), and those the environment
+  the tests were started in names. A folder is compared with each in any case, through
+  every link the file system resolves. CI's Windows legs check after each run, with the
+  probe and as the user the tests ran as, that no item of those families or
+  `pitboard-citest-*` is in its Credential Manager, that Task Scheduler's `\Pitboard\` is
+  empty, and that no real login folder appeared.
 - Every program the command line's tests and `pitboard-ffi`'s tests start in place of a
   tool, or put where one is looked for, is one compiled program, the `pitboard` crate's
   example `stand-in`, playing the script written beside its copy
@@ -487,10 +513,18 @@ pages load, as a browser would.
   stopped is one only Anthropic can name. While a switch is waiting, telling reads the
   tool's login and the copy the switch parked, which on macOS are keychain items; with no
   record there, the check is one look at whether the file is there.
-- Pitboard changes nothing where it runs as root or under sudo, or where the host cannot
-  say whether it does: a file it wrote would be root's, and a keychain item might be,
-  where the person's own runs might not read or replace it. One gate, `service::gate`,
-  asks the host's `elevation` and hands out a `service::Permit`, a value only it makes,
+- Pitboard changes nothing where it runs as root or under sudo, or elevated on Windows, or
+  where the host cannot say whether it does: a file it wrote would be root's or the
+  administrators', and a keychain item might be, where the person's own runs might not read
+  or replace it. On Windows `TokenElevation` decides, `TokenElevationType` says which words
+  (Run as administrator, or an account whose every program runs elevated, which no terminal
+  of it changes), a token of LocalSystem, LocalService or NetworkService is elevated
+  whatever it says, and a token not read in full is unknown, which refuses. Nor does it
+  change anything on a Windows older than 11 24H2, build 26100, which Windows Server 2025
+  shares, read as `RtlGetVersion` gives the build and never from the product name; that
+  refusal is `system_too_old`, said before how the process runs, since no way of running
+  Pitboard changes the system. One gate, `service::gate`, asks the host's `floor` and
+  `elevation` and hands out a `service::Permit`, a value only it makes,
   and everything that changes anything takes one as an argument: `atomic::write`, every
   function in `host::fs` that makes, moves or removes a file or a directory,
   `RawStore::write` and `delete` (the keychain among the stores), `Scheduler::put` and
@@ -500,8 +534,10 @@ pages load, as a browser would.
   change asks the gate before it reads, locks or records anything, so a refused one leaves
   even the audit log as it was. Where the gate refuses, `status` answers what
   `status_offline` answers, with a `read_only` warning, the status line writes neither
-  sessions nor readings, `doctor` fails its `elevated` check, and an app writes no file of
-  its own, since `app::write_file` takes a permit too.
+  sessions nor readings, `doctor` fails its `system_too_old` or `elevated` check, first and
+  in the gate's order, and an app writes no file of its own, since `app::write_file` takes a
+  permit too. What each says, on each system, is written once, in `words::elevated` and
+  `words::too_old`.
 - A run of the daily renewal schedule renews the default home, whatever `PITBOARD_HOME`
   says, since the schedule is that home's alone: `Pitboard::renew` renews in the context
   `schedule::for_its_run` gives it. Such a run is told apart by what the scheduler says,
@@ -1201,6 +1237,49 @@ a scratch item.
   `"svce"<blob>="<name>"`.
 - A lock taken with `flock` outlives the file it was taken on while another thread is
   starting a process, here as on Linux: [One sign-in at a time](#one-sign-in-at-a-time).
+
+### Windows
+
+Measured on GitHub's runners only, by `pitboard-probe` and `.github/scripts/runner-facts.ps1`
+in CI run 37673429917 on 8 October 2026: windows-2025 (Windows Server 2025 Datacenter, 24H2,
+build 26100, UBR 33438) and windows-11-arm (build 26200, UBR 9457, 25H2). The VM session's
+block A1, every other kind of token, and A2, the build against `winver`, are not measured
+yet. Until they are, the Windows face reads a token as Microsoft documents it, and these are
+the only tokens it has been seen to read.
+
+- The job's user has a token whose `TokenElevationType` is the default one, a token that is
+  not split, and that is elevated, at high integrity, on both images. Files it makes are
+  owned by Administrators. So every program the job starts is elevated, and Pitboard reads
+  it as `token::IN_EVERY_PROGRAM`.
+- A Safer normal-user token computed from the job's token, with `SaferComputeTokenFromLevel`
+  at `SAFER_LEVELID_NORMALUSER`, is elevated still, at high integrity, and so is a program
+  started with it. It cannot stand in for a person on the runners.
+- A local standard user made in the job, and started with `Start-Process -Credential
+  -LoadUserProfile`, its output sent to files, runs an unsigned program on both images,
+  exiting 0, never 0xC0000142. Its token is the default type, not elevated, at medium
+  integrity, so Pitboard reads it as the person. Started without `-Environment`, the
+  program gets the job user's variables; in the earlier run 37660991344 that left the
+  user's local app data naming the job user's folder, which it cannot open, and
+  `SHGetKnownFolderPath` failed. Given its own profile's `USERPROFILE`, `HOMEDRIVE`,
+  `HOMEPATH`, `APPDATA`, `LOCALAPPDATA`, `TEMP`, `TMP` and `USERNAME`, every known folder
+  reads as its own. It can read and run what the job built in the workspace. This is how CI
+  runs every Windows test, through `.github/scripts/test-as-standard-user.ps1`.
+- Developer Mode is on on both images, and that user makes file and directory symbolic
+  links as it is. It makes them with the symbolic-link right granted too, but Developer
+  Mode was still on for that run, so the right alone is not measured; the script grants it
+  only where Developer Mode is off, as Microsoft documents the right.
+- `RtlGetVersion` gives 10.0.26100 and 10.0.26200, the builds the registry's `CurrentBuild`
+  gives. The registry's `ProductName` says `Windows 10 Enterprise` on windows-11-arm, so
+  Pitboard never reads which Windows this is from it.
+- Defender's real-time protection is off on windows-2025 and on, with behaviour monitoring
+  and tamper protection, on windows-11-arm. winget is on windows-2025 alone, and Scoop on
+  neither.
+- As the job's user, in an interactive logon, `credman-names` lists the prefixes of every
+  live login family and `pitboard-*` without an error, and finds no item, on both images.
+  As the fresh standard user, after each Windows test run, it does the same and finds
+  nothing, on both images (run 37762408901). Neither image holds Codex's
+  `%ProgramData%\OpenAI\Codex`, Claude Code's `C:\Program Files\ClaudeCode` or its
+  policy keys.
 
 ### One sign-in at a time
 

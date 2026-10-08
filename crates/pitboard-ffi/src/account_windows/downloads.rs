@@ -150,7 +150,7 @@ mod tests {
     use std::collections::HashSet;
 
     fn on_a_mac(suggested: &str, taken: &[&str]) -> String {
-        let taken: HashSet<&str> = taken.iter().copied().collect();
+        let taken: HashSet<String> = taken.iter().map(|name| downloads(name)).collect();
         destination(Os::MacOs, Path::new("/Downloads"), suggested, |candidate| {
             taken.contains(candidate.to_str().expect("UTF-8"))
         })
@@ -158,20 +158,24 @@ mod tests {
         .into_owned()
     }
 
+    fn downloads(name: &str) -> String {
+        Path::new("/Downloads")
+            .join(name)
+            .to_string_lossy()
+            .into_owned()
+    }
+
     /// A download never overwrites a file, and two downloads never get one name. From
     /// AccountWindowsTests.swift.
     #[test]
     fn a_download_is_numbered_past_names_taken() {
         assert_eq!(
-            on_a_mac(
-                "report.pdf",
-                &["/Downloads/report.pdf", "/Downloads/report 2.pdf"]
-            ),
-            "/Downloads/report 3.pdf"
+            on_a_mac("report.pdf", &["report.pdf", "report 2.pdf"]),
+            downloads("report 3.pdf")
         );
-        assert_eq!(on_a_mac("notes", &[]), "/Downloads/notes");
-        assert_eq!(on_a_mac("", &[]), "/Downloads/Download");
-        assert_eq!(on_a_mac("a/b.txt", &[]), "/Downloads/b.txt");
+        assert_eq!(on_a_mac("notes", &[]), downloads("notes"));
+        assert_eq!(on_a_mac("", &[]), downloads("Download"));
+        assert_eq!(on_a_mac("a/b.txt", &[]), downloads("b.txt"));
     }
 
     /// Each name as the Swift `DownloadCenter.destination` named it, free and with its own
@@ -208,14 +212,10 @@ mod tests {
             ("~/x.txt", "x.txt", "x 2.txt"),
             ("a\\b.txt", "a\\b.txt", "a\\b 2.txt"),
         ] {
+            assert_eq!(on_a_mac(suggested, &[]), downloads(free), "{suggested:?}");
             assert_eq!(
-                on_a_mac(suggested, &[]),
-                format!("/Downloads/{free}"),
-                "{suggested:?}"
-            );
-            assert_eq!(
-                on_a_mac(suggested, &[&format!("/Downloads/{free}")]),
-                format!("/Downloads/{second}"),
+                on_a_mac(suggested, &[free]),
+                downloads(second),
                 "{suggested:?}"
             );
         }
@@ -318,18 +318,26 @@ mod tests {
         let decomposed = "Ba\u{301}o ca\u{301}o.pdf";
         let first = choose(precomposed, &[]);
         assert_eq!(first, at(precomposed));
+        // On Windows the other Unicode form is another name, so it is free (`same_file`).
+        let copy = |name: &str, of: &str| match OS {
+            Os::MacOs | Os::Linux => at(name),
+            Os::Windows => at(of),
+        };
         assert_eq!(
             choose(precomposed, &[&at(decomposed)]),
-            at("B\u{e1}o c\u{e1}o 2.pdf"),
+            copy("B\u{e1}o c\u{e1}o 2.pdf", precomposed),
             "reserved as Foundation gives its path"
         );
         assert_eq!(
             choose(precomposed, &[&first]),
-            at("B\u{e1}o c\u{e1}o 2.pdf")
+            match OS {
+                Os::MacOs | Os::Linux => at("B\u{e1}o c\u{e1}o 2.pdf"),
+                Os::Windows => at("B\u{e1}o c\u{e1}o (1).pdf"),
+            }
         );
         assert_eq!(
             choose(decomposed, &[&first]),
-            at("Ba\u{301}o ca\u{301}o 2.pdf")
+            copy("Ba\u{301}o ca\u{301}o 2.pdf", decomposed)
         );
         assert!(!folder.exists());
     }

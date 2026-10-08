@@ -1157,6 +1157,7 @@ mod tests {
     /// until then, rather than to run it as it is. From the default home it says what it
     /// said. On a machine in memory, whose scheduler asks nobody.
     #[test]
+    #[cfg_attr(windows, ignore = "W25: Task Scheduler")]
     fn schedule_status_from_another_home_says_what_the_schedule_renews() {
         use pitboard_core::testing::MemoryHost;
         let home = std::env::temp_dir().join(format!(

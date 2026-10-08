@@ -116,6 +116,28 @@ pub mod testing {
         crate::context::variables()
     }
 
+    pub fn real_login_places(
+        started_in: &crate::context::Context,
+    ) -> Result<Vec<std::path::PathBuf>, String> {
+        use crate::host::user;
+        let home = user::accounts_own_home().ok_or("this system names no home for this account")?;
+        let pitboard = user::accounts_own_pitboard_home()
+            .ok_or("this system names no Pitboard folder for this account")?;
+        let own = crate::context::Context::new(home).with_pitboard_home(pitboard);
+        Ok([&own, started_in]
+            .into_iter()
+            .flat_map(|ctx| {
+                [
+                    crate::provider::claude::paths::config_dir(ctx),
+                    crate::provider::claude::paths::config_file(ctx),
+                    crate::provider::codex::paths::home(ctx),
+                    ctx.pitboard_home.clone(),
+                ]
+            })
+            .filter(|place| place.is_absolute())
+            .collect())
+    }
+
     /// Parks `contents` under `service` in this context's vault, as a change does, once the
     /// gate every change passes has let it: a test that runs as root is refused here too.
     pub fn vault_write(

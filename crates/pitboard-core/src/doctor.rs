@@ -108,6 +108,7 @@ pub struct Facts {
     pub elevation: crate::host::Elevation,
     /// A login left in Claude Code's fallback file behind the one in the keychain.
     pub fallback_login: Option<FallbackLogin>,
+    pub floor: crate::host::Floor,
     pub now: i64,
 }
 
@@ -379,6 +380,7 @@ pub fn gather(ctx: &Context) -> Facts {
         in_the_app: ctx.caller == "app",
         elevation: ctx.host().elevation(ctx),
         fallback_login: fallback_login(ctx),
+        floor: ctx.host().floor(),
         now: ctx.now(),
     }
 }
@@ -633,23 +635,40 @@ fn running_codex(ctx: &Context) -> Option<Vec<crate::holder::Holding>> {
     }
 }
 
-/// The check that fails where this process runs as root or under sudo, or nobody could
-/// tell whether it does, since then Pitboard changes nothing: `None` where it runs as the
-/// person themselves.
-fn elevated(elevation: crate::host::Elevation) -> Option<Check> {
-    let detail = match elevation {
+/// The check that fails where this process runs as root or under sudo, or elevated on
+/// Windows, or nobody could tell whether it does, since then Pitboard changes nothing: `None`
+/// where it runs as the person themselves.
+fn elevated(os: Os, elevation: crate::host::Elevation) -> Option<Check> {
+    let said = match elevation {
         crate::host::Elevation::Normal => return None,
-        crate::host::Elevation::Elevated { why } => format!("Pitboard runs {why}"),
-        crate::host::Elevation::Unknown => {
-            "Pitboard cannot tell whether it runs as root or with sudo".to_string()
-        }
+        crate::host::Elevation::Elevated { why } => crate::words::elevated(os, Some(why)),
+        crate::host::Elevation::Unknown => crate::words::elevated(os, None),
     };
     Some(fail(
         "elevated",
         "runs as",
-        detail,
-        "Pitboard changes nothing this way: it reads, and renews and writes nothing. Run it \
-         as yourself.",
+        said.because,
+        format!(
+            "Pitboard changes nothing this way: it reads, and renews and writes nothing. {}",
+            said.way_out
+        ),
+    ))
+}
+
+fn too_old(floor: crate::host::Floor) -> Option<Check> {
+    let said = match floor {
+        crate::host::Floor::Met => return None,
+        crate::host::Floor::Below { build } => crate::words::too_old(Some(build)),
+        crate::host::Floor::Unknown => crate::words::too_old(None),
+    };
+    Some(fail(
+        "system_too_old",
+        "runs on",
+        said.because,
+        format!(
+            "Pitboard changes nothing here: it reads, and renews and writes nothing. {}",
+            said.way_out
+        ),
     ))
 }
 
@@ -706,11 +725,9 @@ pub fn evaluate(facts: &Facts) -> Vec<Check> {
     let codex_here = facts.codex.present || facts.codex.enrolled > 0;
     let claude_here = facts.claude_present || !codex_here;
 
-    // First, because it is why every change here is refused, whatever else holds. Said only
-    // where it fails: a person running Pitboard as themselves has nothing to read about it.
-    if let Some(check) = elevated(facts.elevation) {
-        checks.push(check);
-    }
+    // First, in the order the gate asks them: they are why every change here is refused.
+    checks.extend(too_old(facts.floor));
+    checks.extend(elevated(facts.os, facts.elevation));
 
     if let Some(tool) = facts.os.secrets_tool() {
         checks.push(match &facts.security_tool {
@@ -2072,8 +2089,9 @@ fn unplaced(ctx: &Context, variable: &str, path: &std::path::Path) -> Diagnosis 
          everything it reads is under these folders.",
     );
     Diagnosis {
-        checks: elevated(ctx.host().elevation(ctx))
+        checks: too_old(ctx.host().floor())
             .into_iter()
+            .chain(elevated(crate::host::OS, ctx.host().elevation(ctx)))
             .chain(std::iter::once(homes))
             .collect(),
         environment: json!({}),
@@ -2250,6 +2268,7 @@ mod tests {
             in_the_app: false,
             elevation: crate::host::Elevation::Normal,
             fallback_login: None,
+            floor: crate::host::Floor::Met,
             now: NOW,
         }
     }
@@ -2380,6 +2399,7 @@ mod tests {
     /// looked at a file's mode. A gatherer that returns an empty list whatever the disk
     /// says would pass every one of those tests.
     #[test]
+    #[cfg_attr(windows, ignore = "W15: files made private to the person on Windows")]
     fn a_world_readable_park_is_found_on_the_disk() {
         use crate::host::fs::testing;
 
@@ -2422,6 +2442,10 @@ mod tests {
     /// mode bit. A backup restore, a `cp -r`, an rsync or a careless umask changes one
     /// quietly, and nothing else in Pitboard would ever mention it.
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W15: who else can read a login on Windows, and the command that makes one private"
+    )]
     fn a_login_anyone_on_this_machine_can_read_is_a_failure() {
         let mut f = facts();
         assert_eq!(check(&evaluate(&f), "private_on_disk").level, Level::Ok);
@@ -2544,6 +2568,10 @@ mod tests {
     /// What the two checks above are given, read off the stores: a login in the file while
     /// the keychain holds another, and nothing where the file is the login or holds none.
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
+    )]
     fn a_login_left_behind_the_keychain_is_found_in_its_file() {
         use crate::host::memory::MemoryHost;
 
@@ -2948,6 +2976,7 @@ mod tests {
     /// What the check above is given, read off a real disk: a schedule written the way
     /// `pitboard schedule install` writes it, whose Pitboard is then taken away.
     #[test]
+    #[cfg_attr(windows, ignore = "W25: Task Scheduler")]
     fn a_schedule_whose_pitboard_is_gone_is_found_on_the_disk() {
         let root = std::env::temp_dir().join(format!(
             "pitboard-doctor-schedule-{}-{:?}",
@@ -3149,6 +3178,7 @@ mod tests {
     /// another password, and none. The report a person pastes hides the proxy's host, as it
     /// does this run's.
     #[test]
+    #[cfg_attr(windows, ignore = "W25: Task Scheduler")]
     fn the_schedules_proxy_is_read_from_what_install_wrote() {
         let root = std::env::temp_dir().join(format!(
             "pitboard-doctor-schedule-proxy-{}-{:?}",
@@ -3705,6 +3735,7 @@ mod tests {
     /// Code's config for every account, a signed-in Codex account read as one with nothing
     /// parked to switch to, and the advice was to sign in again.
     #[test]
+    #[cfg_attr(windows, ignore = "W21: switching Codex on Windows")]
     fn an_account_is_active_by_its_own_tools_record() {
         use crate::host::memory::MemoryHost;
 
@@ -3974,6 +4005,7 @@ mod tests {
     /// What `/etc/codex` and the person's own config say is gathered as Codex reads it, and a
     /// store a requirement pins is said to be one no line of the person's own changes.
     #[test]
+    #[cfg_attr(windows, ignore = "W21: switching Codex on Windows")]
     fn a_store_an_administrator_pinned_is_gathered_and_said() {
         let host = crate::host::memory::MemoryHost::new();
         let ctx = Context::for_unit_test().with_memory_stores(host.clone());
@@ -4142,6 +4174,7 @@ mod tests {
     /// nothing. Only the two directories above the program are looked at, names first, so a
     /// standalone install is named without opening any file inside it.
     #[test]
+    #[cfg_attr(windows, ignore = "W15: files made private to the person on Windows")]
     fn a_version_is_read_out_of_each_way_codex_is_installed() {
         use crate::host::fs::testing;
 
@@ -4200,6 +4233,10 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W15: who else can read a login on Windows, and the command that makes one private"
+    )]
     fn a_codex_login_anybody_can_read_or_nobody_can_parse_is_said() {
         let mut codex = with_codex();
         codex.auth_access = Some(mode(0o644));
@@ -4373,6 +4410,7 @@ mod tests {
     /// What the section is judged on, read off a real disk: a scratch Codex home with a
     /// login in it, in the file Codex keeps it in.
     #[test]
+    #[cfg_attr(windows, ignore = "W21: switching Codex on Windows")]
     fn codex_facts_are_read_off_the_disk() {
         use crate::host::fs::testing;
 
@@ -4554,6 +4592,75 @@ mod tests {
         assert!(checks.iter().any(|c| c.code.starts_with("codex_")));
     }
 
+    #[test]
+    fn windows_is_told_how_it_runs_and_which_build_it_needs() {
+        let mut facts = facts();
+        facts.os = Os::Windows;
+        let refusing = |facts: &Facts| -> Vec<(&'static str, String, String)> {
+            evaluate(facts)
+                .into_iter()
+                .filter(|c| ["elevated", "system_too_old"].contains(&c.code))
+                .map(|c| (c.code, c.detail, c.advice))
+                .collect()
+        };
+        assert!(refusing(&facts).is_empty());
+
+        facts.elevation = crate::host::Elevation::Elevated {
+            why: crate::host::token::AS_ADMINISTRATOR,
+        };
+        assert_eq!(
+            refusing(&facts),
+            [(
+                "elevated",
+                "Pitboard runs as administrator".to_string(),
+                "Pitboard changes nothing this way: it reads, and renews and writes nothing. Run \
+                 it from a terminal that is not elevated (not Run as administrator)."
+                    .to_string()
+            )]
+        );
+
+        facts.elevation = crate::host::Elevation::Elevated {
+            why: crate::host::token::IN_EVERY_PROGRAM,
+        };
+        facts.floor = crate::host::Floor::Below { build: 22631 };
+        assert_eq!(
+            refusing(&facts),
+            [
+                (
+                    "system_too_old",
+                    "Pitboard runs on Windows build 22631, older than Windows 11 24H2 (build \
+                     26100)"
+                        .to_string(),
+                    "Pitboard changes nothing here: it reads, and renews and writes nothing. It \
+                     changes things on Windows 11 24H2 and later, and on Windows Server 2025: \
+                     update Windows to use it here."
+                        .to_string()
+                ),
+                (
+                    "elevated",
+                    "Pitboard runs elevated, as every program this Windows account starts does"
+                        .to_string(),
+                    "Pitboard changes nothing this way: it reads, and renews and writes nothing. \
+                     That is so with User Account Control off and in the built-in Administrator \
+                     account: run it from a standard account, or turn User Account Control on."
+                        .to_string()
+                ),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_home_that_is_not_a_full_path_still_hears_why_nothing_changes() {
+        use crate::context::Environment;
+        let env: Environment = [("HOME", "")].into_iter().collect();
+        let host = crate::host::memory::MemoryHost::new();
+        host.runs_on(crate::host::Floor::Below { build: 22631 });
+        host.runs_with(crate::host::Elevation::Unknown);
+        let ctx = Context::for_command_line(&env).with_memory_stores(host);
+        let codes: Vec<&str> = run(&ctx).checks.iter().map(|c| c.code).collect();
+        assert_eq!(codes, ["system_too_old", "elevated", "homes"]);
+    }
+
     /// With neither tool present, a new machine is told what to do first, as it always was.
     #[test]
     fn a_machine_with_neither_tool_still_hears_about_claude_code() {
@@ -4567,6 +4674,7 @@ mod tests {
     /// nothing else, since every other check reads under one of the homes. It read Claude
     /// Code's and Pitboard's files under whatever folder it was run from.
     #[test]
+    #[cfg_attr(windows, ignore = "W14: Pitboard's own folder on Windows")]
     fn doctor_checks_nothing_under_a_home_that_is_not_a_full_path() {
         use crate::context::Environment;
         for (pairs, said) in [

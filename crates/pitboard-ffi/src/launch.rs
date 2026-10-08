@@ -1014,6 +1014,7 @@ mod tests {
     /// home is one nothing can be written under, so even a regression here reaches no
     /// scheduler.
     #[test]
+    #[cfg_attr(windows, ignore = "W14: Pitboard's own folder on Windows")]
     fn the_app_schedules_nothing_without_a_command_line_to_run() {
         let core = AppCore::for_app(environment("/dev/null", &[]), None);
         let Err(PitboardError::Failed { code, message, .. }) = core.schedule_install() else {
@@ -1052,6 +1053,7 @@ mod tests {
     /// home, which is all the schedule renews, and the pretend scheduler is left with nothing
     /// installed. The same app with its default home installs it.
     #[test]
+    #[cfg_attr(windows, ignore = "W25: Task Scheduler")]
     fn the_app_schedules_nothing_where_pitboard_home_is_another_directory() {
         let home = std::env::temp_dir().join(format!(
             "pitboard-app-schedule-home-{}-{:?}",
@@ -1106,17 +1108,25 @@ mod tests {
     /// check, and checks nothing else.
     #[test]
     fn the_apps_core_reads_nothing_under_a_home_that_is_not_a_full_path() {
+        // `/Users/x` is no full path on Windows; this one is everywhere, and is never made.
+        let full = std::env::temp_dir().join(format!(
+            "pitboard-app-no-full-home-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        assert!(!full.exists(), "{} is there already", full.display());
         for (home, pitboard, variable) in [
-            ("relative", "/elsewhere/.pitboard", "HOME"),
-            ("/Users/x", "pitboard", "PITBOARD_HOME"),
-            ("/Users/x", "", "PITBOARD_HOME"),
+            ("relative".into(), full.join(".pitboard"), "HOME"),
+            (full.clone(), "pitboard".into(), "PITBOARD_HOME"),
+            (full.clone(), PathBuf::new(), "PITBOARD_HOME"),
         ] {
             let host = pitboard_core::host::memory::MemoryHost::new();
+            let given = pitboard.clone();
             let core = AppCore::asking(
                 move || {
                     let mut made = made(Some("/nowhere/codex"), None);
-                    let ctx = Context::new(PathBuf::from(home))
-                        .with_pitboard_home(PathBuf::from(pitboard))
+                    let ctx = Context::new(PathBuf::clone(&home))
+                        .with_pitboard_home(given.clone())
                         .with_caller("app".into())
                         .with_memory_stores(Arc::clone(&host));
                     made.core = service::Pitboard::new(ctx);
@@ -1156,10 +1166,12 @@ mod tests {
             assert!(
                 checks
                     .iter()
-                    .all(|check| ["elevated", "homes"].contains(&check.code.as_str())),
+                    .all(|check| ["system_too_old", "elevated", "homes"]
+                        .contains(&check.code.as_str())),
                 "nothing else is checked"
             );
         }
+        assert!(!full.exists(), "{} was written", full.display());
     }
 
     /// Repairing at launch is a no-op wherever there is nothing to repair, and never
@@ -1167,6 +1179,7 @@ mod tests {
     /// outside an app names no command line, and in one that names this test's own program,
     /// which stands in for a command line that is there.
     #[test]
+    #[cfg_attr(windows, ignore = "W14: Pitboard's own folder on Windows")]
     fn the_app_repairs_nothing_where_no_schedule_runs_it() {
         let launched = AppCore::for_app(environment("/dev/null", &[]), None);
         assert!(!launched.schedule_repair().expect("nothing to repair"));
@@ -1179,6 +1192,7 @@ mod tests {
     /// something first needs it, and not when the app makes its model, which it does on its
     /// main thread; and once, however many calls arrive at the same time.
     #[test]
+    #[cfg_attr(windows, ignore = "W14: Pitboard's own folder on Windows")]
     fn the_core_is_made_once_when_it_is_first_needed() {
         let asks = Asks::default();
         let core = Arc::new(AppCore::asking(
@@ -1216,6 +1230,7 @@ mod tests {
     /// later, and what it answers then is what is used. Once more and no more: a shell that
     /// is always that slow would otherwise cost its patience on every ask.
     #[test]
+    #[cfg_attr(windows, ignore = "W14: Pitboard's own folder on Windows")]
     fn a_login_shell_too_slow_to_answer_is_asked_once_more_later() {
         let asks = Asks::default();
         let core = AppCore::asking(

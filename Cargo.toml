@@ -56,6 +56,7 @@ unicode-segmentation = "1.13"
 # Columns are counted in what a terminal shows, not in characters: a CJK label is two
 # columns wide per character and would push everything after it out of line.
 unicode-width = "0.2"
+windows-sys = "0.61"
 # Both generators must match this exact version, since bindings check method checksums at load
 # time. The Swift one is built from it. The C# one, uniffi-bindgen-cs, is released for one
 # UniFFI version at a time (v0.11.0+v0.31.0 reads 0.31), so this moves only with a release of

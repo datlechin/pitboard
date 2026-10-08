@@ -99,7 +99,8 @@ pub fn access(_path: &Path) -> Option<Access> {
 
 /// What a test or a fixture does to a file's access, or to make a link, on Windows: an
 /// access control list and a link Windows lets this account make, which W15 sets and makes.
-/// Until then each says it cannot, as an app that cannot make a fixture says so.
+/// Until then each says it cannot, as an app that cannot make a fixture says so, but for
+/// making a file runnable.
 #[cfg(any(test, feature = "test-support"))]
 pub mod testing {
     use std::io;
@@ -138,8 +139,9 @@ pub mod testing {
     }
 
     /// A file anybody may run.
-    pub fn make_runnable(_path: &Path) -> io::Result<()> {
-        Err(not_yet())
+    // Windows has no run bit: a file runs by its extension and the ACL it inherits.
+    pub fn make_runnable(path: &Path) -> io::Result<()> {
+        std::fs::metadata(path).map(drop)
     }
 
     /// A file nobody may run, which anybody may still read.
@@ -179,12 +181,11 @@ mod tests {
     #[test]
     fn every_change_to_a_files_access_waits_for_w15() {
         let path = Path::new("never-made");
-        let answers: [(&str, io::Result<()>); 10] = [
+        let answers: [(&str, io::Result<()>); 9] = [
             ("open_to_others", testing::open_to_others(path)),
             ("make_private", testing::make_private(path)),
             ("read_only_for_owner", testing::read_only_for_owner(path)),
             ("deny_reading", testing::deny_reading(path)),
-            ("make_runnable", testing::make_runnable(path)),
             ("deny_running", testing::deny_running(path)),
             ("deny_changes", testing::deny_changes(path)),
             ("allow_changes", testing::allow_changes(path)),
@@ -198,5 +199,24 @@ mod tests {
         let private = testing::is_private(path).expect_err("is_private");
         assert_eq!(private.kind(), io::ErrorKind::Unsupported);
         assert!(!path.exists(), "nothing was made");
+    }
+
+    #[test]
+    fn a_file_a_test_wrote_is_runnable_as_it_is() {
+        let dir = std::env::temp_dir().join(format!("pitboard-runnable-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("a scratch folder");
+        let program = dir.join("program.exe");
+        std::fs::copy(std::env::current_exe().expect("this test"), &program).expect("copied");
+        let before = std::fs::read(&program).expect("read");
+        testing::make_runnable(&program).expect("runnable as it is");
+        assert_eq!(std::fs::read(&program).expect("read"), before, "unchanged");
+        let missing = testing::make_runnable(&dir.join("absent.exe")).expect_err("absent");
+        assert_eq!(missing.kind(), io::ErrorKind::NotFound);
+        let ran = std::process::Command::new(&program)
+            .args(["--list", "--format=terse"])
+            .output()
+            .expect("the copy runs");
+        assert!(ran.status.success(), "{ran:?}");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

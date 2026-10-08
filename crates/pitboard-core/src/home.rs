@@ -199,6 +199,10 @@ mod tests {
     /// wrote, which keeps the folder too. `PITBOARD_HOME` can name a folder of somebody's
     /// own.
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W16: Pitboard writing, replacing and removing files on Windows"
+    )]
     fn what_an_older_pitboard_kept_and_this_one_does_not_is_removed() {
         let root = std::env::temp_dir().join(format!(
             "pitboard-home-retired-{}-{:?}",
@@ -237,6 +241,7 @@ mod tests {
     /// Pitboard directory worked out from it. Unset, a tool's variable names nothing, and an
     /// empty `CLAUDE_SECURESTORAGE_CONFIG_DIR` names Claude Code's default folder.
     #[test]
+    #[cfg_attr(windows, ignore = "W14: Pitboard's own folder on Windows")]
     fn a_home_that_is_not_a_full_path_is_refused_by_the_variable_that_named_it() {
         let home = ("HOME", "/Users/x");
         for pairs in [
@@ -287,6 +292,7 @@ mod tests {
 
     /// The refusal says which variable, what it holds, and the two ways out.
     #[test]
+    #[cfg_attr(windows, ignore = "W14: Pitboard's own folder on Windows")]
     fn a_home_that_is_not_a_full_path_is_said_with_the_way_out() {
         let said = |pairs: &[(&str, &str)]| {
             let env: Environment = pairs.iter().copied().collect();

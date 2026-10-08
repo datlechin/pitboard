@@ -10,7 +10,7 @@ pub(crate) use super::unix::{fs, proc, user};
 
 use super::administered::Administered;
 use super::unix::service;
-use super::{Elevation, Host, LoginPath, Os, Process, Scheduler};
+use super::{Elevation, Floor, Host, LoginPath, Os, Process, Scheduler};
 use crate::context::{Context, Environment};
 use crate::store::vault::FileVault;
 use crate::store::{PlainFile, RawStore};
@@ -61,6 +61,10 @@ impl Host for Linux {
 
     fn elevation(&self, ctx: &Context) -> Elevation {
         user::elevation(ctx.sudo())
+    }
+
+    fn floor(&self) -> Floor {
+        Floor::Met
     }
 
     /// Linux has no managed preferences: an administrator sets things in files.

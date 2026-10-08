@@ -146,6 +146,10 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W16: Pitboard writing, replacing and removing files on Windows"
+    )]
     fn a_session_gets_back_what_it_passed_the_run_before() {
         let (ctx, _scratch) = machine("exchange");
         let ctx = at(&ctx, NOW);
@@ -171,6 +175,10 @@ mod tests {
     /// A status line can run every second in every open session, and what it passes is
     /// mostly what it passed the time before.
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W16: Pitboard writing, replacing and removing files on Windows"
+    )]
     fn a_run_that_changes_nothing_leaves_the_file_alone() {
         let (ctx, _scratch) = machine("unchanged");
         exchange(
@@ -197,6 +205,10 @@ mod tests {
     /// A session still open is seen again once a day, and one nobody has run for a week goes
     /// when anything is next written.
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W16: Pitboard writing, replacing and removing files on Windows"
+    )]
     fn a_session_not_seen_for_a_week_is_dropped() {
         let (ctx, _scratch) = machine("pruned");
         exchange(

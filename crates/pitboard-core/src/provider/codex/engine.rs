@@ -584,6 +584,7 @@ mod tests {
     /// What a sign-in left is read from the private directory's own `auth.json`, whatever
     /// `CODEX_HOME` this process has.
     #[test]
+    #[cfg_attr(windows, ignore = "W21: switching Codex on Windows")]
     fn a_sign_in_is_read_back_from_the_private_directory() {
         let dir = std::env::temp_dir().join(format!(
             "pitboard-codex-readback-{}-{:?}",
@@ -605,6 +606,7 @@ mod tests {
     /// A keychain store is refused with a reason rather than read: every read of an item
     /// Codex made for itself would put a permission prompt in front of the person.
     #[test]
+    #[cfg_attr(windows, ignore = "W21: switching Codex on Windows")]
     fn a_keychain_store_is_refused_with_a_reason_and_never_read() {
         let dir = std::env::temp_dir().join(format!(
             "pitboard-codex-keyring-{}-{:?}",
@@ -641,6 +643,7 @@ mod tests {
     /// line in the person's own config can change it, and so is a sign-in under it. One that
     /// cannot be read is refused rather than taken for the file.
     #[test]
+    #[cfg_attr(windows, ignore = "W21: switching Codex on Windows")]
     fn a_store_an_administrator_set_is_refused_naming_where() {
         let host = crate::host::memory::MemoryHost::new();
         let ctx = Context::for_unit_test().with_memory_stores(host.clone());
@@ -677,6 +680,7 @@ mod tests {
     /// refused for the line. A line naming a profile no table defines is refused, saying
     /// what each Codex does with it.
     #[test]
+    #[cfg_attr(windows, ignore = "W21: switching Codex on Windows")]
     fn a_profile_line_is_read_as_choosing_its_profile() {
         let host = crate::host::memory::MemoryHost::new();
         let ctx = Context::for_unit_test().with_memory_stores(host.clone());
@@ -706,6 +710,7 @@ mod tests {
     /// its login in `auth.json`, so the account is switched there rather than refused, as it
     /// was while Pitboard read the person's `config.toml` alone.
     #[test]
+    #[cfg_attr(windows, ignore = "W21: switching Codex on Windows")]
     fn a_file_store_an_administrator_set_is_over_the_persons_own() {
         let dir = std::env::temp_dir().join(format!(
             "pitboard-codex-over-own-{}-{:?}",

@@ -234,6 +234,10 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W16: Pitboard writing, replacing and removing files on Windows"
+    )]
     fn refuses_while_another_holder_is_alive() {
         let t = scratch("busy");
         let _held = acquire(Permit::for_a_test(), &t).expect("first acquire");
@@ -245,6 +249,10 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W16: Pitboard writing, replacing and removing files on Windows"
+    )]
     fn reclaims_a_lock_left_behind_by_a_dead_process() {
         let t = scratch("stale");
         let lock = PathBuf::from(format!("{}.lock", t.display()));
@@ -254,6 +262,10 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W16: Pitboard writing, replacing and removing files on Windows"
+    )]
     fn releasing_is_immediate() {
         let t = scratch("release");
         let started = std::time::Instant::now();
@@ -268,6 +280,10 @@ mod tests {
 
     /// Aged past staleness first, so only a live heartbeat can bring it back.
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W16: Pitboard writing, replacing and removing files on Windows"
+    )]
     fn the_heartbeat_keeps_a_held_lock_young() {
         let t = scratch("beat");
         let g = acquire(Permit::for_a_test(), &t).unwrap();
@@ -290,6 +306,10 @@ mod tests {
     /// it still holds it. An mtime that is not the one this guard last stored is the only
     /// evidence of that there is.
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W16: Pitboard writing, replacing and removing files on Windows"
+    )]
     fn a_lock_somebody_else_touched_is_never_ours_again() {
         let t = scratch("compromised");
         let g = acquire(Permit::for_a_test(), &t).unwrap();
@@ -315,6 +335,10 @@ mod tests {
     /// A lock directory that vanished is gone whoever removed it, and renewing it would
     /// mean making one nobody is coordinating through.
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W16: Pitboard writing, replacing and removing files on Windows"
+    )]
     fn a_lock_that_vanished_is_not_quietly_remade() {
         let t = scratch("vanished");
         let g = acquire(Permit::for_a_test(), &t).unwrap();
@@ -330,6 +354,10 @@ mod tests {
     /// remembered what it asked for would call every lock compromised and abandon every
     /// switch. The value read back is the only one worth keeping.
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W16: Pitboard writing, replacing and removing files on Windows"
+    )]
     fn what_the_filesystem_stored_is_what_gets_remembered() {
         let t = scratch("granularity");
         let _g = acquire(Permit::for_a_test(), &t).unwrap();

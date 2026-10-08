@@ -3,6 +3,8 @@
 //! empty `CLAUDE_CONFIG_DIR`, which Claude Code takes as the folder it runs in, is refused
 //! by the command line itself.
 
+mod common;
+
 use pitboard_core::testing::stand_in::{self, Script};
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -30,15 +32,20 @@ fn pitboard(
     for name in pitboard_core::testing::variables() {
         command.env_remove(name);
     }
+    let account = home.parent().expect("the scratch folder").join("account");
     command
         .args(args)
         .arg("--json")
         .current_dir(home)
+        .envs(common::os::account_folders(&account))
         .env("HOME", home)
         .env("USER", "pitboard-test-nobody")
         .env("PITBOARD_HOME", home.join("pitboard"))
         .env("CODEX_HOME", home.join("codex"))
-        .env("PATH", "/usr/bin:/bin");
+        .env(
+            "PATH",
+            std::env::join_paths(common::os::system_folders()).expect("a search path"),
+        );
     if let Some(v) = config_dir {
         command.env("CLAUDE_CONFIG_DIR", v);
     }
@@ -56,12 +63,29 @@ fn environment(home: &Path, config_dir: Option<&str>) -> serde_json::Value {
     doctor(home, config_dir, &[])["data"]["environment"].clone()
 }
 
-fn scratch(name: &str) -> PathBuf {
+struct Scratch(PathBuf);
+
+impl Scratch {
+    fn home(&self) -> PathBuf {
+        self.0.join("home")
+    }
+}
+
+impl Drop for Scratch {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
+fn scratch(name: &str) -> Scratch {
     let p = std::env::temp_dir().join(format!("pitboard-env-{}-{name}", std::process::id()));
+    common::refuse_a_real_login_place(&p);
     let _ = std::fs::remove_dir_all(&p);
-    std::fs::create_dir_all(&p).unwrap();
-    std::fs::write(p.join(".claude.json"), "{}").unwrap();
-    p
+    let scratch = Scratch(p);
+    std::fs::create_dir_all(scratch.home()).unwrap();
+    common::os::make_account_folders(&scratch.0.join("account"));
+    std::fs::write(scratch.home().join(".claude.json"), "{}").unwrap();
+    scratch
 }
 
 /// Claude Code 2.1.289 reads an empty `CLAUDE_CONFIG_DIR` as unset for its config file and
@@ -73,7 +97,8 @@ fn scratch(name: &str) -> PathBuf {
 /// command says so, and `doctor` fails its `homes` check and checks nothing else.
 #[test]
 fn an_empty_config_dir_is_refused() {
-    let home = scratch("empty");
+    let scratch = scratch("empty");
+    let home = scratch.home();
     let unset = environment(&home, None);
     assert_eq!(unset["credential_service"], "Claude Code-credentials");
 
@@ -100,7 +125,6 @@ fn an_empty_config_dir_is_refused() {
         .map(|entry| entry.expect("an entry").file_name())
         .collect();
     assert_eq!(left, [".claude.json"], "nothing is written");
-    let _ = std::fs::remove_dir_all(&home);
 }
 
 /// `PITBOARD_CLAUDE` and `PITBOARD_CODEX` name the program the command line runs for each
@@ -108,8 +132,10 @@ fn an_empty_config_dir_is_refused() {
 /// ever run: doctor reads which build each is off the path it resolves to, which is where
 /// each tool's installer puts the version.
 #[test]
+#[cfg_attr(windows, ignore = "W17: finding programs on Windows")]
 fn a_program_the_environment_names_is_the_one_the_command_line_runs() {
-    let home = scratch("named");
+    let scratch = scratch("named");
+    let home = scratch.home();
     let claude = home.join("elsewhere/claude/versions/9.9.9");
     let codex = home.join("elsewhere/codex/releases/9.9.8-aarch64-apple-darwin/bin/codex");
     for program in [&claude, &codex] {
@@ -154,5 +180,4 @@ fn a_program_the_environment_names_is_the_one_the_command_line_runs() {
         serde_json::Value::Null,
         "empty names nothing, so PATH is looked on, and nothing is there: {empty}"
     );
-    let _ = std::fs::remove_dir_all(&home);
 }

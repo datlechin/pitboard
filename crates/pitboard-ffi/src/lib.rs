@@ -376,6 +376,7 @@ mod tests {
     /// whether a path is a program, cross the bindings as the core reads them, so the app has
     /// no rule of its own for any of them.
     #[test]
+    #[cfg_attr(windows, ignore = "W17: finding programs on Windows")]
     fn the_app_asks_the_core_where_things_are_and_what_runs() {
         let environment = |pairs: &[(&str, &str)]| -> HashMap<String, String> {
             pairs

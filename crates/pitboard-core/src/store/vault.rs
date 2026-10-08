@@ -137,6 +137,10 @@ mod tests {
     /// and `host::fs::create_private_dir` are two other modules' promises, and a change to
     /// either would quietly widen every parked login on Linux.
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W16: Pitboard writing, replacing and removing files on Windows"
+    )]
     fn a_parked_login_is_readable_only_by_its_owner() {
         let root = std::env::temp_dir().join(format!(
             "pitboard-vault-modes-{}-{:?}",

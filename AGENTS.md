@@ -45,7 +45,9 @@ and test it there.
   `Claude Code-credentials` and every `Claude Code-credentials-<hash>`, each piece of them
   included, Codex's `cli|*` and `secrets|*` targets, and anything under
   `Codex MCP Credentials`. Never use `cmdkey /delete`, `vaultcmd` or PowerShell's credential
-  modules on those names.
+  modules on those names. Tests write only `pitboard-citest-*` items or the slot hashed from
+  their own folder, `common::guard_not_live` refuses the rest by pattern, and CI lists those
+  names after each Windows run and fails on any left.
 - Never read, copy, rewrite or delete `%USERPROFILE%\.claude`, `%USERPROFILE%\.claude.json`,
   `%USERPROFILE%\.codex`, `%ProgramData%\OpenAI\Codex`, `C:\Program Files\ClaudeCode`, or
   the `%LOCALAPPDATA%\Pitboard` of an account that holds real logins.
