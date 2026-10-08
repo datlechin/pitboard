@@ -265,6 +265,7 @@ fn account(row: status::Row, now: i64) -> Account {
                 usage::Source::Remembered => Source::Remembered,
             },
             observed_at: u.observed_at,
+            lists_every_limit: u.lists_every_limit,
             windows: u
                 .windows
                 .into_iter()

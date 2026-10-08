@@ -71,7 +71,8 @@ impl LimitExt for Limit {
 
 /// An account as the core reports one, a Claude Code one not signed in unless a test says
 /// otherwise. `None` is a login signed in and not enrolled. Switchable unless it is the one
-/// signed in, as a real one is.
+/// signed in, and its numbers every limit it has where its tool is Claude Code, as a real
+/// one is.
 pub(crate) fn account(label: Option<&str>) -> AccountMade {
     AccountMade {
         label: label.map(str::to_owned),
@@ -194,6 +195,7 @@ impl AccountMade {
                 source: Source::Live,
                 observed_at: Some(self.read_at),
                 windows: self.windows,
+                lists_every_limit: self.provider == "claude",
             }),
             stale: None,
             stale_explanation: self.explanation,

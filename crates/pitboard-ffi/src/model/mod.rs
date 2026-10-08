@@ -621,7 +621,7 @@ pub struct RunOutNotice {
     pub title: String,
     /// The tool, beside another tool's accounts: "Claude Code".
     pub subtitle: Option<String>,
-    /// "spare has 80% of its own left."
+    /// "spare has 80% of its own left.", or "seat has no such limit."
     pub body: String,
     /// The account its Switch button switches to, its label with its tool, for
     /// `Intent::SwitchTo`. `None` for a notification with nothing to switch to, which has no

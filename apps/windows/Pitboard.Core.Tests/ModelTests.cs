@@ -87,7 +87,8 @@ public sealed class ModelTests
             Switchable: false, Parked: null,
             Usage: new Usage(
                 Source.Live, At,
-                [new Limit("session", 18_000, null, 42.0, At + 3_600, null, true)]),
+                [new Limit("session", 18_000, null, 42.0, At + 3_600, null, true)],
+                ListsEveryLimit: true),
             Stale: null, StaleExplanation: null);
         return new Snapshot(
             Revision: revision, Now: At, Reading: false, UpdatedAt: At,

@@ -96,7 +96,8 @@ impl Window {
 /// A limit by one name. A Claude Code session, and Anthropic's answer when it has no
 /// `limits`, use the older `five_hour` and `seven_day` for the limits `limits` calls
 /// `session` and `weekly_all`. Codex's windows borrow the older names for their lengths,
-/// which is harmless: one account's readings are only ever compared with each other.
+/// which is harmless: every Codex reading names its windows the same way, and none is
+/// scoped to a model.
 pub(crate) fn limit_name(kind: &str) -> &str {
     match kind {
         "five_hour" => "session",
@@ -106,10 +107,16 @@ pub(crate) fn limit_name(kind: &str) -> &str {
 }
 
 /// A percentage as every front end draws it and the automatic switch judges it: a whole
-/// one, a half rounded up, so a limit drawn at 95% is at 95%. Whether a limit is used up
-/// is not judged by it: that is the service's 100, as read.
+/// one, a half rounded up, so a limit drawn at 95% is at 95%. Whether the account in use
+/// has run out of a limit is not judged by it: that is the service's 100, as read.
 pub fn whole(percent: f64) -> i64 {
     percent.round() as i64
+}
+
+/// Whether a limit `percent` used has reached `share` as it is drawn: one drawn at 95% has
+/// reached 95%.
+pub fn reached(percent: f64, share: u8) -> bool {
+    whole(percent) >= i64::from(share)
 }
 
 /// Resets closer together than this are one reset.
@@ -238,6 +245,74 @@ pub(crate) fn moved(known: &Snapshot, passed: &[Window], now: i64) -> Option<Sna
         windows,
         observed_at: Some(now),
         ..known.clone()
+    })
+}
+
+/// What an account with room for a switch away from one limit has used.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Room {
+    /// Of that limit. `None` where the account does not have it.
+    pub used: Option<f64>,
+    /// Of the fullest of its other limits.
+    pub fullest: f64,
+}
+
+/// The room an account whose reading holds `theirs` has for a switch away from `limit` of
+/// the account in use, whose limits are `mine`: `None` where any of `theirs` has reached
+/// `share` as it is drawn, or where nothing says what the account has used of one of `mine`.
+/// The automatic switch asks it with its share, and the app's advice with 100.
+///
+/// Where `theirs` are every limit the account has ([`Snapshot::lists_every_limit`]), one
+/// they leave out is one it does not have, so a plan without the limit that ran out, such as
+/// a Team seat with no weekly limit for all models, is a place to go. Any other reading says
+/// nothing of a limit it leaves out, which may be used up, as with no reading at all. Only a
+/// model's limit other than `limit` may be left out of one that gives the five-hour and
+/// weekly limits: the older named shape names no model's, and plans limit models apart.
+pub fn room(
+    theirs: &[Window],
+    lists_every_limit: bool,
+    mine: &[Window],
+    limit: &Window,
+    share: u8,
+    now: i64,
+) -> Option<Room> {
+    if theirs.is_empty() || theirs.iter().any(|window| reached(window.used(now), share)) {
+        return None;
+    }
+    let given = |had: &Window| theirs.iter().find(|window| window.same_limit(had));
+    if !lists_every_limit {
+        let gives = |kind: &str| {
+            theirs
+                .iter()
+                .any(|window| window.scope.is_none() && limit_name(&window.kind) == kind)
+        };
+        let overall = gives("session") && gives("weekly_all");
+        let unknown = |had: &Window| {
+            given(had).is_none() && !(overall && had.scope.is_some() && !had.same_limit(limit))
+        };
+        if std::iter::once(limit).chain(mine).any(unknown) {
+            return None;
+        }
+    }
+    let fullest = theirs
+        .iter()
+        .filter(|window| !window.same_limit(limit))
+        .map(|window| window.used(now))
+        .fold(0.0, f64::max);
+    Some(Room {
+        used: given(limit).map(|window| window.used(now)),
+        fullest,
+    })
+}
+
+/// The candidate with the most room: the least used of the limit, one without it as one with
+/// none used, then the least full in its others. The first of those alike.
+pub fn roomiest<T>(candidates: impl IntoIterator<Item = (T, Room)>) -> Option<(T, Room)> {
+    candidates.into_iter().min_by(|(_, a), (_, b)| {
+        a.used
+            .unwrap_or(0.0)
+            .total_cmp(&b.used.unwrap_or(0.0))
+            .then_with(|| a.fullest.total_cmp(&b.fullest))
     })
 }
 

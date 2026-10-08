@@ -18,7 +18,7 @@
 //! It decides from what Pitboard already knows, the readings every front end and every
 //! status line record, and asks nobody anything to decide. What it never does:
 //!
-//! - switch to an account without room below the share in every limit it reports;
+//! - switch to an account without room below the share in every limit it has;
 //! - switch back by itself. The next time the account in use reaches the share, the best
 //!   account there is is chosen again, which may be the one it left;
 //! - switch away from one limit of an account twice before that limit resets. Somebody who
@@ -34,7 +34,7 @@ use crate::provider::ProviderId;
 use crate::service::Permit;
 use crate::state::{Key, State};
 use crate::status::Row;
-use crate::usage::{Snapshot, Window, same_reset, whole};
+use crate::usage::{self, Snapshot, Window, same_reset};
 use crate::{atomic, home};
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
@@ -72,10 +72,9 @@ impl Threshold {
         self.0
     }
 
-    /// Whether a limit `percent` used has reached the share as it is drawn: one drawn at 95%
-    /// has reached 95%.
+    /// Whether a limit `percent` used has reached the share as it is drawn.
     pub fn reached(self, percent: f64) -> bool {
-        whole(percent) >= i64::from(self.0)
+        usage::reached(percent, self.0)
     }
 
     fn reached_by(self, window: &Window, now: i64) -> bool {
@@ -227,55 +226,6 @@ fn sooner(a: Option<i64>, b: Option<i64>) -> Ordering {
     }
 }
 
-/// How full an account is that has room for the switch: of the limit that sent Pitboard
-/// looking, and at the fullest of its others. `None` where it has no room.
-///
-/// Room is below the share in every limit it reports, and a reading for each limit the
-/// account in use has: a limit it does not report counts as spent, as one with no reading
-/// at all does. Except a limit scoped to one model, other than the one that reached the
-/// share, where the account reports its five-hour and weekly limits: plans differ in the
-/// models they limit apart, and an account on another plan would otherwise never be one to
-/// go to.
-fn room(
-    candidate: &Row,
-    mine: &Snapshot,
-    limit: &Window,
-    threshold: Threshold,
-    now: i64,
-) -> Option<(f64, f64)> {
-    let theirs = &candidate.usage.as_ref()?.windows;
-    if theirs
-        .iter()
-        .any(|window| threshold.reached_by(window, now))
-    {
-        return None;
-    }
-    let reports = |kind: &str| {
-        theirs
-            .iter()
-            .any(|window| window.scope.is_none() && crate::usage::limit_name(&window.kind) == kind)
-    };
-    let overall = reports("session") && reports("weekly_all");
-    for had in &mine.windows {
-        if theirs.iter().any(|window| window.same_limit(had)) {
-            continue;
-        }
-        if !(overall && had.scope.is_some() && !had.same_limit(limit)) {
-            return None;
-        }
-    }
-    let used = theirs
-        .iter()
-        .find(|window| window.same_limit(limit))?
-        .used(now);
-    let fullest = theirs
-        .iter()
-        .filter(|window| !window.same_limit(limit))
-        .map(|window| window.used(now))
-        .fold(0.0, f64::max);
-    Some((used, fullest))
-}
-
 /// What Pitboard would do about the Claude Code account in use, from `rows`, as `state`
 /// and `ledger` stand at `now`.
 pub(crate) fn decide(
@@ -307,15 +257,24 @@ pub(crate) fn decide(
         return Decision::Stay;
     }
     let passed_over = tried.map_or(&[][..], |tried| tried.passed_over.as_slice());
-    let best = rows
-        .iter()
-        .filter(claude)
-        .filter(|row| row.switchable(now))
-        .filter(|row| !passed_over.contains(&row.id))
-        .filter_map(|row| Some((row, room(row, reading, limit, threshold, now)?)))
-        .min_by(|(_, (a, a_most)), (_, (b, b_most))| {
-            a.total_cmp(b).then_with(|| a_most.total_cmp(b_most))
-        });
+    let best = usage::roomiest(
+        rows.iter()
+            .filter(claude)
+            .filter(|row| row.switchable(now))
+            .filter(|row| !passed_over.contains(&row.id))
+            .filter_map(|row| {
+                let theirs = row.usage.as_ref()?;
+                let room = usage::room(
+                    &theirs.windows,
+                    theirs.lists_every_limit,
+                    &reading.windows,
+                    limit,
+                    threshold.percent(),
+                    now,
+                )?;
+                Some((row, room))
+            }),
+    );
     match best.and_then(|(row, _)| row.key()) {
         Some(to) => Decision::Switch(Plan {
             from,
@@ -371,7 +330,7 @@ fn path(ctx: &Context) -> PathBuf {
 fn entry(id: &str, limit: &Window) -> String {
     [
         id,
-        crate::usage::limit_name(&limit.kind),
+        usage::limit_name(&limit.kind),
         limit.scope.as_deref().unwrap_or_default(),
     ]
     .join("/")
@@ -749,12 +708,27 @@ mod tests {
     }
 
     #[test]
-    fn a_limit_the_other_account_does_not_report_counts_as_spent() {
-        let unknown_weekly = row("spare", false, vec![window("session", 0.0)]);
-        assert!(matches!(
-            decided(&[work_at(96.0), unknown_weekly]),
-            Decision::NoRoom { .. }
-        ));
+    fn an_account_on_a_plan_without_that_limit_is_a_place_to_go() {
+        let work = row(
+            "work",
+            true,
+            vec![window("session", 20.0), window("weekly_all", 96.0)],
+        );
+        let seat = row(
+            "seat",
+            false,
+            vec![
+                window("session", 10.0),
+                scoped("weekly_scoped", "Fable", 0.0),
+            ],
+        );
+        assert_eq!(to(&decided(&[work, seat])), Some("seat"));
+    }
+
+    #[test]
+    fn a_limit_the_other_account_does_not_report_is_one_it_does_not_have() {
+        let no_weekly = row("spare", false, vec![window("session", 0.0)]);
+        assert_eq!(to(&decided(&[work_at(96.0), no_weekly])), Some("spare"));
         let mut unread = spare();
         unread.usage = None;
         assert!(matches!(
@@ -763,9 +737,64 @@ mod tests {
         ));
     }
 
-    /// Plans limit different models apart, so an account on another plan reports no limit
-    /// for a model the account in use has one for. It is one to go to where its five-hour
-    /// and weekly limits have room, unless that model's limit is the one that ran out.
+    /// Only an answer read whole says which limits an account has. One in the older shape,
+    /// or with a row Pitboard could not read, says nothing of a limit it leaves out, which
+    /// may be at 100%. The older shape names no model's limit, so it is judged by the
+    /// five-hour and weekly limits, unless a model's limit is the one at the share.
+    #[test]
+    fn a_limit_left_out_of_a_reading_that_may_leave_limits_out_is_not_known_whichever_it_is() {
+        let older = |windows| {
+            let mut older = row("spare", false, windows);
+            older.usage.as_mut().unwrap().lists_every_limit = false;
+            older
+        };
+        let no_room = |rows: &[Row]| matches!(decided(rows), Decision::NoRoom { .. });
+        assert!(
+            no_room(&[work_at(96.0), older(vec![window("seven_day", 10.0)])]),
+            "the limit at the share"
+        );
+        assert!(
+            no_room(&[work_at(96.0), older(vec![window("five_hour", 30.0)])]),
+            "another limit"
+        );
+        let mut weekly_unread = row("spare", false, Vec::new());
+        weekly_unread.usage = Some(usage::from_usage_object(
+            &serde_json::json!({"limits": [
+                {"kind": "session", "percent": 10.0, "scope": null},
+                {"kind": "weekly_all", "percent": null, "scope": null},
+            ]}),
+            NOW,
+        ));
+        assert!(
+            no_room(&[work_at(96.0), weekly_unread]),
+            "a limit whose row was not read"
+        );
+
+        let both = || older(vec![window("five_hour", 30.0), window("seven_day", 10.0)]);
+        assert_eq!(to(&decided(&[work_at(96.0), both()])), Some("spare"));
+        let with_opus = |session: f64, opus: f64| {
+            row(
+                "work",
+                true,
+                vec![
+                    window("session", session),
+                    window("weekly_all", 20.0),
+                    scoped("weekly_scoped", "Opus", opus),
+                ],
+            )
+        };
+        assert_eq!(
+            to(&decided(&[with_opus(96.0, 40.0), both()])),
+            Some("spare")
+        );
+        assert!(
+            no_room(&[with_opus(10.0, 97.0), both()]),
+            "a model's limit at the share"
+        );
+    }
+
+    /// Plans limit different models apart, so an account on another plan has no limit for a
+    /// model the account in use has one for, and is one to go to whichever limit ran out.
     #[test]
     fn a_limit_for_a_model_the_other_plan_does_not_have_is_not_counted_against_it() {
         let work = row(
@@ -788,10 +817,7 @@ mod tests {
                 scoped("weekly_scoped", "Opus", 97.0),
             ],
         );
-        assert!(matches!(
-            decided(&[opus_ran_out, spare()]),
-            Decision::NoRoom { .. }
-        ));
+        assert_eq!(to(&decided(&[opus_ran_out, spare()])), Some("spare"));
 
         let session_only = row("spare", false, vec![window("session", 10.0)]);
         let work = row(
@@ -802,10 +828,7 @@ mod tests {
                 scoped("weekly_scoped", "Opus", 40.0),
             ],
         );
-        assert!(matches!(
-            decided(&[work, session_only]),
-            Decision::NoRoom { .. }
-        ));
+        assert_eq!(to(&decided(&[work, session_only])), Some("spare"));
     }
 
     #[test]

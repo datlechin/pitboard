@@ -28,7 +28,7 @@ What needs attention appears as these items:
 
 | Item | Appears when | Choosing it |
 | --- | --- | --- |
-| **Switch to personal** | The account in use has used all of a limit, and `personal` has room in every limit it reports. The line under the item names the limit that ran out. | Switches to `personal`. |
+| **Switch to personal** | The account in use has used all of a limit, and `personal` has room in every limit it has. The line under the item names the limit that ran out. | Switches to `personal`. |
 | The title of a notice, such as **Couldn't read usage**, or **2 things to look at** when there are several | Pitboard has a warning or a problem to show. | Opens the Pitboard window on the **Accounts** pane, which shows each notice in full. |
 | **Install Pitboard** `<version>` | A copy from a release has found an update. | Opens the update window. |
 | **Claude Code isn't installed** | The app found neither `claude` nor `codex`, and no tool has a login or an account. | Opens Claude Code's setup page in your browser. |
@@ -120,7 +120,7 @@ Notices say what needs attention, most pressing first:
 | --- | --- | --- |
 | **An interrupted switch is waiting** | A switch stopped partway, and Pitboard cannot yet tell whether it finished. | **Give Up** |
 | **Couldn't read usage** | The last read failed. The reason is under the title. | None |
-| **work has no 5-hour limit left** | The account in use has used all of a limit, and another account has room in every limit it reports. | **Switch to personal** |
+| **work has no 5-hour limit left** | The account in use has used all of a limit, and another account has room in every limit it has. | **Switch to personal** |
 | **Switched to work** | A switch the app made finished: one you asked for, or one it made by itself. The lines under it say what happens to open sessions. | **Dismiss** (an x) |
 | **work has a new login** | A sign-in in the app gave the account in use a new login. | **Dismiss** (an x) |
 | The title of another warning, such as **A parked login was refused** | A read or a change gave a warning. For each title, see [Warning codes](/reference/errors#warning-codes). | None |
@@ -389,7 +389,7 @@ In these examples, `work` is the account in use:
 
 | Title | Posted when | Body | Button |
 | --- | --- | --- | --- |
-| **work has no 5-hour limit left** | `work` has used all of a limit, and another account of the same tool has room in every limit it reports. | **personal has 58% of its own left.** | **Switch**, which switches to `personal` |
+| **work has no 5-hour limit left** | `work` has used all of a limit, and another account of the same tool has room in every limit it has. | **personal has 58% of its own left.**, or **seat has no such limit.** for an account without that limit | **Switch**, which switches to `personal` |
 | **Switched Claude Code to personal** | The app switched Claude Code from `work` to `personal` by itself. | **work had used 96% of its 5-hour limit. Sessions already running follow within 33 seconds.** | None |
 | **Claude Code was not switched** | A limit of `work` reached the share in **Switch when a limit reaches**, and one of the [reasons](#when-the-app-switches-by-itself) stops the switch. | **work has used 96% of its 5-hour limit.**, then the reason | None |
 | **Pitboard could not switch Claude Code** | An automatic switch failed. | Why it failed, in the words of the error | None |
@@ -398,7 +398,13 @@ Only **work has no 5-hour limit left** has a subtitle: **Claude Code** or **Code
 
 ### When an account runs out
 
-The notification offers the same tool's account with the most of that limit left, among those with room in every limit they report. A limit whose reset time has passed counts as reset. If no account has room, the app posts nothing.
+The notification offers the same tool's account with the most of that limit left. It considers only accounts that show less than 100% of every limit they have. Of two with as much left, it offers the one least full in its other limits, as the automatic switch chooses.
+
+Anthropic's answer lists every limit an account has. A Claude Code account on a plan without the limit that ran out is therefore offered, as one with none of that limit used. A Team seat, for example, can have no weekly limit for all models.
+
+OpenAI's answer can leave a window out, so a Codex account's reading may not list every limit it has. An account whose reading may leave a limit out is offered only if that reading gives every limit of the account in use. [Which account it switches to](/guides/automatic-switching#which-account-it-switches-to) says which readings those are and which limit they may leave out.
+
+A limit whose reset time has passed counts as reset. If no account has room, the app posts nothing.
 
 The app posts it once each time a limit runs out, however often you quit and reopen it before the limit resets. If the switch from **Switch** fails, the Pitboard window opens with an alert. For how to act on it, see [When an account runs out](/guides/switch#when-an-account-runs-out).
 

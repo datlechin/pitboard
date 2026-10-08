@@ -4,17 +4,20 @@
 //! Pure: what advice there is follows from a read, the tools in their order and what has been
 //! told, and the model's state keeps both and says what to post and what to keep.
 
-use crate::{Account, Limit, Status, Tool};
-use pitboard_core::usage::{same_reset, whole};
-use std::cmp::Ordering;
+use crate::{Account, Limit, Status, Tool, Usage};
+use pitboard_core::usage::{self, same_reset, whole};
 use std::collections::BTreeMap;
+
+/// The share, as drawn, an account to offer must be below in every limit: one the app draws
+/// at 100% of any has nothing left to offer.
+const FULL: u8 = 100;
 
 /// What has been told about, by `Advice::key`: the reset of the limit last told, in epoch
 /// seconds, or 0 where none was known. Kept in Pitboard's directory between launches.
 pub(crate) type Told = BTreeMap<String, i64>;
 
 /// An account in use has run out of a limit, and another account of the same tool has room
-/// in the same kind of limit.
+/// for a switch away from it.
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct Advice {
     /// The tool both accounts are for, as a `Tool`'s code.
@@ -25,69 +28,63 @@ pub(crate) struct Advice {
     /// The account that ran out, and the limit it ran out of.
     pub(crate) ran: String,
     pub(crate) window: Limit,
-    /// The account offered instead, and what it has left of the same kind of limit.
+    /// The account offered instead, and what it has left of the same kind of limit: `None`
+    /// where it has no such limit.
     pub(crate) instead: String,
-    pub(crate) left: i64,
+    pub(crate) left: Option<i64>,
     /// What to switch to: `instead` with its tool, which names one account whatever else is
     /// enrolled.
     pub(crate) switch_to: String,
 }
 
-/// What is used of `limit` at `now`: nothing, once its reset has passed, though no reading
-/// has said so yet, as the core counts it.
-fn share(limit: &Limit, now: i64) -> f64 {
-    if limit.resets_at.is_some_and(|at| at <= now) {
-        0.0
-    } else {
-        limit.percent
+fn window(limit: &Limit) -> usage::Window {
+    usage::Window {
+        kind: limit.kind.clone(),
+        scope: limit.scope.clone(),
+        percent: limit.percent,
+        resets_at: limit.resets_at,
+        is_active: limit.is_active,
+        severity: limit.severity.clone(),
+        length_seconds: limit.length_seconds,
     }
 }
 
-/// What an account has used of the limit `window` is of, counting one it does not report as
-/// spent: an account whose limits are unknown is not one to recommend.
-fn used(account: &Account, window: &Limit, now: i64) -> f64 {
-    account
-        .usage
-        .iter()
-        .flat_map(|usage| &usage.windows)
-        .find(|limit| limit.kind == window.kind && limit.scope == window.scope)
-        .map_or(100.0, |limit| share(limit, now))
+fn windows_of(measured: &Usage) -> Vec<usage::Window> {
+    measured.windows.iter().map(window).collect()
 }
 
-/// Whether an account has room in every limit it reports. One that has run out of any is no
-/// place to go, whichever limit sent somebody looking: switched to, it stops at once.
-fn has_room(account: &Account, now: i64) -> bool {
-    account
-        .usage
-        .iter()
-        .flat_map(|usage| &usage.windows)
-        .all(|limit| share(limit, now) < 100.0)
-}
-
-/// The account of the same tool with the most left of `window`'s kind that can be switched
-/// to at `now` and has room in every other limit, and what it has left: none when none has
-/// any. The first of those as empty, as Swift's `min(by:)` keeps the first.
-fn spare(window: &Limit, mine: &[&Account], now: i64) -> Option<(String, i64, String)> {
-    let spare = mine
-        .iter()
-        .filter(|account| account.switchable && account.qualified.is_some())
-        .filter(|account| has_room(account, now))
-        .fold(None::<&&Account>, |best, account| match best {
-            Some(best)
-                if used(account, window, now).partial_cmp(&used(best, window, now))
-                    != Some(Ordering::Less) =>
-            {
-                Some(best)
-            }
-            _ => Some(account),
-        })?;
-    let room = used(spare, window, now);
-    match (&spare.label, &spare.qualified) {
-        (Some(label), Some(qualified)) if room < 100.0 => {
-            Some((label.clone(), 100 - whole(room), qualified.clone()))
-        }
-        _ => None,
-    }
+/// The account of the same tool that can be switched to at `now` with the most room for a
+/// switch away from `ran` of `current`, by the rule the automatic switch keeps, and what it
+/// has left of that kind of limit: none when none has room.
+fn spare(
+    ran: &Limit,
+    current: &Account,
+    mine: &[&Account],
+    now: i64,
+) -> Option<(String, Option<i64>, String)> {
+    let ran = window(ran);
+    let in_use = current.usage.as_ref().map(windows_of).unwrap_or_default();
+    let (spare, room) = usage::roomiest(
+        mine.iter()
+            .filter(|account| account.switchable && account.qualified.is_some())
+            .filter_map(|account| {
+                let theirs = account.usage.as_ref()?;
+                let room = usage::room(
+                    &windows_of(theirs),
+                    theirs.lists_every_limit,
+                    &in_use,
+                    &ran,
+                    FULL,
+                    now,
+                )?;
+                Some((account, room))
+            }),
+    )?;
+    Some((
+        spare.label.clone()?,
+        room.used.map(|used| 100 - whole(used)),
+        spare.qualified.clone()?,
+    ))
 }
 
 impl Advice {
@@ -108,8 +105,8 @@ impl Advice {
     }
 
     /// Nothing to say unless an account in use has exhausted a limit not yet told about, and
-    /// an account of the same tool that can be switched to now has room in the same kind of
-    /// limit. At most one piece of advice per tool, in the order `tools` lists them.
+    /// an account of the same tool that can be switched to now has room for a switch away
+    /// from it. At most one piece of advice per tool, in the order `tools` lists them.
     ///
     /// Only ever the same tool: a Codex account with room left is no help to somebody whose
     /// Claude Code account has run out, and a switch between them is not a switch at all.
@@ -141,7 +138,9 @@ impl Advice {
                     {
                         continue;
                     }
-                    let Some((instead, left, switch_to)) = spare(window, &mine, status.now) else {
+                    let Some((instead, left, switch_to)) =
+                        spare(window, current, &mine, status.now)
+                    else {
                         continue;
                     };
                     return Some(Advice {
@@ -169,15 +168,13 @@ impl Advice {
     /// now. The one offered before may have been forgotten, renamed, expired or run out
     /// itself, and a menu item offering it would fail when chosen.
     pub(crate) fn renewed(&self, status: &Status) -> Option<Advice> {
-        if !self.holds(status) {
-            return None;
-        }
+        let current = self.still_out(status)?;
         let mine: Vec<&Account> = status
             .accounts
             .iter()
             .filter(|account| account.provider == self.provider)
             .collect();
-        let (instead, left, switch_to) = spare(&self.window, &mine, status.now)?;
+        let (instead, left, switch_to) = spare(&self.window, current, &mine, status.now)?;
         Some(Advice {
             instead,
             left,
@@ -186,10 +183,10 @@ impl Advice {
         })
     }
 
-    /// Whether `status` still bears this out: the account that ran out is still the one in
+    /// The account that ran out, where `status` still bears this out: it is still the one in
     /// use, and the same limit of it is still spent, at the same reset.
-    pub(crate) fn holds(&self, status: &Status) -> bool {
-        status.accounts.iter().any(|account| {
+    fn still_out<'a>(&self, status: &'a Status) -> Option<&'a Account> {
+        status.accounts.iter().find(|account| {
             account.provider == self.provider
                 && account.label.as_deref() == Some(self.ran.as_str())
                 && account.signed_in
@@ -281,12 +278,36 @@ mod tests {
         let advice = about(&read, &Told::new()).remove(0);
         assert_eq!(advice.ran, "work");
         assert_eq!(advice.instead, "fresh");
-        assert_eq!(advice.left, 95);
+        assert_eq!(advice.left, Some(95));
         assert_eq!(
             advice.switch_to, "claude/fresh",
             "the switch names the account with its tool"
         );
         assert_eq!(advice.tool, None, "one tool, so nothing says which");
+    }
+
+    /// Of two with as much left, the one least full in its other limits, as the automatic
+    /// switch chooses.
+    #[test]
+    fn of_two_with_as_much_left_the_least_full_in_its_other_limits_is_offered() {
+        let read = status(vec![
+            account(Some("work"))
+                .signed_in()
+                .limits(vec![window("session", 100.0)])
+                .build(),
+            account(Some("busy"))
+                .limits(vec![window("session", 20.0), window("weekly_all", 80.0)])
+                .build(),
+            account(Some("idle"))
+                .limits(vec![window("session", 20.0), window("weekly_all", 10.0)])
+                .build(),
+        ]);
+        assert_eq!(
+            about(&read, &Told::new())
+                .first()
+                .map(|advice| advice.instead.as_str()),
+            Some("idle")
+        );
     }
 
     /// MenuTests.swift's anAccountThatCannotBeSwitchedToIsNotOffered.
@@ -365,28 +386,83 @@ mod tests {
     #[test]
     fn advice_holds_for_the_window_it_is_about_and_not_the_one_after() {
         let advice = about(&spent_at(7_200), &Told::new()).remove(0);
-        assert!(advice.holds(&spent_at(7_200)));
+        assert!(advice.still_out(&spent_at(7_200)).is_some());
         assert!(
-            advice.holds(&spent_at(7_201)),
+            advice.still_out(&spent_at(7_201)).is_some(),
             "one reset, as another source rounds it"
         );
-        assert!(!advice.holds(&spent_at(25_200)));
+        assert!(advice.still_out(&spent_at(25_200)).is_none());
     }
 
-    /// An account whose limit of the same kind is unknown is not one to recommend: it is
-    /// counted as spent.
+    /// An account whose limits are unknown is not one to recommend.
     #[test]
-    fn an_account_whose_limit_is_unknown_is_not_offered() {
+    fn an_account_with_no_reading_is_not_offered() {
         let read = status(vec![
             account(Some("work"))
                 .signed_in()
                 .limits(vec![window("session", 100.0)])
                 .build(),
-            account(Some("spare"))
-                .limits(vec![window("weekly_all", 0.0)])
-                .build(),
+            account(Some("spare")).unmeasured().build(),
         ]);
         assert!(about(&read, &Told::new()).is_empty());
+    }
+
+    /// Anthropic's answer lists every limit an account has, and a Team seat's has no weekly
+    /// limit for all models. One that has none of the limit that ran out is a place to go,
+    /// and is not said to have all of it left.
+    #[test]
+    fn an_account_on_a_plan_without_that_limit_is_offered() {
+        let read = status(vec![
+            account(Some("work"))
+                .signed_in()
+                .limits(vec![window("session", 20.0), window("weekly_all", 100.0)])
+                .build(),
+            account(Some("seat"))
+                .limits(vec![
+                    window("session", 10.0),
+                    window("weekly_scoped", 0.0).scope("Fable"),
+                ])
+                .build(),
+        ]);
+        assert_eq!(
+            about(&read, &Told::new())
+                .first()
+                .map(|advice| (advice.instead.as_str(), advice.left)),
+            Some(("seat", None))
+        );
+    }
+
+    /// The automatic switch's rule, for a tool it never switches. OpenAI's answer may leave
+    /// a window out, so a Codex account whose reading leaves out a limit the account in use
+    /// has is not offered, whichever limit ran out. Nor is one shown at 100% of any limit.
+    #[test]
+    fn a_codex_account_is_offered_by_the_same_rule() {
+        let five_hours = |percent| window("five_hour", percent).length(18_000);
+        let week = |percent| window("seven_day", percent).length(604_800);
+        let codex = |label, limits| account(Some(label)).of("codex").limits(limits).build();
+        let work = account(Some("work"))
+            .of("codex")
+            .signed_in()
+            .limits(vec![five_hours(100.0), week(30.0)])
+            .build();
+        let not_offered = vec![
+            work,
+            codex("full", vec![five_hours(99.6), week(10.0)]),
+            codex("weekly-only", vec![week(0.0)]),
+            codex("five-hour-only", vec![five_hours(10.0)]),
+        ];
+        assert!(
+            Advice::about(&status(not_offered.clone()), &both_tools(), &Told::new()).is_empty()
+        );
+        let spare = codex("spare", vec![five_hours(40.0), week(50.0)]);
+        let read = status([not_offered, vec![spare]].concat());
+        let advice = Advice::about(&read, &both_tools(), &Told::new());
+        assert_eq!(
+            advice
+                .first()
+                .map(|advice| (advice.switch_to.as_str(), advice.left)),
+            Some(("codex/spare", Some(60)))
+        );
     }
 
     /// MenuTests.swift's aWeeklyLimitIsComparedWithWeeklyLimits.
@@ -427,7 +503,7 @@ mod tests {
         ]);
         read.now = 1_000;
         let advice = about(&read, &Told::new()).remove(0);
-        assert_eq!((advice.instead.as_str(), advice.left), ("spare", 70));
+        assert_eq!((advice.instead.as_str(), advice.left), ("spare", Some(70)));
     }
 
     /// An account that has run out of another limit is no place to go, whichever limit sent
@@ -453,7 +529,7 @@ mod tests {
                 .build(),
         ]);
         let advice = about(&read, &Told::new()).remove(0);
-        assert_eq!((advice.instead.as_str(), advice.left), ("other", 60));
+        assert_eq!((advice.instead.as_str(), advice.left), ("other", Some(60)));
     }
 
     /// A Codex account with room is no help to somebody whose Claude Code account has run
@@ -510,7 +586,7 @@ mod tests {
         assert_eq!(to, ["claude/personal", "codex/spare"]);
         let tools: Vec<Option<&str>> = advice.iter().map(|a| a.tool.as_deref()).collect();
         assert_eq!(tools, [Some("Claude Code"), Some("Codex")]);
-        assert_eq!(advice[1].left, 40);
+        assert_eq!(advice[1].left, Some(40));
     }
 
     /// What was said about one tool's `work` says nothing about another's.

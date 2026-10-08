@@ -255,9 +255,13 @@ pub(crate) fn sessions_follow_in(tool: Option<&str>) -> String {
     }
 }
 
-/// "spare has 80% of its own left.", of the account advice offers.
-pub(crate) fn room_left(account: &str, left: i64) -> String {
-    format!("{account} has {left}% of its own left.")
+/// "spare has 80% of its own left.", of the account advice offers, or "seat has no such
+/// limit." of one whose plan does not limit it that way.
+pub(crate) fn room_left(account: &str, left: Option<i64>) -> String {
+    match left {
+        Some(left) => format!("{account} has {left}% of its own left."),
+        None => format!("{account} has no such limit."),
+    }
 }
 
 /// "work has no 5-hour limit left", of the account in use that ran out.

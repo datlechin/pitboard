@@ -17,6 +17,14 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   reset, and never add a limit. An account Pitboard has not asked Anthropic about yet gets
   no reading from a session, and the status line shows the session's own numbers for it,
   where it showed none until they moved.
+- The app no longer offers an account whose reading may leave a limit out where it leaves
+  out one the account in use has, by the automatic switch's rule. It offered one whenever
+  the limit left out was not the one that ran out. OpenAI's answer can leave a window out,
+  so a Codex account whose answer had one window empty is not offered from an account that
+  has both. For a Claude Code account whose reading is from before this version, this lasts
+  until Pitboard next asks Anthropic about that account. [Which account it switches
+  to](https://docs.usepitboard.com/guides/automatic-switching#which-account-it-switches-to)
+  says which readings may leave a limit out, and the one limit they may still leave out.
 
 ### Removed
 
@@ -25,6 +33,18 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Fixed
 
+- An account on a plan with fewer limits, such as a Team seat with no weekly limit for all
+  models, is a place for the automatic switch to go and for the app to offer. A limit an
+  account does not have counted as spent, so a seat was never chosen once a personal
+  account's weekly limit reached the share, nor an account without a model's weekly limit
+  once that one did. Anthropic's answer lists every limit an account has. A Claude Code
+  reading that may leave one out still leaves the automatic switch no room where it leaves
+  out a limit of the account in use, as before: an answer without Anthropic's list of
+  limits, one Pitboard could not read in full, and an account's reading from before this
+  version, until Pitboard next asks Anthropic about that account. The app offers by the
+  automatic switch's rule. It never offers an account that shows 100% of any limit, and of
+  two with as much left it offers the one least full in its other limits. An account
+  without the limit that ran out is offered with **seat has no such limit.**
 - An account just switched to no longer shows the previous account's usage from Claude
   Code's usage cache, and the automatic switch no longer acts on that cache. Claude Code
   2.1.294 stamps the cache with the account its config names, while the numbers in it are

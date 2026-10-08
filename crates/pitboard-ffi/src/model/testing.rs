@@ -55,7 +55,8 @@ pub(super) fn window(kind: &str, percent: f64) -> Limit {
 }
 
 /// An account as the core reports one. `label` `None` is a login signed in and not
-/// enrolled. Switchable unless it is the one signed in, as a real one is.
+/// enrolled. Switchable unless it is the one signed in, and its numbers every limit it has
+/// where its tool is Claude Code, as a real one is.
 pub(super) fn account(
     label: Option<&str>,
     provider: &str,
@@ -78,6 +79,7 @@ pub(super) fn account(
             source: Source::Live,
             observed_at: Some(0),
             windows,
+            lists_every_limit: provider == "claude",
         }),
         stale: None,
         stale_explanation: None,

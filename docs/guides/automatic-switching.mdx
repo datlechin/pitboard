@@ -42,10 +42,19 @@ The app, `pitboard watch` and `pitboard use` can run at once without making two 
 Pitboard watches each limit of the account in use. Besides the five-hour and weekly limits, an account can report a weekly limit for one model, such as Opus. Once any limit reaches the share, it looks for another enrolled Claude Code account that:
 
 - Has a parked login that can still be put in use.
-- Has used less than the share of every limit it reports.
-- Reports each limit the account in use has. The exception is a weekly limit for one model that did not reach the share. Plans limit different models, so an account without it qualifies if it reports its five-hour and weekly limits.
+- Has used less than the share of every limit it has.
 
-Pitboard takes the account with the most room in the limit that reached the share, then the one least full in its other limits. A limit whose reset time has passed counts as reset.
+Plans have different limits. A Team seat can have a five-hour limit and a weekly limit for one model, and no weekly limit for all models.
+
+Anthropic's answer lists every limit an account has, so an account without the limit that reached the share qualifies, whichever limit that is. Whether a plan with no limit for a model offers that model at all is not known.
+
+Pitboard never switches to an account it has no reading of. A reading may leave a limit out if Anthropic answered without its list of limits, or if Pitboard could not read the answer in full.
+
+So may a reading an earlier version of Pitboard recorded. After you update Pitboard, each account has one until Pitboard next asks Anthropic about that account.
+
+Such a reading qualifies only if it gives every limit the account in use has. The exception is a model's weekly limit other than the one that reached the share, where the reading gives the five-hour and weekly limits.
+
+Pitboard takes the account with the most room in the limit that reached the share. An account without that limit counts as one with none of it used. Then Pitboard takes the one least full in its other limits. A limit whose reset time has passed counts as reset.
 
 If none qualifies, nothing moves, and `pitboard watch` says so once. When the account runs out, the app offers a switch if another account has room then, as [When an account runs out](/guides/switch#when-an-account-runs-out) describes.
 

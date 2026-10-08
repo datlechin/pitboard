@@ -73,7 +73,11 @@ The command line never quits an app. After `pitboard use`, quit the ChatGPT app 
 
 ## When an account runs out
 
-When the account in use runs out of a limit, the app offers a switch to another account of the same tool. It offers the one with the most of that limit left, among accounts with room in every limit they report. A limit whose reset time has passed counts as reset.
+When the account in use runs out of a limit, the app offers a switch to another account of the same tool. It offers the one with the most of that limit left, among accounts with room in every limit they have. A limit whose reset time has passed counts as reset.
+
+A Claude Code account on a plan without that limit is offered, as one with none of that limit used. A Team seat, for example, can have no weekly limit for all models.
+
+OpenAI's answer can leave a window out. A Codex account is offered only if its reading gives every limit the account in use has. [When an account runs out](/reference/app#when-an-account-runs-out) says which other readings this applies to.
 
 The offer comes as a notification. One titled **work has no 5-hour limit left**, for example, says **personal has 58% of its own left.** Click **Switch** in it to switch to `personal`.
 

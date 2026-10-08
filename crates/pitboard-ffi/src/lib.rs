@@ -220,6 +220,9 @@ pub struct Usage {
     pub source: Source,
     pub observed_at: Option<i64>,
     pub windows: Vec<Limit>,
+    /// Whether `windows` are every limit the account has, so a limit they leave out is one
+    /// it does not have.
+    pub lists_every_limit: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]

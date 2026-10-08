@@ -178,16 +178,16 @@ fn advice_offers_what_can_still_be_used_after_every_read() {
         other("side", 40.0, true),
         other("extra", 50.0, true),
     ])));
-    let offered = |model: &Hand| -> Vec<String> {
+    fn offered(model: &Hand) -> Vec<(&str, Option<i64>)> {
         model
             .state
             .advice
             .iter()
-            .map(|advice| format!("{} {}", advice.switch_to, advice.left))
+            .map(|advice| (advice.switch_to.as_str(), advice.left))
             .collect()
-    };
+    }
     model.refresh(&mut machine);
-    assert_eq!(offered(&model), ["claude/personal 90"]);
+    assert_eq!(offered(&model), [("claude/personal", Some(90))]);
 
     machine.answer = Ok(status(vec![
         spent(),
@@ -198,7 +198,7 @@ fn advice_offers_what_can_still_be_used_after_every_read() {
     model.refresh(&mut machine);
     assert_eq!(
         offered(&model),
-        ["claude/personal 70"],
+        [("claude/personal", Some(70))],
         "what is left follows the numbers"
     );
 
@@ -210,7 +210,7 @@ fn advice_offers_what_can_still_be_used_after_every_read() {
     model.refresh(&mut machine);
     assert_eq!(
         offered(&model),
-        ["claude/side 60"],
+        [("claude/side", Some(60))],
         "personal was forgotten"
     );
 
@@ -222,7 +222,7 @@ fn advice_offers_what_can_still_be_used_after_every_read() {
     model.refresh(&mut machine);
     assert_eq!(
         offered(&model),
-        ["claude/extra 50"],
+        [("claude/extra", Some(50))],
         "side needs signing in again"
     );
 

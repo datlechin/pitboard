@@ -101,12 +101,17 @@ pages load, as a browser would.
     app with its setting on, or `pitboard watch`. `Threshold` is the share a limit switches
     at, 50 to 99, 95 unless chosen. `decide` is the rule, from the readings Pitboard already
     holds: which limit of the account in use reached the share, and which switchable account
-    has room under it in every limit it reports. `Ledger` is `autoswitch.json`, what was
-    tried for each limit of each account until that limit resets: the attempts, how many in
-    a row failed for a reason waiting may mend, when the last began, whether one switched
-    and the accounts passed over, written only under `state.lock`. `look` decides from files
-    alone, and says why where Pitboard will not switch. `switch/auto.rs` decides again under
-    the lock and switches only for the same plan, through `switch_held` given the account it
+    has room under it in every limit it has, by `usage::room`, which the app's advice asks
+    at 100. A limit a reading that lists every limit leaves out is one the account does not
+    have. Any other reading leaves no room unless it gives every limit of the account in
+    use, except a model's limit other than the one at the share where it gives the five-hour
+    and weekly limits. `usage::roomiest` picks the account with the most room in that limit,
+    then the least full in its others. `Ledger` is `autoswitch.json`, what was tried for
+    each limit of each account until that limit resets: the attempts, how many in a row
+    failed for a reason waiting may mend, when the last began, whether one switched and the
+    accounts passed over, written only under `state.lock`. `look` decides from files alone,
+    and says why where Pitboard will not switch. `switch/auto.rs` decides again under the
+    lock and switches only for the same plan, through `switch_held` given the account it
     expects to leave, which refuses with `switch_overtaken`, changing nothing, once that
     account is no longer the one signed in; the switch takes that as nothing to do.
     `service::Pitboard::auto_switch` joins the two, and the audit log records a switch, or
@@ -1567,6 +1572,32 @@ measured, and the register cannot hold them, since every fact in it is read from
   `signed_in_account_changed`, nothing is written over the renewed login, the account it
   would have switched to keeps its parked login, and the next attempt, a minute on,
   switches.
+
+### Anthropic's usage answer
+
+Read on 8 October 2026, on one machine. Claude Code 2.1.294 keeps the `utilization` object
+of its last `GET /api/oauth/usage` in `~/.claude.json`, and five backups of that file held
+one each. Four, each a Team seat's, hold `limits` `session` and one model's `weekly_scoped`,
+and no `weekly_all`. The fifth, an answer from 16:13:36, was noted with `session` alone and
+not read again to say whether that was all it held. Pitboard's own reading of a personal Max
+account that day, taken from Anthropic's answers, holds `session`, `weekly_all` and
+`weekly_scoped`. So an answer lists every limit its account has, and one it leaves out is
+one the account does not have. Anthropic documents none of this, and it was seen on one
+machine on one day.
+
+- `usage::answered` rests on it: an answer whose every row of `limits` was read replaces the
+  reading whole (`Snapshot::lists_every_limit`).
+- `usage::room` rests on it: a limit such a reading leaves out counts as one with none used,
+  so a Team seat is a place to go once a personal account's weekly limit for all models
+  reaches the share, or runs out for the app's advice.
+- Other readings say nothing of a limit they leave out: one in the older named shape, one
+  with a row that did not normalise, one an older Pitboard wrote, and every one of
+  OpenAI's. Such a reading leaves no room unless it gives every limit of the account in
+  use. It may leave out a model's limit other than the one at the share where it gives the
+  five-hour and weekly limits: the older named shape names no model's, and plans limit
+  models apart.
+- Whether a plan with no limit for a model offers that model at all is not known. Pitboard
+  counts it as room.
 
 ### Codex
 

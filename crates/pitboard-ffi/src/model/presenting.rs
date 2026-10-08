@@ -1913,6 +1913,25 @@ fn advice_offers_the_account_with_room_and_names_its_tool_only_beside_another() 
     assert_eq!(titles, ["Claude Code: work has no 5-hour limit left"]);
 }
 
+/// An account offered on a plan without the limit that ran out is said to have no such
+/// limit, not all of it left.
+#[test]
+fn an_account_offered_without_the_limit_that_ran_out_is_said_to_have_no_such_limit() {
+    let (model, _) = reading(vec![
+        account(Some("work"))
+            .signed_in()
+            .limits(vec![window("session", 20.0), window("weekly_all", 100.0)])
+            .build(),
+        account(Some("seat"))
+            .limits(vec![window("session", 10.0)])
+            .build(),
+    ]);
+    let notices = model.shown().notices;
+    assert_eq!(notices.len(), 1);
+    assert_eq!(notices[0].title, "work has no weekly limit left");
+    assert_eq!(notices[0].lines, ["seat has no such limit."]);
+}
+
 /// A switch of one tool leaves another tool's accounts as they were. Advice about a Claude
 /// Code account still out, beside another that still has room, is as true after a Codex
 /// switch as before it, and it is never told again, so putting it away loses it.
