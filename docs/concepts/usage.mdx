@@ -63,6 +63,18 @@ Pace is the reading's own: what was used when it was taken, against an even pace
 
 ## What the status line adds
 
-When Claude Code's [status line](/guides/status-line) runs `pitboard statusline`, each session passes it the account's usage. Pitboard records it, so `pitboard`, the app and idle sessions show what busy sessions report.
+When Claude Code's [status line](/guides/status-line) runs `pitboard statusline`, each session passes it the usage of the account it is on. Pitboard records it, so `pitboard`, the app and idle sessions show what busy sessions report.
 
-A session's numbers do not name their account. Pitboard records them only if they moved since the session's last run and Claude Code's config named the same account both times. It records nothing in the 33 seconds an [open session](/concepts/switching#open-sessions) can take to follow a switch.
+A session's numbers do not name their account, but their windows tell it. Each account's five-hour and weekly windows reset at times of their own.
+
+Pitboard records a session's numbers for the one account whose last answer from Anthropic has the same window. That answer must hold no other window of those limits still running, and must give each limit the session passed. An account whose answer leaves a limit out does not have it. So an [open session](/concepts/switching#open-sessions) still on the account before a switch or a `/login` records for that account, however long it takes to follow.
+
+Where the windows match no account, or more than one, Pitboard records nothing. The line then shows the session's own numbers. Its label is marked, as in `work?`, or is `unenrolled` where Claude Code's login is of an account you have not enrolled.
+
+A five-hour window that began after Pitboard last asked Anthropic matches no account by itself. Where the session passes its weekly limit too, that window says whose the five-hour one is. A session that passes only its five-hour limit, as a Team seat's does, records nothing after a reset until Pitboard asks Anthropic again.
+
+A five-hour window no answer has given, such as that one or an unenrolled account's, can reset within a minute of another account's. Pitboard then records the session's numbers for that account while both windows run. Each answer from Anthropic for that account corrects them only until the session's next response.
+
+A weekly limit the session passes prevents this where Anthropic's last answer for that account gives another weekly window still running. It also does where that account has no weekly limit for all models, such as a Team seat.
+
+Pitboard records only numbers that moved since the session's last run. A session left open passes its last response's numbers again, and those can be older than an answer that lowered a percentage since.

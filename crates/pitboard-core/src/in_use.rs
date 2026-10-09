@@ -5,9 +5,8 @@
 //! its own account into the config, and the login in the keychain changed outside Pitboard,
 //! which went on naming the account it had last switched to. So the record keeps what the
 //! service said, with the fingerprint of the login it said it of, and every reader that does
-//! not read the store takes the account in use from it ([`known`]), but the status line,
-//! which still files a session's numbers under the account Claude Code's config names. What
-//! the tool's own record names is otherwise only a sign that something signed in since.
+//! not read the store takes the account in use from it ([`known`]). What the tool's own
+//! record names is only a sign that something signed in since.
 
 use crate::api::Owner;
 use crate::context::Context;

@@ -195,10 +195,19 @@ pages load, as a browser would.
     online. `Pitboard::standing` says what stands on every read: `login_replaced`,
     `in_use_unconfirmed` where Claude Code's config has moved since the record was checked
     and the read could not ask, and `config_names_another` where it names another account
-    than the one in use. `schedule.rs` decides what daily renewal runs and whose it is, and
-    refuses a program in the temporary copy macOS runs an app from, by
-    `in_a_temporary_copy`, which an app asks of the command line inside it too; the host's
-    scheduler writes it.
+    than the one in use. `statusline.rs` files what a Claude Code session passed under the
+    account its windows prove: the one account whose reading, as Anthropic last answered
+    for it, holds a window the session passed and does not rule the session out. A reading
+    rules it out with another running window of a limit passed, or by listing every limit
+    its account has and not one passed. It files only what moved since the session's last
+    run, which `sessions.rs` keeps. Numbers that prove no account are shown as the session's
+    and filed nowhere, under the account in use from `in_use::known` marked `?`, or under
+    none where that account's reading rules the session out. A session that passed none
+    shows the account in use, marked while the record is in doubt. Where the record names no
+    enrolled account, both show `unenrolled`, or `?` while the record is in doubt.
+    `schedule.rs` decides what daily renewal runs and whose it is, and refuses a program in
+    the temporary copy macOS runs an app from, by `in_a_temporary_copy`, which an app asks
+    of the command line inside it too; the host's scheduler writes it.
   - `words.rs`: the sentences and column words Pitboard says in more than one place, each
     a function of typed values: spans of time, a limit's names, when it resets, its pace and
     when it runs out, a parked login's life, a renewal run and doctor's summary. It also holds
@@ -912,11 +921,10 @@ pages load, as a browser would.
   asked about.
 - Who is in use is one record per tool, `state.json`'s `in_use`, written under `state.lock`
   only where a service has just answered for that login or a fingerprint ties it to an
-  earlier answer. Every reader that does not read the store takes it from there, but the
-  status line, which still files a session's numbers under the account Claude Code's
-  config names. `forget` asks as a switch does. Otherwise Claude Code's config is a sign
-  that something signed in, and the words of a warning, never whose a login is: a Claude
-  Code process started or signed in on another login can rewrite it with its own account.
+  earlier answer. Every reader that does not read the store takes it from there, and
+  `forget` asks as a switch does. Otherwise Claude Code's config is a sign that something
+  signed in, and the words of a warning, never whose a login is: a Claude Code process
+  started or signed in on another login can rewrite it with its own account.
   Of Pitboard, only a switch writes it, and `use` of the account already in use where it
   names another; the app's button for that is `use` refused where another account is in
   use by then. Each records `named` once the write lands, and keeps what the config named
@@ -932,6 +940,19 @@ pages load, as a browser would.
 - An answer from Anthropic that Pitboard read whole replaces a Claude Code account's
   reading, and a session only moves that reading, within the limits the answer gave. So
   numbers filed under the wrong account go at that account's next answer.
+- Pitboard files usage only under the account it is proven to be of: an answer for that
+  account's own login, or a session's numbers whose windows that account's answered reading
+  holds, where no other account's reading does. That reading holds no other running window
+  of a limit the session passed, and where it lists every limit of its account, it lists
+  each one passed. Never under the account Claude Code's config names, nor by the time
+  since a switch: a session goes on with the login it holds for as long as it takes to
+  follow one. Windows are told apart by their resets, to the minute. So a session in a
+  window its account's reading does not hold yet can be filed under another account whose
+  window resets within a minute of it, for as long as both windows run: each answer for
+  that account puts its reading right only until the session's next response. A weekly
+  window passed with it tells the two apart where that account's reading holds another
+  running weekly window for all models, or lists every limit and none such. A session that
+  passes the five-hour limit alone tells nothing apart.
 - Pitboard switches by itself only for a front end somebody asked to: the app with its
   setting on, or `pitboard watch` running. It never switches Codex by itself, since a
   running `codex` never follows a switch. The status line and the daily renewal schedule
@@ -1694,6 +1715,16 @@ treated, and only the macOS build shows it. The run reads both builds since.
   switch names the account switched to in `/status`, while `/usage` and every request go on
   with the login it holds. What a switch says of running sessions names no account for that
   reason.
+- Read on the same days from the same four builds, whose code here is the same: the JSON a
+  session passes its status line holds `rate_limits.five_hour` and `seven_day`, each a share
+  used and a reset, taken whole from one response's headers and only for windows whose
+  reset is ahead. It names no account, organisation or email. Only the process's own
+  sign-in or sign-out, the end of a remote attach after one, or a response while it holds no
+  claude.ai login empties it. So a session passes the numbers of the login it holds,
+  whatever the config names, and the status line tells whose they are by their windows (the
+  register's `status_line_input_names_no_account`). The two windows of one run are of one
+  response, so a five-hour window no answer has given yet is taken on the word of the weekly
+  window passed with it.
 
 Not measured. Switching by itself rests on the session cache's 33 seconds, measured on
 2.1.278, and, while a file sits behind the keychain, on a reading of 2.1.294 that no running
@@ -1731,6 +1762,12 @@ machine on one day.
 - `usage::room` rests on it: a limit such a reading leaves out counts as one with none used,
   so a Team seat is a place to go once a personal account's weekly limit for all models
   reaches the share, or runs out for the app's advice.
+- The status line rests on it: a session that passes a limit such a reading leaves out is
+  not on that account. What 0.9.0's status line kept in `~/.pitboard/sessions.json` on
+  that machine the same day agrees: the last runs of ten sessions in two Team seats'
+  five-hour windows passed that window alone, and those of four sessions of personal
+  accounts each passed a weekly window. Were a seat's session to pass one, nothing it
+  passed would be filed under the seat.
 - Other readings say nothing of a limit they leave out: one in the older named shape, one
   with a row that did not normalise, one an older Pitboard wrote, and every one of
   OpenAI's. Such a reading leaves no room unless it gives every limit of the account in

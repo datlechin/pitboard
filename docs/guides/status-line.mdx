@@ -4,7 +4,7 @@ sidebarTitle: "Status line"
 description: "Add `pitboard statusline` to Claude Code's settings to see every account's usage in each session."
 ---
 
-`pitboard statusline` prints one line with the account in use and what every Claude Code account has left.
+`pitboard statusline` prints one line with the account the session is on and what every Claude Code account has left.
 
 ## Add it to Claude Code
 
@@ -32,20 +32,22 @@ personal 59%▼·73%▲  work 12%·40%
 
 ## Read the line
 
-The account in use comes first, in bold, then every other Claude Code account you enrolled.
+The account the session is on comes first, in bold, then every other Claude Code account you enrolled.
 
 | What you see | What it means |
 | --- | --- |
 | `personal 59%·73%` | `personal` has used 59% of its five-hour limit and 73% of its weekly limit. |
 | A green, yellow or red percentage | Green under 70%, yellow from 70%, red from 90%. |
-| A red `▲` or a green `▼` after a percentage of the account in use | That limit is used faster than an even [pace](/concepts/usage#pace), or slower. Nothing within 5 points of even, in the first 3% of a window, or where Pitboard does not know when the window resets. `pitboard` says how far, and when a limit over pace runs out. |
+| A red `▲` or a green `▼` after a percentage of the first account | That limit is used faster than an even [pace](/concepts/usage#pace), or slower. Nothing within 5 points of even, in the first 3% of a window, or where Pitboard does not know when the window resets. `pitboard` says how far, and when a limit over pace runs out. |
 | `?` | Pitboard has no reading of that limit. Run `pitboard` to read every account. |
-| `(3h 00m)` after another account | That account's numbers are 3 hours old. Numbers under 15 minutes old show no age. The account in use never shows an age. |
+| `(3h 00m)` after another account | That account's numbers are 3 hours old. Numbers under 15 minutes old show no age. The first account never shows an age. |
+| `work?` in place of the first label | Pitboard cannot tell which account the session is on. `work` is the account in use, as Anthropic last said of Claude Code's login. The percentages are the session's own, where it passed some. Run `pitboard` to read every account. |
+| `?` in place of the first label | Pitboard can name no account the session may be on. That is when the account in use is in other windows than the session's, or lacks a limit the session passed. It is also when Pitboard knows of no enrolled account in use and has not asked Anthropic since Claude Code's config last changed. Run `pitboard` to ask. |
 | `unenrolled` in place of the first label | Claude Code is not signed in to an account you enrolled. See [Add and manage accounts](/guides/accounts#add-the-account-you-are-signed-in-to). |
 
 The line leaves out accounts of OpenAI's Codex CLI and limits for a single model. For those, see [Check what each account has left](/guides/usage).
 
-Claude Code passes the account's usage to its status line only on Pro and Max plans, after the session's first response. Before that, or on other plans, the line shows Pitboard's last reading of the account in use.
+Claude Code passes the account's usage to its status line only on Pro and Max plans, after the session's first response. Before that, or on other plans, the line shows Pitboard's last reading of the account in use. It is marked `work?` while Claude Code's config names another account than when Pitboard last asked Anthropic, as a sign-in leaves it. It is also marked until Pitboard has first asked.
 
 ## Combine it with your own status line
 
@@ -59,6 +61,6 @@ Pass the input unchanged. Without the session's `session_id`, Pitboard still pri
 
 ## What it reads and writes
 
-`pitboard statusline` makes no network request, does not read the keychain and does not touch a login. It reads only what Claude Code passes, Claude Code's config and Pitboard's files.
+`pitboard statusline` makes no network request, does not read the keychain and does not touch a login. It reads only what Claude Code passes, Claude Code's config and Pitboard's files. It reads the config only to tell whether it names another account than when Pitboard last asked Anthropic. It never takes the account in use from it.
 
 It writes only in `~/.pitboard`, where it records the usage each session passes, so `pitboard` and the app show it. For when it records usage, see [How usage is read](/concepts/usage#what-the-status-line-adds).

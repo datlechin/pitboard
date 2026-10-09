@@ -110,7 +110,7 @@ The `data` of each command, in the order of `pitboard --help`:
 | `uninstall` | `parks_removed`, `parks_pending` (could not be deleted) and `parks_left` (left because another Pitboard may own them), counts. `home_removed` and `schedule_removed`, booleans. |
 | `rename` | `from`, `to` and `email`. |
 | `doctor` | `environment`: the paths and login stores Pitboard found, and the version of OpenAI's Codex CLI. `checks`, each with `code`, `name`, `level` (`ok`, `warn` or `fail`), `detail` and `advice`, as [Maintenance commands](/reference/maintenance-commands#doctor) lists. |
-| `statusline` | `line`, the status line without colour. |
+| `statusline` | `line`, the status line without colour. Its first label can end in `?`, or be `?` alone, as [Integration commands](/reference/integration-commands#statusline) says. |
 | `watch` | One envelope for each event: `event`, `threshold` and the fields of that event, as [Watch events](/reference/json-output#watch-events) lists. |
 | `generate` (`completions` and `manpage`) | `{}` |
 

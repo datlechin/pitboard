@@ -462,9 +462,8 @@ pub(crate) trait Provider: Send + Sync + std::fmt::Debug {
     /// another login can rewrite with its own account (the register's
     /// `config_identity_is_the_last_writers`), so it need not be the login stored's. So it is
     /// a sign that something signed in, the words for a message, and what a switch to the
-    /// account in use writes over: never whose a login is, which row is in use, or whether an
-    /// account may be forgotten. The status line alone still files a session's numbers under
-    /// the account it names.
+    /// account in use writes over: never whose a login is, which row is in use, whose a
+    /// session's numbers are, or whether an account may be forgotten.
     fn own_record(&self, ctx: &Context) -> Option<Identity>;
 
     /// Correct whatever this tool caches about who is signed in, now that `incoming`'s

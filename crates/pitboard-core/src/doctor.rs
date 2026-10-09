@@ -1131,11 +1131,11 @@ fn judge_dormant(park: &ParkFact, now: i64) -> Option<Check> {
 }
 
 /// Whose login Claude Code has stored, as Anthropic last said, which every reader that does
-/// not ask but the status line takes as the account in use, and whether something may have
-/// signed in since. Doctor asks nobody, so a login renewed since, which Claude Code does
-/// every few hours, is said and is no warning; Claude Code's config naming another account
-/// is, since only a read that asks can say whether another login came with it. Nothing is
-/// said where nothing is recorded and no Claude Code account is enrolled.
+/// not ask takes as the account in use, and whether something may have signed in since.
+/// Doctor asks nobody, so a login renewed since, which Claude Code does every few hours, is
+/// said and is no warning; Claude Code's config naming another account is, since only a
+/// read that asks can say whether another login came with it. Nothing is said where nothing
+/// is recorded and no Claude Code account is enrolled.
 fn judge_in_use(facts: &Facts) -> Option<Check> {
     let (code, name) = ("in_use", "in use");
     let known = facts.in_use.as_ref()?;

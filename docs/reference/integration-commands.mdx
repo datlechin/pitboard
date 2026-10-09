@@ -19,7 +19,7 @@ Usage: pitboard statusline [OPTIONS]
 
 When standard input is a terminal, it reads nothing. Input that is not JSON counts as empty, and the command always exits 0.
 
-It prints one line: the account in use, then every other enrolled Claude Code account, two spaces apart.
+It prints one line: the account the session is on, then every other enrolled Claude Code account, two spaces apart.
 
 | Part | Meaning |
 | --- | --- |
@@ -27,17 +27,19 @@ It prints one line: the account in use, then every other enrolled Claude Code ac
 | `?` | Pitboard has no reading of that limit. |
 | `0%` | None of that limit is used, or it has reset since Pitboard last read it. |
 | `(3h 00m)` | The age of another account's reading, shown once it is older than 15 minutes. |
-| `unenrolled` | Shown in place of the first label when Claude Code's config names no account, or one you have not enrolled. |
+| `work?` | Shown in place of the first label when Pitboard cannot tell which account the session is on. `work` is the account in use. The percentages are the session's own where it passed some. Otherwise they are `work`'s, and Claude Code's config has named another account since Pitboard last asked Anthropic, or Pitboard has not asked yet. |
+| `?` | Shown in place of the first label when Pitboard can name no account the session may be on. That is when the account in use is in other windows than the session's, or lacks a limit the session passed. It is also when Pitboard knows of no enrolled account in use and has not asked Anthropic since Claude Code's config last changed. Running `pitboard` asks. |
+| `unenrolled` | Shown in place of the first label when Claude Code's login, as Anthropic last named it, is of an account you have not enrolled. Also shown when Claude Code has no login stored. |
 
 Limits for a single model and accounts of OpenAI's Codex CLI never appear.
 
-The label of the account in use is bold. Other labels, `·`, `?` and ages are dim. A percentage is green under 70%, yellow from 70% and red from 90%.
+The first label is bold. Other labels, `·`, `?` and ages are dim. A percentage is green under 70%, yellow from 70% and red from 90%.
 
 The colour stays on through a pipe unless `NO_COLOR` is set, as [Commands](/reference/commands#output) describes. With `--json`, the [JSON output](/reference/json-output#data-by-command) field `data.line` holds the line without colour.
 
-It reads Claude Code's config to learn which account is in use. It also reads Pitboard's accounts and readings, never the keychain.
+It takes the account in use from what Anthropic last said of Claude Code's login, as Pitboard recorded it. It reads Claude Code's config only to tell whether it has named another account since. It also reads Pitboard's accounts and readings, never the keychain.
 
-It keeps what each session passed at its last run in `~/.pitboard/sessions.json`. It records a session's numbers in `~/.pitboard/usage.json`, the readings `pitboard` and the app show. For when it records them, see [How usage is read](/concepts/usage#what-the-status-line-adds).
+It keeps what each session passed at its last run in `~/.pitboard/sessions.json`. It records a session's numbers in `~/.pitboard/usage.json`, the readings `pitboard` and the app show, for the account whose windows they are. For when it records them, see [How usage is read](/concepts/usage#what-the-status-line-adds).
 
 At a prompt, it prints Pitboard's last readings:
 

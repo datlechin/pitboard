@@ -68,6 +68,17 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   it reads under. It no longer asks the usage of a login Anthropic could not name that time,
   which it asked under the account Claude Code's config named, so the numbers of a login a
   sign-in replaced could be filed under the account it replaced.
+- The status line files a session's numbers under the account whose windows they are, in
+  Anthropic's last answer for each account, also while the session is still on the account
+  before a switch or a `/login`. It filed them under the account Claude Code's config named,
+  and took nothing for 33 seconds after a switch, though a session can take longer to follow
+  one. Numbers in windows no account holds are shown as the session's own and filed nowhere.
+  The label is then `work?` for the account whose login Anthropic last named as stored, `?`
+  where the session cannot be on that one, and `unenrolled` where that login is of an
+  account not enrolled. A session that passed nothing shows the account in use, marked
+  while Claude Code's config has named another since Pitboard last asked Anthropic, or
+  until Pitboard has first asked. A session that passes its five-hour limit alone files
+  nothing after each five-hour reset until Pitboard has asked Anthropic again.
 
 ### Removed
 

@@ -212,6 +212,12 @@ pub const PER_SYSTEM: &[PerSystem] = &[
         linux: Read("2.1.294"),
         windows: Read("2.1.294"),
     },
+    PerSystem {
+        name: "status_line_input_names_no_account",
+        macos: Read("2.1.294"),
+        linux: Read("2.1.294"),
+        windows: Read("2.1.294"),
+    },
 ];
 
 pub const ASSUMPTIONS: &[Assumption] = &[
@@ -727,6 +733,37 @@ pub const ASSUMPTIONS: &[Assumption] = &[
         probe: &["profileFetchedAt:Date.now()", "organization_uuid!=null)"],
         absent: &[],
     },
+    Assumption {
+        name: "status_line_input_names_no_account",
+        fact: "the status line's input holds `rate_limits.five_hour` and `seven_day`, each \
+               `used_percentage` and `resets_at`, taken whole from one response's headers and \
+               only for windows whose reset is ahead, and no account, organisation or email. \
+               It is emptied only by that process's own account change, a sign-in or \
+               sign-out, by the end of a remote attach after one, or by a response while the \
+               process holds no claude.ai login. A response to a request sent before the \
+               process's account changed is dropped, and so is a reading older than the last \
+               one applied. So a session passes the numbers of the login it holds, whatever the \
+               config names, and both windows it passes are of one response",
+        read_from: "the status line's input and the hook fields common to every hook; the \
+                    session's header snapshot, which keeps only windows whose reset is ahead; \
+                    the limits' `applyWindowReadings`, which sets that snapshot whole from one \
+                    response; `resetCurrentLimits` and both its callers; and the header \
+                    reader, which drops a response from before an account change and empties \
+                    the snapshot without a claude.ai login",
+        // Read on 2026-10-08 from the macOS build and on 2026-10-09 from the Linux x64,
+        // Windows x64 and Windows arm64 builds of 2.1.294, whose code here is the same.
+        verified_against: "2.1.294",
+        depends: "statusline::read, which takes a session's numbers to be the account's whose \
+                  reading, as Anthropic answered it, holds their windows, never the account \
+                  Claude Code's config names, and takes a limit's next window on the word of \
+                  the other window passed with it",
+        probe: &[
+            ".spend_limit)&&{rate_limits:",
+            "applyWindowReadings",
+            "resetCurrentLimits",
+        ],
+        absent: &[],
+    },
 ];
 
 #[cfg(test)]
@@ -758,6 +795,7 @@ mod tests {
                 "usage_cache_stamp_is_the_configs",
                 "status_reads_the_config_usage_the_token",
                 "config_identity_is_the_last_writers",
+                "status_line_input_names_no_account",
             ]
         );
         for name in [
