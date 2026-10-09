@@ -136,16 +136,14 @@ fn running(passed: &[Window], now: i64) -> impl Iterator<Item = &Window> {
         .filter(move |window| window.resets_at.is_some_and(|at| at > now))
 }
 
-/// `account`'s reading where Anthropic has answered for it. One an older Pitboard wrote says
-/// nothing of that, and can hold numbers it filed under the wrong account, so its windows
-/// prove nothing.
+/// `account`'s reading where Anthropic has answered for it: another's windows prove nothing.
 fn answered<'a>(
     remembered: &'a HashMap<String, Snapshot>,
     account: &Account,
 ) -> Option<&'a Snapshot> {
     remembered
         .get(&account.id)
-        .filter(|reading| reading.answered_at.is_some())
+        .filter(|reading| reading.answered())
 }
 
 /// Whether `reading` holds a window of `passed` that is still running at `now`.

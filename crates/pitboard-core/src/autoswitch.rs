@@ -319,11 +319,9 @@ fn sooner(a: Option<i64>, b: Option<i64>) -> Ordering {
     }
 }
 
-/// A reading Anthropic gave: only its answer says whose numbers they are.
+/// A reading Anthropic gave.
 fn answered(row: &Row) -> Option<&Snapshot> {
-    row.usage
-        .as_ref()
-        .filter(|reading| reading.answered_at.is_some())
+    row.usage.as_ref().filter(|reading| reading.answered())
 }
 
 /// What Pitboard would do about `current`, the Claude Code account in use, from `rows`, as

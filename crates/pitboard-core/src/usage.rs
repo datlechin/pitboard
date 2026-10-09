@@ -66,6 +66,14 @@ pub struct Snapshot {
     pub source: Source,
 }
 
+impl Snapshot {
+    /// Whether the service gave this reading. Only its answer says whose numbers they are:
+    /// one an older Pitboard wrote can hold numbers filed under the wrong account.
+    pub(crate) fn answered(&self) -> bool {
+        self.answered_at.is_some()
+    }
+}
+
 impl Window {
     /// The share used as of `now`. A window whose reset has passed counts as reset, though
     /// no reading has said so yet.
