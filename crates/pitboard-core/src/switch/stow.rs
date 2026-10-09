@@ -154,12 +154,12 @@ pub(crate) fn find(ctx: &Context, state: &State) -> Result<Option<Left>> {
     let Some((_, raw)) = read_left(&live)? else {
         return Ok(None);
     };
-    let held = holding(&raw)?;
+    let held = contents(&raw)?;
     let stored = read_stored(TOOL, &live)?.map(|(_, document)| document);
     let login = match judge(ctx, state, &held, stored.as_ref(), &path)? {
-        Judged::Kept(kept) => Foreseen::Kept(kept),
-        Judged::Untold => Foreseen::Untold,
-        Judged::Owner(owner) => match state.account_of(TOOL, &owner) {
+        Whose::Kept(kept) => Foreseen::Kept(kept),
+        Whose::Untold => Foreseen::Untold,
+        Whose::Owner(owner) => match state.account_of(TOOL, &owner) {
             None => Foreseen::NotEnrolled(owner),
             Some(account) => {
                 let stored = stored
@@ -243,10 +243,10 @@ impl Putting<'_> {
         let (_, mut raw) = read_left(&live)?
             .filter(|(_, raw)| store::fingerprint(raw) == seen)
             .ok_or_else(|| self.changed())?;
-        let mut held = holding(&raw)?;
+        let mut held = contents(&raw)?;
         let stored = read_stored(TOOL, &live)?.map(|(_, document)| document);
         let judged = judge(ctx, state, &held, stored.as_ref(), &self.path)?;
-        if let Judged::Owner(owner) = &judged
+        if let Whose::Owner(owner) = &judged
             && state.account_of(TOOL, owner).is_none()
         {
             return Err(not_enrolled(&self.path, owner));
@@ -255,8 +255,8 @@ impl Putting<'_> {
         // second sign-in of the account in use is to be told apart. Either way `stored` is the
         // login stored that the file's was told by.
         let (stored, stored_owner) = match judged {
-            Judged::Kept(_) => (stored, None),
-            Judged::Owner(_) | Judged::Untold => match identify::now(ctx, permit, state, TOOL)? {
+            Whose::Kept(_) => (stored, None),
+            Whose::Owner(_) | Whose::Untold => match identify::now(ctx, permit, state, TOOL)? {
                 identify::Live::Login(login) => (Some(login.document), Some(login.owner)),
                 identify::Live::Nothing => (None, None),
             },
@@ -268,9 +268,9 @@ impl Putting<'_> {
             return Err(self.changed());
         }
         let kept = match judged {
-            Judged::Kept(kept) => kept,
-            Judged::Owner(owner) => self.keep(state, &owner, stored_owner.as_ref(), &held)?,
-            Judged::Untold => match self.renew(&live, &mut raw, &mut held)? {
+            Whose::Kept(kept) => kept,
+            Whose::Owner(owner) => self.keep(state, &owner, stored_owner.as_ref(), &held)?,
+            Whose::Untold => match self.renew(&live, &mut raw, &mut held)? {
                 None => Kept::Refused,
                 Some(owner) => self.keep(state, &owner, stored_owner.as_ref(), &held)?,
             },
@@ -316,7 +316,7 @@ impl Putting<'_> {
         &mut self,
         live: &provider::LiveStore,
         raw: &mut String,
-        held: &mut Held,
+        held: &mut Contents,
     ) -> Result<Option<Owner>> {
         let tool = provider::of(TOOL);
         let slice = held.slice.clone().expect("only a login is renewed");
@@ -341,7 +341,7 @@ impl Putting<'_> {
         self.lock_lost |= let_go(writing);
         self.partway = Partway::Renewed;
         fault::point("stow.renewed");
-        *held = holding(&renewed)?;
+        *held = contents(&renewed)?;
         *raw = renewed;
         tool.identify(self.ctx, &fresh)
             .map(|found| Some(Owner::from(found)))
@@ -393,7 +393,7 @@ impl Putting<'_> {
         state: &mut State,
         owner: &Owner,
         stored: Option<&Owner>,
-        held: &Held,
+        held: &Contents,
     ) -> Result<Kept> {
         let account = state
             .account_of(TOOL, owner)
@@ -448,7 +448,7 @@ fn still_stored(live: &provider::LiveStore, judged: Option<&Value>) -> Result<bo
 
 /// What the file holds: the account's login in it, where there is one, and its other keys by
 /// name.
-struct Held {
+struct Contents {
     slice: Option<Value>,
     dropped: Vec<String>,
 }
@@ -456,7 +456,7 @@ struct Held {
 /// What the file holds, told as every warning and doctor tell it ([`live::holds_a_login`]):
 /// a file that is not a JSON object holds no login and no key, and one with no token holds
 /// keys and no login.
-fn holding(raw: &str) -> Result<Held> {
+fn contents(raw: &str) -> Result<Contents> {
     let document = live::document_in(raw);
     let slice = live::holds_a_login(&document)
         .then(|| provider::of(TOOL).slice(&document))
@@ -470,11 +470,11 @@ fn holding(raw: &str) -> Result<Held> {
         .filter(|key| !login.is_some_and(|login| login.contains_key(*key)))
         .cloned()
         .collect();
-    Ok(Held { slice, dropped })
+    Ok(Contents { slice, dropped })
 }
 
 /// Whose the login in the file is, as far as can be told without renewing it.
-enum Judged {
+enum Whose {
     /// Kept already, or nothing to keep.
     Kept(Kept),
     Owner(Owner),
@@ -489,12 +489,12 @@ enum Judged {
 fn judge(
     ctx: &Context,
     state: &State,
-    held: &Held,
+    held: &Contents,
     stored: Option<&Value>,
     path: &Path,
-) -> Result<Judged> {
+) -> Result<Whose> {
     let Some(slice) = &held.slice else {
-        return Ok(Judged::Kept(Kept::NoLogin));
+        return Ok(Whose::Kept(Kept::NoLogin));
     };
     let tool = provider::of(TOOL);
     let login = tool.fingerprint(slice);
@@ -506,7 +506,7 @@ fn judge(
                 .filter(|record| record.login == login)
                 .and_then(|_| state.account_in_use(TOOL))
                 .map(|account| state.typed(&account.key()));
-            return Ok(Judged::Kept(Kept::Stored { label }));
+            return Ok(Whose::Kept(Kept::Stored { label }));
         }
         if let Some((account, parked)) = state.accounts.iter().find_map(|account| {
             account
@@ -518,11 +518,11 @@ fn judge(
             // A park that does not read back keeps nothing: the login is that account's, and
             // is parked in its place.
             return Ok(if reads_back(ctx, account, parked)? {
-                Judged::Kept(Kept::AlreadyParked {
+                Whose::Kept(Kept::AlreadyParked {
                     label: state.typed(&account.key()),
                 })
             } else {
-                Judged::Owner(account.owner())
+                Whose::Owner(account.owner())
             });
         }
         if let Some(owner) = state
@@ -530,15 +530,15 @@ fn judge(
             .filter(|record| record.login == login)
             .and_then(|record| record.owner.clone())
         {
-            return Ok(Judged::Owner(owner));
+            return Ok(Whose::Owner(owner));
         }
     }
     // Renewing it settles whose it is, where it has a refresh token to renew it with.
     let untold = || {
         if login.is_empty() {
-            Judged::Kept(Kept::Refused)
+            Whose::Kept(Kept::Refused)
         } else {
-            Judged::Untold
+            Whose::Untold
         }
     };
     if tool
@@ -549,7 +549,7 @@ fn judge(
         return Ok(untold());
     }
     match tool.identify(ctx, &provider::Credential::new(TOOL, slice.clone())) {
-        Ok(found) => Ok(Judged::Owner(Owner::from(found))),
+        Ok(found) => Ok(Whose::Owner(Owner::from(found))),
         // Expired earlier than its own expiry said, or with no access token at all.
         Err(ProviderError::Unauthorized | ProviderError::ShapeUnexpected { .. }) => Ok(untold()),
         Err(error) => Err(not_identified(path, error)),
