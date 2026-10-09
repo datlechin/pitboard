@@ -141,7 +141,7 @@ The **Activity** pane lists the last 500 changes Pitboard made, newest first, fr
 | **Result** | **Done**, or the outcome's code written out in words, such as **Renewed** or **Parked login refused**. |
 | **Asked By** | **Pitboard app**, **Command line**, or **Unknown** for a change logged before Pitboard recorded who asked. |
 
-**Automatic switch** is a switch Pitboard made or tried by itself before a Claude Code account ran out. Its **Account** is the account it switched to, or tried to, or `claude` for a try that failed before Pitboard chose one. Its **Asked By** is **Pitboard app** for the app's own, and **Command line** for `pitboard watch`. A look that finds nothing to switch adds no line.
+**Automatic switch** is a switch Pitboard made or tried by itself before a Claude Code account ran out. Its **Account** is the account it switched to, or tried to, and empty for a try that failed before Pitboard chose one. Its **Asked By** is **Pitboard app** for the app's own, and **Command line** for `pitboard watch`. A look that finds nothing to switch adds no line.
 
 **Automatic switch not made** is a switch Pitboard did not make by itself. Its **Result** is **Not identified** where Pitboard could not tell whose login Claude Code has stored, so it did not decide. Its **Account** is then the account last known in use. Otherwise a limit of the account in use reached the share, and Pitboard did not switch away from it. Its **Account** is then that account. Its **Result** is the reason, such as **No room**, **Already switched**, **Attempts spent**, **Settling** or **Auth overridden**. Each such reason has one line for each limit and its reset.
 

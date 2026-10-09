@@ -126,8 +126,8 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   time it asks again, `until`, and `no_reading` with the `account` in use. Breaking for a
   script that reads the first two from `skipped`. `pitboard watch` says each once, as
   `Pitboard is not switching Claude Code:` and the reason, and so does the app, in a
-  notification titled **Pitboard is not switching Claude Code**. An `auto-switch` line in `pitboard log` whose error came before
-  Pitboard chose an account names `claude`.
+  notification titled **Pitboard is not switching Claude Code**. An `auto-switch` line in
+  `pitboard log` whose error came before Pitboard chose an account names no account.
 - The app asks whether to switch Claude Code by itself every 30 seconds, as `pitboard
   watch` decides, and after every read and every change of numbers, so an account put in
   use stops settling, and a try held back after one that came to nothing is made, with

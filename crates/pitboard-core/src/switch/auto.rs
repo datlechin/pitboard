@@ -31,7 +31,7 @@ use crate::service::Warning;
 /// between them. Where an attempt that failed leaves no limit to try, why is recorded with
 /// the failure, as a decision records it, so the look a front end makes while it waits after
 /// the failure stands on that. A switch, and anything that stopped one, is recorded as
-/// `auto-switch`, with the account it went to, or `claude` before there was one.
+/// `auto-switch`, with the account it went to, or none before there was one.
 pub(crate) fn automatically(
     settled: Settled,
     threshold: Threshold,
@@ -49,7 +49,7 @@ pub(crate) fn automatically(
         audit::record(ctx, permit, "auto-switch", subject, error.code());
         error
     };
-    let unchosen = which.code();
+    let unchosen = "";
     let mut ledger = Ledger::load(ctx);
     let known_at = state.in_use(which).map(|last| last.known_at);
     if let Some(why) = ledger.unidentified(known_at, now) {
@@ -1332,7 +1332,8 @@ mod tests {
 
     /// A keychain this front end cannot read, as one locked in a session over SSH, is its
     /// failure alone. It is refused with that error and kept for nobody to wait on, so another
-    /// front end that reads the keychain, such as the app, switches at once.
+    /// front end that reads the keychain, such as the app, switches at once. No account was
+    /// chosen, so the line names none: a label may be `claude`.
     #[test]
     #[cfg_attr(
         windows,
@@ -1349,7 +1350,7 @@ mod tests {
             logged(&m),
             [(
                 "auto-switch".into(),
-                "claude".into(),
+                String::new(),
                 "credential_store_locked".into()
             )]
         );

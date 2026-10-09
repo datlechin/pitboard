@@ -827,8 +827,7 @@ impl Pitboard {
             });
         }
         let tool = ProviderId::Claude;
-        let (settled, mut warnings) =
-            self.settled_for(permit, "auto-switch", tool.code(), Some(tool))?;
+        let (settled, mut warnings) = self.settled_for(permit, "auto-switch", "", Some(tool))?;
         match switch::automatically(settled, threshold) {
             Ok((value, more)) => {
                 warnings.extend(more);
