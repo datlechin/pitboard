@@ -4,13 +4,13 @@ sidebarTitle: "Upgrade from 0.3.0"
 description: "Move a Homebrew install from the old formula or app cask to the `pitboard` and `pitboard-app` casks."
 ---
 
-From 0.4.0, `datlechin/tap/pitboard` is the command line, and `datlechin/tap/pitboard-app` is the menu bar app with the command line inside it.
-
-Up to 0.3.0, `brew install datlechin/tap/pitboard` installed a formula. `brew install --cask datlechin/tap/pitboard` installed the app.
+Up to 0.3.0, `datlechin/tap` had a `pitboard` formula for the command line and a `pitboard` cask for the app. From 0.4.0, the `pitboard` cask is the command line, and the `pitboard-app` cask is the app with the command line inside it.
 
 ## From the old formula
 
-`brew update` warns that it did not install the cask that replaces the formula, and Pitboard stays at the old version. The two commands it prints leave `pitboard` running the formula's copy. Instead, remove the formula, then install the cask:
+`brew update` warns that it did not install the cask that replaces the formula. Pitboard stays at the version you have. The two commands `brew update` prints leave `pitboard` running the formula's copy.
+
+Remove the formula, then install the cask:
 
 ```sh
 brew uninstall --formula pitboard
@@ -21,35 +21,29 @@ brew install datlechin/tap/pitboard
 
 `brew update` replaces the app with the command line. The app's settings and your accounts in `~/.pitboard` stay.
 
-To get the app back, run these in order, before or after that `brew update`:
+<Warning>
+  Leave `--zap` out when you remove the old app cask. Its zap moves `~/.pitboard` to the Trash. That folder is the only index of your accounts and their parked logins. Homebrew runs the zap of the cask as you installed it, even after the tap changes.
+</Warning>
+
+To get the app back, run these in order, before or after `brew update`:
 
 ```sh
+# Remove the old app, or the command line that replaced it
 brew uninstall --cask pitboard
+# Remove the formula the old app depended on, if it is there
 brew uninstall --formula --force pitboard
+# Install the app and the command line inside it
 brew install --cask datlechin/tap/pitboard-app
 ```
 
-The first command removes the old app, or the command line that replaced it. The second removes the old formula, if there is one.
-
-<Warning>
-  Leave `--zap` out when you remove the old app cask: with it, that cask moves `~/.pitboard` to the Trash. That folder is the only record of your accounts and their parked logins. Homebrew runs `--zap` as the cask you installed says, even after the tap changes.
-</Warning>
-
 ## If you downloaded the app from a release
 
-The app updates itself as before. To use its command line in a terminal, see [Add the app's command line to your PATH](/install#add-the-app%E2%80%99s-command-line-to-your-path).
+The app updates itself as before. From 0.4.0, each update brings the command line inside the app. To run it in a terminal, see [Put the bundled command line on your PATH](/install#put-the-bundled-command-line-on-your-path).
 
 ## If daily renewal was on
 
-In an app up to 0.3.0, the daily renewal schedule ran the app itself, which renewed nothing. Once an app from 0.4.0 or later is in its place, that schedule renews. Open the app once to point the schedule at the command line inside it.
+In an app up to 0.3.0, the daily renewal schedule ran the app itself and renewed nothing. When that schedule starts an app from 0.4.0 or later, the app renews through the command line inside it. Opening the app once points the schedule at that command line.
 
-A schedule stays broken if the `pitboard` it runs is gone. On Linux, that includes one turned on with the old formula.
+A schedule that runs a `pitboard` that is gone stays broken. On Linux, that includes one turned on with the old formula, which ran the copy inside the formula's folder.
 
-To check yours, run `pitboard doctor` or open the **This Mac** pane in the Pitboard window. A broken schedule fails the `renewal schedule` check.
-
-To fix the schedule, turn daily renewal off and on again. In the app, click Pitboard's item in the menu bar and choose **Settings**. Click **General**. Turn **Renew parked logins daily** off, then on. On the command line, run:
-
-```sh
-pitboard schedule uninstall
-pitboard schedule install
-```
+To check yours and fix it, see [Daily renewal stopped working](/troubleshooting#daily-renewal-stopped-working).

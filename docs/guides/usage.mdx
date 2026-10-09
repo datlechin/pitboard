@@ -1,84 +1,63 @@
 ---
 title: "Check what each account has left"
 sidebarTitle: "Check usage"
-description: "Read each account's five-hour and weekly limits, when they reset and how long the account lasts at its rate."
+description: "Read each account's five-hour and weekly limits, when they reset and how long the account lasts."
 ---
-
-Pitboard shows how much each account has used of its five-hour and weekly limits, and when each limit resets. Check it before you switch Claude Code or OpenAI's Codex CLI to another account, to see which one has room.
 
 ## See usage
 
 <Tabs>
   <Tab title="App">
-    Pitboard's item in the menu bar shows the account in use and the limit it is working against, such as **work 42%**.
+    Pitboard's item in the menu bar shows the account in use and how much of one limit it has used, such as **work 73%**. [Menu bar item](/reference/app#menu-bar-item) says which limit.
 
-    Click it to open Pitboard's menu. The menu lists every account and puts a check mark beside the one in use. Under each name is a line such as **5-hour 42%, weekly 12%**.
+    Click the item to open Pitboard's menu, which lists every account with a line under each.
 
-    For bars, reset times and how long each account lasts, choose **Open Pitboard** (Command-0). The Pitboard window opens.
-
-    <Frame>
-      <img src="/images/window.png" alt="The Pitboard window, listing each account with a bar for each of its limits, when each resets, and a note on the last Codex switch above them" />
-    </Frame>
+    For a bar per limit, with its reset and pace, choose **Open Pitboard** (Command-0).
   </Tab>
   <Tab title="Command line">
-    Run `pitboard`. It is the same as `pitboard status`.
+    Run `pitboard`, the same as `pitboard status`.
 
     ```sh
     pitboard
     ```
 
     ```text
-    ● personal  me@example.com  signed in
+    ● work      me@company.com  signed in
         5h    ██████░│░░   59%  resets in 1h 10m  18% under pace
         week  █│█████░░░   73%  resets in 5d 18h  55% over pace
               weekly limit runs out in 11h 05m at this pace
 
-    ○ work      me@company.com  ready · good for 26d 4h
+    ○ personal  me@example.com  ready · good for 26d 4h
         5h    █░░│░░░░░░   12%  resets in 3h 02m  27% under pace
         week  ████░░│░░░   40%  resets in 2d 4h   29% under pace
     ```
   </Tab>
 </Tabs>
 
-Once both tools have accounts, the app and the command line list each tool's accounts under its own heading. Each tool has its own account in use.
+With accounts of both tools, each tool has its own heading and its own account in use.
 
 ## Read the lines under each account
 
-<Tabs>
-  <Tab title="App">
-    | What you see | What it means |
-    | --- | --- |
-    | A check mark in the menu, **In Use** in the window | The tool is using this account. |
-    | **5-hour 42%, weekly 12%** | The account has used 42% of its five-hour limit and 12% of its weekly limit. |
-    | **5-hour used up until 22:12** | The account has used all of its five-hour limit. The limit resets at 22:12. |
-    | A green, orange or red bar | How much of the limit is used: green under 70%, orange from 70%, red from 90%. |
-    | A red or green mark across a bar, and **27% over pace** or **13% under pace** beside it | Where an even [pace](/concepts/usage#pace) would be by now. Red: the limit is used faster than that. Green: slower. No mark and **on pace** within 5 points. Hold the pointer over the bar for what an even pace would have used. |
-    | **Weekly limit runs out in 11h 05m at this pace** | For the account in use, the limit that runs out first at its pace, before it resets. The menu shows it beside that limit, as **weekly 73% (runs out in 11h 05m)**. |
-    | **About to run out** | The same, with less than a minute left. |
-    | **Parked login good for 10 more days** | You can switch to the account, and its [parked login](/concepts/switching#parked-logins) lasts 10 more days. Codex accounts show no such line, because Codex states no expiry. |
-    | **Needs signing in again** in the menu, **Sign In Again** in the window | Pitboard holds no parked login it can use for the account. See [Sign in to an account again](/guides/sign-in-again). |
-    | **Not named yet** in the menu, the tip **Give this account a name** in the window | The tool is signed in to an account Pitboard has not enrolled. See [Add and manage accounts](/guides/accounts#add-the-account-you-are-signed-in-to). |
-  </Tab>
-  <Tab title="Command line">
-    | What you see | What it means |
-    | --- | --- |
-    | `●` and `signed in`, or `○` | The tool is using this account, or not. |
-    | `ready · good for 26d 4h` | You can switch to the account. Its [parked login](/concepts/switching#parked-logins) lasts another 26 days and 4 hours. |
-    | `ready` alone | You can switch to the account. Codex accounts show this, because Codex states no expiry. |
-    | `ready · expires in 2d 3h · pitboard enroll work --sign-in` | You can switch to the account, but its parked login expires in under 3 days. Run `pitboard renew` to renew it, or the command shown to sign in to it again. To renew parked logins every day, see [Keep parked logins alive](/guides/renewal). |
-    | `login expired` or `nothing parked`, then a command | Pitboard holds no parked login it can use for the account. Run the command shown, or see [Sign in to an account again](/guides/sign-in-again). |
-    | `login replaced outside Pitboard`, then a command | A sign-in outside Pitboard replaced the account's only login, and Pitboard held no copy of it. Run the command shown. See [An account reads `login replaced outside Pitboard`](/troubleshooting#an-account-reads-login-replaced-outside-pitboard). |
-    | `login could not be read` | The tool's login could not be read, and it may be this account's, whose login Pitboard last recorded the tool holding. Run `pitboard doctor`. |
-    | `signed in · not enrolled: pitboard enroll <label>` | The tool is signed in to an account Pitboard has not enrolled. Run the command with a label you choose in place of `<label>`. |
-    | `5h`, `week` | The five-hour limit and the weekly limit. A limit for one model adds the model's name. |
-    | `██████░░░░   59%` | How much of the limit is used: green under 70%, yellow from 70%, red from 90%. |
-    | `│` in a bar, and `55% over pace` or `18% under pace` after the reset | Where an even [pace](/concepts/usage#pace) would be by now. Red: the limit is used faster than that. Green: slower. No mark and `on pace` within 5 points. |
-    | `weekly limit runs out in 11h 05m at this pace` | For the account in use, the limit that runs out first at its pace, before it resets. |
-    | `weekly limit is about to run out` | The same, with less than a minute left. |
-  </Tab>
-</Tabs>
+| App | Command line | Meaning |
+| --- | --- | --- |
+| A check mark in the menu, **In Use** in the window | `●` and `signed in`, and `○` on the others | The tool is using this account. |
+| **5-hour 59%, weekly 73%** in the menu, a bar per limit in the window | `5h`, `week` and a bar per limit | How much of each limit the account has used. A limit for one model adds the model's name. |
+| A green, orange or red bar | A green, yellow or red bar and percentage | Under 70%, from 70% and from 90% used. |
+| **resetting now** in the window | `resetting now` | The reset time has passed. The figure is the last one measured until the next reading. |
+| A red or green mark across a bar, and **55% over pace** or **18% under pace** | `│` in a bar, and `55% over pace` or `18% under pace` | The mark is where an even [pace](/concepts/usage#pace) would be when the numbers were measured. Red: faster than that. Green: slower. `on pace`, with no mark: within 5 points of it. |
+| **weekly 73% (runs out in 11h 05m)** in the menu, and a note in the window | `weekly limit runs out in 11h 05m at this pace` | For the account in use, the limit that runs out first at its pace, and when. Under a minute, it reads **about to run out**. |
+| **5-hour used up until 22:12** in the menu, or **5-hour used up** once that time has passed | `100%` in red | The account has used all of the limit until it resets. |
+| **Parked login good for 26 more days** in the window | `ready · good for 26d 4h`, or `ready` alone for Codex | You can switch to the account. Its [parked login](/concepts/switching#parked-logins) lasts that long. Pitboard knows no expiry for a Codex login. |
+| **Parked login good for 2 more days** in the window | `ready · expires in 2d 3h`, then a command | The parked login expires within 3 days. [Renew now](/guides/renewal#renew-now). |
+| **Needs signing in again** in the menu, **Sign In Again** in the window | `login expired` or `nothing parked`, then a command | Pitboard holds no parked login it can use for the account. [Sign in to an account again](/guides/sign-in-again). |
+| **Needs signing in again** in the menu, with the reason in the window | `login replaced outside Pitboard`, then a command | A sign-in outside Pitboard replaced the account's only login. See [An account reads `login replaced outside Pitboard`](/troubleshooting#an-account-reads-login-replaced-outside-pitboard). |
+| **Login Pitboard can't use**, or a line such as **Claude Code's login could not be read; run `pitboard doctor`** | `login could not be read`, beside an account or `account unknown` | Pitboard could not read the tool's login. Beside an account, that login may be the account's. Run `pitboard doctor`. |
+| **Login Pitboard can't use**, with **Claude Code's login is not one Pitboard can park or switch** | `account unknown` and `login cannot be switched` | The tool is signed in with a login Pitboard cannot park or switch, such as an API key. Run `pitboard doctor`. |
+| **Not named yet** in the menu, the tip **Give this account a name** in the window | `signed in · not enrolled: pitboard enroll <label>` | The tool is signed in to an account Pitboard has not enrolled. [Add the account you are signed in to](/guides/accounts#add-the-account-you-are-signed-in-to). |
+| **Switching** in the menu, a progress indicator in the window | None | A switch to the account is running. |
+| The email address as the line in the menu, no bars in the window | `no usage known yet`, or `no usage known` and a reason | Pitboard has no reading of the account. [Usage shows old numbers](/troubleshooting#usage-shows-old-numbers) explains each reason. |
 
-Pace appears from 3% into a window. For how it is worked out, see [How usage is read](/concepts/usage#pace).
+With [`CLAUDE_CONFIG_DIR`](/reference/files#environment-variables) set, a line such as `for the credential slot Claude Code-credentials-1a2b3c4d` follows the Claude Code accounts. It names the keychain item that `signed in` refers to.
 
 ## Read without asking, or ask again
 
@@ -88,38 +67,24 @@ To see the last numbers measured, without asking Anthropic or OpenAI, run:
 pitboard status --offline
 ```
 
-Pitboard asks nothing and renews no parked login. Each account ends with a line such as `measured 14:02, 3m ago · read without asking Anthropic`.
+It renews no parked login. Each account ends with a line such as `measured 14:02, 3m ago · read without asking Anthropic`.
 
-To ask about every account again, even one asked about moments ago, run:
+To ask about every account, even one asked about moments ago, run:
 
 ```sh
 pitboard status --fresh
 ```
 
-To do the same in the app, choose **Refresh** in Pitboard's menu (Command-R).
+In the app, choose **Refresh** in Pitboard's menu (Command-R).
 
-For why numbers can be a few minutes old, see [How usage is read](/concepts/usage#how-often-pitboard-asks).
+When Pitboard cannot get newer numbers, the command line shows the last ones with when and why:
 
-## When the numbers are old
+```text
+measured 14:02, 3m ago · Anthropic could not be reached
+```
 
-When the command line shows numbers from an earlier reading, it says when they were measured, as in `measured 14:02, 3m ago`.
-
-If Pitboard could not get newer numbers, the reason follows, as in `measured 14:02, 3m ago · Anthropic could not be reached`. The app shows the reason under the account in the window.
-
-For what each reason means and what to do, see [Troubleshooting](/troubleshooting#usage-shows-old-numbers).
+The app shows the reason under the account in the window. [Usage shows old numbers](/troubleshooting#usage-shows-old-numbers) says what to do about each reason.
 
 ## Choose what the menu bar shows
 
-In Pitboard's menu, choose **Settings** (Command-Comma), then click **General**. Click the **Menu bar shows** pop-up menu, then choose one of these:
-
-| Choice | What the menu bar shows |
-| --- | --- |
-| **Account and usage** | The account in use and the limit it is working against, such as **work 42%**. This is the default. |
-| **Usage only** | The percentage alone, such as **42%**. |
-| **Icon only** | The speedometer icon alone. |
-
-For which limit the percentage follows, see [Menu bar app](/reference/app#menu-bar-item).
-
-With accounts of both tools, the menu bar follows whichever of the two accounts in use is closer to running out.
-
-To move to an account with room, see [Switch accounts](/guides/switch).
+To show the percentage alone or the icon alone, choose it from the **Menu bar shows** pop-up menu in **Settings** > **General**. [Settings](/reference/settings#menu-bar-shows) lists each choice.

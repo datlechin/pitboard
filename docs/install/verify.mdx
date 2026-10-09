@@ -1,56 +1,50 @@
 ---
 title: "Verify a download"
-description: "Check that a release file came from Pitboard's release workflow, using GitHub attestations, checksums and Gatekeeper."
+description: "Check that a release file came from Pitboard's release workflow, using attestations, checksums and Gatekeeper."
 ---
-
-Check a [release download](/install#install-without-homebrew) before you run it. The attestation check needs the [GitHub CLI](https://cli.github.com), `gh`.
 
 ## What each release attests
 
-An attestation is a signed record, kept by GitHub, of the workflow and commit that produced a file. Every release attests these files:
+An attestation is a signed record, kept by GitHub, of the workflow and commit that built a file. Every release attests these files:
 
 - each command line tarball
 - the app's zip file
-- a bill of materials (SBOM) for each of those, in CycloneDX format (`.cdx.json`)
+- a CycloneDX bill of materials (`.cdx.json`) beside each tarball and the app
 - `SHA256SUMS`, the checksums of the tarballs and the app
-- `appcast.xml`, the update feed that tells an installed app what to update to
+- `appcast.xml`, the feed the app updates from
 
-A pre-release publishes no `appcast.xml`.
+A pre-release, tagged like `v0.10.0-rc1`, has no `appcast.xml`.
 
-On macOS, the command line and the app are also signed with a Developer ID and notarised by Apple. Files for Linux are not signed.
-
-The app carries its notarisation ticket. For the command line, macOS fetches the ticket from Apple the first time you open a copy downloaded in a browser.
-
-Homebrew installs these same files, and refuses one changed on the release page after the release workflow ran.
+Checking an attestation needs the [GitHub CLI](https://cli.github.com), `gh`, signed in to a GitHub account.
 
 ## Check an attestation
 
-In the download's folder, run this, where `<file>` is the file's name:
+In the download's folder, run this with the file's name:
 
 ```sh
-gh attestation verify <file> --repo datlechin/pitboard
+gh attestation verify Pitboard-v0.10.0-macos.zip --repo datlechin/pitboard
 ```
 
-When a workflow in Pitboard's repository attested that exact file, it prints `Verification succeeded!` and exits with status 0. A changed file has no attestation, and the command fails with an error starting `Error: HTTP 404: Not Found`.
+When a workflow in `datlechin/pitboard` attested that exact file, `gh` prints `Verification succeeded!` and exits with status 0. A changed file has no attestation, and the command fails.
 
-`--repo` accepts an attestation from any workflow in the repository. To accept only the release workflow, add `--signer-workflow`:
+With `--repo` alone, `gh` accepts an attestation from any workflow in the repository. Add `--signer-workflow` to accept only the release workflow:
 
 ```sh
-gh attestation verify <file> --repo datlechin/pitboard \
+gh attestation verify Pitboard-v0.10.0-macos.zip --repo datlechin/pitboard \
   --signer-workflow datlechin/pitboard/.github/workflows/release.yml
 ```
 
 ## Check the checksums
 
-Download `SHA256SUMS` from the same release and check it first:
+Download `SHA256SUMS` from the same release and check its attestation first:
 
 ```sh
 gh attestation verify SHA256SUMS --repo datlechin/pitboard
 ```
 
-By itself, `SHA256SUMS` shows that a download arrived whole. Someone able to change the release could change a file and its checksum together, and the attestation of `SHA256SUMS` catches that.
+On its own, `SHA256SUMS` shows only that a download arrived whole. Anyone able to change the release could change a file and its checksum together.
 
-Then, in the folder holding both files, run this on macOS:
+Then, in the folder that holds both files, on macOS:
 
 ```sh
 shasum -a 256 -c SHA256SUMS --ignore-missing
@@ -62,15 +56,21 @@ On Linux:
 sha256sum -c SHA256SUMS --ignore-missing
 ```
 
-`--ignore-missing` skips files you did not download. A file that matches prints a line like this, where `<version>` is the release's version:
+`--ignore-missing` skips the files you did not download. A file that matches prints:
 
 ```text
-Pitboard-v<version>-macos.zip: OK
+Pitboard-v0.10.0-macos.zip: OK
 ```
 
 A file that differs prints `FAILED`, and the command exits with status 1.
 
+Homebrew checks the files it installs against the checksums the release workflow took. It refuses one changed on the release page later.
+
 ## Check the signature on macOS
+
+The macOS command line and app are signed with a Developer ID and notarised by Apple. Files for Linux are not signed.
+
+The app carries its notarisation ticket. Gatekeeper fetches the command line's ticket from Apple when you first open a copy downloaded in a browser.
 
 `spctl` asks Gatekeeper whether macOS would open a file. For the app:
 
@@ -83,12 +83,17 @@ spctl --assess --type execute -v /Applications/Pitboard.app
 source=Notarized Developer ID
 ```
 
-For the command line, use `--type install`, because `--type execute` accepts only apps. In the folder the tarball unpacked into, run this:
+For the command line, use `--type install`, since `--type execute` accepts only apps. In the folder the tarball unpacked into:
 
 ```sh
 spctl --assess --type install -v pitboard
 ```
 
-It prints the same, as it would for any developer's notarised file. With `-vvv` in place of `-v`, an `origin` line names the signer. For Pitboard's files, it ends with the team identifier `(D7HJ5TFYCU)`.
+```text
+pitboard: accepted
+source=Notarized Developer ID
+```
+
+Any developer's notarised file is `accepted`. With `-vvv` in place of `-v`, an `origin` line names the signer. For Pitboard's files, it ends with the team identifier `(D7HJ5TFYCU)`.
 
 For what else Pitboard protects against, see [Security and privacy](/security#what-pitboard-protects-against).

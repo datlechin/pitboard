@@ -3,56 +3,52 @@ title: "Introduction"
 description: "Pitboard switches Claude Code and Codex between your own accounts and shows what each account has left."
 ---
 
-Pitboard switches Claude Code and OpenAI's Codex CLI between your own accounts, and shows how much each account has left.
+Without Pitboard, changing account in Claude Code or OpenAI's Codex CLI means signing out and signing in again in a browser.
 
 <Frame>
   <img src="/images/menu.png" alt="The Pitboard menu, listing Claude Code and Codex accounts, with a check mark on each one in use and, under each account's name, its usage or that it needs signing in again" width="300" />
 </Frame>
 
-If you have more than one Claude or ChatGPT subscription, switching accounts in either tool means signing out and signing in again in a browser.
+Pitboard keeps the login of each account you are not using, called a [parked login](/concepts/switching#parked-logins). A switch puts the chosen account's parked login where the tool reads it. Your history, settings and projects stay where they are.
 
-Pitboard keeps the login of each account you are not using, called a parked login. A switch puts the chosen account's parked login where the tool reads it.
+[Open Claude Code sessions](/concepts/switching#open-sessions) follow a switch within about 33 seconds, with no restart. Anything that runs Codex keeps the old account until it starts again. [What happens to open sessions](/guides/switch#what-happens-to-open-sessions) lists what to restart.
 
-Your conversation history, settings and projects stay where they are. Open Claude Code sessions pick up the switch within about 33 seconds, unless a login file sits behind the keychain. A running `codex` needs a restart. See [Open sessions](/concepts/switching#open-sessions).
+Pitboard finishes or undoes an [interrupted switch](/concepts/switching#interrupted-switches) before it makes any other change.
 
-Because open sessions follow, Pitboard can also switch Claude Code by itself before the account in use runs out. It does so only after you turn it on. See [Switch before an account runs out](/guides/automatic-switching).
+Pitboard can also [switch Claude Code by itself](/guides/automatic-switching) before the account in use runs out. It is off until you turn it on.
 
-The menu bar app also gives each account a window on claude.ai or chatgpt.com, where you sign in as that account. See [Use each account's site](/guides/account-windows).
+The menu bar app gives each account its own [window on claude.ai or chatgpt.com](/guides/account-windows), where you sign in as that account.
+
+Pitboard has no server of its own and no telemetry. It sends each login only to the service that issued it. [What leaves your machine](/security#what-leaves-your-machine) lists every request.
 
 ## What it works with
 
-Pitboard works with Claude Code, and with Codex signed in with a ChatGPT account. For what Codex needs, see [Use Pitboard with Codex](/guides/codex#before-you-enrol-a-codex-account).
+Pitboard works with Claude Code, and with Codex signed in with ChatGPT. For Codex, read [Before you enrol a Codex account](/guides/codex#before-you-enrol-a-codex-account) first.
 
-Pitboard is a command line for macOS and Linux, and a menu bar app for macOS 14 or later that includes the command line. For requirements and how far Linux is tested, see [Install Pitboard](/install#what-you-need).
+The command line runs on macOS and Linux. The menu bar app runs on macOS 14 or later and includes the command line. [What you need](/install#what-you-need) gives the architectures and how far each system is tested.
 
-Gemini CLI is not supported. For other unsupported tools and sign-ins, see [What Pitboard will not do](/concepts/limits#tools-and-sign-ins-pitboard-does-not-support).
+[Tools and sign-ins Pitboard does not support](/concepts/limits#tools-and-sign-ins-pitboard-does-not-support) lists what it leaves out. [Is this allowed](/concepts/limits#is-this-allowed) covers the services' terms.
+
+To check a release file before you run it, see [Verify a download](/install/verify).
+
+Pitboard is licensed under [Apache-2.0](https://github.com/datlechin/pitboard/blob/main/LICENSE). It is not affiliated with Anthropic or OpenAI, as [NOTICE](https://github.com/datlechin/pitboard/blob/main/NOTICE) states.
 
 ## Where to go next
 
 <Columns cols={2}>
   <Card title="Quickstart" href="/quickstart">
-    Install Pitboard, add two Claude Code accounts and switch between them.
+    Install Pitboard, enrol two Claude Code accounts and switch between them.
   </Card>
 
   <Card title="Switch accounts" href="/guides/switch">
-    Switch from Pitboard's menu, the Pitboard window or the command line.
+    Switch from the menu bar, the Pitboard window or the command line.
   </Card>
 
   <Card title="How switching works" href="/concepts/switching">
-    What happens to each login in a switch.
+    What happens to each login, and when open sessions follow.
   </Card>
 
   <Card title="Security and privacy" href="/security">
     Where parked logins are kept and what leaves your machine.
   </Card>
 </Columns>
-
-## Questions people ask first
-
-- Where do my logins go? See [What leaves your machine](/security#what-leaves-your-machine).
-- Is this allowed? See [What Pitboard will not do](/concepts/limits#is-this-allowed).
-- What if Pitboard stops halfway through a switch? See [Interrupted switches](/concepts/switching#interrupted-switches).
-- What if my login is too big for the keychain? See [Large logins on macOS](/security#large-logins-on-macos).
-- Why trust the download? See [Verify a download](/install/verify).
-
-Pitboard is licensed under Apache-2.0 and is not affiliated with Anthropic or OpenAI. See [NOTICE](https://github.com/datlechin/pitboard/blob/main/NOTICE).

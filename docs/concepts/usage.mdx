@@ -1,80 +1,69 @@
 ---
 title: "How usage is read"
-description: "Pitboard reads usage from Anthropic and OpenAI, rereads it only once it could have moved, and estimates how long accounts last."
+description: "Where Pitboard's usage numbers come from, how often it asks, and how pace and run-out times are worked out."
 ---
-
-Pitboard asks Anthropic and OpenAI how much of each limit your accounts have used, all at once.
 
 ## Where the numbers come from
 
-For the Claude Code account in use, Pitboard asks Anthropic with Claude Code's login; for any other, with its [parked login](/concepts/switching#parked-logins).
+Pitboard asks Anthropic about Claude Code accounts and OpenAI about OpenAI's Codex CLI accounts, all at once. It asks with the tool's login for the account in use and the [parked login](/concepts/switching#parked-logins) for any other.
 
-For accounts used with OpenAI's Codex CLI, Pitboard sends OpenAI Codex's own usage request, which counts against no limit. Until you enrol a Codex account, Pitboard asks OpenAI nothing.
+For OpenAI, Pitboard sends Codex's own usage request, which spends no limit (read in Codex 0.154.0).
 
-Work on other machines counts too, as [What a switch costs you](/concepts/limits#what-a-switch-costs-you) explains.
+An answer counts the account's work on every machine.
 
-Between answers, Pitboard shows its newest numbers and when they were measured.
+Pitboard asks nothing with a login it cannot read or [identify](/concepts/switching#how-pitboard-knows-whose-login-it-is), since the numbers could land on the wrong account.
 
 ## How often Pitboard asks
 
-Pitboard asks about an account again only once 1% of its shortest limit's window has passed. That is 3 minutes for a five-hour limit, about 1 hour 41 minutes for a weekly one and 1 minute with no reading yet.
+Pitboard asks about an account again only after 1% of its shortest limit's period. That is 3 minutes for a five-hour limit, about 1 hour 41 minutes for a weekly one and 1 minute with no reading yet.
 
-The command line and the app share one record of when each account was asked. Running `pitboard` twice in a row asks about each account at most once.
+The command line and the app share one record of asking, `asking.json`.
 
-When a service asks for less traffic, Pitboard waits the time it names, or else 1 minute, doubling up to 1 hour. If it is unreachable or returns an error, the wait is 30 seconds, doubling up to 15 minutes.
+When a service asks for less traffic, Pitboard waits the time it names, or else 1 minute, doubling up to 1 hour. When a service cannot be reached or answers with a server error, it waits 30 seconds, doubling up to 15 minutes.
 
-The app and [`pitboard watch`](/reference/account-commands#watch) read usage when they start and every 5 minutes while they run. The app also reads when your Mac wakes. Clicking Pitboard's item in the menu bar reads again if the last read is at least a minute old.
+The app and [`pitboard watch`](/reference/account-commands#watch) read when they start and every 5 minutes. Every 2 seconds, they look, without asking, for switches and numbers other runs recorded. The app also reads when your Mac wakes, and when you open its menu or **Accounts** pane once its numbers are a minute old.
 
-Every 2 seconds, both also look for a switch made elsewhere or numbers that other runs of Pitboard recorded, without asking any service. The app shows what it finds. With [automatic switching](/guides/automatic-switching) on, the app also decides from it whether to switch, as `pitboard watch` does.
-
-When what the app finds says Claude Code's config has named another account since Anthropic last named the login stored, as a sign-in leaves it, the app reads again and asks Anthropic whose the login is. It does so once for each account the config names.
-
-`pitboard status --fresh` and **Refresh** in Pitboard's menu or the **Accounts** pane ask about every account anyway, and try again a service that could not be reached. They do not ask through a wait a service asked for.
+`pitboard status --fresh` and **Refresh** in the app skip the 1% floor and a wait after an error. A wait the service asked for still holds.
 
 ## One reading per account
 
-The command line and the app record into one reading per account and show it. Claude Code's status line does too, for Claude Code accounts.
+The command line, the app and the status line share one reading per account.
 
-Pitboard's own answer from a service replaces the limits it gives in the account's reading, and can lower a percentage. So when a limit falls in the middle of its window, after a banked reset on claude.ai or a plan upgrade, Pitboard shows the lower percentage the next time it asks. The app asks every 5 minutes.
+Anthropic's answer lists every limit the account has (read in Claude Code 2.1.294), so it replaces the reading whole and can lower a percentage. A higher percentage a session recorded since stands.
 
-Anthropic's answer lists every limit an account has, so a limit it leaves out is gone. Where Pitboard cannot read every limit in an answer, it keeps a limit the answer leaves out until it resets.
+Where an answer may leave a limit out, Pitboard keeps it until it resets:
 
-OpenAI's answer has room for two windows, either of which can be empty. What an empty one means is not known, so Pitboard keeps a window OpenAI leaves out until it resets.
+- An Anthropic answer without its list of limits, or with a row Pitboard cannot read.
+- Every OpenAI answer. Either of its two periods can be empty, for a reason not known.
 
-A session's numbers do not say when they were measured or whose they are. They only move a limit the account's last answer gave. Within that limit's window, the higher percentage is the newer, so a percentage a session recorded after the answer was taken stands. Once the window resets, Pitboard takes a session's numbers for the next window. A session never adds a limit.
+A Claude Code session's numbers only move a limit the account's last answer gave. Once that limit resets, they start its next period.
 
 ## Pace
 
-Beside each limit, Pitboard compares its use with an even pace: the same rate from the start of its window to its reset.
+An even pace uses a limit at one rate from the start of its period to its reset: 50% by halfway through a week. Pitboard gives the difference in percentage points.
 
-At 40% of its weekly limit, an account is fine two days before the reset, and runs out early two days after the week began.
+More than 5 points over is over pace: at its rate so far, the limit runs out before it resets. More than 5 points under is under pace, and the limit lasts. Anything closer is on pace.
 
-An even pace by now is the part of the window gone by. Halfway through a week it is 50%. Pitboard says the difference in percentage points of the limit:
+A weekly limit 40% used is `11% over pace` 2 days into the week, and `31% under pace` with 2 days left.
 
-- `27% over pace`: 27 points more is used than an even pace would have used. At the rate since the window began, the limit runs out before it resets.
-- `13% under pace`: 13 points less is used, and the limit lasts until it resets.
-- `on pace`: within 5 points either way.
+There is no pace in a period's first 3%, for a limit used up, or where its reset or length is unknown.
 
-Pitboard says no pace in the first 3% of a window, for a limit used up, or where it does not know when the window resets or how long it runs.
+For the account in use, a line names the limit that runs out first: `weekly limit runs out in 11h 05m at this pace`.
 
-For the account in use, a line names the limit that runs out first at its pace, and when: `weekly limit runs out in 11h 05m at this pace`. An account not in use is not being used, so nothing of it runs out, and in `--json` its `lasts` is its first reset.
-
-Pace is the reading's own: what was used when it was taken, against an even pace at that moment. Between readings, only the time until a limit over pace runs out counts down. An old reading says how old, as in `measured 14:02, 2h 00m ago`.
+Pace is as of the reading, so old numbers do not drift towards under pace and hide a warning. Between readings, only a run-out time counts down.
 
 ## What the status line adds
 
-When Claude Code's [status line](/guides/status-line) runs `pitboard statusline`, each session passes it the usage of the account it is on. Pitboard records it, so `pitboard`, the app and idle sessions show what busy sessions report.
+As Claude Code's [status line](/guides/status-line), `pitboard statusline` receives the five-hour and weekly usage of the session's last response. Pitboard records it, asking no service.
 
-A session's numbers do not name their account, but their windows tell it. Each account's five-hour and weekly windows reset at times of their own.
+The numbers name no account (read in Claude Code 2.1.294), but each account's periods reset at their own times. Pitboard records them for the one enrolled account whose reading holds a period the session passed, to within a minute.
 
-Pitboard records a session's numbers for the one account whose last answer from Anthropic has the same window. That answer must hold no other window of those limits still running, and must give each limit the session passed. An account whose answer leaves a limit out does not have it. So an [open session](/concepts/switching#open-sessions) still on the account before a switch or a `/login` records for that account, however long it takes to follow.
+A reading with another running period of one of those limits does not match. Nor does one that lists every limit but lacks one passed. With no match, or several, Pitboard records nothing. [`statusline`](/reference/integration-commands#statusline) lists what the line shows then.
 
-Where the windows match no account, or more than one, Pitboard records nothing. The line then shows the session's own numbers. Its label is marked, as in `work?`, or is `unenrolled` where Claude Code's login is of an account you have not enrolled.
+So an [open session](/concepts/switching#open-sessions) still on its old account after a switch records there until it follows.
 
-A five-hour window that began after Pitboard last asked Anthropic matches no account by itself. Where the session passes its weekly limit too, that window says whose the five-hour one is. A session that passes only its five-hour limit, as a Team seat's does, records nothing after a reset until Pitboard asks Anthropic again.
+A five-hour period begun since Pitboard last asked Anthropic matches no reading, so the weekly period passed with it identifies the account. A Team seat's session passes only its five-hour limit, and records nothing after a reset until Pitboard asks again.
 
-A five-hour window no answer has given, such as that one or an unenrolled account's, can reset within a minute of another account's. Pitboard then records the session's numbers for that account while both windows run. Each answer from Anthropic for that account corrects them only until the session's next response.
+One risk is known. A session on an account no reading holds, such as an unenrolled one, can pass a five-hour period that resets within a minute of an enrolled account's. Its numbers then record for that account, and each answer from Anthropic corrects them only until the session's next response. The session's weekly period prevents this when that account's reading holds a different one, or no weekly limit for all models.
 
-A weekly limit the session passes prevents this where Anthropic's last answer for that account gives another weekly window still running. It also does where that account has no weekly limit for all models, such as a Team seat.
-
-Pitboard records only numbers that moved since the session's last run. A session left open passes its last response's numbers again, and those can be older than an answer that lowered a percentage since.
+Pitboard records only limits that moved since the session's last run. An idle session passes the same numbers again, which can predate an answer that lowered a percentage.

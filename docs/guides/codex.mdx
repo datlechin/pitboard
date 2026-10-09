@@ -1,86 +1,89 @@
 ---
 title: "Use Pitboard with Codex"
 sidebarTitle: "Codex"
-description: "Check what Codex needs before you enrol an account, and where Codex accounts behave differently from Claude Code ones."
+description: "Check what Codex needs before you enrol an account, add Codex accounts and see how they differ."
 ---
 
-Pitboard switches OpenAI's Codex CLI between your ChatGPT accounts. Until you enrol a Codex account, Pitboard lists no Codex accounts and asks OpenAI nothing.
+Until you enrol a Codex account, Pitboard lists nothing about OpenAI's Codex CLI, not even the account Codex is signed in to. It asks OpenAI nothing either.
 
 ## Before you enrol a Codex account
 
-Codex must keep a ChatGPT login in a file. To check, run `pitboard doctor`. Its `Codex login store` line starts with `file`, and `Codex login` shows your email address.
+Pitboard switches Codex only while Codex is signed in with ChatGPT. Codex must keep that login in its file store: `~/.codex/auth.json`, or `auth.json` in `CODEX_HOME`. To check, run:
 
-Pitboard works only with Codex's default store, the file `~/.codex/auth.json`, or `$CODEX_HOME/auth.json` if you set `CODEX_HOME`. The setting `cli_auth_credentials_store` chooses the store. Pitboard refuses these values:
+```sh
+pitboard doctor
+```
 
-- `keyring` and `auto` keep the login in Codex's own keychain items. On macOS, every read by another program would ask you for permission.
-- `ephemeral` keeps the login in memory only, so there is nothing to park.
+In the Codex section, `Codex login store` reads `file`, and `Codex login` reads your email address. If it says `cannot tell`, fix the place it names.
 
-An API-key sign-in has no account login to park. If Codex uses one or is not signed in, run `codex login` and sign in with ChatGPT.
+Codex's setting `cli_auth_credentials_store` chooses the store. Pitboard refuses every store but `file`:
 
-### Where Codex reads the setting
+| `Codex login store` | Where Codex keeps the login |
+| --- | --- |
+| `keyring` | A keychain item Codex made for itself. |
+| `auto` | The same keychain item, falling back to the file. |
+| `secrets` | An encrypted file whose key is in the keychain: `keyring` or `auto` with `secret_auth_storage` turned on in `[features]`. |
+| `ephemeral` | In memory, for one run of Codex. |
 
-Codex reads `cli_auth_credentials_store` from these places, in this order, and the last one that sets it wins:
+Read in Codex 0.154.0. Pitboard does not read Codex's keychain stores, because every read would ask you for permission. A login kept in memory leaves nothing to park.
 
-1. `/etc/codex/config.toml`, which applies to everyone on the machine.
-2. `config.toml` in Codex's folder, `~/.codex` or `CODEX_HOME`.
-3. `/etc/codex/managed_config.toml`.
-4. On macOS, the managed preference `config_toml_base64` of `com.openai.codex`, which a configuration profile sets.
-
-`/etc/codex/requirements.toml`, and on macOS the managed preference `requirements_toml_base64`, can pin the store. Then no other place changes it. Pitboard reads these places as Codex 0.160.0 does, and the `Codex login store` line of `pitboard doctor` names the one that chose the store. If one of them is there and Codex cannot read it, Codex 0.160.0 does not start, and Pitboard refuses too.
-
-A `profile = "<name>"` line in any of them chooses the profile that a `[profiles.<name>]` table defines, as an older Codex, such as 0.99.0, reads it. A profile's table does not change the store, because neither Codex 0.99.0 nor 0.160.0 reads `cli_auth_credentials_store` there. If no table defines the profile a line names, Pitboard refuses, as 0.99.0 does. Codex 0.160.0 does not start with a `profile` line at all: it chooses a profile only with `--profile`.
-
-Codex reads three more places, and Pitboard reads none of them:
-
-- A project's own `.codex/config.toml`. In a trusted project that sets the store, Codex keeps its login somewhere else while it runs there.
-- A profile's `<name>.config.toml` in Codex's folder, which Codex reads only when you run it with `--profile <name>`. `codex login` refuses `--profile`.
-- Configuration an enterprise manages, which Codex fetches with its login. It comes after `/etc/codex/config.toml` and before your own `config.toml`. `codex login` does not load it, so it does not move a login a sign-in writes. Whether it moves the login while Codex runs is not known.
+If the store is `file` but Codex is signed out or uses an API key, run `codex login` and sign in with ChatGPT.
 
 ### Use the file store
 
-If your own `config.toml` or `/etc/codex/config.toml` chose the store, set it to `file` in your own:
+If the `Codex login store` line names your own `config.toml` or `/etc/codex/config.toml`, set the file store in your own `config.toml`, in `~/.codex` or `CODEX_HOME`:
 
 ```toml title="~/.codex/config.toml"
 cli_auth_credentials_store = "file"
 ```
 
-Then run `codex login` and sign in with ChatGPT, so Codex writes its login to the file.
+Then run `codex login` and sign in with ChatGPT.
 
-If `managed_config.toml`, a managed preference or a requirements file chose it, only an administrator can change it. Pitboard's message names which.
+If the line names `/etc/codex/managed_config.toml`, `/etc/codex/requirements.toml` or a managed preference of `com.openai.codex`, only an administrator can change the store. [Codex files](/reference/files#codex-files) lists every place Codex reads the setting from.
 
 ## Add Codex accounts
 
 <Tabs>
   <Tab title="App">
-    1. Click Pitboard's item in the menu bar, then choose **Add Account**.
-    2. If the dialog shows a **Tool** pop-up menu, click it and choose **Codex**. If Codex is not offered, install Codex, then quit Pitboard and open it again. The app looks for `codex` only when it opens.
-    3. Enter a name such as `work`, then click **Sign In**. Your browser opens.
-    4. Sign in with the ChatGPT account you are adding. The dialog closes and the account appears in the **Accounts** pane.
+    <Steps>
+      <Step title="Open the dialog">
+        Click Pitboard's item in the menu bar, then choose **Add Account**. If the dialog has a **Tool** pop-up menu, choose **Codex**.
+      </Step>
+      <Step title="Name the account">
+        Enter a name such as `work`, then click **Sign In**.
+      </Step>
+      <Step title="Sign in">
+        In your browser, sign in with the ChatGPT account you are adding. If the browser does not open, click **Open Sign-In Page**.
+      </Step>
+    </Steps>
 
-    To enrol the account Codex is signed in to, add it the same way, signing in as that account. Then restart any running `codex`: it still holds the old login.
+    If the dialog says Codex is not offered, install Codex, then quit Pitboard and open it again. The app looks for `codex` only when it opens.
+
+    Once one Codex account is enrolled, name the account Codex is signed in to as in [Add the account you are signed in to](/guides/accounts#add-the-account-you-are-signed-in-to).
   </Tab>
   <Tab title="Command line">
-    A Codex label starts with `codex/`, because a bare name means Claude Code.
+    A Codex label starts with `codex/`.
 
     ```sh
-    pitboard enroll codex/personal          # the Codex account signed in now
-    pitboard enroll codex/work --sign-in    # another Codex account
+    pitboard enroll codex/personal          # the account Codex is signed in to
+    pitboard enroll codex/work --sign-in    # another account
     ```
 
-    `--sign-in` runs `codex -c cli_auth_credentials_store="file" login` in a private directory, so the account in use stays signed in, and Codex writes the new login to a file there. Your browser opens: sign in with the ChatGPT account you are adding. Pitboard then prints:
+    With `--sign-in`, your browser opens. Sign in with the ChatGPT account you are adding.
 
     ```text
-    Enrolled codex/work (me@company.com). Switch to it with: pitboard use codex/work
+    Enrolled codex/work (work@example.com). Switch to it with: pitboard use codex/work
     ```
   </Tab>
 </Tabs>
 
-Do not add another account by running `codex login` yourself: it revokes the login in use. For why, see [Add another account](/guides/accounts#add-another-account). To rename or forget accounts, see [Add and manage accounts](/guides/accounts).
+Do not add accounts with `codex login`. It revokes the login in use, which then needs a browser sign-in: see [Add another account](/guides/accounts#add-another-account).
 
 ## How Codex accounts differ
 
-- Nothing that runs Codex picks up a switch: a `codex` session, the ChatGPT app, Codex's background app server or Codex in an editor. Start each again without signing out in it, as [What happens to open sessions](/guides/switch#what-happens-to-open-sessions) explains. In the app, a switch while the ChatGPT app is open offers to quit and open it again.
-- Pitboard reads the account from the login itself, without asking OpenAI. Two people in one ChatGPT Team or Business workspace are two accounts.
-- A switch still asks OpenAI whether it accepts the incoming login, by reading that account's usage. That read does not count toward your limits.
-- A [parked Codex login](/concepts/switching#parked-logins) shows `ready` with no `good for` time, because Codex states no expiry.
-- On macOS, Pitboard passes a parked Codex login to the keychain command `security` as an argument, and says so after a switch or a `--sign-in`. See [Large logins on macOS](/security#large-logins-on-macos).
+- Nothing that runs Codex follows a switch. Start each again as [What happens to open sessions](/guides/switch#what-happens-to-open-sessions) says.
+- Pitboard never switches Codex by itself. [Switch before an account runs out](/guides/automatic-switching) is for Claude Code only.
+- Pitboard identifies a Codex login from the login itself, without asking OpenAI. See [How Pitboard knows whose login it is](/concepts/switching#how-pitboard-knows-whose-login-it-is).
+- A switch still asks OpenAI whether the parked login works, by reading that account's usage. The read spends none of its limits: see [Where the numbers come from](/concepts/usage#where-the-numbers-come-from).
+- A parked Codex login shows `ready` with no `good for` time, because Codex states no lifetime for its login (read in 0.154.0).
+- On macOS, Pitboard passes every parked Codex login to `security` as an argument: see [Large logins on macOS](/security#large-logins-on-macos).

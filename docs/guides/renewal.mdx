@@ -1,36 +1,32 @@
 ---
 title: "Keep parked logins alive"
-description: "Renew parked logins once a day, so an account you have left alone for weeks can still be switched to."
+description: "Renew parked logins daily or by hand, before they expire and need a browser sign-in."
 ---
-
-If you leave an account unused for weeks, turn on daily renewal. A parked login is the login Pitboard holds for an account not in use. Daily renewal keeps it usable, so switching back needs no browser sign-in.
 
 ## Why parked logins expire
 
-For how parking works, see [How switching works](/concepts/switching#parked-logins).
+A Claude Code [parked login](/concepts/switching#parked-logins) expires 30 days after its last renewal. `pitboard` shows the time left as `ready · good for 26d 4h`, and the app as **Parked login good for 26 more days**. Pitboard knows no expiry for a Codex parked login, so neither shows a time for it.
 
-A Claude Code parked login expires 30 days after its last renewal. `pitboard` shows the time left as `ready · good for 26d 4h`, and the Pitboard window as **Parked login good for 26 more days**. An expired one needs a browser sign-in: see [Sign in to an account again](/guides/sign-in-again).
+Pitboard renews parked logins only when it runs: `pitboard` in a terminal, the app while it is open, or daily renewal. After 30 days with none of them, every Claude Code parked login has expired. [`renew`](/reference/maintenance-commands#renew) says when each one is due.
 
-OpenAI's Codex CLI states no expiry, so a parked Codex login shows only `ready`.
+An expired parked login needs a browser sign-in: see [Sign in to an account again](/guides/sign-in-again).
 
-Pitboard renews parked logins only when it runs. Running `pitboard` or the app renews a parked login only when Pitboard can no longer ask for usage with it, or 2 minutes before. `pitboard renew` and daily renewal also renew every parked login that expires within 3 days.
-
-The tool renews the login it is using itself. Pitboard renews one only when [`pitboard stow`](/reference/account-commands#stow) puts away a login left in `.credentials.json` whose access token has expired, under the lock Claude Code takes for its own renewals.
+The login in use belongs to its tool, which renews it. [Rules](/concepts/limits#rules) names the one case where Pitboard does.
 
 ## Turn on daily renewal
 
+<Note>
+  To turn it on from the app, quit the app, move it to your Applications folder, then open it again. Until then macOS runs a temporary copy, and the setting cannot be turned on.
+</Note>
+
 <Tabs>
   <Tab title="App">
-    1. If the app is not in your Applications folder, quit it, move it there, then open it. Until you do, macOS runs a temporary copy that daily renewal cannot use.
-    2. Click Pitboard's item in the menu bar, then choose **Settings**.
-    3. Click **General**, then turn on **Renew parked logins daily**. **Runs** shows **Every day**.
+    Click Pitboard's item in the menu bar, choose **Settings**, then click **General**. Turn on **Renew parked logins daily**.
   </Tab>
   <Tab title="Command line">
     ```sh
     pitboard schedule install
     ```
-
-    On a Mac, it prints:
 
     ```text
     Parked logins will be renewed daily.
@@ -41,21 +37,17 @@ The tool renews the login it is using itself. Pitboard renews one only when [`pi
   </Tab>
 </Tabs>
 
-Daily renewal runs `pitboard renew` once a day, from a LaunchAgent on macOS or a systemd user timer on Linux.
+Daily renewal runs `pitboard renew` once a day, from a LaunchAgent on macOS or a systemd user timer on Linux. On a Mac, the first run comes 24 hours after you turn it on. A run due while the Mac sleeps is skipped, and the next run renews whatever is still due.
 
-On a Mac, the first run comes a day after you turn it on. A run due while the Mac is asleep is missed, and the next one renews whatever is still due.
+It keeps the proxy it was turned on with. Behind a proxy, turn it on with `pitboard schedule install` from a shell that sets the proxy. Run it again after the proxy changes. [`schedule`](/reference/maintenance-commands#schedule) lists the variables it keeps.
 
-Daily renewal goes through the proxy `pitboard schedule install` was started with, since your computer's scheduler does not start it from your shell. After your proxy changes, run `pitboard schedule install` again. The app's switch writes the app's own environment, which names no proxy your shell sets. For the details, see [`schedule`](/reference/maintenance-commands#schedule).
-
-<Note>
-  Daily renewal renews only the parked logins in `~/.pitboard`. While the `PITBOARD_HOME` environment variable names another directory, Pitboard refuses to turn it on, with `schedule_not_default_home`. To turn it on, unset `PITBOARD_HOME`. To renew the parked logins in the other directory, run `pitboard renew` yourself with `PITBOARD_HOME` set.
-</Note>
+It renews only the parked logins in `~/.pitboard`. While `PITBOARD_HOME` names another directory, turning it on fails with `schedule_not_default_home`. To renew the parked logins there, run `pitboard renew` yourself with `PITBOARD_HOME` set.
 
 ## Check or turn off daily renewal
 
 <Tabs>
   <Tab title="App">
-    In **Settings** > **General**, the **Renew parked logins daily** switch shows whether it is on. To stop it, turn off the switch.
+    In **Settings** > **General**, the **Renew parked logins daily** setting shows whether it is on. Turn it off to stop daily renewal.
   </Tab>
   <Tab title="Command line">
     ```sh
@@ -67,19 +59,23 @@ Daily renewal goes through the proxy `pitboard schedule install` was started wit
     /Users/me/Library/LaunchAgents/com.datlechin.pitboard.renew.plist
     ```
 
-    To stop it, run `pitboard schedule uninstall`.
+    To stop it:
+
+    ```sh
+    pitboard schedule uninstall
+    ```
   </Tab>
 </Tabs>
 
-If `pitboard doctor` reports a problem with daily renewal, see [Daily renewal stopped working](/troubleshooting#daily-renewal-stopped-working).
+If `pitboard doctor` reports a problem with its `renewal schedule` check, see [Daily renewal stopped working](/troubleshooting#daily-renewal-stopped-working).
 
 ## Renew now
 
-Renew every due parked login without waiting for daily renewal. A login `pitboard` shows with `ready · expires in 2d 3h` is due, and renewing it saves a sign-in.
+A parked login that `pitboard` shows as `expires in 2d 3h` needs only a renewal, not a sign-in.
 
 <Tabs>
   <Tab title="App">
-    In **Settings** > **General**, click **Renew Now**. The text beside the button gives the result, such as **Renewed one.**
+    In **Settings** > **General**, click **Renew Now**. The line beside the button shows the result `pitboard renew` would print.
   </Tab>
   <Tab title="Command line">
     ```sh
@@ -92,8 +88,10 @@ Renew every due parked login without waiting for daily renewal. A login `pitboar
   </Tab>
 </Tabs>
 
+For every line it can print, see [`renew`](/reference/maintenance-commands#renew).
+
 ## Accounts you no longer use
 
-With daily renewal on, Pitboard keeps a parked login alive for as long as its account stays enrolled. `pitboard doctor` warns about an account last switched to at least 30 days ago.
+Pitboard keeps renewing a parked login for as long as its account stays enrolled. `pitboard doctor` warns about an account unused for 30 days or more.
 
-If you are not coming back to an account, forget it: see [Forget an account](/guides/accounts#forget-an-account). For an account labelled `old`, run `pitboard forget old`. Forgetting deletes the parked login but does not revoke it: see [Security and privacy](/security#what-pitboard-protects-against).
+If you are not coming back to an account, forget it: see [Forget an account](/guides/accounts#forget-an-account).

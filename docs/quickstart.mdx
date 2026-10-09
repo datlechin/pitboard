@@ -1,25 +1,30 @@
 ---
 title: "Quickstart"
-description: "Install Pitboard, add two Claude Code accounts, see what each has left and switch between them."
+description: "Install Pitboard, enrol two Claude Code accounts, switch between them and read what each has left."
 ---
 
-Enrol two Claude Code accounts with Pitboard's command line, switch between them and see what each account has left.
-
-Before you start, install Claude Code, run `claude` once and sign in to one of your accounts.
+You need Claude Code signed in to one of your accounts. If it is not, run `claude` and sign in.
 
 <Steps>
-  <Step title="Install Pitboard">
-    Run one of these commands, not both. The menu bar app includes the command line.
-
+  <Step title="Install">
     ```sh
-    brew install datlechin/tap/pitboard            # the command line, macOS and Linux
-    brew install --cask datlechin/tap/pitboard-app # the menu bar app, macOS 14 or later
+    brew install datlechin/tap/pitboard
     ```
 
-    To check the install, run `pitboard --version`. It prints `pitboard` and the version number. For other ways to install, see [Install Pitboard](/install).
+    Then check that it runs:
+
+    ```sh
+    pitboard --version
+    ```
+
+    ```text
+    pitboard 0.10.0
+    ```
+
+    For the menu bar app, or to install without Homebrew, see [Install Pitboard](/install).
   </Step>
-  <Step title="Add the account you are signed in to">
-    Enrol the account Claude Code is signed in to, under the label `personal`. A label is the short name you give an account.
+  <Step title="Enrol the account you are signed in to">
+    Pitboard knows each account by a [label](/reference/commands#labels), a short name you choose. Enrol the account in use as `personal`:
 
     ```sh
     pitboard enroll personal
@@ -31,27 +36,25 @@ Before you start, install Claude Code, run `claude` once and sign in to one of y
     ```
   </Step>
   <Step title="Add a second account">
-    Enrol your second account as `work`. The `--sign-in` option runs Claude Code's own sign-in, and Claude Code stays signed in to `personal`.
-
     ```sh
     pitboard enroll work --sign-in
     ```
-
-    Pitboard prints this line:
 
     ```text
     Opening Claude Code's sign-in. Sign in as the account to add; the account in use now stays signed in.
     ```
 
-    Claude Code's sign-in opens in your browser. Sign in there as your second account. Pitboard keeps that account's login until you switch to it, and prints:
+    Sign in as your second account in the browser that opens.
 
     ```text
     Enrolled work (me@company.com). Switch to it with: pitboard use work
     ```
-  </Step>
-  <Step title="Switch to it">
-    Switch Claude Code to `work`.
 
+    <Warning>
+      Add accounts only as [Add another account](/guides/accounts#add-another-account) shows, never with Claude Code's `/login`. It replaces the login in use without Pitboard parking it. The account that was in use then needs a browser sign-in again.
+    </Warning>
+  </Step>
+  <Step title="Switch">
     ```sh
     pitboard use work
     ```
@@ -61,13 +64,11 @@ Before you start, install Claude Code, run `claude` once and sign in to one of y
     Claude Code sessions already running follow within 33 seconds.
     ```
 
-    `work` is the account in use. `personal`'s login is parked: Pitboard keeps it until you switch back with `pitboard use personal`.
+    `personal`'s login stays [parked](/concepts/switching#parked-logins) until you switch back with `pitboard use personal`.
 
-    A Claude Code session that is already open picks up the switch within about 33 seconds. You do not have to restart it. If the second line names `.credentials.json` instead, open sessions keep `personal` until their login is next renewed, as [Open sessions](/concepts/switching#open-sessions) explains.
+    If the second line names `.credentials.json` instead, a login file sits behind the keychain. To put it away with `pitboard stow`, follow [Claude Code over SSH uses another account](/troubleshooting#claude-code-over-ssh-uses-another-account).
   </Step>
   <Step title="See what each account has left">
-    Run `pitboard` on its own.
-
     ```sh
     pitboard
     ```
@@ -82,12 +83,14 @@ Before you start, install Claude Code, run `claude` once and sign in to one of y
         week  █│█████░░░   73%  resets in 5d 18h  55% over pace
     ```
 
-    The account in use is marked `●` and `signed in`. `ready` means you can switch to the account, and `good for 26d 4h` is how long its parked login lasts.
+    - `●` marks the account in use.
+    - `ready` means you can switch to the account.
+    - `good for 26d 4h` is how long its parked login lasts.
+    - `5h` and `week` are the five-hour and weekly limits.
+    - `│` marks where the bar would reach at an even [pace](/concepts/usage#pace).
 
-    Under each account, `5h` is its five-hour limit and `week` is its weekly limit. Each line shows how much of the limit is used, when it resets and how its use compares with an even [pace](/concepts/usage#pace).
-
-    When a limit of the account in use is over pace, a last line under it says when it runs out. For what each line means, see [Check what each account has left](/guides/usage#read-the-lines-under-each-account).
+    For every line Pitboard can show, see [Read the lines under each account](/guides/usage#read-the-lines-under-each-account).
   </Step>
 </Steps>
 
-Next, to switch OpenAI's Codex CLI between your ChatGPT accounts, see [Use Pitboard with Codex](/guides/codex). To add accounts in the menu bar app, see [Add and manage accounts](/guides/accounts).
+To switch OpenAI's Codex CLI as well, see [Use Pitboard with Codex](/guides/codex).

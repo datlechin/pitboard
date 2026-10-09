@@ -37,21 +37,22 @@
         "group": "Use Pitboard",
         "pages": [
           "guides/accounts",
-          "guides/usage",
           "guides/switch",
+          "guides/usage",
           "guides/automatic-switching",
-          "guides/account-windows",
-          "guides/sign-in-again",
-          "guides/renewal",
+          "guides/status-line",
           "guides/codex",
-          "guides/status-line"
+          "guides/renewal",
+          "guides/sign-in-again",
+          "guides/account-windows"
         ]
       },
       {
         "group": "Troubleshooting",
         "pages": [
           "troubleshooting",
-          "troubleshooting/recovery"
+          "troubleshooting/recovery",
+          "troubleshooting/account-windows"
         ]
       },
       {
@@ -80,6 +81,7 @@
           "reference/errors",
           "reference/files",
           "reference/app",
+          "reference/account-windows",
           "reference/settings"
         ]
       }
