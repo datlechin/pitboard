@@ -10,7 +10,7 @@
 //! Anthropic no more than the app would.
 
 use crate::{Report, emit, followed, ui};
-use pitboard_core::autoswitch::{Auto, Skip, Threshold};
+use pitboard_core::autoswitch::{Auto, Blind, Threshold};
 use pitboard_core::error::Error;
 use pitboard_core::provider::ProviderId;
 use pitboard_core::service::{Changing, Done, Pitboard};
@@ -33,7 +33,9 @@ const READ_EVERY: i64 = 300;
 /// and a failed attempt may be tried again, with nobody writing anything.
 const DECIDE_EVERY: i64 = 30;
 
-/// Decides once from what Pitboard last measured, asking nobody, and says what it came to.
+/// Decides once from the usage Pitboard last measured, and says what it came to. Nobody is
+/// asked for usage; a decision under the lock may ask Anthropic whose login Claude Code has
+/// stored, as a switch does.
 pub fn once(pitboard: &Pitboard, threshold: Threshold) -> Report {
     match said(pitboard.auto_switch(threshold), threshold, false) {
         Said::Event(report) | Said::Stop(report) => report,
@@ -91,7 +93,8 @@ pub fn run(pitboard: &Pitboard, threshold: Threshold, as_json: bool) -> ExitCode
 
 /// Whether this report says something not said since the last switch, recording that it
 /// has been said. A switch is always said, and after it everything may be said again: what
-/// stopped the last one may stop the next.
+/// stopped the last one may stop the next. A reason it cannot watch is told apart by the
+/// account or the cause it names, and not by when it asks again.
 fn untold(told: &mut HashSet<String>, report: &Report) -> bool {
     let key = match &report.result {
         Ok(data) if data["event"] == "switched" => {
@@ -105,6 +108,8 @@ fn untold(told: &mut HashSet<String>, report: &Report) -> bool {
             &data["limit"]["scope"],
             &data["limit"]["resets_at"],
             &data["reason"],
+            &data["email"],
+            &data["detail"],
         ]
         .map(Value::to_string)
         .join("/"),
@@ -183,31 +188,50 @@ fn said(outcome: Changing<Auto>, threshold: Threshold, stamped: bool) -> Said {
                 words::share_of_limit(&limit),
             )),
         ),
-        Auto::Skipped { from, limit, why } => {
-            // The command line has a command for giving up on it, which the app has a
-            // button for in its place.
-            let what = match why {
-                Skip::SwitchInterrupted => format!(
-                    "{}, or give up on it with `pitboard abandon`",
-                    words::not_switching(&why)
-                ),
-                _ => words::not_switching(&why),
-            };
+        Auto::Skipped { from, limit, why } => Report::done(
+            "watch",
+            json!({
+                "event": "skipped",
+                "threshold": percent,
+                "from": from,
+                "limit": limit_json(&limit),
+                "reason": why.code(),
+            }),
+            at(format!(
+                "{} has used {}. Pitboard is not switching: {}.\n",
+                ui::paint(ui::BOLD, &from),
+                words::share_of_limit(&limit),
+                words::not_switching(&why),
+            )),
+        ),
+        Auto::NotWatching { why } => {
+            let mut data = json!({
+                "event": "not_watching",
+                "threshold": percent,
+                "reason": why.code(),
+            });
+            let mut line = words::not_watching(&why);
+            match &why {
+                // The command line has a command for giving up on it, which the app has a
+                // button for in its place.
+                Blind::SwitchInterrupted => {
+                    line.push_str(", or give up on it with `pitboard abandon`")
+                }
+                Blind::NotEnrolled { email } => data["email"] = json!(email),
+                Blind::Unidentified { detail, until } => {
+                    data["detail"] = json!(detail);
+                    data["until"] = json!(until);
+                    line = format!(
+                        "{line}. It asks again at {}",
+                        pitboard_core::time::moment(*until, epoch())
+                    );
+                }
+                Blind::CustomOauth | Blind::NothingSignedIn => {}
+            }
             Report::done(
                 "watch",
-                json!({
-                    "event": "skipped",
-                    "threshold": percent,
-                    "from": from,
-                    "limit": limit_json(&limit),
-                    "reason": why.code(),
-                }),
-                at(format!(
-                    "{} has used {}. Pitboard is not switching: {}.\n",
-                    ui::paint(ui::BOLD, &from),
-                    words::share_of_limit(&limit),
-                    what,
-                )),
+                data,
+                at(format!("Pitboard is not switching Claude Code: {line}.\n")),
             )
         }
     };
@@ -275,5 +299,96 @@ mod tests {
         assert!(!ends_watching(&Error::ParkedLoginExpired {
             label: "spare".into()
         }));
+    }
+
+    fn event(why: Blind) -> Report {
+        let looked = Ok(Done {
+            value: Auto::NotWatching { why },
+            warnings: Vec::new(),
+        });
+        let Said::Event(report) = said(looked, Threshold::DEFAULT, false) else {
+            panic!("an event");
+        };
+        report
+    }
+
+    /// A reason Pitboard cannot judge whether to switch at all is an event of its own, with
+    /// no account or limit, and says what to do where the command line has a command for it.
+    #[test]
+    fn a_reason_it_cannot_watch_is_an_event_of_its_own() {
+        let interrupted = event(Blind::SwitchInterrupted);
+        let data = interrupted.result.as_ref().expect("an event");
+        assert_eq!(
+            (&data["event"], &data["reason"], &data["threshold"]),
+            (
+                &json!("not_watching"),
+                &json!("switch_interrupted"),
+                &json!(95)
+            )
+        );
+        assert_eq!(
+            interrupted.human,
+            "Pitboard is not switching Claude Code: a switch was interrupted, and the next \
+             change you make finishes it, or give up on it with `pitboard abandon`.\n"
+        );
+
+        let stranger = event(Blind::NotEnrolled {
+            email: "me@example.com".into(),
+        });
+        let data = stranger.result.as_ref().expect("an event");
+        assert_eq!(
+            (&data["reason"], &data["email"]),
+            (&json!("not_enrolled"), &json!("me@example.com"))
+        );
+
+        let unidentified = event(Blind::Unidentified {
+            detail: "could not reach Anthropic: no route to host".into(),
+            until: 1_760_000_060,
+        });
+        let data = unidentified.result.as_ref().expect("an event");
+        assert_eq!(
+            (&data["reason"], &data["detail"], &data["until"]),
+            (
+                &json!("not_identified"),
+                &json!("could not reach Anthropic: no route to host"),
+                &json!(1_760_000_060)
+            )
+        );
+        assert!(
+            unidentified.human.starts_with(
+                "Pitboard is not switching Claude Code: whose login Claude Code has stored \
+                 could not be told (could not reach Anthropic: no route to host). It asks \
+                 again at "
+            ),
+            "{}",
+            unidentified.human
+        );
+    }
+
+    /// Each reason, and what it names, is said once: two runs that cannot tell whose login is
+    /// stored for one cause are one reason, whenever each asks again.
+    #[test]
+    fn a_reason_it_cannot_watch_is_said_once_for_what_it_names() {
+        let mut told = HashSet::new();
+        let unidentified = |until| {
+            event(Blind::Unidentified {
+                detail: "could not reach Anthropic: no route to host".into(),
+                until,
+            })
+        };
+        assert!(untold(&mut told, &unidentified(60)));
+        assert!(!untold(&mut told, &unidentified(180)));
+        assert!(untold(
+            &mut told,
+            &event(Blind::NotEnrolled {
+                email: "me@example.com".into()
+            })
+        ));
+        assert!(untold(
+            &mut told,
+            &event(Blind::NotEnrolled {
+                email: "you@example.com".into()
+            })
+        ));
     }
 }

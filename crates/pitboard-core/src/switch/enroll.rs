@@ -456,11 +456,11 @@ fn record_current(ctx: &Context, permit: Permit, key: &Key, state: &mut State) -
     // document with no account in it is nobody signed in: Claude Code's after a `/logout`
     // still holds the machine's MCP tokens.
     let (stored, found) = identify::look(ctx, state, which)?;
-    let identify::Live::Login {
+    let identify::Live::Login(identify::Login {
         document: live,
         owner,
         ..
-    } = stored
+    }) = stored
     else {
         return Err(Error::LiveCredentialAbsent { tool: which });
     };
@@ -515,7 +515,7 @@ fn from_sign_in(
                 warnings.push(Warning::SignInParkedNotInUse {
                     tool: key.provider,
                     label: state.typed(key),
-                    why: untold(&why),
+                    why: identify::untold(&why),
                 });
             }
             Ok((enrolled, warnings))
@@ -545,29 +545,13 @@ fn signed_in_now(
     owner: &Owner,
 ) -> SignedInNow {
     match identify::now(ctx, permit, state, which) {
-        Ok(identify::Live::Login {
+        Ok(identify::Live::Login(identify::Login {
             store,
             document,
             owner: found,
-        }) if found.same_login(owner) => SignedInNow::Theirs(store, document),
+        })) if found.same_login(owner) => SignedInNow::Theirs(store, document),
         Ok(_) => SignedInNow::NotTheirs,
         Err(e) => SignedInNow::Untold(e),
-    }
-}
-
-/// Why the login in use could not be told, in a few words. The warning it goes into says
-/// what to do, and an error's own advice would be about something else.
-fn untold(error: &Error) -> String {
-    match error {
-        Error::SessionExpired { tool } => format!("{} refused its access token", tool.service()),
-        Error::IdentityUnverifiable { detail, .. }
-        | Error::LiveCredentialShapeUnexpected { detail, .. } => detail.clone(),
-        Error::LiveStoreUnsupported { reason, .. } => reason.clone(),
-        Error::LiveCredentialElsewhere { email } => {
-            format!("its config names {email}, and Pitboard cannot find that login")
-        }
-        Error::Store(e) => e.to_string(),
-        other => other.code().replace('_', " "),
     }
 }
 

@@ -417,15 +417,6 @@ pub enum Error {
     #[error("the signed-in account changed while switching. Nothing was moved; try again.")]
     SignedInAccountChanged,
 
-    /// A switch Pitboard decided to make by itself, away from an account that is no longer
-    /// the one signed in when the switch looks. Never said to anybody: the switch that
-    /// decided it takes it as nothing left to do.
-    #[error(
-        "the account signed in is no longer the one Pitboard decided to switch away from. \
-         Nothing was moved."
-    )]
-    SwitchOvertaken,
-
     #[error(
         "an earlier switch from `{from}` to `{to}` was interrupted, and Pitboard cannot yet \
          tell whether it finished ({detail}). Nothing was changed. Run `{}` once so its \
@@ -686,7 +677,6 @@ impl Error {
             SessionExpired { .. } => "session_expired",
             IdentityUnverifiable { .. } => "identity_unverifiable",
             SignedInAccountChanged => "signed_in_account_changed",
-            SwitchOvertaken => "switch_overtaken",
             RecoveryUndetermined { .. } => "recovery_undetermined",
             RecoveryElsewhere { .. } => "recovery_elsewhere",
             ProgramNotFound { tool } => match tool {
@@ -839,7 +829,6 @@ mod tests {
                 tool: ProviderId::Claude,
             },
             Error::ParkSlotExhausted,
-            Error::SwitchOvertaken,
             Error::SignedInAccountChanged,
             Error::AccountUnknown {
                 label: "x".into(),

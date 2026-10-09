@@ -134,8 +134,8 @@ enum Command {
                 .range(i64::from(Threshold::LOWEST)..=i64::from(Threshold::HIGHEST)),
         )]
         at: u8,
-        /// Decide once from the numbers Pitboard last measured, without asking anyone, and
-        /// stop
+        /// Decide once from the usage Pitboard last measured, asking no service for usage,
+        /// and stop
         #[arg(long)]
         once: bool,
     },

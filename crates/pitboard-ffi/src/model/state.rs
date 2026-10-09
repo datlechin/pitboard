@@ -161,8 +161,8 @@ pub(crate) enum Job {
         reopen: Option<String>,
     },
     /// Switch Claude Code by itself where a limit of the account in use has reached `at`%
-    /// and another account has room: the core decides whether, and to which, from what it
-    /// knows, and decides again under its lock.
+    /// and another account has room: the core looks from its files, and decides whether, and
+    /// to which, once under its lock, from whose login Claude Code has stored.
     AutoSwitch { at: u8 },
     /// Open the app at `location` again.
     Open { location: String },
@@ -1480,8 +1480,9 @@ impl State {
 
     /// What switching Claude Code by itself came to. A switch is taken as one somebody asked
     /// for is, and said in a notification, since nobody was there to ask for it; a reason it
-    /// did not switch, and a refusal, are said once each until it next switches. Nothing to
-    /// do, and no account with room, say nothing: a run-out is advised as it always was.
+    /// did not switch, a reason it cannot judge, and a refusal, are said once each until it
+    /// next switches. Nothing to do, and no account with room, say nothing: a run-out is
+    /// advised as it always was.
     fn auto_switched(
         &mut self,
         done: Result<AutoSwitched, PitboardError>,
@@ -1520,6 +1521,10 @@ impl State {
                 format!("skipped/{code}"),
                 crate::present::auto_skipped_notice(&from, &used, &code, &why),
             ),
+            Ok(AutoSwitched::NotWatching { key, why }) => {
+                let notice = crate::present::auto_not_watching_notice(&key, &why);
+                (key, notice)
+            }
             Err(PitboardError::Failed { code, message, .. }) => {
                 self.auto_refused = true;
                 (

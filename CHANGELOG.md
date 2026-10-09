@@ -22,6 +22,10 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   **Update Claude Code's Config**, that does it and moves no login. Where a switch has put
   another account in use since the notice was drawn, it writes nothing and says so, with
   the error `account_not_in_use`.
+- The `pitboard log` verb `auto-stay`, which the app's **Activity** pane names **Automatic
+  switch not made**: Pitboard could not tell whose login Claude Code has stored, so the
+  automatic switch decided nothing. Its outcome is `not_identified`, and its subject the
+  account last known in use.
 
 ### Changed
 
@@ -79,11 +83,26 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   while Claude Code's config has named another since Pitboard last asked Anthropic, or
   until Pitboard has first asked. A session that passes its five-hour limit alone files
   nothing after each five-hour reset until Pitboard has asked Anthropic again.
+- `pitboard watch --json` prints the event `not_watching` where Pitboard cannot decide
+  whether to switch at all, with a `reason`: `switch_interrupted` and
+  `custom_oauth_endpoint`, which were reasons of `skipped`, and `nothing_signed_in`,
+  `not_enrolled` with the `email` of the account, and `not_identified` with a `detail` and
+  the time it asks again, `until`. Breaking for a script that reads the first two from
+  `skipped`. `pitboard watch` says each once, as `Pitboard is not switching Claude Code:`
+  and the reason, and so does the app, in a notification titled **Pitboard is not
+  switching Claude Code**. An `auto-switch` line in `pitboard log` whose error came before
+  Pitboard chose an account names `claude`.
+- In `pitboard-core`, `autoswitch::Blind`, `autoswitch::Look`, the variant
+  `autoswitch::Auto::NotWatching`, `service::Pitboard::auto_look` and `words::not_watching`
+  are new. `autoswitch::Skip`'s `SwitchInterrupted` and `CustomOauth` are
+  `Blind::SwitchInterrupted` and `Blind::CustomOauth`, and `error::Error::SwitchOvertaken`
+  is gone. These change the crate's public API.
 
 ### Removed
 
 - `"source": "claude_code_cache"` in `pitboard status --json`, and `pitboard doctor`'s
   `usage_cache` check. Breaking for a script that reads either.
+- The error code `switch_overtaken`, which was never printed.
 
 ### Fixed
 
@@ -130,6 +149,20 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   Claude Code names the account in use. It changed nothing, and only the next switch put
   the config right. The `config_names_another` and `config_write_failed` warnings and
   `pitboard doctor` name the command.
+- The automatic switch asks whose login Claude Code has stored under its lock, as a switch
+  does, and decides from the answer: where a switch may be due, where Claude Code's config
+  has named another account since Anthropic last named that login, and until Pitboard has
+  first asked. It knows the login by its fingerprint where Anthropic named it before. So
+  after a sign-in outside Pitboard it watches the account signed in to, and spends no
+  attempt on the account it replaced. It decides and switches from that one answer, under
+  one lock. Where whose the login is cannot be told, as with Anthropic out of reach, it
+  decides nothing, says so, and asks again after a minute, then twice as long after each
+  such failure in a row, up to 15 minutes, until a read records whose it is. It was tried
+  as a switch, and said as one that failed. A keychain one front end cannot read, as over
+  SSH, fails that front end's tries alone, and the app still switches.
+- A login too large to write without the argument line, where `PITBOARD_NO_ARGV` forbids
+  it, counts as one of the automatic switch's three attempts at a limit. It passed the
+  account to go to over, then every other in turn, until no account read as having room.
 
 ## [0.9.0] - 2026-10-08
 

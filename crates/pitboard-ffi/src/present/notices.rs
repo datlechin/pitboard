@@ -353,6 +353,18 @@ pub(crate) fn auto_skipped_notice(from: &str, used: &str, code: &str, why: &str)
     }
 }
 
+/// Where Pitboard cannot judge whether to switch Claude Code by itself: why, in the core's
+/// words. Identified by what tells the reason apart, `key`.
+pub(crate) fn auto_not_watching_notice(key: &str, why: &str) -> RunOutNotice {
+    RunOutNotice {
+        id: format!("auto-{key}"),
+        title: "Pitboard is not switching Claude Code".into(),
+        subtitle: None,
+        body: format!("{}.", capitalised(why)),
+        switch_to: None,
+    }
+}
+
 /// A warning that stands until somebody acts, posted once while it does, since nobody may
 /// have the window open: a login replaced outside Pitboard. Titled and identified as its
 /// notice in the window is, and said in the core's words.

@@ -325,11 +325,23 @@ fn read_stored(which: ProviderId, live: &provider::LiveStore) -> Result<Option<(
 pub fn switch(settled: Settled, key: &Key) -> Result<(Outcome, Vec<Warning>)> {
     let Settled {
         _exclusive,
-        state,
+        mut state,
         ctx,
         permit,
     } = settled;
-    switch_held(state, &ctx, permit, key, None)
+    let target = enrolled(&state, key)?;
+    // Known before taking the tool's own lock so a round trip does not hold up its writes,
+    // then confirmed under the lock. Recorded at once, so the record names the account a
+    // switch moves out of when it records the one it moves to, whatever it named before.
+    let identify::Live::Login(outgoing) = identify::now(&ctx, permit, &mut state, key.provider)?
+    else {
+        return Err(Error::LiveCredentialAbsent { tool: key.provider });
+    };
+    if target.owned_by(&outgoing.owner) {
+        return already_active(&ctx, permit, &mut state, key, &target);
+    }
+    let (switched, warnings) = switch_from(state, &ctx, permit, key, outgoing)?;
+    Ok((switched.into(), warnings))
 }
 
 /// What [`switch`] does for the account in use, for a button drawn while it was: writes it
@@ -344,7 +356,7 @@ pub fn update_config(settled: Settled, key: &Key) -> Result<(Outcome, Vec<Warnin
     } = settled;
     let target = enrolled(&state, key)?;
     match identify::now(&ctx, permit, &mut state, key.provider)? {
-        identify::Live::Login { owner, .. } if target.owned_by(&owner) => {
+        identify::Live::Login(stored) if target.owned_by(&stored.owner) => {
             already_active(&ctx, permit, &mut state, key, &target)
         }
         _ => Err(Error::AccountNotInUse {
@@ -365,38 +377,54 @@ fn enrolled(state: &State, key: &Key) -> Result<Account> {
         })
 }
 
-/// [`switch`], for a caller that holds Pitboard's lock itself. Where `expected` names an
-/// account by its id, the switch is made only away from that account: one decided from what
-/// was known before the lock was held is refused, with nothing changed, once somebody else
-/// has switched since, to this account too.
-fn switch_held(
+/// A switch made: which tool's login moved, between which accounts, the outgoing login's new
+/// park, and when sessions already running take it. What [`Outcome::Switched`] says.
+struct Switched {
+    provider: ProviderId,
+    from: String,
+    to: String,
+    parked: Park,
+    adoption: provider::Adoption,
+}
+
+impl From<Switched> for Outcome {
+    fn from(switched: Switched) -> Outcome {
+        let Switched {
+            provider,
+            from,
+            to,
+            parked,
+            adoption,
+        } = switched;
+        Outcome::Switched {
+            provider,
+            from,
+            to,
+            parked,
+            adoption,
+        }
+    }
+}
+
+/// [`switch`] to `key`'s account from `outgoing`, the login its tool has stored, which the
+/// caller told whose it is and recorded under Pitboard's lock, and which is not the target's.
+/// The automatic switch decides from that same telling, so nothing comes between what it
+/// decided and the login it moves.
+fn switch_from(
     mut state: State,
     ctx: &Context,
     permit: Permit,
     key: &Key,
-    expected: Option<&str>,
-) -> Result<(Outcome, Vec<Warning>)> {
+    outgoing: identify::Login,
+) -> Result<(Switched, Vec<Warning>)> {
     let label = &key.label;
     let tool = provider::of(key.provider);
     let target = enrolled(&state, key)?;
-    // Known before taking the tool's own lock so a round trip does not hold up its writes,
-    // then confirmed under the lock. Recorded at once, so the record names the account a
-    // switch moves out of when it records the one it moves to, whatever it named before.
-    let identify::Live::Login {
+    let identify::Login {
         store: live,
         document: first,
         owner: outgoing,
-    } = identify::now(ctx, permit, &mut state, key.provider)?
-    else {
-        return Err(Error::LiveCredentialAbsent { tool: key.provider });
-    };
-
-    if expected.is_some_and(|expected| expected != state.id_of(key.provider, &outgoing)) {
-        return Err(Error::SwitchOvertaken);
-    }
-    if target.owned_by(&outgoing) {
-        return already_active(ctx, permit, &mut state, key, &target);
-    }
+    } = outgoing;
     let (outgoing_key, outgoing_id) = state
         .account_of(key.provider, &outgoing)
         .map(|account| (account.key(), account.id.clone()))
@@ -635,7 +663,7 @@ fn switch_held(
         .chain((parks_pending > 0).then_some(Warning::ParksPendingRemoval(parks_pending)))
         .collect();
     Ok((
-        Outcome::Switched {
+        Switched {
             provider: key.provider,
             adoption: tool.adoption(tool.behind(ctx).as_ref()),
             from,

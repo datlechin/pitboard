@@ -171,6 +171,7 @@ Each object in `windows` is one limit:
 | `switched` | Pitboard switched Claude Code. | `from`, `to`, `limit` and `adoption` |
 | `no_room` | A limit of the account in use reached the share, and no other account has room. | `from` and `limit` |
 | `skipped` | A limit reached the share and another account has room, but something stops the switch. | `from`, `limit` and `reason` |
+| `not_watching` | Pitboard cannot decide whether to switch at all. | `reason`, and `email`, or `detail` and `until`, where the reason has them |
 | `idle` | `--once` found nothing to do. Printed only with `--once`. | None |
 
 The other fields are these:
@@ -181,15 +182,22 @@ The other fields are these:
 | `to` | string | The account switched to, by its label. |
 | `limit` | object | The limit of `from` that reached the share, as Pitboard last read it: `kind`, `scope`, `percent` and `resets_at`, as in [Status data](/reference/json-output#status-data). A limit reaches the share at its whole percentage, a half rounded up, so `percent` can be up to half a point under `threshold`, such as `94.5` for `95`. |
 | `adoption` | object | How sessions already running pick up the switch: `{"follows":"polling","within_seconds":33}`, or `{"follows":"renewal","path":...}` while a login file sits behind the keychain, as for `use`. |
-| `reason` | string | Why Pitboard does not switch. |
+| `reason` | string | Why Pitboard does not switch, or cannot decide. |
+| `email` | string | The account whose login Claude Code has stored, which is not enrolled. |
+| `detail` | string | Why Pitboard could not tell whose login Claude Code has stored, in a few words. |
+| `until` | integer | When Pitboard asks whose login Claude Code has stored again, in epoch seconds. |
 
-`reason` is one of these:
+For `skipped`, `reason` is `auth_overridden`: Claude Code signs in another way, such as with `ANTHROPIC_API_KEY` or `apiKeyHelper`, so a switch would change nothing its sessions use.
+
+For `not_watching`, `reason` is one of these:
 
 | `reason` | Meaning |
 | --- | --- |
 | `switch_interrupted` | A switch did not finish. The next change you make finishes it, or `pitboard abandon` gives up on it. |
 | `custom_oauth_endpoint` | `CLAUDE_CODE_CUSTOM_OAUTH_URL` is set, so Pitboard does not act on Claude Code. |
-| `auth_overridden` | Claude Code signs in another way, such as with `ANTHROPIC_API_KEY` or `apiKeyHelper`, so a switch would change nothing its sessions use. |
+| `nothing_signed_in` | Claude Code has no login stored. |
+| `not_enrolled` | The login Claude Code has stored is of an account not enrolled, which `email` names. |
+| `not_identified` | Pitboard could not tell whose login Claude Code has stored, for `detail`, and asks again at `until`. |
 
 A switch that fails prints an envelope with `ok` set to `false`, `data` set to `null` and the `error`, as every command does. `watch` then goes on. An error that ends `watch` is printed the same way, and `watch` exits with its status.
 

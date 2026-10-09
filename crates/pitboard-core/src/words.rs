@@ -97,17 +97,33 @@ pub fn share_of_limit(limit: &crate::usage::Window) -> String {
 pub fn not_switching(why: &crate::autoswitch::Skip) -> String {
     use crate::autoswitch::Skip;
     match why {
-        Skip::SwitchInterrupted => {
-            "a switch was interrupted, and the next change you make finishes it".into()
-        }
-        Skip::CustomOauth => "Claude Code uses a custom OAuth endpoint, and Pitboard does not \
-                              act on Claude Code then"
-            .into(),
         Skip::Overridden(names) => format!(
             "Claude Code signs in another way, set by {}, so a switch would change nothing its \
              sessions use",
             names.join(", ")
         ),
+    }
+}
+
+/// Why Pitboard cannot judge whether to switch Claude Code by itself, as a clause that says
+/// what to do about it where anything can be done. It names no command, and no time, which
+/// each front end says in its own way.
+pub fn not_watching(why: &crate::autoswitch::Blind) -> String {
+    use crate::autoswitch::Blind;
+    match why {
+        Blind::SwitchInterrupted => {
+            "a switch was interrupted, and the next change you make finishes it".into()
+        }
+        Blind::CustomOauth => "Claude Code uses a custom OAuth endpoint, and Pitboard does not \
+                               act on Claude Code then"
+            .into(),
+        Blind::NothingSignedIn => "Claude Code has no login stored".into(),
+        Blind::NotEnrolled { email } => {
+            format!("Claude Code has {email}'s login stored, and that account is not enrolled")
+        }
+        Blind::Unidentified { detail, .. } => {
+            format!("whose login Claude Code has stored could not be told ({detail})")
+        }
     }
 }
 
@@ -371,13 +387,22 @@ mod tests {
     /// so it names no command: the app gives up on an interrupted switch with a button.
     #[test]
     fn why_it_did_not_switch_names_no_command() {
-        use crate::autoswitch::Skip;
+        use crate::autoswitch::{Blind, Skip};
+        let why = Skip::Overridden(vec!["apiKeyHelper".into()]);
+        assert!(!not_switching(&why).contains("pitboard "), "{why:?}");
         for why in [
-            Skip::SwitchInterrupted,
-            Skip::CustomOauth,
-            Skip::Overridden(vec!["apiKeyHelper".into()]),
+            Blind::SwitchInterrupted,
+            Blind::CustomOauth,
+            Blind::NothingSignedIn,
+            Blind::NotEnrolled {
+                email: "me@example.com".into(),
+            },
+            Blind::Unidentified {
+                detail: "could not reach Anthropic: no route to host".into(),
+                until: 0,
+            },
         ] {
-            assert!(!not_switching(&why).contains("pitboard "), "{why:?}");
+            assert!(!not_watching(&why).contains("pitboard "), "{why:?}");
         }
     }
 

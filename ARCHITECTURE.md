@@ -94,21 +94,22 @@ pages load, as a browser would.
     logins are keychain items. On Linux, they are files in the vault.
   - `switch/`: every change to Pitboard's index (switching, by hand or by itself in
     `auto.rs`, enrolling, adopting, renaming, forgetting, renewing, repairing, abandoning
-    and uninstalling), and the journal that
-    finishes an interrupted switch. `identify.rs` says whose login each tool has stored:
-    the record's owner where the login's refresh token has the fingerprint the record was
-    made for, which asks nobody, and the tool's service otherwise (`whose`). A store with
-    no login is recorded as holding none only where the tool's own record names nobody
-    either; where it names somebody, the login is somewhere Pitboard does not look, and
-    nothing is recorded. A change records what it finds under the lock it holds (`now`, or
-    `look` then `record` where enrolling the account found names it first); a read records
-    it afterwards (`record_read`), only where it changed, only where it takes the lock
-    without waiting, never while a switch waits to be finished, and only where the tool's
-    own record names what it named and the store holds the login it asked about, both read
-    again under the lock. Each writes an `in-use` line in the activity log
-    for what changed outside Pitboard. With `test-support`, a context may hold a
-    `SignInScript`, which plays a tool's own sign-in in place of its program, for a test or
-    a fixture that may start none; everything around it is the core's own.
+    and uninstalling), and the journal that finishes an interrupted switch. `identify.rs`
+    says whose login each tool has stored: the record's owner where the login's refresh
+    token has the fingerprint the record was made for, which asks nobody, and the tool's
+    service otherwise (`whose`). A store with no login is recorded as holding none only
+    where the tool's own record names nobody either; where it names somebody, the login is
+    somewhere Pitboard does not look, and nothing is recorded. A change records what it
+    finds under the lock it holds (`now`, or `look` then `record` where enrolling the
+    account found names it first, or `look` then `keep` where the automatic switch has its
+    own to do when it cannot be told); a read records it afterwards (`record_read`), only
+    where it changed, only where it takes the lock without waiting, never while a switch
+    waits to be finished, and only where the tool's own record names what it named and the
+    store holds the login it asked about, both read again under the lock. Each writes an
+    `in-use` line in the activity log for what changed outside Pitboard. With
+    `test-support`, a context may hold a `SignInScript`, which plays a tool's own sign-in in
+    place of its program, for a test or a fixture that may start none; everything around
+    it is the core's own.
   - `state.rs`: `state.json`, the index of accounts and where each one's login is parked.
   - `in_use.rs`: whose login each tool has stored, as its service last said, with the
     fingerprint of that login and the account the tool's own record named then. It is
@@ -134,13 +135,22 @@ pages load, as a browser would.
     then the least full in its others. `Ledger` is `autoswitch.json`, what was tried for
     each limit of each account until that limit resets: the attempts, how many in a row
     failed for a reason waiting may mend, when the last began, whether one switched and the
-    accounts passed over, written only under `state.lock`. `look` decides from files alone,
-    and says why where Pitboard will not switch. `switch/auto.rs` decides again under the
-    lock and switches only for the same plan, through `switch_held` given the account it
-    expects to leave, which refuses with `switch_overtaken`, changing nothing, once that
-    account is no longer the one signed in; the switch takes that as nothing to do.
-    `service::Pitboard::auto_switch` joins the two, and the audit log records a switch, or
-    the error that stopped one, as `auto-switch`.
+    accounts passed over; and `asked`, where whose login Claude Code has stored could not be
+    told, when it was last asked, how many times in a row and why. A record of whose it is
+    made since `asked`, by a read or a switch, ends that row. It is written only under
+    `state.lock`. `look` judges from files alone, with the account in use from
+    `in_use::known`: what stands (`Look::Stands`), or `Look::Act` where a switch may be due
+    or that account is in doubt. `Blind` is why nothing can be judged at all: a switch
+    waiting to be finished, a custom OAuth endpoint, no login stored, a login of an account
+    nobody enrolled, or one nobody could tell whose it is, which `asked` paces as attempts
+    are paced. `asked` holds only what every front end would meet alike: a store this
+    process cannot read, such as a keychain locked over SSH, is returned as its error, for
+    its front end to pace. `switch/auto.rs` tells whose login is stored under the lock, as
+    a switch does, records it, decides once from that, and switches from that same login
+    through `switch::switch_from`. `service::Pitboard::auto_look` is the look and
+    `auto_switch` joins the two. The audit log records a switch, or the error that stopped
+    one, as `auto-switch`, of `claude` where no account was chosen yet, and a login nobody
+    could tell whose it is as `auto-stay`, of the account last known in use, once per wait.
   - `lock.rs`: the lock Claude Code takes around credential writes, taken the same way.
   - `context.rs`: what the core takes from its environment, read from a map of variables
     by the same code for every front end, apart from the `PATH` that `host/linux` reads to
@@ -725,9 +735,10 @@ pages load, as a browser would.
   read lands. It runs on the lane of changes, behind any switch asked for, and asks nobody
   about quitting an app, since Claude Code follows a switch by itself. A switch it made is
   taken as one asked for is, with the read after it, and said in a notification with no
-  button; a reason it did not switch, and a refusal, are said once each until it next
-  switches, and never in an alert, since nobody asked. The setting is kept in `app.json`
-  with the other preferences, and taken only once they are read.
+  button; a reason it did not switch, a reason it cannot judge, each by what it names, and
+  a refusal, are said once each until it next switches, and never in an alert, since
+  nobody asked. The setting is kept in `app.json` with the other preferences, and taken
+  only once they are read.
 - The notice that Claude Code's config names another account offers to write the account
   in use there: `Intent::UpdateConfig`, a change of the app's own like a rename and not a
   switch, so the row never reads as switching and nothing said about a switch or the
@@ -957,17 +968,29 @@ pages load, as a browser would.
   setting on, or `pitboard watch` running. It never switches Codex by itself, since a
   running `codex` never follows a switch. The status line and the daily renewal schedule
   never switch, and an automatic switch never quits an app.
-- An automatic switch is decided twice. `autoswitch::look` decides from files alone: it
-  takes no lock, sends no request, reads no keychain and records nothing, so a look that
-  finds nothing to do costs nobody anything. `switch/auto.rs` decides again under
-  `state.lock`, from the files as they are then, and switches only for the same plan and
-  only away from the account still signed in. So the app, `pitboard watch` and a person's
-  own `pitboard use` never make two switches from one reading. The attempt is written to
-  `autoswitch.json` before anything moves, so a switch killed midway still counts against
-  that limit's attempts. One that failed for a reason trying again may mend, Anthropic out
-  of reach or Claude Code writing its login, is taken back out of them, so an outage never
-  uses them up. The next try waits a minute, then twice as long after each such failure in
-  a row, up to 15 minutes.
+- An automatic switch is decided once, under `state.lock`, from one telling of whose login
+  Claude Code has stored, and made from that same login, so nothing comes between the
+  decision and the switch. `autoswitch::look` comes first, from files alone: it takes no
+  lock, sends no request, reads no keychain and records nothing, so a look that finds
+  nothing to do costs nobody anything. It goes on to the lock only where a switch may be
+  due or the record of whose login is stored is in doubt. Under the lock, `switch/auto.rs`
+  tells whose it is as a switch does, by its fingerprint or by asking Anthropic, records
+  it, and decides from that and the files as they are then. So the app, `pitboard watch`
+  and a person's own `pitboard use` never make two switches from one reading, and a
+  sign-in outside Pitboard is judged as the account it signed in. Where whose login is
+  stored cannot be told, nothing is judged from the record, which may be another
+  account's: that is recorded once, and asked again a minute later, then twice as long
+  after each such failure in a row, up to 15 minutes. A record of whose it is made since,
+  by a read or a switch, ends both the wait and the row. Only what every front end would
+  meet alike is waited on so: a store one process cannot read, such as a keychain locked
+  over SSH, is that front end's refusal, and holds back no other. The attempt is written
+  to `autoswitch.json` once the switch is decided and before anything moves, so a switch
+  killed midway still counts against that limit's attempts. One that failed for a reason
+  trying again may mend, Anthropic out of reach or Claude Code writing its login, is taken
+  back out of them, so an outage never uses them up. The next try waits as long. One
+  refused over the account switched to passes that account over; any other refusal
+  counts, a login too large to write among them, which is about the machine and not the
+  account.
 - Additive writes become durable before destructive ones. A run that dies midway leaves a
   spare copy of a login, never a missing one.
 - The `--json` contract changes only on purpose. A change to a snapshot is a change to the

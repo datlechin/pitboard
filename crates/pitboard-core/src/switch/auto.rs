@@ -1,88 +1,149 @@
 //! The switch Pitboard makes by itself, under the lock every change takes.
 //!
-//! What a front end decided from a look at its files may be out of date by the time it holds
-//! the lock: the app and `pitboard watch` can both be running, and either, or a person, may
-//! have switched meanwhile. So the decision is made again here, from the files as they are
-//! now, and the switch goes ahead only for the same plan, and only away from the account
-//! that is still signed in. Two front ends that decided the same thing make one switch; one
-//! that decided from numbers a switch has since made untrue makes none.
+//! A look at the files found that a switch may be due, or that whose login Claude Code has
+//! stored is in doubt. Either may be out of date by the time the lock is held: the app and
+//! `pitboard watch` can both be running, and either, or a person, may have switched
+//! meanwhile, or signed in outside Pitboard. So whose login is stored is told here, as a
+//! switch tells it, and recorded, and the switch is decided once, from that and the files as
+//! they are now. The switch rests on that same telling, so nothing comes between the
+//! decision and the login it moves. Two front ends that decided the same thing make one
+//! switch; one that decided from numbers a switch has since made untrue makes none.
 
-use super::{Outcome, Settled, switch_held};
-use crate::autoswitch::{Auto, Decision, Ledger, Plan, Threshold, decide};
+use super::{Settled, Switched, identify, switch_from};
+use crate::autoswitch::{self, Auto, Blind, Judged, Ledger, Threshold, decide};
 use crate::error::{Error, Result};
+use crate::provider::ProviderId;
 use crate::service::Warning;
+use crate::{audit, status};
 
-/// The switch for `plan`, if it is still the one to make.
+/// Switches Claude Code where a limit of the account in use has reached `threshold` and
+/// another account has room, as [`crate::autoswitch`] says, and records what it came to.
 ///
-/// The attempt is recorded before anything moves, so however the switch ends, killed
-/// included, it counts against the limit's attempts, and the front ends never try one limit
-/// more often than [`crate::autoswitch::ATTEMPTS`] times between them. What it came to is
-/// recorded before the lock is let go.
+/// Whose login Claude Code has stored is told first. Where it cannot be, nothing is judged
+/// from what Pitboard last knew, which may be another account's: that is recorded once, as
+/// `auto-stay`, and nobody is asked again until the wait after it is over, as an attempt
+/// waits. A store this process cannot read is refused with its error and kept for nobody to
+/// wait on, since another front end may read it. The attempt is recorded once the switch is
+/// decided and before anything moves, so however the switch ends, killed included, it counts
+/// against the limit's attempts, and the front ends never try one limit more often than
+/// [`crate::autoswitch::ATTEMPTS`] times between them. A switch, and anything that stopped
+/// one, is recorded as `auto-switch`, with the account it went to, or `claude` before there
+/// was one.
 pub(crate) fn automatically(
     settled: Settled,
-    plan: &Plan,
     threshold: Threshold,
 ) -> Result<(Auto, Vec<Warning>)> {
     let Settled {
         _exclusive,
-        state,
+        mut state,
         ctx,
         permit,
     } = settled;
     let ctx = &ctx;
     let now = ctx.now();
-    let rows = crate::status::gather_offline(ctx, &state).rows;
+    let which = ProviderId::Claude;
+    let stopped = |subject: &str, error: Error| {
+        audit::record(ctx, permit, "auto-switch", subject, error.code());
+        error
+    };
+    let unchosen = which.code();
     let mut ledger = Ledger::load(ctx);
-    match decide(&state, &rows, &ledger, threshold, now) {
-        Decision::Switch(again) if again.same(plan) => {}
-        _ => return Ok((Auto::Idle, Vec::new())),
+    let known_at = state.in_use(which).map(|last| last.known_at);
+    if let Some(why) = ledger.unidentified(known_at, now) {
+        return Ok((Auto::NotWatching { why }, Vec::new()));
     }
+    let (live, found) = match identify::look(ctx, &state, which) {
+        Ok(looked) => looked,
+        Err(error) if unreadable_here(&error) => return Err(stopped(unchosen, error)),
+        Err(error) => {
+            let why = ledger.not_told(identify::untold(&error), known_at, now);
+            ledger
+                .save(ctx, permit)
+                .map_err(|error| stopped(unchosen, error))?;
+            let last = state
+                .account_in_use(which)
+                .map(|account| state.typed(&account.key()))
+                .unwrap_or_default();
+            audit::record(ctx, permit, "auto-stay", &last, why.code());
+            return Ok((Auto::NotWatching { why }, Vec::new()));
+        }
+    };
+    identify::keep(ctx, permit, &mut state, which, found)
+        .map_err(|error| stopped(unchosen, error))?;
+    if ledger.told() {
+        ledger
+            .save(ctx, permit)
+            .map_err(|error| stopped(unchosen, error))?;
+    }
+    let identify::Live::Login(outgoing) = live else {
+        return Ok((
+            Auto::NotWatching {
+                why: Blind::NothingSignedIn,
+            },
+            Vec::new(),
+        ));
+    };
+    if let Some(why) = autoswitch::unwatched(&state, Some(&outgoing.owner)) {
+        return Ok((Auto::NotWatching { why }, Vec::new()));
+    }
+    let rows = status::gather_offline(ctx, &state).rows;
+    let plan = match autoswitch::judged(ctx, &state, decide(&state, &rows, &ledger, threshold, now))
+    {
+        Judged::Switch(plan) => plan,
+        Judged::Stands(stands) => return Ok((stands, Vec::new())),
+    };
+    let to = state.typed(&plan.to);
     let to_id = state
         .get(&plan.to)
         .map(|account| account.id.clone())
         .unwrap_or_default();
-    ledger.attempt(plan, now);
-    ledger.save(ctx, permit)?;
-    match switch_held(state, ctx, permit, &plan.to, Some(&plan.from_id)) {
+    ledger.attempt(&plan, now);
+    ledger
+        .save(ctx, permit)
+        .map_err(|error| stopped(&to, error))?;
+    match switch_from(state, ctx, permit, &plan.to, outgoing) {
         Ok((
-            Outcome::Switched {
+            Switched {
                 from, to, adoption, ..
             },
             warnings,
         )) => {
-            ledger.switched(plan);
+            ledger.switched(&plan);
             // The switch was made. A record of it that could not be written costs at most
             // one more attempt at a limit of the account it left, should that account be
             // put back in use before it resets.
             let _ = ledger.save(ctx, permit);
+            audit::record(ctx, permit, "auto-switch", &to, "ok");
             Ok((
                 Auto::Switched {
                     from,
                     to,
-                    limit: plan.limit.clone(),
+                    limit: plan.limit,
                     adoption,
                 },
                 warnings,
             ))
         }
-        // Somebody switched first, to this account or away from the one decided on, which
-        // the switch refuses as overtaken before any login moves or Claude Code's config is
-        // written, which only a switch and `use` write. A plan never switches to the account
-        // it leaves, so none is already active.
-        Ok((Outcome::AlreadyActive { .. }, _)) | Err(Error::SwitchOvertaken) => {
-            Ok((Auto::Idle, Vec::new()))
-        }
         Err(error) => {
             if over_the_account_switched_to(&error) {
-                ledger.pass_over(plan, &to_id);
+                ledger.pass_over(&plan, &to_id);
                 let _ = ledger.save(ctx, permit);
             } else if mended_by_waiting(&error) {
-                ledger.waited(plan);
+                ledger.waited(&plan);
                 let _ = ledger.save(ctx, permit);
             }
-            Err(error)
+            Err(stopped(&to, error))
         }
     }
+}
+
+/// A store this process could not read, such as a keychain locked in a session over SSH: its
+/// front end paces it, as a refusal before the ledger.
+fn unreadable_here(error: &Error) -> bool {
+    matches!(
+        error,
+        Error::Store(crate::store::Error::Locked | crate::store::Error::Unreadable(_))
+    )
 }
 
 /// A refusal that is about this moment: Anthropic out of reach or overloaded, Claude Code
@@ -96,7 +157,9 @@ fn mended_by_waiting(error: &Error) -> bool {
 }
 
 /// A refusal that is about the account switched to, and not about this moment: trying it
-/// again would be refused again, and another account may be fine.
+/// again would be refused again, and another account may be fine. A login too large to write
+/// is not one: the size that matters is of the document the machine keeps, whichever account
+/// goes in, so it is counted against the limit's attempts as any other refusal is.
 fn over_the_account_switched_to(error: &Error) -> bool {
     matches!(
         error,
@@ -107,40 +170,43 @@ fn over_the_account_switched_to(error: &Error) -> bool {
             | Error::ParkedLoginBelongsElsewhere { .. }
             | Error::ParkedCredentialMissing { .. }
             | Error::ParkedCredentialCorrupt { .. }
-            | Error::CredentialTooLarge { .. }
     )
 }
 
 #[cfg(test)]
 mod tests {
     use super::super::harness::{
-        Machine, NOW, cache_usage, config_names, document, hold, machine, owner, usage_answer,
-        window,
+        Machine, NOW, cache_usage, config_names, document, hold, machine, owner, state_file,
+        usage_answer, window,
     };
     use super::super::*;
     use crate::api::scripted::Trouble;
-    use crate::autoswitch::{Auto, RETRY_SECONDS, Skip, Threshold};
+    use crate::autoswitch::{
+        ATTEMPTS, Auto, Blind, Decision, Ledger, Look, RETRY_SECONDS, Skip, Threshold, decide,
+    };
     use crate::service::{Permit, Pitboard};
+    use crate::store::memory::Fault;
     use crate::time::{Clock, FixedClock};
     use crate::usage::{Snapshot, Source};
     use std::sync::Arc;
 
-    /// What Pitboard has measured of `uuid`'s five-hour and weekly limits.
+    /// What Anthropic has just answered of `uuid`'s five-hour and weekly limits.
     fn measured(m: &Machine, uuid: &str, session: f64, weekly: f64) {
         crate::readings::answered(
             &m.ctx,
             Permit::for_a_test(),
-            &[(
-                uuid.to_owned(),
-                Snapshot {
-                    windows: vec![window("session", session), window("weekly_all", weekly)],
-                    observed_at: Some(NOW),
-                    answered_at: Some(NOW),
-                    lists_every_limit: true,
-                    source: Source::Live,
-                },
-            )],
+            &[(uuid.to_owned(), answer(m, session, weekly))],
         );
+    }
+
+    fn answer(m: &Machine, session: f64, weekly: f64) -> Snapshot {
+        Snapshot {
+            windows: vec![window("session", session), window("weekly_all", weekly)],
+            observed_at: Some(m.ctx.now()),
+            answered_at: Some(m.ctx.now()),
+            lists_every_limit: true,
+            source: Source::Live,
+        }
     }
 
     /// `here` in use at `session` of its five-hour limit, `there` parked with room.
@@ -158,6 +224,15 @@ mod tests {
 
     fn auto(m: &Machine) -> crate::service::Changing<Auto> {
         Pitboard::new(m.ctx.clone()).auto_switch(Threshold::DEFAULT)
+    }
+
+    /// What the look at the files alone comes to, where it ends there and takes no lock.
+    fn stands(m: &Machine) -> Auto {
+        let state = state::load(&m.ctx).expect("state");
+        match crate::autoswitch::look(&m.ctx, &state, Threshold::DEFAULT) {
+            Look::Stands(stands) => *stands,
+            Look::Act => panic!("the look goes on to the lock"),
+        }
     }
 
     fn live_refresh(m: &Machine) -> Option<String> {
@@ -295,6 +370,7 @@ mod tests {
     fn a_limit_below_the_share_takes_no_lock_and_changes_nothing() {
         let (m, _) = nearly_out("auto-below", 94.0);
         let before = m.mem.live().peek(&m.service);
+        assert!(matches!(stands(&m), Auto::Idle));
         assert!(matches!(auto(&m).expect("a look").value, Auto::Idle));
         assert_eq!(m.mem.live().peek(&m.service), before);
         assert!(crate::audit::read(&m.ctx, 100).is_empty());
@@ -341,8 +417,8 @@ mod tests {
         assert_eq!(live_refresh(&m).as_deref(), Some("here-refresh"));
     }
 
-    /// Two front ends that decided the same switch make it once: the second finds, under the
-    /// lock, that it has been made.
+    /// Two front ends whose looks both found a switch due make it once: the second finds,
+    /// under the lock, the account switched to in use, with room.
     #[test]
     #[cfg_attr(
         windows,
@@ -351,24 +427,39 @@ mod tests {
     fn two_front_ends_that_decided_one_switch_make_it_once() {
         let (m, _) = nearly_out("auto-twice", 96.0);
         let state = state::load(&m.ctx).expect("state");
-        let plan = |m: &Machine| match crate::autoswitch::look(&m.ctx, &state, Threshold::DEFAULT) {
-            crate::autoswitch::Next::Switch(plan) => plan,
-            other => panic!("a switch, not {other:?}"),
+        for _ in 0..2 {
+            let looked = crate::autoswitch::look(&m.ctx, &state, Threshold::DEFAULT);
+            assert!(matches!(looked, Look::Act), "{looked:?}");
+        }
+        let rows = crate::status::gather_offline(&m.ctx, &state).rows;
+        let Decision::Switch(plan) =
+            decide(&state, &rows, &Ledger::default(), Threshold::DEFAULT, NOW)
+        else {
+            panic!("a switch decided");
         };
-        let (first, second) = (plan(&m), plan(&m));
-        for plan in [&first, &second] {
+
+        let mut came_to = Vec::new();
+        for _ in 0..2 {
             let settled = settle(&m.ctx, Permit::for_a_test(), None)
                 .expect("settled")
                 .0;
-            let _ = automatically(settled, plan, Threshold::DEFAULT).expect("no failure");
+            came_to.push(
+                automatically(settled, Threshold::DEFAULT)
+                    .expect("no failure")
+                    .0,
+            );
         }
+        assert!(
+            matches!(came_to[..], [Auto::Switched { .. }, Auto::Idle]),
+            "{came_to:?}"
+        );
         assert_eq!(live_refresh(&m).as_deref(), Some("there-refresh"));
         assert_eq!(
-            crate::autoswitch::Ledger::load(&m.ctx),
+            Ledger::load(&m.ctx),
             {
-                let mut once = crate::autoswitch::Ledger::default();
-                once.attempt(&first, NOW);
-                once.switched(&first);
+                let mut once = Ledger::default();
+                once.attempt(&plan, NOW);
+                once.switched(&plan);
                 once
             },
             "one attempt, which switched"
@@ -376,14 +467,14 @@ mod tests {
         hold(&m, "after two front ends decided one switch");
     }
 
-    /// The account signed in changed since the look, by a sign-in in Claude Code that
-    /// Pitboard's record has not caught up with: the switch is not made from the account
-    /// that is in use now, which nobody decided to leave. Whose login the switch found is
-    /// recorded, and the activity log says what changed outside Pitboard.
+    /// A sign-in in Claude Code since Pitboard last read, over `here` at the share: under the
+    /// lock the automatic switch asks whose the login stored is, records it, and judges the
+    /// account signed in, which has room. Nothing is attempted from `here`, which nobody is
+    /// on any more, and the activity log says what changed outside Pitboard.
     #[test]
     #[cfg_attr(windows, ignore = "W22: switching Claude Code on Windows")]
-    fn a_switch_decided_away_from_an_account_no_longer_in_use_is_not_made() {
-        let (m, _) = nearly_out("auto-overtaken", 96.0);
+    fn a_sign_in_since_the_last_read_is_judged_as_the_account_it_signed_in() {
+        let (m, _) = nearly_out("auto-signed-in-since", 96.0);
         let elsewhere = document("elsewhere-refresh");
         m.api
             .owned_by("access-elsewhere-refresh", owner("elsewhere"));
@@ -394,10 +485,17 @@ mod tests {
             None,
         ));
         state::save(&m.ctx, Permit::for_a_test(), &state).expect("saved");
+        measured(&m, "elsewhere", 20.0, 20.0);
         m.sign_in(&elsewhere);
 
         assert!(matches!(auto(&m).expect("no failure").value, Auto::Idle));
         assert_eq!(m.live(), Some(elsewhere), "the login in use stays in use");
+        assert_eq!(
+            crate::autoswitch::Ledger::load(&m.ctx),
+            crate::autoswitch::Ledger::default(),
+            "no attempt"
+        );
+        assert!(!m.ctx_home().join(".pitboard/autoswitch.json").exists());
         assert_eq!(
             super::super::harness::audit_lines(&m, "in-use"),
             [
@@ -411,6 +509,16 @@ mod tests {
             "and nothing else, since no switch was made"
         );
         let state = state::load(&m.ctx).expect("state");
+        assert_eq!(
+            state
+                .in_use(ProviderId::Claude)
+                .and_then(|record| record.owner.clone()),
+            Some(owner("elsewhere"))
+        );
+        assert_eq!(
+            state.get(&m.key("here")).and_then(|a| a.replaced_at),
+            Some(NOW)
+        );
         assert!(
             state
                 .get(&m.key("there"))
@@ -418,6 +526,88 @@ mod tests {
                 .is_some(),
             "and the account it would have switched to is still parked"
         );
+    }
+
+    /// Claude Code's config naming another account since Anthropic last named the login
+    /// stored puts the account in use in doubt. The automatic switch settles it under its
+    /// lock, by the login's fingerprint where it is the one Anthropic named, and records what
+    /// the config names, so the next look has nothing to settle and takes no lock.
+    #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
+    )]
+    fn a_doubt_is_settled_under_the_lock_once() {
+        let (m, _) = nearly_out("auto-doubt", 94.0);
+        config_names(&m, "there");
+
+        let looked = auto(&m).expect("a look").value;
+        assert!(matches!(looked, Auto::Idle), "{looked:?}");
+        assert_eq!(m.api.calls(), 0, "{:?}", m.api.asked());
+        let state = state::load(&m.ctx).expect("state");
+        assert_eq!(
+            state
+                .in_use(ProviderId::Claude)
+                .and_then(|record| record.named.clone()),
+            Some(state::new_id(ProviderId::Claude, &owner("there"))),
+            "the record says the config names `there`"
+        );
+        let before = state_file(&m);
+
+        let looked = stands(&m);
+        assert!(matches!(looked, Auto::Idle), "{looked:?}");
+        let looked = auto(&m).expect("a look").value;
+        assert!(matches!(looked, Auto::Idle), "{looked:?}");
+        assert_eq!(m.api.calls(), 0);
+        assert_eq!(state_file(&m), before, "nothing left to settle");
+        assert!(!m.ctx_home().join(".pitboard/autoswitch.json").exists());
+        let read = Pitboard::new(m.ctx.clone())
+            .status_offline()
+            .expect("a read");
+        let codes: Vec<&str> = read.warnings.iter().map(Warning::code).collect();
+        assert_eq!(codes, ["config_names_another"]);
+    }
+
+    /// A login too large to write without the argument line, where the argument line is not
+    /// allowed, is refused before anything moves, over the login going out. It is about this
+    /// machine and not the account switched to, so it counts as an attempt as any refusal
+    /// that waiting will not mend does. It passed that account over, and then each other in
+    /// turn, until the account in use read as having nowhere to go.
+    #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
+    )]
+    fn a_login_too_large_to_write_counts_as_an_attempt() {
+        let (mut m, clock) = nearly_out("auto-too-large", 96.0);
+        m.ctx = m.ctx.clone().with_argv_fallback(false);
+        m.mem.vault().takes_on_stdin(16);
+        let state = state::load(&m.ctx).expect("state");
+        let rows = crate::status::gather_offline(&m.ctx, &state).rows;
+        let Decision::Switch(plan) =
+            decide(&state, &rows, &Ledger::default(), Threshold::DEFAULT, NOW)
+        else {
+            panic!("a switch decided");
+        };
+
+        for _ in 0..ATTEMPTS {
+            let failed = auto(&m).expect_err("too large to park");
+            assert_eq!(failed.error.code(), "credential_too_large");
+            clock.advance(RETRY_SECONDS);
+        }
+        let looked = auto(&m).expect("a look").value;
+        assert!(matches!(looked, Auto::Idle), "{looked:?}");
+
+        let mut tried = Ledger::default();
+        for attempt in 0..ATTEMPTS {
+            tried.attempt(&plan, NOW + i64::from(attempt) * RETRY_SECONDS);
+        }
+        assert_eq!(
+            Ledger::load(&m.ctx),
+            tried,
+            "every attempt counted, and no account passed over"
+        );
+        assert_eq!(live_refresh(&m).as_deref(), Some("here-refresh"));
     }
 
     /// Automatic switches happen while Claude Code is busy, which is when it renews its
@@ -575,15 +765,246 @@ mod tests {
         let journal =
             std::fs::read(m.ctx_home().join(".pitboard/journal.json")).expect("a journal");
 
-        let Auto::Skipped { why, .. } = auto(&m).expect("a look").value else {
-            panic!("skipped");
-        };
-        assert_eq!(why, Skip::SwitchInterrupted);
+        let looked = auto(&m).expect("a look").value;
+        assert!(
+            matches!(
+                looked,
+                Auto::NotWatching {
+                    why: Blind::SwitchInterrupted
+                }
+            ),
+            "{looked:?}"
+        );
         assert_eq!(
             std::fs::read(m.ctx_home().join(".pitboard/journal.json")).ok(),
             Some(journal),
             "nothing finished it but a change somebody makes"
         );
+    }
+
+    /// Under a custom OAuth endpoint Claude Code keeps its login where Pitboard does not act,
+    /// so there is nothing to watch, whatever the numbers say, and nothing is settled.
+    #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W16: Pitboard writing, replacing and removing files on Windows"
+    )]
+    fn under_a_custom_oauth_endpoint_nothing_is_watched() {
+        let (m, _) = nearly_out("auto-custom-oauth", 96.0);
+        let config = m.ctx_home().join(".claude");
+        std::fs::create_dir_all(&config).expect("a config dir");
+        std::fs::write(
+            config.join("settings.json"),
+            serde_json::json!({"env": {"CLAUDE_CODE_CUSTOM_OAUTH_URL": "https://oauth.example"}})
+                .to_string(),
+        )
+        .expect("settings");
+        let looked = auto(&m).expect("a look").value;
+        assert!(
+            matches!(
+                looked,
+                Auto::NotWatching {
+                    why: Blind::CustomOauth
+                }
+            ),
+            "{looked:?}"
+        );
+        assert!(crate::audit::read(&m.ctx, 100).is_empty());
+        assert_eq!(live_refresh(&m).as_deref(), Some("here-refresh"));
+    }
+
+    /// Whose login Claude Code has stored could not be told under the lock, here a login it
+    /// renewed while Anthropic is out of reach: nothing is judged from what the record said
+    /// before, which may be another account's. That is said and recorded once, and nobody is
+    /// asked again until the wait is over, a minute and then twice as long each time, as an
+    /// attempt waits. Once Anthropic answers, the account it names is judged.
+    #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
+    )]
+    fn an_identification_that_fails_is_said_and_waited_on() {
+        let (m, clock) = nearly_out("auto-unidentified", 96.0);
+        m.api.token_trouble("access-here-renewed", Trouble::Offline);
+        m.sign_in(&document("here-renewed"));
+        let stays = || {
+            crate::audit::read(&m.ctx, 100)
+                .into_iter()
+                .filter(|entry| entry.verb == "auto-stay")
+                .map(|entry| (entry.subject, entry.outcome))
+                .collect::<Vec<_>>()
+        };
+
+        let mut asked = 0;
+        for (round, wait) in [60, 120].into_iter().enumerate() {
+            let looked = auto(&m).expect("no failure").value;
+            let Auto::NotWatching {
+                why: Blind::Unidentified { until, .. },
+            } = looked
+            else {
+                panic!("not watching, not {looked:?}");
+            };
+            assert_eq!(until, clock.now() + wait);
+            asked += 1;
+            assert_eq!(m.api.calls(), asked, "asked once in round {round}");
+            assert_eq!(
+                stays(),
+                vec![("here".to_string(), "not_identified".to_string()); round + 1]
+            );
+
+            clock.advance(wait - 1);
+            let unidentified = |looked: &Auto| {
+                matches!(
+                    looked,
+                    Auto::NotWatching {
+                        why: Blind::Unidentified { .. }
+                    }
+                )
+            };
+            let looked = stands(&m);
+            assert!(unidentified(&looked), "{looked:?}");
+            let looked = auto(&m).expect("no failure").value;
+            assert!(unidentified(&looked), "{looked:?}");
+            assert_eq!(m.api.calls(), asked, "nobody asked while it waits");
+            assert_eq!(stays().len(), round + 1, "and nothing more recorded");
+            clock.advance(1);
+        }
+        assert!(logged(&m).is_empty(), "nothing attempted");
+
+        m.api.owned_by("access-here-renewed", owner("here"));
+        let looked = auto(&m).expect("a switch").value;
+        assert!(matches!(looked, Auto::Switched { .. }), "{looked:?}");
+        assert_eq!(live_refresh(&m).as_deref(), Some("there-refresh"));
+    }
+
+    /// A read that records whose a changed login is ends the failures in a row before it, as
+    /// telling it under the lock does, though the look then finds nothing to decide and never
+    /// takes the lock. The next failure, at Claude Code's next renewal, waits a minute again.
+    #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
+    )]
+    fn a_read_that_tells_whose_the_login_is_ends_the_failures_in_a_row() {
+        let (m, clock) = nearly_out("auto-told-by-a-read", 96.0);
+        let waits_until = |m: &Machine| match auto(m).expect("no failure").value {
+            Auto::NotWatching {
+                why: Blind::Unidentified { until, .. },
+            } => until,
+            other => panic!("not watching, not {other:?}"),
+        };
+        m.api.token_trouble("access-here-renewed", Trouble::Offline);
+        m.sign_in(&document("here-renewed"));
+        assert_eq!(waits_until(&m), NOW + RETRY_SECONDS);
+
+        clock.advance(RETRY_SECONDS);
+        m.api.owned_by("access-here-renewed", owner("here"));
+        m.api.using("access-here-renewed", answer(&m, 50.0, 20.0));
+        Pitboard::new(m.ctx.clone()).status(false).expect("a read");
+        let looked = stands(&m);
+        assert!(matches!(looked, Auto::Idle), "{looked:?}");
+
+        clock.advance(10 * 60);
+        m.api.token_trouble("access-here-again", Trouble::Offline);
+        m.sign_in(&document("here-again"));
+        measured(&m, "here", 96.0, 20.0);
+        assert_eq!(waits_until(&m), clock.now() + RETRY_SECONDS);
+    }
+
+    /// A keychain this front end cannot read, as one locked in a session over SSH, is its
+    /// failure alone. It is refused with that error and kept for nobody to wait on, so another
+    /// front end that reads the keychain, such as the app, switches at once.
+    #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
+    )]
+    fn a_keychain_one_front_end_cannot_read_holds_back_no_other() {
+        let (m, _) = nearly_out("auto-locked-here", 96.0);
+        m.fault_live(Fault::Locked);
+
+        let failed = auto(&m).expect_err("the keychain is locked");
+        assert_eq!(failed.error.code(), "credential_store_locked");
+        assert!(!m.ctx_home().join(".pitboard/autoswitch.json").exists());
+        assert_eq!(
+            logged(&m),
+            [(
+                "auto-switch".into(),
+                "claude".into(),
+                "credential_store_locked".into()
+            )]
+        );
+
+        m.mem.live().heal(&m.service);
+        let looked = auto(&m).expect("a switch").value;
+        assert!(matches!(looked, Auto::Switched { .. }), "{looked:?}");
+        assert_eq!(live_refresh(&m).as_deref(), Some("there-refresh"));
+    }
+
+    /// The login Claude Code has stored is of an account nobody enrolled: there is no reading
+    /// of it to judge and no account Pitboard could park it under, so that is said, and once
+    /// recorded, said again from the record alone.
+    #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
+    )]
+    fn an_account_nobody_enrolled_in_use_is_not_watched() {
+        let (m, _) = nearly_out("auto-not-enrolled", 96.0);
+        m.api.owned_by("access-stranger-refresh", owner("stranger"));
+        m.sign_in(&document("stranger-refresh"));
+        config_names(&m, "stranger");
+        let not_enrolled = |looked: &Auto| {
+            matches!(
+                looked,
+                Auto::NotWatching {
+                    why: Blind::NotEnrolled { email },
+                } if email == "stranger@example.com"
+            )
+        };
+
+        let looked = auto(&m).expect("no failure").value;
+        assert!(not_enrolled(&looked), "{looked:?}");
+        assert_eq!(m.api.calls(), 1);
+        let looked = auto(&m).expect("no failure").value;
+        assert!(not_enrolled(&looked), "{looked:?}");
+        assert_eq!(m.api.calls(), 1, "from the record");
+        assert!(logged(&m).is_empty());
+        assert_eq!(live_refresh(&m).as_deref(), Some("stranger-refresh"));
+    }
+
+    /// Claude Code has no login stored, as its `/logout` leaves it: nothing is watched.
+    #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
+    )]
+    fn with_no_login_stored_nothing_is_watched() {
+        let (m, _) = nearly_out("auto-signed-out", 96.0);
+        m.sign_in(&serde_json::json!({"mcpOAuth": {"some-server": {"token": "unrelated"}}}));
+        let path = m.ctx_home().join(".claude.json");
+        let mut config: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&path).expect("a config")).expect("JSON");
+        config
+            .as_object_mut()
+            .expect("an object")
+            .remove("oauthAccount");
+        std::fs::write(&path, config.to_string()).expect("written");
+
+        for _ in 0..2 {
+            let looked = auto(&m).expect("no failure").value;
+            assert!(
+                matches!(
+                    looked,
+                    Auto::NotWatching {
+                        why: Blind::NothingSignedIn
+                    }
+                ),
+                "{looked:?}"
+            );
+        }
+        assert_eq!(m.api.calls(), 0);
+        assert!(logged(&m).is_empty());
     }
 
     /// Claude Code authenticated some other way uses none of the logins Pitboard moves, so
@@ -606,9 +1027,7 @@ mod tests {
         let Auto::Skipped { why, .. } = auto(&m).expect("a look").value else {
             panic!("skipped");
         };
-        let Skip::Overridden(names) = why else {
-            panic!("overridden, not {why:?}");
-        };
+        let Skip::Overridden(names) = why;
         assert!(names[0].starts_with("apiKeyHelper in "), "{names:?}");
         assert_eq!(m.mem.live().peek(&m.service), before);
     }
@@ -630,17 +1049,17 @@ mod tests {
         assert!(!m.ctx_home().join(".pitboard/autoswitch.json").exists());
     }
 
-    /// A sign-in to the account the automatic switch decided on, landing before it holds the
-    /// lock, leaves Claude Code's config naming the account it decided to leave. Only a
-    /// switch and `use` write the config, so the switch it no longer has to make leaves the
+    /// A sign-in to the account the look found a switch due to, landing before the lock is
+    /// held, leaves Claude Code's config naming the account it would have left. Only a switch
+    /// and `use` write the config, so the switch there is no longer any need for leaves the
     /// config as it is, and the login too.
     #[test]
     #[cfg_attr(
         windows,
         ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
     )]
-    fn an_automatic_switch_overtaken_by_a_sign_in_to_its_target_writes_no_config() {
-        let (m, _) = nearly_out("auto-overtaken-writes-nothing", 96.0);
+    fn a_sign_in_to_the_account_it_would_switch_to_writes_no_config() {
+        let (m, _) = nearly_out("auto-signed-in-to-target", 96.0);
         m.api.owned_by("access-there-again-refresh", owner("there"));
         m.sign_in(&document("there-again-refresh"));
         let config =

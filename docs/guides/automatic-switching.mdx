@@ -37,6 +37,16 @@ Automatic switching is off until you turn it on. It never switches Codex, becaus
 
 The app, `pitboard watch` and `pitboard use` can run at once without making two switches from one reading. [Who starts a switch](/concepts/switching#who-starts-a-switch) explains why.
 
+## Which account it watches
+
+Pitboard watches the account whose login Claude Code has stored, as Anthropic last named it. Claude Code's config can name another account: a Claude Code process started or signed in on another login writes its own there.
+
+If the config has named another account since Anthropic last named the login, Pitboard tells whose login it is again before it decides. Until Pitboard has first asked Anthropic, it does the same.
+
+It knows the login by its fingerprint if Anthropic named it before, and asks Anthropic otherwise. So after a sign-in outside Pitboard, such as `/login` in Claude Code, Pitboard watches the account signed in to.
+
+Pitboard tells whose the login is again before it switches too, and switches from that same login.
+
 ## Which account it switches to
 
 Pitboard watches each limit of the account in use. Besides the five-hour and weekly limits, an account can report a weekly limit for one model, such as Opus. Once any limit reaches the share, it looks for another enrolled Claude Code account that:
@@ -74,19 +84,31 @@ Some tries fail for a reason that may pass: Anthropic out of reach or overloaded
 
 ## When it holds back
 
-Pitboard does not switch in these cases:
+Pitboard does not decide whether to switch at all in these cases:
 
 - A switch is interrupted. The next change you make finishes it, or `pitboard abandon` gives up on it. See [Interrupted switches](/concepts/switching#interrupted-switches).
 - Claude Code uses `CLAUDE_CODE_CUSTOM_OAUTH_URL`.
-- Claude Code signs in another way that `pitboard doctor` warns about, such as `apiKeyHelper`.
+- Claude Code has no login stored.
+- The login Claude Code has stored is of an account you have not enrolled.
+- Pitboard cannot tell whose login Claude Code has stored, for example while Anthropic is out of reach.
 
-The app says why in a notification titled **Claude Code was not switched**. When a try fails, it posts **Pitboard could not switch Claude Code**. The app and `pitboard watch` say each once until the next switch.
+When Pitboard cannot tell whose the login is, it tries again after 1 minute. It then waits twice as long after each such failure in a row, up to 15 minutes.
+
+A read of your accounts that records whose a changed login is ends the wait, and the next failure waits 1 minute again. [`pitboard log`](/reference/maintenance-commands#log) records each failure as `auto-stay`.
+
+The app says why in a notification titled **Pitboard is not switching Claude Code**.
+
+Pitboard does not switch if Claude Code signs in another way that `pitboard doctor` warns about, such as `apiKeyHelper`. The app says so in a notification titled **Claude Code was not switched**.
+
+When a try fails, the app posts **Pitboard could not switch Claude Code**. The app and `pitboard watch` say each reason and each failure once until the next switch.
+
+A keychain that one run cannot read, such as `pitboard watch` over SSH while the keychain is locked, fails that run's tries alone. Another run that can read it, such as the app, still switches.
 
 A login file behind the keychain, `~/.claude/.credentials.json` on macOS, does not stop a switch. Sessions started after the switch use the account switched to at once, and open ones when their login is next renewed. The switch's notification and line say so in place of the 33 seconds. See [Open sessions](/concepts/switching#open-sessions).
 
 ## Keep the numbers fresh
 
-Pitboard decides from usage it has already read, sending no request. The app and `pitboard watch` read every account every 5 minutes, less often while Anthropic rate limits usage checks. A session using its account fast can pass the share and reach the limit between two reads.
+Pitboard decides from usage it has already read, and asks for none. The app and `pitboard watch` read every account every 5 minutes, less often while Anthropic rate limits usage checks. A session using its account fast can pass the share and reach the limit between two reads.
 
 Add `pitboard statusline` to Claude Code, as [Show usage in Claude Code's status line](/guides/status-line) describes. Each session then records its usage after every response, and the app and `pitboard watch` see it within 2 seconds. The status line itself never switches.
 

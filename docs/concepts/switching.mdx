@@ -21,7 +21,7 @@ Pitboard moves no login until it knows whose it is.
 
 For Claude Code, it asks Anthropic. Claude Code's config file can name another account than the one whose login is stored: a Claude Code process started or signed in on another login can write its own there. For Codex, it reads the account from the login's ID token. It records the answer with a fingerprint of the login's refresh token, and asks again only about a login with another fingerprint: one the tool renewed, or one a sign-in outside Pitboard put there.
 
-These take the account in use from that record without asking: `pitboard status --offline`, the app between its reads, `pitboard doctor` and Pitboard deciding whether to switch by itself. `pitboard forget` asks as a switch does. Claude Code's config naming another account since the last answer only tells Pitboard that something may have signed in, and a read that asks settles it.
+These take the account in use from that record without asking: `pitboard status --offline`, the app between its reads, `pitboard doctor` and Pitboard's first look at whether to switch by itself. `pitboard forget` asks as a switch does. Claude Code's config naming another account since the last answer only tells Pitboard that something may have signed in. A read that asks settles it, and so does Pitboard before it decides whether to switch by itself.
 
 It records a fingerprint of each parked login's refresh token, and refuses a parked login that no longer matches.
 
@@ -42,11 +42,15 @@ You start a switch from Pitboard's menu, the Pitboard window, a notification or 
 
 A switch Pitboard starts by itself is the switch `pitboard use` makes, with the same checks, steps and locks. [`pitboard log`](/reference/maintenance-commands#log) records it with the verb `auto-switch`, and the app's **Activity** pane names it **Automatic switch**.
 
-Pitboard decides whether to switch by itself from files alone, such as its accounts, its record of whose login is stored and its usage readings. That look takes no lock and sends no request. One that finds nothing to do records nothing.
+Pitboard first looks at whether to switch by itself from files alone, such as its accounts, its record of whose login is stored and its usage readings. That look takes no lock and sends no request. One that finds nothing to do records nothing.
 
-The app, `pitboard watch` and your own `pitboard use` can all run at once. A decision can then be out of date by the time Pitboard holds its lock. Holding it, Pitboard decides again from the files as they are then. It switches only if the decision still stands, and only away from the account still signed in.
+Pitboard takes its lock only where a switch may be due, or where its record of whose login is stored is in doubt. That record is in doubt where Claude Code's config has named another account since Anthropic last named the login. It is also in doubt until Pitboard has first asked Anthropic.
 
-So two runs that read the same numbers make one switch between them. A run that read the numbers before someone else switched makes none.
+Holding the lock, Pitboard tells whose login Claude Code has stored, as any switch does, and records it. Then it decides once, from that and the files as they are then, and switches from that same login.
+
+The app, `pitboard watch` and your own `pitboard use` can all run at once. So two runs that read the same numbers make one switch between them. A run that read the numbers before someone else switched, or before a sign-in outside Pitboard, decides from what it finds under the lock.
+
+If Pitboard cannot tell whose login Claude Code has stored, it decides nothing until it can. [When it holds back](/guides/automatic-switching#when-it-holds-back) says when it tries again.
 
 Pitboard also does not switch away by itself from an account within 5 minutes of its being put in use. Any switch puts an account in use, as does enrolling it signed in. The app and `pitboard watch` read every account every 5 minutes, so Pitboard can read the account switched to before leaving it.
 
@@ -84,7 +88,7 @@ A switch can stop partway, for example in a crash or when you stop `pitboard wat
 
 Those commands are `pitboard use`, `enroll`, `forget`, `rename`, `repair` and `uninstall`, and the same changes in the app. `pitboard`, `pitboard doctor`, `pitboard log` and `pitboard renew` do not finish it.
 
-Pitboard does not start a switch by itself while one is interrupted, because finishing it is a change for you to make. Where it would have switched, the app or `pitboard watch` says why once.
+Pitboard does not start a switch by itself while one is interrupted, because finishing it is a change for you to make. The app or `pitboard watch` says so once.
 
 A login matching neither fingerprint usually means the tool refreshed it after the switch stopped. Pitboard must then identify the login, which for Claude Code means asking Anthropic. Until it can, every such command stops without changing anything.
 

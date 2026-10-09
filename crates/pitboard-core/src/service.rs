@@ -2,6 +2,7 @@
 //! interrupted switch first and is recorded in the audit log, and what went wrong on the way
 //! is reported alongside the result, whether or not the change then succeeds.
 
+use crate::autoswitch::{Auto, Look, Threshold};
 use crate::context::Context;
 use crate::doctor::{self, Diagnosis};
 use crate::error::{Error, Result};
@@ -766,35 +767,49 @@ impl Pitboard {
     /// `threshold` and another account has room, as [`crate::autoswitch`] says. For a front
     /// end somebody asked to do that: the app with its setting on, or `pitboard watch`.
     ///
-    /// Looks first from files alone, so a look that finds nothing to do takes no lock, asks
-    /// nobody and records nothing. A switch is decided again under the lock, and is recorded
-    /// in the audit log as `auto-switch`, with what it came to; nothing else here is.
-    pub fn auto_switch(
-        &self,
-        threshold: crate::autoswitch::Threshold,
-    ) -> Changing<crate::autoswitch::Auto> {
+    /// Looks first from files alone ([`auto_look`]), so a look that finds nothing to do takes
+    /// no lock, asks nobody and records nothing. Under the lock whose login Claude Code has
+    /// stored is told, and the switch decided once, as [`switch::automatically`] says, which
+    /// records in the audit log what it came to. A settle that failed first is recorded as
+    /// `auto-switch` of `claude`.
+    ///
+    /// [`auto_look`]: Pitboard::auto_look
+    pub fn auto_switch(&self, threshold: Threshold) -> Changing<Auto> {
         let permit = self.permitted()?;
-        let state = state::load(&self.ctx).map_err(|error| Failed {
+        let looked = self.auto_look(threshold).map_err(|error| Failed {
             error,
             warnings: Vec::new(),
         })?;
-        let plan = match crate::autoswitch::look(&self.ctx, &state, threshold) {
-            crate::autoswitch::Next::Say(auto) => {
-                return Ok(Done {
-                    value: auto,
-                    warnings: Vec::new(),
-                });
+        if let Look::Stands(value) = looked {
+            return Ok(Done {
+                value: *value,
+                warnings: Vec::new(),
+            });
+        }
+        let tool = ProviderId::Claude;
+        let (settled, mut warnings) =
+            self.settled_for(permit, "auto-switch", tool.code(), Some(tool))?;
+        match switch::automatically(settled, threshold) {
+            Ok((value, more)) => {
+                warnings.extend(more);
+                Ok(Done { value, warnings })
             }
-            crate::autoswitch::Next::Switch(plan) => plan,
-        };
-        let subject = state.typed(&plan.to);
-        self.changing(
-            permit,
-            "auto-switch",
-            &subject,
-            Some(ProviderId::Claude),
-            |settled| switch::automatically(settled, &plan, threshold),
-        )
+            Err(mut error) => {
+                warnings.extend(error.take_warnings());
+                Err(Failed { error, warnings })
+            }
+        }
+    }
+
+    /// What switching Claude Code by itself would come to now, from files alone: what
+    /// stands, or that only a decision under the lock can say, which [`auto_switch`] makes.
+    /// Takes no lock, reads no keychain and asks nobody, so a front end may look as often as
+    /// it likes.
+    ///
+    /// [`auto_switch`]: Pitboard::auto_switch
+    pub fn auto_look(&self, threshold: Threshold) -> Result<Look> {
+        let state = state::load(&self.ctx)?;
+        Ok(crate::autoswitch::look(&self.ctx, &state, threshold))
     }
 
     /// Which account somebody meant, as the key the engine looks accounts up by.
@@ -1189,6 +1204,32 @@ impl Pitboard {
         tool: Option<ProviderId>,
         run: impl FnOnce(Settled) -> Result<(T, Vec<Warning>)>,
     ) -> Changing<T> {
+        let (settled, mut warnings) = self.settled_for(permit, verb, subject, tool)?;
+        match run(settled) {
+            Ok((value, more)) => {
+                audit::record(&self.ctx, permit, verb, subject, value.audit_code());
+                warnings.extend(more);
+                Ok(Done { value, warnings })
+            }
+            Err(mut error) => {
+                audit::record(&self.ctx, permit, verb, subject, error.code());
+                warnings.extend(error.take_warnings());
+                Err(Failed { error, warnings })
+            }
+        }
+    }
+
+    /// Settles for a change, with what to know before it runs: another way `tool` is signed
+    /// in, a file behind its store, and an interrupted switch settling finished, which the
+    /// audit log records as `recover`. A settle that failed is recorded as `verb` of
+    /// `subject`, with its error.
+    fn settled_for(
+        &self,
+        permit: Permit,
+        verb: &str,
+        subject: &str,
+        tool: Option<ProviderId>,
+    ) -> std::result::Result<(Settled, Vec<Warning>), Failed> {
         let (settled, recovered) = switch::settle(&self.ctx, permit, tool).map_err(|error| {
             audit::record(&self.ctx, permit, verb, subject, error.code());
             Failed {
@@ -1210,20 +1251,7 @@ impl Pitboard {
             audit::record(&self.ctx, permit, "recover", &r.to, r.code());
             warnings.push(Warning::Recovered(r));
         }
-        match run(settled) {
-            Ok((value, more)) => {
-                if value.recorded() {
-                    audit::record(&self.ctx, permit, verb, subject, value.audit_code());
-                }
-                warnings.extend(more);
-                Ok(Done { value, warnings })
-            }
-            Err(mut error) => {
-                audit::record(&self.ctx, permit, verb, subject, error.code());
-                warnings.extend(error.take_warnings());
-                Err(Failed { error, warnings })
-            }
-        }
+        Ok((settled, warnings))
     }
 }
 
@@ -1231,18 +1259,6 @@ impl Pitboard {
 trait Audited {
     fn audit_code(&self) -> &'static str {
         "ok"
-    }
-
-    /// Whether it changed anything worth a line. A change that found, once it held the lock,
-    /// that there was nothing to do, did nothing.
-    fn recorded(&self) -> bool {
-        true
-    }
-}
-
-impl Audited for crate::autoswitch::Auto {
-    fn recorded(&self) -> bool {
-        matches!(self, crate::autoswitch::Auto::Switched { .. })
     }
 }
 

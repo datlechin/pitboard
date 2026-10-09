@@ -372,6 +372,7 @@ pub(crate) fn change_verb(verb: &str) -> String {
     match verb {
         "use" | "switch" => "Switch".into(),
         "auto-switch" => "Automatic switch".into(),
+        "auto-stay" => "Automatic switch not made".into(),
         "enroll" => "Enrol".into(),
         "forget" => "Forget".into(),
         "rename" => "Rename".into(),
@@ -1126,6 +1127,14 @@ mod tests {
     #[test]
     fn a_switch_made_by_itself_is_named_as_one() {
         assert_eq!(change_verb("auto-switch"), "Automatic switch");
+    }
+
+    /// Where Pitboard could not judge whether to switch by itself, the core logs `auto-stay`
+    /// with the account it last knew in use and why, and the list says so in words.
+    #[test]
+    fn a_switch_not_made_by_itself_is_named_as_one() {
+        assert_eq!(change_verb("auto-stay"), "Automatic switch not made");
+        assert_eq!(change_outcome("not_identified"), "Not identified");
     }
 
     /// What Pitboard found changed outside it in whose login a tool has stored, which the core

@@ -245,7 +245,7 @@ Usage: pitboard watch [OPTIONS]
 | Option | Description |
 | --- | --- |
 | `--at <PERCENT>` | Switch once a limit of the account in use reaches this share, from 50 to 99 [default: 95] |
-| `--once` | Decide once from the numbers Pitboard last measured, without asking anyone, and stop |
+| `--once` | Decide once from the usage Pitboard last measured, asking no service for usage, and stop |
 
 A share outside 50 to 99, or one that is not a whole number, fails with exit status 2.
 
@@ -257,7 +257,7 @@ While it runs, `watch`:
 - Looks every 2 seconds at when the account list and usage readings were last written, such as by a [status line](/guides/status-line) after a response. It decides again when either has changed.
 - Decides again at least every 30 seconds, even when nothing was written.
 
-A decision reads Pitboard's files and sends no request. Unless it comes to a switch, it takes no lock and records nothing.
+A decision first reads Pitboard's files and sends no request. Unless a switch may be due, or Pitboard's record of whose login is stored is in doubt, it takes no lock and records nothing. Otherwise, holding Pitboard's lock, it tells whose login Claude Code has stored, as a switch does, before it decides. [Who starts a switch](/concepts/switching#who-starts-a-switch) says when that record is in doubt.
 
 A switch is the one `pitboard use` makes, with the same checks and journal. [`pitboard log`](/reference/maintenance-commands#log) records it with the verb `auto-switch`.
 
@@ -270,7 +270,8 @@ A switch is the one `pitboard use` makes, with the same checks and journal. [`pi
 | `Watching Claude Code. Pitboard switches to another of your accounts once a limit of the one in use reaches 95%. Stop with Ctrl-C.` | `watch` starts. |
 | `Switched Claude Code from work to personal: work has used 96% of its 5-hour limit. Claude Code sessions already running follow within 33 seconds.` | It switched. While a login file sits behind the keychain, the last sentence says when open sessions follow instead, as for `use`. |
 | `work has used 97% of its 5-hour limit, and no other Claude Code account has room below 95% in every limit.` | A limit reached the share, and no other account has room. Nothing moves. |
-| `work has used 96% of its 5-hour limit. Pitboard is not switching: <reason>.` | A limit reached the share and another account has room, but something stops the switch. |
+| `work has used 96% of its 5-hour limit. Pitboard is not switching: Claude Code signs in another way, set by ANTHROPIC_API_KEY in the environment, so a switch would change nothing its sessions use.` | A limit reached the share and another account has room, but something other than the login Pitboard switches signs Claude Code in, as `pitboard doctor` warns. The line names each setting and where it is set. |
+| `Pitboard is not switching Claude Code: <reason>.` | Pitboard cannot decide whether to switch at all. |
 
 A limit for one model is named with its model, as in `97% of its weekly Opus limit`.
 
@@ -280,7 +281,9 @@ A limit for one model is named with its model, as in `97% of its weekly Opus lim
 | --- | --- |
 | `` a switch was interrupted, and the next change you make finishes it, or give up on it with `pitboard abandon` `` | A switch did not finish. |
 | `Claude Code uses a custom OAuth endpoint, and Pitboard does not act on Claude Code then` | `CLAUDE_CODE_CUSTOM_OAUTH_URL` is set. |
-| `Claude Code signs in another way, set by ANTHROPIC_API_KEY in the environment, so a switch would change nothing its sessions use` | Something other than the login Pitboard switches signs Claude Code in, as `pitboard doctor` warns. The line names each setting and where it is set. |
+| `Claude Code has no login stored` | Claude Code is signed out. |
+| `Claude Code has me@example.com's login stored, and that account is not enrolled` | Claude Code is signed in to an account you have not enrolled. |
+| `whose login Claude Code has stored could not be told (could not reach Anthropic: timed out). It asks again at 14:03` | Pitboard could not tell whose the login is, for the reason in brackets. It tries again at that time, as [When it holds back](/guides/automatic-switching#when-it-holds-back) describes. |
 
 A switch that fails prints its error on standard error, as `pitboard use` would, and `watch` goes on. Each error code is printed once until the next switch. When it tries again depends on the error, as [Switch before an account runs out](/guides/automatic-switching) describes.
 
@@ -288,7 +291,7 @@ A switch that fails prints its error on standard error, as `pitboard use` would,
 
 If you press Control-C while a switch runs, the next change Pitboard makes finishes or undoes it, as [Interrupted switches](/concepts/switching#interrupted-switches) describes.
 
-With `--once`, `watch` decides once from the numbers Pitboard last measured, without asking any service for usage. It prints what it came to, without a start line or the time, and `Nothing to switch now.` when there is nothing to do. A switch it makes still checks the parked login with Anthropic, as `pitboard use` does. It exits 0, or with the error's status if it ends with one.
+With `--once`, `watch` decides once from the usage Pitboard last measured, without asking any service for usage. It prints what it came to, without a start line or the time, and `Nothing to switch now.` when there is nothing to do. A decision that takes Pitboard's lock may ask Anthropic whose login Claude Code has stored, as a switch does. A switch it makes still checks the parked login with Anthropic, as `pitboard use` does. It exits 0, or with the error's status if it ends with one.
 
 With `--json`, `watch` prints one line of JSON for each event, and `--once` prints one. For the fields, see [Watch events](/reference/json-output#watch-events).
 

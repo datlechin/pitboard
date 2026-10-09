@@ -51,7 +51,8 @@ pub use windows::{
 
 pub(crate) use accounts::in_order;
 pub(crate) use notices::{
-    auto_refused_notice, auto_skipped_notice, auto_switched_notice, run_out_notice, standing_notice,
+    auto_not_watching_notice, auto_refused_notice, auto_skipped_notice, auto_switched_notice,
+    run_out_notice, standing_notice,
 };
 
 use crate::account_windows::{AlertText, WindowAccount};

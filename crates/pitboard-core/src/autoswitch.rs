@@ -18,7 +18,10 @@
 //! the agent it was meant to keep going on the account that ran out.
 //!
 //! It decides from what Pitboard already knows, the readings every front end and every
-//! status line record, and asks nobody anything to decide. What it never does:
+//! status line record, and asks nobody about usage to decide. The account it watches is the
+//! one whose login Claude Code has stored, as Anthropic last said. Where the files leave that
+//! in doubt, it is asked under the lock, as a switch asks it, before anything is decided;
+//! where it cannot be told, nothing is decided until it can. What it never does:
 //!
 //! - switch to an account without room below the share in every limit it has;
 //! - switch back by itself. The next time the account in use reaches the share, the best
@@ -31,13 +34,14 @@
 //!   attempts that failed for a reason trying again will not mend. One that might, such as
 //!   Anthropic out of reach, is tried again later each time, up to [`RETRY_MOST_SECONDS`].
 
+use crate::api::Owner;
 use crate::context::Context;
 use crate::provider::ProviderId;
 use crate::service::Permit;
 use crate::state::{Key, State};
 use crate::status::Row;
 use crate::usage::{self, Snapshot, Window, same_reset};
-use crate::{atomic, home};
+use crate::{atomic, home, in_use};
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
@@ -111,8 +115,8 @@ pub const RETRY_MOST_SECONDS: i64 = 900;
 /// reason is not going to be made.
 pub const ATTEMPTS: u32 = 3;
 
-/// How long to wait after an attempt, `waits` attempts in a row having failed for a reason
-/// trying again may mend.
+/// How long to wait after `waits` failures in a row for a reason trying again may mend: of
+/// attempts, or of asking whose login Claude Code has stored.
 fn retry_after(waits: u32) -> i64 {
     (RETRY_SECONDS << waits.saturating_sub(1).min(4)).min(RETRY_MOST_SECONDS)
 }
@@ -120,28 +124,13 @@ fn retry_after(waits: u32) -> i64 {
 /// What Pitboard switches by itself, as it decided from what it knows.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Plan {
-    /// The account in use, and its id, which the switch checks is still the one signed in.
+    /// The account in use, and its id, under which what was tried for its limits is kept.
     pub from: Key,
     pub from_id: String,
     /// The account to switch to.
     pub to: Key,
     /// The limit of `from` that reached the share, as last read.
     pub limit: Window,
-}
-
-impl Plan {
-    /// Whether `other` is this switch: the same accounts, for the same window of the same
-    /// limit, however far that limit has moved since.
-    pub(crate) fn same(&self, other: &Plan) -> bool {
-        self.from == other.from
-            && self.from_id == other.from_id
-            && self.to == other.to
-            && self.limit.same_limit(&other.limit)
-            && same_reset(
-                self.limit.resets_at.unwrap_or(0),
-                other.limit.resets_at.unwrap_or(0),
-            )
-    }
 }
 
 /// What Pitboard would do about the Claude Code account in use, from what it knows now.
@@ -158,7 +147,7 @@ pub(crate) enum Decision {
     },
 }
 
-/// What a look came to, for a front end to say.
+/// What switching by itself came to, for a front end to say.
 #[derive(Debug)]
 pub enum Auto {
     /// Nothing to do now.
@@ -180,15 +169,13 @@ pub enum Auto {
         limit: Window,
         why: Skip,
     },
+    /// Pitboard cannot judge whether to switch, whatever the numbers say, for `why`.
+    NotWatching { why: Blind },
 }
 
 /// Why Pitboard does not switch, where it would have.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Skip {
-    /// A switch was interrupted, and the change that finishes it is somebody's to make.
-    SwitchInterrupted,
-    /// Claude Code keeps its login under another name, which Pitboard does not act on.
-    CustomOauth,
     /// Claude Code authenticates some other way, set by these, so a switch would change
     /// nothing its sessions use.
     Overridden(Vec<String>),
@@ -198,11 +185,48 @@ impl Skip {
     /// A stable code, for `--json` and for telling one apart from another.
     pub fn code(&self) -> &'static str {
         match self {
-            Skip::SwitchInterrupted => "switch_interrupted",
-            Skip::CustomOauth => "custom_oauth_endpoint",
             Skip::Overridden(_) => "auth_overridden",
         }
     }
+}
+
+/// Why Pitboard cannot judge whether to switch Claude Code at all.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Blind {
+    /// A switch was interrupted, and the change that finishes it is somebody's to make.
+    SwitchInterrupted,
+    /// Claude Code keeps its login under another name, which Pitboard does not act on.
+    CustomOauth,
+    /// Claude Code has no login stored.
+    NothingSignedIn,
+    /// The login Claude Code has stored is of an account nobody enrolled, which has `email`.
+    NotEnrolled { email: String },
+    /// Whose login Claude Code has stored could not be told, for `detail`, and is not asked
+    /// again before `until`, in epoch seconds.
+    Unidentified { detail: String, until: i64 },
+}
+
+impl Blind {
+    /// A stable code, for `--json` and for telling one apart from another.
+    pub fn code(&self) -> &'static str {
+        match self {
+            Blind::SwitchInterrupted => "switch_interrupted",
+            Blind::CustomOauth => "custom_oauth_endpoint",
+            Blind::NothingSignedIn => "nothing_signed_in",
+            Blind::NotEnrolled { .. } => "not_enrolled",
+            Blind::Unidentified { .. } => "not_identified",
+        }
+    }
+}
+
+/// What a look at the files alone came to.
+#[derive(Debug)]
+pub enum Look {
+    /// This stands, and nothing is to be done under the lock.
+    Stands(Box<Auto>),
+    /// A switch may be due, or whose login Claude Code has stored is in doubt: only a
+    /// decision under the lock can say ([`crate::service::Pitboard::auto_switch`]).
+    Act,
 }
 
 /// The limit of `reading` furthest past the share, or the one resetting sooner of two as far.
@@ -293,12 +317,28 @@ pub(crate) fn decide(
 
 /// What Pitboard has tried for each limit of each account that reached the share, kept in
 /// Pitboard's directory between runs and shared by every front end that switches by
-/// itself. Written only under the lock every change takes, so two of them never act on one
-/// limit twice. Nothing here is secret: account ids, names of limits, times and counts.
+/// itself, with the last time whose login Claude Code has stored could not be told. Written
+/// only under the lock every change takes, so two of them never act on one limit twice, nor
+/// ask twice in one wait. Nothing here is secret: account ids, names of limits, times, counts
+/// and why a login could not be told whose it is.
 #[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
 pub(crate) struct Ledger {
-    #[serde(default)]
     limits: BTreeMap<String, Tried>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    asked: Option<Asked>,
+}
+
+/// Whose login Claude Code has stored, asked under the lock and not told, since it was last
+/// told.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+struct Asked {
+    /// When it was last asked, in epoch seconds.
+    at: i64,
+    /// Times in a row it was not told, which each make the wait before the next longer.
+    failures: u32,
+    /// Why it was not told the last time, in a few words.
+    detail: String,
 }
 
 /// One limit of one account, in the window that reset at `resets_at`.
@@ -418,24 +458,123 @@ impl Ledger {
             tried.passed_over.push(to_id.to_owned());
         }
     }
-}
 
-/// What to do after a look: switch for this plan, or say this.
-#[derive(Debug)]
-pub(crate) enum Next {
-    Switch(Plan),
-    Say(Auto),
+    /// The times in a row whose login Claude Code has stored was not told, unless a record of
+    /// whose it is, made at `known_at` by anyone who could ask, has come since and ended them.
+    fn not_told_in_a_row(&self, known_at: Option<i64>) -> Option<&Asked> {
+        self.asked
+            .as_ref()
+            .filter(|asked| !known_at.is_some_and(|known_at| known_at > asked.at))
+    }
+
+    /// Why whose login Claude Code has stored is not asked again at `now`: it was not told
+    /// the last time, and the wait after that runs.
+    pub(crate) fn unidentified(&self, known_at: Option<i64>, now: i64) -> Option<Blind> {
+        let asked = self.not_told_in_a_row(known_at)?;
+        let until = asked.at + retry_after(asked.failures);
+        (now < until).then(|| Blind::Unidentified {
+            detail: asked.detail.clone(),
+            until,
+        })
+    }
+
+    /// Whose login Claude Code has stored was asked at `now` and not told, for `detail`, with
+    /// the record of whose it was last made at `known_at`: why nothing is judged, and until
+    /// when.
+    pub(crate) fn not_told(&mut self, detail: String, known_at: Option<i64>, now: i64) -> Blind {
+        let failures = self
+            .not_told_in_a_row(known_at)
+            .map_or(0, |asked| asked.failures)
+            + 1;
+        self.asked = Some(Asked {
+            at: now,
+            failures,
+            detail: detail.clone(),
+        });
+        Blind::Unidentified {
+            detail,
+            until: now + retry_after(failures),
+        }
+    }
+
+    /// Whose login Claude Code has stored was told. Whether that changed what is kept.
+    pub(crate) fn told(&mut self) -> bool {
+        self.asked.take().is_some()
+    }
 }
 
 /// What Pitboard would do now, from its files alone: no lock, no keychain and no network, so
-/// a look that finds nothing to do costs nobody anything. What it decides is decided again
-/// under the lock before anything moves.
-pub(crate) fn look(ctx: &Context, state: &State, threshold: Threshold) -> Next {
+/// a look that finds nothing to do costs nobody anything. The account in use is the one
+/// Pitboard's record says Anthropic last named for the login Claude Code has stored. Where
+/// that record is in doubt, or a switch may be due, only the decision under the lock can
+/// say, from whose login is stored by then.
+pub(crate) fn look(ctx: &Context, state: &State, threshold: Threshold) -> Look {
+    if let Some(why) = blind(ctx) {
+        return Look::Stands(Box::new(Auto::NotWatching { why }));
+    }
+    let now = ctx.now();
+    let ledger = Ledger::load(ctx);
+    let known = in_use::known(ctx, state, ProviderId::Claude);
+    let known_at = known.last.as_ref().map(|last| last.known_at);
+    if let Some(why) = ledger.unidentified(known_at, now) {
+        return Look::Stands(Box::new(Auto::NotWatching { why }));
+    }
+    if known.doubt.is_some() {
+        return Look::Act;
+    }
+    if let Some(why) = unwatched(state, known.owner()) {
+        return Look::Stands(Box::new(Auto::NotWatching { why }));
+    }
     let rows = crate::status::gather_offline(ctx, state).rows;
-    let plan = match decide(state, &rows, &Ledger::load(ctx), threshold, ctx.now()) {
-        Decision::Stay => return Next::Say(Auto::Idle),
+    match judged(ctx, state, decide(state, &rows, &ledger, threshold, now)) {
+        Judged::Switch(_) => Look::Act,
+        Judged::Stands(stands) => Look::Stands(Box::new(stands)),
+    }
+}
+
+/// Why nothing of Claude Code's may be judged here, whatever its numbers: a switch waits to be
+/// finished, which is a change for somebody to make, or Claude Code keeps its login where
+/// Pitboard does not act. Asked before anything else, so the automatic switch never settles
+/// either on its own.
+fn blind(ctx: &Context) -> Option<Blind> {
+    if crate::switch::interrupted(ctx) {
+        Some(Blind::SwitchInterrupted)
+    } else if crate::settings::custom_oauth(ctx) {
+        Some(Blind::CustomOauth)
+    } else {
+        None
+    }
+}
+
+/// Why the account whose login Claude Code has stored, `owner`'s, cannot be watched: there
+/// is none, or nobody enrolled it.
+pub(crate) fn unwatched(state: &State, owner: Option<&Owner>) -> Option<Blind> {
+    let Some(owner) = owner else {
+        return Some(Blind::NothingSignedIn);
+    };
+    state
+        .account_of(ProviderId::Claude, owner)
+        .is_none()
+        .then(|| Blind::NotEnrolled {
+            email: owner.email.clone(),
+        })
+}
+
+/// What a decision comes to once what would stop a switch is asked.
+#[derive(Debug)]
+pub(crate) enum Judged {
+    Switch(Plan),
+    /// Nothing to do, or nothing that can be done.
+    Stands(Auto),
+}
+
+/// What `decision` comes to. Where Claude Code signs in another way, a switch would change
+/// nothing its sessions use.
+pub(crate) fn judged(ctx: &Context, state: &State, decision: Decision) -> Judged {
+    let plan = match decision {
+        Decision::Stay => return Judged::Stands(Auto::Idle),
         Decision::NoRoom { from, limit } => {
-            return Next::Say(Auto::NoRoom {
+            return Judged::Stands(Auto::NoRoom {
                 from: state.typed(&from),
                 limit,
             });
@@ -443,19 +582,13 @@ pub(crate) fn look(ctx: &Context, state: &State, threshold: Threshold) -> Next {
         Decision::Switch(plan) => plan,
     };
     let overridden = crate::provider::of(ProviderId::Claude).overridden_by(ctx);
-    let why = if crate::switch::interrupted(ctx) {
-        Skip::SwitchInterrupted
-    } else if crate::settings::custom_oauth(ctx) {
-        Skip::CustomOauth
-    } else if !overridden.is_empty() {
-        Skip::Overridden(overridden)
-    } else {
-        return Next::Switch(plan);
-    };
-    Next::Say(Auto::Skipped {
+    if overridden.is_empty() {
+        return Judged::Switch(plan);
+    }
+    Judged::Stands(Auto::Skipped {
         from: state.typed(&plan.from),
         limit: plan.limit,
-        why,
+        why: Skip::Overridden(overridden),
     })
 }
 

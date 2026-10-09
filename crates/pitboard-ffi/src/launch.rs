@@ -195,6 +195,9 @@ pub(crate) enum AutoSwitched {
         code: String,
         why: String,
     },
+    /// Pitboard cannot judge whether to switch, for the reason `why` says. `key` tells it
+    /// apart from another: its code, and the account or the cause it names.
+    NotWatching { key: String, why: String },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -326,6 +329,22 @@ fn adoption_of(adoption: pitboard_core::provider::Adoption) -> Adoption {
         pitboard_core::provider::Adoption::RestartRequired { program, .. } => Adoption::Restart {
             program: program.into(),
         },
+    }
+}
+
+/// What tells one reason the automatic switch cannot judge apart from another, for saying each
+/// once: its code, and the account or the cause it names. Not when it asks again, so a cause
+/// that stands is said once however often it is asked about.
+fn not_watching_key(why: &pitboard_core::autoswitch::Blind) -> String {
+    use pitboard_core::autoswitch::Blind;
+    let named = match why {
+        Blind::NotEnrolled { email } => Some(email),
+        Blind::Unidentified { detail, .. } => Some(detail),
+        Blind::SwitchInterrupted | Blind::CustomOauth | Blind::NothingSignedIn => None,
+    };
+    match named {
+        Some(named) => format!("not-watching/{}/{named}", why.code()),
+        None => format!("not-watching/{}", why.code()),
     }
 }
 
@@ -767,6 +786,10 @@ impl AppCore {
                     used: words::share_of_limit(&limit),
                     code: why.code().into(),
                     why: words::not_switching(&why),
+                },
+                Auto::NotWatching { why } => AutoSwitched::NotWatching {
+                    key: not_watching_key(&why),
+                    why: words::not_watching(&why),
                 },
             },
         )

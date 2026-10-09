@@ -9,6 +9,7 @@
 use super::{Result, journal};
 use crate::api::Owner;
 use crate::context::Context;
+use crate::error::Error;
 use crate::in_use::{self, InUse};
 use crate::provider::{self, ProviderError, ProviderId};
 use crate::service::Permit;
@@ -88,12 +89,15 @@ pub(crate) fn whose(
 pub(crate) enum Live {
     /// No login, and the tool's own record names nobody either.
     Nothing,
-    /// A login: the store it was read from, the login whole, and whose it is.
-    Login {
-        store: provider::LiveStore,
-        document: Value,
-        owner: Owner,
-    },
+    Login(Login),
+}
+
+/// A login a tool's live store holds: the store it was read from, the login whole, and whose
+/// it is.
+pub(crate) struct Login {
+    pub(crate) store: provider::LiveStore,
+    pub(crate) document: Value,
+    pub(crate) owner: Owner,
 }
 
 /// What `which`'s store holds now and whose it is, with the record of that, not recorded
@@ -113,11 +117,11 @@ pub(crate) fn look(ctx: &Context, state: &State, which: ProviderId) -> Result<(L
             let found = whose(ctx, state, which, &document)
                 .map_err(|error| super::unidentified(which, error))?;
             let owner = found.owner.clone();
-            let live = Live::Login {
+            let live = Live::Login(Login {
                 store,
                 document,
                 owner,
-            };
+            });
             Ok((live, found.recorded(named)))
         }
     }
@@ -133,12 +137,41 @@ pub(crate) fn now(
     which: ProviderId,
 ) -> Result<Live> {
     let (live, found) = look(ctx, state, which)?;
+    keep(ctx, permit, state, which, found)?;
+    Ok(live)
+}
+
+/// [`now`] for what [`look`] found already, for a change that does something of its own where
+/// whose login is stored could not be told.
+pub(crate) fn keep(
+    ctx: &Context,
+    permit: Permit,
+    state: &mut State,
+    which: ProviderId,
+    found: InUse,
+) -> Result<()> {
     let (changed, noticed) = record(state, which, found, ctx.now());
     if changed {
         state::save(ctx, permit, state)?;
     }
     write_down(ctx, permit, &noticed);
-    Ok(live)
+    Ok(())
+}
+
+/// Why whose login is stored could not be told, in a few words, for a sentence that says what
+/// to do itself: an error's own advice would be about something else.
+pub(crate) fn untold(error: &Error) -> String {
+    match error {
+        Error::SessionExpired { tool } => format!("{} refused its access token", tool.service()),
+        Error::IdentityUnverifiable { detail, .. }
+        | Error::LiveCredentialShapeUnexpected { detail, .. } => detail.clone(),
+        Error::LiveStoreUnsupported { reason, .. } => reason.clone(),
+        Error::LiveCredentialElsewhere { email } => {
+            format!("its config names {email}, and Pitboard cannot find that login")
+        }
+        Error::Store(e) => e.to_string(),
+        other => other.code().replace('_', " "),
+    }
 }
 
 /// Record what a read found of whose login each tool has stored, where that is not what the

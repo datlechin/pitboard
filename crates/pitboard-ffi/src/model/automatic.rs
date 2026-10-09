@@ -239,6 +239,46 @@ fn a_reason_it_did_not_switch_is_said_once() {
     assert_eq!(machine.posted[0].switch_to, None);
 }
 
+/// A reason the core cannot judge whether to switch at all is said once for each reason and
+/// what it names, and leaves nothing claimed.
+#[test]
+fn a_reason_it_is_not_watching_is_said_once() {
+    let mut model = Hand::new();
+    read_preferences(&mut model, true);
+    let mut machine = Machine::reading(Ok(status(vec![work(97.0), personal()])));
+    machine.auto = Ok(AutoSwitched::NotWatching {
+        key: "not-watching/switch_interrupted".into(),
+        why: "a switch was interrupted, and the next change you make finishes it".into(),
+    });
+    model.refresh(&mut machine);
+    model.refresh(&mut machine);
+    assert_eq!(machine.auto_at.len(), 2);
+    assert_eq!(
+        machine.posted,
+        [RunOutNotice {
+            id: "auto-not-watching/switch_interrupted".into(),
+            title: "Pitboard is not switching Claude Code".into(),
+            subtitle: None,
+            body: "A switch was interrupted, and the next change you make finishes it.".into(),
+            switch_to: None,
+        }]
+    );
+    assert!(model.state.switch_under_way().is_none());
+
+    machine.auto = Ok(AutoSwitched::NotWatching {
+        key: "not-watching/not_enrolled/me@example.com".into(),
+        why: "Claude Code has me@example.com's login stored, and that account is not enrolled"
+            .into(),
+    });
+    model.refresh(&mut machine);
+    assert_eq!(
+        machine.posted.len(),
+        2,
+        "another reason: {:?}",
+        machine.posted
+    );
+}
+
 /// A refusal is said once too, in the core's words, and leaves nothing claimed.
 #[test]
 fn a_refusal_is_said_once_and_lets_go() {
