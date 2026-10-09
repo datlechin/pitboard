@@ -204,6 +204,8 @@ pub(crate) fn warning_heading(warning: &Warning) -> &'static str {
         "interrupted_switch_undone" => "An interrupted switch was undone",
         "recovery_undetermined" => "An interrupted switch is waiting",
         "login_replaced" => "A login was replaced outside Pitboard",
+        "in_use_unconfirmed" => "The account in use is not confirmed",
+        "config_names_another" => "Claude Code’s config names another account",
         _ => "Pitboard has a warning",
     }
 }
@@ -991,6 +993,11 @@ mod tests {
             ),
             ("recovery_undetermined", "An interrupted switch is waiting"),
             ("login_replaced", "A login was replaced outside Pitboard"),
+            ("in_use_unconfirmed", "The account in use is not confirmed"),
+            (
+                "config_names_another",
+                "Claude Code’s config names another account",
+            ),
         ];
         let warning = |code: &str| Warning {
             code: code.into(),

@@ -6,6 +6,17 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Added
+
+- The warnings `in_use_unconfirmed` and `config_names_another`. A read that could not ask
+  Anthropic warns with `in_use_unconfirmed` where Claude Code's config has named another
+  account since Anthropic last named the login stored, as a sign-in leaves it. Every read
+  warns with `config_names_another` where the config names another account than the one
+  whose login is stored, which `/status` in Claude Code then shows. `pitboard doctor` has an
+  `in use` check that names the account in use, as Anthropic said and when, and warns of
+  either. The app asks Anthropic once whenever a read between its own says
+  `in_use_unconfirmed`.
+
 ### Changed
 
 - The account index is schema 6. It records whose login Claude Code and Codex each have
@@ -88,6 +99,15 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   share, so a limit at 94.5% showed 95% and was not switched from. `pitboard status`,
   `pitboard watch` and the status line round a half up, as the app does, and a limit changes
   colour at 70% and at 90% as its figure shows them.
+- `pitboard status --offline`, the app between its reads, the automatic switch, `pitboard
+  doctor` and `pitboard forget` take the account in use from what Anthropic last said of
+  the login Claude Code has stored, and the login of an account nobody enrolled has its row
+  offline too. They took it from Claude Code's config, which a Claude Code process started
+  or signed in on another login can rewrite with its own account, as read in Claude Code
+  2.1.294. On one machine it named another account than the login stored for three hours,
+  and the automatic switch watched that account rather than the one at its limit. `forget`
+  asks whose the login is as a switch does, and where nobody can say, it keeps the account
+  last in use and any account with nothing parked.
 
 ## [0.9.0] - 2026-10-08
 

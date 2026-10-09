@@ -279,7 +279,7 @@ fn unidentified(which: ProviderId, error: provider::ProviderError) -> Error {
 /// in, are two different situations. The second means Pitboard is looking in the wrong
 /// place, and writing a login there would put it where nobody reads.
 pub(super) fn nothing_signed_in(ctx: &Context, which: ProviderId) -> Error {
-    match provider::of(which).recorded_identity(ctx) {
+    match provider::of(which).own_record(ctx) {
         Some(found) => Error::LiveCredentialElsewhere { email: found.email },
         None => Error::LiveCredentialAbsent { tool: which },
     }
@@ -562,8 +562,6 @@ fn switch_held(
     fault::point("switch.recorded");
     drop(guard);
 
-    // The tool does not correct what it caches about who is signed in on its own; the next
-    // switch rewrites it.
     let outgoing_identity = provider::Identity {
         account_id: outgoing.account_uuid.clone(),
         email: outgoing.email.clone(),

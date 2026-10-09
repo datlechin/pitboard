@@ -206,6 +206,12 @@ pub const PER_SYSTEM: &[PerSystem] = &[
         linux: Read("2.1.294"),
         windows: Read("2.1.294"),
     },
+    PerSystem {
+        name: "config_identity_is_the_last_writers",
+        macos: Read("2.1.294"),
+        linux: Read("2.1.294"),
+        windows: Read("2.1.294"),
+    },
 ];
 
 pub const ASSUMPTIONS: &[Assumption] = &[
@@ -635,15 +641,15 @@ pub const ASSUMPTIONS: &[Assumption] = &[
     },
     Assumption {
         name: "config_may_name_no_organisation",
-        fact: "`oauthAccount` names the organisation of the login in use, from the profile, \
-               whose shape requires `organization.uuid`. A sign-in that could not read the \
-               profile writes it from the token's own account instead, whose organisation can \
-               be absent, and Claude Code then reads none",
+        fact: "`oauthAccount` names the organisation of the login of the process that wrote \
+               it, from the profile, whose shape requires `organization.uuid`. A sign-in that \
+               could not read the profile writes it from the token's own account instead, \
+               whose organisation can be absent, and Claude Code then reads none",
         read_from: "the sign-in's fallback to `tokenAccount` when the profile cannot be \
                     fetched, and the readers that stand `acct:` in for a missing organisation",
         verified_against: "2.1.294",
-        depends: "Claude's recorded_identity, which names no login when the config names no \
-                  organisation",
+        depends: "Claude's own_record, which names such an account with no organisation, as \
+                  the config wrote it, so in_use::known tells a change of it by the same id",
         probe: &["tokenAccount", "acct:${"],
         absent: &[],
     },
@@ -695,6 +701,32 @@ pub const ASSUMPTIONS: &[Assumption] = &[
         probe: &["Usage read answered from a snapshot"],
         absent: &[],
     },
+    Assumption {
+        name: "config_identity_is_the_last_writers",
+        fact: "`oauthAccount`'s account, email and organisation are written by a sign-in, from \
+               the profile or else the token's own account, and at a process start where \
+               `profileFetchedAt` is missing or over 24 hours old or a profile field is \
+               missing, from the profile of that process's own token. Every start of a \
+               process signed in to claude.ai also writes the email and organisation that \
+               `/api/claude_cli/bootstrap` gives for that process's token, where it names the \
+               config's account or none. A token refresh writes no identity field. So the \
+               config can name another account than the login stored: a process started on \
+               another login writes that login's account where the profile was missing, \
+               incomplete or a day old, and one started on another organisation of the same \
+               person writes that organisation",
+        read_from: "the sign-in's profile and `tokenAccount` write, the start-up profile fetch \
+                    and its 24 hour check, the bootstrap merge into `oauthAccount`, and the \
+                    refresh's profile update",
+        // Read on 2026-10-08 from the macOS build and on 2026-10-09 from the Linux x64,
+        // Windows x64 and Windows arm64 builds of 2.1.294, whose code here is the same.
+        verified_against: "2.1.294",
+        depends: "in_use::known, which takes the config naming another account than when \
+                  Anthropic last named the login stored as a sign that something signed in, \
+                  never as whose the login is; and every reader of the account in use, which \
+                  takes it from that record and not from the config",
+        probe: &["profileFetchedAt:Date.now()", "organization_uuid!=null)"],
+        absent: &[],
+    },
 ];
 
 #[cfg(test)]
@@ -725,6 +757,7 @@ mod tests {
                 "config_may_name_no_organisation",
                 "usage_cache_stamp_is_the_configs",
                 "status_reads_the_config_usage_the_token",
+                "config_identity_is_the_last_writers",
             ]
         );
         for name in [

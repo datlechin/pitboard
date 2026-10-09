@@ -201,8 +201,8 @@ fn enroll() {
 
 /// The last thing a person runs, and the one whose shape matters to whatever wrapper runs
 /// it: how many parked logins went, how many did not, and whether the home is gone.
-/// The reading that asks nobody anything: what was last measured, and who Claude Code's
-/// config says is signed in. Its envelope is a contract like any other.
+/// The reading that asks nobody anything: what was last measured, and whose login each tool
+/// has stored, as its service last said. Its envelope is a contract like any other.
 #[test]
 #[cfg_attr(windows, ignore = "W22: switching Claude Code on Windows")]
 fn status_offline() {

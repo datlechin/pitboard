@@ -340,6 +340,57 @@ fn a_login_replaced_outside_is_posted_once_whatever_is_stored_since() {
     );
 }
 
+/// What a read that asks nobody says while Claude Code's config names `named`, which it did
+/// not when Anthropic last named the login stored, `work`'s, as the core words it.
+fn unconfirmed(named: &str) -> Warning {
+    warning(
+        "in_use_unconfirmed",
+        &format!(
+            "Claude Code's config has named `{named}` since Pitboard last asked Anthropic whose \
+             login Claude Code has stored, so another login may be stored. The one stored then \
+             was `work`'s. `pitboard status` asks again."
+        ),
+    )
+}
+
+/// Claude Code's config naming another account than when Anthropic last named the login
+/// stored is a sign that something signed in, and only a read that asks can say what. A
+/// read that asks nobody and says so, as the app's reads between its own do after a session
+/// records numbers or another front end changes the index, starts one such read, and
+/// another only once it says something else.
+#[test]
+fn an_offline_read_in_doubt_asks_one_read_per_config_value() {
+    let accounts = || vec![claude("work", true, 5.0)];
+    let mut model = Hand::new();
+    let mut machine = Machine::reading(Ok(status(accounts())));
+    model.refresh(&mut machine);
+    let asked = model.count(any_read);
+
+    machine.offline = Ok(warned(accounts(), vec![unconfirmed("home")]));
+    machine.readings += 1;
+    model.notice(&mut machine);
+    assert_eq!(model.count(any_read), asked + 1, "one read that asks");
+
+    machine.readings += 1;
+    model.notice(&mut machine);
+    machine.changed += 1;
+    model.notice(&mut machine);
+    assert_eq!(
+        model.count(any_read),
+        asked + 1,
+        "what it says was asked about already"
+    );
+
+    machine.offline = Ok(warned(accounts(), vec![unconfirmed("spare")]));
+    machine.changed += 1;
+    model.notice(&mut machine);
+    assert_eq!(
+        model.count(any_read),
+        asked + 2,
+        "something else is asked about"
+    );
+}
+
 /// AppModelTests.swift's whatIsInstalledIsAskedAgainWhileNothingIsFound, apart from what
 /// the window says about it. A login shell too slow to answer finds nothing the first time,
 /// and the core asks it once more later, so a read asks again while nothing has been found.

@@ -111,7 +111,8 @@ fn over_the_account_switched_to(error: &Error) -> bool {
 #[cfg(test)]
 mod tests {
     use super::super::harness::{
-        Machine, NOW, cache_usage, document, hold, machine, owner, usage_answer, window,
+        Machine, NOW, cache_usage, config_names, document, hold, machine, owner, usage_answer,
+        window,
     };
     use super::super::*;
     use crate::api::scripted::Trouble;
@@ -213,6 +214,31 @@ mod tests {
             crate::audit::read(&m.ctx, 100).len(),
             lines,
             "a look that does nothing records nothing"
+        );
+    }
+
+    /// Another Claude Code process can write its own account into Claude Code's config and
+    /// leave the login stored as it was. The account switched from is the one Anthropic named
+    /// for that login: taken from the config, `there` read as in use with room, and `here`
+    /// was left at its limit.
+    #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
+    )]
+    fn the_account_anthropic_names_is_the_one_switched_from() {
+        let (m, _) = nearly_out("auto-config-names-another", 96.0);
+        config_names(&m, "there");
+
+        let done = auto(&m).expect("a switch");
+        let Auto::Switched { from, to, .. } = done.value else {
+            panic!("a switch, not {:?}", done.value);
+        };
+        assert_eq!((from.as_str(), to.as_str()), ("here", "there"));
+        assert_eq!(live_refresh(&m).as_deref(), Some("there-refresh"));
+        assert_eq!(
+            logged(&m),
+            [("auto-switch".into(), "there".into(), "ok".into())]
         );
     }
 

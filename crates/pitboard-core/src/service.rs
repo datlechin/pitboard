@@ -7,6 +7,7 @@ use crate::doctor::{self, Diagnosis};
 use crate::error::{Error, Result};
 use crate::holder::{self, capitalised};
 use crate::host::{Elevation, Floor};
+use crate::in_use::{self, Doubt, InUse, Known};
 use crate::provider::{Held, ProviderId};
 use crate::state::{self, Account, Key};
 use crate::switch::{self, Enrolled, Outcome, Recovered, Renewal, Settled, SignIn};
@@ -160,6 +161,21 @@ pub enum Warning {
         label: String,
         now: Stored,
     },
+    /// The tool's own record names `named` since its service last named the login stored,
+    /// `last`'s, as a sign-in leaves it and as another process starting on another login
+    /// can: another login may be stored. Said by a read that could not ask whose it is.
+    InUseUnconfirmed {
+        tool: ProviderId,
+        last: Stored,
+        named: Stored,
+    },
+    /// The tool's own record names `config`, and the login stored is `in_use`'s, as its
+    /// service said: what `/status` in Claude Code shows is not the account in use.
+    ConfigNamesAnother {
+        tool: ProviderId,
+        config: Stored,
+        in_use: Stored,
+    },
     /// This process may change nothing, because it runs as root or under sudo, or elevated on
     /// Windows, or nobody could tell whether it does, so a read answers from what Pitboard
     /// last measured: it renews nothing, asks nobody and writes nothing. `why` is how it runs,
@@ -201,6 +217,8 @@ impl Warning {
             }
             Warning::SignInParkedNotInUse { .. } => "sign_in_parked_not_in_use",
             Warning::LoginReplaced { .. } => "login_replaced",
+            Warning::InUseUnconfirmed { .. } => "in_use_unconfirmed",
+            Warning::ConfigNamesAnother { .. } => "config_names_another",
             Warning::ReadOnly { .. } | Warning::ReadOnlyBelowTheFloor { .. } => "read_only",
         }
     }
@@ -366,6 +384,40 @@ impl fmt::Display for Warning {
                      --sign-in` to sign in to it again."
                 )
             }
+            Warning::InUseUnconfirmed { tool, last, named } => {
+                write!(
+                    f,
+                    "{name}'s config has named {named} since Pitboard last asked {service} whose \
+                     login {name} has stored, so another login may be stored.",
+                    name = tool.name(),
+                    named = named.said("no account"),
+                    service = tool.service(),
+                )?;
+                match last {
+                    Stored::Account(_) | Stored::Unenrolled(_) => {
+                        write!(f, " The one stored then was {}'s.", last.said(""))?;
+                    }
+                    Stored::Nothing => write!(f, " None was stored then.")?,
+                    Stored::Unknown => {}
+                }
+                write!(f, " `pitboard status` asks again.")
+            }
+            Warning::ConfigNamesAnother {
+                tool,
+                config,
+                in_use,
+            } => {
+                let config = config.said("no account");
+                write!(
+                    f,
+                    "{name}'s config names {config}, and the login {name} has stored is {}'s, as \
+                     {} said. `/status` in {name} shows {config}. A switch writes the account it \
+                     puts in use there.",
+                    in_use.said("nobody"),
+                    tool.service(),
+                    name = tool.name(),
+                )
+            }
             Warning::ReadOnly { why } => {
                 read_only(f, &crate::words::elevated(crate::host::OS, *why))
             }
@@ -376,12 +428,13 @@ impl fmt::Display for Warning {
     }
 }
 
-/// Whose login a tool has stored, as Pitboard last recorded it.
+/// An account as a warning or a doctor check names it: whose login a tool has stored, as
+/// Pitboard last recorded it, or whom the tool's own record names.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Stored {
     /// An enrolled account's, by the name to type for it.
     Account(String),
-    /// The login of an account nobody enrolled, by its email.
+    /// An account nobody enrolled, by its email.
     Unenrolled(String),
     /// None.
     Nothing,
@@ -389,23 +442,44 @@ pub enum Stored {
     Unknown,
 }
 
-/// What a read says for as long as it stands, from Pitboard's own record alone: each account
-/// whose only login a sign-in outside Pitboard replaced.
-fn standing(state: &state::State) -> Vec<Warning> {
+impl Stored {
+    /// `owner`'s account of `tool`, or none.
+    pub(crate) fn of(
+        state: &state::State,
+        tool: ProviderId,
+        owner: Option<&crate::api::Owner>,
+    ) -> Stored {
+        match owner {
+            None => Stored::Nothing,
+            Some(owner) => state.account_of(tool, owner).map_or_else(
+                || Stored::Unenrolled(owner.email.clone()),
+                |account| Stored::Account(state.typed(&account.key())),
+            ),
+        }
+    }
+
+    /// How a sentence names it: the name to type, in backticks, the email, or `nobody`.
+    pub(crate) fn said(&self, nobody: &str) -> String {
+        match self {
+            Stored::Account(name) => format!("`{name}`"),
+            Stored::Unenrolled(email) => email.clone(),
+            Stored::Nothing | Stored::Unknown => nobody.to_string(),
+        }
+    }
+}
+
+/// Each account whose only login a sign-in outside Pitboard replaced, from Pitboard's own
+/// record alone.
+fn replaced(state: &state::State) -> Vec<Warning> {
     state
         .accounts
         .iter()
         .filter(|account| account.replaced_at.is_some() && account.parked.is_none())
         .map(|account| {
             let tool = account.provider();
-            let now = match state.in_use(tool) {
-                None => Stored::Unknown,
-                Some(record) => match (&record.owner, state.account_in_use(tool)) {
-                    (None, _) => Stored::Nothing,
-                    (Some(_), Some(now)) => Stored::Account(state.typed(&now.key())),
-                    (Some(owner), None) => Stored::Unenrolled(owner.email.clone()),
-                },
-            };
+            let now = state.in_use(tool).map_or(Stored::Unknown, |record| {
+                Stored::of(state, tool, record.owner.as_ref())
+            });
             Warning::LoginReplaced {
                 tool,
                 id: account.id.clone(),
@@ -414,6 +488,26 @@ fn standing(state: &state::State) -> Vec<Warning> {
             }
         })
         .collect()
+}
+
+/// What `known` says of a tool whose own record is apart from its login: that the record
+/// moved since its service last named the login stored, or that it names another account
+/// than that login's.
+fn in_doubt(state: &state::State, tool: ProviderId, known: &Known) -> Option<Warning> {
+    let named = Stored::of(state, tool, known.own_record.as_ref());
+    if known.doubt == Some(Doubt::NamedMoved) {
+        let last = known.last.as_ref().map_or(Stored::Unknown, |record| {
+            Stored::of(state, tool, record.owner.as_ref())
+        });
+        return Some(Warning::InUseUnconfirmed { tool, last, named });
+    }
+    known
+        .named_another(tool)
+        .map(|_| Warning::ConfigNamesAnother {
+            tool,
+            config: named,
+            in_use: Stored::of(state, tool, known.owner()),
+        })
 }
 
 fn read_only(f: &mut fmt::Formatter<'_>, said: &crate::words::ChangesNothing) -> fmt::Result {
@@ -500,7 +594,9 @@ impl Pitboard {
     ///
     /// Whose login each tool has stored is recorded where the read found it changed, as
     /// [`switch::identify::record_read`] says, before the report is made, so a sign-in outside
-    /// Pitboard that replaced the only login of an account is said from that read on.
+    /// Pitboard that replaced the only login of an account is said from that read on. Where
+    /// Claude Code's config names another account than that login's, that is said too, since
+    /// `/status` in Claude Code shows the config's.
     ///
     /// Where this process may change nothing, it answers what [`status_offline`] answers,
     /// with a `read_only` warning that says why: renewing a parked login rotates its refresh
@@ -532,6 +628,7 @@ impl Pitboard {
             (stuck.join().ok().flatten(), answers)
         });
         switch::identify::record_read(&self.ctx, permit, &answers.found);
+        let found = answers.found.clone();
         // Again, so the rows and what stands are of whose login each tool has stored as it
         // was just recorded.
         let state = state::load(&self.ctx)?;
@@ -553,20 +650,44 @@ impl Pitboard {
                 .iter()
                 .filter_map(|&tool| self.left_behind(tool)),
         );
-        warnings.extend(standing(&state));
+        warnings.extend(self.standing(&state, &found));
         Ok(Done {
             value: report,
             warnings,
         })
     }
 
+    /// What a read says for as long as it stands: each account whose only login a sign-in
+    /// outside Pitboard replaced, and, of a tool that keeps a record of its own apart from its
+    /// login, that the record has moved since its service last named the login stored, or
+    /// that it names another account than that login's.
+    ///
+    /// `found` is whose login each tool's store holds as this read just learned it, which a
+    /// read that asks nobody has none of. For every other tool, what Pitboard recorded
+    /// stands, so a read that could not ask says what one that asks nobody says.
+    fn standing(&self, state: &state::State, found: &[(ProviderId, InUse)]) -> Vec<Warning> {
+        let doubts = ProviderId::ALL
+            .iter()
+            .filter(|&&tool| !crate::provider::of(tool).identifies_by_itself())
+            .filter_map(|&tool| {
+                let known = match found.iter().find(|(which, _)| *which == tool) {
+                    Some((_, found)) => in_use::judged(&self.ctx, tool, Some(found.clone())),
+                    None => in_use::known(&self.ctx, state, tool),
+                };
+                in_doubt(state, tool, &known)
+            });
+        replaced(state).into_iter().chain(doubts).collect()
+    }
+
     pub fn doctor(&self) -> Diagnosis {
         doctor::run(&self.ctx)
     }
 
-    /// The same report without asking anyone: the last numbers Pitboard measured, and who
-    /// each tool's own files say is signed in. Nothing is renewed and nothing is asked, so
-    /// it answers at once wherever there is no network.
+    /// The same report without asking anyone: the last numbers Pitboard measured, and whose
+    /// login each tool has stored as its service last said. Nothing is renewed and nothing is
+    /// asked, so it answers at once wherever there is no network. Where Claude Code's config
+    /// has named another account since, as a sign-in leaves it, that is said, and a read that
+    /// asks settles it.
     ///
     /// An interrupted switch the next change cannot finish is said here too, as [`status`]
     /// says it, wherever that can be told without a request: a Claude Code login renewed
@@ -576,7 +697,7 @@ impl Pitboard {
     /// whether its record is there is the whole of it. So nothing is said of a file behind
     /// the keychain, which only a read of the keychain can tell. What Pitboard's own record
     /// holds is said as [`status`] says it: an account whose only login was replaced outside
-    /// Pitboard.
+    /// Pitboard, and Claude Code's config naming another account than the one in use.
     ///
     /// [`status`]: Pitboard::status
     pub fn status_offline(&self) -> Result<Done<status::Report>> {
@@ -584,7 +705,7 @@ impl Pitboard {
         let warnings = switch::stuck(&self.ctx, &state, switch::Asking::Nobody)
             .map(Warning::SwitchStuck)
             .into_iter()
-            .chain(standing(&state))
+            .chain(self.standing(&state, &[]))
             .collect();
         Ok(Done {
             value: status::gather_offline(&self.ctx, &state),
@@ -1753,7 +1874,7 @@ mod tests {
         state.accounts.push(account("here", "here", None));
         state.accounts[0].replaced_at = Some(1);
         let said = |state: &state::State| -> Vec<String> {
-            standing(state).iter().map(ToString::to_string).collect()
+            replaced(state).iter().map(ToString::to_string).collect()
         };
         let then = "and Pitboard holds no login for `here`. Run `pitboard enroll here \
                     --sign-in` to sign in to it again.";
@@ -1987,6 +2108,88 @@ mod tests {
         assert!(
             !said.iter().any(|(code, _)| *code == "login_replaced"),
             "{said:?}"
+        );
+    }
+
+    /// The labels of the rows a read has in use.
+    fn in_use(read: &Done<status::Report>) -> Vec<&str> {
+        read.value
+            .rows
+            .iter()
+            .filter(|row| row.signed_in)
+            .filter_map(|row| row.label.as_deref())
+            .collect()
+    }
+
+    /// Another Claude Code process that starts or signs in on another login can write that
+    /// login's account into Claude Code's config, and leaves the keychain's as it was. A read
+    /// that asks nobody takes the account in use from what Anthropic last said of the login
+    /// stored, and says the config has moved since. It took the config's account.
+    #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
+    )]
+    fn an_offline_read_names_the_account_anthropic_named_whatever_the_config_says() {
+        let m = machine("offline-config-moved");
+        crate::switch::harness::config_names(&m, "there");
+
+        let read = Pitboard::new(m.ctx.clone())
+            .status_offline()
+            .expect("a read");
+
+        assert_eq!(in_use(&read), ["here"]);
+        assert_eq!(
+            said(&read),
+            [(
+                "in_use_unconfirmed",
+                "Claude Code's config has named `there` since Pitboard last asked Anthropic \
+                 whose login Claude Code has stored, so another login may be stored. The one \
+                 stored then was `here`'s. `pitboard status` asks again."
+                    .to_string()
+            )]
+        );
+        assert_eq!(m.api.calls(), 0);
+    }
+
+    /// A read that asks settles it: the login stored is the one Anthropic named, known by its
+    /// fingerprint, so nobody is asked whose it is, and what stands is that the config names
+    /// another account, which `/status` in Claude Code shows. Said by every read after it,
+    /// the one that asks nobody too, until something writes the config again.
+    #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
+    )]
+    fn a_read_settles_it_and_says_the_config_names_another() {
+        use crate::api::scripted::Asked;
+        let m = machine("read-config-names-another");
+        crate::switch::harness::config_names(&m, "there");
+        let pitboard = Pitboard::new(m.ctx.clone());
+        let names_another = "Claude Code's config names `there`, and the login Claude Code has \
+                             stored is `here`'s, as Anthropic said. `/status` in Claude Code \
+                             shows `there`. A switch writes the account it puts in use there.";
+
+        let read = pitboard.status(false).expect("a read");
+
+        assert!(
+            !m.api
+                .asked()
+                .contains(&Asked::Owner("access-here-refresh".into())),
+            "{:?}",
+            m.api.asked()
+        );
+        assert_eq!(in_use(&read), ["here"]);
+        assert_eq!(
+            said(&read),
+            [("config_names_another", names_another.to_string())]
+        );
+
+        let offline = pitboard.status_offline().expect("a read of what is known");
+        assert_eq!(in_use(&offline), ["here"]);
+        assert_eq!(
+            said(&offline),
+            [("config_names_another", names_another.to_string())]
         );
     }
 

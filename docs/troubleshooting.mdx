@@ -35,6 +35,16 @@ A sign-in outside Pitboard, such as `/login` in Claude Code or `codex login`, wr
 
 To use `work` again, sign in to it: see [Sign in to an account again](/guides/sign-in-again). The warning stops once you do, or once you forget `work`. **Add Account** in the app and `pitboard enroll <label> --sign-in` sign in to another account without touching the login in use.
 
+## Claude Code shows another account than Pitboard
+
+`/status` in Claude Code names one account, and Pitboard shows another in use. `pitboard status` warns with `config_names_another`, or with `in_use_unconfirmed` where it could not ask Anthropic, and `pitboard doctor` warns on its `in use` line.
+
+`/status` shows the account Claude Code's config names. As read in Claude Code 2.1.294, a sign-in writes that account. A switch drops the time Claude Code last fetched its profile, so the first Claude Code process to start after it writes the account of the login it started with. Where that is another login, such as one over SSH that signs in with `~/.claude/.credentials.json`, the config names another account. The account Pitboard shows is the one Anthropic named for the login Claude Code has stored, which every new session uses.
+
+With `in_use_unconfirmed`, Pitboard has not asked Anthropic since the config changed, and the change may be a sign-in. Run `pitboard status` to ask. If a sign-in replaced the only login of the account in use, that account then reads `login replaced outside Pitboard`, as [An account reads `login replaced outside Pitboard`](#an-account-reads-login-replaced-outside-pitboard) says.
+
+With `config_names_another`, the login stored is still the one Pitboard shows. `/usage` and every request use the login a session holds, whatever the config names. The next switch writes the account it puts in use into the config.
+
 ## Pitboard cannot confirm which account is signed in
 
 If the message says `Pitboard could not confirm`, check the connection and run the command again.

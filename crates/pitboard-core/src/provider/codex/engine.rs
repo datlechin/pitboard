@@ -212,11 +212,9 @@ impl Provider for Codex {
         None
     }
 
-    /// The login is its own record: its ID token names the account, and Codex keeps no
-    /// other file saying who is signed in.
-    fn recorded_identity(&self, ctx: &Context) -> Option<Identity> {
-        let live = self.read_live(ctx).ok()??;
-        self.identify(ctx, &live).ok()
+    /// Codex keeps no record apart from its login, whose ID token names the account.
+    fn own_record(&self, _ctx: &Context) -> Option<Identity> {
+        None
     }
 
     /// Nothing to correct: Codex caches no identity apart from the login itself.

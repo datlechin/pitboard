@@ -27,6 +27,8 @@ The app and [`pitboard watch`](/reference/account-commands#watch) read usage whe
 
 Every 2 seconds, both also look for a switch made elsewhere or numbers that other runs of Pitboard recorded, without asking any service. The app shows what it finds. With [automatic switching](/guides/automatic-switching) on, the app also decides from it whether to switch, as `pitboard watch` does.
 
+When what the app finds says Claude Code's config has named another account since Anthropic last named the login stored, as a sign-in leaves it, the app reads again and asks Anthropic whose the login is. It does so once for each account the config names.
+
 `pitboard status --fresh` and **Refresh** in Pitboard's menu or the **Accounts** pane ask about every account anyway, and try again a service that could not be reached. They do not ask through a wait a service asked for.
 
 ## One reading per account

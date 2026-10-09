@@ -28,7 +28,7 @@ An account asked about recently is not asked again until its numbers could have 
 | `--offline` | Answer from what was last measured, without asking anyone |
 | `--fresh` | Ask about every account, even one asked about moments ago |
 
-`--offline` renews nothing and writes nothing. It takes who is signed in from each tool's own files, and each account says `read without asking Anthropic` or `read without asking OpenAI`.
+`--offline` renews nothing and writes nothing. It takes the Claude Code account in use from whose login Anthropic last named, and the Codex one from its login's own claims. Each account says `read without asking Anthropic` or `read without asking OpenAI`. Where Claude Code's config has named another account since Anthropic last named the login stored, it warns with `in_use_unconfirmed`, and `status` without `--offline` asks again.
 
 `--fresh` asks again a service Pitboard could not reach moments ago, but not one that asked Pitboard to wait: those accounts keep their last numbers until the wait ends. Giving both options is refused with exit status 2.
 
@@ -169,7 +169,7 @@ Usage: pitboard forget [OPTIONS] <LABEL>
 
 The menu bar app then deletes the account's [window](/reference/app#account-windows) data, sign-in included, at its next successful read of the accounts.
 
-`forget` refuses the account in use, and its message says to switch to another account first. It reads which account is in use from the tool's own files, so it needs no network.
+`forget` refuses the account in use, and its message says to switch to another account first. It learns which account is in use as a switch does, so it asks Anthropic only about a Claude Code login that changed since Anthropic last named it. Where Anthropic cannot be asked, it refuses the account last in use and any account with nothing parked, with why.
 
 | Argument | Description |
 | --- | --- |

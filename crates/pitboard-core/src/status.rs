@@ -247,8 +247,8 @@ impl Row {
 pub struct Report {
     pub now: i64,
     pub rows: Vec<Row>,
-    /// Who the default tool's live login belongs to, as its service says: Claude Code's
-    /// config can be a day behind. Every tool's answer is in the rows.
+    /// Who the default tool's live login belongs to, as its service says, or offline as it
+    /// last said. Every tool's answer is in the rows.
     pub signed_in: Result<Owner, String>,
     /// Which credential slot this report speaks for.
     ///
@@ -281,10 +281,11 @@ struct LiveLogin {
     /// the other says the account in use is gone. `Some(Err)` is a login whose owner could
     /// not be learned this time, and says why.
     signed_in: Option<Result<Owner, String>>,
-    /// The id of the account the tool's own local record names, where it keeps one. It can
-    /// be behind the login it describes, so it never decides a switch; it keeps the row
-    /// that is signed in from reading as though nobody is, when the service cannot be asked.
-    recorded_id: Option<String>,
+    /// Whose login the store holds as far as Pitboard knows without an answer this time,
+    /// which keeps the row in use from reading as though nobody is where nobody could say or
+    /// nobody was asked: what its service last said, or what a login that names its own
+    /// account names ([`in_use::known`]).
+    known: Option<Owner>,
     usage: Option<Result<Snapshot, Stale>>,
     /// There is a login and Pitboard cannot use it: it could not be read, or it was read and
     /// is not one account's login. A tool in this state whose record names none of its
@@ -355,30 +356,26 @@ fn tools(state: &State) -> Vec<ProviderId> {
         .collect()
 }
 
-/// What is known without asking anyone: who each tool's own record says is signed in, and
-/// the last numbers Pitboard measured. Touches no network, so it answers at once and works
-/// on a train.
+/// What is known without asking anyone: whose login each tool has stored, as its service last
+/// said, and the last numbers Pitboard measured. Touches no network, so it answers at once
+/// and works on a train.
 ///
-/// Each tool is asked for what it keeps without anybody's agreement: Claude Code's config,
-/// which can be a day behind the login it describes, and a Codex login's own claims. Good
-/// enough to say who is in use; never good enough to move a login. It used to read Claude
-/// Code's alone, so a signed-in Codex account read as parked whenever the app had no
-/// network.
+/// Whose a login is comes from Pitboard's record of what Anthropic last said, and from a
+/// Codex login's own claims ([`in_use::known`]). It came from Claude Code's config, which a
+/// Claude Code process started or signed in on another login can rewrite with its own
+/// account, so on one machine it named another account than the login stored for three
+/// hours.
 pub fn gather_offline(ctx: &Context, state: &State) -> Report {
-    let tools = tools(state);
-    let recorded: BTreeMap<ProviderId, Owner> = tools
-        .iter()
-        .filter_map(|&which| {
-            let found = crate::provider::of(which).recorded_identity(ctx)?;
-            Some((which, Owner::from(found)))
-        })
+    let known: BTreeMap<ProviderId, Option<Owner>> = tools(state)
+        .into_iter()
+        .map(|which| (which, in_use::known(ctx, state, which).owner().cloned()))
         .collect();
     let facts = Facts {
-        live: tools
+        live: known
             .iter()
-            .map(|&which| {
+            .map(|(&which, owner)| {
                 let login = LiveLogin {
-                    recorded_id: recorded.get(&which).map(|owner| state.id_of(which, owner)),
+                    known: owner.clone(),
                     usage: Some(Err(Stale::NotAsked)),
                     ..LiveLogin::default()
                 };
@@ -398,9 +395,10 @@ pub fn gather_offline(ctx: &Context, state: &State) -> Report {
             |uuid| remembered.get(uuid).cloned(),
             ctx.now(),
         ),
-        signed_in: recorded
+        signed_in: known
             .get(&crate::label::DEFAULT)
             .cloned()
+            .flatten()
             .ok_or_else(|| "not asked".into()),
     }
 }
@@ -515,18 +513,14 @@ fn ask_usage(
 /// is locked for the moment, and saying it is gone sends somebody to sign in again for
 /// nothing. It used to be read as exactly that.
 ///
-/// The account whose login `state` last recorded in the tool's store stands in for the
-/// tool's own record when the login cannot be read at all. Codex keeps no record apart from
-/// the login itself, so without this a Codex login caught half written named nobody, and the
-/// account in use was told to sign in again while `doctor`, reading the same machine, called
-/// it signed in.
-///
 /// Whose a login is comes from the record where it is the login the record was made for,
-/// and from the tool's service otherwise ([`identify::whose`]). Where nobody could say, what
-/// it has left is not asked: asked under an account standing in, the numbers of a login a
-/// sign-in replaced would be filed under the account it replaced. Where no login is stored,
-/// nobody is recorded only if the tool's own record names nobody either
-/// ([`identify::nobody`]).
+/// and from the tool's service otherwise ([`identify::whose`]). Where nobody could say this
+/// time, because the login could not be read or its service could not be asked, whose
+/// Pitboard last recorded it to be stands in, so the account in use is not told to sign in
+/// again; what it has left is not asked, since asked under an account standing in, the
+/// numbers of a login a sign-in replaced would be filed under the account it replaced.
+/// Where no login is stored, nobody is recorded only if the tool's own record names nobody
+/// either ([`identify::nobody`]).
 fn ask_live(
     ctx: &Context,
     state: &State,
@@ -536,7 +530,7 @@ fn ask_live(
     fresh: bool,
 ) -> Answered {
     let tool = crate::provider::of(which);
-    let own_record = || recorded_id(ctx, state, which);
+    let recorded = || last_known(state, which);
     let nobody = || Answered {
         found: identify::nobody(read.named.as_deref(), ctx.now()),
         ..Answered::learning_nothing(LiveLogin::default())
@@ -547,11 +541,7 @@ fn ask_live(
         Err(error) => {
             return Answered::learning_nothing(LiveLogin {
                 signed_in: Some(Err(error.to_string())),
-                recorded_id: own_record().or_else(|| {
-                    state
-                        .account_in_use(which)
-                        .map(|account| account.id.clone())
-                }),
+                known: recorded(),
                 usage: Some(Err(Stale::LoginUnreadable)),
                 out_of_reach: true,
             });
@@ -569,13 +559,23 @@ fn ask_live(
         // Codex login that a session still running from before a switch rewrote with its
         // own account's tokens under the other account's id. Something is signed in, so
         // it is not nobody; nobody is asked about it, because there is no one account's
-        // token to ask with. The tool's own record says whose it most likely is, and
-        // Pitboard's own record does not stand in, because what is there was read and is
-        // not that account's.
+        // token to ask with. Pitboard's record does not stand in, because what is there was
+        // read and is not that account's. A login that names its own account still says
+        // whose its tokens are, as Codex's ID token does.
         Err(unusable) => {
+            let claimed = tool
+                .identifies_by_itself()
+                .then(|| {
+                    tool.identify(
+                        ctx,
+                        &crate::provider::Credential::new(which, document.clone()),
+                    )
+                })
+                .and_then(Result::ok)
+                .map(Owner::from);
             return Answered::learning_nothing(LiveLogin {
                 signed_in: Some(Err(unusable.to_string())),
-                recorded_id: own_record(),
+                known: claimed,
                 usage: Some(Err(Stale::LoginUnusable)),
                 out_of_reach: true,
             });
@@ -587,7 +587,7 @@ fn ask_live(
             let error = to_api(error);
             return Answered::learning_nothing(LiveLogin {
                 signed_in: Some(Err(error.to_string())),
-                recorded_id: own_record(),
+                known: recorded(),
                 usage: Some(Err(Stale::of(&error, true))),
                 out_of_reach: false,
             });
@@ -598,7 +598,7 @@ fn ask_live(
     Answered {
         login: LiveLogin {
             signed_in: Some(Ok(found.owner.clone())),
-            recorded_id: None,
+            known: None,
             usage: Some(usage),
             out_of_reach: false,
         },
@@ -614,7 +614,6 @@ fn ask_live(
 /// been asking about, and because answers are collected in order, a Codex thread that
 /// panicked quietly erased Claude Code's signed-in row.
 fn settle(
-    ctx: &Context,
     state: &State,
     answers: Vec<(ProviderId, std::thread::Result<Answered>)>,
 ) -> BTreeMap<ProviderId, Answered> {
@@ -622,11 +621,11 @@ fn settle(
         .into_iter()
         .map(|(which, answer)| {
             let answer = answer.unwrap_or_else(|_| {
-                // Whose the login is was never learned, so the tool's own record stands in
-                // for it, the same as when its service cannot be reached.
+                // Whose the login is was never learned, so whose Pitboard last recorded it to
+                // be stands in for it, the same as when its service cannot be reached.
                 Answered::learning_nothing(LiveLogin {
                     signed_in: Some(Err("the check did not finish".into())),
-                    recorded_id: recorded_id(ctx, state, which),
+                    known: last_known(state, which),
                     usage: Some(Err(Stale::Interrupted)),
                     out_of_reach: false,
                 })
@@ -720,7 +719,7 @@ pub(crate) fn ask(ctx: &Context, state: &State, fresh: bool) -> Answers {
     let mut live = BTreeMap::new();
     let mut learned = Vec::new();
     let mut found = Vec::new();
-    for (which, answered) in settle(ctx, state, answers) {
+    for (which, answered) in settle(state, answers) {
         live.insert(which, answered.login);
         learned.extend(answered.learned);
         found.extend(answered.found.map(|found| (which, found)));
@@ -792,11 +791,9 @@ pub(crate) fn report(
     }
 }
 
-/// The id of the account the tool's own record names as signed in.
-fn recorded_id(ctx: &Context, state: &State, which: ProviderId) -> Option<String> {
-    crate::provider::of(which)
-        .recorded_identity(ctx)
-        .map(|found| state.id_of(which, &Owner::from(found)))
+/// Whose login Pitboard last recorded `which`'s store to hold.
+fn last_known(state: &State, which: ProviderId) -> Option<Owner> {
+    state.in_use(which)?.owner.clone()
 }
 
 /// Where a tool comes in a listing: the order [`ProviderId::ALL`] gives them.
@@ -816,20 +813,23 @@ fn assemble(
     // Per tool, because an account is signed in to its own tool or to nothing. Comparing
     // every account against one machine-wide answer would have marked a Codex account
     // signed in because a Claude Code account with the same uuid was.
-    let live_ids: BTreeMap<ProviderId, String> = ProviderId::ALL
+    let in_use: BTreeMap<ProviderId, &Owner> = ProviderId::ALL
         .iter()
         .filter_map(|&which| {
             let live = facts.live_for(which)?;
-            let id = match (&live.signed_in, facts.asked) {
-                (Some(Ok(owner)), _) => Some(state.id_of(which, owner)),
+            let owner = match (&live.signed_in, facts.asked) {
+                (Some(Ok(owner)), _) => Some(owner),
                 // Unreachable, unreadable, or never asked. The service decides who is
-                // signed in; without its answer, the tool's own local record is the only
-                // one there is.
-                (Some(Err(_)), _) | (None, false) => live.recorded_id.clone(),
+                // signed in; without its answer this time, what it last said stands in.
+                (Some(Err(_)), _) | (None, false) => live.known.as_ref(),
                 (None, true) => None,
             }?;
-            Some((which, id))
+            Some((which, owner))
         })
+        .collect();
+    let live_ids: BTreeMap<ProviderId, String> = in_use
+        .iter()
+        .map(|(&which, owner)| (which, state.id_of(which, owner)))
         .collect();
     // The service's answer folded into what every front end has recorded, or what they
     // recorded where none came. So a row shows the one reading the status lines show, and an
@@ -849,9 +849,6 @@ fn assemble(
             let id = account.id.as_str();
             let which = account.provider();
             let signed_in = live_ids.get(&which).is_some_and(|live| live == id);
-            let live_unreadable = facts
-                .live_for(which)
-                .is_some_and(|live| live.usage() == Err(Stale::LoginUnreadable));
             let (usage, stale) = if signed_in {
                 let live = facts
                     .live_for(which)
@@ -859,15 +856,6 @@ fn assemble(
                 reading(id, &live)
             } else if account.parked.is_none() && account.replaced_at.is_some() {
                 reading(id, &Err(Stale::LoginReplaced))
-            } else if account.parked.is_none()
-                && live_unreadable
-                && state
-                    .account_in_use(which)
-                    .is_some_and(|in_use| in_use.id == account.id)
-            {
-                // Nothing parked because its login is the one Pitboard last recorded the store
-                // holding, and that login is the one that could not be read: unknown, not gone.
-                reading(id, &Err(Stale::LoginUnreadable))
             } else {
                 let parked = facts.parked.get(id).cloned();
                 reading(id, &parked.unwrap_or(Err(Stale::NotAsked)))
@@ -888,14 +876,14 @@ fn assemble(
         .collect();
 
     // A tool signed in to an account nothing has enrolled still gets a row, so somebody can
-    // see what is there and give it a name. One per tool, because each can have its own,
-    // and told apart by tool as well as by account: two tools' identities are two
-    // namespaces, and one tool's row must never stand in for another's.
+    // see what is there and give it a name, offline as well as online. One per tool, because
+    // each can have its own, and told apart by tool as well as by account: two tools'
+    // identities are two namespaces, and one tool's row must never stand in for another's.
     for &which in ProviderId::ALL {
         let Some(live) = facts.live_for(which) else {
             continue;
         };
-        if let Some(Ok(owner)) = &live.signed_in {
+        if let Some(owner) = in_use.get(&which) {
             let id = state.id_of(which, owner);
             if rows.iter().any(|r| r.provider == which && r.id == id) {
                 continue;
@@ -916,14 +904,13 @@ fn assemble(
             });
             continue;
         }
-        // A login that could not be read, or was read and is not one account's, and that no
-        // record pins on any of the tool's accounts. Said, rather than left out, because
-        // leaving it out reads as nobody being signed in; but only for a tool somebody uses
-        // through Pitboard, so a machine that has never enrolled a Codex account sees
-        // nothing about Codex at all.
+        // A login that could not be read, or was read and is not one account's, and that
+        // nothing pins on any account. Said, rather than left out, because leaving it out
+        // reads as nobody being signed in; but only for a tool somebody uses through
+        // Pitboard, so a machine that has never enrolled a Codex account sees nothing about
+        // Codex at all.
         let enrolled = state.accounts.iter().any(|a| a.provider() == which);
-        let placed = rows.iter().any(|r| r.provider == which && r.signed_in);
-        if live.out_of_reach && enrolled && !placed {
+        if live.out_of_reach && enrolled {
             rows.push(Row {
                 provider: which,
                 label: None,
@@ -1066,7 +1053,7 @@ mod tests {
                 ProviderId::Claude,
                 LiveLogin {
                     signed_in: Some(Err("could not reach Anthropic: offline".into())),
-                    recorded_id: Some("alpha-uuid".into()),
+                    known: Some(owner("alpha-uuid")),
                     usage: Some(Err(Stale::Unreachable)),
                     out_of_reach: false,
                 },
@@ -1592,17 +1579,13 @@ mod tests {
     /// are collected in order, a Codex thread that panicked erased Claude Code's signed-in
     /// row.
     #[test]
-    #[cfg_attr(windows, ignore = "W15: files made private to the person on Windows")]
     fn a_thread_that_stopped_stands_in_for_its_own_tool_only() {
-        let home = scratch("panicked");
-        let (ctx, _mem, _api) = machine(&home.0, None);
         let claude_answer = Answered {
             learned: Some(("alpha-uuid".into(), budget::Outcome::Answered)),
             ..Answered::learning_nothing(live("alpha-uuid", Ok(reading(30.0, Source::Live))))
         };
         let panicked: Box<dyn std::any::Any + Send> = Box::new("boom");
         let settled = settle(
-            &ctx,
             &state(&["alpha"]),
             vec![
                 (ProviderId::Claude, Ok(claude_answer)),
@@ -1688,6 +1671,8 @@ mod tests {
         for a in &mut s.accounts {
             a.parked = None;
         }
+        let alpha = InUse::of(&s.accounts[0], "alpha-refresh", NOW);
+        s.identified(ProviderId::Claude, alpha, NOW);
 
         let report = gather(&ctx, &s);
         let alpha = report
@@ -1697,7 +1682,7 @@ mod tests {
             .unwrap();
         assert!(
             alpha.signed_in,
-            "Claude Code's own record still names the account in use"
+            "Pitboard's record of whose login is stored still names the account in use"
         );
         assert_eq!(alpha.stale, Some(Stale::LoginUnreadable));
         assert_eq!(
@@ -1709,34 +1694,40 @@ mod tests {
         assert_eq!(api.calls(), 0, "a login nobody could read was sent nowhere");
     }
 
-    /// While the login in use cannot be read, the account whose login Pitboard last recorded
-    /// in use has nothing parked because that login is the one in use, which may be exactly
-    /// where it was. A `/login` where the keychain is locked moves Claude Code's record to
-    /// another account and leaves that login in the keychain, so the record's account reads
-    /// as signed in and this one was told to sign in again.
+    /// While the login in use cannot be read, the account Anthropic last named for it stays
+    /// in use, with why nothing new is shown, and is not told to sign in again. A `/login`
+    /// where the keychain is locked moves Claude Code's config to another account and leaves
+    /// that login in the keychain, so the config's account read as in use and the one whose
+    /// login was stored read as having nothing parked.
     #[test]
+    #[cfg_attr(windows, ignore = "W15: files made private to the person on Windows")]
     fn the_account_last_recorded_in_use_is_not_sent_to_sign_in_while_the_login_cannot_be_read() {
+        let home = scratch("unreadable-recorded");
+        let (ctx, mem, api) = machine(&home.0, Some("alpha-uuid"));
+        let service = claude::live_service(&ctx);
+        mem.live().plant(
+            &service,
+            &json!({"claudeAiOauth": {"refreshToken": "beta-refresh"}}).to_string(),
+        );
+        mem.live()
+            .fault(&service, Fault::Unreadable("the keychain is locked".into()));
         let mut s = state(&["alpha", "beta"]);
         s.accounts[1].parked = None;
         let beta = InUse::of(&s.accounts[1], "beta-refresh", NOW);
         s.identified(ProviderId::Claude, beta, NOW);
-        let facts = only_claude(
-            LiveLogin {
-                signed_in: Some(Err("the keychain is locked".into())),
-                recorded_id: Some("alpha-uuid".into()),
-                usage: Some(Err(Stale::LoginUnreadable)),
-                out_of_reach: true,
-            },
-            &[("beta-uuid", Err(Stale::NothingParked))],
-        );
 
-        let rows = assemble(&s, &facts, nothing_remembered, NOW);
-        let beta = rows
-            .iter()
-            .find(|r| r.label.as_deref() == Some("beta"))
-            .unwrap();
-        assert!(!beta.signed_in);
-        assert_eq!(beta.stale, Some(Stale::LoginUnreadable));
+        let report = gather(&ctx, &s);
+        let row = |label: &str| {
+            report
+                .rows
+                .iter()
+                .find(|r| r.label.as_deref() == Some(label))
+                .map(|r| (r.signed_in, r.stale))
+                .unwrap()
+        };
+        assert_eq!(row("beta"), (true, Some(Stale::LoginUnreadable)));
+        assert!(!row("alpha").0, "whatever Claude Code's config names");
+        assert_eq!(api.calls(), 0);
 
         // Once the login can be read, nothing parked means what it says.
         let readable = only_claude(
@@ -1751,10 +1742,10 @@ mod tests {
         assert_eq!(beta.stale, Some(Stale::NothingParked));
     }
 
-    /// A tool whose login could not be read and whose own record names none of its
-    /// accounts gets a row of its own, so its silence is not read as nobody signed in. Only
-    /// for a tool somebody uses through Pitboard: a machine that has never enrolled a Codex
-    /// account sees nothing about Codex.
+    /// A tool whose login could not be read, and whose account in use as Pitboard last
+    /// recorded it is none of its accounts, gets a row of its own, so its silence is not read
+    /// as nobody signed in. Only for a tool somebody uses through Pitboard: a machine that has
+    /// never enrolled a Codex account sees nothing about Codex.
     #[test]
     fn an_unreadable_login_gets_a_row_only_for_a_tool_with_accounts() {
         let unreadable = || LiveLogin {
@@ -1832,8 +1823,10 @@ mod tests {
         assert_eq!(api.asked(), [Question::Owner("access-x".into())]);
     }
 
-    /// Offline, each tool is asked for its own record. It used to be Claude Code's config
-    /// alone, so on a plane a signed-in Codex account read as parked.
+    /// Offline, Claude Code's account in use is the one Anthropic last named for its login,
+    /// whatever its config names, and Codex's the one its login names, whatever Pitboard last
+    /// recorded. It used to be Claude Code's config alone, so on a plane a signed-in Codex
+    /// account read as parked.
     #[test]
     #[cfg_attr(windows, ignore = "W21: switching Codex on Windows")]
     fn offline_every_tool_names_its_own_signed_in_account() {
@@ -1866,6 +1859,10 @@ mod tests {
         let mut s = state(&["alpha", "beta"]);
         s.accounts.push(codex_account("work", "work-acc"));
         s.accounts.push(codex_account("home", "home-acc"));
+        let beta = InUse::of(&s.accounts[1], "beta-refresh", NOW);
+        s.identified(ProviderId::Claude, beta, NOW);
+        let home = InUse::of(&s.accounts[3], "home-refresh", NOW);
+        s.identified(ProviderId::Codex, home, NOW);
         let report = gather_offline(&ctx, &s);
         let signed_in: Vec<(ProviderId, &str)> = report
             .rows
@@ -1875,13 +1872,57 @@ mod tests {
             .collect();
         assert_eq!(
             signed_in,
-            [(ProviderId::Claude, "alpha"), (ProviderId::Codex, "work")]
+            [(ProviderId::Claude, "beta"), (ProviderId::Codex, "work")]
         );
         assert_eq!(
-            report.signed_in.expect("Claude Code's config").account_uuid,
-            "alpha-uuid"
+            report
+                .signed_in
+                .expect("what Anthropic last said")
+                .account_uuid,
+            "beta-uuid"
         );
         assert_eq!(api.calls(), 0, "offline asks nobody");
+    }
+
+    /// Offline, the login of an account nobody enrolled is in use where Anthropic last named
+    /// it, and has its row with what was last measured, as it has online. Between the app's
+    /// reads it went, and the account Claude Code's config named was in use in its place.
+    #[test]
+    #[cfg_attr(windows, ignore = "W15: files made private to the person on Windows")]
+    fn offline_a_login_nobody_enrolled_has_its_row() {
+        let home = scratch("offline-unenrolled");
+        let (ctx, _mem, api) = machine(&home.0, Some("alpha-uuid"));
+        let mut s = state(&["alpha"]);
+        let stranger = InUse {
+            owner: Some(owner("stranger-uuid")),
+            login: "stranger-refresh".into(),
+            known_at: NOW,
+            named: in_use::named(&ctx, ProviderId::Claude),
+        };
+        s.identified(ProviderId::Claude, stranger, NOW);
+        readings::answered(
+            &ctx,
+            Permit::for_a_test(),
+            &[("stranger-uuid_org".into(), reading(30.0, Source::Live))],
+        );
+
+        let report = gather_offline(&ctx, &s);
+
+        let in_use: Vec<(Option<&str>, &str, Option<f64>)> = report
+            .rows
+            .iter()
+            .filter(|r| r.signed_in)
+            .map(|r| {
+                let share = r.usage.as_ref().map(|u| u.windows[0].percent);
+                (r.label.as_deref(), r.email.as_str(), share)
+            })
+            .collect();
+        assert_eq!(in_use, [(None, "stranger-uuid@example.com", Some(30.0))]);
+        assert_eq!(
+            report.signed_in.expect("the record's").account_uuid,
+            "stranger-uuid"
+        );
+        assert_eq!(api.calls(), 0);
     }
 
     /// Put `raw` where this machine's Codex keeps its login, exactly as written.
@@ -2100,9 +2141,8 @@ mod tests {
         assert!(unusable.out_of_reach);
         assert_eq!(unusable.usage().err(), Some(Stale::LoginUnusable));
         assert_eq!(
-            unusable.recorded_id.as_deref(),
-            Some("alpha-uuid"),
-            "Claude Code's config, never Pitboard's record of whose login is stored"
+            unusable.known, None,
+            "neither Claude Code's config nor Pitboard's record of whose login was stored"
         );
         assert_eq!(api.calls(), 0);
     }

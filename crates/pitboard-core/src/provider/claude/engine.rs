@@ -141,24 +141,25 @@ impl Provider for Claude {
         Some(PathBuf::from(claude::storage_dir(ctx)).join(".storage-write"))
     }
 
-    /// The identity cached in Claude Code's config, which it refreshes about once a day. One
-    /// that names no organisation does not say which of the person's logins is in use.
-    fn recorded_identity(&self, ctx: &Context) -> Option<Identity> {
+    /// The account Claude Code's config names, as written there. One that names no
+    /// organisation, as a sign-in that could not read the profile leaves it, is named with
+    /// none (the register's `config_may_name_no_organisation`).
+    fn own_record(&self, ctx: &Context) -> Option<Identity> {
         let config = claude::load_config(ctx).ok()?;
         let found = claude::identity(&config)?;
-        if found.organization_uuid.is_empty() {
-            return None;
-        }
         Some(Identity {
             account_id: found.account_uuid,
             email: found.email,
-            group: Some(found.organization_uuid),
+            group: Some(found.organization_uuid).filter(|group| !group.is_empty()),
         })
     }
 
     /// Record the new identity in Claude Code's config. Runs after the login is in place,
-    /// so the config never names an account before its login is live. Claude Code does not
-    /// correct a stale config on its own; it refetches its profile only once a day.
+    /// so the config never names an account before its login is live. It drops
+    /// `profileFetchedAt`, so the next Claude Code process to start writes the account of
+    /// the login it started with, and a sign-in writes its own. Either can be another login
+    /// than the one stored, such as the one a session over SSH takes from a file behind the
+    /// keychain (the register's `config_identity_is_the_last_writers`).
     fn after_switch(
         &self,
         ctx: &Context,
@@ -438,9 +439,10 @@ mod tests {
     }
 
     /// Claude Code keeps the token's own account when the profile could not be read, and
-    /// that can name no organisation.
+    /// that can name no organisation. The config names that account as written, which is
+    /// what a change of it since the last answer is told by.
     #[test]
-    fn a_config_that_names_no_organisation_names_no_login() {
+    fn a_config_naming_no_organisation_names_its_account_with_no_group() {
         let home = std::env::temp_dir().join(format!(
             "pitboard-config-org-{}-{:?}",
             std::process::id(),
@@ -458,13 +460,20 @@ mod tests {
         };
 
         config(serde_json::json!({"accountUuid": "acc", "emailAddress": "a@b.c"}));
-        assert_eq!(Claude.recorded_identity(&ctx), None);
+        assert_eq!(
+            Claude.own_record(&ctx),
+            Some(Identity {
+                account_id: "acc".into(),
+                email: "a@b.c".into(),
+                group: None,
+            })
+        );
 
         config(serde_json::json!({
             "accountUuid": "acc", "emailAddress": "a@b.c", "organizationUuid": "org"
         }));
         assert_eq!(
-            Claude.recorded_identity(&ctx),
+            Claude.own_record(&ctx),
             Some(Identity {
                 account_id: "acc".into(),
                 email: "a@b.c".into(),

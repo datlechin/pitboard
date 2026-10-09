@@ -114,7 +114,13 @@ pages load, as a browser would.
     `state.json`'s `in_use`, written through `State::identified` by a switch, first for the
     login it finds in the store and then for the one it installs, by enrolling the account
     signed in, by a sign-in put in use, by finishing an interrupted switch, and by a read
-    that finds it changed.
+    that finds it changed. `known` is what every reader that does not read the store takes
+    as the account in use: `status --offline`, the automatic switch's look, `doctor`'s
+    accounts. It is the record, in doubt where there is none, where it came forward from
+    schema 5, or where Claude Code's config names another account than when the record was
+    checked against the store; for Codex, the login's own claims, and the record where the
+    login cannot be read. `Provider::own_record` reads the config for that doubt and for
+    the words that say it, never for whose a login is.
   - `autoswitch.rs`: switching Claude Code by itself, for a front end somebody asked to: the
     app with its setting on, or `pitboard watch`. `Threshold` is the share a limit switches
     at, 50 to 99, 95 unless chosen. `decide` is the rule, from the readings Pitboard already
@@ -181,11 +187,17 @@ pages load, as a browser would.
     reading every front end records in `usage.json`, or that reading alone where no answer
     came, and never a tool's own cache (see [Claude Code](#claude-code)). A read asks first
     (`ask`), and makes its rows (`report`) once whose each login is has been recorded, so an
-    account whose only login a sign-in outside Pitboard replaced reads `login_replaced`
-    from that read on. The usage of a login nobody could name is not asked. `schedule.rs`
-    decides what daily renewal runs and whose it is, and refuses a program in the temporary
-    copy macOS runs an app from, by `in_a_temporary_copy`, which an app asks of the command
-    line inside it too; the host's scheduler writes it.
+    account whose only login a sign-in outside Pitboard replaced reads `login_replaced` from
+    that read on. The usage of a login nobody could name is not asked, and the account the
+    record names stands in for it. Offline rows (`gather_offline`) take the account in use
+    from `in_use::known`, an account nobody enrolled included, which gets its row as it does
+    online. `Pitboard::standing` says what stands on every read: `login_replaced`,
+    `in_use_unconfirmed` where Claude Code's config has moved since the record was checked
+    and the read could not ask, and `config_names_another` where it names another account
+    than the one in use. `schedule.rs` decides what daily renewal runs and whose it is, and
+    refuses a program in the temporary copy macOS runs an app from, by
+    `in_a_temporary_copy`, which an app asks of the command line inside it too; the host's
+    scheduler writes it.
   - `words.rs`: the sentences and column words Pitboard says in more than one place, each
     a function of typed values: spans of time, a limit's names, when it resets, its pace and
     when it runs out, a parked login's life, a renewal run and doctor's summary. It also holds
@@ -711,6 +723,11 @@ pages load, as a browser would.
   opened again. What was posted is kept by the account the warning is about (`Warning`'s
   `account`), since its words name whose login is stored now, which every switch changes,
   and not across launches.
+- A read that asks nobody, after another front end changed the index or a session recorded
+  numbers, that says Claude Code's config has named another account since Anthropic last
+  named the login stored (`in_use_unconfirmed`) starts one read that asks, which settles
+  whose the login is. Once for each thing it says, so a config that stays as it is costs no
+  more reads.
 - Every other change this app makes to the account index holds it as a switch does, and the
   poll leaves the index alone meanwhile: naming the login signed in now, a sign-in's
   enrolment, a rename, forgetting, giving up on an interrupted switch and renewing parked
@@ -885,6 +902,13 @@ pages load, as a browser would.
   login is its ID token, or known by its refresh token's fingerprint from an earlier answer
   about that very login. A login with no refresh token has no fingerprint and is always
   asked about.
+- Who is in use is one record per tool, `state.json`'s `in_use`, written under `state.lock`
+  only where a service has just answered for that login or a fingerprint ties it to an
+  earlier answer. Every reader that does not read the store takes it from there, but the
+  status line, which still files a session's numbers under the account Claude Code's
+  config names. `forget` asks as a switch does. Otherwise Claude Code's config is a sign
+  that something signed in, and the words of a warning, never whose a login is: a Claude
+  Code process started or signed in on another login can rewrite it with its own account.
 - Pitboard never renews the login in use. That is the tool's own job, and a second renewer
   would break it.
 - Nothing outside `pitboard-core` writes Pitboard's index. Every change goes through
@@ -1065,10 +1089,10 @@ its `linux-x64`, `win32-x64` and `win32-arm64` builds on the 9th, as bytes on a 
 none was run. All four are built from commit 8f033c6. For each fact read from them, the code
 it names was compared with the macOS build's token by token, minified names apart, and is
 the same in all four: `usage_cache_stamp_is_the_configs`,
-`status_reads_the_config_usage_the_token` and `fallback_file_pins_session_login`. The last
-is read on macOS alone: on Linux the file is Claude Code's only store, and on Windows it is
-too unless Credential Manager is turned on, which W22 reads. The checker finds every fact
-each build was read for.
+`status_reads_the_config_usage_the_token`, `config_identity_is_the_last_writers` and
+`fallback_file_pins_session_login`. The last is read on macOS alone: on Linux the file is
+Claude Code's only store, and on Windows it is too unless Credential Manager is turned on,
+which W22 reads. The checker finds every fact each build was read for.
 
 `.github/workflows/conformance.yml` checks the newest builds of each tool against its
 register on Mondays and Thursdays, or a version given by hand. It reads four builds of each
@@ -1574,9 +1598,17 @@ treated, and only the macOS build shows it. The run reads both builds since.
   document. On one real account, measured on 22 September 2026, the slice was 524 bytes
   against 506 for the OAuth block alone. An account holding a device token has not been
   measured.
-- Claude Code's config file can be a day behind the login it describes, so Pitboard asks
-  Anthropic whose a login is. This was written down on 21 September 2026, with no build
-  named.
+- Claude Code's config can name another account than the login stored. Read from 2.1.294 in
+  its macOS build on 8 October 2026 and in its Linux x64, Windows x64 and Windows arm64
+  builds on 9 October, the same code in all four: a sign-in writes `oauthAccount`, and so
+  does a process start where `profileFetchedAt` is missing, over 24 hours old or missing a
+  profile field, from that process's own login. Every start signed in to claude.ai also
+  writes the email and organisation Anthropic's bootstrap gives its login, where that names
+  the config's account or none, so a process on another organisation of the same person
+  moves it too. A token refresh writes none of them. On 8 October one machine's config named
+  another account than the keychain's login for three hours. So Pitboard asks Anthropic
+  whose a login is, records the answer (`in_use`), and takes a change of the config since as
+  a sign that something signed in (the register's `config_identity_is_the_last_writers`).
 - On 22 September 2026, the machine measured sat within 0.75 seconds of the `Date` header
   of api.anthropic.com across eight requests. `Date` has a granularity of one second.
 - That spread is inside the noise, so Pitboard keeps no estimate of clock skew. A renewal's

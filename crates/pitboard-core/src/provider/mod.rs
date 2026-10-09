@@ -454,14 +454,17 @@ pub(crate) trait Provider: Send + Sync + std::fmt::Debug {
     /// is nothing to hold and nothing it could wait for.
     fn write_lock(&self, ctx: &Context) -> Option<std::path::PathBuf>;
 
-    /// Who this tool itself says is signed in, read from its own files without asking
-    /// anybody.
+    /// The account a tool that keeps a record of its own apart from its login names there,
+    /// read from its files without asking anybody. `None` for a tool whose login names its
+    /// own account, and where the record names nobody.
     ///
-    /// A cache for a tool that keeps one apart from its login, and can lag it; the login's
-    /// own claims for a tool whose login names its account. Good enough to decide which of
-    /// two messages to show and whether an account may be forgotten, never good enough to
-    /// file a login under.
-    fn recorded_identity(&self, ctx: &Context) -> Option<Identity>;
+    /// Claude Code's is its config, which a Claude Code process started or signed in on
+    /// another login can rewrite with its own account (the register's
+    /// `config_identity_is_the_last_writers`), so it need not be the login stored's. So it is
+    /// a sign that something signed in, and the words for a message: never whose a login is,
+    /// which row is in use, or whether an account may be forgotten. The status line alone
+    /// still files a session's numbers under the account it names.
+    fn own_record(&self, ctx: &Context) -> Option<Identity>;
 
     /// Correct whatever this tool caches about who is signed in, now that `incoming`'s
     /// login is live in place of `outgoing`'s.

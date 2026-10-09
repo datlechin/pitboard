@@ -819,8 +819,8 @@ impl AppCore {
             .map_or(0, |made| made.core.readings_changed_at())
     }
 
-    /// The same report without asking anyone: the last numbers Pitboard measured, and who
-    /// Claude Code's config says is signed in.
+    /// The same report without asking anyone: the last numbers Pitboard measured, and whose
+    /// login each tool has stored, as its service last said.
     ///
     /// What the app shows on a plane, and what it shows while a live read is still in
     /// flight, rather than an empty panel and a spinner. It warns of an interrupted switch

@@ -210,7 +210,8 @@ pub(crate) fn machine(name: &str) -> Machine {
 }
 
 /// [`machine`], where `elsewhere`, enrolled with nothing parked, has since signed in to
-/// Claude Code outside Pitboard over `here`, whose only login that was.
+/// Claude Code outside Pitboard over `here`, whose only login that was, as `/login` does:
+/// its login in the keychain and its account in the config.
 pub(crate) fn signed_in_outside(name: &str) -> Machine {
     let m = machine(name);
     m.api
@@ -219,7 +220,23 @@ pub(crate) fn signed_in_outside(name: &str) -> Machine {
     state.accounts.push(account("elsewhere", "elsewhere", None));
     state::save(&m.ctx, Permit::for_a_test(), &state).expect("saved");
     m.sign_in(&document("elsewhere-refresh"));
+    config_names(&m, "elsewhere");
     m
+}
+
+/// Claude Code's config naming `who`, as another Claude Code process that started or signed
+/// in on `who`'s login writes it, with the login in the keychain left as it was.
+pub(crate) fn config_names(m: &Machine, who: &str) {
+    let path = m.root.join(".claude.json");
+    let mut config: Value =
+        serde_json::from_str(&std::fs::read_to_string(&path).expect("a config")).expect("JSON");
+    let owner = owner(who);
+    config["oauthAccount"] = json!({
+        "accountUuid": owner.account_uuid,
+        "emailAddress": owner.email,
+        "organizationUuid": owner.organization_uuid,
+    });
+    std::fs::write(&path, config.to_string()).expect("the config is written");
 }
 
 /// The activity log's `in-use` lines, as subject and outcome.

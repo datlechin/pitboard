@@ -140,8 +140,8 @@ pub(crate) enum Job {
     /// written, as they stand before the read, then the read itself. `fresh` asks each tool's
     /// service about every account whatever it was asked moments ago.
     Read { ticket: Ticket, fresh: bool },
-    /// Read what is already known, asking nobody: the last numbers measured, and who each
-    /// tool's own files say is signed in.
+    /// Read what is already known, asking nobody: the last numbers measured, and whose login
+    /// each tool has stored, as its service last said.
     ReadOffline { why: Why },
     /// When the account index and the usage readings were last written.
     Look,
@@ -780,6 +780,10 @@ pub(crate) struct State {
     /// The accounts whose login was replaced outside Pitboard that the last read said and a
     /// notification has told about, by `Account.id`.
     replaced_told: BTreeSet<String>,
+    /// What the last read that asked nobody said of Claude Code's config naming another
+    /// account since Anthropic last named the login stored, which one read that asks has
+    /// been started for.
+    unconfirmed_asked: Option<String>,
     /// Whether the last switch by itself was refused, so the next waits for the app's next
     /// read rather than for every number a session records: each refusal is a line in the
     /// activity log.
@@ -846,6 +850,7 @@ impl State {
             told_this_launch: Told::new(),
             auto_told: BTreeSet::new(),
             replaced_told: BTreeSet::new(),
+            unconfirmed_asked: None,
             auto_refused: false,
             told: Told::new(),
             preferences: Preferences::default(),
@@ -2042,6 +2047,22 @@ impl State {
             .collect();
     }
 
+    /// Whether `read`, which asked nobody, says Claude Code's config has named another
+    /// account since Anthropic last named the login stored, in words no read that asks has
+    /// been started for yet. A sign-in leaves the config so, and a session's status line
+    /// records numbers soon after one, so the read after them asks Anthropic whose the login
+    /// is now, once for each thing the config is said to name.
+    fn unconfirmed(&mut self, read: &Status) -> bool {
+        let said = read
+            .warnings
+            .iter()
+            .find(|warning| warning.code == "in_use_unconfirmed")
+            .map(|warning| warning.message.clone());
+        let new = said.is_some() && said != self.unconfirmed_asked;
+        self.unconfirmed_asked = said;
+        new
+    }
+
     /// What is already known came in, or could not be read.
     fn known(&mut self, why: Why, read: Option<Status>, now: Now, jobs: &mut Vec<Job>) {
         match why {
@@ -2060,13 +2081,13 @@ impl State {
                     // told without a request. Saying nothing, it cannot tell a switch given
                     // up on or finished elsewhere from one only a service could judge, so
                     // where one is offered the read that asks says which.
-                    if read
+                    let waiting = read
                         .warnings
                         .iter()
-                        .any(|w| w.code == "recovery_undetermined")
-                    {
-                        self.stuck = true;
-                    } else if self.stuck {
+                        .any(|w| w.code == "recovery_undetermined");
+                    let unsaid = self.stuck && !waiting;
+                    self.stuck |= waiting;
+                    if self.unconfirmed(&read) || unsaid {
                         self.refresh(Asked::default(), now, jobs);
                     }
                     self.forget_switches_undone(&read);
@@ -2082,6 +2103,9 @@ impl State {
                 self.look_over(now);
             }
             Why::Numbers { measured } => {
+                if read.as_ref().is_some_and(|read| self.unconfirmed(read)) {
+                    self.refresh(Asked::default(), now, jobs);
+                }
                 // Onto what is shown as the numbers land, which a read may have replaced
                 // while they were read. The Swift put them onto what was shown when the
                 // look found them, and so put back what that read had replaced.
@@ -2102,9 +2126,7 @@ impl State {
     /// Two things are looked at, because they mean different things. The account index
     /// changing can be a switch made somewhere else, so who is signed in is read again. The
     /// readings changing is only numbers, newer ones a session or the command line has seen,
-    /// so only the numbers are taken. Read again every time, who is signed in would come from
-    /// each tool's own files several times a minute, and a switch that could not update
-    /// Claude Code's config leaves it naming the account before.
+    /// so only the numbers are taken: a reading moving says nothing about who is signed in.
     fn looked(&mut self, changed: i64, measured: i64, now: Now, jobs: &mut Vec<Job>) {
         // The first look only records where things stand; there is nothing to compare to.
         let (Some(seen), Some(seen_readings)) = (self.changed_at, self.readings_at) else {

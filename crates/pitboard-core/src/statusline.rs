@@ -269,9 +269,8 @@ pub fn read(ctx: &Context, permit: Option<crate::service::Permit>, input: &str) 
     let state = crate::state::load(ctx).unwrap_or_default();
     // Claude Code's own record of who is signed in, which is its config: a file, and so
     // something a status bar can afford to read after every message.
-    let signed_in = crate::provider::of(ProviderId::Claude)
-        .recorded_identity(ctx)
-        .map(|found| state.id_of(ProviderId::Claude, &crate::api::Owner::from(found)));
+    let signed_in = crate::in_use::names(ctx, ProviderId::Claude)
+        .map(|owner| state.id_of(ProviderId::Claude, &owner));
     let now = ctx.now();
     let remembered = crate::readings::load(ctx);
     let run = run_of(&input, signed_in.as_deref());

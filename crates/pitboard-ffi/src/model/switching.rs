@@ -367,10 +367,10 @@ fn a_switch_to_the_account_in_use_says_what_it_warned_beside_the_last() {
 }
 
 /// AppModelTests.swift's numbersMovingLeaveWhoIsSignedInAndWhatASwitchSaid. A reading moving
-/// says nothing about who is signed in. Taken for a change to the account index, it would
-/// have who is signed in read again from Claude Code's config, which a switch that could not
-/// update it leaves naming the account before, and so put away the one warning saying so.
-/// Numbers move several times a minute, so within seconds of the switch.
+/// says nothing about who is signed in, so only its numbers are taken. Here the read that
+/// brings them names the account before the switch, and taken whole it would put away the
+/// one warning the switch gave. Numbers move several times a minute, so within seconds of
+/// the switch.
 #[test]
 fn numbers_moving_leave_who_is_signed_in_and_what_a_switch_said() {
     let lagging = warning("config_write_failed", "the config did not update");

@@ -123,7 +123,7 @@ The `data` of `pitboard status` has four fields:
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `slot` | object | Which Claude Code login this output describes. On macOS, `service` is its keychain item name; on Linux it names no item. `default` is `true` for the login Claude Code uses when `CLAUDE_CONFIG_DIR` is not set. |
-| `signed_in` | object or null | The Claude Code account in use, never a Codex one: `account_uuid`, `email` and `organization_uuid`. |
+| `signed_in` | object or null | The Claude Code account in use, never a Codex one: `account_uuid`, `email` and `organization_uuid`. With `--offline`, the one Anthropic last named for the login stored. |
 | `signed_in_error` | string or null | Why `signed_in` is `null`, such as `nothing is signed in`. |
 | `accounts` | array | One object per enrolled account: Claude Code first, and the account in use first within each tool. A login in use that no account matches gets one too. |
 

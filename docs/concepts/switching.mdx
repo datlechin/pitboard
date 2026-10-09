@@ -19,7 +19,9 @@ For where parked logins are kept and why they expire, see [Security and privacy]
 
 Pitboard moves no login until it knows whose it is.
 
-For Claude Code, it asks Anthropic, because the account Claude Code's config file names can be a day out of date. For Codex, it reads the account from the login's ID token. It records the answer with a fingerprint of the login's refresh token, and asks again only about a login with another fingerprint: one the tool renewed, or one a sign-in outside Pitboard put there.
+For Claude Code, it asks Anthropic. Claude Code's config file can name another account than the one whose login is stored: a Claude Code process started or signed in on another login can write its own there. For Codex, it reads the account from the login's ID token. It records the answer with a fingerprint of the login's refresh token, and asks again only about a login with another fingerprint: one the tool renewed, or one a sign-in outside Pitboard put there.
+
+These take the account in use from that record without asking: `pitboard status --offline`, the app between its reads, `pitboard doctor` and Pitboard deciding whether to switch by itself. `pitboard forget` asks as a switch does. Claude Code's config naming another account since the last answer only tells Pitboard that something may have signed in, and a read that asks settles it.
 
 It records a fingerprint of each parked login's refresh token, and refuses a parked login that no longer matches.
 
@@ -40,7 +42,7 @@ You start a switch from Pitboard's menu, the Pitboard window, a notification or 
 
 A switch Pitboard starts by itself is the switch `pitboard use` makes, with the same checks, steps and locks. [`pitboard log`](/reference/maintenance-commands#log) records it with the verb `auto-switch`, and the app's **Activity** pane names it **Automatic switch**.
 
-Pitboard decides whether to switch by itself from files alone, such as its accounts, its usage readings and Claude Code's config file. That look takes no lock and sends no request. One that finds nothing to do records nothing.
+Pitboard decides whether to switch by itself from files alone, such as its accounts, its record of whose login is stored and its usage readings. That look takes no lock and sends no request. One that finds nothing to do records nothing.
 
 The app, `pitboard watch` and your own `pitboard use` can all run at once. A decision can then be out of date by the time Pitboard holds its lock. Holding it, Pitboard decides again from the files as they are then. It switches only if the decision still stands, and only away from the account still signed in.
 

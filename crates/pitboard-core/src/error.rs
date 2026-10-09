@@ -376,7 +376,9 @@ pub enum Error {
         source: std::io::Error,
     },
 
-    /// Claude Code refetches its profile only once a day, so this does not correct itself.
+    /// Claude Code fetches its profile again only once the config's is a day old (the
+    /// register's `config_identity_is_the_last_writers`), so this does not correct itself
+    /// sooner.
     #[error(
         "the login moved, but Claude Code's config at {path} could not be updated ({detail}). \
          Claude Code may show the previous account's name until the next switch."
