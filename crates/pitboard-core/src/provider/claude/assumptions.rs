@@ -310,9 +310,10 @@ pub const ASSUMPTIONS: &[Assumption] = &[
                where before it read as empty",
         read_from: "the secure storage module's write wrapper",
         verified_against: VERIFIED_AGAINST,
-        depends: "lock.rs, the whole switch, and `pitboard stow`, which holds it while it writes \
-                  a login left in `.credentials.json` back renewed and while it reads the file and \
-                  the login stored a last time and deletes the file",
+        depends: "lock.rs, the whole switch, and `pitboard stow`, which takes it once before it \
+                  renews a login left in `.credentials.json`, and holds it while it writes that \
+                  login back renewed and while it reads the file and the login stored a last time \
+                  and deletes the file",
         probe: &[
             ".storage-write",
             "[secureStorage] write lock compromised: ",
@@ -353,8 +354,9 @@ pub const ASSUMPTIONS: &[Assumption] = &[
         verified_against: "2.1.294",
         depends: "lock::REFRESH, and `pitboard stow`, which holds it from its last reading of \
                   a login left in `.credentials.json` until the file is gone, so no session \
-                  spends the refresh token of the login it parks, drops or renews meanwhile, and \
-                  writes no owner record, so no session takes it over",
+                  spends the refresh token of the login it parks, drops or renews meanwhile, \
+                  writes no owner record, so no session takes it over, and saves the login it \
+                  renewed as this save does, where the file still holds the token it sent",
         probe: &[
             "\".oauth_refresh.lock\"),realpath:!1,stale:60000,update:5000",
             "tengu_oauth_refresh_legacy_lock_contended",

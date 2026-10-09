@@ -18,17 +18,19 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   or a login Anthropic no longer accepts; only then does it delete the file. A file with no
   login in it, `{}` or not JSON at all, is deleted. A login of an account not enrolled is
   refused, named by its email and organisation, and nothing is deleted. A login whose access
-  token has expired is renewed first and written back to the file. Throughout, it holds the
-  lock Claude Code takes before it renews a login, so no session renews the file's login
-  meanwhile. The file's other keys, such as `mcpOAuth`, go with it, and are named. A session
-  that signed in with the file, as one over SSH does, is signed out. `--yes` skips the
-  question, `--json` gives `stowed`, `path`, `login`, `account` and `dropped`, and the
-  activity log records it as `stow`. The errors `left_login_changed`,
-  `stored_login_changed`, `left_login_not_enrolled` and `left_login_unidentified` say what
-  stopped it, and every error it stops with says whether it renewed or parked the login
-  first. `pitboard doctor`'s `fallback login` check and the `fallback_login` warning name
-  it, and the app offers **Put Away**, but for a file Pitboard cannot read, which doctor
-  still says to delete with `rm`.
+  token has expired is renewed first and written back to the file, over the login the file
+  holds by then where that is still the one renewed. A session writing its credentials just
+  then stops it before the refresh token is sent. Throughout, it holds the lock Claude Code
+  takes before it renews a login, so no session renews the file's login meanwhile. The
+  file's other keys, such as `mcpOAuth`, go with it, and are named. A session that signed in
+  with the file, as one over SSH does, is signed out. `--yes` skips the question, `--json`
+  gives `stowed`, `path`, `login`, `account` and `dropped`, and the activity log records it
+  as `stow`. The errors `left_login_changed`, `stored_login_changed`,
+  `left_login_not_enrolled` and `left_login_unidentified` say what stopped it, and every
+  error it stops with says whether it renewed or parked the login first, or renewed it and
+  could not write it back. `pitboard doctor`'s `fallback login` check and the
+  `fallback_login` warning name it, and the app offers **Put Away**, but for a file Pitboard
+  cannot read, which doctor still says to delete with `rm`.
 - The warnings `in_use_unconfirmed` and `config_names_another`. A read that could not ask
   Anthropic warns with `in_use_unconfirmed` where Claude Code's config has named another
   account since Anthropic last named the login stored, as a sign-in leaves it. Every read

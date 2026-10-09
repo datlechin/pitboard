@@ -1018,18 +1018,28 @@ pages load, as a browser would.
   stored, the very login stored or a second sign-in, that login is read again as the file
   goes, and one a sign-in replaced meanwhile keeps the file (`stored_login_changed`). A
   login whose access token has expired is renewed as a park is and written back into the
-  file before anything else, so the token the exchange rotates is on disk at once. A login
-  of an account nobody enrolled is refused, named by its email and organisation, without
-  asking whose the login stored is, and nothing is deleted; the command line refuses it from
-  the look, asking and trying nothing. Its other keys, such as `mcpOAuth`, are not
-  Pitboard's to move: they go with the file, by name. Every error it stops with says how far
-  it went (`Error::PutAwayStopped`, with the code, cause and exit status of what stopped
-  it): nothing changed, the login renewed and written back, or parked, which stays. A run
+  file before anything else, so the token the exchange rotates is on disk at once. What
+  could refuse that write is asked before the refresh token is sent: Claude Code's write
+  lock is taken once and the file read again under it, so a writer in the way stops it with
+  nothing changed. Once Anthropic has answered, that lock is asked for again for 30 seconds,
+  twice its staleness, and the login is then saved without it, as Claude Code writes on once
+  its own lock is lost. The answer is saved as Claude Code saves a renewal (`refresh_lock`):
+  read from the file itself, not through the keychain in front of it, and written over the
+  login the file holds by then where that still has the refresh token sent, with the file's
+  other keys as they are by then. A login of an account nobody enrolled is refused, named by
+  its email and organisation, without asking whose the login stored is, and nothing is
+  deleted; the command line refuses it from the look, asking and trying nothing. Its other
+  keys, such as `mcpOAuth`, are not Pitboard's to move: they go with the file, by name.
+  Every error it stops with says how far it went (`Error::PutAwayStopped`, with the code,
+  cause and exit status of what stopped it): nothing changed, the login renewed and written
+  back, renewed and not written back, which leaves it spent, or parked, which stays. A run
   that stops anywhere leaves the login in the file, in a park, or in both, but for the
   moment between Anthropic answering a renewal and the answer reaching the file, which every
-  renewal has. A session that signed in with the file, as one over SSH does, is signed out
-  once it is gone. The activity log records it as `stow`. On Linux the file is the store,
-  nothing is behind it, and there is nothing to put away.
+  renewal has: a run killed then, a sign-in or a `/logout` that replaced the file's login
+  meanwhile, or a file that can no longer be read or written. A session that signed in with
+  the file, as one over SSH does, is signed out once it is gone. The activity log records it
+  as `stow`. On Linux the file is the store, nothing is behind it, and there is nothing to
+  put away.
 - A Codex login is moved, never copied (`ParkSemantics::MoveOnly`). The parked login is
   read back before the incoming login is written. Codex's own sign-in and sign-out revoke
   the stored refresh token, so two usable copies of one login must never be at rest.

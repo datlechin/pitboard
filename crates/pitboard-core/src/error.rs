@@ -26,6 +26,9 @@ impl std::fmt::Display for Enrolled {
 pub enum Partway {
     /// Nothing was changed.
     Nothing,
+    /// The login the file held was renewed, which spent its refresh token, and the renewed
+    /// one could not be written back there.
+    RenewedUnwritten,
     /// The login in the file was renewed, and the renewed one written back there.
     Renewed,
     /// The login in the file was parked for `label`.
@@ -37,6 +40,11 @@ impl std::fmt::Display for Partway {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Partway::Nothing => write!(f, "changed nothing"),
+            Partway::RenewedUnwritten => write!(
+                f,
+                "deleted nothing. It renewed the login the file held and could not write the \
+                 renewed login back there, so that login no longer works"
+            ),
             Partway::Renewed => write!(
                 f,
                 "deleted nothing, having renewed the login in the file and written it back there"

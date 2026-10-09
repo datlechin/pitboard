@@ -15,9 +15,12 @@
 //! until it is gone, so no session spends the refresh token counted on meanwhile
 //! (`refresh_lock`). So a run that stops anywhere leaves the login in the file, in a park, or
 //! in both, but for the moment between Anthropic answering a renewal and the answer reaching
-//! the file, which every renewal has. Left in both, the next run parks the file's login again
-//! where it is the newer: a session that signs in with the file may have renewed it since,
-//! spending the park's refresh token.
+//! the file, which every renewal has. What could refuse in that moment is asked before the
+//! refresh token is sent, and the answer is saved as Claude Code saves its own: over the
+//! login the file holds by then, where that is still the one renewed. One that cannot be
+//! saved even so, as where a sign-in replaced the file's login meanwhile, is said to be spent.
+//! Left in both, the next run parks the file's login again where it is the newer: a session
+//! that signs in with the file may have renewed it since, spending the park's refresh token.
 
 use super::{Settled, identify, live_store, purge, read_stored, shape, to_body, write_lock};
 use crate::api::Owner;
@@ -34,6 +37,10 @@ use std::path::{Path, PathBuf};
 
 /// The one tool that keeps a file behind the store it keeps its login in.
 const TOOL: ProviderId = ProviderId::Claude;
+
+/// How often Claude Code's write lock is asked for to save a renewed login, each for as long
+/// as a change waits: 30 seconds in all, twice the lock's staleness.
+const SAVE_ROUNDS: u32 = 4;
 
 /// What is left in the file behind the store Claude Code keeps its login in, as putting it
 /// away is confirmed for.
@@ -142,7 +149,7 @@ pub(crate) fn find(ctx: &Context, state: &State) -> Result<Option<Left>> {
     let Some((_, raw)) = read_left(&live)? else {
         return Ok(None);
     };
-    let held = held(&raw)?;
+    let held = holding(&raw)?;
     let stored = read_stored(TOOL, &live)?.map(|(_, document)| document);
     let login = match judge(ctx, state, &held, stored.as_ref(), &path)? {
         Judged::Kept(kept) => Foreseen::Kept(kept),
@@ -175,10 +182,10 @@ pub(crate) fn find(ctx: &Context, state: &State) -> Result<Option<Left>> {
 /// is asked first, holding up nobody. From the file's last reading until it is gone, under
 /// Claude Code's refresh lock too, which a session takes before it sends a refresh token, so
 /// none spends the file's meanwhile. Claude Code's write lock is taken after it, as Claude
-/// Code takes them, around the renewed login's write and the file's deletion only, so no
-/// network round trip holds up its writes. The file, and the login stored where the file goes
-/// because of it, are read again under it as the file goes, since a `/logout` that gave up
-/// waiting writes with no lock held.
+/// Code takes them, around the renewed login's write and the file's deletion only, and once
+/// before a renewal to find it free, so no network round trip holds up its writes. The file,
+/// and the login stored where the file goes because of it, are read again under it as the
+/// file goes, since a `/logout` that gave up waiting writes with no lock held.
 pub fn stow(settled: Settled, seen: &str) -> Result<(Stowed, Vec<Warning>)> {
     let Settled {
         _exclusive,
@@ -231,7 +238,7 @@ impl Putting<'_> {
         let (_, mut raw) = read_left(&live)?
             .filter(|(_, raw)| store::fingerprint(raw) == seen)
             .ok_or_else(|| self.changed())?;
-        let mut held = held(&raw)?;
+        let mut held = holding(&raw)?;
         let stored = read_stored(TOOL, &live)?.map(|(_, document)| document);
         let judged = judge(ctx, state, &held, stored.as_ref(), &self.path)?;
         if let Judged::Owner(owner) = &judged
@@ -290,9 +297,11 @@ impl Putting<'_> {
     }
 
     /// Renews the login in `held`, as a park is renewed, and writes the renewed login back
-    /// into the file, where it still holds `raw`, before anything else: the exchange spends
-    /// the refresh token it presents. Then asks whose it is. `None` where Anthropic refuses
-    /// the refresh token for good.
+    /// into the file before anything else: the exchange spends the refresh token it presents.
+    /// So what can stop the write is asked before the token is sent, Claude Code's write lock
+    /// and the file as it was read, and nothing after it gives up on the write where the file
+    /// still holds the token sent. Then asks whose it is. `None` where Anthropic refuses the
+    /// refresh token for good.
     fn renew(
         &mut self,
         live: &provider::LiveStore,
@@ -301,32 +310,70 @@ impl Putting<'_> {
     ) -> Result<Option<Owner>> {
         let tool = provider::of(TOOL);
         let slice = held.slice.clone().expect("only a login is renewed");
+        let writing = write_lock(self.ctx, self.permit, TOOL)?;
+        if unchanged(live, raw)?.is_none() {
+            return Err(self.changed());
+        }
+        drop(writing);
         let fresh = match tool.renew(
             self.ctx,
             self.permit,
-            &provider::Credential::new(TOOL, slice),
+            &provider::Credential::new(TOOL, slice.clone()),
         ) {
             Ok(fresh) => fresh,
             Err(ProviderError::InvalidGrant { .. }) => return Ok(None),
             Err(error) => return Err(not_identified(&self.path, error)),
         };
-        let document = tool
-            .splice(&held.document, &fresh.raw)
-            .map_err(|e| shape(TOOL, e))?;
-        let renewed = to_body(document.clone());
-        let writing = write_lock(self.ctx, self.permit, TOOL)?;
-        // Under the refresh lock only a sign-in or a `/logout` writes the file, and either
-        // drops the login renewed here, as Claude Code's own save of a renewal drops it then.
-        let file = unchanged(live, raw)?.ok_or_else(|| self.changed())?;
-        file.write(self.permit, &live.service, &renewed)?;
+        self.partway = Partway::RenewedUnwritten;
+        fault::point("stow.exchanged");
+        let writing = self.write_lock_to_save();
+        let renewed = self.save(&live.service, &slice, &fresh.raw)?;
         self.lock_lost |= let_go(writing);
         self.partway = Partway::Renewed;
         fault::point("stow.renewed");
+        *held = holding(&renewed)?;
         *raw = renewed;
-        held.renewed(document)?;
         tool.identify(self.ctx, &fresh)
             .map(|found| Some(Owner::from(found)))
             .map_err(|error| not_identified(&self.path, error))
+    }
+
+    /// Claude Code's write lock, to save a renewed login under once the refresh token it was
+    /// renewed with is spent. Giving up as a change does would drop that login, so it is asked
+    /// for again until a lock nobody touches has gone stale twice over. `None` where it is
+    /// still not had: the login is then saved without it, as Claude Code writes on once its
+    /// own lock is lost, and that is said.
+    fn write_lock_to_save(&mut self) -> Option<lock::Guard> {
+        for _ in 0..SAVE_ROUNDS {
+            match write_lock(self.ctx, self.permit, TOOL) {
+                Ok(writing) => return writing,
+                Err(Error::Lock(lock::LockError::Busy)) => {}
+                Err(_) => break,
+            }
+        }
+        self.lock_lost = true;
+        None
+    }
+
+    /// Writes `fresh`, the login `sent` renewed, into the file as Claude Code saves a renewal:
+    /// over the login the file holds now, where that still has the refresh token `sent` has,
+    /// keeping whatever else the file has come to hold. Read from the file itself, since the
+    /// store in front of it need not answer for this. What the file then holds.
+    fn save(&self, service: &str, sent: &Value, fresh: &Value) -> Result<String> {
+        let tool = provider::of(TOOL);
+        let file = self.ctx.host().file(self.path.clone());
+        let now = file
+            .read(service)?
+            .map(|now| live::document_in(&now))
+            .filter(|now| tool.fingerprint(now) == tool.fingerprint(sent))
+            .ok_or_else(|| self.changed())?;
+        let renewed = to_body(tool.splice(&now, fresh).map_err(|e| shape(TOOL, e))?);
+        match file.write(self.permit, service, &renewed) {
+            // Nothing landed, so once more: nothing else holds the renewed login.
+            Err(store::Error::Write(_)) => file.write(self.permit, service, &renewed)?,
+            written => written?,
+        }
+        Ok(renewed)
     }
 
     /// What putting away `owner`'s login comes to, where Claude Code has `stored`'s login
@@ -415,31 +462,17 @@ fn still_stored(live: &provider::LiveStore, judged: Option<&Value>) -> Result<bo
     Ok(now.as_ref().and_then(login) == judged.and_then(login))
 }
 
-/// What the file holds, as a document: the account's login in it, where there is one, and
-/// its other keys by name.
+/// What the file holds: the account's login in it, where there is one, and its other keys by
+/// name.
 struct Held {
-    document: Value,
     slice: Option<Value>,
     dropped: Vec<String>,
-}
-
-impl Held {
-    /// `document`, its login renewed, in place of what it held. Its other keys are the same.
-    fn renewed(&mut self, document: Value) -> Result<()> {
-        self.slice = Some(
-            provider::of(TOOL)
-                .slice(&document)
-                .map_err(|e| shape(TOOL, e))?,
-        );
-        self.document = document;
-        Ok(())
-    }
 }
 
 /// What the file holds, told as every warning and doctor tell it ([`live::holds_a_login`]):
 /// a file that is not a JSON object holds no login and no key, and one with no token holds
 /// keys and no login.
-fn held(raw: &str) -> Result<Held> {
+fn holding(raw: &str) -> Result<Held> {
     let document = live::document_in(raw);
     let slice = live::holds_a_login(&document)
         .then(|| provider::of(TOOL).slice(&document))
@@ -453,11 +486,7 @@ fn held(raw: &str) -> Result<Held> {
         .filter(|key| !login.is_some_and(|login| login.contains_key(*key)))
         .cloned()
         .collect();
-    Ok(Held {
-        document,
-        slice,
-        dropped,
-    })
+    Ok(Held { slice, dropped })
 }
 
 /// Whose the login in the file is, as far as can be told without renewing it.
@@ -1439,6 +1468,247 @@ mod tests {
             Some(fingerprint("elsewhere-refresh"))
         );
         assert_eq!(in_the_file(&m), Some(fingerprint("elsewhere-refresh")));
+    }
+
+    /// `elsewhere` enrolled with nothing parked, and its login left in the file with its
+    /// access token expired, which Anthropic renews.
+    fn lapsed_login_left(name: &str) -> Machine {
+        let m = machine(name);
+        enrolled(&m, "elsewhere");
+        renews(&m, "left-refresh", "left-renewed");
+        m.api.owned_by("access-left-renewed", owner("elsewhere"));
+        leave(&m, &lapsed("left-refresh"));
+        m
+    }
+
+    /// Takes Claude Code's write lock at the moment it is called, as a session writing its
+    /// credentials does, last touched `ago` before.
+    fn takes_the_write_lock(m: &Machine, ago: std::time::Duration) -> impl FnOnce() + 'static {
+        let writing = lock_dir(&write_target(m));
+        move || {
+            let parent = writing.parent().expect("the storage directory");
+            std::fs::create_dir_all(parent).expect("the storage directory is made");
+            std::fs::create_dir(&writing).expect("the write lock is free");
+            let touched = std::time::SystemTime::now() - ago;
+            crate::host::fs::touch_dir(Permit::for_a_test(), &writing, touched)
+                .expect("the write lock is touched");
+        }
+    }
+
+    fn renewed(m: &Machine) -> bool {
+        m.api.asked().contains(&Asked::Renew("left-refresh".into()))
+    }
+
+    /// The renewed login is saved under Claude Code's write lock, and the exchange spends the
+    /// refresh token the file holds. So that lock is taken once before the token is sent:
+    /// held by a session then, nothing is sent, and nothing has changed.
+    #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
+    )]
+    fn a_write_lock_held_before_a_renewal_stops_it_with_the_refresh_token_unsent() {
+        let m = lapsed_login_left("stow-write-lock-before");
+        let writing = lock_dir(&write_target(&m));
+
+        let refused = put_away_while(
+            &m,
+            "stow.identified",
+            takes_the_write_lock(&m, std::time::Duration::ZERO),
+        )
+        .expect_err("Claude Code is writing");
+
+        assert_eq!(refused.code(), "switch_in_progress");
+        assert!(
+            refused.to_string().ends_with("Pitboard changed nothing."),
+            "{refused}"
+        );
+        assert!(!renewed(&m), "{:?}", m.api.asked());
+        assert_eq!(in_the_file(&m), Some(fingerprint("left-refresh")));
+
+        std::fs::remove_dir(&writing).expect("the session lets go");
+        let (stowed, _) = put_away(&m).expect("put away");
+        assert_eq!(
+            stowed.kept,
+            Kept::ParkedNow {
+                label: "elsewhere".into()
+            }
+        );
+        assert_eq!(
+            parked_fingerprint(&m, "elsewhere"),
+            Some(fingerprint("left-renewed"))
+        );
+    }
+
+    /// Once the refresh token is spent, giving up on Claude Code's write lock would drop the
+    /// only login left of that grant. So it is waited for longer than a change waits: here a
+    /// lock a killed session left 7 seconds ago, which nobody may take for 8 more.
+    #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
+    )]
+    fn a_write_lock_held_once_the_refresh_token_is_spent_is_waited_for() {
+        let m = lapsed_login_left("stow-write-lock-after");
+
+        let (stowed, _) = put_away_while(
+            &m,
+            "stow.exchanged",
+            takes_the_write_lock(&m, std::time::Duration::from_secs(7)),
+        )
+        .expect("put away");
+
+        assert_eq!(
+            stowed.kept,
+            Kept::ParkedNow {
+                label: "elsewhere".into()
+            }
+        );
+        assert_eq!(
+            parked_fingerprint(&m, "elsewhere"),
+            Some(fingerprint("left-renewed"))
+        );
+        assert_eq!(in_the_file(&m), None);
+    }
+
+    /// A write lock that never comes free is not waited on for ever, nor is the renewed login
+    /// dropped over it: the login is saved without the lock, as Claude Code writes on once
+    /// its own is lost. Here the lock is a file, which taking it over fails on at once.
+    #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
+    )]
+    fn a_write_lock_never_let_go_of_does_not_cost_the_renewed_login() {
+        let m = lapsed_login_left("stow-write-lock-stuck");
+        let stuck = lock_dir(&write_target(&m));
+
+        let refused = put_away_while(&m, "stow.exchanged", move || {
+            let parent = stuck.parent().expect("the storage directory");
+            std::fs::create_dir_all(parent).expect("the storage directory is made");
+            let long_ago = std::time::SystemTime::now() - std::time::Duration::from_secs(3600);
+            std::fs::File::create(&stuck)
+                .and_then(|lock| lock.set_modified(long_ago))
+                .expect("something in the lock's place");
+        })
+        .expect_err("the lock is never had, to delete the file under");
+
+        assert_eq!(refused.code(), "switch_in_progress");
+        assert!(
+            refused.to_string().ends_with(
+                "Pitboard deleted nothing, having parked the login in the file for `elsewhere`."
+            ),
+            "{refused}"
+        );
+        assert_eq!(in_the_file(&m), Some(fingerprint("left-renewed")));
+        assert_eq!(
+            parked_fingerprint(&m, "elsewhere"),
+            Some(fingerprint("left-renewed"))
+        );
+    }
+
+    /// The renewed login goes back into the file as Claude Code saves a renewal: wherever the
+    /// file still holds the refresh token that was sent, whatever else it has come to hold. A
+    /// session that cannot read the keychain saves an MCP token to the file, and that is kept
+    /// beside the renewed login.
+    #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
+    )]
+    fn a_file_whose_other_keys_were_written_meanwhile_takes_the_renewed_login() {
+        let m = machine("stow-other-keys-written");
+        renews(&m, "left-refresh", "left-renewed");
+        m.api.owned_by("access-left-renewed", owner("stranger"));
+        leave(&m, &lapsed("left-refresh"));
+        let mut saved = lapsed("left-refresh");
+        saved["mcpOAuth"] = json!({"another-server": {"token": "saved meanwhile"}});
+
+        let refused = put_away_while(&m, "stow.exchanged", rewrites_the_file(&m, &saved))
+            .expect_err("not enrolled");
+
+        assert_eq!(refused.code(), "left_login_not_enrolled");
+        assert!(
+            refused.to_string().ends_with(
+                "Pitboard deleted nothing, having renewed the login in the file and written it \
+                 back there."
+            ),
+            "{refused}"
+        );
+        let held: Value =
+            serde_json::from_str(&left_file(&m).peek(&m.service).expect("still there"))
+                .expect("JSON");
+        assert_eq!(held["claudeAiOauth"]["refreshToken"], "left-renewed");
+        assert_eq!(held["mcpOAuth"], saved["mcpOAuth"]);
+    }
+
+    /// The renewed login is written into the file itself, which a keychain that locks while
+    /// Anthropic answers does not stand in the way of: what stops then says the login was
+    /// kept, and putting away again finishes.
+    #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
+    )]
+    fn a_keychain_that_locks_while_the_login_is_renewed_does_not_lose_it() {
+        let m = lapsed_login_left("stow-locks-while-renewing");
+
+        let refused = put_away_while(&m, "stow.exchanged", locks_the_keychain(&m))
+            .expect_err("the keychain is locked");
+
+        assert_eq!(refused.code(), "credential_store_locked");
+        assert!(
+            refused.to_string().ends_with(
+                "Pitboard deleted nothing, having parked the login in the file for `elsewhere`."
+            ),
+            "{refused}"
+        );
+        assert_eq!(in_the_file(&m), Some(fingerprint("left-renewed")));
+
+        m.mem.live().heal(&m.service);
+        let (stowed, _) = put_away(&m).expect("put away");
+        assert_eq!(
+            stowed.kept,
+            Kept::AlreadyParked {
+                label: "elsewhere".into()
+            }
+        );
+        assert_eq!(in_the_file(&m), None);
+    }
+
+    /// Where the renewed login cannot go back into the file, a sign-in having replaced the
+    /// login there or the write failing, what stops it says that login is spent, never that
+    /// nothing changed.
+    #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
+    )]
+    fn a_renewed_login_that_cannot_be_written_back_is_said_to_be_spent() {
+        const SPENT: &str = "Pitboard deleted nothing. It renewed the login the file held and \
+                             could not write the renewed login back there, so that login no \
+                             longer works.";
+        let m = lapsed_login_left("stow-signed-in-while-renewing");
+        let refused = put_away_while(
+            &m,
+            "stow.exchanged",
+            rewrites_the_file(&m, &document("signed-in")),
+        )
+        .expect_err("another login is in the file");
+        assert_eq!(refused.code(), "left_login_changed");
+        assert!(refused.to_string().ends_with(SPENT), "{refused}");
+        assert_eq!(in_the_file(&m), Some(fingerprint("signed-in")));
+        assert_eq!(parked_fingerprint(&m, "elsewhere"), None);
+
+        let m = lapsed_login_left("stow-unwritable-while-renewing");
+        let (file, service) = (left_file(&m), m.service.clone());
+        let refused = put_away_while(&m, "stow.exchanged", move || {
+            file.fault(&service, Fault::FailWrite("disk full".into()));
+        })
+        .expect_err("the file cannot be written");
+        assert_eq!(refused.code(), "credential_write_failed");
+        assert!(refused.to_string().ends_with(SPENT), "{refused}");
+        assert_eq!(in_the_file(&m), Some(fingerprint("left-refresh")));
     }
 
     /// Nothing behind the keychain is nothing to put away, and nor is the file where it is
