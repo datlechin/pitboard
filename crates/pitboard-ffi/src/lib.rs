@@ -76,8 +76,8 @@ pub use account_windows::{
 // answers that only the model reads. None of it is exported.
 mod launch;
 pub(crate) use launch::{
-    Adoption, AppCore, AutoSwitched, Change, Check, Enrolled, EnrolledAs, Holding, OwnCommandLine,
-    PitboardError, Remedy, Renewed, SignInSession, Switch, Switched,
+    Adoption, AppCore, AutoLooked, AutoSwitched, Change, Check, Enrolled, EnrolledAs, Holding,
+    OwnCommandLine, PitboardError, Remedy, Renewed, SignInSession, Switch, Switched,
 };
 // What a test or a fixture makes the app's core of, in place of the environment.
 #[cfg(any(test, feature = "fixture"))]

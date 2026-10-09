@@ -39,9 +39,24 @@ Off by default. While it is on, the app switches Claude Code to another of your 
 
 The app switches only while it is open. It switches only to an account that has used less than that share of every limit it has. It never switches back by itself, and never switches Codex, since a running `codex` keeps its account until it is started again.
 
-Turning the setting on, or changing the share, takes effect at once, from the usage the app already has. After that, the app decides again each time it reads usage or sees numbers that other runs of Pitboard recorded. To keep those numbers fresh, see [Keep the numbers fresh](/guides/automatic-switching#keep-the-numbers-fresh).
+Turning the setting on, or changing the share, takes effect at once, from the usage Pitboard already has. After that, the app decides again whenever it reads usage or sees numbers or a change that other runs of Pitboard recorded. It also decides at least every 30 seconds. To keep those numbers fresh, see [Keep the numbers fresh](/guides/automatic-switching#keep-the-numbers-fresh).
+
+While the setting is on, a line under the share says what the app last decided:
+
+| Line | Said while |
+| --- | --- |
+| **Watching work: 62% of its 5-hour limit, as of 16:40.** | No limit of `work`, the account in use, has reached the share. It names the fullest limit still running and when Pitboard read it. |
+| **Watching work: 62% of its 5-hour limit, as of 16:40. Anthropic holds Pitboard off asking again until 17:40.** | Anthropic rate limits usage checks for `work`, so the reading is no newer until then. |
+| **work has used 97% of its 5-hour limit. Pitboard tries again at 16:41.** | A try that came to nothing a moment ago holds the next back. |
+| **work has used 97% of its 5-hour limit. Pitboard is not switching:**, then the reason | Pitboard does not switch away from that limit, for one of the [reasons](/reference/app#when-the-app-switches-by-itself). For an account put in use less than 5 minutes ago, it ends with when Pitboard decides again. |
+| **Pitboard is not switching Claude Code:**, then the reason | Pitboard cannot decide whether to switch at all. Where it cannot tell whose login Claude Code has stored, it ends with when Pitboard asks again. |
+| **Pitboard could not switch Claude Code, and tries again at 16:41:**, then the error | A switch failed. |
+| **Pitboard cannot tell whether to switch Claude Code:**, then the error | Pitboard could not read its own files, such as its account list. |
+| **Switched Claude Code from work to personal: work had used 97% of its 5-hour limit.** | The app switched. The line stays until the app next decides. |
 
 After each switch, the app posts a notification and shows the switch in the Pitboard window as one you made. When a limit reaches the share and the app does not switch away from it, such as when no other account has room, it posts why once for that limit and its reset. When it cannot decide, or a switch fails, it posts why once until it next switches.
+
+After a switch fails, the app tries again no sooner than 1 minute later. It then waits twice as long after each failure in a row, up to 15 minutes, as Pitboard waits after failed tries at a limit.
 
 For the text of each notification, see [Notifications](/reference/app#notifications). For which account the app chooses, and when it holds back, see [Switch before an account runs out](/guides/automatic-switching).
 

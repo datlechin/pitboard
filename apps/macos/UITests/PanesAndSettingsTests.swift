@@ -60,25 +60,29 @@ final class PanesAndSettingsTests: XCTestCase {
 
     /// Switching Claude Code before an account runs out is off at first, and the share it
     /// switches at cannot be changed while it is. Turned on, it says the share, 95%, which
-    /// its stepper raises a point, and it turns off again. The model answers a change after
-    /// the click, so each is waited for on the stepper, which follows the switch.
+    /// its stepper raises a point, and under them what the core's look came to; turned off
+    /// again, it says nothing there. The model answers a change after the click, so each is
+    /// waited for on the stepper, which follows the switch.
     @MainActor
     func testSwitchingBeforeAnAccountRunsOut() {
         let app = XCUIApplication.launched(.oneTool)
         app.openSettings()
         let toggle = app.control("settings.autoSwitch")
         let share = app.control("settings.autoSwitchAt")
+        let standing = app.control("settings.autoSwitchStanding")
         XCTAssertTrue(toggle.waitForExistence(timeout: 5))
         XCTAssertTrue(share.exists)
         // Both are held back until the app's preferences have been read.
         XCTAssertTrue(toggle.wait(for: \.isEnabled, toEqual: true, timeout: 5))
         XCTAssertEqual(toggle.value as? Int, 0)
         XCTAssertFalse(share.isEnabled, "no share to change while it is off")
+        XCTAssertFalse(standing.exists, "nothing said while it is off")
 
         toggle.click()
         XCTAssertTrue(share.wait(for: \.isEnabled, toEqual: true, timeout: 5))
         XCTAssertEqual(toggle.value as? Int, 1)
         XCTAssertTrue(says(app, "Switch when a limit reaches 95%").waitForExistence(timeout: 5))
+        XCTAssertTrue(standing.waitForExistence(timeout: 5), "what the look came to")
 
         let raise = share.incrementArrows.firstMatch
         XCTAssertTrue(raise.exists, "a stepper shows its arrows")
@@ -88,6 +92,7 @@ final class PanesAndSettingsTests: XCTestCase {
         toggle.click()
         XCTAssertTrue(share.wait(for: \.isEnabled, toEqual: false, timeout: 5))
         XCTAssertEqual(toggle.value as? Int, 0)
+        XCTAssertTrue(standing.waitForNonExistence(timeout: 5))
     }
 
     /// What names the share a limit is switched at, as `words`: a text beside the stepper,

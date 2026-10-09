@@ -307,8 +307,8 @@ pub enum Intent {
     /// Switch Claude Code by itself, or stop: the settings' switch, with the share of a limit
     /// it switches at, a whole percentage, taken as the nearest there can be. Kept in the
     /// app's preferences in Pitboard's directory, and taken only once they have been read,
-    /// as `MachineShown::auto_switch` says by `enabled`. Turned on, it looks at once at what
-    /// was read last.
+    /// as `MachineShown::auto_switch` says by `enabled`. Turned on, or at another share, the
+    /// core looks at once whether to switch.
     SetAutoSwitch { on: bool, at: u8 },
     /// Renew every parked login that is due, now, then read the accounts again once, asking
     /// every service, to show what it renewed. Never switches, and asks for no usage beyond

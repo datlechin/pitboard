@@ -23,11 +23,12 @@ use std::time::{Duration, Instant};
 /// As long as a test waits for another thread, however slow the machine running it.
 const PATIENCE: Duration = Duration::from_secs(20);
 
-/// Looks every few milliseconds, reads by itself only when started, once, and gives an app
-/// a moment to quit.
+/// Looks every few milliseconds, reads by itself only when started, once, asks whether to
+/// switch by itself only after a read or a change, and gives an app a moment to quit.
 const QUICK: Cadence = Cadence {
     look_every: Duration::from_millis(10),
     read_every: Duration::from_secs(3_600),
+    decide_every: Duration::from_secs(3_600),
     stale_after: Duration::from_secs(60),
     quit_within: Duration::from_millis(200),
     quit_checked_every: Duration::from_millis(5),

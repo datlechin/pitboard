@@ -10,7 +10,7 @@
 //! Anthropic no more than the app would.
 
 use crate::{Report, emit, followed, ui};
-use pitboard_core::autoswitch::{Auto, Blind, Skip, Threshold};
+use pitboard_core::autoswitch::{Auto, Blind, DECIDE_EVERY_SECONDS, Skip, Threshold};
 use pitboard_core::error::Error;
 use pitboard_core::provider::ProviderId;
 use pitboard_core::service::{Changing, Done, Pitboard};
@@ -28,10 +28,6 @@ const LOOK_EVERY: Duration = Duration::from_secs(2);
 /// How often it asks the services about every account: as often as the app reads them. Each
 /// account is asked only as often as its budget allows whichever front end asks.
 const READ_EVERY: i64 = 300;
-
-/// How often it decides though nothing was written: an account put in use stops settling,
-/// and a failed attempt may be tried again, with nobody writing anything.
-const DECIDE_EVERY: i64 = 30;
 
 /// Decides once from the usage Pitboard last measured, and says what it came to. Nobody is
 /// asked for usage; a decision under the lock may ask Anthropic whose login Claude Code has
@@ -70,7 +66,7 @@ pub fn run(pitboard: &Pitboard, threshold: Threshold, as_json: bool) -> ExitCode
             read_at = Some(now);
         }
         let written = Some((pitboard.changed_at(), pitboard.readings_changed_at()));
-        if written != seen || now - decided_at >= DECIDE_EVERY || now < decided_at {
+        if written != seen || now - decided_at >= DECIDE_EVERY_SECONDS || now < decided_at {
             (seen, decided_at) = (written, now);
             match said(pitboard.auto_switch(threshold), threshold, true) {
                 Said::Idle(_) => {}

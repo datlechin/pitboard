@@ -101,9 +101,20 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   and the reason, and so does the app, in a notification titled **Pitboard is not
   switching Claude Code**. An `auto-switch` line in `pitboard log` whose error came before
   Pitboard chose an account names `claude`.
+- The app asks whether to switch Claude Code by itself every 30 seconds, as `pitboard
+  watch` decides, and after every read and every change of numbers, so an account put in
+  use stops settling, and a try held back after one that came to nothing is made, with
+  nobody writing anything. It asked only after a read or numbers that showed a limit at the
+  share. Under **Switch when a limit reaches**, a line says which account it watches, how
+  much of its fullest limit is used and when that was read, or why it is not switching and
+  when it acts again. After a switch fails, the app tries again a minute later, then twice
+  as long after each failure in a row, up to 15 minutes, as Pitboard waits after failed
+  tries at a limit. It tried again at its next read of usage, so a failure that lasted was
+  tried, and recorded in `pitboard log`, every 5 minutes.
 - In `pitboard-core`, `autoswitch::Blind`, `autoswitch::Look`, the variants
   `autoswitch::Auto::NotWatching`, `Auto::Watching` and `Auto::Waiting`,
   `autoswitch::Skip`'s `NoRoom`, `AlreadyLeft`, `GaveUp` and `Settling`,
+  `autoswitch::DECIDE_EVERY_SECONDS`, `autoswitch::retry_after`,
   `service::Pitboard::auto_look`, `budget::held_until` and `words::not_watching` are new.
   `autoswitch::Skip`'s `SwitchInterrupted` and `CustomOauth` are `Blind::SwitchInterrupted`
   and `Blind::CustomOauth`, `Auto::Idle` is `Auto::Watching`, `Auto::NoRoom` is

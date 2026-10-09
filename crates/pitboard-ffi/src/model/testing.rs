@@ -10,9 +10,9 @@ use super::state::{Answer, Cadence, Job, Msg, Now, State};
 use super::{AppControl, Intent, Notifications, PlatformError, RunOutNotice, Snapshot};
 use crate::account_windows::records::{self, Entry, Records};
 use crate::{
-    Abandoned, Account, Adoption, AppCore, AutoSwitched, Change, Check, Enrolled, EnrolledAs,
-    FoundCommandLine, Holding, Level, Limit, Made, OwnCommandLine, PitboardError, Remedy, Renewed,
-    Schedule, Source, Status, Switch, Switched, Tool, Usage, Warning,
+    Abandoned, Account, Adoption, AppCore, AutoLooked, AutoSwitched, Change, Check, Enrolled,
+    EnrolledAs, FoundCommandLine, Holding, Level, Limit, Made, OwnCommandLine, PitboardError,
+    Remedy, Renewed, Schedule, Source, Status, Switch, Switched, Tool, Usage, Warning,
 };
 use pitboard_core::context::Context;
 use pitboard_core::provider::ProviderId;
@@ -158,6 +158,17 @@ pub(super) fn switched(
         },
         warnings,
     })
+}
+
+/// Nothing to switch by itself: no limit of `account`, the account in use, has reached the
+/// share, with no reading to say how much of which it has used.
+pub(super) fn watching(account: &str) -> AutoSwitched {
+    AutoSwitched::Watching {
+        account: account.into(),
+        used: None,
+        as_of: None,
+        held_until: None,
+    }
 }
 
 /// A switch to the account already in use, as the core reports one.
@@ -416,6 +427,10 @@ pub(super) struct Machine {
     pub switched: Result<Switched, Refusal>,
     /// Every account switched to, as the model named it.
     pub switched_to: Vec<String>,
+    /// What the core's look at whether to switch Claude Code by itself gives.
+    pub look: Result<AutoLooked, Refusal>,
+    /// The share each look was asked at, in order.
+    pub looked_at: Vec<u8>,
     /// What switching Claude Code by itself gives.
     pub auto: Result<AutoSwitched, Refusal>,
     /// The share each switch by itself was asked at, in order.
@@ -522,7 +537,9 @@ impl Machine {
             found: vec![claude_code()],
             switched: already_active("work", Vec::new()),
             switched_to: Vec::new(),
-            auto: Ok(AutoSwitched::Watching),
+            look: Ok(AutoLooked::Stands(watching("work"))),
+            looked_at: Vec::new(),
+            auto: Ok(watching("work")),
             auto_at: Vec::new(),
             held: HashMap::new(),
             apps: StandInApps::new(&[], true),
@@ -655,6 +672,12 @@ impl Machine {
                     qualified,
                     reopen,
                     done: self.switched.clone().map_err(|refused| refused.error()),
+                }
+            }
+            Job::AutoLook { at } => {
+                self.looked_at.push(at);
+                Answer::AutoLooked {
+                    looked: self.look.clone().map_err(|refused| refused.error()),
                 }
             }
             Job::AutoSwitch { at } => {

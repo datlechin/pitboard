@@ -163,14 +163,15 @@ pages load, as a browser would.
     nobody could tell whose it is, which `asked` paces as attempts are paced, or no reading
     Anthropic gave of the account in use. `asked` holds only what every front end would meet
     alike: a store this process cannot read, such as a keychain locked over SSH, is returned
-    as its error, for its front end to pace. `switch/auto.rs` tells whose login is stored
-    under the lock, as a switch does, records it, decides once from that, and switches from
-    that same login through `switch::switch_from`, or records the `Hold` once.
-    `service::Pitboard::auto_look` is the look and `auto_switch` joins the two. The audit
-    log records a switch, or the error that stopped one, as `auto-switch`, of `claude` where
-    no account was chosen yet; and as `auto-stay`, a login nobody could tell whose it is, of
-    the account last known in use, once per wait, and each `Hold`, of the account in use,
-    once per limit, reset and code.
+    as its error, for its front end to pace by `retry_after`, the wait attempts and `asked`
+    take. A front end decides with nothing written every `DECIDE_EVERY_SECONDS`, 30.
+    `switch/auto.rs` tells whose login is stored under the lock, as a switch does, records
+    it, decides once from that, and switches from that same login through
+    `switch::switch_from`, or records the `Hold` once. `service::Pitboard::auto_look` is the
+    look and `auto_switch` joins the two. The audit log records a switch, or the error that
+    stopped one, as `auto-switch`, of `claude` where no account was chosen yet; and as
+    `auto-stay`, a login nobody could tell whose it is, of the account last known in use,
+    once per wait, and each `Hold`, of the account in use, once per limit, reset and code.
   - `lock.rs`: the lock Claude Code takes around credential writes, taken the same way.
   - `context.rs`: what the core takes from its environment, read from a map of variables
     by the same code for every front end, apart from the `PATH` that `host/linux` reads to
@@ -308,30 +309,31 @@ pages load, as a browser would.
     what the app's own preferences are, `machine.rs` what the model knows of this machine
     rather than its accounts, and `windows.rs` the account windows' bookkeeping; `lanes.rs`
     runs what it decides, on a lane of reads, which reads the schedule, doctor's checks and
-    the log too, a lane of changes, one at a time, which also repairs and changes the
-    schedule and renews, a lane that lists processes and asks the app's `AppControl` about
-    other apps, a lane that asks what is installed and looks for the `pitboard` a terminal
-    runs, a thread of its own for each sign-in, a lane that types a code back to one or
-    stops it, a lane that reads and writes what the model keeps, in Pitboard's directory and
-    the windows' records in the app's own, and one that posts through the app's
-    `Notifications`, and tells the listener on a thread of its own; `mod.rs` holds the
-    exported types and the actor thread that owns the state. So far the model reads the
-    accounts, looks every two seconds for a change made elsewhere, asks which tools are
-    installed, switches, quits the app holding a tool's login when the person lets it, gives
-    up on a stuck switch, keeps what each tool's last switch said, runs each tool's own
-    sign-in, enrols the login signed in now, renames and forgets, writes the account in use
-    into Claude Code's config, keeps the sheet over the main window, says which account to
-    switch to once the one in use has run out, notified once for each reset, keeps the
-    app's own preferences, and keeps the daily renewal
-    schedule, renews now, makes doctor's checks, reads the activity log and finds the
-    `pitboard` a terminal runs. It keeps the account windows' books too: which store is
-    whose and each window's last page, which windows close and which stores go after a read,
-    the link waiting for an account, with the wait before it can be opened, and the
-    downloads. Its tests are files of their own there: `reading.rs`, `switching.rs`,
-    `signing.rs`, `changing.rs`, `advising.rs`, `keeping.rs`, `maintaining.rs`,
-    `presenting.rs`, `windowing.rs` and `cadence.rs` drive the state by hand, `lanes.rs` has
-    the lanes' own, and `threaded.rs` drives the model through its threads over the real
-    core.
+    the log too and asks the core's look whether to switch Claude Code by itself, a lane of
+    changes, one at a time, which also repairs and changes the schedule and renews, a lane
+    that lists processes and asks the app's `AppControl` about other apps, a lane that asks
+    what is installed and looks for the `pitboard` a terminal runs, a thread of its own for
+    each sign-in, a lane that types a code back to one or stops it, a lane that reads and
+    writes what the model keeps, in Pitboard's directory and the windows' records in the
+    app's own, and one that posts through the app's `Notifications`, and tells the listener
+    on a thread of its own; `mod.rs` holds the exported types and the actor thread that owns
+    the state. So far the model reads the accounts, looks every two seconds for a change
+    made elsewhere, asks which tools are installed, switches, quits the app holding a tool's
+    login when the person lets it, gives up on a stuck switch, keeps what each tool's last
+    switch said, runs each tool's own sign-in, enrols the login signed in now, renames and
+    forgets, writes the account in use into Claude Code's config, keeps the sheet over the
+    main window, says which account to switch to once the one in use has run out, notified
+    once for each reset, switches Claude Code by itself with its setting on, asking the
+    core's look after every read and every 30 seconds and saying under the setting what it
+    came to, keeps the app's own preferences, and keeps the daily renewal schedule, renews
+    now, makes doctor's checks, reads the activity log and finds the `pitboard` a terminal
+    runs. It keeps the account windows' books too: which store is whose and each window's
+    last page, which windows close and which stores go after a read, the link waiting for an
+    account, with the wait before it can be opened, and the downloads. Its tests are files
+    of their own there: `reading.rs`, `switching.rs`, `automatic.rs`, `signing.rs`,
+    `changing.rs`, `advising.rs`, `keeping.rs`, `maintaining.rs`, `presenting.rs`,
+    `windowing.rs` and `cadence.rs` drive the state by hand, `lanes.rs` has the lanes' own,
+    and `threaded.rs` drives the model through its threads over the real core.
   - `present/` makes each `Snapshot` from the model's state: `present` takes the state and
     the moment, and builds every sentence and row the menu bar, the menu and the window
     show, so a view decides nothing. `accounts.rs` is the menu bar's words and the
@@ -750,18 +752,31 @@ pages load, as a browser would.
   app may close the question with `Intent::KeepAppOpen` before or after it sends the answer:
   a question closed unanswered is kept until another switch is asked for, and an answer is
   taken once.
-- A switch of Claude Code the app makes by itself, with its setting on, is claimed the same
-  way, with `switching` naming the tool rather than an account, since the core chooses
-  which: the model asks for one after it advises, where a limit of the Claude Code account
-  in use has reached the share, and not while another switch, the question before one or
-  another change of the app's own is under way, nor after a refusal until the app's next
-  read lands. It runs on the lane of changes, behind any switch asked for, and asks nobody
-  about quitting an app, since Claude Code follows a switch by itself. A switch it made is
-  taken as one asked for is, with the read after it, and said in a notification with no
-  button; a reason it did not switch away from a limit, once for that limit and its reset, a
-  reason it cannot judge, by what it names, and a refusal, are said once each until it next
-  switches, and never in an alert, since nobody asked. The setting is kept in `app.json`
-  with the other preferences, and taken only once they are read.
+- With its setting on, the app asks the core's look whether to switch Claude Code by itself
+  after every read, after numbers or a change the poll found, as the setting is turned on or
+  its share changed, and every 30 seconds after the last look ended, the core's
+  `DECIDE_EVERY_SECONDS`, as `pitboard watch` decides. A launch looks first once its first
+  read has landed and the preferences are read, or 30 seconds after the preferences where
+  that read is slower: before it, the readings may be an older Pitboard's, which the look
+  cannot judge, and a reason posted then would be gone seconds later. The look runs on the
+  lane of reads and claims nothing. Only where it says a decision under the core's lock must
+  say is a switch asked for, claimed the same way as one somebody asks for, with `switching`
+  naming the tool rather than an account, since the core chooses which; and not while
+  another switch, the question before one or another change of the app's own is under way.
+  It runs on the lane of changes, behind any switch asked for, and asks nobody about
+  quitting an app, since Claude Code follows a switch by itself. A refusal is the app's to
+  pace, since the core records none it raised before deciding: the next is asked for no
+  sooner than the core waits after as many failed attempts in a row, 60 seconds doubling to
+  15 minutes (`autoswitch::retry_after`), and any outcome, of a look or of a decision, ends
+  the row. A switch it made is taken as one asked for is, with the read after it, and said
+  in a notification with no button; a reason it did not switch away from a limit, once for
+  that limit and its reset, whether the decision gave it or a look stood on one recorded
+  since, a reason it cannot judge, by what it names, and a refusal, are said once each until
+  it next switches, and never in an alert, since nobody asked. What the look or the decision
+  came to last is said under the setting while it is on. Turned off, it says nothing there,
+  and a look or a decision answered since asks for nothing, says nothing and holds nothing
+  back, except a switch, which was made and is said. The setting is kept in `app.json` with
+  the other preferences, and taken only once they are read.
 - The notice that Claude Code's config names another account offers to write the account
   in use there: `Intent::UpdateConfig`, a change of the app's own like a rename and not a
   switch, so the row never reads as switching and nothing said about a switch or the
@@ -2346,6 +2361,11 @@ with Swift 6.4.
 - The 30 seconds an app is given to quit run on `Instant` too, where the Swift model's ran
   on `ContinuousClock`: a machine put to sleep while an app is asked to quit gives it its
   30 seconds of waking time, where the Swift gave it none once the machine woke.
+- The look whether to switch Claude Code by itself every 30 seconds, and the wait after a
+  refused switch, run on `Instant` too, so they count waking time. After a sleep the read
+  that `Intent::Woke` asks for is followed by a look at once where it lands, and one that
+  fails, as before the network is back, leaves the next look to its timer. A refusal's
+  wait goes on where it stopped.
 - On Linux the standard library reads `CLOCK_MONOTONIC`, and on Windows
   `QueryPerformanceCounter`. How either counts a sleep was not read.
 

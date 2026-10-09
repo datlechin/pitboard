@@ -72,6 +72,7 @@ impl Job {
             Job::Read { .. }
             | Job::ReadOffline { .. }
             | Job::Look
+            | Job::AutoLook { .. }
             | Job::ReadSchedule { .. }
             | Job::Check
             | Job::ReadLog { .. } => Lane::Reads,
@@ -555,6 +556,9 @@ impl Worker {
                 qualified,
                 reopen,
             },
+            Job::AutoLook { at } => Answer::AutoLooked {
+                looked: core.auto_look(at),
+            },
             Job::AutoSwitch { at } => Answer::AutoSwitched {
                 done: core.auto_switch(at),
             },
@@ -946,6 +950,15 @@ mod tests {
         }
         assert_eq!(Job::Look.lane(), Lane::Reads);
         assert_eq!(Job::AskInstalled.lane(), Lane::Discovery);
+    }
+
+    /// The look at whether to switch Claude Code by itself reads files and claims nothing, so
+    /// it answers on the lane of reads while a switch waits. The switch it may lead to is a
+    /// change, made one at a time with every other.
+    #[test]
+    fn a_look_whether_to_switch_by_itself_runs_with_the_reads() {
+        assert_eq!(Job::AutoLook { at: 95 }.lane(), Lane::Reads);
+        assert_eq!(Job::AutoSwitch { at: 95 }.lane(), Lane::Changes);
     }
 
     /// AppModelTests.swift's onlyARunningAppHoldingTheToolIsAskedAbout once more, on the real

@@ -117,9 +117,15 @@ pub const RETRY_MOST_SECONDS: i64 = 900;
 /// reason is not going to be made.
 pub const ATTEMPTS: u32 = 3;
 
+/// How often a front end that switches by itself decides though nothing was written: an
+/// account put in use stops settling, and the wait after a failed attempt ends, with nobody
+/// writing anything.
+pub const DECIDE_EVERY_SECONDS: i64 = 30;
+
 /// How long to wait after `waits` failures in a row for a reason trying again may mend: of
-/// attempts, or of asking whose login Claude Code has stored.
-fn retry_after(waits: u32) -> i64 {
+/// attempts, of asking whose login Claude Code has stored, or of a front end's refusals that
+/// came before anything here could record them.
+pub fn retry_after(waits: u32) -> i64 {
     (RETRY_SECONDS << waits.saturating_sub(1).min(4)).min(RETRY_MOST_SECONDS)
 }
 

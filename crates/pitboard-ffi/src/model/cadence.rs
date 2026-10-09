@@ -1,7 +1,8 @@
 //! What the model does by itself, and when: the timers the Swift model ran as loops of
 //! `Task.sleep`, which its tests never ran. A read now and every five minutes after the last
-//! one the timer asked for ended, a look every two seconds after the last look ended, and
-//! nothing at all before `Start`.
+//! one the timer asked for ended, a look every two seconds after the last look ended, with
+//! switching by itself on the core's look every 30 seconds, and nothing at all before
+//! `Start`.
 
 use super::Intent;
 use super::state::{Cadence, Job};
@@ -126,6 +127,17 @@ fn the_accounts_are_read_five_minutes_after_the_timers_last_read() {
         model.count(fresh_read),
         1,
         "the timer's is not somebody asking"
+    );
+}
+
+/// With switching by itself on, the core's look is asked every 30 seconds whatever was
+/// written, as often as `pitboard watch` decides: by the core's one number.
+#[test]
+fn the_core_is_asked_whether_to_switch_as_often_as_watch_decides() {
+    assert_eq!(Cadence::APP.decide_every, Duration::from_secs(30));
+    assert_eq!(
+        Cadence::APP.decide_every.as_secs(),
+        pitboard_core::autoswitch::DECIDE_EVERY_SECONDS.unsigned_abs()
     );
 }
 

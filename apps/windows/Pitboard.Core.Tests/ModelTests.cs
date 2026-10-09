@@ -131,7 +131,7 @@ public sealed class ModelTests
             Found: null, InTerminal: null, UpdateNote: null, OffersLink: false, CannotLink: null),
         AutoSwitch: new AutoSwitchShown(
             On: false, At: 95, Lowest: 50, Highest: 99, Enabled: true,
-            AtLabel: "Switch when a limit reaches 95%", Note: ""));
+            AtLabel: "Switch when a limit reaches 95%", Note: "", Standing: null));
 
     /// <summary>
     /// What an app's AppControl does: says what runs, asks an app to quit, opens one again,

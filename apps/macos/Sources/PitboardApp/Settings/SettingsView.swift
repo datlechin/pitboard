@@ -98,6 +98,11 @@ private struct GeneralSettings: View {
                 )
                 .accessibilityIdentifier("settings.autoSwitchAt")
                 .disabled(!auto.enabled || !auto.on)
+                if let standing = auto.standing {
+                    Text(standing)
+                        .explanatory()
+                        .accessibilityIdentifier("settings.autoSwitchStanding")
+                }
             } header: {
                 Text("Before an account runs out")
             } footer: {
