@@ -215,7 +215,7 @@ For `not_watching`, `reason` is one of these:
 | `nothing_signed_in` | Claude Code has no login stored. |
 | `not_enrolled` | The login Claude Code has stored is of an account not enrolled, which `email` names. |
 | `not_identified` | Pitboard could not tell whose login Claude Code has stored, for `detail`, and asks again at `until`. |
-| `no_reading` | Anthropic has given no reading of the account in use, `account`, as after an update of Pitboard. Pitboard decides once it next asks Anthropic about that account. |
+| `no_reading` | Anthropic has given no reading of the account in use, `account`, as after an update of Pitboard. A status line still running a `pitboard` from before 0.10.0 leaves none between Pitboard's reads. Pitboard decides once it next asks Anthropic about that account. |
 
 A switch that fails prints an envelope with `ok` set to `false`, `data` set to `null` and the `error`, as every command does. `watch` then goes on, and prints each error code once until the next switch. After an error it makes no decision that takes Pitboard's lock for 1 minute. It waits twice as long after each error in a row, up to 15 minutes. An error that ends `watch` is printed the same way, and `watch` exits with its status.
 
