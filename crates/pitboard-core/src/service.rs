@@ -804,8 +804,9 @@ impl Pitboard {
 
     /// What switching Claude Code by itself would come to now, from files alone: what
     /// stands, or that only a decision under the lock can say, which [`auto_switch`] makes.
-    /// Takes no lock, reads no keychain and asks nobody, so a front end may look as often as
-    /// it likes.
+    /// Waits on no lock, reads no keychain and asks nobody, so a front end may look as often
+    /// as it likes. While another run is in the middle of a switch, only the decision can
+    /// say, which waits for that run.
     ///
     /// [`auto_switch`]: Pitboard::auto_switch
     pub fn auto_look(&self, threshold: Threshold) -> Result<Look> {

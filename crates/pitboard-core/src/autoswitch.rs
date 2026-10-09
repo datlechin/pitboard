@@ -703,11 +703,16 @@ impl Ledger {
 /// What Pitboard would do now, from its files alone: no lock, no keychain and no network, so
 /// a look that finds nothing to do costs nobody anything. The account in use is the one
 /// Pitboard's record says Anthropic last named for the login Claude Code has stored. Where
-/// that record is in doubt, a switch may be due, or a reason not to switch was not yet
-/// recorded, only the decision under the lock can say, from whose login is stored by then.
+/// that record is in doubt, a switch may be due, a reason not to switch was not yet recorded,
+/// or another run is in the middle of a switch, only the decision under the lock can say,
+/// from whose login is stored by then.
 pub(crate) fn look(ctx: &Context, state: &State, threshold: Threshold) -> Look {
-    if let Some(why) = blind(ctx) {
+    let unfinished = crate::switch::unfinished(ctx);
+    if let Some(why) = blind(ctx, unfinished) {
         return Look::Stands(Box::new(Auto::NotWatching { why }));
+    }
+    if unfinished.is_some() {
+        return Look::Act;
     }
     let now = ctx.now();
     let ledger = Ledger::load(ctx);
@@ -734,9 +739,9 @@ pub(crate) fn look(ctx: &Context, state: &State, threshold: Threshold) -> Look {
 /// Why nothing of Claude Code's may be judged here, whatever its numbers: a switch waits to be
 /// finished, which is a change for somebody to make, or Claude Code keeps its login where
 /// Pitboard does not act. Asked before anything else, so the automatic switch never settles
-/// either on its own.
-fn blind(ctx: &Context) -> Option<Blind> {
-    if crate::switch::interrupted(ctx) {
+/// either on its own. A switch another run is making waits on nobody, and is not one.
+fn blind(ctx: &Context, unfinished: Option<crate::switch::Unfinished>) -> Option<Blind> {
+    if unfinished == Some(crate::switch::Unfinished::Interrupted) {
         Some(Blind::SwitchInterrupted)
     } else if crate::settings::custom_oauth(ctx) {
         Some(Blind::CustomOauth)

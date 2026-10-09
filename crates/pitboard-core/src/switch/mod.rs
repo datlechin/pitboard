@@ -238,6 +238,32 @@ fn try_exclusive(ctx: &Context, permit: Permit) -> Option<std::fs::File> {
     Some(file)
 }
 
+/// A switch's record, as a look that waits on nobody finds it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Unfinished {
+    /// Another run holds Pitboard's lock: the switch is that run's to finish or refuse over.
+    UnderWay,
+    /// No run holds the lock, so the switch waits for the next change.
+    Interrupted,
+}
+
+/// The record of a switch not finished, where one is there. It only asks whether the lock is
+/// held: the lock's file is opened to read, never made, and no file is no holder. The lock is
+/// asked for shared, kept over a second look at the record so no run begins or ends a switch
+/// between the two, and let go of at once.
+pub(crate) fn unfinished(ctx: &Context) -> Option<Unfinished> {
+    if !journal::pending(ctx) {
+        return None;
+    }
+    let Ok(lock) = std::fs::File::open(home::dir(ctx).join("state.lock")) else {
+        return Some(Unfinished::Interrupted);
+    };
+    match lock.try_lock_shared() {
+        Err(std::fs::TryLockError::WouldBlock) => Some(Unfinished::UnderWay),
+        _ => journal::pending(ctx).then_some(Unfinished::Interrupted),
+    }
+}
+
 fn lock_file(ctx: &Context, permit: Permit) -> Result<(std::fs::File, PathBuf)> {
     let path = home::dir(ctx).join("state.lock");
     let fail = |source| Error::HomeUnwritable {

@@ -58,22 +58,12 @@ impl Watching {
         self.printed()["data"].clone()
     }
 
-    /// The account the next `idle` event names. A look made while a `pitboard use` holds
-    /// Pitboard's lock finds that switch's record and says a switch was interrupted, since
-    /// the look cannot tell a switch under way from one interrupted: a known fault, not what
-    /// is meant, and the only event let through before it.
+    /// The account the next event, an `idle` one, names. A look made while a `pitboard use`
+    /// holds Pitboard's lock waits for it, and says nothing of that switch's record.
     fn watched(&self) -> Value {
-        loop {
-            let data = self.next();
-            if data["event"] == "idle" {
-                return data["account"].clone();
-            }
-            assert_eq!(
-                (&data["event"], &data["reason"]),
-                (&json!("not_watching"), &json!("switch_interrupted")),
-                "{data}"
-            );
-        }
+        let data = self.next();
+        assert_eq!(data["event"], "idle", "{data}");
+        data["account"].clone()
     }
 }
 

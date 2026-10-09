@@ -1080,8 +1080,14 @@ pages load, as a browser would.
   decision and the switch. `autoswitch::look` comes first, from files alone: it takes no
   lock, sends no request, reads no keychain and records nothing, so a look that finds
   nothing to do costs nobody anything. It goes on to the lock only where a switch may be
-  due, the record of whose login is stored is in doubt, or a reason not to switch was not
-  recorded yet. Under the lock, `switch/auto.rs` tells whose it is as a switch does, by its
+  due, the record of whose login is stored is in doubt, a reason not to switch was not
+  recorded yet, or another run is in the middle of a switch. A switch's record,
+  `journal.json`, is of one interrupted (`switch_interrupted`) only while no run holds
+  `state.lock`. So where the record is there, the look asks whether the lock is held, and
+  still waits for nobody (`switch::unfinished`): it opens the lock's file to read, never
+  making it, asks for the lock shared without waiting, and lets go at once. Held, the
+  switch is that run's, and the decision waits for the lock and judges what that run
+  leaves. Under the lock, `switch/auto.rs` tells whose it is as a switch does, by its
   fingerprint or by asking Anthropic, records it, and decides from that and the files as
   they are then. So the app, `pitboard watch` and a person's own `pitboard use` never make
   two switches from one reading, and a sign-in outside Pitboard is judged as the account it

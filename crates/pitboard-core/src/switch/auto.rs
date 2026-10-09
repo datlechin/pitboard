@@ -1146,6 +1146,61 @@ mod tests {
         );
     }
 
+    /// A switch another run is making has its record too, for as long as that run holds
+    /// Pitboard's lock. A look then says only a decision under the lock can say, which waits
+    /// for that run. The same record with the lock free is of a switch nobody is finishing.
+    #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
+    )]
+    fn a_switch_under_way_in_another_run_is_not_one_interrupted() {
+        let (m, _) = nearly_out("auto-under-way", 96.0);
+        let settled = settle(&m.ctx, Permit::for_a_test(), None)
+            .expect("settled")
+            .0;
+        let died =
+            crate::fault::killing("switch.park_recorded", || switch(settled, &m.key("there")));
+        assert_eq!(died.unwrap_err(), "switch.park_recorded");
+        let state = state::load(&m.ctx).expect("state");
+        let look = || crate::autoswitch::look(&m.ctx, &state, Threshold::DEFAULT);
+        let lock = m.ctx_home().join(".pitboard/state.lock");
+
+        let another_run = std::thread::scope(|scope| {
+            scope
+                .spawn(|| {
+                    let held = std::fs::File::open(&lock).expect("the lock's file");
+                    held.lock().expect("held");
+                    held
+                })
+                .join()
+                .expect("a run holding the lock")
+        });
+        assert!(matches!(look(), Look::Act), "{:?}", look());
+        assert!(lock.exists() && super::super::interrupted(&m.ctx));
+
+        drop(another_run);
+        assert!(
+            matches!(
+                look(),
+                Look::Stands(stands) if matches!(
+                    *stands,
+                    Auto::NotWatching { why: Blind::SwitchInterrupted }
+                )
+            ),
+            "{:?}",
+            look()
+        );
+
+        std::fs::remove_file(&lock).expect("the lock's file goes");
+        assert!(
+            matches!(look(), Look::Stands(_)),
+            "no file, no holder: {:?}",
+            look()
+        );
+        assert!(!lock.exists(), "a look makes no lock file");
+    }
+
     /// Under a custom OAuth endpoint Claude Code keeps its login where Pitboard does not act,
     /// so there is nothing to watch, whatever the numbers say, and nothing is settled.
     #[test]

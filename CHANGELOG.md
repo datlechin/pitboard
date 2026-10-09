@@ -261,6 +261,11 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   as the last one they saw, such as a `pitboard use` typed in a terminal. Pitboard told when
   its account index was written in whole seconds, so the app showed such a switch only at
   its next read, up to 5 minutes later, and `pitboard watch` named it up to 30 seconds late.
+- The app and `pitboard watch` no longer say a switch was interrupted while another
+  `pitboard` is in the middle of one, such as a `pitboard use` typed in a terminal. Every
+  switch keeps a record until it is done, and they read that record as left by a switch
+  that had stopped. They now wait for the switch and decide from what it leaves, and say
+  `switch_interrupted` only where no `pitboard` is making the switch.
 
 ## [0.9.0] - 2026-10-08
 
