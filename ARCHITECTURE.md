@@ -166,6 +166,11 @@ pages load, as a browser would.
     alike: a store this process cannot read, such as a keychain locked over SSH, is returned
     as its error, for its front end to pace by `retry_after`, the wait attempts and `asked`
     take. A front end decides with nothing written every `DECIDE_EVERY_SECONDS`, 30.
+    `Auto::told_apart` is what every front end that says each outcome once tells one from
+    another by: a `Skip` by the account, the limit, the reset the ledger kept it under and
+    its code (`Skip::told_apart`), a `Blind` by its code and the email, the cause or the
+    account it names, never by when it asks again (`Blind::told_apart`), and a wait by the
+    account and when it ends. Nothing tells a switch apart, nor watching.
     `switch/auto.rs` tells whose login is stored under the lock, as a switch does, records
     it, decides once from that, and switches from that same login through
     `switch::switch_from`, or records the `Hold` once. An attempt that failed is judged
@@ -263,8 +268,9 @@ pages load, as a browser would.
   300 seconds, as the app does, looks every 2 seconds at when the index and the readings
   were last written, and decides again whenever either changed and at least every 30
   seconds. It says every switch, and each thing that stopped one once until the next
-  switch: a reason not to switch away from a limit once for that limit and its reset, and a
-  wait once for when it ends. It says the account it watches, `idle` with its fullest
+  switch, told apart as the core tells it (`Auto::told_apart`): a reason not to switch away
+  from a limit once for that limit and its reset, and a wait once for when it ends; an
+  error once for its code. It says the account it watches, `idle` with its fullest
   limit, when that was read and until when Anthropic holds Pitboard off asking again,
   whenever its last line said something else. Each warning a decision found is said once
   until the next switch, even one that went away and came back, with that decision's line,
@@ -785,12 +791,13 @@ pages load, as a browser would.
   look or of a decision, ends the row. A switch it made is taken as one asked for is, with
   the read after it, and said in a notification with no button; a reason it did not switch
   away from a limit, once for that limit and its reset, whether the decision gave it or a
-  look stood on one recorded since, a reason it cannot judge, by what it names, and a
-  refusal, are said once each until it next switches, and never in an alert, since nobody
-  asked. What the look or the decision came to last is said under the setting while it is
-  on. Turned off, it says nothing there, and a look or a decision answered since asks for
-  nothing, says nothing and holds nothing back, except a switch, which was made and is said.
-  The setting is kept in `app.json` with the other preferences, and taken only once they are
+  look stood on one recorded since, a reason it cannot judge, by what it names, each told
+  apart as the core tells it (`Skip::told_apart`, `Blind::told_apart`), and a refusal, are
+  said once each until it next switches, and never in an alert, since nobody asked. What
+  the look or the decision came to last is said under the setting while it is on. Turned
+  off, it says nothing there, and a look or a decision answered since asks for nothing,
+  says nothing and holds nothing back, except a switch, which was made and is said. The
+  setting is kept in `app.json` with the other preferences, and taken only once they are
   read.
 - The notice that Claude Code's config names another account offers to write the account
   in use there: `Intent::UpdateConfig`, a change of the app's own like a rename and not a
@@ -1135,7 +1142,9 @@ pages load, as a browser would.
   no lock. A front end is told the reset the reason was recorded under, and says it once
   for the same four. What is recorded of a window is kept until a minute past its reset, as
   late as an answer may give it, so an answer a second later neither forgets a limit
-  already left nor says a reason again.
+  already left nor says a reason again. What tells one reason, or one wait, from another
+  is the core's one rule, `Auto::told_apart`, and every front end says by it, building no
+  key of its own, so the app and `pitboard watch` never tell them apart differently.
 - Additive writes become durable before destructive ones. A run that dies midway leaves a
   spare copy of a login, never a missing one.
 - The `--json` contract changes only on purpose. A change to a snapshot is a change to the

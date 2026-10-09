@@ -76,11 +76,11 @@ pub fn run(pitboard: &Pitboard, threshold: Threshold, as_json: bool) -> ExitCode
             );
             if let Some(outcome) = outcome {
                 refusals.after(&outcome, now);
-                let report = said(outcome, threshold, true);
-                if matches!(&report.result, Err(error) if ends_watching(error)) {
-                    return emit(report, as_json);
+                let say = |outcome| said(outcome, threshold, true);
+                if matches!(&outcome, Err(failed) if ends_watching(&failed.error)) {
+                    return emit(say(outcome), as_json);
                 }
-                if let Some(report) = told.untold(report) {
+                if let Some(report) = told.untold(outcome, say) {
                     emit(report, as_json);
                 }
             }
@@ -175,27 +175,41 @@ struct Told {
 }
 
 impl Told {
-    /// What of `report` has not been said since the last switch, recorded as said: `report`
-    /// with only the warnings not said yet, or nothing where it says nothing new. A switch is
-    /// always said, and after it everything may be said again: what stopped the last one may
-    /// stop the next. The account it watches is said whenever the last line said something
-    /// else. A reason, a wait or an error is said once. A warning not said yet is said with
-    /// the line of the decision that found it, though that line was said before. One that
+    /// What of `outcome` has not been said since the last switch, recorded as said: what `say`
+    /// makes of it, with only the warnings not said yet, or nothing where it says nothing new.
+    /// A switch is always said, and after it everything may be said again: what stopped the
+    /// last one may stop the next. The account it watches is said whenever the last line said
+    /// something else. A reason or a wait is said once for what the core tells it apart by
+    /// ([`Auto::told_apart`]), and an error once for its code. A warning not said yet is said
+    /// with the line of the decision that found it, though that line was said before. One that
     /// went away and came back is not said again before the next switch: only a decision
     /// under the lock finds warnings, and none may come between to find it gone.
-    fn untold(&mut self, mut report: Report) -> Option<Report> {
-        let (untold, watching) = match &report.result {
-            Ok(data) if data["event"] == "switched" => {
-                *self = Told::default();
-                (true, None)
-            }
-            Ok(data) if data["event"] == "idle" => {
-                let account = data["account"].as_str().map(str::to_owned);
-                (self.watching != account, account)
-            }
-            Ok(data) => (self.said.insert(told_apart(data)), None),
-            Err(error) => (self.said.insert(format!("error/{}", error.code())), None),
+    fn untold(
+        &mut self,
+        outcome: Changing<Auto>,
+        say: impl FnOnce(Changing<Auto>) -> Report,
+    ) -> Option<Report> {
+        let (untold, watching) = match &outcome {
+            Ok(done) => match &done.value {
+                Auto::Switched { .. } => {
+                    *self = Told::default();
+                    (true, None)
+                }
+                Auto::Watching { account, .. } => (
+                    self.watching.as_ref() != Some(account),
+                    Some(account.clone()),
+                ),
+                value => (
+                    value.told_apart().is_none_or(|key| self.said.insert(key)),
+                    None,
+                ),
+            },
+            Err(failed) => (
+                self.said.insert(format!("error/{}", failed.error.code())),
+                None,
+            ),
         };
+        let mut report = say(outcome);
         report
             .warnings
             .retain(|warning| self.warned.insert(warning.to_string()));
@@ -205,35 +219,6 @@ impl Told {
         self.watching = watching;
         Some(report)
     }
-}
-
-/// What tells a reason or a wait apart from another. A reason not to switch away from a limit
-/// is told apart by the account, the limit and the reset the core recorded it under. A wait is
-/// told apart by the account and when it ends, which each failed attempt moves, and not by the
-/// limit it names: the wait is the moment's, and that limit may be one nothing was recorded
-/// for, whose reset each answer can give a second apart. A reason it cannot watch is told
-/// apart by the account or the cause it names, and not by when it asks again.
-fn told_apart(data: &Value) -> String {
-    let named = if data["event"] == "waiting" {
-        vec![&data["event"], &data["from"], &data["until"]]
-    } else {
-        vec![
-            &data["event"],
-            &data["from"],
-            &data["account"],
-            &data["limit"]["kind"],
-            &data["limit"]["scope"],
-            &data["limit"]["resets_at"],
-            &data["reason"],
-            &data["email"],
-            &data["detail"],
-        ]
-    };
-    named
-        .into_iter()
-        .map(Value::to_string)
-        .collect::<Vec<_>>()
-        .join("/")
 }
 
 /// What deciding came to, as a report with what it found on the way: `stamped` puts the time
@@ -463,20 +448,26 @@ mod tests {
     }
 
     impl Told {
-        /// Whether `report` says anything not said since the last switch.
-        fn says(&mut self, report: Report) -> bool {
-            self.untold(report).is_some()
+        /// What `watch` prints of `outcome`, where it says anything not said since the last
+        /// switch.
+        fn heard(&mut self, outcome: Changing<Auto>) -> Option<Report> {
+            self.untold(outcome, |outcome| said(outcome, Threshold::DEFAULT, false))
+        }
+
+        /// Whether `value` says anything not said since the last switch.
+        fn says(&mut self, value: Auto) -> bool {
+            self.heard(found(value, Vec::new())).is_some()
         }
     }
 
     /// What `watch` prints of `value`.
     fn told(value: Auto) -> Report {
-        found(value, Vec::new())
+        said(found(value, Vec::new()), Threshold::DEFAULT, false)
     }
 
-    /// What `watch` prints of `value`, as a decision that found `warnings` came to it.
-    fn found(value: Auto, warnings: Vec<Warning>) -> Report {
-        said(Ok(Done { value, warnings }), Threshold::DEFAULT, false)
+    /// A decision that found `warnings` came to `value`.
+    fn found(value: Auto, warnings: Vec<Warning>) -> Changing<Auto> {
+        Ok(Done { value, warnings })
     }
 
     fn watching(account: &str) -> Auto {
@@ -497,8 +488,8 @@ mod tests {
             .collect()
     }
 
-    fn blind(why: Blind) -> Report {
-        told(Auto::NotWatching { why })
+    fn blind(why: Blind) -> Auto {
+        Auto::NotWatching { why }
     }
 
     /// A line as it reads with its styles dropped, as anything but a terminal gets it.
@@ -519,12 +510,12 @@ mod tests {
         }
     }
 
-    fn skipped(resets_at: i64, why: Skip) -> Report {
-        told(Auto::Skipped {
+    fn skipped(resets_at: i64, why: Skip) -> Auto {
+        Auto::Skipped {
             from: "work".into(),
             limit: limit(resets_at),
             why,
-        })
+        }
     }
 
     /// Each reason not to switch away from a limit has its code, and no room its own event,
@@ -532,12 +523,12 @@ mod tests {
     /// reset.
     #[test]
     fn a_reason_not_to_switch_is_said_once_for_a_limit_and_its_reset() {
-        let no_room = skipped(
+        let no_room = told(skipped(
             9_000,
             Skip::NoRoom {
                 unread: vec!["spare".into()],
             },
-        );
+        ));
         let data = no_room.result.as_ref().expect("an event");
         assert_eq!(
             (&data["event"], &data["unread"], &data["reason"]),
@@ -553,19 +544,19 @@ mod tests {
             (Skip::GaveUp, "attempts_spent"),
             (Skip::Settling { until: 9_000 }, "settling"),
         ] {
-            let report = skipped(9_000, why);
+            let report = told(skipped(9_000, why));
             let data = report.result.as_ref().expect("an event");
             assert_eq!(
                 (&data["event"], &data["reason"]),
                 (&json!("skipped"), &json!(code))
             );
         }
-        let settling = skipped(
+        let settling = told(skipped(
             9_000,
             Skip::Settling {
                 until: 1_760_000_300,
             },
-        );
+        ));
         assert_eq!(
             settling.result.as_ref().expect("an event")["until"],
             1_760_000_300
@@ -590,15 +581,13 @@ mod tests {
     /// whichever limit it names and whatever that limit's reset.
     #[test]
     fn a_wait_is_said_once_for_when_it_ends() {
-        let waiting_at = |limit: Window, until| {
-            told(Auto::Waiting {
-                from: "work".into(),
-                limit,
-                until,
-            })
+        let waiting_at = |limit: Window, until| Auto::Waiting {
+            from: "work".into(),
+            limit,
+            until,
         };
         let waiting = |until| waiting_at(limit(9_000), until);
-        let report = waiting(1_760_000_060);
+        let report = told(waiting(1_760_000_060));
         let data = report.result.as_ref().expect("an event");
         assert_eq!(
             (&data["event"], &data["from"], &data["until"]),
@@ -681,7 +670,6 @@ mod tests {
     /// account, a reason, a wait or an error. Said, it is not said again.
     #[test]
     fn the_account_it_watches_is_said_when_that_changes() {
-        let watching = |account| told(watching(account));
         let mut said = Told::default();
         assert!(said.says(watching("work")));
         assert!(!said.says(watching("work")));
@@ -712,48 +700,43 @@ mod tests {
             names: vec!["ANTHROPIC_API_KEY".into()],
         };
         let mut said = Told::default();
-        assert!(said.says(told(watching("work"))));
+        assert!(said.says(watching("work")));
         let again = said
-            .untold(found(watching("work"), vec![fallback()]))
+            .heard(found(watching("work"), vec![fallback()]))
             .expect("a warning not said yet");
         assert_eq!(plain(&again), "Watching work.\n");
         assert_eq!(warned(&again), ["fallback_login"]);
         assert!(
-            !said.says(found(watching("work"), vec![fallback()])),
+            said.heard(found(watching("work"), vec![fallback()]))
+                .is_none(),
             "said once"
         );
         let more = said
-            .untold(found(watching("work"), vec![fallback(), overridden()]))
+            .heard(found(watching("work"), vec![fallback(), overridden()]))
             .expect("another warning");
         assert_eq!(warned(&more), ["auth_overridden"], "and only that one");
 
         assert!(said.says(skipped(9_000, Skip::GaveUp)));
-        let refused = Report::refused(
-            "watch",
-            Failed {
-                error: Error::SignedInAccountChanged,
-                warnings: vec![fallback()],
-            },
-        );
-        assert!(said.says(refused), "an error is said once");
-        let refused_again = Report::refused(
-            "watch",
-            Failed {
-                error: Error::SignedInAccountChanged,
-                warnings: vec![
-                    overridden(),
-                    Warning::LockCompromised {
-                        tool: ProviderId::Claude,
-                    },
-                ],
-            },
-        );
+        let refused = Err(Failed {
+            error: Error::SignedInAccountChanged,
+            warnings: vec![fallback()],
+        });
+        assert!(said.heard(refused).is_some(), "an error is said once");
+        let refused_again = Err(Failed {
+            error: Error::SignedInAccountChanged,
+            warnings: vec![
+                overridden(),
+                Warning::LockCompromised {
+                    tool: ProviderId::Claude,
+                },
+            ],
+        });
         let refused_again = said
-            .untold(refused_again)
+            .heard(refused_again)
             .expect("with a warning not said yet");
         assert_eq!(warned(&refused_again), ["lock_compromised"]);
         assert!(
-            said.says(told(watching("work"))),
+            said.says(watching("work")),
             "the last line said something else"
         );
 
@@ -766,7 +749,7 @@ mod tests {
             },
             vec![fallback()],
         );
-        let switched = said.untold(switched).expect("a switch");
+        let switched = said.heard(switched).expect("a switch");
         assert_eq!(
             warned(&switched),
             ["fallback_login"],
@@ -877,7 +860,7 @@ mod tests {
     /// no account or limit, and says what to do where the command line has a command for it.
     #[test]
     fn a_reason_it_cannot_watch_is_an_event_of_its_own() {
-        let interrupted = blind(Blind::SwitchInterrupted);
+        let interrupted = told(blind(Blind::SwitchInterrupted));
         let data = interrupted.result.as_ref().expect("an event");
         assert_eq!(
             (&data["event"], &data["reason"], &data["threshold"]),
@@ -893,9 +876,9 @@ mod tests {
              change you make finishes it, or give up on it with `pitboard abandon`.\n"
         );
 
-        let unread = blind(Blind::NoReading {
+        let unread = told(blind(Blind::NoReading {
             account: "work".into(),
-        });
+        }));
         let data = unread.result.as_ref().expect("an event");
         assert_eq!(
             (&data["reason"], &data["account"]),
@@ -907,19 +890,19 @@ mod tests {
              yet.\n"
         );
 
-        let stranger = blind(Blind::NotEnrolled {
+        let stranger = told(blind(Blind::NotEnrolled {
             email: "me@example.com".into(),
-        });
+        }));
         let data = stranger.result.as_ref().expect("an event");
         assert_eq!(
             (&data["reason"], &data["email"]),
             (&json!("not_enrolled"), &json!("me@example.com"))
         );
 
-        let unidentified = blind(Blind::Unidentified {
+        let unidentified = told(blind(Blind::Unidentified {
             detail: "could not reach Anthropic: no route to host".into(),
             until: 1_760_000_060,
-        });
+        }));
         let data = unidentified.result.as_ref().expect("an event");
         assert_eq!(
             (&data["reason"], &data["detail"], &data["until"]),

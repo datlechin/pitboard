@@ -220,7 +220,8 @@ pub(crate) enum AutoSwitched {
     },
     /// A limit of `from` reached the share, `used` of it, and Pitboard did not switch, for
     /// the reason `why` says, until `until` where the reason ends then. `key` tells it apart
-    /// from another: the account, the limit, its reset and the reason's code.
+    /// from another, as the core does (`Skip::told_apart`): the account, the limit, its reset
+    /// and the reason's code.
     Skipped {
         key: String,
         from: String,
@@ -229,8 +230,8 @@ pub(crate) enum AutoSwitched {
         until: Option<i64>,
     },
     /// Pitboard cannot judge whether to switch, for the reason `why` says, and asks again at
-    /// `until` where it waits to. `key` tells it apart from another: its code, and the
-    /// account or the cause it names.
+    /// `until` where it waits to. `key` tells it apart from another, as the core does
+    /// (`Blind::told_apart`): its code, and the email, the cause or the account it names.
     NotWatching {
         key: String,
         why: String,
@@ -414,7 +415,7 @@ fn auto_switched(auto: Auto, warnings: Vec<Warning>, threshold: Threshold) -> Au
             used: words::share_of_limit(&limit),
         },
         Auto::Skipped { from, limit, why } => AutoSwitched::Skipped {
-            key: skipped_key(&from, &limit, &why),
+            key: why.told_apart(&from, &limit),
             used: words::share_of_limit(&limit),
             why: words::not_switching(&why, threshold),
             until: match why {
@@ -424,7 +425,7 @@ fn auto_switched(auto: Auto, warnings: Vec<Warning>, threshold: Threshold) -> Au
             from,
         },
         Auto::NotWatching { why } => AutoSwitched::NotWatching {
-            key: not_watching_key(&why),
+            key: why.told_apart(),
             why: words::not_watching(&why),
             until: match why {
                 Blind::Unidentified { until, .. } => Some(until),
@@ -432,35 +433,6 @@ fn auto_switched(auto: Auto, warnings: Vec<Warning>, threshold: Threshold) -> Au
             },
         },
     }
-}
-
-/// What tells one reason the automatic switch cannot judge apart from another, for saying each
-/// once: its code, and the account or the cause it names. Not when it asks again, so a cause
-/// that stands is said once however often it is asked about.
-fn not_watching_key(why: &Blind) -> String {
-    let named = match why {
-        Blind::NotEnrolled { email } => Some(email),
-        Blind::Unidentified { detail, .. } => Some(detail),
-        Blind::NoReading { account } => Some(account),
-        _ => None,
-    };
-    match named {
-        Some(named) => format!("not-watching/{}/{named}", why.code()),
-        None => format!("not-watching/{}", why.code()),
-    }
-}
-
-/// What tells one reason the automatic switch did not switch away from a limit apart from
-/// another, for saying each once: the account, the limit, the reset the core recorded the
-/// reason under, and the reason's code, as the core records it once.
-fn skipped_key(from: &str, limit: &usage::Window, why: &Skip) -> String {
-    format!(
-        "skipped/{from}/{}/{}/{}/{}",
-        limit.kind,
-        limit.scope.as_deref().unwrap_or_default(),
-        limit.resets_at.unwrap_or_default(),
-        why.code()
-    )
 }
 
 fn changed<T, R>(
@@ -1505,39 +1477,5 @@ mod tests {
         };
         assert_eq!(code, "schedule_program_unnamed");
         let _ = std::fs::remove_dir_all(&home);
-    }
-
-    /// A reason not to switch away from a limit is said once for that limit and its reset, as
-    /// the core records it: the limit's next window, another limit and another reason are each
-    /// another.
-    #[test]
-    fn a_reason_not_to_switch_is_told_apart_by_its_limit_its_reset_and_its_code() {
-        let limit = |kind: &str, scope: Option<&str>, resets_at: i64| usage::Window {
-            kind: kind.into(),
-            scope: scope.map(str::to_owned),
-            percent: 97.0,
-            resets_at: Some(resets_at),
-            is_active: true,
-            severity: None,
-            length_seconds: None,
-        };
-        let session = limit("session", None, 9_000);
-        assert_eq!(
-            skipped_key("work", &session, &Skip::GaveUp),
-            "skipped/work/session//9000/attempts_spent"
-        );
-        let keys = [
-            skipped_key("work", &session, &Skip::GaveUp),
-            skipped_key("work", &limit("session", None, 27_000), &Skip::GaveUp),
-            skipped_key(
-                "work",
-                &limit("weekly_scoped", Some("Opus"), 9_000),
-                &Skip::GaveUp,
-            ),
-            skipped_key("work", &session, &Skip::AlreadyLeft),
-            skipped_key("home", &session, &Skip::GaveUp),
-        ];
-        let told_apart: std::collections::BTreeSet<&String> = keys.iter().collect();
-        assert_eq!(told_apart.len(), keys.len(), "{keys:?}");
     }
 }

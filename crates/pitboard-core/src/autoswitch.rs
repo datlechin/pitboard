@@ -225,6 +225,28 @@ pub enum Auto {
     NotWatching { why: Blind },
 }
 
+impl Auto {
+    /// What tells this apart from another, for every front end that says each once: a reason
+    /// not to switch away from a limit by [`Skip::told_apart`], a reason nothing can be judged
+    /// by [`Blind::told_apart`]. A wait is told apart by the account and when it ends, which
+    /// each failed attempt moves, and not by the limit it names: the wait is the moment's, and
+    /// that limit may be one nothing was recorded for, whose reset each answer can give a
+    /// second apart. Nothing tells a switch apart, nor watching, whose numbers move with every
+    /// reading: a front end paces those as it will.
+    pub fn told_apart(&self) -> Option<String> {
+        match self {
+            Auto::Watching { .. } | Auto::Switched { .. } => None,
+            Auto::Waiting {
+                from,
+                limit: _,
+                until,
+            } => Some(format!("waiting/{from}/{until}")),
+            Auto::Skipped { from, limit, why } => Some(why.told_apart(from, limit)),
+            Auto::NotWatching { why } => Some(why.told_apart()),
+        }
+    }
+}
+
 /// Why Pitboard does not switch away from a limit at the share.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
@@ -256,6 +278,20 @@ impl Skip {
             Skip::Settling { .. } => "settling",
             Skip::Overridden(_) => "auth_overridden",
         }
+    }
+
+    /// What tells this reason not to switch away from `limit` of `from`, as `from` is typed,
+    /// apart from another: the account, the limit, the reset the ledger recorded it under and
+    /// its code, as the ledger records it once. Not what else it names, such as when settling
+    /// ends.
+    pub fn told_apart(&self, from: &str, limit: &Window) -> String {
+        format!(
+            "skipped/{from}/{}/{}/{}/{}",
+            limit.kind,
+            limit.scope.as_deref().unwrap_or_default(),
+            limit.resets_at.unwrap_or_default(),
+            self.code()
+        )
     }
 }
 
@@ -289,6 +325,22 @@ impl Blind {
             Blind::NotEnrolled { .. } => "not_enrolled",
             Blind::Unidentified { .. } => "not_identified",
             Blind::NoReading { .. } => "no_reading",
+        }
+    }
+
+    /// What tells this reason apart from another: its code, and the email, the cause or the
+    /// account it names. Not when it asks again, so a cause that stands is said once however
+    /// often it is asked about.
+    pub fn told_apart(&self) -> String {
+        let named = match self {
+            Blind::SwitchInterrupted | Blind::CustomOauth | Blind::NothingSignedIn => None,
+            Blind::NotEnrolled { email } => Some(email),
+            Blind::Unidentified { detail, until: _ } => Some(detail),
+            Blind::NoReading { account } => Some(account),
+        };
+        match named {
+            Some(named) => format!("not-watching/{}/{named}", self.code()),
+            None => format!("not-watching/{}", self.code()),
         }
     }
 }
@@ -1665,6 +1717,65 @@ mod tests {
                     unread: vec!["unread".into()]
                 }
             )
+        );
+    }
+
+    /// A reason not to switch away from a limit is said once for that limit and its reset, as
+    /// the ledger records it: the limit's next window, another limit and another reason are
+    /// each another.
+    #[test]
+    fn a_reason_not_to_switch_is_told_apart_by_its_limit_its_reset_and_its_code() {
+        let limit = |kind: &str, scope: Option<&str>, resets_at: i64| Window {
+            kind: kind.into(),
+            scope: scope.map(str::to_owned),
+            percent: 97.0,
+            resets_at: Some(resets_at),
+            is_active: true,
+            severity: None,
+            length_seconds: None,
+        };
+        let session = limit("session", None, 9_000);
+        assert_eq!(
+            Skip::GaveUp.told_apart("work", &session),
+            "skipped/work/session//9000/attempts_spent"
+        );
+        let keys = [
+            Skip::GaveUp.told_apart("work", &session),
+            Skip::GaveUp.told_apart("work", &limit("session", None, 27_000)),
+            Skip::GaveUp.told_apart("work", &limit("weekly_scoped", Some("Opus"), 9_000)),
+            Skip::AlreadyLeft.told_apart("work", &session),
+            Skip::GaveUp.told_apart("home", &session),
+        ];
+        let told_apart: std::collections::BTreeSet<&String> = keys.iter().collect();
+        assert_eq!(told_apart.len(), keys.len(), "{keys:?}");
+    }
+
+    /// A reason nothing can be judged is told apart by its code and what it names, and not by
+    /// when it asks again.
+    #[test]
+    fn a_reason_nothing_can_be_judged_is_told_apart_by_what_it_names() {
+        let unidentified = |until| Blind::Unidentified {
+            detail: "could not reach Anthropic".into(),
+            until,
+        };
+        assert_eq!(
+            unidentified(60).told_apart(),
+            "not-watching/not_identified/could not reach Anthropic"
+        );
+        assert_eq!(
+            unidentified(60).told_apart(),
+            unidentified(180).told_apart()
+        );
+        assert_eq!(
+            Blind::SwitchInterrupted.told_apart(),
+            "not-watching/switch_interrupted"
+        );
+        let not_enrolled = |email: &str| Blind::NotEnrolled {
+            email: email.into(),
+        };
+        assert_ne!(
+            not_enrolled("me@example.com").told_apart(),
+            not_enrolled("you@example.com").told_apart()
         );
     }
 
