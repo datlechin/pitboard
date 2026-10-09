@@ -251,8 +251,9 @@ fn left_login(left: &crate::switch::Left) -> String {
              Code has stored. Putting it away drops this second sign-in with the file."
         ),
         Foreseen::Kept(Kept::ParkedNow { label }) => format!(
-            "{path} holds `{label}`'s login, and Pitboard holds no login of `{label}` it can \
-             switch to. Putting it away parks this one for `{label}`, then deletes the file."
+            "{path} holds `{label}`'s login, and Pitboard holds no parked login of `{label}` to \
+             keep in its place. Putting it away parks this one for `{label}`, then deletes the \
+             file."
         ),
         Foreseen::Kept(Kept::ParkKept { label }) => format!(
             "{path} holds another login of `{label}`, which keeps the login Pitboard has parked \

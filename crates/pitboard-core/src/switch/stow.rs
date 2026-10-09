@@ -19,8 +19,10 @@
 //! refresh token is sent, and the answer is saved as Claude Code saves its own: over the
 //! login the file holds by then, where that is still the one renewed. One that cannot be
 //! saved even so, as where a sign-in replaced the file's login meanwhile, is said to be spent.
-//! Left in both, the next run parks the file's login again where it is the newer: a session
-//! that signs in with the file may have renewed it since, spending the park's refresh token.
+//! Left in both, the park is written down as a copy of the file's login (`State::from_file`),
+//! and the next run parks what the file holds by then in its place: a session that signs in
+//! with the file may have renewed it since, spending the park's refresh token. Any other park
+//! the account can be switched to is kept, and the file's login goes with the file.
 
 use super::{Settled, identify, live_store, purge, read_stored, shape, to_body, write_lock};
 use crate::api::Owner;
@@ -162,7 +164,7 @@ pub(crate) fn find(ctx: &Context, state: &State) -> Result<Option<Left>> {
                     .transpose()
                     .map_err(|e| super::unidentified(TOOL, e))?
                     .map(|found| found.owner);
-                Foreseen::Kept(kept_for(ctx, state, account, stored.as_ref(), &held)?)
+                Foreseen::Kept(kept_for(ctx, state, account, stored.as_ref())?)
             }
         },
     };
@@ -285,6 +287,11 @@ impl Putting<'_> {
             });
         }
         file.delete(permit, &live.service)?;
+        // Unsaved, a park stays written down as a copy of a file that has gone, and the next
+        // file's login of that account is parked in its place: nothing is lost by it.
+        if state.file_gone() {
+            let _ = state::save(ctx, permit, state);
+        }
         self.lock_lost |= let_go(writing) | refreshing.let_go();
         if self.lock_lost {
             self.warnings.push(Warning::LockCompromised { tool: TOOL });
@@ -388,7 +395,7 @@ impl Putting<'_> {
         let account = state
             .account_of(TOOL, owner)
             .ok_or_else(|| not_enrolled(&self.path, owner))?;
-        let kept = kept_for(self.ctx, state, account, stored, held)?;
+        let kept = kept_for(self.ctx, state, account, stored)?;
         if let (Kept::ParkedNow { label }, Some(slice)) = (&kept, &held.slice) {
             let parking = park_for(self.ctx, self.permit, state, owner, slice)?;
             self.warnings.extend(parking);
@@ -579,36 +586,26 @@ fn kept_for(
     state: &State,
     account: &Account,
     stored: Option<&Owner>,
-    held: &Held,
 ) -> Result<Kept> {
     let label = state.typed(&account.key());
-    let login = held.slice.as_ref().expect("only a login is somebody's");
     Ok(if stored.is_some_and(|stored| account.owned_by(stored)) {
         Kept::SecondSignIn { label }
-    } else if switchable(ctx, account, login)? {
+    } else if switchable(ctx, state, account)? {
         Kept::ParkKept { label }
     } else {
         Kept::ParkedNow { label }
     })
 }
 
-/// Whether `account` holds a parked login it can be switched to in place of `login`: one that
-/// reads back as recorded, has not expired, and is no older than `login`, by when their access
-/// tokens expire. A login renewed since it was parked has spent the park's refresh token, and
-/// expires later: a session that signs in with the file renews it there after a run that
-/// parked it stopped before the file went.
-fn switchable(ctx: &Context, account: &Account, login: &Value) -> Result<bool> {
-    let expires = provider::of(TOOL).expiry(login).access_expires_at;
-    let as_new = |parked: &state::Park| {
-        parked
-            .access_expires_at
-            .zip(expires)
-            .is_some_and(|(parked, login)| parked >= login)
-    };
+/// Whether `account` holds a parked login to keep in place of the one in the file: one that
+/// reads back as recorded, has not expired, and is not a copy an earlier put-away made of the
+/// file's login before it stopped. A session that signs in with the file renews the login
+/// there, which spends such a copy, and nothing here can tell that it did.
+fn switchable(ctx: &Context, state: &State, account: &Account) -> Result<bool> {
     match account
         .parked
         .as_ref()
-        .filter(|parked| parked.restorable_at(ctx.now()) && as_new(parked))
+        .filter(|parked| parked.restorable_at(ctx.now()) && !state.is_from_file(&parked.service))
     {
         Some(parked) => reads_back(ctx, account, parked),
         None => Ok(false),
@@ -626,7 +623,10 @@ fn reads_back(ctx: &Context, account: &Account, parked: &state::Park) -> Result<
 }
 
 /// Parks `slice`, `owner`'s login, for that account, the way a sign-in of an account not in
-/// use is parked, in place of any park it held, and records it. What parking it warned of.
+/// use is parked, in place of any park it held, and records it. That the park copies the
+/// file's login is written down before the copy is, so a run killed between the two leaves
+/// no copy the next run would keep in place of what the file holds by then. What parking it
+/// warned of.
 fn park_for(
     ctx: &Context,
     permit: Permit,
@@ -637,9 +637,23 @@ fn park_for(
     let account = state
         .account_of(TOOL, owner)
         .expect("parked only for an enrolled account");
-    let (key, id) = (account.key(), account.id.clone());
-    let (parked, parking) = park::keep(ctx, permit, TOOL, &state.typed(&key), &id, slice)?;
-    let service = parked.service.clone();
+    let (key, id, label) = (
+        account.key(),
+        account.id.clone(),
+        state.typed(&account.key()),
+    );
+    let parking = park::price(
+        ctx,
+        TOOL,
+        &label,
+        &park::service_name(&id, ctx.now_millis()),
+        slice,
+    )?;
+    let service = park::reserve(ctx, permit, &id)?;
+    state.copying_from_file(&service);
+    state::save(ctx, permit, state)?;
+    let parked = park::store_at(ctx, permit, TOOL, &service, slice)?;
+    fault::point("stow.park_stored");
     state.park(&key, parked);
     // Unrecorded, the park would be an item nothing refers to, never deleted.
     state::save(ctx, permit, state).inspect_err(|_| {
@@ -1069,6 +1083,140 @@ mod tests {
         assert_eq!(
             parked_fingerprint(&m, "there"),
             Some(fingerprint("there-refresh"))
+        );
+        assert_eq!(in_the_file(&m), None);
+    }
+
+    /// A park the account can be switched to is kept whichever login is the newer: a login of
+    /// that account signed in to since goes with the file, and so does one whose access token
+    /// had expired and was renewed to tell whose it is, which then expires later than any park.
+    #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
+    )]
+    fn a_park_it_can_switch_to_is_kept_though_the_files_login_is_newer() {
+        let kept = Kept::ParkKept {
+            label: "there".into(),
+        };
+        let m = machine("stow-park-kept-newer");
+        m.api.owned_by("access-there-again", owner("there"));
+        leave(&m, &renewed_later("there-again"));
+        let vault = m.mem.vault().services();
+        assert_eq!(found(&m).login, Foreseen::Kept(kept.clone()));
+
+        let (stowed, _) = put_away(&m).expect("put away");
+
+        assert_eq!(stowed.kept, kept);
+        assert_eq!(m.mem.vault().services(), vault);
+        assert_eq!(
+            parked_fingerprint(&m, "there"),
+            Some(fingerprint("there-refresh"))
+        );
+        assert_eq!(in_the_file(&m), None);
+
+        let m = machine("stow-park-kept-renewed");
+        m.api.renews(
+            "there-again",
+            crate::api::Renewed {
+                access_token: "access-there-renewed".into(),
+                refresh_token: Some("there-renewed".into()),
+                expires_in: 28_800,
+                refresh_token_expires_in: Some(30 * 86_400),
+                scopes: None,
+                at: None,
+            },
+        );
+        m.api.owned_by("access-there-renewed", owner("there"));
+        leave(&m, &lapsed("there-again"));
+        let vault = m.mem.vault().services();
+
+        let (stowed, _) = put_away(&m).expect("put away");
+
+        assert_eq!(stowed.kept, kept);
+        assert_eq!(m.mem.vault().services(), vault);
+        assert_eq!(
+            parked_fingerprint(&m, "there"),
+            Some(fingerprint("there-refresh"))
+        );
+        assert_eq!(in_the_file(&m), None);
+    }
+
+    /// The copy a put-away makes is left out only while the file it was copied from is there.
+    /// Once the file has gone it is the account's park as any other, and another login of that
+    /// account left in a file later goes with that file.
+    #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
+    )]
+    fn a_login_parked_from_the_file_is_kept_once_that_file_has_gone() {
+        let m = machine("stow-parked-then-kept");
+        enrolled(&m, "elsewhere");
+        m.api
+            .owned_by("access-elsewhere-refresh", owner("elsewhere"));
+        m.api.owned_by("access-elsewhere-again", owner("elsewhere"));
+        leave(&m, &document("elsewhere-refresh"));
+        let (stowed, _) = put_away(&m).expect("put away");
+        assert_eq!(
+            stowed.kept,
+            Kept::ParkedNow {
+                label: "elsewhere".into()
+            }
+        );
+        assert!(state::load(&m.ctx).expect("state").from_file.is_empty());
+
+        leave(&m, &renewed_later("elsewhere-again"));
+        let (stowed, _) = put_away(&m).expect("put away");
+
+        assert_eq!(
+            stowed.kept,
+            Kept::ParkKept {
+                label: "elsewhere".into()
+            }
+        );
+        assert_eq!(
+            parked_fingerprint(&m, "elsewhere"),
+            Some(fingerprint("elsewhere-refresh"))
+        );
+    }
+
+    /// That a park is a copy of the file's login is written down before the copy is. A run
+    /// killed before it recorded the copy leaves one the next change gives to the account,
+    /// and a session that signs in with the file can renew the login there meanwhile, which
+    /// spends the copy: the renewed login is parked in its place.
+    #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
+    )]
+    fn a_copy_a_killed_run_never_recorded_is_not_kept_over_the_login_renewed_since() {
+        let m = machine("stow-killed-unrecorded");
+        enrolled(&m, "elsewhere");
+        m.api
+            .owned_by("access-elsewhere-refresh", owner("elsewhere"));
+        leave(&m, &document("elsewhere-refresh"));
+        let seen = found(&m).seen;
+        let died = crate::fault::killing("stow.park_stored", || put_away_seen(&m, &seen));
+        assert_eq!(died.unwrap_err(), "stow.park_stored");
+        assert_eq!(parked_fingerprint(&m, "elsewhere"), None);
+
+        m.api
+            .renew_trouble("elsewhere-refresh", Trouble::InvalidGrant);
+        m.api
+            .owned_by("access-elsewhere-renewed", owner("elsewhere"));
+        leave(&m, &renewed_later("elsewhere-renewed"));
+        let (stowed, _) = put_away(&m).expect("put away again");
+
+        assert_eq!(
+            stowed.kept,
+            Kept::ParkedNow {
+                label: "elsewhere".into()
+            }
+        );
+        assert_eq!(
+            parked_fingerprint(&m, "elsewhere"),
+            Some(fingerprint("elsewhere-renewed"))
         );
         assert_eq!(in_the_file(&m), None);
     }
@@ -1854,9 +2002,9 @@ mod tests {
 
     /// A run that stops after parking the file's login, killed or refused, leaves that login
     /// in the park and in the file both. A session that signs in with the file renews it
-    /// there, spending the park's refresh token, so the next run parks the renewed login in
-    /// the park's place, known by its later expiry, rather than keep the spent park and delete
-    /// the only login that still works.
+    /// there, spending the park's refresh token. The park is written down as a copy of the
+    /// file's login, so the next run parks the renewed login in its place, rather than keep
+    /// the spent park and delete the only login that still works.
     #[test]
     #[cfg_attr(
         windows,

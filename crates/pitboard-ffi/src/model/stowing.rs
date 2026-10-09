@@ -130,8 +130,9 @@ fn the_sheet_says_whose_the_login_is_once_it_is_known() {
         text.lines,
         [
             format!(
-                "{FILE} holds `work`'s login, and Pitboard holds no login of `work` it can \
-                 switch to. Putting it away parks this one for `work`, then deletes the file."
+                "{FILE} holds `work`'s login, and Pitboard holds no parked login of `work` to \
+                 keep in its place. Putting it away parks this one for `work`, then deletes \
+                 the file."
             ),
             "It also holds 1 other key, `mcpOAuth`, which goes with the file: Pitboard does not \
              move it, and Claude Code's document in the keychain keeps its own."

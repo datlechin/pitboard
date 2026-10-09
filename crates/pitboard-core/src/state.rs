@@ -253,6 +253,13 @@ pub struct State {
     /// parks in.
     #[serde(default)]
     pub foreign: Vec<String>,
+    /// Parked items that copy the login in a file behind a tool's store which is still
+    /// there, each written down before the copy is. A put-away that stopped leaves the login
+    /// in both, and a session that signs in with the file can renew it there, which spends
+    /// the copy. So the next put-away never keeps one of these in place of what the file
+    /// holds by then. Emptied once the file has gone.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub from_file: Vec<String>,
 }
 
 impl Default for State {
@@ -266,6 +273,7 @@ impl Default for State {
             other_slots: BTreeMap::new(),
             discarded: Vec::new(),
             foreign: Vec::new(),
+            from_file: Vec::new(),
         }
     }
 }
@@ -511,12 +519,33 @@ impl State {
         }
     }
 
-    /// No account holds `service` afterwards, and nothing records who wrote it.
+    /// No account holds `service` afterwards, and nothing records who wrote it or what it
+    /// copied.
     fn let_go(&mut self, service: &str) {
         for account in &mut self.accounts {
             account.parked.take_if(|p| p.service == service);
         }
         self.foreign.retain(|listed| listed != service);
+        self.from_file.retain(|listed| listed != service);
+    }
+
+    /// `service` is about to hold a copy of the login in a file behind a tool's store.
+    pub(crate) fn copying_from_file(&mut self, service: &str) {
+        if !self.is_from_file(service) {
+            self.from_file.push(service.to_string());
+        }
+    }
+
+    /// Whether `service` copies the login a file behind a tool's store held, with that file
+    /// still there as far as anything recorded.
+    pub(crate) fn is_from_file(&self, service: &str) -> bool {
+        self.from_file.iter().any(|listed| listed == service)
+    }
+
+    /// The file behind a tool's store has gone, so no park copies it any more. Whether any
+    /// was written down as one.
+    pub(crate) fn file_gone(&mut self) -> bool {
+        !std::mem::take(&mut self.from_file).is_empty()
     }
 
     pub fn references(&self, service: &str) -> bool {
@@ -1385,6 +1414,23 @@ mod tests {
         s.discard("current");
         assert!(s.get(&claude("work")).unwrap().parked.is_none());
         assert_eq!(s.discarded, ["something-else", "current"]);
+    }
+
+    /// A park let go of, installed or replaced, is no longer written down as a copy of a
+    /// file's login, and the list is left out of the file while it is empty.
+    #[test]
+    fn a_park_let_go_of_is_no_longer_a_copy_of_a_files_login() {
+        let mut s = State::default();
+        s.upsert(account("work", Some(park("copy"))));
+        assert!(!serde_json::to_string(&s).unwrap().contains("from_file"));
+        s.copying_from_file("copy");
+        s.copying_from_file("copy");
+        assert_eq!(s.from_file, ["copy"]);
+        assert!(s.is_from_file("copy"));
+
+        s.park(&claude("work"), park("renewed"));
+        assert!(s.from_file.is_empty());
+        assert!(!s.file_gone(), "nothing was written down by then");
     }
 
     #[test]

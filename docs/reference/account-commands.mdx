@@ -219,12 +219,12 @@ It then keeps the login where it is not kept already, and deletes the file:
 | The login Claude Code has stored | Deletes the file. | `stored` |
 | The login parked for an account | Deletes the file. | `already_parked` |
 | Another login of the account in use | Deletes the file, dropping that second sign-in. The keychain keeps the account's own login. | `second_sign_in` |
-| A login of an enrolled account with no parked login it can switch to, or with an older one | Parks the login for that account in place of any other, then deletes the file. | `parked` |
-| Another login of an account with a parked login it can switch to, as new or newer | Keeps that parked login, and deletes the file. | `park_kept` |
+| A login of an enrolled account with no parked login it can switch to | Parks the login for that account in place of any other, then deletes the file. | `parked` |
+| Another login of an account with a parked login it can switch to | Keeps that parked login, and deletes the file. | `park_kept` |
 | A login Anthropic no longer accepts, or one with no refresh token whose access token has expired | Deletes the file. | `login_refused` |
 | A login of an account not enrolled here | Deletes nothing. Fails with `left_login_not_enrolled`, naming the account's email and organisation. | None |
 
-Of two logins of one account, the newer is the one whose access token expires later. A login renewed in the file since it was parked is newer, and that renewal used up the parked login.
+A parked login that an earlier `stow` copied from the file, before it stopped with the file still there, does not count as one the account can switch to. A session that signs in with the file can renew the login there, and that renewal uses up the copy. `stow` parks the login the file holds by then in the copy's place.
 
 It renews a login whose access token has expired first, as it renews a parked login, and writes it back to the file before anything else. Anthropic then names its account. Before it sends the refresh token, it takes Claude Code's write lock once and reads the file again, so a session writing its credentials then stops `stow` with nothing changed. It writes the renewed login over the login the file holds by then, where that is still the one it renewed, and keeps the file's other keys.
 
@@ -249,7 +249,7 @@ With nothing behind the keychain, `stow` prints `Nothing is left behind the stor
 At a terminal, without `--yes` or `--json`, `stow` says what the file holds and asks first on standard error:
 
 ```text
-/Users/you/.claude/.credentials.json holds `work`'s login, and Pitboard holds no login of `work` it can switch to. Putting it away parks this one for `work`, then deletes the file.
+/Users/you/.claude/.credentials.json holds `work`'s login, and Pitboard holds no parked login of `work` to keep in its place. Putting it away parks this one for `work`, then deletes the file.
 It also holds 1 other key, `mcpOAuth`, which goes with the file: Pitboard does not move it, and Claude Code's document in the keychain keeps its own.
 Once the file is gone, Claude Code sessions already running follow a switch within 33 seconds again, and one that signed in with its login, such as one over SSH, is signed out.
 Put it away? [y/N]

@@ -1270,8 +1270,8 @@ mod tests {
         assert_eq!(
             question,
             "/Users/x/.claude/.credentials.json holds `work`'s login, and Pitboard holds no \
-             login of `work` it can switch to. Putting it away parks this one for `work`, then \
-             deletes the file.\n\
+             parked login of `work` to keep in its place. Putting it away parks this one for \
+             `work`, then deletes the file.\n\
              It also holds 1 other key, `mcpOAuth`, which goes with the file: Pitboard does not \
              move it, and Claude Code's document in the keychain keeps its own.\n\
              Once the file is gone, Claude Code sessions already running follow a switch within \
