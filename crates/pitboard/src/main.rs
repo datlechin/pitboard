@@ -75,6 +75,12 @@ enum Command {
         #[arg(short = 'y', long)]
         yes: bool,
     },
+    /// Put away the login Claude Code left in a file behind the keychain, then delete the file
+    Stow {
+        /// Do not ask first
+        #[arg(short = 'y', long)]
+        yes: bool,
+    },
     /// Give up on an interrupted switch that cannot be finished, keeping every login
     Abandon,
     /// Ask the credential store what parked logins are here, and account for every one
@@ -154,6 +160,7 @@ impl Command {
             Command::Enroll { .. } => "enroll",
             Command::Use { .. } => "use",
             Command::Forget { .. } => "forget",
+            Command::Stow { .. } => "stow",
             Command::Abandon => "abandon",
             Command::Repair => "repair",
             Command::Adopt => "adopt",
@@ -595,6 +602,58 @@ fn forget(pitboard: &Pitboard, label: &str) -> Report {
     })
 }
 
+/// What `pitboard stow` finds, asks and does: the login left in the file behind Claude Code's
+/// store and what putting it away would do with it, then, once `confirm` says yes, putting it
+/// away while the file still holds what was found. A login of an account nobody enrolled is
+/// refused as the look found it, saying whose it is, and nothing is asked or changed. `None`
+/// where the answer was no.
+fn stow(pitboard: &Pitboard, confirm: impl FnOnce(&str) -> bool) -> Option<Report> {
+    let left = match pitboard.left_login() {
+        Err(error) => return Some(Report::failed(Some("stow"), error)),
+        Ok(None) => {
+            return Some(Report::done(
+                "stow",
+                json!({ "stowed": false }),
+                format!("{}\n", pitboard_core::words::nothing_left()),
+            ));
+        }
+        Ok(Some(left)) => left,
+    };
+    if let Some(refused) = left.refusal() {
+        return Some(Report::failed(Some("stow"), refused));
+    }
+    if !confirm(&left_question(&left)) {
+        return None;
+    }
+    Some(changed("stow", pitboard.stow(&left.seen), |stowed| {
+        (
+            json!({
+                "stowed": true,
+                "path": stowed.path,
+                "login": stowed.kept.code(),
+                "account": stowed.kept.account(),
+                "dropped": stowed.dropped,
+            }),
+            stowed_lines(&stowed),
+        )
+    }))
+}
+
+/// The question `pitboard stow` asks before it puts the file away: what it holds, what goes
+/// with it, and what becomes of Claude Code's sessions.
+fn left_question(left: &pitboard_core::switch::Left) -> String {
+    let lines = pitboard_core::words::left_lines(left);
+    format!("{}\nPut it away? [y/N] ", lines.join("\n"))
+}
+
+/// What `pitboard stow` says it did, a line each.
+fn stowed_lines(stowed: &pitboard_core::switch::Stowed) -> String {
+    pitboard_core::words::stowed_lines(stowed)
+        .into_iter()
+        .map(|line| format!("{line}\n"))
+        .collect()
+}
+
 fn abandon(pitboard: &Pitboard) -> Report {
     match pitboard.abandon_recovery() {
         Err(error) => Report::failed(Some("abandon"), error),
@@ -921,6 +980,25 @@ fn rename(pitboard: &Pitboard, from: &str, to: &str) -> Report {
     })
 }
 
+/// Whether a command that deletes something asks first: only where there is someone to ask.
+/// `--yes`, `--json`, a pipe and a script go straight through, and so does a run that may
+/// change nothing, as root or under sudo, whose answer would only be refused.
+fn asks(pitboard: &Pitboard, yes: bool, json: bool) -> bool {
+    !yes && !json
+        && pitboard.permit().is_ok()
+        && std::io::stdin().is_terminal()
+        && std::io::stderr().is_terminal()
+}
+
+/// Asks `question` on standard error: yes only for `y`, `Y` or `yes`.
+fn agreed(question: &str) -> bool {
+    eprint!("{question}");
+    let _ = std::io::stderr().flush();
+    let mut answer = String::new();
+    let _ = std::io::stdin().read_line(&mut answer);
+    matches!(answer.trim(), "y" | "Y" | "yes")
+}
+
 /// A usage error keeps clap's own rendering, unless the caller asked for JSON, which is
 /// promised for every outcome.
 fn parse() -> Result<Cli, ExitCode> {
@@ -992,28 +1070,24 @@ fn main() -> ExitCode {
         Command::Use { label } => use_account(&pitboard, &label),
         Command::Forget { label, yes } => {
             // The way back is a browser sign-in for that account, which is the cost
-            // Pitboard exists to spare people. Asked only where there is someone to ask:
-            // a pipe, a script and --json go straight through. Nor is a question asked whose
-            // answer would only be refused, as root or under sudo.
-            if !yes
-                && !cli.json
-                && pitboard.permit().is_ok()
-                && std::io::stdin().is_terminal()
-                && std::io::stderr().is_terminal()
+            // Pitboard exists to spare people.
+            if asks(&pitboard, yes, cli.json)
+                && !agreed(&format!(
+                    "Forget {label} and delete its parked login? Adding it again needs a \
+                     browser sign-in. [y/N] "
+                ))
             {
-                eprint!(
-                    "Forget {} and delete its parked login? \
-                     Adding it again needs a browser sign-in. [y/N] ",
-                    label
-                );
-                let _ = std::io::stderr().flush();
-                let mut answer = String::new();
-                let _ = std::io::stdin().read_line(&mut answer);
-                if !matches!(answer.trim(), "y" | "Y" | "yes") {
-                    return ExitCode::SUCCESS;
-                }
+                return ExitCode::SUCCESS;
             }
             forget(&pitboard, &label)
+        }
+        Command::Stow { yes } => {
+            // A session signing in with the file is signed out once it is gone.
+            let ask = asks(&pitboard, yes, cli.json);
+            match stow(&pitboard, |question| !ask || agreed(question)) {
+                Some(report) => report,
+                None => return ExitCode::SUCCESS,
+            }
         }
         Command::Abandon => abandon(&pitboard),
         Command::Repair => repair(&pitboard),
@@ -1022,23 +1096,14 @@ fn main() -> ExitCode {
         Command::Schedule { ref what } => schedule(&pitboard, what),
         Command::Log { lines } => log(&pitboard, lines),
         Command::Uninstall { yes } => {
-            if !yes
-                && !cli.json
-                && pitboard.permit().is_ok()
-                && std::io::stdin().is_terminal()
-                && std::io::stderr().is_terminal()
+            if asks(&pitboard, yes, cli.json)
+                && !agreed(
+                    "Delete every parked login this Pitboard wrote, the daily renewal schedule \
+                     and ~/.pitboard? The account you are signed in to stays signed in; the \
+                     others need a browser sign-in again. [y/N] ",
+                )
             {
-                eprint!(
-                    "Delete every parked login this Pitboard wrote, the daily renewal \
-                     schedule and ~/.pitboard? The account you are signed in to stays signed \
-                     in; the others need a browser sign-in again. [y/N] "
-                );
-                let _ = std::io::stderr().flush();
-                let mut answer = String::new();
-                let _ = std::io::stdin().read_line(&mut answer);
-                if !matches!(answer.trim(), "y" | "Y" | "yes") {
-                    return ExitCode::SUCCESS;
-                }
+                return ExitCode::SUCCESS;
             }
             uninstall(&pitboard)
         }
@@ -1123,6 +1188,117 @@ mod tests {
             adoption,
             json!({"follows": "renewal", "path": "/Users/x/.claude/.credentials.json"})
         );
+    }
+
+    /// A login of an account nobody enrolled is refused as the look found it: nothing is
+    /// asked, and putting it away is not tried, so the file stays and the activity log has no
+    /// line of it. On a machine in memory, whose Anthropic answers from a script.
+    #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
+    )]
+    fn stow_refuses_a_login_of_an_account_not_enrolled_as_the_look_found_it() {
+        use pitboard_core::api::Owner;
+        use pitboard_core::testing::{FixedClock, MemoryHost, ScriptedApi, live_service};
+        use std::sync::Arc;
+        const NOW: i64 = 1_760_000_000;
+        let home = std::env::temp_dir().join(format!(
+            "pitboard-cli-stow-not-enrolled-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let _ = std::fs::remove_dir_all(&home);
+        let (mem, api) = (MemoryHost::new(), ScriptedApi::new());
+        let ctx = Context::new(home.clone())
+            .with_pitboard_home(home.join(".pitboard"))
+            .with_memory_stores(Arc::clone(&mem))
+            .with_scripted_api(Arc::clone(&api))
+            .with_clock(Arc::new(FixedClock::at(NOW)));
+        let service = live_service(&ctx);
+        let login = |who: &str| {
+            api.owned_by(
+                &format!("access-{who}"),
+                Owner {
+                    account_uuid: who.into(),
+                    email: format!("{who}@example.com"),
+                    organization_uuid: format!("org-{who}"),
+                },
+            );
+            json!({"claudeAiOauth": {
+                "accessToken": format!("access-{who}"),
+                "refreshToken": format!("refresh-{who}"),
+                "expiresAt": (NOW + 3600) * 1000,
+            }})
+            .to_string()
+        };
+        mem.live().plant(&service, &login("here"));
+        let file = mem.file_at(home.join(".claude").join(".credentials.json"));
+        let left = login("stranger");
+        file.plant(&service, &left);
+        let pitboard = Pitboard::new(ctx);
+
+        let report = stow(&pitboard, |_| panic!("nothing is asked")).expect("a refusal");
+
+        let logged = pitboard.log(10);
+        let _ = std::fs::remove_dir_all(&home);
+        assert!(
+            matches!(&report.result, Err(error) if error.code() == "left_login_not_enrolled"),
+            "{:?}",
+            report.result
+        );
+        assert_eq!(file.peek(&service), Some(left));
+        assert!(logged.is_empty(), "{logged:?}");
+    }
+
+    /// `pitboard stow` asks before it deletes the file: what it holds and what putting it away
+    /// does with that, the keys that go with it, and what becomes of Claude Code's sessions.
+    /// Once it has, it says the same of what it did.
+    #[test]
+    fn stow_asks_saying_what_the_file_holds_and_says_what_it_did() {
+        use pitboard_core::switch::{Foreseen, Kept, Left, Stowed};
+        let path = std::path::PathBuf::from("/Users/x/.claude/.credentials.json");
+        let parked = Kept::ParkedNow {
+            label: "work".into(),
+        };
+        let question = left_question(&Left {
+            path: path.clone(),
+            seen: "0123456789abcdef".into(),
+            login: Foreseen::Kept(parked.clone()),
+            dropped: vec!["mcpOAuth".into()],
+        });
+        assert_eq!(
+            question,
+            "/Users/x/.claude/.credentials.json holds `work`'s login, and Pitboard holds no \
+             login of `work` it can switch to. Putting it away parks this one for `work`, then \
+             deletes the file.\n\
+             It also holds 1 other key, `mcpOAuth`, which goes with the file: Pitboard does not \
+             move it, and Claude Code's document in the keychain keeps its own.\n\
+             Once the file is gone, Claude Code sessions already running follow a switch within \
+             33 seconds again, and one that signed in with its login, such as one over SSH, is \
+             signed out.\n\
+             Put it away? [y/N] "
+        );
+        let said = stowed_lines(&Stowed {
+            path,
+            kept: Kept::NoLogin,
+            dropped: vec!["mcpOAuth".into(), "coworkRemoteDevice".into()],
+        });
+        assert_eq!(
+            said,
+            "Deleted /Users/x/.claude/.credentials.json, which held no Claude Code login.\n\
+             It also held 2 other keys, `mcpOAuth` and `coworkRemoteDevice`, which went with the \
+             file: Pitboard does not move them, and Claude Code's document in the keychain keeps \
+             its own.\n\
+             Once the file is gone, Claude Code sessions already running follow a switch within \
+             33 seconds again.\n"
+        );
+        assert!(matches!(
+            Cli::try_parse_from(["pitboard", "stow", "-y"])
+                .expect("parsed")
+                .command,
+            Some(Command::Stow { yes: true })
+        ));
     }
 
     #[test]
@@ -1284,6 +1460,7 @@ mod tests {
             &["enroll", "codex/work", "--sign-in"],
             &["use", "work"],
             &["forget", "work", "-y"],
+            &["stow", "-y"],
             &["abandon"],
             &["repair"],
             &["adopt"],
@@ -1325,6 +1502,7 @@ mod tests {
             "pitboard enroll",
             "pitboard use",
             "pitboard forget",
+            "pitboard stow",
             "pitboard abandon",
             "pitboard repair",
             "pitboard adopt",

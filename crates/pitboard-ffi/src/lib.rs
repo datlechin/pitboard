@@ -57,8 +57,8 @@ pub use present::{
     DownloadState, EmptyList, Footing, ItemAction, ItemOffer, LimitPace, LimitRow, LinkPicker,
     MachineShown, MenuBarText, MenuEntry, MenuNotices, NoticeAction, OpenWindow, PaceStanding,
     PageLoad, PanelNotice, PickerAccount, PickerShown, Question, RenewalShown, ScheduleShown,
-    SetupStep, Severity, SheetText, SheetTool, SigningInText, StoreDeletion, WaitingShown,
-    WindowOffer, WindowWaiting, downloads_quit_question, name_to_save,
+    SetupStep, Severity, SheetText, SheetTool, SigningInText, StoreDeletion, StowText,
+    WaitingShown, WindowOffer, WindowWaiting, downloads_quit_question, name_to_save,
 };
 
 mod account_windows;
@@ -170,6 +170,20 @@ pub struct Warning {
     /// names it, where its words change while it stands: `login_replaced` names whose login
     /// the tool has stored now, which every switch changes. `None` for every other warning.
     pub account: Option<String>,
+    /// What the file a `fallback_login` warning is about holds, which says whether it can be
+    /// put away: one Pitboard cannot read cannot. `None` for every other warning.
+    pub file_holds: Option<FileHolds>,
+}
+
+/// What a file behind a tool's store holds, as far as Pitboard can read it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum FileHolds {
+    /// A login of the tool's, which a session that cannot read that store signs in with.
+    Login,
+    /// No login of the tool's.
+    NoLogin,
+    /// It is there, and cannot be read.
+    Unreadable,
 }
 
 /// An interrupted switch that was given up on, keeping every login it named.

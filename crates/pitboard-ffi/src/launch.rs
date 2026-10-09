@@ -10,14 +10,15 @@
 //! failed.
 
 use crate::{
-    Abandoned, Account, FoundCommandLine, Level, Limit, Parked, Schedule, Source, Status, Tool,
-    Usage, Warning, found_command_line, tool,
+    Abandoned, Account, FileHolds, FoundCommandLine, Level, Limit, Parked, Schedule, Source,
+    Status, Tool, Usage, Warning, found_command_line, tool,
 };
 use pitboard_core::app::AppContext;
 use pitboard_core::autoswitch::{Auto, Blind, Look, Skip, Threshold};
 use pitboard_core::context::Environment;
-use pitboard_core::provider::ProviderId;
+use pitboard_core::provider::{self, ProviderId};
 use pitboard_core::service::{self, Changing};
+use pitboard_core::switch::{Left, Stowed};
 use pitboard_core::{doctor, status, switch, usage, words};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -66,6 +67,14 @@ fn warnings(found: &[service::Warning]) -> Vec<Warning> {
             message: w.to_string(),
             account: match w {
                 service::Warning::LoginReplaced { tool, id, .. } => Some(account_id(*tool, id)),
+                _ => None,
+            },
+            file_holds: match w {
+                service::Warning::FallbackLogin { held, .. } => Some(match held {
+                    provider::Held::Login => FileHolds::Login,
+                    provider::Held::NoLogin => FileHolds::NoLogin,
+                    provider::Held::Unreadable => FileHolds::Unreadable,
+                }),
                 _ => None,
             },
         })
@@ -861,6 +870,21 @@ impl AppCore {
     pub(crate) fn update_config(&self, label: String) -> Result<Vec<Warning>, PitboardError> {
         changed(self.core().core.update_config(&label), |_, warnings| {
             warnings
+        })
+    }
+
+    /// What is left in the file behind Claude Code's store, and what putting it away would do
+    /// with it, as `pitboard stow` asks first: `None` where nothing is. Takes no lock and writes
+    /// nothing, and may ask Anthropic whose the login in it is, and whose the login stored is.
+    pub(crate) fn left_login(&self) -> Result<Option<Left>, PitboardError> {
+        Ok(self.readable()?.core.left_login()?)
+    }
+
+    /// Puts away the file behind Claude Code's store, while it holds what `seen` was taken of,
+    /// as `pitboard stow` does. Gives what it did, and what it warned of.
+    pub(crate) fn stow(&self, seen: &str) -> Result<(Stowed, Vec<Warning>), PitboardError> {
+        changed(self.core().core.stow(seen), |stowed, warnings| {
+            (stowed, warnings)
         })
     }
 

@@ -75,18 +75,38 @@ pub(crate) fn chain(ctx: &Context) -> Live {
 /// reading the login in use says as well, or the file cannot even be looked at, which
 /// Claude Code's own look cannot either, and takes for a file that is not there.
 pub(crate) fn behind(ctx: &Context) -> Option<Result<String, Error>> {
-    store::behind(&chain(ctx), &claude::live_service(ctx))
-        .ok()?
-        .into_iter()
-        .next()
+    let (live, service) = (chain(ctx), claude::live_service(ctx));
+    let file = store::behind(&live, &service).ok()??;
+    // Gone between the look and the read: not there.
+    file.read(&service).transpose()
 }
 
-/// The login in what `.credentials.json` holds, where it holds one. A file that is not
-/// JSON, or holds no account's login, signs nobody in.
-pub(crate) fn login_in(held: &str) -> Option<Value> {
+/// What `.credentials.json` holds, as a JSON object: an empty one where it holds none, which
+/// holds nothing of anybody's.
+pub(crate) fn document_in(held: &str) -> Value {
     serde_json::from_str::<Value>(held)
         .ok()
-        .filter(|document| document.get("claudeAiOauth").is_some())
+        .filter(Value::is_object)
+        .unwrap_or_else(|| Value::Object(serde_json::Map::new()))
+}
+
+/// Whether `document`, what `.credentials.json` holds, holds a login: a `claudeAiOauth` with
+/// a token in it, to sign in with or to renew with. A file that is not a JSON object, or
+/// holds no such token, signs nobody in, and nothing can tell whose it is. What every
+/// warning, doctor and `pitboard stow` tell it by.
+pub(crate) fn holds_a_login(document: &Value) -> bool {
+    let oauth = document.get("claudeAiOauth");
+    ["accessToken", "refreshToken"].into_iter().any(|token| {
+        oauth
+            .and_then(|oauth| oauth.get(token))
+            .and_then(Value::as_str)
+            .is_some_and(|token| !token.is_empty())
+    })
+}
+
+/// The login in what `.credentials.json` holds, whole, where it holds one.
+pub(crate) fn login_in(held: &str) -> Option<Value> {
+    Some(document_in(held)).filter(holds_a_login)
 }
 
 /// The credential Claude Code left for a config directory during a private sign-in: the

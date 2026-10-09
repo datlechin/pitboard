@@ -1,9 +1,9 @@
 //! Every fact about Claude Code that Pitboard stands on, named and dated.
 //!
 //! The keychain item's name and how the slot is hashed from a directory, the five keys a
-//! logout deletes, the write lock and its constants, the one write that skips the lock, the
-//! 4032-byte ceiling on a `security` command, the thirty seconds a session caches a
-//! credential for. All of it was read out of one build.
+//! logout deletes, the write lock, the refresh lock and their constants, the one write that
+//! skips the write lock, the 4032-byte ceiling on a `security` command, the thirty seconds a
+//! session caches a credential for. Each was read out of the build its entry names.
 //!
 //! None of it transfers. The next provider's equivalents have to be read out of its own
 //! build the same way, into a list of its own, dated on its own schedule.
@@ -218,6 +218,12 @@ pub const PER_SYSTEM: &[PerSystem] = &[
         linux: Read("2.1.294"),
         windows: Read("2.1.294"),
     },
+    PerSystem {
+        name: "refresh_lock",
+        macos: Read("2.1.294"),
+        linux: Read("2.1.294"),
+        windows: Read("2.1.294"),
+    },
 ];
 
 pub const ASSUMPTIONS: &[Assumption] = &[
@@ -304,7 +310,9 @@ pub const ASSUMPTIONS: &[Assumption] = &[
                where before it read as empty",
         read_from: "the secure storage module's write wrapper",
         verified_against: VERIFIED_AGAINST,
-        depends: "lock.rs and the whole switch",
+        depends: "lock.rs, the whole switch, and `pitboard stow`, which holds it while it writes \
+                  a login left in `.credentials.json` back renewed and while it reads the file and \
+                  the login stored a last time and deletes the file",
         probe: &[
             ".storage-write",
             "[secureStorage] write lock compromised: ",
@@ -321,6 +329,37 @@ pub const ASSUMPTIONS: &[Assumption] = &[
         verified_against: VERIFIED_AGAINST,
         depends: "the slot re-read in switch, which exists for this",
         probe: &["secureStorage.READ_FAILED"],
+        absent: &[],
+    },
+    Assumption {
+        name: "refresh_lock",
+        fact: "a renewal of the login takes proper-lockfile's directory lock \
+               `<storage dir>/.oauth_refresh.lock`, stale 60000ms and touched every 5000ms, then \
+               the legacy `<storage dir, links resolved>.lock` the same way, letting go of the \
+               first where the second is held and going without the second where it cannot be \
+               made. Under them it reads the login again, sends its refresh token, and saves the \
+               answer through the write lock only where the login stored still holds the token \
+               it sent, writing nothing otherwise. So the write lock does not keep a renewal \
+               from spending a refresh token: this lock does. A holder is taken over before \
+               the lock is stale only where its owner record, \
+               `<storage dir>/.oauth_refresh.lock.owner`, proves it gone",
+        read_from: "the refresh lock's options and the function taking both locks, the token \
+                    refresh and the scope expansion, which take it before they read the login \
+                    again and send the refresh token, the refresh's compare-and-set save through \
+                    the storage write wrapper, and the dead holder takeover, which reads the \
+                    owner record",
+        // Read on 2026-10-09 from the macOS, Linux x64, Windows x64 and Windows arm64 builds of
+        // 2.1.294, whose code here is the same.
+        verified_against: "2.1.294",
+        depends: "lock::REFRESH, and `pitboard stow`, which holds it from its last reading of \
+                  a login left in `.credentials.json` until the file is gone, so no session \
+                  spends the refresh token of the login it parks, drops or renews meanwhile, and \
+                  writes no owner record, so no session takes it over",
+        probe: &[
+            "\".oauth_refresh.lock\"),realpath:!1,stale:60000,update:5000",
+            "tengu_oauth_refresh_legacy_lock_contended",
+            "tengu_oauth_refresh_save_adopted_newer_write",
+        ],
         absent: &[],
     },
     Assumption {
@@ -381,7 +420,8 @@ pub const ASSUMPTIONS: &[Assumption] = &[
                and a refresh answer without a refresh-token lifetime keeps the one it had",
         read_from: "the OAuth client id and the token refresh path",
         verified_against: VERIFIED_AGAINST,
-        depends: "api::CLIENT_ID and park::renewed",
+        depends: "api::CLIENT_ID and park::renewed, and the renewal `pitboard stow` makes of a \
+                  login left in `.credentials.json` whose access token has expired",
         probe: &["9d1c250a-e61b-44d9-88ed-5944d1962f5e"],
         absent: &[],
     },
@@ -549,7 +589,8 @@ pub const ASSUMPTIONS: &[Assumption] = &[
         // the same.
         verified_against: "2.1.294",
         depends: "doctor's credential check, which says what a session does while the \
-                  keychain is locked",
+                  keychain is locked, and what `pitboard stow` says of a session that signed in \
+                  with `.credentials.json`: signed out once the file is gone",
         probe: &["[keychain] read failed; serving stale cache"],
         absent: &[],
     },
@@ -568,8 +609,8 @@ pub const ASSUMPTIONS: &[Assumption] = &[
                     twice, and the app's two switches after the first went on reading and \
                     writing the keychain item",
         verified_against: "2.1.294",
-        depends: "doctor's fallback_login check and the warning every read and every change \
-                  give about it",
+        depends: "doctor's fallback_login check, the warning every read and every change give \
+                  about it, and `pitboard stow`, which puts that login away",
         probe: &["plaintext_fallback_used"],
         absent: &[],
     },
@@ -583,8 +624,9 @@ pub const ASSUMPTIONS: &[Assumption] = &[
                     deletes the fallback only when its read of the primary before the write was \
                     null",
         verified_against: "2.1.294",
-        depends: "doctor's fallback_login check, whose advice is to delete the file, and the \
-                  warning every read and every change give while it is there",
+        depends: "doctor's fallback_login check and the warning every read and every change \
+                  give while it is there, both of which name `pitboard stow`, the one thing \
+                  that deletes the file",
         // Behaviour, with no literal of its own.
         probe: &[],
         absent: &[],
@@ -617,8 +659,9 @@ pub const ASSUMPTIONS: &[Assumption] = &[
         depends: "Claude's adoption, by which a switch says that running sessions take it at \
                   their login's next renewal while the file is behind the keychain; Claude's \
                   behind, which tells the file by a look and says nothing where the look fails; \
-                  and the fallback_login warning and check, which say so of a file with no \
-                  login in it, or one Pitboard cannot read, too",
+                  the fallback_login warning and check, which say so of a file with no login in \
+                  it, or one Pitboard cannot read, too; and `pitboard stow`, which says sessions \
+                  already running follow a switch within 33 seconds again once the file is gone",
         probe: &["lastCredentialsMtimeMs", "lastUnusableTokenRecheckAt"],
         absent: &[],
     },
@@ -796,6 +839,7 @@ mod tests {
                 "status_reads_the_config_usage_the_token",
                 "config_identity_is_the_last_writers",
                 "status_line_input_names_no_account",
+                "refresh_lock",
             ]
         );
         for name in [

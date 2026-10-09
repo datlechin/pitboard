@@ -17,6 +17,8 @@ struct AccountSheetView: View {
             NameSheet(model: model, sheet: sheet) {
                 .rename(provider: provider, label: label, to: $0)
             }
+        case .stow:
+            StowSheet(model: model)
         }
     }
 }

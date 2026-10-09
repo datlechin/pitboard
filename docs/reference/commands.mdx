@@ -13,6 +13,7 @@ Run a command as `pitboard <command>`. The following table lists each `<command>
 | `enroll` | Add an account: the one signed in now, or with `--sign-in`, another one | [Account commands](/reference/account-commands#enroll) |
 | `use` | Switch a tool to an enrolled account | [Account commands](/reference/account-commands#use) |
 | `forget` | Drop an account and its parked login | [Account commands](/reference/account-commands#forget) |
+| `stow` | Put away the login Claude Code left in a file behind the keychain, then delete the file | [Account commands](/reference/account-commands#stow) |
 | `abandon` | Give up on an interrupted switch that cannot be finished, keeping every login | [Recovery commands](/reference/recovery-commands#abandon) |
 | `repair` | Ask the credential store what parked logins are here, and account for every one | [Recovery commands](/reference/recovery-commands#repair) |
 | `adopt` | Take over a Pitboard directory another computer wrote, keeping the accounts | [Recovery commands](/reference/recovery-commands#adopt) |
@@ -88,7 +89,7 @@ Pitboard colours output that goes to a terminal, unless `NO_COLOR` is set and no
 
 `pitboard statusline` keeps its colour through a pipe, because Claude Code reads the line from a pipe and draws those colours. Setting `NO_COLOR`, even to an empty value, turns that colour off.
 
-`pitboard forget` and `pitboard uninstall` print a question on standard error before they delete anything. They ask only when standard input and standard error are both terminals, and neither `--yes` nor `--json` is given. They go ahead on `y`, `Y` or `yes`.
+`pitboard forget`, `pitboard stow` and `pitboard uninstall` print a question on standard error before they delete anything. They ask only when standard input and standard error are both terminals, and neither `--yes` nor `--json` is given. They go ahead on `y`, `Y` or `yes`.
 
 <Warning>
   Redirecting standard error, as in `2>/dev/null`, also skips the question, and the command deletes without asking. Only signing in to the account again in a browser replaces a deleted parked login.
@@ -103,6 +104,6 @@ Pitboard colours output that goes to a terminal, unless `NO_COLOR` is set and no
 | `2` | The command line was wrong: an unknown option, a missing argument, or a label for `pitboard enroll`, or the second label of `pitboard rename`, that breaks the label rules. |
 | `3` | A login or a tool's files are in a state Pitboard will not act on, for example Codex signed in with an API key. `pitboard doctor` also exits 3 when a check fails. |
 
-Declining the question from `pitboard forget` or `pitboard uninstall` prints nothing more, changes nothing and exits 0.
+Declining the question from `pitboard forget`, `pitboard stow` or `pitboard uninstall` prints nothing more, changes nothing and exits 0.
 
 For the exit status of each error code, see [Error and warning codes](/reference/errors).

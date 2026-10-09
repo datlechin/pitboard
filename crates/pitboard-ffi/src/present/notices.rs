@@ -10,8 +10,8 @@ use super::{
 use crate::model::RunOutNotice;
 use crate::model::advice::Advice;
 use crate::model::state::split;
-use crate::model::{Intent, LastSwitch, Pane};
-use crate::{Adoption, Warning};
+use crate::model::{Intent, LastSwitch, Pane, Sheet};
+use crate::{Adoption, FileHolds, Warning};
 use pitboard_core::provider::ProviderId;
 use pitboard_core::words as said;
 
@@ -227,16 +227,43 @@ pub(crate) fn notices(seen: &Seen, footing: &Footing) -> Vec<PanelNotice> {
             vec![dismiss(Intent::DismissAbandoned)],
         ));
     }
+    if let Some(stowed) = &state.stowed {
+        said.push(notice(
+            "stowed".into(),
+            Severity::Info,
+            "Put away the login left in a file".into(),
+            said::stowed_lines(stowed),
+            vec![dismiss(Intent::DismissStowed)],
+        ));
+    }
     said
 }
 
 /// What a warning's notice offers to do about it. Claude Code's config naming another account
 /// than the one in use is put right by writing the account in use there, which moves no
-/// login; an account in use that is not enrolled has no name to write.
+/// login; an account in use that is not enrolled has no name to write. A file left behind the
+/// keychain is put away from a sheet of its own, which says whose its login is first, where
+/// Pitboard can read it: one it cannot read it cannot put away, and the warning says why.
 fn warning_actions(seen: &Seen, warning: &Warning) -> Vec<NoticeAction> {
-    if warning.code != "config_names_another" {
-        return Vec::new();
+    match warning.code.as_str() {
+        "config_names_another" => update_config_action(seen),
+        "fallback_login" if warning.file_holds != Some(FileHolds::Unreadable) => {
+            vec![NoticeAction {
+                title: "Put Away…".into(),
+                intent: Intent::PresentSheet { sheet: Sheet::Stow },
+                dismisses: false,
+                switches: false,
+                enabled: true,
+                confirm: None,
+            }]
+        }
+        _ => Vec::new(),
     }
+}
+
+/// Writing the account in use into Claude Code's config, held back while a switch is under
+/// way, where that account is enrolled.
+fn update_config_action(seen: &Seen) -> Vec<NoticeAction> {
     seen.accounts()
         .iter()
         .find(|account| account.provider == ProviderId::Claude.code() && account.signed_in)

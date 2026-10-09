@@ -193,6 +193,176 @@ pub fn kept_until_renewed() -> &'static str {
      started again"
 }
 
+/// What is said where nothing is left behind the store Claude Code keeps its login in, as
+/// `pitboard stow` and the app's sheet say it. On Linux the file is that store.
+pub fn nothing_left() -> &'static str {
+    "Nothing is left behind the store Claude Code keeps its login in, so there is nothing to \
+     put away."
+}
+
+/// What `pitboard stow` and the app's sheet say of the file behind Claude Code's store before
+/// it is put away, a paragraph each: what it holds and what putting it away would do with
+/// that, the keys that would go with it, and what becomes of Claude Code's sessions once it is
+/// gone. Of a login of an account nobody enrolled, whose it is and what to do first.
+pub fn left_lines(left: &crate::switch::Left) -> Vec<String> {
+    use crate::switch::{Foreseen, Kept};
+    if let Foreseen::NotEnrolled(_) = left.login {
+        return vec![left_login(left)];
+    }
+    let held_a_login = left.login != Foreseen::Kept(Kept::NoLogin);
+    std::iter::once(left_login(left))
+        .chain(dropped_keys(&left.dropped, false))
+        .chain(std::iter::once(once_stowed(held_a_login)))
+        .collect()
+}
+
+/// What they say once it is put away, a paragraph each.
+pub fn stowed_lines(stowed: &crate::switch::Stowed) -> Vec<String> {
+    let held_a_login = stowed.kept != crate::switch::Kept::NoLogin;
+    std::iter::once(stowed_login(stowed))
+        .chain(dropped_keys(&stowed.dropped, true))
+        .chain(std::iter::once(once_stowed(held_a_login)))
+        .collect()
+}
+
+/// What the file holds, and what putting it away would do with the login in it.
+fn left_login(left: &crate::switch::Left) -> String {
+    use crate::switch::{Foreseen, Kept};
+    let path = left.path.display();
+    match &left.login {
+        Foreseen::Kept(Kept::NoLogin) => {
+            format!("{path} holds no Claude Code login. Putting it away deletes it.")
+        }
+        Foreseen::Kept(Kept::Refused) => format!(
+            "{path} holds a Claude Code login Anthropic no longer accepts. Putting it away \
+             deletes it."
+        ),
+        Foreseen::Kept(Kept::Stored { label }) => format!(
+            "{path} holds the login Claude Code has stored{}. Putting it away deletes the file, \
+             and that login stays where it is.",
+            of_account(label.as_deref())
+        ),
+        Foreseen::Kept(Kept::AlreadyParked { label }) => format!(
+            "{path} holds the login Pitboard keeps parked for `{label}`. Putting it away deletes \
+             the file, and the parked login stays."
+        ),
+        Foreseen::Kept(Kept::SecondSignIn { label }) => format!(
+            "{path} holds another login of `{label}`, the account in use, whose own login Claude \
+             Code has stored. Putting it away drops this second sign-in with the file."
+        ),
+        Foreseen::Kept(Kept::ParkedNow { label }) => format!(
+            "{path} holds `{label}`'s login, and Pitboard holds no login of `{label}` it can \
+             switch to. Putting it away parks this one for `{label}`, then deletes the file."
+        ),
+        Foreseen::Kept(Kept::ParkKept { label }) => format!(
+            "{path} holds another login of `{label}`, which keeps the login Pitboard has parked \
+             for it. Putting it away deletes the file."
+        ),
+        Foreseen::NotEnrolled(owner) => format!(
+            "{path} holds {}'s login{}, an account not enrolled here, so Pitboard cannot put it \
+             away. Enrol that account first, with `pitboard enroll <label> --sign-in`, or with \
+             `pitboard enroll <label>` while Claude Code is signed in to it.",
+            owner.email,
+            in_organisation(&owner.organization_uuid)
+        ),
+        Foreseen::Untold => format!(
+            "{path} holds a Claude Code login whose access token has expired. Putting it away \
+             renews it and writes it back to the file first, then asks Anthropic whose it is, \
+             and goes on only for an account enrolled here."
+        ),
+    }
+}
+
+/// What putting the file away did with the login it held.
+fn stowed_login(stowed: &crate::switch::Stowed) -> String {
+    use crate::switch::Kept;
+    let path = stowed.path.display();
+    match &stowed.kept {
+        Kept::NoLogin => format!("Deleted {path}, which held no Claude Code login."),
+        Kept::Refused => format!(
+            "Deleted {path}: Anthropic no longer accepts the login it held, so that login was \
+             no longer valid."
+        ),
+        Kept::Stored { label } => format!(
+            "Deleted {path}, which held the login Claude Code has stored{}. That login stays \
+             where it is.",
+            of_account(label.as_deref())
+        ),
+        Kept::AlreadyParked { label } => {
+            format!("Deleted {path}, which held the login Pitboard keeps parked for `{label}`.")
+        }
+        Kept::SecondSignIn { label } => format!(
+            "Deleted {path}, which held a second sign-in of `{label}`, the account in use. That \
+             login was dropped; the one Claude Code has stored stays."
+        ),
+        Kept::ParkedNow { label } => {
+            format!("Parked the login {path} held for `{label}`, then deleted the file.")
+        }
+        Kept::ParkKept { label } => format!(
+            "Deleted {path}, which held another login of `{label}`. `{label}` keeps the login \
+             Pitboard had parked for it."
+        ),
+    }
+}
+
+/// The other keys the file holds, which go with it unmoved, by name and how many: `None`
+/// where it holds none. `gone` once the file has gone.
+fn dropped_keys(keys: &[String], gone: bool) -> Option<String> {
+    let one = match keys.len() {
+        0 => return None,
+        n => n == 1,
+    };
+    let names = listed(keys.iter().map(|key| format!("`{key}`")).collect());
+    let (holds, goes) = match (gone, one) {
+        (false, true) => ("holds", "goes"),
+        (false, false) => ("holds", "go"),
+        (true, _) => ("held", "went"),
+    };
+    let (count, them) = if one {
+        ("1 other key".to_string(), "it")
+    } else {
+        (format!("{} other keys", keys.len()), "them")
+    };
+    Some(format!(
+        "It also {holds} {count}, {names}, which {goes} with the file: Pitboard does not move \
+         {them}, and Claude Code's document in the keychain keeps its own."
+    ))
+}
+
+/// What becomes of Claude Code's sessions once the file is gone: each takes the login stored
+/// again, and one that signed in with a login in the file, as one over SSH does, is signed
+/// out.
+fn once_stowed(held_a_login: bool) -> String {
+    let follow = format!(
+        "Once the file is gone, Claude Code sessions already running follow a switch within \
+         {} seconds again",
+        crate::switch::ADOPTION_CEILING_SECONDS
+    );
+    if held_a_login {
+        format!(
+            "{follow}, and one that signed in with its login, such as one over SSH, is signed \
+             out."
+        )
+    } else {
+        format!("{follow}.")
+    }
+}
+
+/// `label`'s, after a login that is an enrolled account's, where it is one.
+fn of_account(label: Option<&str>) -> String {
+    label.map_or_else(String::new, |label| format!(", `{label}`'s"))
+}
+
+/// The organisation a Claude Code login is of, as a sentence names it after its email: none
+/// for an account outside one, which Anthropic reports as an empty id.
+pub(crate) fn in_organisation(organization: &str) -> String {
+    if organization.is_empty() {
+        String::new()
+    } else {
+        format!(", in organisation {organization}")
+    }
+}
+
 /// How much of a limit is used, in three steps. The command line's colours and the app's
 /// tints change where these do, and the words always say the number itself, because not
 /// everybody sees a colour.

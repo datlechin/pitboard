@@ -1347,22 +1347,25 @@ fn judge_fallback_login(facts: &Facts) -> Option<Check> {
                 "Claude Code signs in with this wherever it cannot read the keychain, such as \
                  in a session started over SSH, and no switch reaches it. A sign-in made where \
                  the keychain could not be read leaves one, as `/login` over SSH does. \
-                 {running} Deleting it leaves one login for every session: `rm {path}`."
+                 {running} `pitboard stow` keeps this login for its account, where Pitboard \
+                 holds no other it can switch to, then deletes the file, which leaves one login \
+                 for every session."
             ),
         ),
         Ok(None) => (
             format!("{path}  ·  no login in it"),
             format!(
-                "It holds no Claude Code login. {running} Deleting it lets them follow a \
-                 switch: `rm {path}`."
+                "It holds no Claude Code login. {running} `pitboard stow` deletes it, which \
+                 lets them follow a switch."
             ),
         ),
         Err(e) => (
             format!("{path}  ·  not read: {e}"),
             format!(
                 "Pitboard could not read it, so whether it holds a login, which a session that \
-                 cannot read the keychain signs in with, cannot be told. {running} Deleting it \
-                 lets them follow a switch, and takes whatever it holds with it: `rm {path}`."
+                 cannot read the keychain signs in with, cannot be told, and `pitboard stow` \
+                 cannot put it away. {running} Deleting it lets them follow a switch, and takes \
+                 whatever it holds with it: `rm {path}`."
             ),
         ),
     };
@@ -2711,12 +2714,15 @@ mod tests {
                     "While it is there, Claude Code sessions already running at a switch keep \
                      the account they are on until their login is next renewed"
                 )
-                && said
-                    .advice
-                    .contains("`rm /home/x/.claude/.credentials.json`"),
+                && said.advice.ends_with(
+                    "`pitboard stow` keeps this login for its account, where Pitboard holds no \
+                     other it can switch to, then deletes the file, which leaves one login for \
+                     every session."
+                ),
             "{}",
             said.advice
         );
+        assert!(!said.advice.contains("rm "), "{}", said.advice);
         assert!(healthy(&checks), "nothing Pitboard does is stopped by it");
     }
 
@@ -2741,8 +2747,8 @@ mod tests {
             said.advice,
             "It holds no Claude Code login. While it is there, Claude Code sessions already \
              running at a switch keep the account they are on until their login is next \
-             renewed, or until they are started again. Deleting it lets them follow a switch: \
-             `rm /home/x/.claude/.credentials.json`."
+             renewed, or until they are started again. `pitboard stow` deletes it, which lets \
+             them follow a switch."
         );
         assert!(
             check(&checks, "auth_source")
@@ -2784,11 +2790,11 @@ mod tests {
         assert_eq!(
             said.advice,
             "Pitboard could not read it, so whether it holds a login, which a session that \
-             cannot read the keychain signs in with, cannot be told. While it is there, Claude \
-             Code sessions already running at a switch keep the account they are on until \
-             their login is next renewed, or until they are started again. Deleting it lets \
-             them follow a switch, and takes whatever it holds with it: `rm \
-             /home/x/.claude/.credentials.json`."
+             cannot read the keychain signs in with, cannot be told, and `pitboard stow` cannot \
+             put it away. While it is there, Claude Code sessions already running at a switch \
+             keep the account they are on until their login is next renewed, or until they are \
+             started again. Deleting it lets them follow a switch, and takes whatever it holds \
+             with it: `rm /home/x/.claude/.credentials.json`."
         );
         assert!(healthy(&checks), "nothing Pitboard does is stopped by it");
 

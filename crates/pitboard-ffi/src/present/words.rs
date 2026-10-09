@@ -382,16 +382,17 @@ pub(crate) fn change_verb(verb: &str) -> String {
         "adopt" => "Adopt".into(),
         "uninstall" => "Uninstall".into(),
         "in-use" => "Login in use changed".into(),
+        "stow" => "Put away a login left in a file".into(),
         _ => readable(verb),
     }
 }
 
 /// How a change ended: "Done", or what stopped it, from the code the log keeps.
 pub(crate) fn change_outcome(outcome: &str) -> String {
-    if outcome == "ok" {
-        "Done".into()
-    } else {
-        readable(outcome)
+    match outcome {
+        "ok" => "Done".into(),
+        "second_sign_in" => "Second sign-in".into(),
+        _ => readable(outcome),
     }
 }
 
@@ -1004,6 +1005,7 @@ mod tests {
             code: code.into(),
             message: String::new(),
             account: None,
+            file_holds: None,
         };
         for (code, heading) in headings {
             assert_eq!(warning_heading(&warning(code)), heading, "{code}");
@@ -1145,6 +1147,15 @@ mod tests {
         assert_eq!(change_verb("in-use"), "Login in use changed");
         assert_eq!(change_outcome("signed_in_outside"), "Signed in outside");
         assert_eq!(change_outcome("login_replaced"), "Login replaced");
+    }
+
+    /// Putting away a login left in a file, which the core logs as `stow`, is named for what
+    /// it does, and said as it ended: what became of the login.
+    #[test]
+    fn putting_away_a_login_left_in_a_file_is_named_for_what_it_does() {
+        assert_eq!(change_verb("stow"), "Put away a login left in a file");
+        assert_eq!(change_outcome("park_kept"), "Park kept");
+        assert_eq!(change_outcome("second_sign_in"), "Second sign-in");
     }
 
     /// A change that worked says so in a word, and one that did not says what stopped it,

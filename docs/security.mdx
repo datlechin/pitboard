@@ -63,13 +63,13 @@ Pitboard makes only these requests. It has no server of its own and no telemetry
 | --- | --- | --- |
 | `api.anthropic.com/api/oauth/profile` | An access token | Which account a Claude Code login belongs to |
 | `api.anthropic.com/api/oauth/usage` | An access token | What a Claude Code account has left |
-| `platform.claude.com/v1/oauth/token` | A refresh token and the login's client id, or Claude Code's if it has none | Renewing a Claude Code parked login |
+| `platform.claude.com/v1/oauth/token` | A refresh token and the login's client id, or Claude Code's if it has none | Renewing a Claude Code parked login, and a login `pitboard stow` puts away whose access token has expired |
 | `chatgpt.com/backend-api/wham/usage` | An access token and the ChatGPT account id | What a Codex account has left, and whether OpenAI still accepts a login Pitboard is about to switch to. It counts against no limit. |
 | `auth.openai.com/oauth/token` | A refresh token and Codex's public client id | Renewing a Codex parked login |
 | `claude.ai` or `chatgpt.com`, their sign-in pages and anything their pages load | What the site keeps in that window, as a browser sends it | An account's window you open. WebKit makes these requests, as it does in a browser. |
 | `github.com/datlechin/pitboard/releases` | Nothing of yours | The app's update check (`appcast.xml`) and update downloads, only in a copy of the app from a release. It checks once a day while **Check for updates automatically** is on, and when you choose **Check for Updates** or click **Check Now**. The command line never checks. |
 
-Pitboard never renews a login a tool is using. Each renewal is the request the tool itself makes to renew its own login. Until you enrol a Codex account, Pitboard sends OpenAI nothing.
+Pitboard renews a login a tool may be using only when [`pitboard stow`](/reference/account-commands#stow) puts away a login left in `.credentials.json` whose access token has expired. It holds the lock each Claude Code session takes before it renews its login, so no session renews that login meanwhile, and writes the renewed login back to the file before anything else. Each renewal is the request the tool itself makes to renew its own login. Until you enrol a Codex account, Pitboard sends OpenAI nothing.
 
 Every request verifies TLS against your system's trust store. Pitboard's own requests to Anthropic and OpenAI time out after 5 seconds, including those through a proxy that never answers.
 

@@ -75,7 +75,8 @@ impl Job {
             | Job::AutoLook { .. }
             | Job::ReadSchedule { .. }
             | Job::Check
-            | Job::ReadLog { .. } => Lane::Reads,
+            | Job::ReadLog { .. }
+            | Job::LookLeft => Lane::Reads,
             Job::Switch { .. }
             | Job::AutoSwitch { .. }
             | Job::Abandon
@@ -83,6 +84,7 @@ impl Job {
             | Job::Rename { .. }
             | Job::Forget { .. }
             | Job::UpdateConfig { .. }
+            | Job::Stow { .. }
             | Job::RepairSchedule
             | Job::SetSchedule { .. }
             | Job::Renew => Lane::Changes,
@@ -597,6 +599,11 @@ impl Worker {
                 qualified,
             },
             Job::UpdateConfig { qualified } => Answer::ConfigUpdated(core.update_config(qualified)),
+            Job::LookLeft => Answer::LookedLeft(core.left_login()),
+            Job::Stow { seen, from } => Answer::Stowed {
+                done: core.stow(&seen),
+                from,
+            },
             // Nothing kept, a record that is there and cannot be read, and one that does not
             // read as a record of what was told, are each nothing told. The record is written
             // whole the next time something is told, over one that could not be read too: at

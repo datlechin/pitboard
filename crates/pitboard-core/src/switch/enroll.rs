@@ -727,15 +727,8 @@ fn park_signed_in(
     let slice = provider::of(login.provider)
         .slice(&login.document)
         .map_err(|e| super::shape(login.provider, e))?;
-    let parking = park::price(
-        ctx,
-        login.provider,
-        &key.typed(),
-        &park::service_name(&id, ctx.now_millis()),
-        &slice,
-    )?;
-    let service = park::reserve(ctx, permit, &id)?;
-    let fresh = park::store_at(ctx, permit, key.provider, &service, &slice)?;
+    let (fresh, parking) = park::keep(ctx, permit, key.provider, &key.typed(), &id, &slice)?;
+    let service = fresh.service.clone();
     // The window the roadmap named: the login is in the vault and nothing on the machine
     // says so yet.
     crate::fault::point("enroll.park_stored");

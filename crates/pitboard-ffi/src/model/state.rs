@@ -51,6 +51,7 @@ use crate::{
 use pitboard_core::autoswitch::{self, Threshold};
 use pitboard_core::label::SEPARATOR;
 use pitboard_core::provider::{self, ProviderId};
+use pitboard_core::switch::{Foreseen, Left, Stowed};
 use pitboard_core::usage::same_reset;
 use std::collections::{BTreeSet, HashMap};
 use std::time::Duration;
@@ -208,6 +209,13 @@ pub(crate) enum Job {
     Forget { qualified: String },
     /// Write the account `qualified` names into its tool's config, while it is in use.
     UpdateConfig { qualified: String },
+    /// Look at the file behind Claude Code's store: what it holds, and whose the login in it
+    /// is, which may ask Anthropic with that login's own access token, and whose the login
+    /// stored is, as a read asks it. It changes nothing.
+    LookLeft,
+    /// Put away the file behind Claude Code's store, while it holds what `seen` was taken of.
+    /// `from` is the sheet that was up when it was asked for, where what goes wrong is said.
+    Stow { seen: String, from: Option<Sheet> },
     /// Read what the model keeps of its own in Pitboard's directory: the record of what was
     /// told, and the app's preferences.
     LoadKept,
@@ -391,6 +399,14 @@ pub(crate) enum Answer {
     /// What writing the account in use into its tool's config came to, with what its tool
     /// warned of.
     ConfigUpdated(Result<Vec<Warning>, PitboardError>),
+    /// What is left in the file behind Claude Code's store, and what putting it away would
+    /// do with it: `None` where nothing is.
+    LookedLeft(Result<Option<Left>, PitboardError>),
+    /// What putting away the file behind Claude Code's store came to, with what it warned of.
+    Stowed {
+        from: Option<Sheet>,
+        done: Result<(Stowed, Vec<Warning>), PitboardError>,
+    },
     /// What the model keeps of its own, as it was read: nothing told where nothing was kept
     /// or it could not be read, and the app's preferences, with whether they came from their
     /// file, as `Preferences::kept` reads them: from the file where it was there, and
@@ -474,6 +490,17 @@ enum Timer {
     Due(Duration),
     /// What it starts is under way, and the timer is set again once that is over.
     Running,
+}
+
+/// What the sheet for putting away the login left in a file has found of it.
+#[derive(Debug)]
+pub(crate) enum Leftover {
+    /// It is looking.
+    Looking,
+    /// What it found: `None` where nothing is left behind Claude Code's store.
+    Found(Option<Left>),
+    /// It could not look, which its failure says.
+    Unknown,
 }
 
 /// What switching Claude Code by itself last came to, which the settings say under it.
@@ -569,6 +596,10 @@ fn could_not_rename(label: &str) -> String {
 }
 
 const COULD_NOT_UPDATE_CONFIG: &str = "Couldn’t update Claude Code’s config";
+
+const COULD_NOT_TELL_WHOSE: &str = "Couldn’t tell whose login it is";
+
+const COULD_NOT_STOW: &str = "Couldn’t put the login away";
 
 const COULD_NOT_NAME: &str = "Couldn’t name this account";
 
@@ -769,6 +800,11 @@ pub(crate) struct State {
     pub(crate) last_switches: Vec<LastSwitch>,
     /// What giving up on an interrupted switch kept, until somebody has read it.
     pub(crate) abandoned: Option<Abandoned>,
+    /// What the sheet for putting away the login left in a file has found of it, while that
+    /// sheet is up.
+    pub(crate) left: Option<Leftover>,
+    /// What putting away the login left in a file did, until somebody has read it.
+    pub(crate) stowed: Option<Stowed>,
     /// The last thing asked for that did not happen.
     pub(crate) presented: Option<Failure>,
     /// How many failures have been said, which numbers the next.
@@ -878,6 +914,8 @@ impl State {
             quitting: None,
             last_switches: Vec::new(),
             abandoned: None,
+            left: None,
+            stowed: None,
             presented: None,
             failures: 0,
             window: WindowRequest {
@@ -1048,6 +1086,7 @@ impl State {
             Intent::CloseSheet => {
                 self.sheet = None;
                 self.sheet_failure = None;
+                self.left = None;
             }
             Intent::ShowWindow { pane } => self.show_window(pane),
             Intent::DismissFailure => self.presented = None,
@@ -1090,6 +1129,8 @@ impl State {
             Intent::UpdateConfig { qualified } => {
                 self.change(Job::UpdateConfig { qualified }, jobs);
             }
+            Intent::Stow => self.stow(jobs),
+            Intent::DismissStowed => self.stowed = None,
             Intent::PaneShown { pane } => self.pane_shown(pane, now, jobs),
             Intent::ReadSchedule => jobs.push(Job::ReadSchedule {
                 after_change: false,
@@ -1293,6 +1334,12 @@ impl State {
             }
             if self.sheet.as_ref() != Some(&sheet) {
                 self.sheet_failure = None;
+                // The sheet for a login left in a file looks each time it is put up, since the
+                // file may have changed since it last did, and what it found goes with it.
+                self.left = (sheet == Sheet::Stow).then_some(Leftover::Looking);
+                if self.left.is_some() {
+                    jobs.push(Job::LookLeft);
+                }
             }
             self.sheet = Some(sheet);
         }
@@ -1806,6 +1853,10 @@ impl State {
                 self.forgot(&qualified, done.map_err(Some), now, jobs);
             }
             Answer::ConfigUpdated(done) => self.config_updated(done.map_err(Some), now, jobs),
+            Answer::LookedLeft(found) => self.looked_left(found.map_err(Some)),
+            Answer::Stowed { from, done } => {
+                self.stowed(from.as_ref(), done.map_err(Some), now, jobs);
+            }
             Answer::Abandoned(done) => self.abandon_over(done.map_err(Some), now, jobs),
             Answer::SignInStarted { id, started } => {
                 // A tool that could not start leaves its thread nothing more to do.
@@ -1925,6 +1976,8 @@ impl State {
                 }
                 Job::Forget { qualified } => self.forgot(&qualified, Err(None), now, jobs),
                 Job::UpdateConfig { .. } => self.config_updated(Err(None), now, jobs),
+                Job::LookLeft => self.looked_left(Err(None)),
+                Job::Stow { from, .. } => self.stowed(from.as_ref(), Err(None), now, jobs),
                 // Nothing kept could be read: nothing was told before, as far as anyone knows,
                 // and the windows' records are held for this launch, never written.
                 Job::LoadKept => self.kept(Told::new(), None, None, now, jobs),
@@ -2718,6 +2771,95 @@ impl State {
                     Some(error) => Refused::of(COULD_NOT_UPDATE_CONFIG.into(), error),
                     None => Refused::lost(COULD_NOT_UPDATE_CONFIG.into()),
                 });
+            }
+        }
+    }
+
+    /// Puts away the file the sheet for it looked at, as it found it, from that sheet, which
+    /// holds back until it answers. Nothing is asked before the look has found a login it can
+    /// put away, nor while one is being put away.
+    fn stow(&mut self, jobs: &mut Vec<Job>) {
+        if self.sheet != Some(Sheet::Stow) || self.saving.contains(&Sheet::Stow) {
+            return;
+        }
+        let Some(Leftover::Found(Some(left))) = &self.left else {
+            return;
+        };
+        if let Foreseen::NotEnrolled(_) = left.login {
+            return;
+        }
+        let seen = left.seen.clone();
+        self.sheet_failure = None;
+        let from = self.saving_from();
+        self.change(Job::Stow { seen, from }, jobs);
+    }
+
+    /// What the look at the file behind Claude Code's store found, taken in while its sheet
+    /// is up, or why it could not look, said in that sheet. `Err(None)` is a look that came
+    /// to nothing.
+    fn looked_left(&mut self, found: Result<Option<Left>, Option<PitboardError>>) {
+        if self.sheet != Some(Sheet::Stow) {
+            return;
+        }
+        match found {
+            Ok(found) => self.left = Some(Leftover::Found(found)),
+            Err(error) => {
+                self.left = Some(Leftover::Unknown);
+                let refused = match error {
+                    Some(error) => Refused::of(COULD_NOT_TELL_WHOSE.into(), error),
+                    None => Refused::lost(COULD_NOT_TELL_WHOSE.into()),
+                };
+                self.sheet_failure = Some(self.number(refused));
+            }
+        }
+    }
+
+    /// Putting away the file behind Claude Code's store is over. Done, its sheet closes,
+    /// what it did is said until somebody puts it away, what it warned of beside the read
+    /// after it, and the accounts are read again. Refused, it is said in the sheet it was
+    /// asked from, which looks at the file again, and in the window where that has gone.
+    fn stowed(
+        &mut self,
+        from: Option<&Sheet>,
+        done: Result<(Stowed, Vec<Warning>), Option<PitboardError>>,
+        now: Now,
+        jobs: &mut Vec<Job>,
+    ) {
+        self.saved(from);
+        match done {
+            Ok((stowed, warned)) => {
+                self.changes_seen += 1;
+                if self.sheet == Some(Sheet::Stow) {
+                    self.sheet = None;
+                    self.sheet_failure = None;
+                    self.left = None;
+                }
+                self.stowed = Some(stowed);
+                self.updated_ms = None;
+                let saying = self.say_after_read(warned);
+                self.refresh(
+                    Asked {
+                        after_change: true,
+                        saying,
+                        ..Asked::default()
+                    },
+                    now,
+                    jobs,
+                );
+            }
+            Err(error) => {
+                self.change_over();
+                let refused = match error {
+                    Some(error) => Refused::of(COULD_NOT_STOW.into(), error),
+                    None => Refused::lost(COULD_NOT_STOW.into()),
+                };
+                self.save_failed(from, refused);
+                // What it found is out of date: the file may have changed, or been renewed
+                // and written back, before it stopped, and Put Away would only send it again.
+                if self.sheet == Some(Sheet::Stow) {
+                    self.left = Some(Leftover::Looking);
+                    jobs.push(Job::LookLeft);
+                }
             }
         }
     }

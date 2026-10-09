@@ -51,7 +51,7 @@ private func snapshot(
         menuNotices: MenuNotices(install: nil, switches: [], others: nil), footing: .ready,
         setup: nil, accountsShown: .reading(title: "Reading accounts…"),
         menuAccountsNote: nil, updatedMenu: "", updatedWindow: "", sheetText: nil,
-        signingInText: nil, quitConfirmation: nil, failureAlert: nil,
+        signingInText: nil, stowText: nil, quitConfirmation: nil, failureAlert: nil,
         machine: MachineShown(
             schedule: ScheduleShown(
                 schedule: nil, on: false, changing: false, enabled: true, runs: nil,

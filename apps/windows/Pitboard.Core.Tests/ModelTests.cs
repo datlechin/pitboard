@@ -104,7 +104,8 @@ public sealed class ModelTests
             Footing: new Footing.OnlyOne(Provider: "claude", Label: "work"), Setup: null,
             AccountsShown: new AccountsShown.List(), MenuAccountsNote: null,
             UpdatedMenu: "Updated 08:00", UpdatedWindow: "Updated 08:00", SheetText: null,
-            SigningInText: null, QuitConfirmation: null, FailureAlert: null, Machine: Unread(),
+            SigningInText: null, StowText: null, QuitConfirmation: null, FailureAlert: null,
+            Machine: Unread(),
             AccountWindows: NoWindows());
     }
 
@@ -270,7 +271,8 @@ public sealed class ModelTests
     [TestMethod]
     public void ASnapshotCarriesWhatASwitchSaid()
     {
-        var stillRunning = new Warning("sessions_still_running", "2 `codex` sessions are still running", Account: null);
+        var stillRunning = new Warning(
+            "sessions_still_running", "2 `codex` sessions are still running", Account: null, FileHolds: null);
         var switched = new LastSwitch(
             Provider: "codex", To: "codex/work", FollowsAt: null,
             Restart: new RestartNeeded(Program: "codex", From: "personal"), Said: null, Warnings: [stillRunning]);

@@ -67,7 +67,7 @@ If the warning says Claude Code's config could not be updated, the switch worked
 
 A session started over SSH, or one where the keychain is locked, does not follow a switch. See [Claude Code over SSH uses another account](#claude-code-over-ssh-uses-another-account).
 
-If the switch said that open sessions keep their account until their login is next renewed, `~/.claude/.credentials.json` is behind the keychain. Each session follows when it next renews its login, or when you start it again. To have sessions follow within 33 seconds again, delete the file as the same section says.
+If the switch said that open sessions keep their account until their login is next renewed, `~/.claude/.credentials.json` is behind the keychain. Each session follows when it next renews its login, or when you start it again. To have sessions follow within 33 seconds again, put the file away with `pitboard stow`, as [Claude Code over SSH uses another account](#claude-code-over-ssh-uses-another-account) says.
 
 If `/status` names the account you switched to and `/usage` shows the previous account's limits, see [`/usage` shows the previous account after a switch](#/usage-shows-the-previous-account-after-a-switch).
 
@@ -125,13 +125,15 @@ While the file is there, sessions that read the keychain also stop following a s
 To have one login everywhere:
 
 <Steps>
-  <Step title="Delete the file">
-    Run `rm ~/.claude/.credentials.json`, or the path the warning names. A session that was using it is signed out. Open sessions that read the keychain follow the next switch within 33 seconds.
+  <Step title="Put the file away">
+    In a terminal where the keychain is unlocked, such as one in your desktop session, run `pitboard stow`. Or in the app click **Put Away** on the notice **A login file is left behind the keychain**. Pitboard says whose login the file holds and asks first. It keeps that login for its account where it holds none it can switch to, then deletes the file. A session that was signing in with the file is signed out. Open sessions that read the keychain follow the next switch within 33 seconds. See [`stow`](/reference/account-commands#stow).
   </Step>
   <Step title="Reach the keychain">
     Run `security unlock-keychain ~/Library/Keychains/login.keychain-db` in the same session, or start the session from a desktop terminal. It then uses the account Pitboard switched to.
   </Step>
 </Steps>
+
+Where the file holds a login of an account Pitboard has not enrolled, `stow` names that account by its email and organisation, and deletes nothing. Enrol it with `pitboard enroll <label> --sign-in`, then run `pitboard stow` again. A file Pitboard cannot read it cannot put away either: make it readable to you, or delete it with `rm`, which takes whatever it holds with it.
 
 Do not run `/login` while the keychain is locked: it leaves the file again.
 

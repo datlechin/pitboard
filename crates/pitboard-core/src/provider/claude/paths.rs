@@ -101,6 +101,20 @@ pub fn storage_dir(ctx: &Context) -> String {
     )
 }
 
+/// What the lock a token refresh of the login takes first guards, as [`crate::lock::acquire`]
+/// takes it: `.oauth_refresh` in the storage directory, locked as `.oauth_refresh.lock`
+/// (the register's `refresh_lock`).
+pub fn refresh_lock(ctx: &Context) -> PathBuf {
+    PathBuf::from(storage_dir(ctx)).join(".oauth_refresh")
+}
+
+/// What the legacy lock a token refresh takes second guards: the storage directory itself,
+/// its links resolved where it is there, locked beside it.
+pub fn legacy_refresh_lock(ctx: &Context) -> PathBuf {
+    let dir = PathBuf::from(storage_dir(ctx));
+    std::fs::canonicalize(&dir).unwrap_or(dir)
+}
+
 fn storage_dir_from(secure: Option<&str>, home: &std::path::Path, config_dir: &str) -> String {
     use unicode_normalization::UnicodeNormalization;
     match secure {

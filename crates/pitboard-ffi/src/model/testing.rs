@@ -17,6 +17,7 @@ use crate::{
 use pitboard_core::context::Context;
 use pitboard_core::provider::ProviderId;
 use pitboard_core::service;
+use pitboard_core::switch::{Left, Stowed};
 use pitboard_core::testing::{MemoryHost, ScriptedApi, live_service};
 use std::collections::{BTreeSet, HashMap, VecDeque};
 use std::path::PathBuf;
@@ -118,6 +119,7 @@ pub(super) fn warning(code: &str, message: &str) -> Warning {
         code: code.into(),
         message: message.into(),
         account: None,
+        file_holds: None,
     }
 }
 
@@ -462,6 +464,12 @@ pub(super) struct Machine {
     pub forgetting: Result<(), Refusal>,
     /// What writing the account in use into its tool's config gives: what its tool warned of.
     pub updating_config: Result<Vec<Warning>, Refusal>,
+    /// What looking at the file behind Claude Code's store gives.
+    pub leftover: Result<Option<Left>, Refusal>,
+    /// What putting that file away gives.
+    pub stowing: Result<Stowed, Refusal>,
+    /// Every file put away, by what it was confirmed as.
+    pub stowed_seen: Vec<String>,
     /// Every login enrolled as it is signed in now, as the model named it.
     pub enrolled: Vec<String>,
     /// Every rename, from and to, as the model named them.
@@ -554,6 +562,13 @@ impl Machine {
             renaming: Ok(()),
             forgetting: Ok(()),
             updating_config: Ok(Vec::new()),
+            leftover: Ok(None),
+            stowing: Err(refusal(
+                "left_login_changed",
+                "nothing was left to put away",
+                Vec::new(),
+            )),
+            stowed_seen: Vec::new(),
             enrolled: Vec::new(),
             renamed: Vec::new(),
             forgot: Vec::new(),
@@ -749,6 +764,20 @@ impl Machine {
                 Answer::Forgot {
                     qualified,
                     done: self.forgetting.clone().map_err(|refused| refused.error()),
+                }
+            }
+            Job::LookLeft => {
+                Answer::LookedLeft(self.leftover.clone().map_err(|refused| refused.error()))
+            }
+            Job::Stow { seen, from } => {
+                self.stowed_seen.push(seen);
+                Answer::Stowed {
+                    from,
+                    done: self
+                        .stowing
+                        .clone()
+                        .map(|stowed| (stowed, Vec::new()))
+                        .map_err(|refused| refused.error()),
                 }
             }
             Job::UpdateConfig { qualified } => {
@@ -1249,6 +1278,19 @@ impl World {
         self.elsewhere()
             .enroll_signed_in(label, login)
             .expect("the account signed in privately, enrolled");
+    }
+
+    /// `who`'s login left in `.credentials.json` behind the keychain, with its five-hour window
+    /// `percent` used, as a sign-in where the keychain could not be read leaves it.
+    pub(super) fn left_in_a_file(&self, who: &str, percent: f64) {
+        let login = self.claude_login(who, percent);
+        self.left_file().plant(&live_service(&self.ctx), &login);
+    }
+
+    /// The file behind the keychain, `.credentials.json` in Claude Code's own directory.
+    pub(super) fn left_file(&self) -> Arc<pitboard_core::testing::MemoryStore> {
+        self.host
+            .file_at(self.root.join(".claude").join(".credentials.json"))
     }
 
     /// A switch to Claude Code's `label` that nothing can finish, as the core leaves one.

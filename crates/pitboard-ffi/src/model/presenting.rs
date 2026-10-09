@@ -1815,6 +1815,7 @@ fn two_warnings_alike_are_two_notices() {
 fn a_warning_about_an_account_is_its_notice_by_that_account() {
     let replaced = |account: &str, now: &str| Warning {
         account: Some(account.into()),
+        file_holds: None,
         ..warning(
             "login_replaced",
             &format!("Claude Code now has `{now}`'s login stored"),

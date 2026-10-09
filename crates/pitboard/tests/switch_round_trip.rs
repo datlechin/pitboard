@@ -689,13 +689,14 @@ fn every_command_refuses_a_home_that_is_not_a_full_path() {
     access_lapsed(&env, "beta");
     env.expect_usage_requests(0);
     let before = tree(&env.root);
-    let commands: [(&[&str], &str); 14] = [
+    let commands: [(&[&str], &str); 15] = [
         (&["status"], "status"),
         (&["status", "--offline"], "status"),
         (&["enroll", "gamma"], "enroll"),
         (&["use", "beta"], "use"),
         (&["renew"], "renew"),
         (&["forget", "beta", "--yes"], "forget"),
+        (&["stow", "--yes"], "stow"),
         (&["rename", "beta", "gamma"], "rename"),
         (&["abandon"], "abandon"),
         (&["repair"], "repair"),

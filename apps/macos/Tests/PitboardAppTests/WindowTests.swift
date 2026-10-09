@@ -84,6 +84,7 @@ import Testing
         .name(provider: "claude", email: "dana@work.example"),
         .rename(provider: "claude", label: "personal"),
         .rename(provider: "codex", label: "personal"),
+        .stow,
     ]
     #expect(Set(sheets.map(\.id)).count == sheets.count)
     #expect(

@@ -1,9 +1,9 @@
 ---
 title: "Account commands"
-description: "`status`, `enroll`, `use`, `forget`, `rename` and `watch` each get their usage, options, output and an example."
+description: "`status`, `enroll`, `use`, `forget`, `stow`, `rename` and `watch` each get their usage, options, output and an example."
 ---
 
-The account commands show, add, switch, forget and rename the accounts Pitboard knows. `watch` switches Claude Code by itself, before an account runs out, for as long as it runs. Each command also takes `--json` and `--help`, described in [Global options](/reference/commands#global-options). Exit statuses are as in [Exit codes](/reference/commands#exit-codes) unless a section says otherwise.
+The account commands show, add, switch, forget and rename the accounts Pitboard knows, and `stow` puts away a login Claude Code left in a file. `watch` switches Claude Code by itself, before an account runs out, for as long as it runs. Each command also takes `--json` and `--help`, described in [Global options](/reference/commands#global-options). Exit statuses are as in [Exit codes](/reference/commands#exit-codes) unless a section says otherwise.
 
 A label such as `codex/work` names an account of OpenAI's Codex CLI. `pitboard enroll` reads a bare label such as `work` as a Claude Code account. `pitboard use`, `pitboard forget` and the first label of `pitboard rename` look for a bare label in both tools.
 
@@ -34,7 +34,7 @@ An account asked about recently is not asked again until its numbers could have 
 
 `status` exits 0 even when a service cannot be reached, and the account's last line says why. It exits 1 only when Pitboard cannot load its account list.
 
-While `~/.claude/.credentials.json` sits behind the keychain on macOS, `status` warns with `fallback_login`, whatever the file holds. `--offline` reads no keychain, so it does not. See [Claude Code over SSH uses another account](/troubleshooting#claude-code-over-ssh-uses-another-account).
+While `~/.claude/.credentials.json` sits behind the keychain on macOS, `status` warns with `fallback_login`, whatever the file holds. `--offline` reads no keychain, so it does not. [`stow`](#stow) puts the file away.
 
 When an interrupted switch is waiting that the next change cannot finish, `status` warns with `recovery_undetermined` and the message that change would stop with. It finishes nothing; see [Recover after a crash, a restore or a move](/troubleshooting/recovery#an-interrupted-switch-cannot-be-finished). `--offline` gives the same warning wherever it can tell without asking Anthropic. It cannot tell when Claude Code renewed its login after the switch stopped, because only Anthropic can say whose that login is.
 
@@ -198,6 +198,78 @@ Forgot old (old@example.com).
 ```
 
 For the same task in the app, see [Add and manage accounts](/guides/accounts#forget-an-account).
+
+## `stow`
+
+```text
+Put away the login Claude Code left in a file behind the keychain, then delete the file
+
+Usage: pitboard stow [OPTIONS]
+```
+
+`pitboard stow` puts away `~/.claude/.credentials.json` where it sits behind the keychain on macOS, the file `fallback_login` warns of. A `/login` run where the keychain was locked leaves it. While it is there, open Claude Code sessions keep their account after a switch until their login is next renewed. See [Claude Code over SSH uses another account](/troubleshooting#claude-code-over-ssh-uses-another-account).
+
+It first reads the file and says what it holds. It tells whose the login is by its refresh token, where Pitboard knows that token, and otherwise asks Anthropic with the login's own access token. It never sends an access token that has expired. Where that names an account, it asks whose the login Claude Code has stored is too, as `pitboard status` does, where that login changed since Anthropic last named it.
+
+It then keeps the login where it is not kept already, and deletes the file:
+
+| The file holds | What `stow` does | `login` in JSON |
+| --- | --- | --- |
+| No Claude Code login, such as `{}`, an empty file or one that is not JSON | Deletes the file. | `no_login` |
+| The login Claude Code has stored | Deletes the file. | `stored` |
+| The login parked for an account | Deletes the file. | `already_parked` |
+| Another login of the account in use | Deletes the file, dropping that second sign-in. The keychain keeps the account's own login. | `second_sign_in` |
+| A login of an enrolled account with no parked login it can switch to, or with an older one | Parks the login for that account in place of any other, then deletes the file. | `parked` |
+| Another login of an account with a parked login it can switch to, as new or newer | Keeps that parked login, and deletes the file. | `park_kept` |
+| A login Anthropic no longer accepts, or one with no refresh token whose access token has expired | Deletes the file. | `login_refused` |
+| A login of an account not enrolled here | Deletes nothing. Fails with `left_login_not_enrolled`, naming the account's email and organisation. | None |
+
+Of two logins of one account, the newer is the one whose access token expires later. A login renewed in the file since it was parked is newer, and that renewal used up the parked login.
+
+It renews a login whose access token has expired first, as it renews a parked login, and writes it back to the file before anything else. Anthropic then names its account.
+
+`stow` holds Pitboard's lock throughout. From its last reading of the file until the file is gone, it also holds the lock a Claude Code session takes before it renews its login, so no session renews the login in the file meanwhile. It takes Claude Code's write lock only to write a renewed login back to the file and to delete the file, and reads the file again under it each time. Where the file changed since it was read, it fails with `left_login_changed`. Where it deletes the file because of the login Claude Code has stored, and a sign-in replaced that login meanwhile, it fails with `stored_login_changed`. Where Anthropic cannot be reached, it fails with `left_login_unidentified`. A locked keychain or a file Pitboard cannot read stops it too.
+
+None of these deletes the file. Where `stow` renewed the login first, the file holds the renewed login. Where it parked the login first, the parked login stays. The message ends by saying which, or that Pitboard changed nothing.
+
+Other keys in the file, such as `mcpOAuth`, are not moved. They go with the file, and `stow` names them. Claude Code's document in the keychain keeps its own.
+
+<Warning>
+  A Claude Code session that signs in with the file, such as one over SSH while the keychain is locked, is signed out once the file is gone.
+</Warning>
+
+Once the file is gone, open sessions follow a switch within 33 seconds again.
+
+With nothing behind the keychain, `stow` prints `Nothing is left behind the store Claude Code keeps its login in, so there is nothing to put away.` and changes nothing. On Linux the file is where Claude Code keeps its login, so `stow` always prints that.
+
+| Option | Description |
+| --- | --- |
+| `-y, --yes` | Do not ask first |
+
+At a terminal, without `--yes` or `--json`, `stow` says what the file holds and asks first on standard error:
+
+```text
+/Users/you/.claude/.credentials.json holds `work`'s login, and Pitboard holds no login of `work` it can switch to. Putting it away parks this one for `work`, then deletes the file.
+It also holds 1 other key, `mcpOAuth`, which goes with the file: Pitboard does not move it, and Claude Code's document in the keychain keeps its own.
+Once the file is gone, Claude Code sessions already running follow a switch within 33 seconds again, and one that signed in with its login, such as one over SSH, is signed out.
+Put it away? [y/N]
+```
+
+It does not ask about a login of an account not enrolled here, which it refuses. For when it asks and what each answer does, see [Output](/reference/commands#output).
+
+To put the file away without being asked:
+
+```sh
+pitboard stow --yes
+```
+
+```text
+Parked the login /Users/you/.claude/.credentials.json held for `work`, then deleted the file.
+It also held 1 other key, `mcpOAuth`, which went with the file: Pitboard does not move it, and Claude Code's document in the keychain keeps its own.
+Once the file is gone, Claude Code sessions already running follow a switch within 33 seconds again, and one that signed in with its login, such as one over SSH, is signed out.
+```
+
+The activity log records it as `stow`; see [`log`](/reference/maintenance-commands#log). For the same task in the app, see [Accounts pane](/reference/app#accounts-pane).
 
 ## `rename`
 

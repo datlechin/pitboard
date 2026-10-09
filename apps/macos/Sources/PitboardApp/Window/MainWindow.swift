@@ -105,6 +105,7 @@ extension Sheet: Identifiable {
         case .signInAgain(let provider, let label): "again/\(provider)/\(label)"
         case .name(let provider, _): "name/\(provider)"
         case .rename(let provider, let label): "rename/\(provider)/\(label)"
+        case .stow: "stow"
         }
     }
 }

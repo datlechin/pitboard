@@ -93,8 +93,9 @@ pages load, as a browser would.
     file, the vault of files and the stores in memory the tests use. On macOS, parked
     logins are keychain items. On Linux, they are files in the vault.
   - `switch/`: every change to Pitboard's index (switching, by hand or by itself in
-    `auto.rs`, enrolling, adopting, renaming, forgetting, renewing, repairing, abandoning
-    and uninstalling), and the journal that finishes an interrupted switch. `identify.rs`
+    `auto.rs`, enrolling, adopting, renaming, forgetting, renewing, repairing, abandoning,
+    uninstalling, and putting away a login Claude Code left in a file behind the keychain in
+    `stow.rs`), and the journal that finishes an interrupted switch. `identify.rs`
     says whose login each tool has stored: the record's owner where the login's refresh
     token has the fingerprint the record was made for, which asks nobody, and the tool's
     service otherwise (`whose`). A store with no login is recorded as holding none only
@@ -174,7 +175,8 @@ pages load, as a browser would.
     `auto-switch`, of `claude` where no account was chosen yet; and as
     `auto-stay`, a login nobody could tell whose it is, of the account last known in use,
     once per wait, and each `Hold`, of the account in use, once per limit, reset and code.
-  - `lock.rs`: the lock Claude Code takes around credential writes, taken the same way.
+  - `lock.rs`: the locks Claude Code takes around writes and renewals of its login, each
+    taken the same way and kept with Claude Code's own numbers (`Timing`).
   - `context.rs`: what the core takes from its environment, read from a map of variables
     by the same code for every front end, apart from the `PATH` that `host/linux` reads to
     find the program daily renewal runs.
@@ -243,9 +245,11 @@ pages load, as a browser would.
     of the command line inside it too; the host's scheduler writes it.
   - `words.rs`: the sentences and column words Pitboard says in more than one place, each
     a function of typed values: spans of time, a limit's names, when it resets, its pace and
-    when it runs out, a parked login's life, a renewal run and doctor's summary. It also holds
-    `usage_level`, the steps at which a limit's colour changes. A thing said both in a
-    column and in a sentence has a function for each form. The command line calls these
+    when it runs out, a parked login's life, a renewal run, doctor's summary, and what is
+    left in a file behind the keychain and what putting it away does and did (`left_lines`,
+    `stowed_lines`, `nothing_left`), which `pitboard stow` and the app's sheet both say. It
+    also holds `usage_level`, the steps at which a limit's colour changes. A thing said both
+    in a column and in a sentence has a function for each form. The command line calls these
     functions directly, and so does `pitboard-ffi`'s `present/` as it makes the snapshot,
     which carries what an app shows of them. The bindings export none of them. Clock times
     are not in it.
@@ -329,7 +333,8 @@ pages load, as a browser would.
     made elsewhere, asks which tools are installed, switches, quits the app holding a tool's
     login when the person lets it, gives up on a stuck switch, keeps what each tool's last
     switch said, runs each tool's own sign-in, enrols the login signed in now, renames and
-    forgets, writes the account in use into Claude Code's config, keeps the sheet over the
+    forgets, writes the account in use into Claude Code's config, puts away a login left in
+    a file behind the keychain from a sheet that looks first, keeps the sheet over the
     main window, says which account to switch to once the one in use has run out, notified
     once for each reset, switches Claude Code by itself with its setting on, asking the
     core's look after every read and every 30 seconds and saying under the setting what it
@@ -339,9 +344,10 @@ pages load, as a browser would.
     last page, which windows close and which stores go after a read, the link waiting for an
     account, with the wait before it can be opened, and the downloads. Its tests are files
     of their own there: `reading.rs`, `switching.rs`, `automatic.rs`, `signing.rs`,
-    `changing.rs`, `advising.rs`, `keeping.rs`, `maintaining.rs`, `presenting.rs`,
-    `windowing.rs` and `cadence.rs` drive the state by hand, `lanes.rs` has the lanes' own,
-    and `threaded.rs` drives the model through its threads over the real core.
+    `changing.rs`, `stowing.rs`, `advising.rs`, `keeping.rs`, `maintaining.rs`,
+    `presenting.rs`, `windowing.rs` and `cadence.rs` drive the state by hand, `lanes.rs`
+    has the lanes' own, and `threaded.rs` drives the model through its threads over the
+    real core.
   - `present/` makes each `Snapshot` from the model's state: `present` takes the state and
     the moment, and builds every sentence and row the menu bar, the menu and the window
     show, so a view decides nothing. `accounts.rs` is the menu bar's words and the
@@ -792,6 +798,14 @@ pages load, as a browser would.
   account in use goes. The core refuses it, writing nothing, where another account is in
   use by then, so a button drawn before a switch landed never switches back. What it warned
   of is said beside the read after it, as a sign-in's is.
+- The notice that a login is left in a file behind the keychain offers to put it away:
+  `Sheet::Stow`, which looks first, on the lane of reads (`Job::LookLeft`), and says whose
+  the login is once that is known, in the words `pitboard stow` asks with, offering **Put
+  Away** only for a login it can put away. `Intent::Stow` puts away the file as that look
+  found it, on the lane of changes, a change of the app's own like a rename: what goes wrong
+  is said in the sheet, which looks again, since what it found is out of date by then, and
+  once it is done the sheet closes, what it did is said until it is dismissed, and the
+  accounts are read again.
 - A login replaced outside Pitboard, which every read says until it is put right
   (`login_replaced`), is posted once for each account while the reads that ask say it, and
   again only once one has stopped saying it and a later one says it, or after the app is
@@ -970,6 +984,52 @@ pages load, as a browser would.
   every change warns while the file is there (`fallback_login`). The automatic switch still
   switches: new sessions take the account switched to at once, and running ones at their
   next renewal. A read and a switch never touch the file.
+- Only `pitboard stow`, and the app's **Put Away** after its sheet, write or delete
+  `.credentials.json` while the keychain holds the login in use, and only once somebody has
+  confirmed what the file holds. It looks first, taking no lock and writing nothing:
+  `stow::find` reads the file, tells whose its login is by its refresh token's fingerprint
+  where that is the login stored, a park's that reads back, or the record's, and otherwise
+  asks Anthropic with the login's own access token, never with one that has expired; where
+  that names an enrolled account, it tells whose the login stored is as a read does. Whether
+  the file holds a login at all is `claude::live::holds_a_login`, a `claudeAiOauth` with a
+  token in it, which every `fallback_login` warning and doctor tell it by too: a file that
+  is not a JSON object, or holds no token, signs nobody in and is deleted as holding none,
+  and a login with no refresh token whose access token has expired is dead. What the look
+  found is shown with `Left::seen`, a fingerprint of the file's bytes, and `stow` goes ahead
+  only while the file still holds those bytes, read again under `state.lock`, again under
+  Claude Code's refresh lock (the register's `refresh_lock`), and again as the file goes.
+  The refresh lock is held from that reading until the file is gone, taken as Claude Code
+  takes it, `.oauth_refresh.lock` and then the legacy `<storage dir>.lock` with its 60
+  second staleness: a session renewing a login takes it before it sends the refresh token,
+  and saves the answer only where the stored login still holds the token it sent, so a
+  renewal under way while the file went would spend the token Pitboard counted on and save
+  nowhere. Claude Code's write lock, which excludes sign-ins but not that renewal, is taken
+  after it, as Claude Code takes them, around the renewed login's write and the file's
+  deletion only, so no network round trip holds up Claude Code's writes; a `/logout` that
+  gave up waiting writes with no lock, so the file is read again under it. Additive before
+  destructive: the file goes only once its login is parked for its account, or is shown to
+  be kept already (the very login stored, or a park's that reads back), a second sign-in of
+  the account in use, whose own login the keychain holds, or another login of an account
+  holding a park it can be switched to that is as new, or dead, with Anthropic refusing its
+  refresh token. Newer is by when the access token expires: a login renewed since it was
+  parked expires later and has spent the park's refresh token, as when a run stopped between
+  parking the login and deleting the file and a session that signs in with the file renewed
+  it there, so it is parked in the park's place. Where the file goes because of the login
+  stored, the very login stored or a second sign-in, that login is read again as the file
+  goes, and one a sign-in replaced meanwhile keeps the file (`stored_login_changed`). A
+  login whose access token has expired is renewed as a park is and written back into the
+  file before anything else, so the token the exchange rotates is on disk at once. A login
+  of an account nobody enrolled is refused, named by its email and organisation, without
+  asking whose the login stored is, and nothing is deleted; the command line refuses it from
+  the look, asking and trying nothing. Its other keys, such as `mcpOAuth`, are not
+  Pitboard's to move: they go with the file, by name. Every error it stops with says how far
+  it went (`Error::PutAwayStopped`, with the code, cause and exit status of what stopped
+  it): nothing changed, the login renewed and written back, or parked, which stays. A run
+  that stops anywhere leaves the login in the file, in a park, or in both, but for the
+  moment between Anthropic answering a renewal and the answer reaching the file, which every
+  renewal has. A session that signed in with the file, as one over SSH does, is signed out
+  once it is gone. The activity log records it as `stow`. On Linux the file is the store,
+  nothing is behind it, and there is nothing to put away.
 - A Codex login is moved, never copied (`ParkSemantics::MoveOnly`). The parked login is
   read back before the incoming login is written. Codex's own sign-in and sign-out revoke
   the stored refresh token, so two usable copies of one login must never be at rest.
@@ -1662,6 +1722,16 @@ treated, and only the macOS build shows it. The run reads both builds since.
   and abandons the write when that read fails. A stale account cannot be written back. From
   2.1.281, a locked keychain counts as a failed read here once the process has seen its
   item; before, it read as empty.
+- A renewal of the login takes another lock first, proper-lockfile's directory lock at
+  `<storage dir>/.oauth_refresh.lock`, stale after 60000 ms and touched every 5000 ms, then
+  the legacy `<storage dir, links resolved>.lock` the same way, going without the second
+  where it cannot be made. Under them it reads the login again and sends the refresh token,
+  and takes the write lock only to save the answer, where the login stored still holds the
+  token it sent; otherwise it saves nothing. So the write lock does not keep a renewal from
+  spending a refresh token, and the refresh lock does. A holder is taken over before the
+  lock is stale only where its owner record, `.oauth_refresh.lock.owner`, proves it gone,
+  and Pitboard writes none. Read on 9 October 2026 in the macOS, Linux and Windows builds of
+  2.1.294, whose code here is the same.
 - Claude Code treats its own lock going missing as a warning and keeps writing. Pitboard
   cannot expect the other side to stop.
 - A write can be marked as already locked without the lock being taken. `/logout` does this
@@ -1696,7 +1766,8 @@ treated, and only the macOS build shows it. The run reads both builds since.
   nothing before it. Once both hold a login, the file's outlives every token refresh, every
   sign-in from a desktop session and every switch, and a session that cannot read the
   keychain signs in with it. `doctor` names it as `fallback_login`, and every read that
-  reads the keychain and every change warns while it is there.
+  reads the keychain and every change warns while it is there, each naming `pitboard stow`,
+  the one thing of Pitboard's that deletes it.
 - While the keychain is locked, a session keeps serving the login it last read, cached again
   every 30 seconds, and follows no switch. One that has read none reads the keychain as
   empty and signs in with the file, or is signed out.

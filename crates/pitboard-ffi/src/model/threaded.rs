@@ -14,7 +14,7 @@ use super::{
 };
 use crate::AppCore;
 use crate::present::testing::Utc;
-use pitboard_core::testing::Asked;
+use pitboard_core::testing::{Asked, live_service};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc::{Receiver, Sender, channel};
 use std::sync::{Arc, Condvar, Mutex, OnceLock, Weak};
@@ -1290,6 +1290,57 @@ fn renaming_and_forgetting_reach_the_core() {
     told.until("the account forgotten", has(&["work"]));
     let last = model.snapshot();
     assert_eq!((last.failure, last.sheet_failure), (None, None));
+    model.shutdown();
+}
+
+/// A login left in a file behind the keychain is put away from its sheet through the real
+/// core: the read says the file is there, the sheet says whose the login is, and once it is
+/// put away the file is gone and the read after it says nothing more of it.
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
+)]
+fn putting_away_a_login_left_in_a_file_reaches_the_core() {
+    let world = World::new("stow");
+    world.enrolled("work", "here", 10.0);
+    world.parked("spare", "there", 20.0);
+    world.left_in_a_file("there", 20.0);
+    let told = Arc::new(Told::default());
+    let model = model(&world.core(), &told);
+    model.send(Intent::Start);
+    let warns = |told: &[Snapshot]| {
+        told.last().is_some_and(|last| {
+            last.notices
+                .iter()
+                .any(|notice| notice.id.starts_with("warning/fallback_login/"))
+        })
+    };
+    told.until("the file said", warns);
+
+    model.send(Intent::PresentSheet { sheet: Sheet::Stow });
+    told.until("the sheet's look", |told| {
+        told.last()
+            .and_then(|last| last.stow_text.as_ref())
+            .is_some_and(|text| text.can_confirm)
+    });
+    let text = model.snapshot().stow_text.expect("the sheet's words");
+    assert!(
+        text.lines[0].contains("holds the login Pitboard keeps parked for `spare`"),
+        "{:?}",
+        text.lines
+    );
+
+    model.send(Intent::Stow);
+    told.until("put away, and read after", |told| {
+        told.last().is_some_and(|last| {
+            !last.reading
+                && last.sheet.is_none()
+                && last.notices.iter().any(|notice| notice.id == "stowed")
+                && !warns(std::slice::from_ref(last))
+        })
+    });
+    assert_eq!(world.left_file().peek(&live_service(world.ctx())), None);
     model.shutdown();
 }
 

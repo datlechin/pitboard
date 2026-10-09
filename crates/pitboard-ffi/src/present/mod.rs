@@ -420,6 +420,29 @@ pub struct SheetText {
     pub saving: bool,
 }
 
+/// What the sheet for putting away the login Claude Code left in a file behind the keychain
+/// says: what putting it away does, and once it has looked, what the file holds, whose the
+/// login is and what becomes of it, in the words `pitboard stow` asks with.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct StowText {
+    pub title: String,
+    /// What putting it away is for.
+    pub message: String,
+    /// What the look found, a paragraph each. Empty while it looks, and where it could not
+    /// look, which the sheet's failure says.
+    pub lines: Vec<String>,
+    /// What the sheet says while it looks: "Finding out whose login it is…".
+    pub looking: Option<String>,
+    /// What its default button says: "Put Away".
+    pub confirm: String,
+    /// Whether that button can be pressed: the look found a login to put away, of an
+    /// enrolled account or of none, and it is not being put away already.
+    pub can_confirm: bool,
+    /// It is being put away, which cannot be withdrawn: nothing in it can be pressed
+    /// meanwhile, and it cannot be closed.
+    pub saving: bool,
+}
+
 /// A tool a sheet's picker offers, and what the sheet says once it is picked.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct SheetTool {
@@ -644,6 +667,7 @@ pub(crate) fn present_on(os: Os, state: &State, now: i64, local: &dyn LocalTime)
         footing,
         sheet_text: sheets::sheet_text(&seen),
         signing_in_text: sheets::signing_in_text(&seen),
+        stow_text: sheets::stow_text(&seen),
         quit_confirmation: state.asking().map(sheets::quit_confirmation),
         failure_alert: state.presented.as_ref().map(sheets::failure_alert),
         machine: machine::machine(&seen),

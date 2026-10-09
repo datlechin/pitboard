@@ -284,7 +284,8 @@ impl fmt::Display for Warning {
                 "{path} holds another {tool} login, which a session that cannot read the \
                  keychain, such as one started over SSH, signs in with. No switch reaches it. \
                  While it is there, {tool} sessions already running at a switch {running}. \
-                 `pitboard doctor` says what to do.",
+                 `pitboard stow` keeps that login for its account, where Pitboard holds no \
+                 other it can switch to, then deletes the file.",
                 path = path.display(),
                 tool = tool.name(),
                 running = crate::words::kept_until_renewed(),
@@ -296,8 +297,8 @@ impl fmt::Display for Warning {
             } => write!(
                 f,
                 "{path} is there with no {tool} login in it. While it is, {tool} sessions \
-                 already running at a switch {running}. Deleting it lets them follow a switch: \
-                 `rm {path}`.",
+                 already running at a switch {running}. `pitboard stow` deletes it, which lets \
+                 them follow a switch.",
                 path = path.display(),
                 tool = tool.name(),
                 running = crate::words::kept_until_renewed(),
@@ -1181,6 +1182,41 @@ impl Pitboard {
         )
     }
 
+    /// The login left in the file behind Claude Code's store, and what putting it away would
+    /// do with it, for somebody to confirm: `None` where nothing is behind that store. What
+    /// `pitboard stow` and the app's sheet ask first. Takes no lock and writes nothing, and
+    /// asks Anthropic whose the login is, with its own access token, only where neither its
+    /// fingerprint nor its expiry already says, and then, for an enrolled account, whose the
+    /// login stored is, as a read asks it, only where that changed since Anthropic last named
+    /// it.
+    pub fn left_login(&self) -> Result<Option<switch::Left>> {
+        let state = state::load(&self.ctx)?;
+        switch::left_login(&self.ctx, &state)
+    }
+
+    /// Puts away the login left in the file behind Claude Code's store, while the file still
+    /// holds what `seen` was taken of, as [`switch::stow`] says. Recorded in the audit log as
+    /// `stow`, of the account the login was found to be where it is enrolled, with what became
+    /// of it, or with the error that stopped it. Settled with what a change of Claude Code's
+    /// login warns of but the file, which is what it puts away.
+    pub fn stow(&self, seen: &str) -> Changing<switch::Stowed> {
+        let permit = self.permitted()?;
+        let tool = ProviderId::Claude;
+        let (settled, recovered) = self.settled(permit, "stow", "", Some(tool))?;
+        let warnings = self.overridden(tool).into_iter().chain(recovered).collect();
+        self.change(permit, "stow", "", (settled, warnings), |settled| {
+            switch::stow(settled, seen)
+        })
+    }
+
+    /// What says `tool` signs in with something else than the login Pitboard moves, read from
+    /// files as well as from this process's environment, so the app, which has no shell
+    /// environment at all, gets the same answer as the command line.
+    fn overridden(&self, tool: ProviderId) -> Option<Warning> {
+        let names = crate::provider::of(tool).overridden_by(&self.ctx);
+        (!names.is_empty()).then_some(Warning::AuthOverridden { tool, names })
+    }
+
     /// What a file behind `tool`'s store says, where one is there. It reads that store, so a
     /// read that asks nobody does not ask it.
     fn left_behind(&self, tool: ProviderId) -> Option<Warning> {
@@ -1205,9 +1241,24 @@ impl Pitboard {
         tool: Option<ProviderId>,
         run: impl FnOnce(Settled) -> Result<(T, Vec<Warning>)>,
     ) -> Changing<T> {
-        let (settled, mut warnings) = self.settled_for(permit, verb, subject, tool)?;
+        let settled = self.settled_for(permit, verb, subject, tool)?;
+        self.change(permit, verb, subject, settled, run)
+    }
+
+    /// Runs a change on what is settled for it, beside what settling warned of, and records
+    /// it in the audit log as `verb`: of the subject the change names where it names one, and
+    /// otherwise of `subject`.
+    fn change<T: Audited>(
+        &self,
+        permit: Permit,
+        verb: &str,
+        subject: &str,
+        (settled, mut warnings): (Settled, Vec<Warning>),
+        run: impl FnOnce(Settled) -> Result<(T, Vec<Warning>)>,
+    ) -> Changing<T> {
         match run(settled) {
             Ok((value, more)) => {
+                let subject = value.audit_subject().unwrap_or(subject);
                 audit::record(&self.ctx, permit, verb, subject, value.audit_code());
                 warnings.extend(more);
                 Ok(Done { value, warnings })
@@ -1221,9 +1272,8 @@ impl Pitboard {
     }
 
     /// Settles for a change, with what to know before it runs: another way `tool` is signed
-    /// in, a file behind its store, and an interrupted switch settling finished, which the
-    /// audit log records as `recover`. A settle that failed is recorded as `verb` of
-    /// `subject`, with its error.
+    /// in, a file behind its store, and an interrupted switch settling finished, as
+    /// [`Pitboard::settled`] records it.
     fn settled_for(
         &self,
         permit: Permit,
@@ -1231,6 +1281,26 @@ impl Pitboard {
         subject: &str,
         tool: Option<ProviderId>,
     ) -> std::result::Result<(Settled, Vec<Warning>), Failed> {
+        let (settled, recovered) = self.settled(permit, verb, subject, tool)?;
+        let mut warnings = Vec::new();
+        if let Some(tool) = tool {
+            warnings.extend(self.overridden(tool));
+            warnings.extend(self.left_behind(tool));
+        }
+        warnings.extend(recovered);
+        Ok((settled, warnings))
+    }
+
+    /// Settles for a change, with an interrupted switch settling finished, which the audit
+    /// log records as `recover`. A settle that failed is recorded as `verb` of `subject`, with
+    /// its error.
+    fn settled(
+        &self,
+        permit: Permit,
+        verb: &str,
+        subject: &str,
+        tool: Option<ProviderId>,
+    ) -> std::result::Result<(Settled, Option<Warning>), Failed> {
         let (settled, recovered) = switch::settle(&self.ctx, permit, tool).map_err(|error| {
             audit::record(&self.ctx, permit, verb, subject, error.code());
             Failed {
@@ -1238,21 +1308,11 @@ impl Pitboard {
                 warnings: Vec::new(),
             }
         })?;
-        let mut warnings = Vec::new();
-        // Read from files as well as from this process's environment, so the app, which
-        // has no shell environment at all, gets the same answer as the command line.
-        if let Some(tool) = tool {
-            let names = crate::provider::of(tool).overridden_by(&self.ctx);
-            if !names.is_empty() {
-                warnings.push(Warning::AuthOverridden { tool, names });
-            }
-            warnings.extend(self.left_behind(tool));
-        }
-        if let Some(r) = recovered {
+        let recovered = recovered.map(|r| {
             audit::record(&self.ctx, permit, "recover", &r.to, r.code());
-            warnings.push(Warning::Recovered(r));
-        }
-        Ok((settled, warnings))
+            Warning::Recovered(r)
+        });
+        Ok((settled, recovered))
     }
 }
 
@@ -1260,6 +1320,11 @@ impl Pitboard {
 trait Audited {
     fn audit_code(&self) -> &'static str {
         "ok"
+    }
+
+    /// The account it was of, where only running it could tell.
+    fn audit_subject(&self) -> Option<&str> {
+        None
     }
 }
 
@@ -1279,6 +1344,16 @@ impl Audited for Outcome {
 impl Audited for switch::Reclaimed {}
 impl Audited for Enrolled {}
 impl Audited for String {}
+
+impl Audited for switch::Stowed {
+    fn audit_code(&self) -> &'static str {
+        self.kept.code()
+    }
+
+    fn audit_subject(&self) -> Option<&str> {
+        self.kept.account()
+    }
+}
 
 impl Audited for switch::Removed {
     fn audit_code(&self) -> &'static str {
@@ -1506,6 +1581,14 @@ mod tests {
             "{}",
             said[0]
         );
+        assert!(
+            said[0].ends_with(
+                "`pitboard stow` keeps that login for its account, where Pitboard holds no \
+                 other it can switch to, then deletes the file."
+            ),
+            "{}",
+            said[0]
+        );
         let offline = pitboard.status_offline().expect("a read of what is known");
         assert!(
             offline
@@ -1555,7 +1638,7 @@ mod tests {
                     "{path} is there with no Claude Code login in it. While it is, Claude \
                      Code sessions already running at a switch keep the account they are on \
                      until their login is next renewed, or until they are started again. \
-                     Deleting it lets them follow a switch: `rm {path}`.",
+                     `pitboard stow` deletes it, which lets them follow a switch.",
                     path = left.display()
                 )],
                 "{warnings:?}"

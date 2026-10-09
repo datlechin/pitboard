@@ -1,0 +1,23 @@
+---
+source: tests/contract.rs
+expression: "serde_json :: json! ({ \"exit\" : code, \"envelope\" : value })"
+---
+{
+  "exit": 0,
+  "envelope": {
+    "v": 1,
+    "command": "stow",
+    "ok": true,
+    "data": {
+      "stowed": true,
+      "path": "[path]",
+      "login": "stored",
+      "account": "alpha",
+      "dropped": [
+        "slackTag"
+      ]
+    },
+    "warnings": [],
+    "error": null
+  }
+}

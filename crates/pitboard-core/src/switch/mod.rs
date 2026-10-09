@@ -25,6 +25,7 @@ mod journal;
 mod refusals;
 mod rename;
 pub(crate) mod renew;
+mod stow;
 #[cfg(test)]
 mod two_tools;
 mod uninstall;
@@ -43,6 +44,8 @@ pub use journal::{Abandoned, Recovered, pending as interrupted};
 pub(crate) use journal::{Asking, interrupted_tool};
 pub use rename::rename;
 pub use renew::{Due, Renewal, renew_due, renew_parked};
+pub(crate) use stow::find as left_login;
+pub use stow::{Foreseen, Kept, Left, Stowed, stow};
 pub use uninstall::{Removed, uninstall};
 
 use crate::context::Context;
@@ -748,7 +751,7 @@ struct Readied {
 fn write_lock(ctx: &Context, permit: Permit, which: ProviderId) -> Result<Option<lock::Guard>> {
     Ok(provider::of(which)
         .write_lock(ctx)
-        .map(|dir| lock::acquire(permit, &dir))
+        .map(|dir| lock::acquire(permit, &dir, lock::WRITE))
         .transpose()?)
 }
 

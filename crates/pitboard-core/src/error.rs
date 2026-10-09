@@ -20,6 +20,35 @@ impl std::fmt::Display for Enrolled {
     }
 }
 
+/// How far putting away the file behind a tool's store had gone when something stopped it.
+/// Never as far as deleting the file, and never further than keeping the login it held.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Partway {
+    /// Nothing was changed.
+    Nothing,
+    /// The login in the file was renewed, and the renewed one written back there.
+    Renewed,
+    /// The login in the file was parked for `label`.
+    Parked { label: String },
+}
+
+impl std::fmt::Display for Partway {
+    /// What Pitboard did, after "Pitboard".
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Partway::Nothing => write!(f, "changed nothing"),
+            Partway::Renewed => write!(
+                f,
+                "deleted nothing, having renewed the login in the file and written it back there"
+            ),
+            Partway::Parked { label } => write!(
+                f,
+                "deleted nothing, having parked the login in the file for `{label}`"
+            ),
+        }
+    }
+}
+
 /// Why a request to Anthropic did not produce an answer Pitboard could use.
 ///
 /// The code on an error says what Pitboard was doing; this says what went wrong underneath
@@ -573,6 +602,66 @@ pub enum Error {
     #[error("the sign-in did not finish, so nothing was enrolled.")]
     SignInIncomplete,
 
+    /// The file behind the store in use holds something else than what putting it away was
+    /// confirmed for, or is gone.
+    #[error(
+        "{} has changed since putting it away was confirmed. Putting it away again says first \
+         what it holds now.",
+        path.display()
+    )]
+    LeftLoginChanged { path: PathBuf },
+
+    /// The login stored changed before the file behind it could go, where it was going
+    /// because of that login: the file held that very login, or another of the same account.
+    #[error(
+        "the login {} has stored changed while {} was being put away, and whether the file's \
+         login is kept somewhere depended on it. Putting it away again says first what it does \
+         now.",
+        ProviderId::Claude.name(),
+        path.display()
+    )]
+    StoredLoginChanged { path: PathBuf },
+
+    /// The login left in the file is an account's nobody enrolled, so there is no account to
+    /// keep it for, and deleting the file would lose it.
+    #[error(
+        "{} holds {email}'s login{}, an account not enrolled here, so Pitboard has no account to \
+         keep it for. Enrol that account first, with `pitboard enroll <label> --sign-in`, or \
+         with `pitboard enroll <label>` while Claude Code is signed in to it, then run \
+         `pitboard stow` again.",
+        path.display(),
+        crate::words::in_organisation(organization)
+    )]
+    LeftLoginNotEnrolled {
+        path: PathBuf,
+        email: String,
+        organization: String,
+    },
+
+    #[error(
+        "Pitboard could not ask {} whose the login left in {} is ({detail}). Check the \
+         connection and try again.",
+        ProviderId::Claude.service(),
+        path.display()
+    )]
+    LeftLoginUnidentified {
+        path: PathBuf,
+        cause: Cause,
+        detail: String,
+    },
+
+    /// What stopped putting away the file behind a tool's store, said with how far that had
+    /// gone, which is never as far as deleting the file. Its code, cause and exit status are
+    /// `error`'s, so a program branches on what stopped it.
+    #[error("{} Pitboard {partway}.", sentence(error))]
+    PutAwayStopped {
+        partway: Partway,
+        /// What parking the login warned about, where it was parked first. Taken out by the
+        /// service and reported beside the error.
+        warnings: Vec<crate::service::Warning>,
+        error: Box<Error>,
+    },
+
     /// Signing in to a second account works by pointing the tool's own login at a scratch
     /// directory. Where that does not isolate it from the live login, running one would
     /// write over the account somebody is using, so Pitboard will not.
@@ -684,6 +773,11 @@ impl Error {
                 ProviderId::Codex => "codex_not_found",
             },
             SignInIncomplete => "sign_in_incomplete",
+            LeftLoginChanged { .. } => "left_login_changed",
+            StoredLoginChanged { .. } => "stored_login_changed",
+            LeftLoginNotEnrolled { .. } => "left_login_not_enrolled",
+            LeftLoginUnidentified { .. } => "left_login_unidentified",
+            PutAwayStopped { error, .. } => error.code(),
             SignInNotIsolated { .. } => "sign_in_not_isolated",
             RenewalFailed { .. } => "renewal_failed",
             SignInInProgress => "sign_in_in_progress",
@@ -696,17 +790,17 @@ impl Error {
         }
     }
 
-    /// 1 when a request could not be met; 2 when the command line was wrong; 3 when a login
-    /// or Claude Code's files are in a state Pitboard cannot safely act on: an unexpected
-    /// format, or a login that could not be put back.
     /// What went wrong underneath, where the failure came from a request to Anthropic.
     /// `None` where nothing was asked.
     pub fn cause(&self) -> Option<Cause> {
         use Error::*;
         match self {
-            IdentityUnverifiable { cause, .. } => Some(*cause),
+            IdentityUnverifiable { cause, .. } | LeftLoginUnidentified { cause, .. } => {
+                Some(*cause)
+            }
             RenewalFailed { cause, .. } => *cause,
             SessionExpired { .. } => Some(Cause::TokenExpired),
+            PutAwayStopped { error, .. } => error.cause(),
             _ => None,
         }
     }
@@ -715,11 +809,16 @@ impl Error {
     /// a failure that happened after something worth warning about was done carries any.
     pub(crate) fn take_warnings(&mut self) -> Vec<crate::service::Warning> {
         match self {
-            Error::SignInNotInstalled { warnings, .. } => std::mem::take(warnings),
+            Error::SignInNotInstalled { warnings, .. } | Error::PutAwayStopped { warnings, .. } => {
+                std::mem::take(warnings)
+            }
             _ => Vec::new(),
         }
     }
 
+    /// 1 when a request could not be met; 2 when the command line was wrong; 3 when a login
+    /// or Claude Code's files are in a state Pitboard cannot safely act on: an unexpected
+    /// format, or a login that could not be put back.
     pub fn exit_code(&self) -> u8 {
         use Error::*;
         match self {
@@ -738,8 +837,20 @@ impl Error {
             | RecoveryRecordCorrupt { .. } => 3,
             Usage(_) => 2,
             Store(e) => e.exit_code(),
+            PutAwayStopped { error, .. } => error.exit_code(),
             _ => 1,
         }
+    }
+}
+
+/// `error`'s message as a sentence, ending with a full stop as some do not, for more to be
+/// said after it.
+fn sentence(error: &Error) -> String {
+    let said = error.to_string();
+    if said.ends_with('.') {
+        said
+    } else {
+        format!("{said}.")
     }
 }
 
@@ -860,12 +971,58 @@ mod tests {
             Error::Elevated { why: None },
             Error::SystemTooOld { build: Some(22631) },
             Error::WindowsNotReleased,
+            Error::LeftLoginChanged { path: "f".into() },
+            Error::StoredLoginChanged { path: "f".into() },
         ];
         let mut codes: Vec<&str> = samples.iter().map(Error::code).collect();
         codes.sort_unstable();
         let before = codes.len();
         codes.dedup();
         assert_eq!(codes.len(), before);
+    }
+
+    /// Whatever stops putting the file away is branched on by its own code, cause and exit
+    /// status, and says after its own words how far putting it away had gone.
+    #[test]
+    fn what_stopped_putting_a_file_away_keeps_its_code_and_says_how_far_it_went() {
+        let stopped = Error::PutAwayStopped {
+            partway: Partway::Parked {
+                label: "work".into(),
+            },
+            warnings: Vec::new(),
+            error: Box::new(Error::Store(crate::store::Error::Locked)),
+        };
+
+        assert_eq!(stopped.code(), "credential_store_locked");
+        assert_eq!(
+            stopped.exit_code(),
+            Error::Store(crate::store::Error::Locked).exit_code()
+        );
+        assert!(
+            stopped.to_string().ends_with(
+                "desktop session. Pitboard deleted nothing, having parked the login in the file \
+                 for `work`."
+            ),
+            "{stopped}"
+        );
+
+        let unidentified = Error::PutAwayStopped {
+            partway: Partway::Nothing,
+            warnings: Vec::new(),
+            error: Box::new(Error::LeftLoginUnidentified {
+                path: "f".into(),
+                cause: Cause::Unreachable,
+                detail: "offline".into(),
+            }),
+        };
+        assert_eq!(unidentified.code(), "left_login_unidentified");
+        assert_eq!(unidentified.cause(), Some(Cause::Unreachable));
+        assert!(
+            unidentified
+                .to_string()
+                .ends_with("try again. Pitboard changed nothing."),
+            "{unidentified}"
+        );
     }
 
     #[test]

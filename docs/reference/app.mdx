@@ -124,8 +124,10 @@ Notices say what needs attention, most pressing first:
 | **Switched to work** | A switch the app made finished: one you asked for, or one it made by itself. The lines under it say what happens to open sessions. | **Dismiss** (an x) |
 | **work has a new login** | A sign-in in the app gave the account in use a new login. | **Dismiss** (an x) |
 | **Claude Code's config names another account** | Claude Code's config names another account than the one in use, which `/status` in Claude Code then shows. | **Update Claude Code's Config**, which writes the account in use into the config, as `pitboard use` with it does, and moves no login. Where a switch has put another account in use since the notice was drawn, it writes nothing and opens the alert **Couldn't update Claude Code's config**. None while the account in use is not enrolled. |
+| **A login file is left behind the keychain** | On macOS, `~/.claude/.credentials.json` sits behind the keychain, which keeps open sessions from following a switch. | **Put Away**, which opens **Put Away the Login Left in a File**. None where Pitboard cannot read the file, which it cannot put away: the notice sends you to `pitboard doctor`, which says why. |
 | The title of another warning, such as **A parked login was refused** | A read or a change gave a warning. For each title, see [Warning codes](/reference/errors#warning-codes). | None |
 | **Gave up on the interrupted switch** | You clicked **Give Up** and confirmed. | **Dismiss** (an x) |
+| **Put away the login left in a file** | You clicked **Put Away** in **Put Away the Login Left in a File**, and the file is gone. The lines under it say what became of its login and its other keys. | **Dismiss** (an x) |
 
 ### Activity pane
 
@@ -142,6 +144,8 @@ The **Activity** pane lists the last 500 changes Pitboard made, newest first, fr
 **Automatic switch** is a switch Pitboard made or tried by itself before a Claude Code account ran out. Its **Account** is the account it switched to, or tried to, or `claude` for a try that failed before Pitboard chose one. Its **Asked By** is **Pitboard app** for the app's own, and **Command line** for `pitboard watch`. A look that finds nothing to switch adds no line.
 
 **Automatic switch not made** is a switch Pitboard did not make by itself. Its **Result** is **Not identified** where Pitboard could not tell whose login Claude Code has stored, so it did not decide. Its **Account** is then the account last known in use. Otherwise a limit of the account in use reached the share, and Pitboard did not switch away from it. Its **Account** is then that account. Its **Result** is the reason, such as **No room**, **Already switched**, **Attempts spent**, **Settling** or **Auth overridden**. Each such reason has one line for each limit and its reset.
+
+**Put away a login left in a file** is [`pitboard stow`](/reference/account-commands#stow), or **Put Away** in the app. Its **Account** is the account the login was of, where that account is enrolled. Its **Result** says what became of the login, such as **Parked**, **Park kept** or **Second sign-in**, or what stopped it.
 
 **Login in use changed** is a change Pitboard found made outside it, such as `/login` in Claude Code. Its **Result** is **Signed in outside** with the account signed in, **Signed out outside** with none, or **Login replaced** with the account whose only login went.
 
@@ -174,10 +178,11 @@ Double-clicking a row, or selecting it and pressing Return, does what its button
 | **Signing In to Claude Code**, **Signing In to Codex** | **Sign In** in **Add Account** or **Sign In to work Again**. The same dialog takes this title. | **Waiting for your browser** while you sign in there. **Browser didn't open?** with **Open Sign-In Page**, when the tool gives its sign-in address. For Claude Code, a **Code** field and **Submit Code** from the start, for the code shown after you sign in. Claude Code takes it whether or not your browser came back to it. If Claude Code does not take the code, the dialog says **Claude Code didn't take that code. Copy the whole code your browser shows, and paste it again.** and shows the **Code** field again for the same sign-in. The dialog closes when the sign-in finishes. **Cancel** stops the sign-in and adds nothing. |
 | **Name This Account** | **Name** in a tip or a shortcut menu, a double-click or Return on the account's row, or an account in the menu marked **Not named yet** | A **Name** field and **Save** |
 | **Rename "work"** | **Rename** in a shortcut menu | A **Name** field holding the label, and **Rename** |
+| **Put Away the Login Left in a File** | **Put Away** on the notice **A login file is left behind the keychain** | **Finding out whose login it is** while Pitboard reads the file and, where it must, asks Anthropic whose its login is. Then what the file holds and what putting it away does with that, the other keys that go with it, and what becomes of open sessions, in the words [`pitboard stow`](/reference/account-commands#stow) asks with, and **Put Away**. A login of an account not enrolled here is named, with what to do first, and **Put Away** cannot be clicked. |
 
 **Add Account** offers each tool whose program the app found, and each tool that has an enrolled account even if its program was not found. When the app finds neither program and no account is enrolled, it offers only Claude Code.
 
-If an action fails, the dialog stays open with what you entered. It shows the reason under a title such as **Couldn't sign in to work**.
+If an action fails, the dialog stays open with what you entered. It shows the reason under a title such as **Couldn't sign in to work**, or in **Put Away the Login Left in a File**, **Couldn't tell whose login it is** or **Couldn't put the login away**. After **Couldn't put the login away**, that dialog reads the file again and says what it holds then.
 
 | Alert | Opened by | Says | Buttons |
 | --- | --- | --- | --- |

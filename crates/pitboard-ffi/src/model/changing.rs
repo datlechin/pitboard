@@ -9,6 +9,7 @@
 
 use super::advice::Told;
 use super::state::{Answer, Job};
+use super::stowing::{left, parked_now};
 use super::switching::{a_read_that_started_before, switch};
 use super::testing::{
     Hand, Machine, a_look, a_look_or_a_read, any_read, claude, codex_account, enrolled_as,
@@ -17,6 +18,7 @@ use super::testing::{
 use super::{Intent, Sheet};
 use crate::present::testing::account;
 use crate::{Account, EnrolledAs};
+use pitboard_core::switch::Foreseen;
 use std::time::Duration;
 
 fn enrol(provider: &str, name: &str) -> Intent {
@@ -466,6 +468,30 @@ fn however_a_change_ends_it_gives_the_index_back_to_the_poll() {
             Box::new(move |model, machine| {
                 machine.enrolling_current = Err(refusal("refused", "refused", Vec::new()));
                 model.send(enrol("codex", "job"));
+                model.run(machine);
+            }),
+        ),
+        (
+            "a refused put away",
+            Box::new(move |model, machine| {
+                machine.leftover = Ok(Some(left(Foreseen::Kept(parked_now("work")))));
+                machine.stowing = Err(refusal("refused", "refused", Vec::new()));
+                model.send(Intent::PresentSheet { sheet: Sheet::Stow });
+                model.run(machine);
+                model.send(Intent::Stow);
+                model.run(machine);
+            }),
+        ),
+        (
+            "a put away that came to nothing",
+            Box::new(|model, machine| {
+                machine.leftover = Ok(Some(left(Foreseen::Kept(parked_now("work")))));
+                model.send(Intent::PresentSheet { sheet: Sheet::Stow });
+                model.run(machine);
+                model.send(Intent::Stow);
+                let stowing = model.next();
+                model.give(Answer::Lost(stowing));
+                // The sheet looks at the file again.
                 model.run(machine);
             }),
         ),
