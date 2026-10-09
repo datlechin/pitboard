@@ -10,7 +10,7 @@ use crate::holder::{self, capitalised};
 use crate::host::{Elevation, Floor};
 use crate::in_use::{self, Doubt, InUse, Known};
 use crate::provider::{Held, ProviderId};
-use crate::state::{self, Account, Key};
+use crate::state::{self, Account, Key, new_id};
 use crate::switch::{self, Enrolled, Outcome, Recovered, Renewal, Settled, SignIn};
 use crate::{audit, readings, schedule, status, statusline};
 use std::fmt;
@@ -165,10 +165,14 @@ pub enum Warning {
     /// The tool's own record names `named` since its service last named the login stored,
     /// `last`'s, as a sign-in leaves it and as another process starting on another login
     /// can: another login may be stored. Said by a read that could not ask whose it is.
+    /// `asked` is false for a record brought forward from an earlier Pitboard, whose `last`
+    /// is the account it last switched to, which the service never named, and whose own
+    /// record names another account.
     InUseUnconfirmed {
         tool: ProviderId,
         last: Stored,
         named: Stored,
+        asked: bool,
     },
     /// The tool's own record names `config`, and the login stored is `in_use`'s, as its
     /// service said: what `/status` in Claude Code shows is not the account in use. Using
@@ -387,7 +391,24 @@ impl fmt::Display for Warning {
                      --sign-in` to sign in to it again."
                 )
             }
-            Warning::InUseUnconfirmed { tool, last, named } => {
+            Warning::InUseUnconfirmed {
+                tool,
+                last,
+                named,
+                asked: false,
+            } => write!(
+                f,
+                "{name}'s config names {named}, and Pitboard has not asked {service} whose login \
+                 {name} has stored since Pitboard was updated, so another login may be stored. \
+                 The account it last switched to is {last}. `pitboard status` asks.",
+                name = tool.name(),
+                named = named.said("no account"),
+                service = tool.service(),
+                last = last.said("none"),
+            ),
+            Warning::InUseUnconfirmed {
+                tool, last, named, ..
+            } => {
                 write!(
                     f,
                     "{name}'s config has named {named} since Pitboard last asked {service} whose \
@@ -506,15 +527,33 @@ fn replaced(state: &state::State) -> Vec<Warning> {
 }
 
 /// What `known` says of a tool whose own record is apart from its login: that the record
-/// moved since its service last named the login stored, or that it names another account
-/// than that login's.
+/// moved since its service last named the login stored, or names another account than one
+/// the service never named, or that it names another account than that login's.
 fn in_doubt(state: &state::State, tool: ProviderId, known: &Known) -> Option<Warning> {
     let named = Stored::of(state, tool, known.own_record.as_ref());
-    if known.doubt == Some(Doubt::NamedMoved) {
+    let unconfirmed = |asked| {
         let last = known.last.as_ref().map_or(Stored::Unknown, |record| {
             Stored::of(state, tool, record.owner.as_ref())
         });
-        return Some(Warning::InUseUnconfirmed { tool, last, named });
+        Some(Warning::InUseUnconfirmed {
+            tool,
+            last,
+            named: named.clone(),
+            asked,
+        })
+    };
+    match known.doubt {
+        Some(Doubt::NamedMoved) => return unconfirmed(true),
+        Some(Doubt::NeverEstablished) => {
+            let owner = known.owner()?;
+            let config = known.own_record.as_ref()?;
+            return if new_id(tool, config) == new_id(tool, owner) {
+                None
+            } else {
+                unconfirmed(false)
+            };
+        }
+        Some(Doubt::LoginUnreadable) | None => {}
     }
     known
         .named_another(tool)
@@ -2277,6 +2316,48 @@ mod tests {
                 "Claude Code's config has named `there` since Pitboard last asked Anthropic \
                  whose login Claude Code has stored, so another login may be stored. The one \
                  stored then was `here`'s. `pitboard status` asks again."
+                    .to_string()
+            )]
+        );
+        assert_eq!(m.api.calls(), 0);
+    }
+
+    /// A record brought forward from 0.9.0 names the account it last switched to, which
+    /// Anthropic never named. Where Claude Code's config names another account, a read that
+    /// asks nobody says the account in use is not confirmed, as doctor and the status line do.
+    #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
+    )]
+    fn an_offline_read_of_a_record_never_asked_about_says_the_config_names_another() {
+        let m = machine("offline-never-asked");
+        let mut state = state::load(&m.ctx).expect("state");
+        let here = state.get(&m.key("here")).expect("here").owner();
+        state.in_use.insert(
+            ProviderId::Claude.code().into(),
+            crate::in_use::InUse {
+                owner: Some(here),
+                login: String::new(),
+                known_at: 0,
+                named: None,
+            },
+        );
+        state::save(&m.ctx, Permit::for_a_test(), &state).expect("saved");
+        crate::switch::harness::config_names(&m, "there");
+
+        let read = Pitboard::new(m.ctx.clone())
+            .status_offline()
+            .expect("a read");
+
+        assert_eq!(in_use(&read), ["here"]);
+        assert_eq!(
+            said(&read),
+            [(
+                "in_use_unconfirmed",
+                "Claude Code's config names `there`, and Pitboard has not asked Anthropic whose \
+                 login Claude Code has stored since Pitboard was updated, so another login may \
+                 be stored. The account it last switched to is `here`. `pitboard status` asks."
                     .to_string()
             )]
         );

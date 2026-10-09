@@ -33,9 +33,11 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   to delete with `rm`.
 - The warnings `in_use_unconfirmed` and `config_names_another`. A read that could not ask
   Anthropic warns with `in_use_unconfirmed` where Claude Code's config has named another
-  account since Anthropic last named the login stored, as a sign-in leaves it. Every read
-  warns with `config_names_another` where the config names another account than the one
-  whose login is stored, which `/status` in Claude Code then shows. `pitboard doctor` has an
+  account since Anthropic last named the login stored, as a sign-in leaves it, and, until it
+  first asks Anthropic after the update, where the config names another account than the
+  one Pitboard last switched to, which it takes as in use until then. Every read warns with
+  `config_names_another` where the config names another account than the one whose login
+  is stored, which `/status` in Claude Code then shows. `pitboard doctor` has an
   `in use` check that names the account in use, as Anthropic said and when, and warns of
   either. The app asks Anthropic once whenever a read between its own says
   `in_use_unconfirmed`.

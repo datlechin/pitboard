@@ -28,7 +28,7 @@ An account asked about recently is not asked again until its numbers could have 
 | `--offline` | Answer from what was last measured, without asking anyone |
 | `--fresh` | Ask about every account, even one asked about moments ago |
 
-`--offline` renews nothing and writes nothing. It takes the Claude Code account in use from whose login Anthropic last named, and the Codex one from its login's own claims. Each account says `read without asking Anthropic` or `read without asking OpenAI`. Where Claude Code's config has named another account since Anthropic last named the login stored, it warns with `in_use_unconfirmed`, and `status` without `--offline` asks again.
+`--offline` renews nothing and writes nothing. It takes the Claude Code account in use from whose login Anthropic last named, and the Codex one from its login's own claims. Each account says `read without asking Anthropic` or `read without asking OpenAI`. Until Pitboard first asks Anthropic after an update from 0.9.0 or earlier, it takes the account it last switched to. It warns with `in_use_unconfirmed` where Claude Code's config has named another account since Anthropic last named the login stored, or names another account than the one last switched to, and `status` without `--offline` asks again.
 
 `--fresh` asks again a service Pitboard could not reach moments ago, but not one that asked Pitboard to wait: those accounts keep their last numbers until the wait ends. Giving both options is refused with exit status 2.
 
