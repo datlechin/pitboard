@@ -160,6 +160,42 @@ fn a_stale_config_cannot_make_a_switch_file_the_credential_under_the_wrong_accou
     );
 }
 
+/// Claude Code's config can name another account than the one whose login it has stored, as
+/// a Claude Code process started on another login leaves it. Using the account in use writes
+/// that account there again and moves no login.
+#[test]
+#[cfg_attr(windows, ignore = "W22: switching Claude Code on Windows")]
+fn using_the_account_in_use_writes_it_into_claude_codes_config_again() {
+    let env = two_accounts("namesagain");
+    let names_beta = || {
+        let mut config = env.config();
+        config["oauthAccount"]["accountUuid"] = serde_json::json!(env.uuid('b'));
+        config["oauthAccount"]["organizationUuid"] = serde_json::json!(env.uuid('p'));
+        std::fs::write(env.root.join(".claude.json"), config.to_string()).unwrap();
+    };
+
+    names_beta();
+    let (out, err, code) = env.run(&["use", "alpha"]);
+    assert_eq!(code, 0, "{err}");
+    assert!(
+        out.contains("alpha is already signed in. Claude Code's config named another account"),
+        "{out}"
+    );
+    assert_eq!(env.config()["oauthAccount"]["accountUuid"], env.uuid('a'));
+    assert_eq!(env.live()["claudeAiOauth"]["refreshToken"], "refresh-a");
+
+    names_beta();
+    let (out, err, code) = env.run(&["use", "alpha", "--json"]);
+    assert_eq!(code, 0, "{err}");
+    let data = &envelope(&out)["data"];
+    assert_eq!(
+        (&data["changed"], &data["config_updated"]),
+        (&false.into(), &true.into())
+    );
+    let (out, _, _) = env.run(&["use", "alpha", "--json"]);
+    assert_eq!(envelope(&out)["data"]["config_updated"], false);
+}
+
 #[test]
 #[cfg_attr(windows, ignore = "W22: switching Claude Code on Windows")]
 fn switching_away_from_an_account_that_is_not_enrolled_is_refused() {

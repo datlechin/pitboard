@@ -138,7 +138,7 @@ Before anything moves, Pitboard checks that the parked login belongs to that acc
 | --- | --- |
 | `<LABEL>` | The label the account was enrolled under, such as `work` or `codex/work` |
 
-If the account is already in use, `use` prints `work is already signed in.` and moves no login.
+If the account is already in use, `use` prints `work is already signed in.` and moves no login. Where Claude Code's config names another account, `use` writes `work` into it, as a switch does, and adds `Claude Code's config named another account, and now names work.` `/status` in Claude Code then shows `work`.
 
 After a switch, it prints `Switched to work; personal is parked.` and one more line. For Claude Code, that line is `Claude Code sessions already running follow within 33 seconds.` On macOS, while `~/.claude/.credentials.json` sits behind the keychain, it is ``Claude Code sessions already running keep the account they are on until their login is next renewed, or until they are started again: /Users/you/.claude/.credentials.json is there. `pitboard doctor` says more.`` instead. See [Open sessions](/concepts/switching#open-sessions). For Codex, it is the second line of the following example.
 

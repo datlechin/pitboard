@@ -43,7 +43,7 @@ To use `work` again, sign in to it: see [Sign in to an account again](/guides/si
 
 With `in_use_unconfirmed`, Pitboard has not asked Anthropic since the config changed, and the change may be a sign-in. Run `pitboard status` to ask. If a sign-in replaced the only login of the account in use, that account then reads `login replaced outside Pitboard`, as [An account reads `login replaced outside Pitboard`](#an-account-reads-login-replaced-outside-pitboard) says.
 
-With `config_names_another`, the login stored is still the one Pitboard shows. `/usage` and every request use the login a session holds, whatever the config names. The next switch writes the account it puts in use into the config.
+With `config_names_another`, the login stored is still the one Pitboard shows. `/usage` and every request use the login a session holds, whatever the config names. To have `/status` name the account in use, run `pitboard use` with it, or click **Update Claude Code's Config** on the app's notice. It writes that account into the config and moves no login. A Claude Code process that starts on another login, such as one over SSH, can write its own account there again.
 
 ## Pitboard cannot confirm which account is signed in
 
@@ -63,11 +63,21 @@ warning: ANTHROPIC_API_KEY in the environment is set, so Claude Code signs in wi
 
 Unset or remove what it names, then restart Claude Code.
 
-If the warning says Claude Code's config could not be updated, the switch worked, but the old name may show until the next switch.
+If the warning says Claude Code's config could not be updated, the switch worked, but the old name may show. Run `pitboard use` with the account switched to once the warning's cause is fixed: it writes that account into the config.
 
 A session started over SSH, or one where the keychain is locked, does not follow a switch. See [Claude Code over SSH uses another account](#claude-code-over-ssh-uses-another-account).
 
 If the switch said that open sessions keep their account until their login is next renewed, `~/.claude/.credentials.json` is behind the keychain. Each session follows when it next renews its login, or when you start it again. To have sessions follow within 33 seconds again, delete the file as the same section says.
+
+If `/status` names the account you switched to and `/usage` shows the previous account's limits, see [`/usage` shows the previous account after a switch](#/usage-shows-the-previous-account-after-a-switch).
+
+## `/usage` shows the previous account after a switch
+
+After a switch, `/status` in an open Claude Code session names the account you switched to, and `/usage` shows the limits of the account you left.
+
+The two read different things. As read in Claude Code 2.1.294, `/status` shows the account Claude Code's config names, and a session reads the config again within about a second. The switch writes the account it puts in use there. `/usage` shows the session's last usage reading, then asks Anthropic with the login the session holds.
+
+A session holds the previous login until it follows the switch: within about 33 seconds, or, while `~/.claude/.credentials.json` is behind the keychain, when it next renews its login. Until then its requests go with the previous account too, whatever `/status` says. `pitboard use` with the account you switched to changes nothing here: the config already names it. Start the session again to have it take the login in use at once.
 
 ## A running codex still uses the old account
 

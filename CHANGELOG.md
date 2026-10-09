@@ -16,6 +16,12 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   `in use` check that names the account in use, as Anthropic said and when, and warns of
   either. The app asks Anthropic once whenever a read between its own says
   `in_use_unconfirmed`.
+- `config_updated` in `pitboard use --json` for an account already in use, and the
+  `pitboard log` outcome of the same name, where `use` wrote that account into Claude Code's
+  config. The app's notice **Claude Code's config names another account** has a button,
+  **Update Claude Code's Config**, that does it and moves no login. Where a switch has put
+  another account in use since the notice was drawn, it writes nothing and says so, with
+  the error `account_not_in_use`.
 
 ### Changed
 
@@ -108,6 +114,11 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   and the automatic switch watched that account rather than the one at its limit. `forget`
   asks whose the login is as a switch does, and where nobody can say, it keeps the account
   last in use and any account with nothing parked.
+- `pitboard use` with the account already in use writes that account into Claude Code's
+  config where the config names another account, as a switch to it does, so `/status` in
+  Claude Code names the account in use. It changed nothing, and only the next switch put
+  the config right. The `config_names_another` and `config_write_failed` warnings and
+  `pitboard doctor` name the command.
 
 ## [0.9.0] - 2026-10-08
 

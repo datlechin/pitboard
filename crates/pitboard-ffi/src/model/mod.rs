@@ -279,6 +279,13 @@ pub enum Intent {
     /// Drop the account `qualified` names, and the login parked for it, once somebody has
     /// answered the question its row asks first. What goes wrong is said in the window.
     Forget { qualified: String },
+    /// Write the account `qualified` names, the one in use, into its tool's config where that
+    /// names another account, as `pitboard use` with it does: the button on the notice that
+    /// says Claude Code's config names another account. A change like a rename and not a
+    /// switch, so nothing said about a switch or the account in use goes. Refused, writing
+    /// nothing, where another account is in use by then. What it warned of is said beside
+    /// the read after it, and what stopped it in the window.
+    UpdateConfig { qualified: String },
     /// `pane` of the main window is shown, or its own button asks for what it shows to be
     /// read again, as Check Again and the activity's Refresh do: what it shows is read every
     /// time, as the Swift panes read it on every visit, since an app runs for days and a check

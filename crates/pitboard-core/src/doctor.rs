@@ -1153,7 +1153,8 @@ fn judge_in_use(facts: &Facts) -> Option<Check> {
             ask,
         ));
     };
-    let in_use = Stored::of(state, ProviderId::Claude, last.owner.as_ref()).said("no account");
+    let account = Stored::of(state, ProviderId::Claude, last.owner.as_ref());
+    let in_use = account.said("no account");
     let config =
         Stored::of(state, ProviderId::Claude, known.own_record.as_ref()).said("no account");
     let when = time::moment(last.known_at, facts.now);
@@ -1192,8 +1193,8 @@ fn judge_in_use(facts: &Facts) -> Option<Check> {
             name,
             format!("{in_use}, as Anthropic said {when}, and Claude Code's config names {config}"),
             format!(
-                "`/status` in Claude Code shows {config}. A switch writes the account it puts in \
-                 use there."
+                "`/status` in Claude Code shows {config}. {}",
+                account.how_to_name()
             ),
         ));
     }
@@ -4153,8 +4154,8 @@ mod tests {
         );
         assert_eq!(
             said.advice,
-            "`/status` in Claude Code shows `there`. A switch writes the account it puts in use \
-             there."
+            "`/status` in Claude Code shows `there`. `pitboard use here` writes `here` into the \
+             config."
         );
         assert_eq!(in_use(&facts), ["here"]);
     }

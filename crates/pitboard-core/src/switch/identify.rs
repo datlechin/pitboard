@@ -147,9 +147,10 @@ pub(crate) fn now(
 /// A read that finds what the record says writes nothing. One that would change it takes
 /// Pitboard's lock only where nobody holds it, and records nothing while a switch waits to be
 /// finished, which may be about to put another login in the store: the next read records
-/// what it finds then. Each tool's store is read again under the lock, and a login that moved
-/// since it was asked about is not recorded, so an answer about one login is never filed for
-/// another. Nothing of the tool's own is written.
+/// what it finds then. Each tool's own record and store are read again under the lock, and a
+/// tool where either moved since the read is not recorded, so an answer about one login is
+/// never filed for another, and what the read saw the tool's own record name is never filed
+/// over what `use` wrote there since. Nothing of the tool's own is written.
 pub(crate) fn record_read(ctx: &Context, permit: Permit, found: &[(ProviderId, InUse)]) {
     let news = |state: &State| -> Vec<(ProviderId, InUse)> {
         found
@@ -182,7 +183,7 @@ pub(crate) fn record_read(ctx: &Context, permit: Permit, found: &[(ProviderId, I
     let mut noticed = Vec::new();
     for (which, found) in news(&state) {
         let expected = found.owner.as_ref().map(|_| found.login.clone());
-        if holding(ctx, which) != Some(expected) {
+        if in_use::named(ctx, which) != found.named || holding(ctx, which) != Some(expected) {
             continue;
         }
         let (recorded, said) = record(&mut state, which, found, ctx.now());
@@ -269,7 +270,7 @@ pub(crate) fn write_down(ctx: &Context, permit: Permit, noticed: &[Noticed]) {
 #[cfg(test)]
 mod tests {
     use super::super::harness::{
-        document, in_use_lines, machine, owner, signed_in_outside, state_file,
+        audit_lines, config_names, document, machine, owner, signed_in_outside, state_file,
     };
     use super::*;
     use crate::service::Pitboard;
@@ -304,7 +305,36 @@ mod tests {
             "the login moved while it was asked about"
         );
         assert_eq!(state_file(&m), before);
-        assert!(in_use_lines(&m).is_empty());
+        assert!(audit_lines(&m, "in-use").is_empty());
+    }
+
+    /// `pitboard use` wrote the account in use into Claude Code's config while a read was
+    /// asking about the login: what the read saw the config name is past, and is not filed
+    /// over what `use` recorded.
+    #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
+    )]
+    fn what_a_read_saw_the_config_name_before_it_was_written_is_not_recorded() {
+        let m = machine("identify-config-written-meanwhile");
+        config_names(&m, "there");
+        let state = state::load(&m.ctx).expect("state");
+        let (_, found) = look(&m.ctx, &state, ProviderId::Claude).expect("a look");
+        let pitboard = Pitboard::new(m.ctx.clone());
+        pitboard.switch_to("here").expect("already in use");
+        let before = state_file(&m);
+
+        record_read(&m.ctx, Permit::for_a_test(), &[(ProviderId::Claude, found)]);
+
+        assert_eq!(state_file(&m), before);
+        let read = pitboard.status_offline().expect("a read of what is known");
+        let codes: Vec<&str> = read
+            .warnings
+            .iter()
+            .map(crate::service::Warning::code)
+            .collect();
+        assert!(codes.is_empty(), "{codes:?}");
     }
 
     /// A switch that stopped partway may be about to put another login in the store, and the
@@ -333,7 +363,7 @@ mod tests {
 
         assert!(super::super::interrupted(&m.ctx), "the switch still waits");
         assert_eq!(state_file(&m), before);
-        assert!(in_use_lines(&m).is_empty());
+        assert!(audit_lines(&m, "in-use").is_empty());
     }
 
     /// A login is known by its fingerprint only where the record was made for that very

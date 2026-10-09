@@ -239,11 +239,11 @@ pub(crate) fn config_names(m: &Machine, who: &str) {
     std::fs::write(&path, config.to_string()).expect("the config is written");
 }
 
-/// The activity log's `in-use` lines, as subject and outcome.
-pub(crate) fn in_use_lines(m: &Machine) -> Vec<(String, String)> {
+/// The activity log's lines of `verb`, as subject and outcome.
+pub(crate) fn audit_lines(m: &Machine, verb: &str) -> Vec<(String, String)> {
     crate::audit::read(&m.ctx, 100)
         .into_iter()
-        .filter(|entry| entry.verb == "in-use")
+        .filter(|entry| entry.verb == verb)
         .map(|entry| (entry.subject, entry.outcome))
         .collect()
 }

@@ -116,7 +116,7 @@ The log holds labels, codes and times, and no email addresses. It holds an accou
 
 | Verb | Written when | Subject and outcome |
 | --- | --- | --- |
-| `use` | A switch you make, in the app or with `pitboard use` | The label switched to. `already_active` when that account was already in use. |
+| `use` | A switch you make, in the app or with `pitboard use`, and **Update Claude Code's Config** in the app | The label switched to. `already_active` when that account was already in use. `config_updated` when it was, and Claude Code's config named another account, which Pitboard replaced with it. |
 | `auto-switch` | Pitboard switches Claude Code by itself, from the app or `pitboard watch`, or a switch it tries fails. Deciding not to switch writes no line. | The label switched to, or tried. `ok`, or the code of the error that stopped the switch. |
 | `in-use` | A read or a change finds that the login a tool has stored changed outside Pitboard, by a sign-in or a sign-out in the tool | `signed_in_outside`, with the label of the account whose login the tool has stored, or none for an account Pitboard has not enrolled. `signed_out_outside`, with none, when the tool has no login stored. While Claude Code's config still names an account, Pitboard cannot tell that from a login kept where it does not read, and writes no line. `login_replaced`, with the label of the account whose only login was replaced. |
 | `enroll` | An enrolment, with or without `--sign-in` | The label. `label_unusable` when the label was refused. |
@@ -130,7 +130,7 @@ The log holds labels, codes and times, and no email addresses. It holds an accou
 | `recover` | An interrupted switch is finished or undone before another change | The label the switch was to. The outcome is `interrupted_switch_finished` or `interrupted_switch_undone`. |
 | `reclaim` | A parked login is given back to its account, or discarded | The label with `ok`, or the parked login's name with `discarded` |
 | `schedule` | Daily renewal is turned on or off, or the app repairs a schedule that an app of 0.3.0 or earlier wrote | `install`, `uninstall` or `repair` |
-| `config` | A Claude Code switch removes keys that name the previous account from Claude Code's config | The names of the keys, with the outcome `dropped` |
+| `config` | A Claude Code switch removes keys that name the previous account from Claude Code's config. `pitboard use` of the account in use, or **Update Claude Code's Config** in the app, removes keys that name the account the config named. | The names of the keys, with the outcome `dropped` |
 
 ```sh
 pitboard log -n 3
@@ -242,7 +242,7 @@ When Codex's checks appear and Claude Code is absent, `doctor` leaves out most o
   | `security_tool` | `security tool` | macOS only. `/usr/bin/security`, which Pitboard reads the keychain with, is there. |
   | `config_file` | `config file` | Claude Code's config file can be read. Fails where Claude Code has never run. |
   | `identity` | `identity` | Claude Code's config names an account. That can be another than the one whose login is stored, so `in_use` says which account is in use. |
-  | `in_use` | `in use` | The account whose login Claude Code has stored, as Anthropic last named it and when, as every read that does not ask takes it. Says so where the login was renewed or replaced since, which the next `pitboard status` asks about. Warns where Anthropic has not been asked since this version, where Claude Code's config has named another account since, so that something may have signed in, and where the config names another account than the one in use, which `/status` in Claude Code then shows. Sends no request. |
+  | `in_use` | `in use` | The account whose login Claude Code has stored, as Anthropic last named it and when, as every read that does not ask takes it. Says so where the login was renewed or replaced since, which the next `pitboard status` asks about. Warns where Anthropic has not been asked since this version, where Claude Code's config has named another account since, so that something may have signed in, and where the config names another account than the one in use, which `/status` in Claude Code then shows, and names the `pitboard use` that writes the account in use there. Sends no request. |
   | `slot` | `slot` | Which of Claude Code's login entries Pitboard reads: the default one, or one that `CLAUDE_CONFIG_DIR` or `CLAUDE_SECURESTORAGE_CONFIG_DIR` selects. Always `ok`. |
   | `credential_size` | `login size` | Only when Claude Code's login is in the macOS keychain. Whether it fits what `security` reads from standard input. A larger one warns, and fails when `PITBOARD_NO_ARGV` is set. |
   | `credential_store` | `credential store` | Where Claude Code keeps its login, and whether Pitboard can read it there. A file instead of the keychain warns on macOS. |

@@ -717,10 +717,19 @@ impl AppCore {
                         to,
                         adoption: adoption_of(adoption),
                     },
-                    switch::Outcome::AlreadyActive { label } => Switch::AlreadyActive { label },
+                    switch::Outcome::AlreadyActive { label, .. } => Switch::AlreadyActive { label },
                 },
                 warnings,
             }
+        })
+    }
+
+    /// Writes the account `label` names into its tool's config where that names another
+    /// account, while it is in use, and refuses where it no longer is. Gives what it warned
+    /// of.
+    pub(crate) fn update_config(&self, label: String) -> Result<Vec<Warning>, PitboardError> {
+        changed(self.core().core.update_config(&label), |_, warnings| {
+            warnings
         })
     }
 

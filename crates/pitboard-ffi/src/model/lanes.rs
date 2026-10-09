@@ -81,6 +81,7 @@ impl Job {
             | Job::Enrol { .. }
             | Job::Rename { .. }
             | Job::Forget { .. }
+            | Job::UpdateConfig { .. }
             | Job::RepairSchedule
             | Job::SetSchedule { .. }
             | Job::Renew => Lane::Changes,
@@ -591,6 +592,7 @@ impl Worker {
                 done: core.forget(qualified.clone()),
                 qualified,
             },
+            Job::UpdateConfig { qualified } => Answer::ConfigUpdated(core.update_config(qualified)),
             // Nothing kept, a record that is there and cannot be read, and one that does not
             // read as a record of what was told, are each nothing told. The record is written
             // whole the next time something is told, over one that could not be read too: at
@@ -924,6 +926,9 @@ mod tests {
             },
             Job::Forget {
                 qualified: "claude/spare".into(),
+            },
+            Job::UpdateConfig {
+                qualified: "claude/work".into(),
             },
         ] {
             assert_eq!(change.lane(), Lane::Changes, "{change:?}");

@@ -10,7 +10,8 @@ expression: "serde_json :: json! ({ \"exit\" : code, \"envelope\" : value })"
     "ok": true,
     "data": {
       "to": "beta",
-      "changed": false
+      "changed": false,
+      "config_updated": false
     },
     "warnings": [],
     "error": null

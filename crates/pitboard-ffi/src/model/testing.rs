@@ -445,12 +445,16 @@ pub(super) struct Machine {
     pub renaming: Result<(), Refusal>,
     /// What forgetting gives.
     pub forgetting: Result<(), Refusal>,
+    /// What writing the account in use into its tool's config gives: what its tool warned of.
+    pub updating_config: Result<Vec<Warning>, Refusal>,
     /// Every login enrolled as it is signed in now, as the model named it.
     pub enrolled: Vec<String>,
     /// Every rename, from and to, as the model named them.
     pub renamed: Vec<(String, String)>,
     /// Every account forgotten, as the model named it.
     pub forgot: Vec<String>,
+    /// Every account written into its tool's config, as the model named it.
+    pub configs_updated: Vec<String>,
     /// What was told about before the model started, as kept in Pitboard's directory.
     pub told_before: Told,
     /// Every record of what was told the model kept, in order.
@@ -532,9 +536,11 @@ impl Machine {
             enrolling_current: enrolled_as(EnrolledAs::Current, Vec::new()),
             renaming: Ok(()),
             forgetting: Ok(()),
+            updating_config: Ok(Vec::new()),
             enrolled: Vec::new(),
             renamed: Vec::new(),
             forgot: Vec::new(),
+            configs_updated: Vec::new(),
             told_before: Told::new(),
             kept: Vec::new(),
             posted: Vec::new(),
@@ -721,6 +727,14 @@ impl Machine {
                     qualified,
                     done: self.forgetting.clone().map_err(|refused| refused.error()),
                 }
+            }
+            Job::UpdateConfig { qualified } => {
+                self.configs_updated.push(qualified);
+                Answer::ConfigUpdated(
+                    self.updating_config
+                        .clone()
+                        .map_err(|refused| refused.error()),
+                )
             }
             // The account windows' records by the lane's own rules, over a file in memory.
             Job::LoadKept => Answer::Kept {

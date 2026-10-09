@@ -1,7 +1,7 @@
 //! Dropping an account and the credentials parked for it.
 
 use super::identify::{self, Live};
-use super::{Error, Result, Settled, purge};
+use super::{Error, Result, Settled, enrolled, purge};
 use crate::service::Warning;
 use crate::state::{self, Key};
 
@@ -22,13 +22,7 @@ pub fn forget(settled: Settled, key: &Key) -> Result<(String, Vec<Warning>)> {
         ctx,
         permit,
     } = settled;
-    let account = state
-        .get(key)
-        .cloned()
-        .ok_or_else(|| Error::AccountUnknown {
-            label: key.typed(),
-            enrolled: state.labels(key.provider),
-        })?;
+    let account = enrolled(&state, key)?;
     let in_use = match identify::now(&ctx, permit, &mut state, key.provider) {
         Ok(Live::Login { owner, .. }) => account.owned_by(&owner),
         Ok(Live::Nothing) => false,

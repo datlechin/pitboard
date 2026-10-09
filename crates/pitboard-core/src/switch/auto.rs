@@ -65,7 +65,10 @@ pub(crate) fn automatically(
                 warnings,
             ))
         }
-        // Somebody switched first: to this account, or away from the one decided on.
+        // Somebody switched first, to this account or away from the one decided on, which
+        // the switch refuses as overtaken before any login moves or Claude Code's config is
+        // written, which only a switch and `use` write. A plan never switches to the account
+        // it leaves, so none is already active.
         Ok((Outcome::AlreadyActive { .. }, _)) | Err(Error::SwitchOvertaken) => {
             Ok((Auto::Idle, Vec::new()))
         }
@@ -396,7 +399,7 @@ mod tests {
         assert!(matches!(auto(&m).expect("no failure").value, Auto::Idle));
         assert_eq!(m.live(), Some(elsewhere), "the login in use stays in use");
         assert_eq!(
-            super::super::harness::in_use_lines(&m),
+            super::super::harness::audit_lines(&m, "in-use"),
             [
                 ("elsewhere".to_string(), "signed_in_outside".to_string()),
                 ("here".to_string(), "login_replaced".to_string()),
@@ -625,5 +628,29 @@ mod tests {
         assert_eq!(m.mem.live().peek(&m.service), before);
         assert!(logged(&m).is_empty());
         assert!(!m.ctx_home().join(".pitboard/autoswitch.json").exists());
+    }
+
+    /// A sign-in to the account the automatic switch decided on, landing before it holds the
+    /// lock, leaves Claude Code's config naming the account it decided to leave. Only a
+    /// switch and `use` write the config, so the switch it no longer has to make leaves the
+    /// config as it is, and the login too.
+    #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
+    )]
+    fn an_automatic_switch_overtaken_by_a_sign_in_to_its_target_writes_no_config() {
+        let (m, _) = nearly_out("auto-overtaken-writes-nothing", 96.0);
+        m.api.owned_by("access-there-again-refresh", owner("there"));
+        m.sign_in(&document("there-again-refresh"));
+        let config =
+            || std::fs::read_to_string(m.ctx_home().join(".claude.json")).expect("a config");
+        let before = config();
+
+        let done = auto(&m).expect("nothing to do");
+
+        assert!(matches!(done.value, Auto::Idle), "{:?}", done.value);
+        assert_eq!(config(), before);
+        assert_eq!(live_refresh(&m).as_deref(), Some("there-again-refresh"));
     }
 }

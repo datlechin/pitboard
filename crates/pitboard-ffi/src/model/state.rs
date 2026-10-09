@@ -196,6 +196,8 @@ pub(crate) enum Job {
     },
     /// Drop the account `qualified` names, and the login parked for it.
     Forget { qualified: String },
+    /// Write the account `qualified` names into its tool's config, while it is in use.
+    UpdateConfig { qualified: String },
     /// Read what the model keeps of its own in Pitboard's directory: the record of what was
     /// told, and the app's preferences.
     LoadKept,
@@ -243,8 +245,9 @@ pub(crate) struct Ticket {
     timed: bool,
     /// Whether it is the read after a switch, whose landing ends the switch.
     after_switch: bool,
-    /// The sign-in it is the read after, whose warnings are said once it has landed.
-    after_sign_in: Option<u64>,
+    /// What the change it is the read after warned of, by its number in `said_after_read`,
+    /// which is said once it has landed.
+    saying: Option<u64>,
     /// Whether it is the read after a renewal, whose landing ends the renewal.
     after_renewal: bool,
     /// Whether it is the read after a change of this app's own to the account index other
@@ -371,6 +374,9 @@ pub(crate) enum Answer {
         qualified: String,
         done: Result<(), PitboardError>,
     },
+    /// What writing the account in use into its tool's config came to, with what its tool
+    /// warned of.
+    ConfigUpdated(Result<Vec<Warning>, PitboardError>),
     /// What the model keeps of its own, as it was read: nothing told where nothing was kept
     /// or it could not be read, and the app's preferences, with whether they came from their
     /// file, as `Preferences::kept` reads them: from the file where it was there, and
@@ -468,8 +474,9 @@ struct Asked {
     timed: bool,
     /// Whether a switch asked, which is over once this read lands.
     after_switch: bool,
-    /// The sign-in that asked, whose warnings are said once this read lands.
-    after_sign_in: Option<u64>,
+    /// What the change that asked warned of, by its number in `said_after_read`, which is
+    /// said once this read lands.
+    saying: Option<u64>,
     /// Whether a renewal asked, which is over once this read is.
     after_renewal: bool,
     /// Whether a change of this app's own to the account index asked, other than a switch,
@@ -536,6 +543,8 @@ fn could_not_forget(qualified: &str) -> String {
 fn could_not_rename(label: &str) -> String {
     format!("Couldn’t rename {label}")
 }
+
+const COULD_NOT_UPDATE_CONFIG: &str = "Couldn’t update Claude Code’s config";
 
 const COULD_NOT_NAME: &str = "Couldn’t name this account";
 
@@ -717,12 +726,13 @@ pub(crate) struct State {
     /// switch itself, until the read after it lands.
     switching: Option<String>,
     /// How many of this app's other changes to the account index are under way: naming the
-    /// login signed in now, a sign-in's enrolment, a rename, forgetting, giving up on an
-    /// interrupted switch and renewing parked logins. Each holds the index from the moment it
-    /// is asked for, a sign-in's from the moment it is told to enrol, until the read after it
-    /// is over, or until it has failed. Meanwhile the change poll leaves the index alone, as
-    /// it does while a switch runs: what it finds there may be the change's own, which taken
-    /// for one made elsewhere dropped the read the change asked for.
+    /// login signed in now, a sign-in's enrolment, a rename, forgetting, writing the account
+    /// in use into its tool's config, giving up on an interrupted switch and renewing parked
+    /// logins. Each holds the index from the moment it is asked for, a sign-in's from the
+    /// moment it is told to enrol, until the read after it is over, or until it has failed.
+    /// Meanwhile the change poll leaves the index alone, as it does while a switch runs: what
+    /// it finds there may be the change's own, which taken for one made elsewhere dropped the
+    /// read the change asked for.
     changing: u32,
     /// A switch waiting for the person to let Pitboard quit an app first: the question last
     /// asked, while it is asked and after it is closed unanswered, until another switch is
@@ -748,9 +758,11 @@ pub(crate) struct State {
     sign_in_holding: Option<u64>,
     /// How many sign-ins have been asked for, which numbers the next.
     sign_ins: u64,
-    /// What a finished sign-in warned about, said beside the read after it once that read has
-    /// landed, which would otherwise put it away: by the sign-in's id.
+    /// What a finished sign-in or a config update warned about, said beside the read after it
+    /// once that read has landed, which would otherwise put it away: by a number of its own.
     said_after_read: Vec<(u64, Vec<Warning>)>,
+    /// How many have been kept there, which numbers the next.
+    sayings: u64,
     /// The sheet over the main window.
     pub(crate) sheet: Option<Sheet>,
     /// What went wrong in the sheet that is up.
@@ -842,6 +854,7 @@ impl State {
             sign_in_holding: None,
             sign_ins: 0,
             said_after_read: Vec::new(),
+            sayings: 0,
             sheet: None,
             sheet_failure: None,
             saving: Vec::new(),
@@ -1039,6 +1052,9 @@ impl State {
                 }
             }
             Intent::Forget { qualified } => self.change(Job::Forget { qualified }, jobs),
+            Intent::UpdateConfig { qualified } => {
+                self.change(Job::UpdateConfig { qualified }, jobs);
+            }
             Intent::PaneShown { pane } => self.pane_shown(pane, now, jobs),
             Intent::ReadSchedule => jobs.push(Job::ReadSchedule {
                 after_change: false,
@@ -1529,7 +1545,7 @@ impl State {
             changes_seen: self.changes_seen,
             timed: asked.timed,
             after_switch: asked.after_switch,
-            after_sign_in: asked.after_sign_in,
+            saying: asked.saying,
             after_renewal: asked.after_renewal,
             after_change: asked.after_change,
         };
@@ -1560,9 +1576,9 @@ impl State {
     }
 
     /// A read is over, or was not needed. The read after a switch ending ends the switch, the
-    /// read after any other change of this app's own ends that change, and what a sign-in
-    /// warned about is said once the read after it is over, whatever it came to, as the Swift
-    /// model said it once its `refresh` had returned.
+    /// read after any other change of this app's own ends that change, and what a sign-in or
+    /// a config update warned about is said once the read after it is over, whatever it came
+    /// to, as the Swift model said a sign-in's once its `refresh` had returned.
     fn over(&mut self, ticket: Ticket, now: Now) {
         if ticket.after_switch {
             self.switching = None;
@@ -1573,8 +1589,11 @@ impl State {
         if ticket.after_renewal {
             self.machine.renewing = false;
         }
-        if let Some(id) = ticket.after_sign_in
-            && let Some(at) = self.said_after_read.iter().position(|(of, _)| *of == id)
+        if let Some(number) = ticket.saying
+            && let Some(at) = self
+                .said_after_read
+                .iter()
+                .position(|(of, _)| *of == number)
         {
             let (_, said) = self.said_after_read.remove(at);
             let new: Vec<Warning> = said
@@ -1653,6 +1672,7 @@ impl State {
             Answer::Forgot { qualified, done } => {
                 self.forgot(&qualified, done.map_err(Some), now, jobs);
             }
+            Answer::ConfigUpdated(done) => self.config_updated(done.map_err(Some), now, jobs),
             Answer::Abandoned(done) => self.abandon_over(done.map_err(Some), now, jobs),
             Answer::SignInStarted { id, started } => {
                 // A tool that could not start leaves its thread nothing more to do.
@@ -1769,6 +1789,7 @@ impl State {
                     self.renamed(&renaming, Err(None), now, jobs);
                 }
                 Job::Forget { qualified } => self.forgot(&qualified, Err(None), now, jobs),
+                Job::UpdateConfig { .. } => self.config_updated(Err(None), now, jobs),
                 // Nothing kept could be read: nothing was told before, as far as anyone knows,
                 // and the windows' records are held for this launch, never written.
                 Job::LoadKept => self.kept(Told::new(), None, None, jobs),
@@ -1865,10 +1886,7 @@ impl State {
                     self.sheet = None;
                     self.sheet_failure = None;
                     let said = self.enrolled(&signing, done);
-                    if !said.is_empty() {
-                        self.said_after_read.push((id, said));
-                    }
-                    asked.after_sign_in = Some(id);
+                    asked.saying = self.say_after_read(said);
                 }
                 self.refresh(asked, now, jobs);
             }
@@ -2275,11 +2293,15 @@ impl State {
         match done {
             Ok(done) => {
                 self.changes_seen += 1;
-                self.said(qualified, done, now);
                 // Advice about this tool is about the account it has just left. Another
-                // tool's stays: it is as true as it was, and it is never told again.
-                let provider = split(qualified).0;
-                self.advice.retain(|advice| advice.provider != provider);
+                // tool's stays: it is as true as it was, and it is never told again. Nothing
+                // moved where the account was already in use, and advice about it stands
+                // until a read no longer bears it out.
+                if matches!(done.outcome, Switch::Switched { .. }) {
+                    let provider = split(qualified).0;
+                    self.advice.retain(|advice| advice.provider != provider);
+                }
+                self.said(qualified, done, now);
                 self.updated_ms = None;
                 self.refresh(
                     Asked {
@@ -2533,6 +2555,41 @@ impl State {
         }
     }
 
+    /// Writing the account in use into its tool's config is over. Nothing moved, so what was
+    /// said of the last switch and of the account in use stands. What it warned of, such as a
+    /// config it could not write, is said beside the read after it, and what refused it in
+    /// the window.
+    fn config_updated(
+        &mut self,
+        done: Result<Vec<Warning>, Option<PitboardError>>,
+        now: Now,
+        jobs: &mut Vec<Job>,
+    ) {
+        match done {
+            Ok(warned) => {
+                self.changes_seen += 1;
+                self.updated_ms = None;
+                let saying = self.say_after_read(warned);
+                self.refresh(
+                    Asked {
+                        after_change: true,
+                        saying,
+                        ..Asked::default()
+                    },
+                    now,
+                    jobs,
+                );
+            }
+            Err(error) => {
+                self.change_over();
+                self.present(match error {
+                    Some(error) => Refused::of(COULD_NOT_UPDATE_CONFIG.into(), error),
+                    None => Refused::lost(COULD_NOT_UPDATE_CONFIG.into()),
+                });
+            }
+        }
+    }
+
     /// Giving up on an interrupted switch is over: what it kept is said and the accounts are
     /// read again, asking each service, or what stopped it is said in the window.
     fn abandon_over(
@@ -2577,6 +2634,18 @@ impl State {
     /// One of this app's own changes to the account index is over, and no longer holds it.
     fn change_over(&mut self) {
         self.changing = self.changing.saturating_sub(1);
+    }
+
+    /// Keeps what a change warned about to be said beside the read after it once that read is
+    /// over, which would otherwise put it away: the number that read is asked with, where
+    /// there is anything to say.
+    fn say_after_read(&mut self, said: Vec<Warning>) -> Option<u64> {
+        if said.is_empty() {
+            return None;
+        }
+        self.sayings += 1;
+        self.said_after_read.push((self.sayings, said));
+        Some(self.sayings)
     }
 
     /// The read after one of this app's own changes, which ends that change once it is over.

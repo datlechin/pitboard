@@ -78,7 +78,12 @@ pub enum Outcome {
         adoption: provider::Adoption,
     },
     /// Not a failure: the state the caller asked for already holds.
-    AlreadyActive { label: String },
+    AlreadyActive {
+        label: String,
+        /// The tool's own record named another account, and now names this one again, as a
+        /// switch to it writes it.
+        config_updated: bool,
+    },
 }
 
 /// Pitboard's state, held exclusively, with any interrupted switch already finished. Every
@@ -327,10 +332,43 @@ pub fn switch(settled: Settled, key: &Key) -> Result<(Outcome, Vec<Warning>)> {
     switch_held(state, &ctx, permit, key, None)
 }
 
+/// What [`switch`] does for the account in use, for a button drawn while it was: writes it
+/// into its tool's own record where that names another account. Refused, moving nothing,
+/// where another account's login is stored by then, which [`switch`] would switch back from.
+pub fn update_config(settled: Settled, key: &Key) -> Result<(Outcome, Vec<Warning>)> {
+    let Settled {
+        _exclusive,
+        mut state,
+        ctx,
+        permit,
+    } = settled;
+    let target = enrolled(&state, key)?;
+    match identify::now(&ctx, permit, &mut state, key.provider)? {
+        identify::Live::Login { owner, .. } if target.owned_by(&owner) => {
+            already_active(&ctx, permit, &mut state, key, &target)
+        }
+        _ => Err(Error::AccountNotInUse {
+            tool: key.provider,
+            label: state.typed(key),
+        }),
+    }
+}
+
+/// The account enrolled under `key`, or a refusal that lists the labels that are.
+fn enrolled(state: &State, key: &Key) -> Result<Account> {
+    state
+        .get(key)
+        .cloned()
+        .ok_or_else(|| Error::AccountUnknown {
+            label: key.typed(),
+            enrolled: state.labels(key.provider),
+        })
+}
+
 /// [`switch`], for a caller that holds Pitboard's lock itself. Where `expected` names an
 /// account by its id, the switch is made only away from that account: one decided from what
 /// was known before the lock was held is refused, with nothing changed, once somebody else
-/// has switched since.
+/// has switched since, to this account too.
 fn switch_held(
     mut state: State,
     ctx: &Context,
@@ -340,13 +378,7 @@ fn switch_held(
 ) -> Result<(Outcome, Vec<Warning>)> {
     let label = &key.label;
     let tool = provider::of(key.provider);
-    let target = state
-        .get(key)
-        .cloned()
-        .ok_or_else(|| Error::AccountUnknown {
-            label: key.typed(),
-            enrolled: state.labels(key.provider),
-        })?;
+    let target = enrolled(&state, key)?;
     // Known before taking the tool's own lock so a round trip does not hold up its writes,
     // then confirmed under the lock. Recorded at once, so the record names the account a
     // switch moves out of when it records the one it moves to, whatever it named before.
@@ -359,16 +391,11 @@ fn switch_held(
         return Err(Error::LiveCredentialAbsent { tool: key.provider });
     };
 
-    if target.owned_by(&outgoing) {
-        return Ok((
-            Outcome::AlreadyActive {
-                label: state.typed(key),
-            },
-            Vec::new(),
-        ));
-    }
     if expected.is_some_and(|expected| expected != state.id_of(key.provider, &outgoing)) {
         return Err(Error::SwitchOvertaken);
+    }
+    if target.owned_by(&outgoing) {
+        return already_active(ctx, permit, &mut state, key, &target);
     }
     let (outgoing_key, outgoing_id) = state
         .account_of(key.provider, &outgoing)
@@ -555,7 +582,11 @@ fn switch_held(
         owner: Some(target.owner()),
         login: tool.fingerprint(&incoming),
         known_at: ctx.now(),
-        named: in_use::naming(key.provider, &target.owner()),
+        // What the tool's own record named when the store was read, until `write_config`
+        // writes `target` there.
+        named: state
+            .in_use(key.provider)
+            .and_then(|known| known.named.clone()),
     };
     state.identified(key.provider, installed, ctx.now());
     state::save(ctx, permit, &state)?;
@@ -567,10 +598,14 @@ fn switch_held(
         email: outgoing.email.clone(),
         group: Some(outgoing.organization_uuid.clone()).filter(|g| !g.is_empty()),
     };
-    let cache_warning = tool
-        .after_switch(ctx, permit, &target, &outgoing_identity)
-        .err()
-        .map(Warning::ConfigNotUpdated);
+    let cache_warning = write_config(
+        ctx,
+        permit,
+        &mut state,
+        key.provider,
+        &target,
+        &outgoing_identity,
+    );
     fault::point("switch.config_updated");
     let parks_pending = purge(ctx, permit, &mut state);
     clear_journal(ctx, permit);
@@ -609,6 +644,64 @@ fn switch_held(
         },
         warnings,
     ))
+}
+
+/// `use` of `target`, the account under `key`, whose login its tool has stored: writes it
+/// into the tool's own record where that names another account, as a switch to it does.
+fn already_active(
+    ctx: &Context,
+    permit: Permit,
+    state: &mut State,
+    key: &Key,
+    target: &Account,
+) -> Result<(Outcome, Vec<Warning>)> {
+    let which = key.provider;
+    let naming = in_use::naming(which, &target.owner());
+    let named = provider::of(which)
+        .own_record(ctx)
+        .filter(|named| Some(state::new_id(which, &api::Owner::from(named.clone()))) != naming);
+    let (config_updated, warnings) = match named {
+        None => (false, Vec::new()),
+        Some(named) => match write_config(ctx, permit, state, which, target, &named) {
+            None => (true, Vec::new()),
+            Some(warning) => (false, vec![warning]),
+        },
+    };
+    Ok((
+        Outcome::AlreadyActive {
+            label: state.typed(key),
+            config_updated,
+        },
+        warnings,
+    ))
+}
+
+/// Writes `target`, whose login `which` has stored and is recorded as in use, into the
+/// tool's own record over `named`, and records that it names `target` once the write lands.
+/// A write that fails is the warning returned, and leaves the record naming what the tool's
+/// own record named when the store was read, so every read says it names another account.
+fn write_config(
+    ctx: &Context,
+    permit: Permit,
+    state: &mut State,
+    which: ProviderId,
+    target: &Account,
+    named: &provider::Identity,
+) -> Option<Warning> {
+    if let Err(error) = provider::of(which).after_switch(ctx, permit, target, named) {
+        return Some(Warning::ConfigNotUpdated(error));
+    }
+    if let Some(record) = state.in_use(which).cloned() {
+        let naming = InUse {
+            named: in_use::naming(which, &target.owner()),
+            ..record
+        };
+        // Unsaved, the next read finds the tool's own record naming `target` and records it.
+        if state.identified(which, naming, ctx.now()).changed {
+            let _ = state::save(ctx, permit, state);
+        }
+    }
+    None
 }
 
 /// A write to a tool's live login, made ready under the tool's own lock.

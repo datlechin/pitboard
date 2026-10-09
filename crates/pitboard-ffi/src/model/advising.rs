@@ -6,7 +6,7 @@
 
 use super::advice::{Advice, Told};
 use super::switching::switch;
-use super::testing::{Hand, Machine, refusal, status, switched};
+use super::testing::{Hand, Machine, already_active, refusal, status, switched, warned, warning};
 use super::{Intent, RunOutNotice};
 use crate::Account;
 use crate::present::testing::{LimitExt, account, window};
@@ -463,4 +463,52 @@ fn a_change_noticed_before_what_was_told_is_in_is_advised_on_after() {
     model.run(&mut machine);
     assert_eq!(switches_to(&model), ["claude/personal"]);
     assert!(machine.posted.is_empty(), "told before");
+}
+
+/// A switch to the account already in use, as a notification pressed after a switch made
+/// elsewhere asks for, moves nothing, so advice that it has run out stands until a read no
+/// longer bears it out: it is still in use and still out, and the advice is not told again.
+#[test]
+fn a_switch_to_the_account_in_use_keeps_the_advice_about_it() {
+    let mut model = Hand::new();
+    let mut machine = Machine::reading(Ok(status(vec![work(100.0, 7_200), personal()])));
+    model.refresh(&mut machine);
+    assert_eq!(switches_to(&model), ["claude/personal"]);
+
+    machine.switched = already_active("work", Vec::new());
+    switch(&mut model, &mut machine, "claude/work");
+    assert_eq!(switches_to(&model), ["claude/personal"]);
+}
+
+/// Writing the account in use into Claude Code's config moves nothing either, so advice that
+/// it has run out stands. The account in use can be out of a limit while the config names
+/// another account, as on the machine of 8 October, and advice put away then is not given
+/// again until that limit resets.
+#[test]
+fn updating_the_config_keeps_the_advice_about_the_account_in_use() {
+    let names_another = warning(
+        "config_names_another",
+        "Claude Code’s config names `personal`, and the login Claude Code has stored is \
+         `work`’s.",
+    );
+    let mut model = Hand::new();
+    let mut machine = Machine::reading(Ok(warned(
+        vec![work(100.0, 7_200), personal()],
+        vec![names_another],
+    )));
+    model.refresh(&mut machine);
+    let update = model
+        .shown()
+        .notices
+        .into_iter()
+        .flat_map(|notice| notice.actions)
+        .find(|action| action.title == "Update Claude Code’s Config")
+        .expect("offered");
+
+    machine.answer = Ok(status(vec![work(100.0, 7_200), personal()]));
+    model.send(update.intent);
+    model.run(&mut machine);
+    assert_eq!(machine.configs_updated, ["claude/work"]);
+    assert_eq!(switches_to(&model), ["claude/personal"]);
+    assert_eq!(machine.posted.len(), 1, "told once");
 }

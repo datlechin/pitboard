@@ -12,6 +12,7 @@ use crate::model::advice::Advice;
 use crate::model::state::split;
 use crate::model::{Intent, LastSwitch, Pane};
 use crate::{Adoption, Warning};
+use pitboard_core::provider::ProviderId;
 use pitboard_core::words as said;
 
 /// Where a person goes to install Claude Code, the tool a machine without one is told
@@ -210,7 +211,7 @@ pub(crate) fn notices(seen: &Seen, footing: &Footing) -> Vec<PanelNotice> {
             Severity::Warning,
             words::warning_heading(warning).into(),
             vec![warning.message.clone()],
-            Vec::new(),
+            warning_actions(seen, warning),
         ));
     }
     if let Some(abandoned) = &state.abandoned {
@@ -227,6 +228,29 @@ pub(crate) fn notices(seen: &Seen, footing: &Footing) -> Vec<PanelNotice> {
         ));
     }
     said
+}
+
+/// What a warning's notice offers to do about it. Claude Code's config naming another account
+/// than the one in use is put right by writing the account in use there, which moves no
+/// login; an account in use that is not enrolled has no name to write.
+fn warning_actions(seen: &Seen, warning: &Warning) -> Vec<NoticeAction> {
+    if warning.code != "config_names_another" {
+        return Vec::new();
+    }
+    seen.accounts()
+        .iter()
+        .find(|account| account.provider == ProviderId::Claude.code() && account.signed_in)
+        .and_then(|account| account.qualified.clone())
+        .map(|qualified| NoticeAction {
+            title: "Update Claude Code’s Config".into(),
+            intent: Intent::UpdateConfig { qualified },
+            dismisses: false,
+            switches: false,
+            enabled: seen.state.switch_under_way().is_none(),
+            confirm: None,
+        })
+        .into_iter()
+        .collect()
 }
 
 /// What one tool's last switch still has to say. Sessions of a tool that follows a switch by

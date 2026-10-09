@@ -1,14 +1,18 @@
 //! Enrolling the login signed in now, renaming and forgetting, as the Swift model did them:
 //! its tests on those, each under its own name in snake case, driven through `State::apply`
-//! by hand. Each closes only its own sheet, says what went wrong where it was asked, and reads
-//! the accounts afterwards.
+//! by hand. Each closes only its own sheet, says what went wrong where it was asked, and
+//! reads the accounts afterwards.
+//!
+//! Writing the account in use into Claude Code's config, which the Swift model never did, is
+//! tested here too: a change with no sheet, which says what went wrong in an alert and reads
+//! the accounts afterwards, as a rename does.
 
 use super::advice::Told;
 use super::state::{Answer, Job};
 use super::switching::{a_read_that_started_before, switch};
 use super::testing::{
     Hand, Machine, a_look, a_look_or_a_read, any_read, claude, codex_account, enrolled_as,
-    offline_read, refusal, status, still_running, switched, warning,
+    offline_read, refusal, status, still_running, switched, warned, warning,
 };
 use super::{Intent, Sheet};
 use crate::present::testing::account;
@@ -32,6 +36,12 @@ fn rename(provider: &str, label: &str, to: &str) -> Intent {
 
 fn forget(qualified: &str) -> Intent {
     Intent::Forget {
+        qualified: qualified.into(),
+    }
+}
+
+fn update_config(qualified: &str) -> Intent {
+    Intent::UpdateConfig {
         qualified: qualified.into(),
     }
 }
@@ -397,6 +407,18 @@ fn a_look_landing_after_forgetting_leaves_the_read_after_it() {
     });
 }
 
+#[test]
+fn a_look_landing_after_updating_the_config_leaves_the_read_after_it() {
+    let after = vec![
+        codex_account("personal", true),
+        codex_account("spare", false),
+    ];
+    a_look_landing_after(after, |model, machine| {
+        model.send(update_config("claude/work"));
+        model.run_but(machine, a_look_or_a_read);
+    });
+}
+
 /// However a change of this app's own ends, it gives the account index back to the poll, and
 /// a change made elsewhere after it is noticed: one that is refused or comes to nothing reads
 /// nothing after it, a read after one can fail, or be dropped behind a second change, and a
@@ -421,6 +443,22 @@ fn however_a_change_ends_it_gives_the_index_back_to_the_poll() {
                 model.send(forget("codex/spare"));
                 let forgetting = model.next();
                 model.give(Answer::Lost(forgetting));
+            }),
+        ),
+        (
+            "a refused config update",
+            Box::new(move |model, machine| {
+                machine.updating_config = Err(refusal("refused", "it was refused", Vec::new()));
+                model.send(update_config("claude/work"));
+                model.run(machine);
+            }),
+        ),
+        (
+            "a config update that came to nothing",
+            Box::new(|model, _| {
+                model.send(update_config("claude/work"));
+                let updating = model.next();
+                model.give(Answer::Lost(updating));
             }),
         ),
         (
@@ -755,4 +793,138 @@ fn a_save_that_came_to_nothing_says_so() {
     assert_eq!(failure.title, "Couldn’t rename work");
     assert!(failure.message.starts_with("Pitboard stopped before"));
     assert!(!shown.sheet_text.expect("the sheet").saving);
+}
+
+/// `work` in use and `spare` beside it, as the reads in the config update's tests have them.
+fn work_in_use() -> Vec<Account> {
+    vec![
+        account(Some("work")).signed_in().build(),
+        account(Some("spare")).build(),
+    ]
+}
+
+fn names_another() -> crate::Warning {
+    warning(
+        "config_names_another",
+        "Claude Code’s config names `spare`, and the login Claude Code has stored is `work`’s.",
+    )
+}
+
+/// The button on the notice that says Claude Code's config names another account.
+fn the_update(model: &Hand) -> Intent {
+    model
+        .shown()
+        .notices
+        .into_iter()
+        .flat_map(|notice| notice.actions)
+        .find(|action| action.title == "Update Claude Code’s Config")
+        .expect("offered")
+        .intent
+}
+
+fn titles(model: &Hand) -> Vec<String> {
+    model
+        .shown()
+        .notices
+        .into_iter()
+        .map(|notice| notice.title)
+        .collect()
+}
+
+/// Writing the account in use into Claude Code's config moves no login, so it is no switch:
+/// the row of the account in use never reads as switching while it runs, no account is
+/// switched to, and no notice says "Switched to work". What it warned of that the read after
+/// it says as well, such as a file behind the keychain, which every change and read carries,
+/// is said once.
+#[test]
+fn updating_claude_codes_config_is_no_switch() {
+    let behind = warning(
+        "fallback_login",
+        "/Users/you/.claude/.credentials.json holds another Claude Code login.",
+    );
+    let mut model = Hand::new();
+    let mut machine = Machine::reading(Ok(warned(
+        work_in_use(),
+        vec![names_another(), behind.clone()],
+    )));
+    model.refresh(&mut machine);
+
+    model.send(the_update(&model));
+    let shown = model.shown();
+    assert_eq!(shown.switch_under_way, None);
+    let rows: Vec<(String, bool)> = shown
+        .sections
+        .into_iter()
+        .flat_map(|section| section.accounts)
+        .map(|row| (row.summary, row.switching))
+        .collect();
+    assert!(
+        rows.iter()
+            .all(|(summary, switching)| summary != "Switching…" && !switching),
+        "{rows:?}"
+    );
+
+    machine.updating_config = Ok(vec![behind.clone()]);
+    machine.answer = Ok(warned(work_in_use(), vec![behind]));
+    model.run(&mut machine);
+    assert_eq!(machine.configs_updated, ["claude/work"]);
+    assert!(machine.switched_to.is_empty());
+    assert!(model.shown().last_switches.is_empty());
+    assert_eq!(titles(&model), ["A login file is left behind the keychain"]);
+}
+
+/// A config that could not be written is said beside the read after the update, which still
+/// says the config names another account, under a title of its own and never as a switch,
+/// until the next read.
+#[test]
+fn a_config_that_could_not_be_updated_is_said_beside_the_read_after() {
+    let not_written = warning(
+        "config_write_failed",
+        "Claude Code's config at /Users/you/.claude.json could not be updated (disk full).",
+    );
+    let mut model = Hand::new();
+    let mut machine = Machine::reading(Ok(warned(work_in_use(), vec![names_another()])));
+    model.refresh(&mut machine);
+
+    machine.updating_config = Ok(vec![not_written.clone()]);
+    model.send(the_update(&model));
+    model.run(&mut machine);
+    assert_eq!(
+        titles(&model),
+        [
+            "Claude Code’s config names another account",
+            "Pitboard has a warning"
+        ]
+    );
+    assert_eq!(model.shown().notices[1].lines, [not_written.message]);
+    assert!(model.shown().last_switches.is_empty());
+
+    model.refresh(&mut machine);
+    assert_eq!(
+        titles(&model),
+        ["Claude Code’s config names another account"]
+    );
+}
+
+/// Pressed once another account is in use, as after a switch that landed before the press,
+/// the update writes nothing and says so in the window, as a refused change is said.
+#[test]
+fn a_config_update_refused_is_said_in_the_window() {
+    let mut model = Hand::new();
+    let mut machine = Machine::reading(Ok(warned(work_in_use(), vec![names_another()])));
+    model.refresh(&mut machine);
+
+    machine.updating_config = Err(refusal(
+        "account_not_in_use",
+        "`work` is not signed in now, so Pitboard left Claude Code's config as it is.",
+        Vec::new(),
+    ));
+    model.send(update_config("claude/work"));
+    model.run(&mut machine);
+    let shown = model.shown();
+    let refused = shown.failure.expect("said");
+    assert_eq!(refused.title, "Couldn’t update Claude Code’s config");
+    assert_eq!(refused.code.as_deref(), Some("account_not_in_use"));
+    assert!(shown.last_switches.is_empty());
+    assert!(machine.switched_to.is_empty());
 }

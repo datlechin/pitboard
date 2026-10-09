@@ -103,8 +103,9 @@ pages load, as a browser would.
     nothing is recorded. A change records what it finds under the lock it holds (`now`, or
     `look` then `record` where enrolling the account found names it first); a read records
     it afterwards (`record_read`), only where it changed, only where it takes the lock
-    without waiting, never while a switch waits to be finished, and only where the store
-    still holds the login it asked about. Each writes an `in-use` line in the activity log
+    without waiting, never while a switch waits to be finished, and only where the tool's
+    own record names what it named and the store holds the login it asked about, both read
+    again under the lock. Each writes an `in-use` line in the activity log
     for what changed outside Pitboard. With `test-support`, a context may hold a
     `SignInScript`, which plays a tool's own sign-in in place of its program, for a test or
     a fixture that may start none; everything around it is the core's own.
@@ -276,9 +277,10 @@ pages load, as a browser would.
     accounts, looks every two seconds for a change made elsewhere, asks which tools are
     installed, switches, quits the app holding a tool's login when the person lets it, gives
     up on a stuck switch, keeps what each tool's last switch said, runs each tool's own
-    sign-in, enrols the login signed in now, renames and forgets, keeps the sheet over the
-    main window, says which account to switch to once the one in use has run out, notified
-    once for each reset, keeps the app's own preferences, and keeps the daily renewal
+    sign-in, enrols the login signed in now, renames and forgets, writes the account in use
+    into Claude Code's config, keeps the sheet over the main window, says which account to
+    switch to once the one in use has run out, notified once for each reset, keeps the
+    app's own preferences, and keeps the daily renewal
     schedule, renews now, makes doctor's checks, reads the activity log and finds the
     `pitboard` a terminal runs. It keeps the account windows' books too: which store is
     whose and each window's last page, which windows close and which stores go after a read,
@@ -717,6 +719,12 @@ pages load, as a browser would.
   button; a reason it did not switch, and a refusal, are said once each until it next
   switches, and never in an alert, since nobody asked. The setting is kept in `app.json`
   with the other preferences, and taken only once they are read.
+- The notice that Claude Code's config names another account offers to write the account
+  in use there: `Intent::UpdateConfig`, a change of the app's own like a rename and not a
+  switch, so the row never reads as switching and nothing said about a switch or the
+  account in use goes. The core refuses it, writing nothing, where another account is in
+  use by then, so a button drawn before a switch landed never switches back. What it warned
+  of is said beside the read after it, as a sign-in's is.
 - A login replaced outside Pitboard, which every read says until it is put right
   (`login_replaced`), is posted once for each account while the reads that ask say it, and
   again only once one has stopped saying it and a later one says it, or after the app is
@@ -730,15 +738,15 @@ pages load, as a browser would.
   more reads.
 - Every other change this app makes to the account index holds it as a switch does, and the
   poll leaves the index alone meanwhile: naming the login signed in now, a sign-in's
-  enrolment, a rename, forgetting, giving up on an interrupted switch and renewing parked
-  logins. Each holds the index inside `State::apply` from the
-  moment its intent is taken, a sign-in's from the moment its thread is told to enrol, until
-  the read after it is over, landed, dropped or failed, or until the change itself has
-  failed, so a change made elsewhere is noticed by the next look once none is under way. A
-  look can find the index as such a change wrote it and land after the change has answered,
-  before the read the change asked for: taken for a change made elsewhere, it dropped that
-  read as one that started before a change, and a look that landed while a rename was made
-  put away what the account's last switch said
+  enrolment, a rename, forgetting, writing the account in use into Claude Code's config,
+  giving up on an interrupted switch and renewing parked logins. Each holds the index inside
+  `State::apply` from the moment its intent is taken, a sign-in's from the moment its thread
+  is told to enrol, until the read after it is over, landed, dropped or failed, or until the
+  change itself has failed, so a change made elsewhere is noticed by the next look once none
+  is under way. A look can find the index as such a change wrote it and land after the
+  change has answered, before the read the change asked for: taken for a change made
+  elsewhere, it dropped that read as one that started before a change, and a look that
+  landed while a rename was made put away what the account's last switch said
   ([A look and the app's own changes](#a-look-and-the-apps-own-changes)).
 - What a tool's last switch said is kept apart from the read's warnings, one per tool, until
   that tool no longer has the account it switched to signed in or the person puts it away:
@@ -909,6 +917,13 @@ pages load, as a browser would.
   config names. `forget` asks as a switch does. Otherwise Claude Code's config is a sign
   that something signed in, and the words of a warning, never whose a login is: a Claude
   Code process started or signed in on another login can rewrite it with its own account.
+  Of Pitboard, only a switch writes it, and `use` of the account already in use where it
+  names another; the app's button for that is `use` refused where another account is in
+  use by then. Each records `named` once the write lands, and keeps what the config named
+  when the store was read where it fails, so every read says the config names another
+  account. A read never writes it: a process starting on another login writes its own
+  account back. A read records nothing for a tool whose config names another account than
+  when the read began, so it never files what it saw over what a change wrote since.
 - Pitboard never renews the login in use. That is the tool's own job, and a second renewer
   would break it.
 - Nothing outside `pitboard-core` writes Pitboard's index. Every change goes through
@@ -994,14 +1009,15 @@ Schema 6 records whose login each tool has stored, as its service last said (`in
 place of the account Pitboard last switched to (`active`). A tool's record holds the owner the
 service named, the fingerprint of the login it named it for, when, and the account the tool's
 own record named then. A switch first records the login it finds in the store, then the one
-it installs. Enrolling the account signed in, a sign-in put in use and finishing an
-interrupted switch record theirs, and a read records what it finds where that changed. Each
-goes through `State::identified`. Where the owner changes and the account before it has
-nothing parked and no other slot's record names it, that account's only login is gone, and
-the account says when (`replaced_at`) until it holds a parked login or is in use again: its
-row reads `login_replaced`, and every read warns with `login_replaced`. Adopting a directory
-from another computer clears it, with the records, since both were of that computer's
-stores.
+it installs with what the tool's own record named, then, once it has written the incoming
+account there, that it names that one. Enrolling the account signed in, a sign-in put in use
+and finishing an interrupted switch record theirs, and a read records what it finds where
+that changed. Each goes through `State::identified`. Where the owner changes and the account
+before it has nothing parked and no other slot's record names it, that account's only login
+is gone, and the account says when (`replaced_at`) until it holds a parked login or is in
+use again: its row reads `login_replaced`, and every read warns with `login_replaced`.
+Adopting a directory from another computer clears it, with the records, since both were of
+that computer's stores.
 
 Each `CLAUDE_CONFIG_DIR` or `CODEX_HOME` names a store of its own, its credential slot, so a
 tool has a record for each slot it was read under. `in_use` holds the one of the slot `slot`

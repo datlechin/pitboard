@@ -2128,6 +2128,54 @@ fn a_notice_offers_an_account_only_when_it_can_switch_to_one() {
     assert!(!shown.notices[0].actions[0].enabled);
 }
 
+/// Claude Code's config naming another account than the one in use is put right by writing
+/// the account in use there, so its notice offers that. It moves no account, so the menu
+/// does not offer it as a switch. An account in use that is not enrolled has no name to
+/// write, and is offered nothing.
+#[test]
+fn the_config_names_another_notice_offers_to_update_it() {
+    let names_another = warning(
+        "config_names_another",
+        "Claude Code's config names `spare`, and the login Claude Code has stored is `work`'s.",
+    );
+    let accounts = |in_use: Account| {
+        vec![
+            in_use,
+            account(Some("spare")).build(),
+            account(Some("main")).of("codex").signed_in().build(),
+        ]
+    };
+    let mut model = at_noon();
+    let mut machine = Machine::reading(Ok(warned(
+        accounts(account(Some("work")).signed_in().build()),
+        vec![names_another.clone()],
+    )));
+    model.refresh(&mut machine);
+
+    let shown = model.shown();
+    assert_eq!(
+        shown.notices[0].actions,
+        [NoticeAction {
+            title: "Update Claude Code’s Config".into(),
+            intent: Intent::UpdateConfig {
+                qualified: "claude/work".into()
+            },
+            dismisses: false,
+            switches: false,
+            enabled: true,
+            confirm: None,
+        }]
+    );
+    assert!(shown.menu_notices.switches.is_empty());
+
+    machine.answer = Ok(warned(
+        accounts(account(None).signed_in().uuid("u").build()),
+        vec![names_another],
+    ));
+    model.refresh(&mut machine);
+    assert!(model.shown().notices[0].actions.is_empty());
+}
+
 /// What can be done about a notice is a button under it, and putting it away is the icon at
 /// its end: never both, and never neither.
 ///

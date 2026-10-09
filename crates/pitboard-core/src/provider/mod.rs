@@ -461,13 +461,15 @@ pub(crate) trait Provider: Send + Sync + std::fmt::Debug {
     /// Claude Code's is its config, which a Claude Code process started or signed in on
     /// another login can rewrite with its own account (the register's
     /// `config_identity_is_the_last_writers`), so it need not be the login stored's. So it is
-    /// a sign that something signed in, and the words for a message: never whose a login is,
-    /// which row is in use, or whether an account may be forgotten. The status line alone
-    /// still files a session's numbers under the account it names.
+    /// a sign that something signed in, the words for a message, and what a switch to the
+    /// account in use writes over: never whose a login is, which row is in use, or whether an
+    /// account may be forgotten. The status line alone still files a session's numbers under
+    /// the account it names.
     fn own_record(&self, ctx: &Context) -> Option<Identity>;
 
     /// Correct whatever this tool caches about who is signed in, now that `incoming`'s
-    /// login is live in place of `outgoing`'s.
+    /// login is live and the tool still names `outgoing`: the account switched away from, or
+    /// the one its own record names in place of the account already in use.
     ///
     /// Runs after the login has moved and cannot undo it, so a failure here is reported
     /// and never rolled back: the tool would otherwise name an account whose login is no

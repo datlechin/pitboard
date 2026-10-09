@@ -354,6 +354,15 @@ pub enum Error {
     #[error("`{label}` is signed in; switch to another account before forgetting it.")]
     CannotForgetActiveAccount { label: String },
 
+    /// Asked to write an account into its tool's config as the one in use, once another
+    /// account's login is stored, as after a switch made since somebody asked.
+    #[error(
+        "`{label}` is not signed in now, so Pitboard left {}'s config as it is. A switch \
+         writes the account it puts in use there.",
+        tool.name()
+    )]
+    AccountNotInUse { tool: ProviderId, label: String },
+
     #[error("could not find a free place to park this login. Run `pitboard doctor`.")]
     ParkSlotExhausted,
 
@@ -380,8 +389,9 @@ pub enum Error {
     /// register's `config_identity_is_the_last_writers`), so this does not correct itself
     /// sooner.
     #[error(
-        "the login moved, but Claude Code's config at {path} could not be updated ({detail}). \
-         Claude Code may show the previous account's name until the next switch."
+        "Claude Code's config at {path} could not be updated ({detail}), so Claude Code may \
+         show another account's name than the one in use. `pitboard use` with the account in \
+         use writes it there."
     )]
     ConfigWriteFailed { path: PathBuf, detail: String },
 
@@ -659,6 +669,7 @@ impl Error {
             ProviderUnknown { .. } => "provider_unknown",
             LabelAmbiguous { .. } => "label_ambiguous",
             CannotForgetActiveAccount { .. } => "cannot_forget_active_account",
+            AccountNotInUse { .. } => "account_not_in_use",
             ParkSlotExhausted => "park_slot_exhausted",
             ParkedCredentialMissing { .. } => "parked_credential_missing",
             ParkedCredentialCorrupt { .. } => "parked_credential_corrupt",
@@ -839,6 +850,10 @@ mod tests {
                 label: "x".into(),
             },
             Error::ParkedLoginExpired { label: "x".into() },
+            Error::AccountNotInUse {
+                tool: ProviderId::Claude,
+                label: "x".into(),
+            },
             Error::LabelTaken {
                 label: "x".into(),
                 who: "e".into(),

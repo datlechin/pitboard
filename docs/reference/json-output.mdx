@@ -99,7 +99,7 @@ The `data` of each command, in the order of `pitboard --help`:
 | --- | --- |
 | `status` | See [Status data](/reference/json-output#status-data). |
 | `enroll` | `label` as typed, `provider` (`claude` or `codex`), `email`, and `enrolled`: `current`, `signed_in`, `renewed` or `in_use`, as [Account commands](/reference/account-commands#enroll) explains. |
-| `use` | Already in use: `to`, and `changed` set to `false`. After a switch: `from`, `to`, `provider`, `changed` set to `true`, `parked_at` (when the login you left was parked), `adoption_ceiling_seconds` and `adoption`. |
+| `use` | Already in use: `to`, `changed` set to `false`, and `config_updated`, `true` where Claude Code's config named another account and `use` wrote the account in use into it. After a switch: `from`, `to`, `provider`, `changed` set to `true`, `parked_at` (when the login you left was parked), `adoption_ceiling_seconds` and `adoption`. |
 | `forget` | `label` and `email`. |
 | `abandon` | `abandoned`, `false` when there was no interrupted switch. When it is `true`, also `from`, `to` and `logins_kept`, a count. |
 | `repair` | `given_back`, a list of objects with `label` and `service`, the parked login's name. `deleted`, `strangers` (left alone because they belong to no account this Pitboard knows) and `unreadable`, lists of parked login names. All four are always present. |

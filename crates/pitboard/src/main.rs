@@ -500,10 +500,23 @@ fn enrolled(pitboard: &Pitboard, label: &str, outcome: Changing<Enrolled>) -> Re
 
 fn use_account(pitboard: &Pitboard, label: &str) -> Report {
     changed("use", pitboard.switch_to(label), |outcome| match outcome {
-        Outcome::AlreadyActive { label } => (
-            json!({ "to": label, "changed": false }),
-            format!("{} is already signed in.\n", paint(BOLD, &label)),
-        ),
+        Outcome::AlreadyActive {
+            label,
+            config_updated,
+        } => {
+            let named = if config_updated {
+                format!(
+                    " Claude Code's config named another account, and now names {}.",
+                    paint(BOLD, &label)
+                )
+            } else {
+                String::new()
+            };
+            (
+                json!({ "to": label, "changed": false, "config_updated": config_updated }),
+                format!("{} is already signed in.{named}\n", paint(BOLD, &label)),
+            )
+        }
         Outcome::Switched {
             provider,
             from,

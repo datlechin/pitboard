@@ -1194,7 +1194,7 @@ mod tests {
                 .map(Account::key),
             Some(m.key("here"))
         );
-        assert!(harness::in_use_lines(&m).is_empty());
+        assert!(harness::audit_lines(&m, "in-use").is_empty());
     }
 
     /// Only the account Pitboard last saw in use is warned about. Signing in again to a

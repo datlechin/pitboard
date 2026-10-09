@@ -170,7 +170,8 @@ pub enum Warning {
         named: Stored,
     },
     /// The tool's own record names `config`, and the login stored is `in_use`'s, as its
-    /// service said: what `/status` in Claude Code shows is not the account in use.
+    /// service said: what `/status` in Claude Code shows is not the account in use. Using
+    /// `in_use` writes it there again.
     ConfigNamesAnother {
         tool: ProviderId,
         config: Stored,
@@ -411,12 +412,12 @@ impl fmt::Display for Warning {
                 write!(
                     f,
                     "{name}'s config names {config}, and the login {name} has stored is {}'s, as \
-                     {} said. `/status` in {name} shows {config}. A switch writes the account it \
-                     puts in use there.",
+                     {} said. `/status` in {name} shows {config}.",
                     in_use.said("nobody"),
                     tool.service(),
                     name = tool.name(),
-                )
+                )?;
+                write!(f, " {}", in_use.how_to_name())
             }
             Warning::ReadOnly { why } => {
                 read_only(f, &crate::words::elevated(crate::host::OS, *why))
@@ -464,6 +465,18 @@ impl Stored {
             Stored::Account(name) => format!("`{name}`"),
             Stored::Unenrolled(email) => email.clone(),
             Stored::Nothing | Stored::Unknown => nobody.to_string(),
+        }
+    }
+
+    /// The sentence that says what writes this account, whose login the tool has stored, into
+    /// the tool's own record again: `pitboard use` where it is enrolled, and otherwise the
+    /// next switch.
+    pub(crate) fn how_to_name(&self) -> String {
+        match self {
+            Stored::Account(name) => {
+                format!("`pitboard use {name}` writes `{name}` into the config.")
+            }
+            _ => "A switch writes the account it puts in use into the config.".into(),
         }
     }
 }
@@ -733,6 +746,19 @@ impl Pitboard {
         let key = self.named(permit, "use", typed)?;
         self.changing(permit, "use", &key.typed(), Some(key.provider), |settled| {
             switch::switch(settled, &key)
+        })
+    }
+
+    /// What [`switch_to`] does for the account in use, for a front end's button drawn while
+    /// `typed` was: recorded as `use`, and refused, moving nothing, where another account's
+    /// login is stored by then.
+    ///
+    /// [`switch_to`]: Pitboard::switch_to
+    pub fn update_config(&self, typed: &str) -> Changing<Outcome> {
+        let permit = self.permitted()?;
+        let key = self.named(permit, "use", typed)?;
+        self.changing(permit, "use", &key.typed(), Some(key.provider), |settled| {
+            switch::update_config(settled, &key)
         })
     }
 
@@ -1224,6 +1250,10 @@ impl Audited for Outcome {
     fn audit_code(&self) -> &'static str {
         match self {
             Outcome::Switched { .. } => "ok",
+            Outcome::AlreadyActive {
+                config_updated: true,
+                ..
+            } => "config_updated",
             Outcome::AlreadyActive { .. } => "already_active",
         }
     }
@@ -1247,7 +1277,7 @@ impl Audited for switch::Removed {
 mod tests {
     use super::*;
     use crate::switch::harness::{
-        Machine, codex_machine, hold, in_use_lines, machine, signed_in_outside, state_file,
+        Machine, audit_lines, codex_machine, hold, machine, signed_in_outside, state_file,
     };
     use std::collections::BTreeMap;
     use std::sync::Arc;
@@ -1851,12 +1881,12 @@ mod tests {
             ("elsewhere".to_string(), "signed_in_outside".to_string()),
             ("here".to_string(), "login_replaced".to_string()),
         ];
-        assert_eq!(in_use_lines(&m), noticed);
+        assert_eq!(audit_lines(&m, "in-use"), noticed);
 
         let recorded = state_file(&m);
         let again = pitboard.status(false).expect("a second read");
         assert_eq!(said(&again), [("login_replaced", replaced.to_string())]);
-        assert_eq!(in_use_lines(&m), noticed, "recorded once");
+        assert_eq!(audit_lines(&m, "in-use"), noticed, "recorded once");
         assert_eq!(state_file(&m), recorded, "and written once");
 
         let offline = pitboard.status_offline().expect("a read of what is known");
@@ -1945,7 +1975,7 @@ mod tests {
         pitboard.status(false).expect("another read");
 
         assert_eq!(state_file(&m), before);
-        assert!(in_use_lines(&m).is_empty());
+        assert!(audit_lines(&m, "in-use").is_empty());
     }
 
     /// Each `CLAUDE_CONFIG_DIR` has a login of its own stored, and Pitboard keeps whose for
@@ -1989,7 +2019,7 @@ mod tests {
             Some(NOW)
         );
         assert_eq!(
-            in_use_lines(&m),
+            audit_lines(&m, "in-use"),
             [
                 ("elsewhere".to_string(), "signed_in_outside".to_string()),
                 ("here".to_string(), "login_replaced".to_string()),
@@ -2060,7 +2090,7 @@ mod tests {
             None
         );
         assert_eq!(
-            in_use_lines(&m),
+            audit_lines(&m, "in-use"),
             [("elsewhere".to_string(), "signed_in_outside".to_string())]
         );
 
@@ -2079,7 +2109,7 @@ mod tests {
             Some(NOW)
         );
         assert_eq!(
-            in_use_lines(&m)[1..],
+            audit_lines(&m, "in-use")[1..],
             [
                 ("elsewhere".to_string(), "signed_in_outside".to_string()),
                 ("here".to_string(), "login_replaced".to_string()),
@@ -2103,7 +2133,7 @@ mod tests {
         let read = Pitboard::new(m.ctx.clone()).status(false).expect("a read");
 
         assert_eq!(state_file(&m), before);
-        assert!(in_use_lines(&m).is_empty());
+        assert!(audit_lines(&m, "in-use").is_empty());
         let said = said(&read);
         assert!(
             !said.iter().any(|(code, _)| *code == "login_replaced"),
@@ -2168,7 +2198,7 @@ mod tests {
         let pitboard = Pitboard::new(m.ctx.clone());
         let names_another = "Claude Code's config names `there`, and the login Claude Code has \
                              stored is `here`'s, as Anthropic said. `/status` in Claude Code \
-                             shows `there`. A switch writes the account it puts in use there.";
+                             shows `there`. `pitboard use here` writes `here` into the config.";
 
         let read = pitboard.status(false).expect("a read");
 
