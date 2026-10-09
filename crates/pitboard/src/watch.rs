@@ -386,7 +386,7 @@ fn event(value: Auto, threshold: Threshold) -> (Value, String) {
                     data["until"] = json!(until);
                     line = format!("{line}. It asks again at {}", moment(*until));
                 }
-                Blind::CustomOauth | Blind::NothingSignedIn => {}
+                _ => {}
             }
             (
                 data,

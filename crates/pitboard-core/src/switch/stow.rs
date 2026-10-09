@@ -86,6 +86,7 @@ pub enum Foreseen {
 /// What putting the file away did with the login it held. `label` is the account's name as a
 /// command takes it.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Kept {
     /// It held none.
     NoLogin,

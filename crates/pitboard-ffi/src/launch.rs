@@ -430,11 +430,7 @@ fn auto_switched(auto: Auto, warnings: Vec<Warning>, threshold: Threshold) -> Au
             why: words::not_watching(&why),
             until: match why {
                 Blind::Unidentified { until, .. } => Some(until),
-                Blind::SwitchInterrupted
-                | Blind::CustomOauth
-                | Blind::NothingSignedIn
-                | Blind::NotEnrolled { .. }
-                | Blind::NoReading { .. } => None,
+                _ => None,
             },
         },
     }
@@ -448,7 +444,7 @@ fn not_watching_key(why: &Blind) -> String {
         Blind::NotEnrolled { email } => Some(email),
         Blind::Unidentified { detail, .. } => Some(detail),
         Blind::NoReading { account } => Some(account),
-        Blind::SwitchInterrupted | Blind::CustomOauth | Blind::NothingSignedIn => None,
+        _ => None,
     };
     match named {
         Some(named) => format!("not-watching/{}/{named}", why.code()),

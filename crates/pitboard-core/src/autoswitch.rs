@@ -260,6 +260,7 @@ impl Skip {
 
 /// Why Pitboard cannot judge whether to switch Claude Code at all.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Blind {
     /// A switch was interrupted, and the change that finishes it is somebody's to make.
     SwitchInterrupted,
