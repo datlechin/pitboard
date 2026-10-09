@@ -10,13 +10,14 @@ use super::state::{Answer, Cadence, Job, Msg, Now, State};
 use super::{AppControl, Intent, Notifications, PlatformError, RunOutNotice, Snapshot};
 use crate::account_windows::records::{self, Entry, Records};
 use crate::{
-    Abandoned, Account, Adoption, AppCore, AutoSwitched, Change, Check, Enrolled, EnrolledAs,
-    FoundCommandLine, Holding, Level, Limit, Made, OwnCommandLine, PitboardError, Remedy, Renewed,
-    Schedule, Source, Status, Switch, Switched, Tool, Usage, Warning,
+    Abandoned, Account, Adoption, AppCore, AutoLooked, AutoSwitched, Change, Check, Enrolled,
+    EnrolledAs, FoundCommandLine, Holding, Level, Limit, Made, OwnCommandLine, PitboardError,
+    Remedy, Renewed, Schedule, Source, Status, Switch, Switched, Tool, Usage, Warning,
 };
 use pitboard_core::context::Context;
 use pitboard_core::provider::ProviderId;
 use pitboard_core::service;
+use pitboard_core::switch::{Left, Stowed};
 use pitboard_core::testing::{MemoryHost, ScriptedApi, live_service};
 use std::collections::{BTreeSet, HashMap, VecDeque};
 use std::path::PathBuf;
@@ -55,7 +56,8 @@ pub(super) fn window(kind: &str, percent: f64) -> Limit {
 }
 
 /// An account as the core reports one. `label` `None` is a login signed in and not
-/// enrolled. Switchable unless it is the one signed in, as a real one is.
+/// enrolled. Switchable unless it is the one signed in, and its numbers every limit it has
+/// where its tool is Claude Code, as a real one is.
 pub(super) fn account(
     label: Option<&str>,
     provider: &str,
@@ -78,6 +80,7 @@ pub(super) fn account(
             source: Source::Live,
             observed_at: Some(0),
             windows,
+            lists_every_limit: provider == "claude",
         }),
         stale: None,
         stale_explanation: None,
@@ -115,6 +118,8 @@ pub(super) fn warning(code: &str, message: &str) -> Warning {
     Warning {
         code: code.into(),
         message: message.into(),
+        account: None,
+        held: None,
     }
 }
 
@@ -155,6 +160,17 @@ pub(super) fn switched(
         },
         warnings,
     })
+}
+
+/// Nothing to switch by itself: no limit of `account`, the account in use, has reached the
+/// share, with no reading to say how much of which it has used.
+pub(super) fn watching(account: &str) -> AutoSwitched {
+    AutoSwitched::Watching {
+        account: account.into(),
+        used: None,
+        as_of: None,
+        held_until: None,
+    }
 }
 
 /// A switch to the account already in use, as the core reports one.
@@ -402,7 +418,7 @@ pub(super) struct Machine {
     pub answer: Result<Status, Refusal>,
     /// What reading what is already known gives.
     pub offline: Result<Status, Refusal>,
-    /// When the account index was last written, in seconds.
+    /// When the account index was last written, in milliseconds.
     pub changed: i64,
     /// When the usage readings were last written. A read moves it, as the core's does: what
     /// it measured is recorded.
@@ -413,6 +429,10 @@ pub(super) struct Machine {
     pub switched: Result<Switched, Refusal>,
     /// Every account switched to, as the model named it.
     pub switched_to: Vec<String>,
+    /// What the core's look at whether to switch Claude Code by itself gives.
+    pub look: Result<AutoLooked, Refusal>,
+    /// The share each look was asked at, in order.
+    pub looked_at: Vec<u8>,
     /// What switching Claude Code by itself gives.
     pub auto: Result<AutoSwitched, Refusal>,
     /// The share each switch by itself was asked at, in order.
@@ -442,12 +462,22 @@ pub(super) struct Machine {
     pub renaming: Result<(), Refusal>,
     /// What forgetting gives.
     pub forgetting: Result<(), Refusal>,
+    /// What writing the account in use into its tool's config gives: what its tool warned of.
+    pub updating_config: Result<Vec<Warning>, Refusal>,
+    /// What looking at the file behind Claude Code's store gives.
+    pub leftover: Result<Option<Left>, Refusal>,
+    /// What putting that file away gives.
+    pub stowing: Result<Stowed, Refusal>,
+    /// Every file put away, by what it was confirmed as.
+    pub stowed_seen: Vec<String>,
     /// Every login enrolled as it is signed in now, as the model named it.
     pub enrolled: Vec<String>,
     /// Every rename, from and to, as the model named them.
     pub renamed: Vec<(String, String)>,
     /// Every account forgotten, as the model named it.
     pub forgot: Vec<String>,
+    /// Every account written into its tool's config, as the model named it.
+    pub configs_updated: Vec<String>,
     /// What was told about before the model started, as kept in Pitboard's directory.
     pub told_before: Told,
     /// Every record of what was told the model kept, in order.
@@ -515,7 +545,9 @@ impl Machine {
             found: vec![claude_code()],
             switched: already_active("work", Vec::new()),
             switched_to: Vec::new(),
-            auto: Ok(AutoSwitched::Idle),
+            look: Ok(AutoLooked::Stands(watching("work"))),
+            looked_at: Vec::new(),
+            auto: Ok(watching("work")),
             auto_at: Vec::new(),
             held: HashMap::new(),
             apps: StandInApps::new(&[], true),
@@ -529,9 +561,18 @@ impl Machine {
             enrolling_current: enrolled_as(EnrolledAs::Current, Vec::new()),
             renaming: Ok(()),
             forgetting: Ok(()),
+            updating_config: Ok(Vec::new()),
+            leftover: Ok(None),
+            stowing: Err(refusal(
+                "left_login_changed",
+                "nothing was left to put away",
+                Vec::new(),
+            )),
+            stowed_seen: Vec::new(),
             enrolled: Vec::new(),
             renamed: Vec::new(),
             forgot: Vec::new(),
+            configs_updated: Vec::new(),
             told_before: Told::new(),
             kept: Vec::new(),
             posted: Vec::new(),
@@ -648,6 +689,12 @@ impl Machine {
                     done: self.switched.clone().map_err(|refused| refused.error()),
                 }
             }
+            Job::AutoLook { at } => {
+                self.looked_at.push(at);
+                Answer::AutoLooked {
+                    looked: self.look.clone().map_err(|refused| refused.error()),
+                }
+            }
             Job::AutoSwitch { at } => {
                 self.auto_at.push(at);
                 Answer::AutoSwitched {
@@ -718,6 +765,28 @@ impl Machine {
                     qualified,
                     done: self.forgetting.clone().map_err(|refused| refused.error()),
                 }
+            }
+            Job::LookLeft => {
+                Answer::LookedLeft(self.leftover.clone().map_err(|refused| refused.error()))
+            }
+            Job::Stow { seen, from } => {
+                self.stowed_seen.push(seen);
+                Answer::Stowed {
+                    from,
+                    done: self
+                        .stowing
+                        .clone()
+                        .map(|stowed| (stowed, Vec::new()))
+                        .map_err(|refused| refused.error()),
+                }
+            }
+            Job::UpdateConfig { qualified } => {
+                self.configs_updated.push(qualified);
+                Answer::ConfigUpdated(
+                    self.updating_config
+                        .clone()
+                        .map_err(|refused| refused.error()),
+                )
             }
             // The account windows' records by the lane's own rules, over a file in memory.
             Job::LoadKept => Answer::Kept {
@@ -1211,6 +1280,19 @@ impl World {
             .expect("the account signed in privately, enrolled");
     }
 
+    /// `who`'s login left in `.credentials.json` behind the keychain, with its five-hour window
+    /// `percent` used, as a sign-in where the keychain could not be read leaves it.
+    pub(super) fn left_in_a_file(&self, who: &str, percent: f64) {
+        let login = self.claude_login(who, percent);
+        self.left_file().plant(&live_service(&self.ctx), &login);
+    }
+
+    /// The file behind the keychain, `.credentials.json` in Claude Code's own directory.
+    pub(super) fn left_file(&self) -> Arc<pitboard_core::testing::MemoryStore> {
+        self.host
+            .file_at(self.root.join(".claude").join(".credentials.json"))
+    }
+
     /// A switch to Claude Code's `label` that nothing can finish, as the core leaves one.
     /// Claude Code's keychain locks as the switch writes, so the switch cannot tell what it
     /// wrote and keeps its record and every copy. Claude Code then renews the login it has,
@@ -1366,7 +1448,8 @@ impl World {
                     length_seconds: Some(18_000),
                 }],
                 observed_at: Some(now),
-                account_uuid: None,
+                answered_at: Some(now),
+                lists_every_limit: true,
                 source: pitboard_core::usage::Source::Live,
             },
         );
@@ -1430,7 +1513,8 @@ impl World {
             pitboard_core::usage::Snapshot {
                 windows: Vec::new(),
                 observed_at: Some(now),
-                account_uuid: None,
+                answered_at: Some(now),
+                lists_every_limit: false,
                 source: pitboard_core::usage::Source::Live,
             },
         );
@@ -1459,9 +1543,9 @@ impl World {
         std::fs::write(&path, state.to_string()).expect("the account index written");
     }
 
-    /// Says the account index was written `seconds` later than it was. The index's time is
-    /// kept to the second, so a write within the same second as the last one looks like
-    /// none; a test says it came later rather than waiting a second.
+    /// Says the account index was written `seconds` later than it was. Two writes close
+    /// together need not get two times on every file system, so a test says the later one
+    /// came later rather than waiting for its time to move.
     pub(super) fn index_written_later(&self, seconds: u64) {
         self.index_written(|written| written + Duration::from_secs(seconds));
     }

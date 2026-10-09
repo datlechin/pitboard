@@ -977,6 +977,16 @@ impl Env {
         serde_json::from_str(&raw).unwrap()
     }
 
+    /// The label of `tool`'s account whose login Pitboard last recorded `tool`'s store
+    /// holding.
+    pub fn in_use(&self, tool: &str) -> Option<String> {
+        let state: pitboard_core::state::State = serde_json::from_value(self.state()).unwrap();
+        let which = pitboard_core::provider::ProviderId::parse(tool).unwrap();
+        state
+            .account_in_use(which)
+            .map(|account| account.label.clone())
+    }
+
     /// What Claude Code's `label` is filed under: its parked logins, its readings and a
     /// switch's record name it by this.
     pub fn account_id(&self, label: &str) -> String {
@@ -999,9 +1009,9 @@ impl Env {
         std::fs::write(self.root.join("pitboard/state.json"), state.to_string()).unwrap();
     }
 
-    /// What Pitboard has measured of each Claude Code account's five-hour and weekly limits,
-    /// by label, written where every front end records what it measured. Each limit resets
-    /// an hour and a day from now.
+    /// What Anthropic last answered of each Claude Code account's five-hour and weekly limits,
+    /// by label, written where and as every front end records an answer. Each limit resets an
+    /// hour and a day from now.
     pub fn measured(&self, shares: &[(&str, f64, f64)]) {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -1026,7 +1036,8 @@ impl Env {
                         window("weekly_all", weekly, 86_400),
                     ],
                     "observed_at": now,
-                    "account_uuid": id,
+                    "answered_at": now,
+                    "lists_every_limit": true,
                     "source": "live",
                 });
                 (id, reading)
@@ -1037,6 +1048,15 @@ impl Env {
             serde_json::Value::Object(readings).to_string(),
         )
         .unwrap();
+    }
+
+    /// Change the readings by account id, as a later answer from Anthropic would.
+    pub fn edit_readings(&self, edit: impl FnOnce(&mut serde_json::Value)) {
+        let path = self.root.join("pitboard/usage.json");
+        let mut readings: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        edit(&mut readings);
+        std::fs::write(path, readings.to_string()).unwrap();
     }
 
     /// Every account was last put in use an hour ago. Enrolling the account signed in puts

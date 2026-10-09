@@ -90,7 +90,7 @@ fn a_full_switch_moves_the_identity_and_nothing_else() {
     );
     assert_eq!(config["numStartups"], 7, "machine state must survive");
 
-    assert_eq!(env.state()["active"]["claude"], "beta");
+    assert_eq!(env.in_use("claude").as_deref(), Some("beta"));
     assert!(
         env.parked_service("alpha").is_some(),
         "the outgoing account is parked at the moment it is replaced"
@@ -158,6 +158,42 @@ fn a_stale_config_cannot_make_a_switch_file_the_credential_under_the_wrong_accou
         env.parked_service("alpha").is_some(),
         "alpha's login must be parked under alpha"
     );
+}
+
+/// Claude Code's config can name another account than the one whose login it has stored, as
+/// a Claude Code process started on another login leaves it. Using the account in use writes
+/// that account there again and moves no login.
+#[test]
+#[cfg_attr(windows, ignore = "W22: switching Claude Code on Windows")]
+fn using_the_account_in_use_writes_it_into_claude_codes_config_again() {
+    let env = two_accounts("namesagain");
+    let names_beta = || {
+        let mut config = env.config();
+        config["oauthAccount"]["accountUuid"] = serde_json::json!(env.uuid('b'));
+        config["oauthAccount"]["organizationUuid"] = serde_json::json!(env.uuid('p'));
+        std::fs::write(env.root.join(".claude.json"), config.to_string()).unwrap();
+    };
+
+    names_beta();
+    let (out, err, code) = env.run(&["use", "alpha"]);
+    assert_eq!(code, 0, "{err}");
+    assert!(
+        out.contains("alpha is already signed in. Claude Code's config named another account"),
+        "{out}"
+    );
+    assert_eq!(env.config()["oauthAccount"]["accountUuid"], env.uuid('a'));
+    assert_eq!(env.live()["claudeAiOauth"]["refreshToken"], "refresh-a");
+
+    names_beta();
+    let (out, err, code) = env.run(&["use", "alpha", "--json"]);
+    assert_eq!(code, 0, "{err}");
+    let data = &envelope(&out)["data"];
+    assert_eq!(
+        (&data["changed"], &data["config_updated"]),
+        (&false.into(), &true.into())
+    );
+    let (out, _, _) = env.run(&["use", "alpha", "--json"]);
+    assert_eq!(envelope(&out)["data"]["config_updated"], false);
 }
 
 #[test]
@@ -284,7 +320,7 @@ fn renaming_keeps_the_login_and_the_new_label_switches() {
         assert_eq!(code, 0, "{err}");
         assert!(out.contains(&format!("Renamed {from} to {to}")), "{out}");
     }
-    assert_eq!(env.state()["active"]["claude"], "personal");
+    assert_eq!(env.in_use("claude").as_deref(), Some("personal"));
     assert_eq!(env.parked_service("work"), Some(beta_park.clone()));
     assert!(env.is_parked(&beta_park), "a rename deletes nothing");
 
@@ -653,13 +689,14 @@ fn every_command_refuses_a_home_that_is_not_a_full_path() {
     access_lapsed(&env, "beta");
     env.expect_usage_requests(0);
     let before = tree(&env.root);
-    let commands: [(&[&str], &str); 14] = [
+    let commands: [(&[&str], &str); 15] = [
         (&["status"], "status"),
         (&["status", "--offline"], "status"),
         (&["enroll", "gamma"], "enroll"),
         (&["use", "beta"], "use"),
         (&["renew"], "renew"),
         (&["forget", "beta", "--yes"], "forget"),
+        (&["stow", "--yes"], "stow"),
         (&["rename", "beta", "gamma"], "rename"),
         (&["abandon"], "abandon"),
         (&["repair"], "repair"),
@@ -979,16 +1016,6 @@ fn a_mistyped_command_line_still_answers_in_json_when_asked() {
 #[cfg_attr(windows, ignore = "W22: switching Claude Code on Windows")]
 fn the_status_line_names_the_account_in_use_and_the_others() {
     let env = two_accounts("statusline");
-    // Enrolled moments ago, and for as long as sessions take to follow an account being put
-    // to use the status line takes nothing from them. An hour on, they are its own.
-    env.edit_state(|state| {
-        let alpha = &mut state["accounts"][0];
-        assert_eq!(alpha["label"], "alpha");
-        let used = alpha["last_used_at"]
-            .as_i64()
-            .expect("enrolling it was using it");
-        alpha["last_used_at"] = serde_json::json!(used - 3_600);
-    });
     let statusline = |session: serde_json::Value| {
         let mut child = env
             .command(&["statusline"])
@@ -1005,10 +1032,15 @@ fn the_status_line_names_the_account_in_use_and_the_others() {
             .unwrap();
         child.wait_with_output().unwrap()
     };
-    // A session's numbers are taken as they move, so it runs once as it starts, before any
-    // response, and again with the numbers its first response brought.
     let opened = statusline(serde_json::json!({"session_id": "pane"}));
     assert!(opened.status.success());
+    assert_eq!(
+        anstream::adapter::strip_str(&String::from_utf8_lossy(&opened.stdout)).to_string(),
+        "alpha ?·?  beta ?·?\n"
+    );
+    // Nobody has asked Anthropic about alpha's usage here, so no reading holds the windows
+    // of the numbers its first response brought: they are the session's, and the label is
+    // marked.
     let out = statusline(serde_json::json!({"session_id": "pane", "rate_limits": {
         "five_hour": {"used_percentage": 46.0, "resets_at": 4_000_000_000i64},
         "seven_day": {"used_percentage": 70.0, "resets_at": 4_000_000_000i64}
@@ -1022,7 +1054,7 @@ fn the_status_line_names_the_account_in_use_and_the_others() {
     );
     assert_eq!(
         anstream::adapter::strip_str(&line).to_string(),
-        "alpha 46%·70%  beta ?·?\n"
+        "alpha? 46%·70%  beta ?·?\n"
     );
 }
 

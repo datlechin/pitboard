@@ -211,27 +211,31 @@ fn a_switch_between_two_organisations_is_settled_by_the_organisation_anthropic_n
     let to_team = crate::state::Key::new(crate::provider::ProviderId::Claude, "team");
     let died = fault::killing("switch.installed", || switch(settled, &to_team));
     assert_eq!(died.unwrap_err(), "switch.installed");
-    m.mem.live().plant(
-        &m.service,
-        &json!({"claudeAiOauth": {
-            "refreshToken": "rotated-since",
-            "accessToken": "access-team-refresh",
-            "expiresAt": (NOW + 3600) * 1000,
-            "refreshTokenExpiresAt": (NOW + 30 * 86_400) * 1000,
-        }})
-        .to_string(),
-    );
+    let rotated = json!({"claudeAiOauth": {
+        "refreshToken": "rotated-since",
+        "accessToken": "access-team-refresh",
+        "expiresAt": (NOW + 3600) * 1000,
+        "refreshTokenExpiresAt": (NOW + 30 * 86_400) * 1000,
+    }});
+    m.mem.live().plant(&m.service, &rotated.to_string());
 
     let (settled, recovered) = settle(&m.ctx, Permit::for_a_test(), None).expect("settled");
     assert!(
         recovered.is_some_and(|r| r.finished),
         "the switch had landed"
     );
+    let claude = crate::provider::ProviderId::Claude;
     assert_eq!(
         settled
             .state
-            .active_for(crate::provider::ProviderId::Claude),
+            .account_in_use(claude)
+            .map(|account| account.label.as_str()),
         Some("team")
+    );
+    assert_eq!(
+        settled.state.in_use(claude).map(|r| r.login.clone()),
+        Some(provider::of(claude).fingerprint(&rotated)),
+        "the login Anthropic named, not the one the switch installed"
     );
 }
 

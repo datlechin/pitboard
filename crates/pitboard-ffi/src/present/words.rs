@@ -8,6 +8,7 @@
 use crate::{Level, Warning};
 use pitboard_core::host::Os;
 use pitboard_core::pace::{Pace, Standing};
+use pitboard_core::usage::whole;
 use unicode_segmentation::UnicodeSegmentation;
 
 const MINUTE: i64 = 60;
@@ -45,12 +46,10 @@ pub(crate) fn bar_name(label: &str) -> String {
     cut
 }
 
-/// A figure as a bar or a line says it: a whole percentage, a half rounded up, as Swift's
-/// `rounded()` rounds it.
+/// A figure as a bar or a line says it, as the command line draws it and the automatic
+/// switch judges it.
 pub(crate) fn figure(percent: f64) -> String {
-    // Saturating, where Swift's `Int(_:)` stops the app on a figure past what fits.
-    let whole = percent.round() as i64;
-    format!("{whole}%")
+    format!("{}%", whole(percent))
 }
 
 /// `numerator / denominator` rounded to the nearest whole, a half to the even one, as
@@ -125,9 +124,9 @@ pub(crate) fn spoken_limit(
     resetting_in: Option<i64>,
     pace: Option<&Pace>,
 ) -> String {
-    let mut used = format!("{name} limit, {} percent used", percent.round() as i64);
+    let mut used = format!("{name} limit, {} percent used", whole(percent));
     if let Some(pace) = pace {
-        let points = pace.delta.abs().round() as i64;
+        let points = whole(pace.delta.abs());
         used.push_str(&match pace.standing {
             Standing::Over { .. } => format!(", {points} percent over an even pace"),
             Standing::Under => format!(", {points} percent under an even pace"),
@@ -195,7 +194,7 @@ pub(crate) fn warning_heading(warning: &Warning) -> &'static str {
         "sessions_keep_old_login" => "Open sessions still use the old login",
         "sessions_unknown" => "Couldn’t tell which sessions are open",
         "auth_overridden" => "An environment variable overrides the login",
-        "fallback_login" => "Another login is left in a file",
+        "fallback_login" => "A login file is left behind the keychain",
         "parked_login_refused" => "A parked login was refused",
         "lock_compromised" => "The login may have been written twice",
         "parks_pending_removal" => "Old parked logins are still there",
@@ -204,6 +203,9 @@ pub(crate) fn warning_heading(warning: &Warning) -> &'static str {
         "interrupted_switch_finished" => "An interrupted switch was finished",
         "interrupted_switch_undone" => "An interrupted switch was undone",
         "recovery_undetermined" => "An interrupted switch is waiting",
+        "login_replaced" => "A login was replaced outside Pitboard",
+        "in_use_unconfirmed" => "The account in use is not confirmed",
+        "config_names_another" => "Claude Code’s config names another account",
         _ => "Pitboard has a warning",
     }
 }
@@ -256,9 +258,13 @@ pub(crate) fn sessions_follow_in(tool: Option<&str>) -> String {
     }
 }
 
-/// "spare has 80% of its own left.", of the account advice offers.
-pub(crate) fn room_left(account: &str, left: i64) -> String {
-    format!("{account} has {left}% of its own left.")
+/// "spare has 80% of its own left.", of the account advice offers, or "seat has no such
+/// limit." of one whose plan does not limit it that way.
+pub(crate) fn room_left(account: &str, left: Option<i64>) -> String {
+    match left {
+        Some(left) => format!("{account} has {left}% of its own left."),
+        None => format!("{account} has no such limit."),
+    }
 }
 
 /// "work has no 5-hour limit left", of the account in use that ran out.
@@ -366,6 +372,7 @@ pub(crate) fn change_verb(verb: &str) -> String {
     match verb {
         "use" | "switch" => "Switch".into(),
         "auto-switch" => "Automatic switch".into(),
+        "auto-stay" => "Automatic switch not made".into(),
         "enroll" => "Enrol".into(),
         "forget" => "Forget".into(),
         "rename" => "Rename".into(),
@@ -374,16 +381,18 @@ pub(crate) fn change_verb(verb: &str) -> String {
         "repair" => "Repair".into(),
         "adopt" => "Adopt".into(),
         "uninstall" => "Uninstall".into(),
+        "in-use" => "Login in use changed".into(),
+        "stow" => "Put away a login left in a file".into(),
         _ => readable(verb),
     }
 }
 
 /// How a change ended: "Done", or what stopped it, from the code the log keeps.
 pub(crate) fn change_outcome(outcome: &str) -> String {
-    if outcome == "ok" {
-        "Done".into()
-    } else {
-        readable(outcome)
+    match outcome {
+        "ok" => "Done".into(),
+        "second_sign_in" => "Second sign-in".into(),
+        _ => readable(outcome),
     }
 }
 
@@ -964,7 +973,7 @@ mod tests {
                 "auth_overridden",
                 "An environment variable overrides the login",
             ),
-            ("fallback_login", "Another login is left in a file"),
+            ("fallback_login", "A login file is left behind the keychain"),
             ("parked_login_refused", "A parked login was refused"),
             ("lock_compromised", "The login may have been written twice"),
             ("parks_pending_removal", "Old parked logins are still there"),
@@ -985,10 +994,18 @@ mod tests {
                 "An interrupted switch was undone",
             ),
             ("recovery_undetermined", "An interrupted switch is waiting"),
+            ("login_replaced", "A login was replaced outside Pitboard"),
+            ("in_use_unconfirmed", "The account in use is not confirmed"),
+            (
+                "config_names_another",
+                "Claude Code’s config names another account",
+            ),
         ];
         let warning = |code: &str| Warning {
             code: code.into(),
             message: String::new(),
+            account: None,
+            held: None,
         };
         for (code, heading) in headings {
             assert_eq!(warning_heading(&warning(code)), heading, "{code}");
@@ -1112,6 +1129,33 @@ mod tests {
     #[test]
     fn a_switch_made_by_itself_is_named_as_one() {
         assert_eq!(change_verb("auto-switch"), "Automatic switch");
+    }
+
+    /// Where Pitboard could not judge whether to switch by itself, the core logs `auto-stay`
+    /// with the account it last knew in use and why, and the list says so in words.
+    #[test]
+    fn a_switch_not_made_by_itself_is_named_as_one() {
+        assert_eq!(change_verb("auto-stay"), "Automatic switch not made");
+        assert_eq!(change_outcome("not_identified"), "Not identified");
+    }
+
+    /// What Pitboard found changed outside it in whose login a tool has stored, which the core
+    /// logs as `in-use`, is named for what happened, since its subject is the account signed
+    /// in on one line and the account whose login went on another, and said as it ended.
+    #[test]
+    fn a_change_found_outside_pitboard_is_named_for_what_happened() {
+        assert_eq!(change_verb("in-use"), "Login in use changed");
+        assert_eq!(change_outcome("signed_in_outside"), "Signed in outside");
+        assert_eq!(change_outcome("login_replaced"), "Login replaced");
+    }
+
+    /// Putting away a login left in a file, which the core logs as `stow`, is named for what
+    /// it does, and said as it ended: what became of the login.
+    #[test]
+    fn putting_away_a_login_left_in_a_file_is_named_for_what_it_does() {
+        assert_eq!(change_verb("stow"), "Put away a login left in a file");
+        assert_eq!(change_outcome("park_kept"), "Park kept");
+        assert_eq!(change_outcome("second_sign_in"), "Second sign-in");
     }
 
     /// A change that worked says so in a word, and one that did not says what stopped it,

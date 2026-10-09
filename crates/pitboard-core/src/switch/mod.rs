@@ -1,10 +1,11 @@
 //! Moving the signed-in identity from one enrolled account to another.
 //!
 //! Two rules set the order of every step. Which account the outgoing login belongs to is
-//! asked of Anthropic, never read from Claude Code's config, which can lag the login by a
-//! day: a login filed under the wrong account takes both accounts with it. And additive
-//! writes become durable before destructive ones, so a run that dies midway leaves a spare
-//! copy, never a missing one.
+//! asked of Anthropic, or known by its refresh token's fingerprint from an earlier answer
+//! about that login, never read from Claude Code's config, which can lag the login by a day:
+//! a login filed under the wrong account takes both accounts with it. And additive writes
+//! become durable before destructive ones, so a run that dies midway leaves a spare copy,
+//! never a missing one.
 
 use crate::provider;
 use crate::provider::ProviderId;
@@ -18,11 +19,13 @@ mod foreign;
 mod forget;
 #[cfg(test)]
 pub(crate) mod harness;
+pub(crate) mod identify;
 mod journal;
 #[cfg(test)]
 mod refusals;
 mod rename;
 pub(crate) mod renew;
+mod stow;
 #[cfg(test)]
 mod two_tools;
 mod uninstall;
@@ -41,10 +44,13 @@ pub use journal::{Abandoned, Recovered, pending as interrupted};
 pub(crate) use journal::{Asking, interrupted_tool};
 pub use rename::rename;
 pub use renew::{Due, Renewal, renew_due, renew_parked};
+pub(crate) use stow::find as left_login;
+pub use stow::{Foreseen, Kept, Left, Stowed, stow};
 pub use uninstall::{Removed, uninstall};
 
 use crate::context::Context;
 use crate::error::{Error, Result};
+use crate::in_use::{self, InUse};
 use crate::service::{Permit, Warning};
 use crate::state::{Account, Key, Park, State};
 use crate::{api, fault, holder, home, lock, park, pending, state, store};
@@ -52,10 +58,11 @@ use journal::{Journal, clear_journal, reconcile, write_journal};
 use serde_json::Value;
 use std::path::PathBuf;
 
-/// Claude Code serves the credential from a 30 second cache whose clock restarts on every
-/// read or write, so a session picks up a swap within about 30 seconds of its last read
-/// rather than of its start. Measured over three runs on one machine: swapping at t+8, t+20
-/// and t+28 seconds took effect at t+32.3, t+33.5 and t+32.95 from process start.
+/// Claude Code serves the credential from a 30 second cache, so a session already running
+/// picks up a swap within about 33 seconds, wherever no `.credentials.json` sits behind the
+/// keychain (the register's `credential_cache`). Measured over three runs on one machine
+/// with 2.1.278: swapping at t+8, t+20 and t+28 seconds took effect at t+32.3, t+33.5 and
+/// t+32.95 from process start.
 pub const ADOPTION_CEILING_SECONDS: u32 = 33;
 
 #[derive(Debug)]
@@ -67,12 +74,19 @@ pub enum Outcome {
         to: String,
         parked: Park,
         /// When a session already running will be using the incoming login, as this tool
-        /// answers it. Carried rather than read from a constant, because the honest answer
-        /// for two of the three tools is that nothing follows until they are restarted.
+        /// answers it on this machine once the switch is made. Carried rather than read from
+        /// a constant, because the honest answer for two of the three tools is that nothing
+        /// follows until they are restarted, and for Claude Code it turns on what sits
+        /// behind the keychain.
         adoption: provider::Adoption,
     },
     /// Not a failure: the state the caller asked for already holds.
-    AlreadyActive { label: String },
+    AlreadyActive {
+        label: String,
+        /// The tool's own record named another account, and now names this one again, as a
+        /// switch to it writes it.
+        config_updated: bool,
+    },
 }
 
 /// Pitboard's state, held exclusively, with any interrupted switch already finished. Every
@@ -224,6 +238,32 @@ fn try_exclusive(ctx: &Context, permit: Permit) -> Option<std::fs::File> {
     Some(file)
 }
 
+/// A switch's record, as a look that waits on nobody finds it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Unfinished {
+    /// Another run holds Pitboard's lock: the switch is that run's to finish or refuse over.
+    UnderWay,
+    /// No run holds the lock, so the switch waits for the next change.
+    Interrupted,
+}
+
+/// The record of a switch not finished, where one is there. It only asks whether the lock is
+/// held: the lock's file is opened to read, never made, and no file is no holder. The lock is
+/// asked for shared, kept over a second look at the record so no run begins or ends a switch
+/// between the two, and let go of at once.
+pub(crate) fn unfinished(ctx: &Context) -> Option<Unfinished> {
+    if !journal::pending(ctx) {
+        return None;
+    }
+    let Ok(lock) = std::fs::File::open(home::dir(ctx).join("state.lock")) else {
+        return Some(Unfinished::Interrupted);
+    };
+    match lock.try_lock_shared() {
+        Err(std::fs::TryLockError::WouldBlock) => Some(Unfinished::UnderWay),
+        _ => journal::pending(ctx).then_some(Unfinished::Interrupted),
+    }
+}
+
 fn lock_file(ctx: &Context, permit: Permit) -> Result<(std::fs::File, PathBuf)> {
     let path = home::dir(ctx).join("state.lock");
     let fail = |source| Error::HomeUnwritable {
@@ -250,16 +290,21 @@ pub(super) fn identify_document(
     provider::of(which)
         .identify(ctx, &credential)
         .map(api::Owner::from)
-        .map_err(|e| match e {
-            provider::ProviderError::Unauthorized => Error::SessionExpired { tool: which },
-            other @ (provider::ProviderError::ShapeUnexpected { .. }
-            | provider::ProviderError::Unsupported { .. }) => shape(which, other),
-            other => Error::IdentityUnverifiable {
-                tool: which,
-                cause: crate::error::Cause::of_provider(&other),
-                detail: other.to_string(),
-            },
-        })
+        .map_err(|e| unidentified(which, e))
+}
+
+/// Why nobody could say whose a login of `which` is, as a change refuses over it.
+fn unidentified(which: ProviderId, error: provider::ProviderError) -> Error {
+    match error {
+        provider::ProviderError::Unauthorized => Error::SessionExpired { tool: which },
+        other @ (provider::ProviderError::ShapeUnexpected { .. }
+        | provider::ProviderError::Unsupported { .. }) => shape(which, other),
+        other => Error::IdentityUnverifiable {
+            tool: which,
+            cause: crate::error::Cause::of_provider(&other),
+            detail: other.to_string(),
+        },
+    }
 }
 
 /// Nothing is signed in to this tool, said the way the tool's own files explain it.
@@ -268,7 +313,7 @@ pub(super) fn identify_document(
 /// in, are two different situations. The second means Pitboard is looking in the wrong
 /// place, and writing a login there would put it where nobody reads.
 pub(super) fn nothing_signed_in(ctx: &Context, which: ProviderId) -> Error {
-    match provider::of(which).recorded_identity(ctx) {
+    match provider::of(which).own_record(ctx) {
         Some(found) => Error::LiveCredentialElsewhere { email: found.email },
         None => Error::LiveCredentialAbsent { tool: which },
     }
@@ -288,70 +333,127 @@ fn read_live(
     which: ProviderId,
     live: &provider::LiveStore,
 ) -> Result<(String, Value)> {
-    let raw = store::read_raw(&live.chain, &live.service)?
-        .ok_or_else(|| nothing_signed_in(ctx, which))?;
+    read_stored(which, live)?.ok_or_else(|| nothing_signed_in(ctx, which))
+}
+
+/// [`read_live`], with `None` where nothing is signed in: nothing stored, or a document with
+/// no account's login in it, as Claude Code's `/logout` leaves.
+fn read_stored(which: ProviderId, live: &provider::LiveStore) -> Result<Option<(String, Value)>> {
+    let Some(raw) = store::read_raw(&live.chain, &live.service)? else {
+        return Ok(None);
+    };
     let document = serde_json::from_str(&raw)
         .map_err(|e| Error::Store(store::Error::Malformed(e.to_string())))?;
     match provider::of(which).slice(&document) {
-        Err(provider::ProviderError::NoLogin { .. }) => Err(nothing_signed_in(ctx, which)),
+        Err(provider::ProviderError::NoLogin { .. }) => Ok(None),
         Err(other) => Err(shape(which, other)),
-        Ok(_) => Ok((raw, document)),
+        Ok(_) => Ok(Some((raw, document))),
     }
 }
 
 pub fn switch(settled: Settled, key: &Key) -> Result<(Outcome, Vec<Warning>)> {
     let Settled {
         _exclusive,
-        state,
+        mut state,
         ctx,
         permit,
     } = settled;
-    switch_held(state, &ctx, permit, key, None)
+    let target = enrolled(&state, key)?;
+    // Known before taking the tool's own lock so a round trip does not hold up its writes,
+    // then confirmed under the lock. Recorded at once, so the record names the account a
+    // switch moves out of when it records the one it moves to, whatever it named before.
+    let identify::Live::Login(outgoing) = identify::now(&ctx, permit, &mut state, key.provider)?
+    else {
+        return Err(Error::LiveCredentialAbsent { tool: key.provider });
+    };
+    if target.owned_by(&outgoing.owner) {
+        return already_active(&ctx, permit, &mut state, key, &target);
+    }
+    let (switched, warnings) = switch_from(state, &ctx, permit, key, outgoing)?;
+    Ok((switched.into(), warnings))
 }
 
-/// [`switch`], for a caller that holds Pitboard's lock itself. Where `expected` names an
-/// account by its id, the switch is made only away from that account: one decided from what
-/// was known before the lock was held is refused, with nothing changed, once somebody else
-/// has switched since.
-fn switch_held(
-    mut state: State,
-    ctx: &Context,
-    permit: Permit,
-    key: &Key,
-    expected: Option<&str>,
-) -> Result<(Outcome, Vec<Warning>)> {
-    let label = &key.label;
-    let tool = provider::of(key.provider);
-    let target = state
+/// What [`switch`] does for the account in use, for a button drawn while it was: writes it
+/// into its tool's own record where that names another account. Refused, moving nothing,
+/// where another account's login is stored by then, which [`switch`] would switch back from.
+pub fn update_config(settled: Settled, key: &Key) -> Result<(Outcome, Vec<Warning>)> {
+    let Settled {
+        _exclusive,
+        mut state,
+        ctx,
+        permit,
+    } = settled;
+    let target = enrolled(&state, key)?;
+    match identify::now(&ctx, permit, &mut state, key.provider)? {
+        identify::Live::Login(stored) if target.owned_by(&stored.owner) => {
+            already_active(&ctx, permit, &mut state, key, &target)
+        }
+        _ => Err(Error::AccountNotInUse {
+            tool: key.provider,
+            label: state.typed(key),
+        }),
+    }
+}
+
+/// The account enrolled under `key`, or a refusal that lists the labels that are.
+fn enrolled(state: &State, key: &Key) -> Result<Account> {
+    state
         .get(key)
         .cloned()
         .ok_or_else(|| Error::AccountUnknown {
             label: key.typed(),
             enrolled: state.labels(key.provider),
-        })?;
-    let live = live_store(ctx, key.provider)?;
+        })
+}
 
-    // Asked before taking the tool's own lock so a round trip does not hold up its writes,
-    // then confirmed under the lock.
-    let (_, first) = read_live(ctx, key.provider, &live)?;
-    let outgoing = identify_document(ctx, key.provider, &first)?;
+/// A switch made: which tool's login moved, between which accounts, the outgoing login's new
+/// park, and when sessions already running take it. What [`Outcome::Switched`] says.
+struct Switched {
+    provider: ProviderId,
+    from: String,
+    to: String,
+    parked: Park,
+    adoption: provider::Adoption,
+}
 
-    if target.owned_by(&outgoing) {
-        if state.active_for(key.provider) != Some(label.as_str()) {
-            state.set_active(key.provider, Some(label.to_string()));
-            state.used(key, ctx.now());
-            state::save(ctx, permit, &state)?;
+impl From<Switched> for Outcome {
+    fn from(switched: Switched) -> Outcome {
+        let Switched {
+            provider,
+            from,
+            to,
+            parked,
+            adoption,
+        } = switched;
+        Outcome::Switched {
+            provider,
+            from,
+            to,
+            parked,
+            adoption,
         }
-        return Ok((
-            Outcome::AlreadyActive {
-                label: state.typed(key),
-            },
-            Vec::new(),
-        ));
     }
-    if expected.is_some_and(|expected| expected != state.id_of(key.provider, &outgoing)) {
-        return Err(Error::SwitchOvertaken);
-    }
+}
+
+/// [`switch`] to `key`'s account from `outgoing`, the login its tool has stored, which the
+/// caller told whose it is and recorded under Pitboard's lock, and which is not the target's.
+/// The automatic switch decides from that same telling, so nothing comes between what it
+/// decided and the login it moves.
+fn switch_from(
+    mut state: State,
+    ctx: &Context,
+    permit: Permit,
+    key: &Key,
+    outgoing: identify::Login,
+) -> Result<(Switched, Vec<Warning>)> {
+    let label = &key.label;
+    let tool = provider::of(key.provider);
+    let target = enrolled(&state, key)?;
+    let identify::Login {
+        store: live,
+        document: first,
+        owner: outgoing,
+    } = outgoing;
     let (outgoing_key, outgoing_id) = state
         .account_of(key.provider, &outgoing)
         .map(|account| (account.key(), account.id.clone()))
@@ -379,6 +481,11 @@ fn switch_held(
     // does not hold up its writes.
     let (held, incoming) = prove_incoming(ctx, permit, &mut state, key, &target, held, incoming)?;
 
+    // A renewal by a running session spends the refresh token it sends, and the tool's write
+    // lock does not keep one from starting. So the lock a renewal takes first is held from
+    // before the outgoing login is read for the last time until the login installed in its
+    // place is recorded: the copy parked is then never one a session has spent.
+    let refreshing = Refreshing::take(ctx, permit, key.provider)?;
     let guard = write_lock(ctx, permit, key.provider)?;
     let Readied {
         before_raw,
@@ -533,23 +640,35 @@ fn switch_held(
     }
 
     state.discard(&held.service);
-    state.set_active(key.provider, Some(label.to_string()));
-    state.used(key, ctx.now());
+    let installed = InUse {
+        owner: Some(target.owner()),
+        login: tool.fingerprint(&incoming),
+        known_at: ctx.now(),
+        // What the tool's own record named when the store was read, until `write_config`
+        // writes `target` there.
+        named: state
+            .in_use(key.provider)
+            .and_then(|known| known.named.clone()),
+    };
+    state.identified(key.provider, installed, ctx.now());
     state::save(ctx, permit, &state)?;
     fault::point("switch.recorded");
     drop(guard);
+    let lock_lost = lock_lost | Refreshing::let_go(refreshing);
 
-    // The tool does not correct what it caches about who is signed in on its own; the next
-    // switch rewrites it.
     let outgoing_identity = provider::Identity {
         account_id: outgoing.account_uuid.clone(),
         email: outgoing.email.clone(),
         group: Some(outgoing.organization_uuid.clone()).filter(|g| !g.is_empty()),
     };
-    let cache_warning = tool
-        .after_switch(ctx, permit, &target, &outgoing_identity)
-        .err()
-        .map(Warning::ConfigNotUpdated);
+    let cache_warning = write_config(
+        ctx,
+        permit,
+        &mut state,
+        key.provider,
+        &target,
+        &outgoing_identity,
+    );
     fault::point("switch.config_updated");
     let parks_pending = purge(ctx, permit, &mut state);
     clear_journal(ctx, permit);
@@ -579,15 +698,73 @@ fn switch_held(
         .chain((parks_pending > 0).then_some(Warning::ParksPendingRemoval(parks_pending)))
         .collect();
     Ok((
-        Outcome::Switched {
+        Switched {
             provider: key.provider,
-            adoption: tool.adoption(),
+            adoption: tool.adoption(tool.behind(ctx).as_ref()),
             from,
             to,
             parked,
         },
         warnings,
     ))
+}
+
+/// `use` of `target`, the account under `key`, whose login its tool has stored: writes it
+/// into the tool's own record where that names another account, as a switch to it does.
+fn already_active(
+    ctx: &Context,
+    permit: Permit,
+    state: &mut State,
+    key: &Key,
+    target: &Account,
+) -> Result<(Outcome, Vec<Warning>)> {
+    let which = key.provider;
+    let naming = in_use::naming(which, &target.owner());
+    let named = provider::of(which)
+        .own_record(ctx)
+        .filter(|named| Some(state::new_id(which, &api::Owner::from(named.clone()))) != naming);
+    let (config_updated, warnings) = match named {
+        None => (false, Vec::new()),
+        Some(named) => match write_config(ctx, permit, state, which, target, &named) {
+            None => (true, Vec::new()),
+            Some(warning) => (false, vec![warning]),
+        },
+    };
+    Ok((
+        Outcome::AlreadyActive {
+            label: state.typed(key),
+            config_updated,
+        },
+        warnings,
+    ))
+}
+
+/// Writes `target`, whose login `which` has stored and is recorded as in use, into the
+/// tool's own record over `named`, and records that it names `target` once the write lands.
+/// A write that fails is the warning returned, and leaves the record naming what the tool's
+/// own record named when the store was read, so every read says it names another account.
+fn write_config(
+    ctx: &Context,
+    permit: Permit,
+    state: &mut State,
+    which: ProviderId,
+    target: &Account,
+    named: &provider::Identity,
+) -> Option<Warning> {
+    if let Err(error) = provider::of(which).after_switch(ctx, permit, target, named) {
+        return Some(Warning::ConfigNotUpdated(error));
+    }
+    if let Some(record) = state.in_use(which).cloned() {
+        let naming = InUse {
+            named: in_use::naming(which, &target.owner()),
+            ..record
+        };
+        // Unsaved, the next read finds the tool's own record naming `target` and records it.
+        if state.identified(which, naming, ctx.now()).changed {
+            let _ = state::save(ctx, permit, state);
+        }
+    }
+    None
 }
 
 /// A write to a tool's live login, made ready under the tool's own lock.
@@ -606,8 +783,46 @@ struct Readied {
 fn write_lock(ctx: &Context, permit: Permit, which: ProviderId) -> Result<Option<lock::Guard>> {
     Ok(provider::of(which)
         .write_lock(ctx)
-        .map(|dir| lock::acquire(permit, &dir))
+        .map(|dir| lock::acquire(permit, &dir, lock::WRITE))
         .transpose()?)
+}
+
+/// The locks `which`'s tool takes before it renews its login, held: its own, then the one
+/// beside it, taken as a renewal takes them (Claude Code's are the register's `refresh_lock`),
+/// so no session renews the login stored meanwhile. The second is gone without where it
+/// cannot be made, as the tool goes without it, and let go of first, as the tool lets go of
+/// it.
+pub(super) struct Refreshing {
+    legacy: Option<lock::Guard>,
+    own: lock::Guard,
+}
+
+impl Refreshing {
+    /// `None` for a tool that takes no such lock. Taken before the tool's write lock, as the
+    /// tool takes them.
+    pub(super) fn take(
+        ctx: &Context,
+        permit: Permit,
+        which: ProviderId,
+    ) -> Result<Option<Refreshing>> {
+        let Some((own, legacy)) = provider::of(which).refresh_lock(ctx) else {
+            return Ok(None);
+        };
+        let own = lock::acquire(permit, &own, lock::REFRESH)?;
+        let legacy = match lock::acquire(permit, &legacy, lock::REFRESH) {
+            Ok(legacy) => Some(legacy),
+            Err(lock::LockError::Io(_)) => None,
+            Err(busy) => return Err(busy.into()),
+        };
+        Ok(Some(Refreshing { legacy, own }))
+    }
+
+    /// Lets go of it, saying whether it stopped being Pitboard's meanwhile.
+    pub(super) fn let_go(held: Option<Refreshing>) -> bool {
+        held.is_some_and(|held| {
+            held.own.compromised() || held.legacy.as_ref().is_some_and(lock::Guard::compromised)
+        })
+    }
 }
 
 /// Readies `incoming` to go in place of the login read earlier as `first`, which was
@@ -700,7 +915,9 @@ pub(crate) enum StillHolding {
 /// What is running `which`'s tool with the login it started with, by kind, as the process
 /// list says.
 pub(crate) fn still_holding(ctx: &Context, which: ProviderId) -> StillHolding {
-    match provider::of(which).adoption() {
+    // What sits behind a store only delays sessions that follow by themselves, which hold
+    // nothing here, so it is not read.
+    match provider::of(which).adoption(None) {
         provider::Adoption::RestartRequired { program, holders } => {
             match holder::find(ctx, program, holders) {
                 None => StillHolding::Unknown,
@@ -708,7 +925,9 @@ pub(crate) fn still_holding(ctx: &Context, which: ProviderId) -> StillHolding {
                 Some(holding) => StillHolding::These(holding),
             }
         }
-        provider::Adoption::PollingWithin(_) => StillHolding::Nothing,
+        provider::Adoption::PollingWithin(_) | provider::Adoption::AtRenewal { .. } => {
+            StillHolding::Nothing
+        }
     }
 }
 
@@ -875,6 +1094,108 @@ mod tests {
 
     fn failing(message: &str) -> store::Error {
         store::Error::Write(message.into())
+    }
+
+    /// After a sign-in outside Pitboard the record can still name the account a switch goes
+    /// to. The switch moves the store from the login it found there, so the account it goes
+    /// to comes to be in use then, and the login it found is the one parked.
+    #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
+    )]
+    fn a_switch_after_a_sign_in_outside_puts_the_account_it_goes_to_in_use() {
+        let m = harness::machine("records-both-logins");
+        let mut state = state::load(&m.ctx).expect("state");
+        let before = InUse::of(
+            state.get(&m.key("there")).expect("enrolled"),
+            "signed-in-over",
+            harness::NOW - 3600,
+        );
+        state
+            .in_use
+            .insert(ProviderId::Claude.code().into(), before);
+        state::save(&m.ctx, Permit::for_a_test(), &state).expect("saved");
+
+        let settled = settle(&m.ctx, Permit::for_a_test(), None)
+            .expect("nothing to recover")
+            .0;
+        switch(settled, &m.key("there")).expect("switched");
+
+        let state = state::load(&m.ctx).expect("state");
+        let there = state.get(&m.key("there")).expect("enrolled");
+        assert_eq!(
+            there.last_used_at,
+            Some(harness::NOW),
+            "in use from this switch"
+        );
+        assert_eq!(
+            state.in_use(ProviderId::Claude).map(|r| r.login.as_str()),
+            Some(
+                provider::of(ProviderId::Claude)
+                    .fingerprint(&harness::oauth("there-refresh", 30))
+                    .as_str()
+            )
+        );
+        assert!(
+            state
+                .get(&m.key("here"))
+                .expect("enrolled")
+                .parked
+                .is_some()
+        );
+    }
+
+    /// A session renewing Claude Code's login takes the refresh lock before it sends the
+    /// refresh token, and saves the answer only where the login stored still holds the token
+    /// it sent (the register's `refresh_lock`). A switch holds that lock from before it reads
+    /// the outgoing login until it has recorded the one it installed, so a session renewing
+    /// meanwhile waits: the login parked for the account switched from is never one a session
+    /// spent, with its renewal lost at a save that found another login stored.
+    #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
+    )]
+    fn a_session_renewing_the_outgoing_login_during_a_switch_waits_for_it() {
+        use harness::{Session, lock_dir, renews_meanwhile, saves};
+        let refreshing =
+            |m: &harness::Machine| lock_dir(&provider::claude::paths::refresh_lock(&m.ctx));
+        for point in ["switch.journal_written", "switch.park_recorded"] {
+            let m = harness::machine(&format!("refresh-lock-{point}"));
+            let keychain = std::sync::Arc::clone(m.mem.live());
+            let session = Session::new();
+            let settled = settle(&m.ctx, Permit::for_a_test(), None)
+                .expect("nothing to recover")
+                .0;
+
+            let done = fault::meanwhile(
+                point,
+                renews_meanwhile(&m, std::sync::Arc::clone(&keychain), &session),
+                || switch(settled, &m.key("there")),
+            );
+            saves(&m, &keychain, &session);
+
+            assert!(
+                session.waited.get(),
+                "{point}: a session spent the refresh token Pitboard parked"
+            );
+            done.expect("switched");
+            let state = state::load(&m.ctx).expect("state");
+            let parked = state
+                .get(&m.key("here"))
+                .and_then(|account| account.parked.clone())
+                .expect("the outgoing login is parked");
+            assert_eq!(
+                parked.refresh_fingerprint,
+                store::fingerprint("here-refresh"),
+                "{point}"
+            );
+            assert!(
+                !refreshing(&m).exists(),
+                "{point}: the refresh lock is let go of"
+            );
+        }
     }
 
     #[test]

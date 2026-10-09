@@ -16,8 +16,9 @@ use crate::provider::claude::live as claude_live;
 use crate::provider::claude::paths as claude;
 use crate::provider::claude::slot;
 use crate::provider::codex::paths as codex;
+use crate::service::Stored;
 use crate::state::{Park, State};
-use crate::{home, park, store, switch, time, usage, words};
+use crate::{home, park, store, switch, time, words};
 use serde_json::{Value, json};
 use std::path::PathBuf;
 
@@ -83,6 +84,9 @@ pub struct Facts {
     /// Accounts Pitboard is not asking Anthropic about yet, and for how long: (uuid, seconds).
     pub asking_held: Vec<(String, i64)>,
     pub state: Result<State, Error>,
+    /// Whose login Claude Code has stored, as Anthropic last said, where the account list
+    /// can be read.
+    pub in_use: Option<crate::in_use::Known>,
     /// Each enrolled account's parked login, read back from the vault.
     pub parks: Vec<ParkFact>,
     pub interrupted: bool,
@@ -106,7 +110,7 @@ pub struct Facts {
     /// Whether this process runs as the person themselves, as the host says, which is what
     /// the gate every change passes asks.
     pub elevation: crate::host::Elevation,
-    /// A login left in Claude Code's fallback file behind the one in the keychain.
+    /// Claude Code's fallback file, where it is behind the keychain holding the login in use.
     pub fallback_login: Option<FallbackLogin>,
     pub floor: crate::host::Floor,
     pub now: i64,
@@ -235,8 +239,9 @@ pub struct ParkFact {
     /// The name a command on this machine takes for it: qualified where another tool has an
     /// account of the same name, since a bare one would then be ambiguous.
     pub name: String,
+    /// Whether its login is the one its tool has stored, as far as files say.
     pub active: bool,
-    /// When this account was last switched to, where that is recorded.
+    /// When this account last came to be in use, where that is recorded.
     pub last_used_at: Option<i64>,
     pub park: Option<Park>,
     /// Why it cannot be read back, if it cannot.
@@ -252,12 +257,13 @@ pub enum Unreadable {
     Broken(String),
 }
 
-/// A login left in Claude Code's plaintext fallback file while the keychain holds the one
-/// in use.
+/// Claude Code's plaintext fallback file, there while the keychain holds the login in use.
 pub struct FallbackLogin {
     pub path: PathBuf,
-    /// A handle on its refresh token, never the token. Empty where it holds none.
-    pub fingerprint: String,
+    /// A handle on the refresh token of the login it holds, never the token: `None` where
+    /// it holds no login, empty where that login has no refresh token, and why where what
+    /// it holds cannot be read.
+    pub fingerprint: Result<Option<String>, store::Error>,
 }
 
 impl ParkFact {
@@ -268,19 +274,18 @@ impl ParkFact {
 }
 
 fn park_facts(ctx: &Context, state: &State) -> Vec<ParkFact> {
-    // Who each tool's own record says is signed in, asked once per tool and only of a tool
-    // that has accounts here. Offline for every tool: Claude Code's config, a Codex login's
-    // own claims. Deciding it from Claude Code's config alone read a signed-in Codex
-    // account as one with nothing parked to switch to.
-    let recorded: std::collections::BTreeMap<ProviderId, Option<crate::api::Owner>> =
-        ProviderId::ALL
-            .iter()
-            .filter(|&&which| state.accounts.iter().any(|a| a.provider() == which))
-            .map(|&which| {
-                let found = crate::provider::of(which).recorded_identity(ctx);
-                (which, found.map(crate::api::Owner::from))
-            })
-            .collect();
+    // Whose login each tool has stored, as its service last said, asked once per tool and
+    // only of a tool that has accounts here, and from files alone: Pitboard's record, and a
+    // Codex login's own claims. Never Claude Code's config, which a Claude Code process
+    // started or signed in on another login can rewrite with its own account.
+    let in_use: std::collections::BTreeMap<ProviderId, Option<crate::api::Owner>> = ProviderId::ALL
+        .iter()
+        .filter(|&&which| state.accounts.iter().any(|a| a.provider() == which))
+        .map(|&which| {
+            let known = crate::in_use::known(ctx, state, which);
+            (which, known.owner().cloned())
+        })
+        .collect();
     state
         .accounts
         .iter()
@@ -289,12 +294,10 @@ fn park_facts(ctx: &Context, state: &State) -> Vec<ParkFact> {
             label: a.label.clone(),
             name: state.typed(&a.key()),
             last_used_at: a.last_used_at,
-            // What the account's own tool says, when it says anything. Pitboard's own
-            // record of its last switch says nothing about a sign-in made elsewhere.
-            active: match recorded.get(&a.provider()).and_then(Option::as_ref) {
-                Some(owner) => a.owned_by(owner),
-                None => state.active_for(a.provider()) == Some(a.label.as_str()),
-            },
+            active: in_use
+                .get(&a.provider())
+                .and_then(Option::as_ref)
+                .is_some_and(|owner| a.owned_by(owner)),
             park: a.parked.clone(),
             unreadable: a.parked.as_ref().and_then(|p| {
                 park::load(ctx, &a.key(), p).err().map(|e| match e {
@@ -351,6 +354,10 @@ pub fn gather(ctx: &Context) -> Facts {
         auth_overrides: crate::settings::overrides(ctx),
         auth_unread: crate::settings::unread(),
         asking_held: crate::budget::holds(ctx),
+        in_use: state
+            .as_ref()
+            .ok()
+            .map(|s| crate::in_use::known(ctx, s, ProviderId::Claude)),
         parks: state
             .as_ref()
             .map(|s| park_facts(ctx, s))
@@ -385,13 +392,18 @@ pub fn gather(ctx: &Context) -> Facts {
     }
 }
 
-/// The login left in Claude Code's fallback file, where there is one. A chain that cannot
-/// be read says nothing of what is behind it, and the `credential_store` check says why.
+/// Claude Code's fallback file, where it is behind the keychain, and the login it holds.
+/// Where whether it is there cannot be told, nothing is said of it: a keychain that cannot
+/// be read is the `credential_store` check's to say, and a file that cannot even be looked
+/// at is one Claude Code's own look takes for not there.
 fn fallback_login(ctx: &Context) -> Option<FallbackLogin> {
-    let document = claude_live::fallback_login(ctx).ok()??;
+    let held = claude_live::behind(ctx)?;
     Some(FallbackLogin {
         path: claude_live::credential_file(ctx),
-        fingerprint: crate::provider::claude::document::fingerprint_of(&document),
+        fingerprint: held.map(|held| {
+            claude_live::login_in(&held)
+                .map(|document| crate::provider::claude::document::fingerprint_of(&document))
+        }),
     })
 }
 
@@ -627,11 +639,12 @@ fn codex_package_version(path: &std::path::Path) -> Option<String> {
 /// Every `codex` running as this user, by kind, asked the way a switch asks so the two
 /// cannot disagree.
 fn running_codex(ctx: &Context) -> Option<Vec<crate::holder::Holding>> {
-    match crate::provider::of(ProviderId::Codex).adoption() {
+    match crate::provider::of(ProviderId::Codex).adoption(None) {
         crate::provider::Adoption::RestartRequired { program, holders } => {
             crate::holder::find(ctx, program, holders)
         }
-        crate::provider::Adoption::PollingWithin(_) => Some(Vec::new()),
+        crate::provider::Adoption::PollingWithin(_)
+        | crate::provider::Adoption::AtRenewal { .. } => Some(Vec::new()),
     }
 }
 
@@ -772,6 +785,7 @@ pub fn evaluate(facts: &Facts) -> Vec<Check> {
             "It writes this after its first successful call. Run `claude` once.",
         ),
     });
+    checks.extend(judge_in_use(facts));
 
     checks.push(ok(
         "slot",
@@ -899,41 +913,6 @@ pub fn evaluate(facts: &Facts) -> Vec<Check> {
 
     checks.push(judge_credential(facts));
     checks.extend(judge_fallback_login(facts));
-
-    checks.push(
-        match (
-            facts
-                .config
-                .as_ref()
-                .ok()
-                .and_then(usage::from_config_cache),
-            &facts.identity,
-        ) {
-            (Some(s), Some(id)) if s.account_uuid.as_deref() == Some(id.account_uuid.as_str()) => {
-                ok(
-                    "usage_cache",
-                    "usage cache",
-                    format!("{} windows, measured for this account", s.windows.len()),
-                )
-            }
-            (Some(_), Some(_)) => warn(
-                "usage_cache",
-                "usage cache",
-                "cached for a different account",
-                "Its numbers are ignored rather than shown, which is why status may look empty.",
-            ),
-            (Some(s), None) => ok(
-                "usage_cache",
-                "usage cache",
-                format!("{} windows", s.windows.len()),
-            ),
-            (None, _) => ok(
-                "usage_cache",
-                "usage cache",
-                "absent; Claude Code writes it after a call that reports usage",
-            ),
-        },
-    );
 
     checks.push(match &facts.home_access {
         None => ok(
@@ -1093,12 +1072,12 @@ pub fn evaluate(facts: &Facts) -> Vec<Check> {
 const CLAUDE_CODES_OWN: &[&str] = &[
     "config_file",
     "identity",
+    "in_use",
     "slot",
     "credential_size",
     "credential_store",
     "credential",
     "fallback_login",
-    "usage_cache",
     "storage_v5",
     "daemon",
     "claude_version",
@@ -1148,6 +1127,104 @@ fn judge_dormant(park: &ParkFact, now: i64) -> Option<Check> {
              it, `pitboard forget {}` deletes the login and the record.",
             park.typed()
         ),
+    ))
+}
+
+/// Whose login Claude Code has stored, as Anthropic last said, which every reader that does
+/// not ask takes as the account in use, and whether something may have signed in since.
+/// Doctor asks nobody, so a login renewed since, which Claude Code does every few hours, is
+/// said and is no warning; Claude Code's config naming another account is, since only a
+/// read that asks can say whether another login came with it. Nothing is said where nothing
+/// is recorded and no Claude Code account is enrolled.
+fn judge_in_use(facts: &Facts) -> Option<Check> {
+    let (code, name) = ("in_use", "in use");
+    let known = facts.in_use.as_ref()?;
+    let state = facts.state.as_ref().ok()?;
+    let enrolled = facts.parks.iter().any(|p| p.provider == ProviderId::Claude);
+    if known.last.is_none() && !enrolled {
+        return None;
+    }
+    let ask = "Run `pitboard status`, which asks Anthropic whose login Claude Code has stored.";
+    let Some(last) = &known.last else {
+        return Some(warn(
+            code,
+            name,
+            "Anthropic has not been asked whose login Claude Code has stored",
+            ask,
+        ));
+    };
+    let account = Stored::of(state, ProviderId::Claude, last.owner.as_ref());
+    let in_use = account.said("no account");
+    let config =
+        Stored::of(state, ProviderId::Claude, known.own_record.as_ref()).said("no account");
+    let when = time::moment(last.known_at, facts.now);
+    let then = match &last.owner {
+        Some(_) => format!("Anthropic named {in_use} {when}"),
+        None => format!("Pitboard found no login stored {when}"),
+    };
+    match known.doubt {
+        Some(crate::in_use::Doubt::NeverEstablished) => {
+            return Some(warn(
+                code,
+                name,
+                format!(
+                    "Anthropic has not been asked whose login Claude Code has stored since \
+                     Pitboard was updated; {in_use} is the account it last switched to"
+                ),
+                ask,
+            ));
+        }
+        Some(crate::in_use::Doubt::NamedMoved) => {
+            return Some(warn(
+                code,
+                name,
+                format!(
+                    "Claude Code's config has named {config} since {then}, so another login \
+                     may be stored"
+                ),
+                ask,
+            ));
+        }
+        Some(crate::in_use::Doubt::LoginUnreadable) | None => {}
+    }
+    if known.named_another(ProviderId::Claude).is_some() {
+        return Some(warn(
+            code,
+            name,
+            format!("{in_use}, as Anthropic said {when}, and Claude Code's config names {config}"),
+            format!(
+                "`/status` in Claude Code shows {config}. {}",
+                account.how_to_name()
+            ),
+        ));
+    }
+    // The login stored now by its fingerprint, empty for a login with no refresh token:
+    // `Some(None)` where none is stored, and `None` where the store cannot be read.
+    let stored = match &facts.credential {
+        Ok(Some(document)) if document.get("claudeAiOauth").is_some() => Some(Some(
+            crate::provider::of(ProviderId::Claude).fingerprint(document),
+        )),
+        Ok(_) => Some(None),
+        Err(_) => None,
+    };
+    let renewed = "the next `pitboard status` asks whose it is";
+    Some(ok(
+        code,
+        name,
+        match (&last.owner, stored) {
+            (Some(_), Some(Some(now))) if now.is_empty() || now != last.login => format!(
+                "{in_use}, as Anthropic said {when} of a login renewed or replaced since; \
+                 {renewed}"
+            ),
+            (Some(_), Some(None)) => {
+                format!("{in_use}, as Anthropic said {when}; no login is stored since")
+            }
+            (Some(_), _) => format!("{in_use}, as Anthropic said {when}"),
+            (None, Some(Some(_))) => {
+                format!("no login stored, as Pitboard found {when}; one is since, and {renewed}")
+            }
+            (None, _) => format!("no login stored, as Pitboard found {when}"),
+        },
     ))
 }
 
@@ -1214,12 +1291,19 @@ fn judge_credential(facts: &Facts) -> Check {
                 "Unlock it with `security unlock-keychain`, or run Pitboard from a desktop \
                  session. Until then a Claude Code session here keeps the login it last read \
                  and follows no switch{}",
-                match &facts.fallback_login {
-                    Some(left) => format!(
-                        ", and one started here signs in with the login in {}.",
-                        left.path.display()
+                match facts
+                    .fallback_login
+                    .as_ref()
+                    .map(|left| (left.path.display(), &left.fingerprint))
+                {
+                    Some((path, Ok(Some(_)))) => {
+                        format!(", and one started here signs in with the login in {path}.")
+                    }
+                    Some((path, Err(_))) => format!(
+                        ", and whether one started here signs in with what {path} holds cannot \
+                         be told, since Pitboard could not read it."
                     ),
-                    None => ", and one started here is signed out.".into(),
+                    Some((_, Ok(None))) | None => ", and one started here is signed out.".into(),
                 }
             ),
         ),
@@ -1232,32 +1316,60 @@ fn judge_credential(facts: &Facts) -> Check {
     }
 }
 
-/// A login left in the fallback file behind the keychain's.
+/// The fallback file behind the keychain, with a login in it, none, or what cannot be read.
 ///
 /// Read in 2.1.294: a sign-in where the keychain is locked writes its login to the file and
 /// leaves the keychain's in place (`locked_sign_in_writes_fallback`), and a keychain write
 /// deletes the file only where the keychain held nothing before
 /// (`fallback_outlives_keychain_writes`). So the file stays through every switch, and a
-/// session that cannot read the keychain signs in with it whatever Pitboard switched to.
+/// session that cannot read the keychain signs in with a login in it whatever Pitboard
+/// switched to. A session already running watches the file by a look at it, whatever it
+/// holds and whether or not it can be read, and while it is there takes a switch only at
+/// its login's next renewal (`fallback_file_pins_session_login`).
 fn judge_fallback_login(facts: &Facts) -> Option<Check> {
     let left = facts.fallback_login.as_ref()?;
     let path = left.path.display();
-    let fingerprint = if left.fingerprint.is_empty() {
-        "none"
-    } else {
-        left.fingerprint.as_str()
-    };
-    Some(warn(
-        "fallback_login",
-        "fallback login",
-        format!("{path}  ·  refresh {fingerprint}"),
-        format!(
-            "Claude Code signs in with this wherever it cannot read the keychain, such as in a \
-             session started over SSH, and no switch reaches it. A sign-in made where the \
-             keychain could not be read leaves one, as `/login` over SSH does. Deleting it \
-             leaves one login for every session: `rm {path}`."
+    let running = format!(
+        "While it is there, Claude Code sessions already running at a switch {}.",
+        words::kept_until_renewed()
+    );
+    let (detail, advice) = match &left.fingerprint {
+        Ok(Some(fingerprint)) => (
+            format!(
+                "{path}  ·  refresh {}",
+                if fingerprint.is_empty() {
+                    "none"
+                } else {
+                    fingerprint.as_str()
+                }
+            ),
+            format!(
+                "Claude Code signs in with this wherever it cannot read the keychain, such as \
+                 in a session started over SSH, and no switch reaches it. A sign-in made where \
+                 the keychain could not be read leaves one, as `/login` over SSH does. \
+                 {running} `pitboard stow` keeps this login for its account, where Pitboard \
+                 holds no other it can switch to, then deletes the file, which leaves one login \
+                 for every session."
+            ),
         ),
-    ))
+        Ok(None) => (
+            format!("{path}  ·  no login in it"),
+            format!(
+                "It holds no Claude Code login. {running} `pitboard stow` deletes it, which \
+                 lets them follow a switch."
+            ),
+        ),
+        Err(e) => (
+            format!("{path}  ·  not read: {e}"),
+            format!(
+                "Pitboard could not read it, so whether it holds a login, which a session that \
+                 cannot read the keychain signs in with, cannot be told, and `pitboard stow` \
+                 cannot put it away. {running} Deleting it lets them follow a switch, and takes \
+                 whatever it holds with it: `rm {path}`."
+            ),
+        ),
+    };
+    Some(warn("fallback_login", "fallback login", detail, advice))
 }
 
 /// A parked login this close to expiring is worth renewing now.
@@ -1553,10 +1665,16 @@ fn exempting(proxy: &ProxyFact) -> Option<String> {
 /// needs the answer.
 ///
 /// Where Pitboard does not read every layer, it says which it did not read beside that
-/// answer, since a layer it did not read could still set something else.
+/// answer, since a layer it did not read could still set something else. Where a file sits
+/// behind the keychain, a session already running takes the stored login only when it next
+/// reads it, at its login's renewal, which the `fallback_login` check says.
 fn judge_auth(facts: &Facts) -> Check {
     if facts.auth_overrides.is_empty() {
-        let read = "the stored login, which is what Pitboard moves";
+        let read = if facts.fallback_login.is_some() {
+            "the stored login, which is what Pitboard moves, once a session reads it again"
+        } else {
+            "the stored login, which is what Pitboard moves"
+        };
         return ok(
             "auth_source",
             "what a session authenticates with",
@@ -2122,6 +2240,18 @@ fn redaction_for(ctx: &Context, facts: &Facts) -> crate::redact::Sheet {
             sheet = sheet.hide(name.clone(), "org");
         }
     }
+    // Whose login is stored, as Anthropic last named it, and whom Claude Code's config names,
+    // which need not be accounts anybody enrolled.
+    let named = facts
+        .in_use
+        .iter()
+        .flat_map(|known| known.owner().into_iter().chain(&known.own_record));
+    for owner in named {
+        sheet = sheet
+            .hide(owner.email.clone(), "email")
+            .hide(owner.account_uuid.clone(), "account")
+            .hide(owner.organization_uuid.clone(), "org");
+    }
     if let Ok(state) = &facts.state {
         for account in &state.accounts {
             sheet = sheet
@@ -2159,12 +2289,13 @@ fn redaction_for(ctx: &Context, facts: &Facts) -> crate::redact::Sheet {
     {
         sheet = sheet.hide(fingerprint, "login");
     }
-    if let Some(left) = facts
+    if let Some(fingerprint) = facts
         .fallback_login
         .as_ref()
-        .filter(|left| !left.fingerprint.is_empty())
+        .and_then(|left| left.fingerprint.as_ref().ok().cloned().flatten())
+        .filter(|fingerprint| !fingerprint.is_empty())
     {
-        sheet = sheet.hide(left.fingerprint.clone(), "login");
+        sheet = sheet.hide(fingerprint, "login");
     }
     for park in &facts.parks {
         if let Some(held) = &park.park {
@@ -2258,6 +2389,7 @@ mod tests {
             auth_unread: None,
             asking_held: Vec::new(),
             state: Ok(State::default()),
+            in_use: Some(in_use_as_named()),
             parks: Vec::new(),
             interrupted: false,
             stuck: None,
@@ -2270,6 +2402,28 @@ mod tests {
             fallback_login: None,
             floor: crate::host::Floor::Met,
             now: NOW,
+        }
+    }
+
+    /// What [`facts`] holds of whose login Claude Code has stored: the login in its
+    /// keychain, `acc`'s in `org`, as Anthropic named it a minute ago, with the config naming
+    /// it too.
+    fn in_use_as_named() -> crate::in_use::Known {
+        let owner = crate::api::Owner {
+            account_uuid: "acc".into(),
+            email: "a@b.c".into(),
+            organization_uuid: "org".into(),
+        };
+        let stored = json!({"claudeAiOauth": {"refreshToken": "r"}});
+        crate::in_use::Known {
+            last: Some(crate::in_use::InUse {
+                owner: Some(owner.clone()),
+                login: crate::provider::of(ProviderId::Claude).fingerprint(&stored),
+                known_at: NOW - 60,
+                named: Some(crate::state::new_id(ProviderId::Claude, &owner)),
+            }),
+            doubt: None,
+            own_record: Some(owner),
         }
     }
 
@@ -2526,7 +2680,7 @@ mod tests {
         // with it, and the advice says so.
         f.fallback_login = Some(FallbackLogin {
             path: f.credential_file.clone(),
-            fingerprint: "0123456789abcdef".into(),
+            fingerprint: Ok(Some("0123456789abcdef".into())),
         });
         let advice = check(&evaluate(&f), "credential").advice.clone();
         assert!(
@@ -2544,7 +2698,7 @@ mod tests {
 
         f.fallback_login = Some(FallbackLogin {
             path: f.credential_file.clone(),
-            fingerprint: "0123456789abcdef".into(),
+            fingerprint: Ok(Some("0123456789abcdef".into())),
         });
         let checks = evaluate(&f);
         let said = check(&checks, "fallback_login");
@@ -2556,17 +2710,108 @@ mod tests {
         );
         assert!(
             said.advice.contains("over SSH")
-                && said
-                    .advice
-                    .contains("`rm /home/x/.claude/.credentials.json`"),
+                && said.advice.contains(
+                    "While it is there, Claude Code sessions already running at a switch keep \
+                     the account they are on until their login is next renewed"
+                )
+                && said.advice.ends_with(
+                    "`pitboard stow` keeps this login for its account, where Pitboard holds no \
+                     other it can switch to, then deletes the file, which leaves one login for \
+                     every session."
+                ),
             "{}",
             said.advice
         );
+        assert!(!said.advice.contains("rm "), "{}", said.advice);
         assert!(healthy(&checks), "nothing Pitboard does is stopped by it");
     }
 
-    /// What the two checks above are given, read off the stores: a login in the file while
-    /// the keychain holds another, and nothing where the file is the login or holds none.
+    /// A running session watches the file by its being there, so one with no login in it
+    /// holds sessions to their account after a switch all the same. It is said, with what
+    /// lets them follow, and the login check's advice does not send a session to it.
+    #[test]
+    fn a_file_behind_the_keychain_with_no_login_in_it_is_said_with_what_it_holds_back() {
+        let mut f = facts();
+        f.fallback_login = Some(FallbackLogin {
+            path: f.credential_file.clone(),
+            fingerprint: Ok(None),
+        });
+        let checks = evaluate(&f);
+        let said = check(&checks, "fallback_login");
+        assert_eq!(said.level, Level::Warn);
+        assert_eq!(
+            said.detail,
+            "/home/x/.claude/.credentials.json  ·  no login in it"
+        );
+        assert_eq!(
+            said.advice,
+            "It holds no Claude Code login. While it is there, Claude Code sessions already \
+             running at a switch keep the account they are on until their login is next \
+             renewed, or until they are started again. `pitboard stow` deletes it, which lets \
+             them follow a switch."
+        );
+        assert!(
+            check(&checks, "auth_source")
+                .detail
+                .ends_with(", once a session reads it again"),
+            "{}",
+            check(&checks, "auth_source").detail
+        );
+
+        f.credential = Err(store::Error::Locked);
+        let advice = check(&evaluate(&f), "credential").advice.clone();
+        assert!(
+            advice.ends_with("one started here is signed out."),
+            "{advice}"
+        );
+    }
+
+    /// A running session looks at the file and never reads it to decide, so one Pitboard
+    /// cannot read holds sessions to their account after a switch all the same. It is said
+    /// with why, without guessing whether a login is in it, and so is the login check's
+    /// advice for a session that cannot read the keychain.
+    #[test]
+    fn a_file_behind_the_keychain_that_cannot_be_read_is_said_with_why() {
+        let mut f = facts();
+        f.fallback_login = Some(FallbackLogin {
+            path: f.credential_file.clone(),
+            fingerprint: Err(store::Error::Unreadable(
+                "cannot read /home/x/.claude/.credentials.json: Permission denied".into(),
+            )),
+        });
+        let checks = evaluate(&f);
+        let said = check(&checks, "fallback_login");
+        assert_eq!(said.level, Level::Warn);
+        assert_eq!(
+            said.detail,
+            "/home/x/.claude/.credentials.json  ·  not read: the credential store could not be \
+             read: cannot read /home/x/.claude/.credentials.json: Permission denied"
+        );
+        assert_eq!(
+            said.advice,
+            "Pitboard could not read it, so whether it holds a login, which a session that \
+             cannot read the keychain signs in with, cannot be told, and `pitboard stow` cannot \
+             put it away. While it is there, Claude Code sessions already running at a switch \
+             keep the account they are on until their login is next renewed, or until they are \
+             started again. Deleting it lets them follow a switch, and takes whatever it holds \
+             with it: `rm /home/x/.claude/.credentials.json`."
+        );
+        assert!(healthy(&checks), "nothing Pitboard does is stopped by it");
+
+        f.credential = Err(store::Error::Locked);
+        let advice = check(&evaluate(&f), "credential").advice.clone();
+        assert!(
+            advice.ends_with(
+                "whether one started here signs in with what /home/x/.claude/.credentials.json \
+                 holds cannot be told, since Pitboard could not read it."
+            ),
+            "{advice}"
+        );
+    }
+
+    /// What the checks above are given, read off the stores: the file while the keychain
+    /// holds the login in use, with the login in it, none, or why it cannot be read, and
+    /// nothing where the file is the store in use.
     #[test]
     #[cfg_attr(
         windows,
@@ -2574,6 +2819,7 @@ mod tests {
     )]
     fn a_login_left_behind_the_keychain_is_found_in_its_file() {
         use crate::host::memory::MemoryHost;
+        use crate::store::memory::Fault;
 
         let host = MemoryHost::new();
         let ctx = Context::for_unit_test().with_memory_stores(Arc::clone(&host));
@@ -2587,12 +2833,31 @@ mod tests {
         file.plant(&service, &login("left"));
         let found = fallback_login(&ctx).expect("a login behind the keychain's");
         assert_eq!(found.path, claude_live::credential_file(&ctx));
-        assert_eq!(found.fingerprint, store::fingerprint("left"));
+        assert_eq!(
+            found.fingerprint.expect("readable"),
+            Some(store::fingerprint("left"))
+        );
 
         file.plant(&service, &json!({"mcpOAuth": {}}).to_string());
-        assert!(fallback_login(&ctx).is_none(), "what `/logout` leaves");
+        let found = fallback_login(&ctx).expect("what `/logout` leaves is still there");
+        assert_eq!(
+            found.fingerprint.expect("readable"),
+            None,
+            "and holds no login"
+        );
 
         file.plant(&service, &login("left"));
+        file.fault(
+            &service,
+            Fault::UnreadableContents("permission denied".into()),
+        );
+        let found = fallback_login(&ctx).expect("what cannot be read is still there");
+        assert!(
+            matches!(found.fingerprint, Err(store::Error::Unreadable(_))),
+            "and what it holds is not guessed"
+        );
+        file.heal(&service);
+
         host.live().delete_everything();
         assert!(
             fallback_login(&ctx).is_none(),
@@ -2617,6 +2882,7 @@ mod tests {
                 email: "work@example.com".into(),
                 parked: parked("work", Some(NOW + 20 * 86_400)).park,
                 last_used_at: None,
+                replaced_at: None,
                 detail: crate::state::Detail::Claude {
                     organization_uuid: "org".into(),
                     oauth_account: json!({}),
@@ -3731,9 +3997,11 @@ mod tests {
             && c.advice.contains("`pitboard forget claude/work`")));
     }
 
-    /// Whether an account is the one signed in is its own tool's question. Asked of Claude
-    /// Code's config for every account, a signed-in Codex account read as one with nothing
-    /// parked to switch to, and the advice was to sign in again.
+    /// Whether an account is the one signed in is its own tool's question: Claude Code's from
+    /// what Anthropic last said of its login, which the config naming another does not move,
+    /// and Codex's from its login's own claims. Asked of Claude Code's config for every
+    /// account, a signed-in Codex account read as one with nothing parked to switch to, and
+    /// the advice was to sign in again.
     #[test]
     #[cfg_attr(windows, ignore = "W21: switching Codex on Windows")]
     fn an_account_is_active_by_its_own_tools_record() {
@@ -3760,8 +4028,8 @@ mod tests {
         std::fs::write(
             root.join(".claude.json"),
             json!({"oauthAccount": {
-                "accountUuid": "alpha-uuid",
-                "emailAddress": "a@example.com",
+                "accountUuid": "beta-uuid",
+                "emailAddress": "b@example.com",
                 "organizationUuid": "org",
             }})
             .to_string(),
@@ -3776,6 +4044,7 @@ mod tests {
                 email: format!("{label}@example.com"),
                 parked: None,
                 last_used_at: None,
+                replaced_at: None,
                 detail,
             };
         let claude = || crate::state::Detail::Claude {
@@ -3789,12 +4058,16 @@ mod tests {
         let mut state = State {
             accounts: vec![
                 account("alpha", "alpha-uuid", claude()),
+                account("beta", "beta-uuid", claude()),
                 account("work", "work-acc", codex()),
                 account("home", "home-acc", codex()),
             ],
             ..State::default()
         };
-        state.set_active(ProviderId::Codex, Some("home".into()));
+        let alpha = crate::in_use::InUse::of(&state.accounts[0], "alpha-refresh", NOW);
+        state.identified(ProviderId::Claude, alpha, NOW);
+        let home = crate::in_use::InUse::of(&state.accounts[3], "home-refresh", NOW);
+        state.identified(ProviderId::Codex, home, NOW);
         let active = |facts: &[ParkFact]| -> Vec<String> {
             facts
                 .iter()
@@ -3803,13 +4076,23 @@ mod tests {
                 .collect()
         };
 
-        // Nothing signed in to Codex: Pitboard's own record of its last switch stands in.
-        assert_eq!(active(&park_facts(&ctx, &state)), ["alpha", "codex/home"]);
+        // Nothing signed in to Codex: nobody, whatever Pitboard last recorded.
+        assert_eq!(active(&park_facts(&ctx, &state)), ["alpha"]);
 
-        // Codex's login names `work`, whatever Pitboard last recorded.
+        // A Codex login that cannot be read: Pitboard's record of whose it was stands in.
         let live = crate::provider::of(ProviderId::Codex)
             .live(&ctx)
             .expect("Codex keeps its login in a file here");
+        store::write_raw(
+            &live.chain,
+            Permit::for_a_test(),
+            &live.service,
+            "{\"auth_mo",
+        )
+        .expect("half a login");
+        assert_eq!(active(&park_facts(&ctx, &state)), ["alpha", "codex/home"]);
+
+        // Codex's login names `work`, whatever Pitboard last recorded.
         let login = json!({
             "auth_mode": "chatgpt",
             "tokens": {
@@ -3830,6 +4113,120 @@ mod tests {
         )
         .expect("a login");
         assert_eq!(active(&park_facts(&ctx, &state)), ["alpha", "codex/work"]);
+    }
+
+    /// The accounts `facts` has in use, by the name a command takes.
+    fn in_use(facts: &Facts) -> Vec<String> {
+        facts
+            .parks
+            .iter()
+            .filter(|p| p.active)
+            .map(ParkFact::typed)
+            .collect()
+    }
+
+    /// The account in use is the one Anthropic last named for the login stored, known by
+    /// that login's fingerprint, and doctor says when it was named. Claude Code's config
+    /// naming another, once a read has found the login is still the one named, is said, and
+    /// moves nothing.
+    #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
+    )]
+    fn the_account_in_use_is_the_one_anthropic_named() {
+        use crate::switch::harness::{NOW, config_names, machine};
+        let m = machine("doctor-in-use");
+        let at = time::moment(NOW, NOW);
+
+        let facts = gather(&m.ctx);
+        let checks = evaluate(&facts);
+        let said = check(&checks, "in_use");
+        assert_eq!(said.level, Level::Ok);
+        assert_eq!(said.detail, format!("`here`, as Anthropic said {at}"));
+        assert_eq!(in_use(&facts), ["here"]);
+
+        config_names(&m, "there");
+        crate::service::Pitboard::new(m.ctx.clone())
+            .status(false)
+            .expect("a read");
+        let facts = gather(&m.ctx);
+        let checks = evaluate(&facts);
+        let said = check(&checks, "in_use");
+        assert_eq!(said.level, Level::Warn);
+        assert_eq!(
+            said.detail,
+            format!("`here`, as Anthropic said {at}, and Claude Code's config names `there`")
+        );
+        assert_eq!(
+            said.advice,
+            "`/status` in Claude Code shows `there`. `pitboard use here` writes `here` into the \
+             config."
+        );
+        assert_eq!(in_use(&facts), ["here"]);
+    }
+
+    /// Claude Code renews its login by itself, and a renewed login has another fingerprint.
+    /// That is what happens every few hours, so it is no warning: the next read asks whose it
+    /// is. Doctor asks nobody.
+    #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
+    )]
+    fn a_renewed_login_is_not_a_warning() {
+        use crate::switch::harness::{NOW, document, machine};
+        let m = machine("doctor-renewed");
+        m.sign_in(&document("here-renewed"));
+
+        let checks = evaluate(&gather(&m.ctx));
+        let said = check(&checks, "in_use");
+
+        assert_eq!(said.level, Level::Ok);
+        assert_eq!(
+            said.detail,
+            format!(
+                "`here`, as Anthropic said {} of a login renewed or replaced since; the next \
+                 `pitboard status` asks whose it is",
+                time::moment(NOW, NOW)
+            )
+        );
+        assert_eq!(m.api.calls(), 0);
+    }
+
+    /// Claude Code's config has named another account since Anthropic last named the login
+    /// stored, as a sign-in leaves it and another Claude Code process starting on another
+    /// login can. Something may have signed in, and only Anthropic can say whose the login is
+    /// now.
+    #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
+    )]
+    fn a_config_that_moved_since_is_a_warning() {
+        use crate::switch::harness::{NOW, config_names, machine};
+        let m = machine("doctor-config-moved");
+        config_names(&m, "there");
+
+        let facts = gather(&m.ctx);
+        let checks = evaluate(&facts);
+        let said = check(&checks, "in_use");
+
+        assert_eq!(said.level, Level::Warn);
+        assert_eq!(
+            said.detail,
+            format!(
+                "Claude Code's config has named `there` since Anthropic named `here` {}, so \
+                 another login may be stored",
+                time::moment(NOW, NOW)
+            )
+        );
+        assert_eq!(
+            said.advice,
+            "Run `pitboard status`, which asks Anthropic whose login Claude Code has stored."
+        );
+        assert_eq!(in_use(&facts), ["here"]);
+        assert_eq!(m.api.calls(), 0);
     }
 
     /// A machine that has never run Codex reads exactly as it did before Pitboard knew

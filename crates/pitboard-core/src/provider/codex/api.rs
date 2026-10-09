@@ -229,7 +229,7 @@ fn ask_usage(
                 .read_to_string()
                 .map_err(|e| network(e.to_string()))?;
             let body: Value = serde_json::from_str(&text).map_err(|e| malformed(e.to_string()))?;
-            Ok(snapshot(&body, account_id, now))
+            Ok(snapshot(&body, now))
         }
         401 | 403 => Err(ProviderError::Unauthorized),
         429 => Err(ProviderError::RateLimited {
@@ -249,7 +249,10 @@ fn ask_usage(
 ///
 /// A window that will not normalise is dropped rather than drawn, the same rule the Claude
 /// Code side has always used: a number nobody can explain is worse than no number.
-fn snapshot(body: &Value, account_id: &str, now: i64) -> Snapshot {
+///
+/// Either window can be null (`codex_usage_endpoint`), and nothing measured says whether a
+/// null one is not running or was left out, so an answer is not taken to list every limit.
+fn snapshot(body: &Value, now: i64) -> Snapshot {
     let limits = &body["rate_limit"];
     let windows = ["primary_window", "secondary_window"]
         .into_iter()
@@ -258,7 +261,8 @@ fn snapshot(body: &Value, account_id: &str, now: i64) -> Snapshot {
     Snapshot {
         windows,
         observed_at: Some(now),
-        account_uuid: Some(account_id.to_string()),
+        answered_at: Some(now),
+        lists_every_limit: false,
         source: Source::Live,
     }
 }
@@ -408,7 +412,7 @@ mod tests {
 
     #[test]
     fn the_answer_this_endpoint_really_sends_becomes_a_window() {
-        let snapshot = snapshot(&measured(), "acc-1", 1_790_000_000);
+        let snapshot = snapshot(&measured(), 1_790_000_000);
         assert_eq!(
             snapshot.windows.len(),
             1,
@@ -418,8 +422,9 @@ mod tests {
         assert_eq!(window.kind, "seven_day");
         assert!((window.percent - 45.0).abs() < f64::EPSILON);
         assert_eq!(window.resets_at, Some(1_790_628_078));
-        assert_eq!(snapshot.account_uuid.as_deref(), Some("acc-1"));
         assert_eq!(snapshot.source, Source::Live);
+        assert_eq!(snapshot.answered_at, Some(1_790_000_000));
+        assert!(!snapshot.lists_every_limit);
     }
 
     #[test]
@@ -430,7 +435,7 @@ mod tests {
             "limit_window_seconds": 18_000,
             "reset_at": 1_790_100_000i64
         });
-        let snapshot = snapshot(&body, "acc-1", 0);
+        let snapshot = snapshot(&body, 0);
         assert_eq!(
             snapshot
                 .windows
@@ -451,7 +456,7 @@ mod tests {
                 "secondary_window": {"used_percent": -1.0, "limit_window_seconds": 604_800},
             }
         });
-        assert!(snapshot(&body, "acc-1", 0).windows.is_empty());
+        assert!(snapshot(&body, 0).windows.is_empty());
     }
 
     /// An answer with no rate limit block at all reads as no windows rather than panicking.
@@ -461,7 +466,7 @@ mod tests {
             serde_json::json!({}),
             serde_json::json!({"rate_limit": null}),
         ] {
-            assert!(snapshot(&body, "acc-1", 0).windows.is_empty(), "{body}");
+            assert!(snapshot(&body, 0).windows.is_empty(), "{body}");
         }
     }
 }

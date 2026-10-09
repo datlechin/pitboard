@@ -34,7 +34,7 @@ fn id(m: &Machine, who: &str) -> String {
 fn enrolled(m: &Machine, who: &str, parked: Option<Park>) -> Account {
     match m.which {
         ProviderId::Claude => account(who, who, parked),
-        ProviderId::Codex => codex_account(who, &codex_id(who), parked),
+        ProviderId::Codex => codex_account(who, who, parked),
     }
 }
 
@@ -52,7 +52,8 @@ fn login(m: &Machine, who: &str, refresh: &str) -> Value {
                 crate::usage::Snapshot {
                     windows: Vec::new(),
                     observed_at: Some(NOW),
-                    account_uuid: None,
+                    answered_at: Some(NOW),
+                    lists_every_limit: false,
                     source: crate::usage::Source::Live,
                 },
             );

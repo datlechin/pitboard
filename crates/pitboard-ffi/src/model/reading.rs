@@ -9,6 +9,7 @@ use super::testing::{
     offline_read, percent, refusal, status, warned, warning,
 };
 use super::{Intent, ReadFailure};
+use crate::Warning;
 use std::time::Duration;
 
 /// AppModelTests.swift's aReadFillsInTheTitleAndTheRows. The title is said with the menu
@@ -96,10 +97,11 @@ fn a_change_made_somewhere_else_is_noticed_without_asking_anthropic() {
     assert_eq!(accounts[0].label.as_deref(), Some("work"));
 }
 
-/// Every session's status line records what its session has seen, and a reading only moves
-/// forward. The menu bar read 20% while every status line said 22%, because it only ever
-/// showed what it had asked Anthropic itself. It follows the readings the way it follows a
-/// switch made elsewhere: from what is already known, asking nobody.
+/// Every read records its answers, and every session's status line what its session has
+/// seen where it moves a limit an answer gave. The menu bar read 20% while every status line
+/// said 22%, because it only ever showed what it had asked Anthropic itself. It follows the
+/// readings the way it follows a switch made elsewhere: from what is already known, asking
+/// nobody.
 #[test]
 fn numbers_a_session_recorded_reach_the_menu_bar_without_asking_anyone() {
     let mut model = Hand::new();
@@ -230,6 +232,163 @@ fn a_failed_read_shows_its_own_warnings_rather_than_the_last_ones() {
     assert_eq!(
         shown.read_failure.map(|f| f.message).as_deref(),
         Some("Anthropic could not be reached")
+    );
+}
+
+/// What a read says while a sign-in outside Pitboard has replaced the only login of `who`,
+/// with Claude Code holding `now`'s, as the core words it and names the account.
+fn replaced(who: &str, now: &str) -> Warning {
+    Warning {
+        account: Some(format!("claude:{who}")),
+        held: None,
+        ..warning(
+            "login_replaced",
+            &format!(
+                "`{who}`'s login was replaced by a sign-in outside Pitboard: Claude Code now has \
+                 `{now}`'s login stored, and Pitboard holds no login for `{who}`. Run `pitboard \
+                 enroll {who} --sign-in` to sign in to it again."
+            ),
+        )
+    }
+}
+
+/// A sign-in outside Pitboard that replaced the only login of an account is said on every
+/// read until it is put right, and posted once while it stands, since nobody may have the
+/// window open: a read that carries it again posts nothing, and one after it went and came
+/// back posts it again.
+#[test]
+fn a_login_replaced_outside_is_posted_once_while_it_stands() {
+    let replaced = replaced("work", "home");
+    let accounts = || vec![claude("home", true, 5.0), claude("work", false, 0.0)];
+    let mut model = Hand::new();
+    let mut machine = Machine::reading(Ok(warned(accounts(), vec![replaced.clone()])));
+
+    model.refresh(&mut machine);
+    let posted: Vec<(&str, &str, Option<&str>)> = machine
+        .posted
+        .iter()
+        .map(|notice| {
+            (
+                notice.title.as_str(),
+                notice.body.as_str(),
+                notice.switch_to.as_deref(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        posted,
+        [(
+            "A login was replaced outside Pitboard",
+            replaced.message.as_str(),
+            None
+        )]
+    );
+
+    model.send(Intent::Refresh { asked: true });
+    model.run(&mut machine);
+    assert_eq!(machine.posted.len(), 1, "once while it stands");
+
+    machine.answer = Ok(warned(accounts(), Vec::new()));
+    model.send(Intent::Refresh { asked: true });
+    model.run(&mut machine);
+    machine.answer = Ok(warned(accounts(), vec![replaced]));
+    model.send(Intent::Refresh { asked: true });
+    model.run(&mut machine);
+    assert_eq!(machine.posted.len(), 2, "and again once it is back");
+}
+
+/// What a replaced login's words say Claude Code holds now changes with every switch made
+/// since, and it is still the one account's login replaced, which was posted already.
+/// Another account replaced is posted on its own.
+#[test]
+fn a_login_replaced_outside_is_posted_once_whatever_is_stored_since() {
+    let accounts = || {
+        vec![
+            claude("home", false, 5.0),
+            claude("spare", true, 0.0),
+            claude("work", false, 0.0),
+        ]
+    };
+    let mut model = Hand::new();
+    let mut machine = Machine::reading(Ok(warned(accounts(), vec![replaced("work", "home")])));
+    model.refresh(&mut machine);
+    assert_eq!(machine.posted.len(), 1);
+
+    machine.answer = Ok(warned(accounts(), vec![replaced("work", "spare")]));
+    model.send(Intent::Refresh { asked: true });
+    model.run(&mut machine);
+    assert_eq!(
+        machine.posted.len(),
+        1,
+        "the same account's login, posted once"
+    );
+
+    let both = vec![replaced("work", "spare"), replaced("home", "spare")];
+    machine.answer = Ok(warned(accounts(), both.clone()));
+    model.send(Intent::Refresh { asked: true });
+    model.run(&mut machine);
+    let posted: Vec<(&str, &str)> = machine
+        .posted
+        .iter()
+        .map(|notice| (notice.id.as_str(), notice.body.as_str()))
+        .collect();
+    assert_eq!(
+        posted[1..],
+        [(
+            "warning/login_replaced/claude:home",
+            both[1].message.as_str()
+        )]
+    );
+}
+
+/// What a read that asks nobody says while Claude Code's config names `named`, which it did
+/// not when Anthropic last named the login stored, `work`'s, as the core words it.
+fn unconfirmed(named: &str) -> Warning {
+    warning(
+        "in_use_unconfirmed",
+        &format!(
+            "Claude Code's config has named `{named}` since Pitboard last asked Anthropic whose \
+             login Claude Code has stored, so another login may be stored. The one stored then \
+             was `work`'s. `pitboard status` asks again."
+        ),
+    )
+}
+
+/// Claude Code's config naming another account than when Anthropic last named the login
+/// stored is a sign that something signed in, and only a read that asks can say what. A
+/// read that asks nobody and says so, as the app's reads between its own do after a session
+/// records numbers or another front end changes the index, starts one such read, and
+/// another only once it says something else.
+#[test]
+fn an_offline_read_in_doubt_asks_one_read_per_config_value() {
+    let accounts = || vec![claude("work", true, 5.0)];
+    let mut model = Hand::new();
+    let mut machine = Machine::reading(Ok(status(accounts())));
+    model.refresh(&mut machine);
+    let asked = model.count(any_read);
+
+    machine.offline = Ok(warned(accounts(), vec![unconfirmed("home")]));
+    machine.readings += 1;
+    model.notice(&mut machine);
+    assert_eq!(model.count(any_read), asked + 1, "one read that asks");
+
+    machine.readings += 1;
+    model.notice(&mut machine);
+    machine.changed += 1;
+    model.notice(&mut machine);
+    assert_eq!(
+        model.count(any_read),
+        asked + 1,
+        "what it says was asked about already"
+    );
+
+    machine.offline = Ok(warned(accounts(), vec![unconfirmed("spare")]));
+    machine.changed += 1;
+    model.notice(&mut machine);
+    assert_eq!(
+        model.count(any_read),
+        asked + 2,
+        "something else is asked about"
     );
 }
 

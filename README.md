@@ -17,8 +17,9 @@ each account you are not using, called a parked login. A switch puts the chosen 
 parked login where the tool reads it.
 
 Only the account changes: your history, sessions, settings and projects stay where they are.
-A Claude Code session that is already open picks up a switch within about 33 seconds. A
-running `codex` keeps the old account until you restart it.
+A Claude Code session that is already open picks up a switch within about 33 seconds, or,
+while `~/.claude/.credentials.json` sits behind the keychain on macOS, when its login is next
+renewed. A running `codex` keeps the old account until you restart it.
 
 The menu bar app also gives each account its own
 [window on claude.ai or chatgpt.com](https://docs.usepitboard.com/guides/account-windows),

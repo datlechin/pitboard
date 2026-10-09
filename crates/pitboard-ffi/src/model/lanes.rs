@@ -72,15 +72,19 @@ impl Job {
             Job::Read { .. }
             | Job::ReadOffline { .. }
             | Job::Look
+            | Job::AutoLook { .. }
             | Job::ReadSchedule { .. }
             | Job::Check
-            | Job::ReadLog { .. } => Lane::Reads,
+            | Job::ReadLog { .. }
+            | Job::LookLeft => Lane::Reads,
             Job::Switch { .. }
             | Job::AutoSwitch { .. }
             | Job::Abandon
             | Job::Enrol { .. }
             | Job::Rename { .. }
             | Job::Forget { .. }
+            | Job::UpdateConfig { .. }
+            | Job::Stow { .. }
             | Job::RepairSchedule
             | Job::SetSchedule { .. }
             | Job::Renew => Lane::Changes,
@@ -554,6 +558,9 @@ impl Worker {
                 qualified,
                 reopen,
             },
+            Job::AutoLook { at } => Answer::AutoLooked {
+                looked: core.auto_look(at),
+            },
             Job::AutoSwitch { at } => Answer::AutoSwitched {
                 done: core.auto_switch(at),
             },
@@ -590,6 +597,12 @@ impl Worker {
             Job::Forget { qualified } => Answer::Forgot {
                 done: core.forget(qualified.clone()),
                 qualified,
+            },
+            Job::UpdateConfig { qualified } => Answer::ConfigUpdated(core.update_config(qualified)),
+            Job::LookLeft => Answer::LookedLeft(core.left_login()),
+            Job::Stow { seen, from } => Answer::Stowed {
+                done: core.stow(&seen),
+                from,
             },
             // Nothing kept, a record that is there and cannot be read, and one that does not
             // read as a record of what was told, are each nothing told. The record is written
@@ -925,6 +938,9 @@ mod tests {
             Job::Forget {
                 qualified: "claude/spare".into(),
             },
+            Job::UpdateConfig {
+                qualified: "claude/work".into(),
+            },
         ] {
             assert_eq!(change.lane(), Lane::Changes, "{change:?}");
         }
@@ -941,6 +957,15 @@ mod tests {
         }
         assert_eq!(Job::Look.lane(), Lane::Reads);
         assert_eq!(Job::AskInstalled.lane(), Lane::Discovery);
+    }
+
+    /// The look at whether to switch Claude Code by itself reads files and claims nothing, so
+    /// it answers on the lane of reads while a switch waits. The switch it may lead to is a
+    /// change, made one at a time with every other.
+    #[test]
+    fn a_look_whether_to_switch_by_itself_runs_with_the_reads() {
+        assert_eq!(Job::AutoLook { at: 95 }.lane(), Lane::Reads);
+        assert_eq!(Job::AutoSwitch { at: 95 }.lane(), Lane::Changes);
     }
 
     /// AppModelTests.swift's onlyARunningAppHoldingTheToolIsAskedAbout once more, on the real

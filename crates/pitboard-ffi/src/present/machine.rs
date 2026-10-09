@@ -10,7 +10,8 @@
 
 use super::{Seen, words};
 use crate::model::machine::ScheduleFailure;
-use crate::{FoundCommandLine, Level, Schedule};
+use crate::model::state::AutoStanding;
+use crate::{AutoSwitched, FoundCommandLine, Level, Schedule};
 use pitboard_core::autoswitch::Threshold;
 
 /// What the app shows of this machine rather than its accounts. Not called `Machine`, the
@@ -32,7 +33,8 @@ pub struct MachineShown {
 }
 
 /// Switching Claude Code by itself before the account in use runs out, as the settings show
-/// it: their switch, the share it switches at, and what is said under them.
+/// it: their switch, the share it switches at, what it came to last, and what is said under
+/// them.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct AutoSwitchShown {
     /// Whether the switch shows it as on. Off unless somebody turned it on.
@@ -51,6 +53,10 @@ pub struct AutoSwitchShown {
     pub at_label: String,
     /// What is said under them: what it does and what it never does.
     pub note: String,
+    /// While it is on, what it came to last, once there is anything: which account it
+    /// watches, how much of its fullest limit is used and when that was read, or why it is
+    /// not switching and when it acts again.
+    pub standing: Option<String>,
 }
 
 /// Daily renewal, as the settings show it.
@@ -201,10 +207,27 @@ pub(crate) fn machine(seen: &Seen) -> MachineShown {
     }
 }
 
-/// Switching Claude Code by itself, from the app's preferences.
+/// Switching Claude Code by itself, from the app's preferences. How soon running sessions
+/// follow is promised only while the last read found no file behind the keychain.
 fn auto_switch(seen: &Seen) -> AutoSwitchShown {
     let state = seen.state;
     let at = state.preferences.threshold().percent();
+    let follows = if state
+        .warnings
+        .iter()
+        .any(|warning| warning.code == "fallback_login")
+    {
+        format!(
+            "While a login file is left behind the keychain, Claude Code sessions already \
+             running {}.",
+            pitboard_core::words::kept_until_renewed()
+        )
+    } else {
+        format!(
+            "Sessions already running follow within about {} seconds.",
+            pitboard_core::switch::ADOPTION_CEILING_SECONDS
+        )
+    };
     AutoSwitchShown {
         on: state.preferences.auto_switch,
         at,
@@ -215,11 +238,71 @@ fn auto_switch(seen: &Seen) -> AutoSwitchShown {
         note: format!(
             "Pitboard switches Claude Code to another of your accounts with room below \
              {at}% in every limit, once a limit of the one in use reaches {at}%, while the app \
-             is open. Sessions already running follow within about {} seconds. It never \
-             switches back by itself, and never switches Codex: a running codex keeps its \
-             account until restarted.",
-            pitboard_core::switch::ADOPTION_CEILING_SECONDS
+             is open. {follows} It never switches back by itself, and never switches Codex: a \
+             running codex keeps its account until restarted."
         ),
+        standing: state
+            .auto_standing
+            .as_ref()
+            .filter(|_| state.preferences.auto_switch)
+            .map(|standing| auto_standing(seen, standing)),
+    }
+}
+
+/// What switching Claude Code by itself came to last, as the line under the setting says it:
+/// the core's words for the account watched and each reason, in sentences of the app's own,
+/// which `pitboard watch` frames apart, with clock times as the person's own clock says them.
+fn auto_standing(seen: &Seen, standing: &AutoStanding) -> String {
+    match standing {
+        AutoStanding::Came(AutoSwitched::Watching {
+            account,
+            used,
+            as_of,
+            held_until,
+        }) => pitboard_core::words::watching(
+            account,
+            used.as_deref(),
+            as_of.map(|at| seen.clock(at)).as_deref(),
+            held_until.map(|until| seen.clock(until)).as_deref(),
+        ),
+        AutoStanding::Came(AutoSwitched::Waiting { from, used, until }) => format!(
+            "{from} has used {used}. Pitboard tries again at {}.",
+            seen.clock(*until)
+        ),
+        AutoStanding::Came(AutoSwitched::Switched { from, to, used, .. }) => {
+            format!("Switched Claude Code from {from} to {to}: {from} had used {used}.")
+        }
+        AutoStanding::Came(AutoSwitched::Skipped {
+            from,
+            used,
+            why,
+            until,
+            ..
+        }) => {
+            let said = format!("{from} has used {used}. Pitboard is not switching: {why}.");
+            match until {
+                Some(until) => format!("{said} It decides again at {}.", seen.clock(*until)),
+                None => said,
+            }
+        }
+        AutoStanding::Came(AutoSwitched::NotWatching { why, until, .. }) => {
+            let said = format!("Pitboard is not switching Claude Code: {why}.");
+            match until {
+                Some(until) => format!("{said} It asks again at {}.", seen.clock(*until)),
+                None => said,
+            }
+        }
+        AutoStanding::Stopped {
+            message,
+            until: Some(until),
+        } => format!(
+            "Pitboard could not switch Claude Code, and tries again at {}: {message}",
+            seen.clock(*until)
+        ),
+        AutoStanding::Stopped {
+            message,
+            until: None,
+        } => format!("Pitboard cannot tell whether to switch Claude Code: {message}"),
     }
 }
 

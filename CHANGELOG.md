@@ -6,6 +6,277 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Added
+
+- `pitboard stow`, and **Put Away** on the app's notice **A login file is left behind the
+  keychain**, put away the Claude Code login left in `~/.claude/.credentials.json` behind
+  the keychain on macOS, so sessions already running follow a switch within 33 seconds
+  again. Each says whose the login is and asks first, asking Anthropic with the login's own
+  access token where Pitboard does not know it by its fingerprint. It parks the login for
+  its account where Pitboard holds no parked login it can switch to, keeps the parked one
+  where it does, and drops a second sign-in of the account in use or a login Anthropic no
+  longer accepts; only then does it delete the file. A file with no login in it, `{}` or not
+  JSON at all, is deleted. A login of an account not enrolled is refused, named by its email
+  and organisation, and nothing is deleted. A login whose access token has expired is
+  renewed first and written back to the file, over the login the file holds by then where
+  that is still the one renewed. A session writing its credentials just then stops it before
+  the refresh token is sent. Throughout, it holds the lock Claude Code takes before it
+  renews a login, so no session renews the file's login meanwhile. The file's other keys,
+  such as `mcpOAuth`, go with it, and are named. A session that signed in with the file, as
+  one over SSH does, is signed out. `--yes` skips the question, `--json` gives `stowed`,
+  `path`, `login`, `account` and `dropped`, and the activity log records it as `stow`. The
+  errors `left_login_changed`, `stored_login_changed`, `left_login_not_enrolled` and
+  `left_login_unidentified` say what stopped it, and every error it stops with says whether
+  it renewed or parked the login first, or renewed it and could not write it back.
+  `pitboard doctor`'s `fallback login` check and the `fallback_login` warning name it, and
+  the app offers **Put Away**, but for a file Pitboard cannot read, which doctor still says
+  to delete with `rm`.
+- The warnings `in_use_unconfirmed` and `config_names_another`. A read that could not ask
+  Anthropic warns with `in_use_unconfirmed` where Claude Code's config has named another
+  account since Anthropic last named the login stored, as a sign-in leaves it, and, until it
+  first asks Anthropic after the update, where the config names another account than the
+  one Pitboard last switched to, which it takes as in use until then. Every read warns with
+  `config_names_another` where the config names another account than the one whose login
+  is stored, which `/status` in Claude Code then shows. `pitboard doctor` has an
+  `in use` check that names the account in use, as Anthropic said and when, and warns of
+  either. The app asks Anthropic once whenever a read between its own says
+  `in_use_unconfirmed`.
+- `config_updated` in `pitboard use --json` for an account already in use, and the
+  `pitboard log` outcome of the same name, where `use` wrote that account into Claude Code's
+  config. The app's notice **Claude Code's config names another account** has a button,
+  **Update Claude Code's Config**, that does it and moves no login. Where a switch has put
+  another account in use since the notice was drawn, it writes nothing and says so, with
+  the error `account_not_in_use`.
+- The `pitboard log` verb `auto-stay`, which the app's **Activity** pane names **Automatic
+  switch not made**: the automatic switch did not switch, and why. `not_identified`, with
+  the account last known in use: Pitboard could not tell whose login Claude Code has
+  stored, so it decided nothing. `no_room`, `already_switched`, `attempts_spent`,
+  `settling` and `auth_overridden`, with the account in use: a limit reached the share and
+  Pitboard did not switch away from it, recorded once for each limit and its reset.
+- `pitboard watch --json` events `waiting`, with `from`, `limit` and `until`, the time it
+  tries again after a try that came to nothing, and the fields `account`, `limit`, `as_of`
+  and `held_until` of `idle`: the account it watches, its fullest limit, when that was read
+  and until when Anthropic holds Pitboard off asking again. `no_room` gains `unread`, the
+  accounts it could switch to that Anthropic has given no reading of yet, and `skipped` the
+  reasons `already_switched`, `attempts_spent` and `settling`, the last with `until`.
+
+### Changed
+
+- The account index is schema 6. It records whose login Claude Code and Codex each have
+  stored, as Anthropic or the login itself last said, with which login that was, in place
+  of the account Pitboard last switched to. An earlier Pitboard cannot read it once this
+  one has, and says to update, so update the command line and the app together. A status
+  line still running an earlier `pitboard` shows `unenrolled` until that one is updated.
+  It also rewrites Pitboard's usage readings without what tells an answer from Anthropic
+  apart, so between Pitboard's own reads the automatic switch says `no_reading` and does
+  not switch.
+- While `~/.claude/.credentials.json` is behind the keychain on macOS, a switch, by hand or
+  by itself, says that Claude Code sessions already running keep the account they are on
+  until their login is next renewed or they are started again, and names the file, in place
+  of 33 seconds. The automatic switch still switches: sessions started after it take the
+  account at once. `pitboard use --json` gives `"adoption": {"follows": "renewal", "path":
+  ...}` with `adoption_ceiling_seconds` `null`, and the app counts nothing down. Read in
+  Claude Code 2.1.294, not measured: a running session keeps its login while the file is
+  there, whatever it holds. So every `pitboard status` without `--offline` and every read
+  of the app warns with `fallback_login` while the file is there, as every change did, and
+  so does a file with no login in it or one Pitboard cannot read, which pin sessions too.
+  `pitboard doctor`'s `fallback login` check says the same, and the app's notice is titled
+  **A login file is left behind the keychain**. The app's setting promises 33 seconds only
+  while no read has found the file.
+- An answer from Anthropic replaces a Claude Code account's reading whole: a limit the
+  answer does not give is gone at once, whatever its reset, so numbers filed under the wrong
+  account go at that account's next answer. They stayed until their own reset, days for a
+  weekly limit. An answer with a limit Pitboard cannot read, or without Anthropic's list of
+  limits, takes no running limit away. A Claude Code session's numbers only move a limit
+  Anthropic already gave for that account, within its window or in the next one once it has
+  reset, and never add a limit. An account Pitboard has not asked Anthropic about yet gets
+  no reading from a session, and the status line shows the session's own numbers for it,
+  where it showed none until they moved.
+- The app no longer offers an account whose reading may leave a limit out where it leaves
+  out one the account in use has, by the automatic switch's rule. It offered one whenever
+  the limit left out was not the one that ran out. OpenAI's answer can leave a window out,
+  so a Codex account whose answer had one window empty is not offered from an account that
+  has both. For a Claude Code account whose reading is from before this version, this lasts
+  until Pitboard next asks Anthropic about that account. [Which account it switches
+  to](https://docs.usepitboard.com/guides/automatic-switching#which-account-it-switches-to)
+  says which readings may leave a limit out, and the one limit they may still leave out.
+- A read and a switch ask Anthropic whose Claude Code's stored login is only once that login
+  has changed since Anthropic last named it, by its refresh token's fingerprint. So a switch
+  away from the login Anthropic last named no longer stops at `session_expired` where only
+  that login's access token has lapsed. A read records whose login each tool has stored
+  where it found that changed, with a record for each `CLAUDE_CONFIG_DIR` and `CODEX_HOME`
+  it reads under. It no longer asks the usage of a login Anthropic could not name that time,
+  which it asked under the account Claude Code's config named, so the numbers of a login a
+  sign-in replaced could be filed under the account it replaced.
+- The status line files a session's numbers under the account whose windows they are, in
+  Anthropic's last answer for each account, also while the session is still on the account
+  before a switch or a `/login`. It filed them under the account Claude Code's config named,
+  and took nothing for 33 seconds after a switch, though a session can take longer to follow
+  one. Numbers in windows no account holds are shown as the session's own and filed nowhere.
+  The label is then `work?` for the account whose login Anthropic last named as stored, `?`
+  where the session cannot be on that one, and `unenrolled` where that login is of an
+  account not enrolled. A session that passed nothing shows the account in use, marked
+  while Claude Code's config has named another since Pitboard last asked Anthropic, or
+  until Pitboard has first asked. A session that passes its five-hour limit alone files
+  nothing after each five-hour reset until Pitboard has asked Anthropic again.
+- `pitboard watch --json` prints the event `not_watching` where Pitboard cannot decide
+  whether to switch at all, with a `reason`: `switch_interrupted` and
+  `custom_oauth_endpoint`, which were reasons of `skipped`, and `nothing_signed_in`,
+  `not_enrolled` with the `email` of the account, `not_identified` with a `detail` and the
+  time it asks again, `until`, and `no_reading` with the `account` in use. Breaking for a
+  script that reads the first two from `skipped`. `pitboard watch` says each once, as
+  `Pitboard is not switching Claude Code:` and the reason, and so does the app, in a
+  notification titled **Pitboard is not switching Claude Code**. An `auto-switch` line in
+  `pitboard log` whose error came before Pitboard chose an account names no account.
+- The app asks whether to switch Claude Code by itself every 30 seconds, as `pitboard
+  watch` decides, and after every read and every change of numbers, so an account put in
+  use stops settling, and a try held back after one that came to nothing is made, with
+  nobody writing anything. It asked only after a read or numbers that showed a limit at the
+  share. Under **Switch when a limit reaches**, a line says which account it watches, how
+  much of its fullest limit is used and when that was read, or why it is not switching and
+  when it acts again. After a switch fails, the app tries again a minute later, then twice
+  as long after each failure in a row, up to 15 minutes, as Pitboard waits after failed
+  tries at a limit. It tried again at its next read of usage, so a failure that lasted was
+  tried, and recorded in `pitboard log`, every 5 minutes.
+- `pitboard watch` names the account it watches, how much of its fullest limit is used and
+  when that was read, whenever its last line said something else: once it has read the
+  accounts, after a switch, and after a reason, a wait or an error. With `--json` that is
+  the event `idle`, which only `--once` printed, and `--once` prints the line in place of
+  `Nothing to switch now.` Each warning a decision found, such as `fallback_login` and
+  `auth_overridden`, is printed once until the next switch, with that decision's line, even
+  one printed before. It printed only those of a decision that failed. After an error it
+  makes no decision under Pitboard's lock for a minute, then twice as long after each error
+  in a row, up to 15 minutes, as the app does. It decided again every 30 seconds, and each
+  error was another line in `pitboard log`.
+- In `pitboard-core`, `state::State::in_use` records whose login each tool has stored, in
+  place of `State::active`, and `State::active_for`, `set_active`, `slot_for`, `set_slot`
+  and `used` are gone. `autoswitch::Skip`'s `SwitchInterrupted` and `CustomOauth` are
+  `Blind::SwitchInterrupted` and `Blind::CustomOauth`, `Auto::Idle` is `Auto::Watching`,
+  `Auto::NoRoom` is `Auto::Skipped` with `Skip::NoRoom`, `words::not_switching` takes the
+  share, and `autoswitch::Skip` is `#[non_exhaustive]`. `usage::Source::ClaudeCodeCache`,
+  `usage::from_config_cache`, `usage::Snapshot::account_uuid`, `status::gather` and
+  `error::Error::SwitchOvertaken` are gone. `state::changed_at` and
+  `service::Pitboard::changed_at` are in epoch milliseconds. `provider::Adoption` is no
+  longer `Copy` and has the variant `AtRenewal`, `service::Warning::FallbackLogin` has the
+  field `held`, a `provider::Held`, and `doctor::FallbackLogin::fingerprint` is `Ok(None)`
+  where the file holds no login and an error where it cannot be read.
+  `switch::Outcome::AlreadyActive` has the field `config_updated`, `statusline::StatusLine`
+  the field `sure`, and `api::Owner` is `Serialize` and `Deserialize`. New are
+  `autoswitch::Blind` and `autoswitch::Look`, the variants `autoswitch::Auto::NotWatching`,
+  `Auto::Watching` and `Auto::Waiting`, `autoswitch::Skip`'s `NoRoom`, `AlreadyLeft`,
+  `GaveUp` and `Settling`, `autoswitch::DECIDE_EVERY_SECONDS` and `autoswitch::retry_after`,
+  `autoswitch::Auto::told_apart` and `Skip::told_apart`, `service::Pitboard::auto_look`,
+  `update_config`, `left_login` and `stow`, `State::account_in_use`, `identified`,
+  `other_slots` and `from_file`, `state::Account::replaced_at` and `owner`, the module
+  `in_use`, `usage::Snapshot::answered_at` and `lists_every_limit`, `usage::Room`,
+  `usage::room`, `usage::roomiest` and `usage::whole`, `status::Stale::LoginReplaced`,
+  `service::Warning`'s `LoginReplaced`, `InUseUnconfirmed` and `ConfigNamesAnother`,
+  `service::Stored`, `provider::Held`, `doctor::Facts::in_use`, `switch::update_config`,
+  `switch::stow` with `Left`, `Stowed`, `Kept` and `Foreseen`, `error::Partway`, the errors
+  `AccountNotInUse`, `LeftLoginChanged`, `StoredLoginChanged`, `LeftLoginNotEnrolled`,
+  `LeftLoginUnidentified` and `StowStopped`, and `words::not_watching`, `watching`,
+  `kept_until_renewed`, `left_lines`, `nothing_left` and `stowed_lines`. These change the
+  crate's public API.
+
+### Removed
+
+- `"source": "claude_code_cache"` in `pitboard status --json`, and `pitboard doctor`'s
+  `usage_cache` check. Breaking for a script that reads either.
+- The error code `switch_overtaken`, which was never printed.
+
+### Fixed
+
+- A sign-in outside Pitboard that replaces the only login of the account in use is said on
+  every read until that account is signed in to again or forgotten. `pitboard status`
+  shows `login replaced outside Pitboard` beside it, `--json` gives it the `stale` code
+  `login_replaced` and the read the warning `login_replaced`, the app posts it once for each
+  account, and `pitboard log` records it as `in-use`, with the account then in use. It read
+  as `nothing parked`, and nothing said what had happened.
+- An account on a plan with fewer limits, such as a Team seat with no weekly limit for all
+  models, is a place for the automatic switch to go and for the app to offer. A limit an
+  account does not have counted as spent, so a seat was never chosen once a personal
+  account's weekly limit reached the share, nor an account without a model's weekly limit
+  once that one did. Anthropic's answer lists every limit an account has. A Claude Code
+  reading that may leave one out still leaves the automatic switch no room where it leaves
+  out a limit of the account in use, as before: an answer without Anthropic's list of
+  limits, one Pitboard could not read in full, and an account's reading from before this
+  version, until Pitboard next asks Anthropic about that account. The app offers by the
+  automatic switch's rule. It never offers an account that shows 100% of any limit, and of
+  two with as much left it offers the one least full in its other limits. An account
+  without the limit that ran out is offered with **seat has no such limit.**
+- An account just switched to no longer shows the previous account's usage from Claude
+  Code's usage cache, and the automatic switch no longer acts on that cache. Claude Code
+  2.1.294 stamps the cache with the account its config names, while the numbers in it are
+  those of the login its session holds, which can still be the one switched away from.
+  Pitboard no longer reads it: between its own answers from Anthropic, an account shows the
+  last reading Pitboard or a status line recorded.
+- The automatic switch switches at the share as shown: a limit the menu shows at 95% counts
+  as 95%, on the account in use and on an account it could go to. It compared the unrounded
+  share, so a limit at 94.5% showed 95% and was not switched from. `pitboard status`,
+  `pitboard watch` and the status line round a half up, as the app does, and a limit changes
+  colour at 70% and at 90% as its figure shows them.
+- `pitboard status --offline`, the app between its reads, the automatic switch, `pitboard
+  doctor` and `pitboard forget` take the account in use from what Anthropic last said of
+  the login Claude Code has stored, and the login of an account nobody enrolled has its row
+  offline too. They took it from Claude Code's config, which a Claude Code process started
+  or signed in on another login can rewrite with its own account, as read in Claude Code
+  2.1.294. On one machine it named another account than the login stored for three hours,
+  and the automatic switch watched that account rather than the one at its limit. `forget`
+  asks whose the login is as a switch does, and where nobody can say, it keeps the account
+  last in use and any account with nothing parked.
+- `pitboard use` with the account already in use writes that account into Claude Code's
+  config where the config names another account, as a switch to it does, so `/status` in
+  Claude Code names the account in use. It changed nothing, and only the next switch put
+  the config right. The `config_names_another` and `config_write_failed` warnings and
+  `pitboard doctor` name the command.
+- The automatic switch asks whose login Claude Code has stored under its lock, as a switch
+  does, and decides from the answer: where a switch may be due, where Claude Code's config
+  has named another account since Anthropic last named that login, and until Pitboard has
+  first asked. It knows the login by its fingerprint where Anthropic named it before. So
+  after a sign-in outside Pitboard it watches the account signed in to, and spends no
+  attempt on the account it replaced. It decides and switches from that one answer, under
+  one lock. Where whose the login is cannot be told, as with Anthropic out of reach, it
+  decides nothing, says so, and asks again after a minute, then twice as long after each
+  such failure in a row, up to 15 minutes, until a read records whose it is. It was tried
+  as a switch, and said as one that failed. A keychain one front end cannot read, as over
+  SSH, fails that front end's tries alone, and the app still switches.
+- The automatic switch judges every limit of the account in use at the share. One it already
+  switched away from, or tried three times, before it resets no longer hides another, such
+  as the five-hour limit of an account put back in use after its weekly limit was left. Each
+  reason it does not switch away from a limit at the share is said once for that limit and
+  its reset, by `pitboard watch` and in the app's notification **Claude Code was not
+  switched**, and recorded once in `pitboard log`: no account with room, naming any that
+  Anthropic has given no reading of yet, the limit already switched away from, three failed
+  tries, the account put in use less than 5 minutes ago, and Claude Code signed in another
+  way. Only the last was said by the app, and `pitboard watch` said no room and the last;
+  none was recorded. A try that came to nothing holds back every limit left to try until its
+  wait is over, which `pitboard watch` says of the limit it tries then, and an account a
+  switch was refused over is passed over for every limit of the account in use until the
+  limit it was refused for resets. It judges only a reading Anthropic gave, of the account
+  in use and of each it could switch to: one an earlier Pitboard wrote is not acted on, and
+  `no_reading` says so, until Pitboard next asks Anthropic about that account.
+- A login too large to write without the argument line, where `PITBOARD_NO_ARGV` forbids
+  it, counts as one of the automatic switch's three attempts at a limit. It passed the
+  account to go to over, then every other in turn, until no account read as having room.
+- The app and `pitboard watch` see a change to Pitboard's accounts made in the same second
+  as the last one they saw, such as a `pitboard use` typed in a terminal. Pitboard told when
+  its account index was written in whole seconds, so the app showed such a switch only at
+  its next read, up to 5 minutes later, and `pitboard watch` named it up to 30 seconds late.
+- A switch of Claude Code, by hand or by itself, holds the lock a Claude Code session takes
+  before it renews its login, from before it last reads the login it switches away from
+  until the switch is recorded. A session that renewed that login at the same moment used up
+  the refresh token Pitboard had just parked, then saved its renewed login nowhere, since
+  another login was stored by then. The account switched from was left with a parked login
+  Anthropic refuses. Read in Claude Code 2.1.294, not measured against a running session.
+  Where a session is renewing its login just then, the switch waits for it, and fails with
+  `switch_in_progress` after about 7.5 seconds, as it does while Claude Code writes its
+  login.
+- The app and `pitboard watch` no longer say a switch was interrupted while another
+  `pitboard` is in the middle of one, such as a `pitboard use` typed in a terminal. Every
+  switch keeps a record until it is done, and they read that record as left by a switch
+  that had stopped. They now wait for the switch and decide from what it leaves, and say
+  `switch_interrupted` only where no `pitboard` is making the switch.
+
 ## [0.9.0] - 2026-10-08
 
 ### Added

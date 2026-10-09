@@ -12,6 +12,7 @@ A switch to an account needs its [parked login](/concepts/switching#parked-login
 
 - `login expired · pitboard enroll work --sign-in`: the parked login has expired.
 - `nothing parked · pitboard enroll work --sign-in`: Pitboard holds no parked login, for example because Anthropic or OpenAI refused the last one.
+- `login replaced outside Pitboard · pitboard enroll work --sign-in`: a sign-in outside Pitboard, such as `/login` in Claude Code, replaced the login the account had in use, and Pitboard held no copy of it.
 - `ready · expires in 2d 3h · pitboard enroll work --sign-in`: the parked login expires within 3 days. `pitboard renew` renews it without a browser sign-in.
 
 A switch to an account with no usable parked login stops before anything moves and names the same command:

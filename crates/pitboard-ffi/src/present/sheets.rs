@@ -1,19 +1,22 @@
 //! What the sheets and the window's questions say, from NameSheets.swift, SignInSheet.swift
-//! and MainWindow.swift: the sheet over the window, a sign-in under way, the question about
-//! quitting an app to switch, and a failure's alert.
+//! and MainWindow.swift: the sheet over the window, a sign-in under way, the sheet for putting
+//! away a login left in a file, the question about quitting an app to switch, and a failure's
+//! alert.
 
 use super::words;
-use super::{Question, Seen, SheetText, SheetTool, SigningInText, alert_of};
+use super::{Question, Seen, SheetText, SheetTool, SigningInText, StowText, alert_of};
 use crate::Tool;
 use crate::account_windows::AlertText;
-use crate::model::state::trimmed;
+use crate::model::state::{Leftover, trimmed};
 use crate::model::{Failure, QuitQuestion, Sheet};
+use pitboard_core::switch::Foreseen;
+use pitboard_core::words as said;
 
 /// The name a sheet would save or sign in as, from what was typed in it, or `None` while
 /// there is nothing to save: what was typed without the white space around it, as the Swift
 /// sheets trimmed it with Foundation's `whitespacesAndNewlines`, and not empty. A rename needs
 /// a name it does not already have. Signing in again needs no name typed: it is the
-/// account's own.
+/// account's own. Putting away a login left in a file saves no name at all.
 ///
 /// The model saves by the same rule, so a sheet that offers Save as this says is never
 /// refused for what is in its field. Answers at once from what it is given, so a view asks it
@@ -25,6 +28,7 @@ pub fn name_to_save(sheet: Sheet, typed: String) -> Option<String> {
     }
     let name = trimmed(&typed);
     match &sheet {
+        Sheet::Stow => None,
         _ if name.is_empty() => None,
         Sheet::Rename { label, .. } if label == name => None,
         _ => Some(name.to_owned()),
@@ -61,6 +65,9 @@ pub(crate) fn starts_on(sheet: &Sheet, addable: &[Tool]) -> String {
         Sheet::SignInAgain { provider, .. }
         | Sheet::Name { provider, .. }
         | Sheet::Rename { provider, .. } => provider.clone(),
+        Sheet::Stow => pitboard_core::provider::ProviderId::Claude
+            .code()
+            .to_owned(),
     }
 }
 
@@ -80,7 +87,8 @@ pub(crate) fn not_offered(seen: &Seen, addable: &[Tool]) -> Option<String> {
     Some(words::not_offered(seen.os, &names, &programs))
 }
 
-/// What the sheet over the main window says, while one is up.
+/// What the sheet over the main window says, while one is up that names an account. The
+/// sheet for putting away a login left in a file says `stow_text` instead.
 pub(crate) fn sheet_text(seen: &Seen) -> Option<SheetText> {
     let state = seen.state;
     let sheet = state.sheet.as_ref()?;
@@ -153,8 +161,46 @@ pub(crate) fn sheet_text(seen: &Seen) -> Option<SheetText> {
             confirm: "Rename".into(),
             saving,
         },
+        Sheet::Stow => return None,
     };
     Some(text)
+}
+
+/// What the sheet for putting away the login left in a file says while it is up: that it is
+/// looking, then what the look found, in the words `pitboard stow` asks with. Put Away waits
+/// for a login it can put away, which a login of an account nobody enrolled is not.
+pub(crate) fn stow_text(seen: &Seen) -> Option<StowText> {
+    let state = seen.state;
+    if state.sheet != Some(Sheet::Stow) {
+        return None;
+    }
+    let saving = state.saving.contains(&Sheet::Stow);
+    let (lines, looking, can_confirm) = match state.left.as_ref() {
+        None | Some(Leftover::Looking) => (
+            Vec::new(),
+            Some("Finding out whose login it is…".to_owned()),
+            false,
+        ),
+        Some(Leftover::Unknown) => (Vec::new(), None, false),
+        Some(Leftover::Found(None)) => (vec![said::nothing_left().to_owned()], None, false),
+        Some(Leftover::Found(Some(left))) => (
+            said::left_lines(left),
+            None,
+            !saving && !matches!(left.login, Foreseen::NotEnrolled(_)),
+        ),
+    };
+    Some(StowText {
+        title: "Put Away the Login Left in a File".into(),
+        message: "Claude Code left a login in a file behind the keychain, which keeps sessions \
+                  already running from following a switch. Pitboard keeps that login for its \
+                  account where it holds none it can switch to, then deletes the file."
+            .into(),
+        lines,
+        looking,
+        confirm: "Put Away".into(),
+        can_confirm,
+        saving,
+    })
 }
 
 /// What a sign-in under way says, whichever sheet started it: the model runs one at a time.
@@ -286,6 +332,8 @@ mod tests {
             warnings: vec![crate::Warning {
                 code: "auth_overridden".into(),
                 message: "ANTHROPIC_API_KEY is set".into(),
+                account: None,
+                held: None,
             }],
         });
         assert_eq!(alert.title, "Couldn’t switch to personal");

@@ -51,7 +51,7 @@ private func snapshot(
         menuNotices: MenuNotices(install: nil, switches: [], others: nil), footing: .ready,
         setup: nil, accountsShown: .reading(title: "Reading accounts…"),
         menuAccountsNote: nil, updatedMenu: "", updatedWindow: "", sheetText: nil,
-        signingInText: nil, quitConfirmation: nil, failureAlert: nil,
+        signingInText: nil, stowText: nil, quitConfirmation: nil, failureAlert: nil,
         machine: MachineShown(
             schedule: ScheduleShown(
                 schedule: nil, on: false, changing: false, enabled: true, runs: nil,
@@ -65,7 +65,7 @@ private func snapshot(
                 cannotLink: nil),
             autoSwitch: AutoSwitchShown(
                 on: false, at: 95, lowest: 50, highest: 99, enabled: true,
-                atLabel: "Switch when a limit reaches 95%", note: "")),
+                atLabel: "Switch when a limit reaches 95%", note: "", standing: nil)),
         accountWindows: windows)
 }
 
@@ -80,7 +80,9 @@ private func status(_ labels: String..., now: Int64 = 0, measured: Int64? = nil)
                 qualified: "claude/\(label)", unplaced: false, email: "\(label)@example.com",
                 accountId: label, signedIn: label == labels.first, switchable: true,
                 parked: nil,
-                usage: measured.map { Usage(source: .live, observedAt: $0, windows: []) },
+                usage: measured.map {
+                    Usage(source: .live, observedAt: $0, windows: [], listsEveryLimit: true)
+                },
                 stale: nil, staleExplanation: nil)
         },
         warnings: [])

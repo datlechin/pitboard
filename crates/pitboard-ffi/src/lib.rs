@@ -57,8 +57,8 @@ pub use present::{
     DownloadState, EmptyList, Footing, ItemAction, ItemOffer, LimitPace, LimitRow, LinkPicker,
     MachineShown, MenuBarText, MenuEntry, MenuNotices, NoticeAction, OpenWindow, PaceStanding,
     PageLoad, PanelNotice, PickerAccount, PickerShown, Question, RenewalShown, ScheduleShown,
-    SetupStep, Severity, SheetText, SheetTool, SigningInText, StoreDeletion, WaitingShown,
-    WindowOffer, WindowWaiting, downloads_quit_question, name_to_save,
+    SetupStep, Severity, SheetText, SheetTool, SigningInText, StoreDeletion, StowText,
+    WaitingShown, WindowOffer, WindowWaiting, downloads_quit_question, name_to_save,
 };
 
 mod account_windows;
@@ -76,8 +76,8 @@ pub use account_windows::{
 // answers that only the model reads. None of it is exported.
 mod launch;
 pub(crate) use launch::{
-    Adoption, AppCore, AutoSwitched, Change, Check, Enrolled, EnrolledAs, Holding, OwnCommandLine,
-    PitboardError, Remedy, Renewed, SignInSession, Switch, Switched,
+    Adoption, AppCore, AutoLooked, AutoSwitched, Change, Check, Enrolled, EnrolledAs, Holding,
+    OwnCommandLine, PitboardError, Remedy, Renewed, SignInSession, Switch, Switched,
 };
 // What a test or a fixture makes the app's core of, in place of the environment.
 #[cfg(any(test, feature = "fixture"))]
@@ -166,6 +166,24 @@ pub fn pitboard_directory(environment: HashMap<String, String>) -> String {
 pub struct Warning {
     pub code: String,
     pub message: String,
+    /// The account a warning that stands until it is put right is about, as `Account.id`
+    /// names it, where its words change while it stands: `login_replaced` names whose login
+    /// the tool has stored now, which every switch changes. `None` for every other warning.
+    pub account: Option<String>,
+    /// What the file a `fallback_login` warning is about holds, which says whether it can be
+    /// put away: one Pitboard cannot read cannot. `None` for every other warning.
+    pub held: Option<Held>,
+}
+
+/// What a file behind a tool's store holds, as far as Pitboard can read it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum Held {
+    /// A login of the tool's, which a session that cannot read that store signs in with.
+    Login,
+    /// No login of the tool's.
+    NoLogin,
+    /// It is there, and cannot be read.
+    Unreadable,
 }
 
 /// An interrupted switch that was given up on, keeping every login it named.
@@ -191,7 +209,6 @@ pub enum Schedule {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
 pub enum Source {
     Live,
-    ClaudeCodeCache,
     Remembered,
 }
 
@@ -221,6 +238,9 @@ pub struct Usage {
     pub source: Source,
     pub observed_at: Option<i64>,
     pub windows: Vec<Limit>,
+    /// Whether `windows` are every limit the account has, so a limit they leave out is one
+    /// it does not have.
+    pub lists_every_limit: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]

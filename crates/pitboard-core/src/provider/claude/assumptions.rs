@@ -1,9 +1,9 @@
 //! Every fact about Claude Code that Pitboard stands on, named and dated.
 //!
 //! The keychain item's name and how the slot is hashed from a directory, the five keys a
-//! logout deletes, the write lock and its constants, the one write that skips the lock, the
-//! 4032-byte ceiling on a `security` command, the thirty seconds a session caches a
-//! credential for. All of it was read out of one build.
+//! logout deletes, the write lock, the refresh lock and their constants, the one write that
+//! skips the write lock, the 4032-byte ceiling on a `security` command, the thirty seconds a
+//! session caches a credential for. Each was read out of the build its entry names.
 //!
 //! None of it transfers. The next provider's equivalents have to be read out of its own
 //! build the same way, into a list of its own, dated on its own schedule.
@@ -172,6 +172,17 @@ pub const PER_SYSTEM: &[PerSystem] = &[
         windows: NO_KEYCHAIN_ON_WINDOWS,
     },
     PerSystem {
+        name: "fallback_file_pins_session_login",
+        macos: Read("2.1.294"),
+        linux: NO_KEYCHAIN_ON_LINUX,
+        windows: Pending {
+            by: &["W22"],
+            reads: "windows_file_adoption: how soon a running session takes a new \
+                    `.credentials.json` on Windows, where it is the store and where it sits \
+                    behind Credential Manager",
+        },
+    },
+    PerSystem {
         name: "login_is_one_organisation",
         macos: Read("2.1.294"),
         linux: Read("2.1.294"),
@@ -184,7 +195,31 @@ pub const PER_SYSTEM: &[PerSystem] = &[
         windows: Read("2.1.294"),
     },
     PerSystem {
-        name: "usage_cache_names_the_account_alone",
+        name: "usage_cache_stamp_is_the_configs",
+        macos: Read("2.1.294"),
+        linux: Read("2.1.294"),
+        windows: Read("2.1.294"),
+    },
+    PerSystem {
+        name: "status_reads_the_config_usage_the_token",
+        macos: Read("2.1.294"),
+        linux: Read("2.1.294"),
+        windows: Read("2.1.294"),
+    },
+    PerSystem {
+        name: "config_identity_is_the_last_writers",
+        macos: Read("2.1.294"),
+        linux: Read("2.1.294"),
+        windows: Read("2.1.294"),
+    },
+    PerSystem {
+        name: "status_line_input_names_no_account",
+        macos: Read("2.1.294"),
+        linux: Read("2.1.294"),
+        windows: Read("2.1.294"),
+    },
+    PerSystem {
+        name: "refresh_lock",
         macos: Read("2.1.294"),
         linux: Read("2.1.294"),
         windows: Read("2.1.294"),
@@ -275,7 +310,10 @@ pub const ASSUMPTIONS: &[Assumption] = &[
                where before it read as empty",
         read_from: "the secure storage module's write wrapper",
         verified_against: VERIFIED_AGAINST,
-        depends: "lock.rs and the whole switch",
+        depends: "lock.rs, the whole switch, and `pitboard stow`, which takes it once before it \
+                  renews a login left in `.credentials.json`, and holds it while it writes that \
+                  login back renewed and while it reads the file and the login stored a last time \
+                  and deletes the file",
         probe: &[
             ".storage-write",
             "[secureStorage] write lock compromised: ",
@@ -292,6 +330,41 @@ pub const ASSUMPTIONS: &[Assumption] = &[
         verified_against: VERIFIED_AGAINST,
         depends: "the slot re-read in switch, which exists for this",
         probe: &["secureStorage.READ_FAILED"],
+        absent: &[],
+    },
+    Assumption {
+        name: "refresh_lock",
+        fact: "a renewal of the login takes proper-lockfile's directory lock \
+               `<storage dir>/.oauth_refresh.lock`, stale 60000ms and touched every 5000ms, then \
+               the legacy `<storage dir, links resolved>.lock` the same way, letting go of the \
+               first where the second is held and going without the second where it cannot be \
+               made. Under them it reads the login again, sends its refresh token, and saves the \
+               answer through the write lock only where the login stored still holds the token \
+               it sent, writing nothing otherwise. So the write lock does not keep a renewal \
+               from spending a refresh token: this lock does. A holder is taken over before \
+               the lock is stale only where its owner record, \
+               `<storage dir>/.oauth_refresh.lock.owner`, proves it gone",
+        read_from: "the refresh lock's options and the function taking both locks, the token \
+                    refresh and the scope expansion, which take it before they read the login \
+                    again and send the refresh token, the refresh's compare-and-set save through \
+                    the storage write wrapper, and the dead holder takeover, which reads the \
+                    owner record",
+        // Read on 2026-10-09 from the macOS, Linux x64, Windows x64 and Windows arm64 builds of
+        // 2.1.294, whose code here is the same.
+        verified_against: "2.1.294",
+        depends: "lock::REFRESH, a switch, which holds it from before it reads the outgoing login \
+                  a last time until it has recorded the login installed, so no session spends the \
+                  refresh token of the copy it parks, and `pitboard stow`, which holds it from its \
+                  last reading of a login left in `.credentials.json` until the file is gone, so \
+                  no session spends the refresh token of the login it parks, drops or renews \
+                  meanwhile, and saves the login it renewed as this save does, where the file \
+                  still holds the token it sent. Neither writes an owner record, so no session \
+                  takes the lock over",
+        probe: &[
+            "\".oauth_refresh.lock\"),realpath:!1,stale:60000,update:5000",
+            "tengu_oauth_refresh_legacy_lock_contended",
+            "tengu_oauth_refresh_save_adopted_newer_write",
+        ],
         absent: &[],
     },
     Assumption {
@@ -314,14 +387,16 @@ pub const ASSUMPTIONS: &[Assumption] = &[
     Assumption {
         name: "credential_cache",
         fact: "a running session serves the credential from a 30 second cache, so a swap is \
-               picked up within about 33 seconds. The 30 seconds are unchanged in 2.1.284; its \
-               re-checks after 1, 3 and 10 seconds, behind `tengu_streamed_thimble` from \
-               2.1.281, can only shorten that",
+               picked up within about 33 seconds, only where no `.credentials.json` is behind \
+               the keychain; see `fallback_file_pins_session_login`. The 30 seconds are \
+               unchanged in 2.1.284; its re-checks after 1, 3 and 10 seconds, behind \
+               `tengu_streamed_thimble` from 2.1.281, can only shorten that",
         read_from: "the keychain backend's cache, and measured against a running session",
         // The 33 seconds were measured against a running 2.1.278; nothing later was run.
         verified_against: "2.1.278",
-        depends: "switch::ADOPTION_CEILING_SECONDS, and autoswitch, which switches before a \
-                  limit rather than at it so a session already running follows in time",
+        depends: "switch::ADOPTION_CEILING_SECONDS and Claude's adoption where nothing is \
+                  behind the keychain, and autoswitch, which switches before a limit rather \
+                  than at it so a session already running follows in time",
         probe: &[],
         absent: &[],
     },
@@ -350,7 +425,8 @@ pub const ASSUMPTIONS: &[Assumption] = &[
                and a refresh answer without a refresh-token lifetime keeps the one it had",
         read_from: "the OAuth client id and the token refresh path",
         verified_against: VERIFIED_AGAINST,
-        depends: "api::CLIENT_ID and park::renewed",
+        depends: "api::CLIENT_ID and park::renewed, and the renewal `pitboard stow` makes of a \
+                  login left in `.credentials.json` whose access token has expired",
         probe: &["9d1c250a-e61b-44d9-88ed-5944d1962f5e"],
         absent: &[],
     },
@@ -518,7 +594,8 @@ pub const ASSUMPTIONS: &[Assumption] = &[
         // the same.
         verified_against: "2.1.294",
         depends: "doctor's credential check, which says what a session does while the \
-                  keychain is locked",
+                  keychain is locked, and what `pitboard stow` says of a session that signed in \
+                  with `.credentials.json`: signed out once the file is gone",
         probe: &["[keychain] read failed; serving stale cache"],
         absent: &[],
     },
@@ -537,7 +614,8 @@ pub const ASSUMPTIONS: &[Assumption] = &[
                     twice, and the app's two switches after the first went on reading and \
                     writing the keychain item",
         verified_against: "2.1.294",
-        depends: "doctor's fallback_login check and the warning a change gives about it",
+        depends: "doctor's fallback_login check, the warning every read and every change give \
+                  about it, and `pitboard stow`, which puts that login away",
         probe: &["plaintext_fallback_used"],
         absent: &[],
     },
@@ -551,10 +629,45 @@ pub const ASSUMPTIONS: &[Assumption] = &[
                     deletes the fallback only when its read of the primary before the write was \
                     null",
         verified_against: "2.1.294",
-        depends: "doctor's fallback_login check, whose advice is to delete the file, and the \
-                  warning a change gives while it is there",
+        depends: "doctor's fallback_login check and the warning every read and every change \
+                  give while it is there, both of which name `pitboard stow`, the one thing \
+                  that deletes the file",
         // Behaviour, with no literal of its own.
         probe: &[],
+        absent: &[],
+    },
+    Assumption {
+        name: "fallback_file_pins_session_login",
+        fact: "before a session makes a request it looks at `.credentials.json` in its storage \
+               directory, by its modification time alone. Where the file is not there, or the \
+               look fails, it drops the login it holds and reads the keychain through its 30 \
+               second cache. Where it is there, whatever it holds and whether or not it can be \
+               read, the session keeps the login it holds while that login is usable: it reads \
+               again where the file's modification time has changed, at most every 30 seconds \
+               where that login is gone or its refresh token is empty or known dead, after a \
+               401, and at its own sign-in, and 5 minutes before the login expires it reads \
+               the store and takes the login there where it differs. So while the file sits \
+               behind the keychain, a session already running keeps the account it is on \
+               after a switch until its login is next renewed, or until it is started again. \
+               Read, not measured against a running session",
+        read_from: "the check before each API client, which stats the file, compares its \
+                    modification time with the one it last saw, reads through the keychain \
+                    cache where the stat fails, and otherwise keeps a usable login, reading \
+                    again at most every 30 seconds for one that is not; the renewal check 5 \
+                    minutes before expiry, which reads the store first and takes its login \
+                    where it differs; and the 401 handlers",
+        // Read on 2026-10-08 from the macOS build and on 2026-10-09 from the Linux x64,
+        // Windows x64 and Windows arm64 builds of 2.1.294, whose code here is the same. On
+        // Linux the file is the only store, and on Windows it is unless Credential Manager
+        // is turned on, by `tengu_windows_credman` or `CLAUDE_CODE_FORCE_WINDOWS_CREDMAN`.
+        verified_against: "2.1.294",
+        depends: "Claude's adoption, by which a switch says that running sessions take it at \
+                  their login's next renewal while the file is behind the keychain; Claude's \
+                  behind, which tells the file by a look and says nothing where the look fails; \
+                  the fallback_login warning and check, which say so of a file with no login in \
+                  it, or one Pitboard cannot read, too; and `pitboard stow`, which says sessions \
+                  already running follow a switch within 33 seconds again once the file is gone",
+        probe: &["lastCredentialsMtimeMs", "lastUnusableTokenRecheckAt"],
         absent: &[],
     },
     Assumption {
@@ -582,28 +695,121 @@ pub const ASSUMPTIONS: &[Assumption] = &[
     },
     Assumption {
         name: "config_may_name_no_organisation",
-        fact: "`oauthAccount` names the organisation of the login in use, from the profile, \
-               whose shape requires `organization.uuid`. A sign-in that could not read the \
-               profile writes it from the token's own account instead, whose organisation can \
-               be absent, and Claude Code then reads none",
+        fact: "`oauthAccount` names the organisation of the login of the process that wrote \
+               it, from the profile, whose shape requires `organization.uuid`. A sign-in that \
+               could not read the profile writes it from the token's own account instead, \
+               whose organisation can be absent, and Claude Code then reads none",
         read_from: "the sign-in's fallback to `tokenAccount` when the profile cannot be \
                     fetched, and the readers that stand `acct:` in for a missing organisation",
         verified_against: "2.1.294",
-        depends: "Claude's recorded_identity, which names no login when the config names no \
-                  organisation",
+        depends: "Claude's own_record, which names such an account with no organisation, as \
+                  the config wrote it, so in_use::known tells a change of it by the same id",
         probe: &["tokenAccount", "acct:${"],
         absent: &[],
     },
     Assumption {
-        name: "usage_cache_names_the_account_alone",
-        fact: "`cachedUsageUtilization` keeps `fetchedAtMs`, the config's `accountUuid` and \
-               `utilization`, and no organisation. Every sign-in clears it, as a logout does, \
-               so between two sign-ins it is one login's",
-        read_from: "where it is written after a usage request, and the reset a sign-in and a \
-                    logout both run first",
+        name: "usage_cache_stamp_is_the_configs",
+        fact: "`cachedUsageUtilization` is written after `GET /api/oauth/usage`, which a \
+               session asks with the login it holds, and stamped with the config's \
+               `accountUuid`, read before the request and again before the write. Nothing \
+               compares the stamp with the login: a session still holding the login it had \
+               before a switch writes that login's numbers under the account the config names \
+               since. Claude Code's own readers compare the stamp with the config alone, and \
+               clear the cache where the two differ. A sign-in clears it, as a logout does",
+        read_from: "the usage read, which takes the config's `accountUuid` before it asks with \
+                    the session's credentials, the cache's writer, which writes only where the \
+                    config still names that account, the cache's two readers, and the reset \
+                    a sign-in and a logout both run",
+        // Read on 2026-10-08 from the macOS build and on 2026-10-09 from the Linux x64,
+        // Windows x64 and Windows arm64 builds of 2.1.294, whose code here is the same.
         verified_against: "2.1.294",
-        depends: "status, which reads it for the login in use only, matched by account uuid",
-        probe: &["cachedUsageUtilization=void 0"],
+        depends: "status, which takes no usage from it, and the automatic switch, which \
+                  decides from status's offline rows",
+        probe: &[
+            "cachedUsageUtilization:{fetchedAtMs:Date.now(),",
+            "cachedUsageUtilization=void 0",
+        ],
+        absent: &[],
+    },
+    Assumption {
+        name: "status_reads_the_config_usage_the_token",
+        fact: "`/status` prints the config's `oauthAccount` email and organisation, and a \
+               running session reads the config again within about a second of a change. \
+               `/usage` shows the session's header snapshot, or without one the config's usage \
+               cache where its stamp is the config's account and it is under an hour old; it \
+               then answers from that cache where it is under 60 seconds old and newer than \
+               the session's last header reading, and otherwise asks with the login the \
+               session holds. So a session that has not taken a switch names the account \
+               switched to in `/status`, while `/usage` and every request go on with the login \
+               it holds",
+        read_from: "`/status`'s account rows, which read the config's `oauthAccount`; the \
+                    config's freshness watch and its 1000 ms poll; the `/usage` screen, which \
+                    seeds itself from the session's header snapshot or the cache, and the \
+                    usage read it starts",
+        // Read on 2026-10-08 from the macOS build and on 2026-10-09 from the Linux x64,
+        // Windows x64 and Windows arm64 builds of 2.1.294, whose code here is the same.
+        verified_against: "2.1.294",
+        depends: "what a switch says of sessions already running while a file is behind the \
+                  keychain, which names the file and no account: `/status` in one of them \
+                  names the account switched to",
+        probe: &["Usage read answered from a snapshot"],
+        absent: &[],
+    },
+    Assumption {
+        name: "config_identity_is_the_last_writers",
+        fact: "`oauthAccount`'s account, email and organisation are written by a sign-in, from \
+               the profile or else the token's own account, and at a process start where \
+               `profileFetchedAt` is missing or over 24 hours old or a profile field is \
+               missing, from the profile of that process's own token. Every start of a \
+               process signed in to claude.ai also writes the email and organisation that \
+               `/api/claude_cli/bootstrap` gives for that process's token, where it names the \
+               config's account or none. A token refresh writes no identity field. So the \
+               config can name another account than the login stored: a process started on \
+               another login writes that login's account where the profile was missing, \
+               incomplete or a day old, and one started on another organisation of the same \
+               person writes that organisation",
+        read_from: "the sign-in's profile and `tokenAccount` write, the start-up profile fetch \
+                    and its 24 hour check, the bootstrap merge into `oauthAccount`, and the \
+                    refresh's profile update",
+        // Read on 2026-10-08 from the macOS build and on 2026-10-09 from the Linux x64,
+        // Windows x64 and Windows arm64 builds of 2.1.294, whose code here is the same.
+        verified_against: "2.1.294",
+        depends: "in_use::known, which takes the config naming another account than when \
+                  Anthropic last named the login stored as a sign that something signed in, \
+                  never as whose the login is; and every reader of the account in use, which \
+                  takes it from that record and not from the config",
+        probe: &["profileFetchedAt:Date.now()", "organization_uuid!=null)"],
+        absent: &[],
+    },
+    Assumption {
+        name: "status_line_input_names_no_account",
+        fact: "the status line's input holds `rate_limits.five_hour` and `seven_day`, each \
+               `used_percentage` and `resets_at`, taken whole from one response's headers and \
+               only for windows whose reset is ahead, and no account, organisation or email. \
+               It is emptied only by that process's own account change, a sign-in or \
+               sign-out, by the end of a remote attach after one, or by a response while the \
+               process holds no claude.ai login. A response to a request sent before the \
+               process's account changed is dropped, and so is a reading older than the last \
+               one applied. So a session passes the numbers of the login it holds, whatever the \
+               config names, and both windows it passes are of one response",
+        read_from: "the status line's input and the hook fields common to every hook; the \
+                    session's header snapshot, which keeps only windows whose reset is ahead; \
+                    the limits' `applyWindowReadings`, which sets that snapshot whole from one \
+                    response; `resetCurrentLimits` and both its callers; and the header \
+                    reader, which drops a response from before an account change and empties \
+                    the snapshot without a claude.ai login",
+        // Read on 2026-10-08 from the macOS build and on 2026-10-09 from the Linux x64,
+        // Windows x64 and Windows arm64 builds of 2.1.294, whose code here is the same.
+        verified_against: "2.1.294",
+        depends: "statusline::read, which takes a session's numbers to be the account's whose \
+                  reading, as Anthropic answered it, holds their windows, never the account \
+                  Claude Code's config names, and takes a limit's next window on the word of \
+                  the other window passed with it",
+        probe: &[
+            ".spend_limit)&&{rate_limits:",
+            "applyWindowReadings",
+            "resetCurrentLimits",
+        ],
         absent: &[],
     },
 ];
@@ -634,7 +840,11 @@ mod tests {
                 "sign_in_takes_another_code",
                 "login_is_one_organisation",
                 "config_may_name_no_organisation",
-                "usage_cache_names_the_account_alone",
+                "usage_cache_stamp_is_the_configs",
+                "status_reads_the_config_usage_the_token",
+                "config_identity_is_the_last_writers",
+                "status_line_input_names_no_account",
+                "refresh_lock",
             ]
         );
         for name in [

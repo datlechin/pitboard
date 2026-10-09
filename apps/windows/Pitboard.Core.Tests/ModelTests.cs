@@ -87,7 +87,8 @@ public sealed class ModelTests
             Switchable: false, Parked: null,
             Usage: new Usage(
                 Source.Live, At,
-                [new Limit("session", 18_000, null, 42.0, At + 3_600, null, true)]),
+                [new Limit("session", 18_000, null, 42.0, At + 3_600, null, true)],
+                ListsEveryLimit: true),
             Stale: null, StaleExplanation: null);
         return new Snapshot(
             Revision: revision, Now: At, Reading: false, UpdatedAt: At,
@@ -103,7 +104,8 @@ public sealed class ModelTests
             Footing: new Footing.OnlyOne(Provider: "claude", Label: "work"), Setup: null,
             AccountsShown: new AccountsShown.List(), MenuAccountsNote: null,
             UpdatedMenu: "Updated 08:00", UpdatedWindow: "Updated 08:00", SheetText: null,
-            SigningInText: null, QuitConfirmation: null, FailureAlert: null, Machine: Unread(),
+            SigningInText: null, StowText: null, QuitConfirmation: null, FailureAlert: null,
+            Machine: Unread(),
             AccountWindows: NoWindows());
     }
 
@@ -130,7 +132,7 @@ public sealed class ModelTests
             Found: null, InTerminal: null, UpdateNote: null, OffersLink: false, CannotLink: null),
         AutoSwitch: new AutoSwitchShown(
             On: false, At: 95, Lowest: 50, Highest: 99, Enabled: true,
-            AtLabel: "Switch when a limit reaches 95%", Note: ""));
+            AtLabel: "Switch when a limit reaches 95%", Note: "", Standing: null));
 
     /// <summary>
     /// What an app's AppControl does: says what runs, asks an app to quit, opens one again,
@@ -269,7 +271,8 @@ public sealed class ModelTests
     [TestMethod]
     public void ASnapshotCarriesWhatASwitchSaid()
     {
-        var stillRunning = new Warning("sessions_still_running", "2 `codex` sessions are still running");
+        var stillRunning = new Warning(
+            "sessions_still_running", "2 `codex` sessions are still running", Account: null, Held: null);
         var switched = new LastSwitch(
             Provider: "codex", To: "codex/work", FollowsAt: null,
             Restart: new RestartNeeded(Program: "codex", From: "personal"), Said: null, Warnings: [stillRunning]);

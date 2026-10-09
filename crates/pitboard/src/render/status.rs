@@ -6,7 +6,7 @@ use pitboard_core::pace::Lasts;
 use pitboard_core::provider::ProviderId;
 use pitboard_core::state::Key;
 use pitboard_core::status::{Report, Row, Stale};
-use pitboard_core::usage::{Snapshot, Source, Window};
+use pitboard_core::usage::{Snapshot, Source, Window, whole};
 use pitboard_core::{time, words};
 use serde_json::{Value, json};
 
@@ -63,6 +63,10 @@ fn standing(row: &Row, now: i64) -> String {
     match &row.parked {
         // Its login may be the one in use that could not be read; the line under it says so.
         None if row.stale == Some(Stale::LoginUnreadable) => paint(WARN, "login could not be read"),
+        None if row.stale == Some(Stale::LoginReplaced) => paint(
+            WARN,
+            format!("login replaced outside Pitboard · {sign_in_again}"),
+        ),
         None => paint(WARN, format!("nothing parked · {sign_in_again}")),
         Some(p) if !p.restorable_at(now) => paint(BAD, format!("login expired · {sign_in_again}")),
         Some(p) => match p.refresh_expires_at {
@@ -87,10 +91,6 @@ fn provenance(usage: &Snapshot, now: i64) -> Option<String> {
     let at = usage.observed_at?;
     match usage.source {
         Source::Live => None,
-        Source::ClaudeCodeCache => Some(format!(
-            "from Claude Code, measured {}",
-            time::moment(at, now)
-        )),
         Source::Remembered => Some(format!(
             "measured {}, {} ago",
             time::moment(at, now),
@@ -205,7 +205,7 @@ pub fn human(report: &Report) -> String {
                     "    {}  {}  {}  {after}\n",
                     pad(&window_name(w), name_width),
                     ui::bar(w.percent, pace.as_ref(), 10),
-                    paint(ui::level(w.percent), format!("{:>3.0}%", w.percent)),
+                    paint(ui::level(w.percent), format!("{:>3}%", whole(w.percent))),
                 ));
             }
             // The answer to the question the whole tool exists for, where there is one: for
@@ -362,7 +362,8 @@ mod tests {
                 length_seconds: None,
             }],
             observed_at: Some(NOW - 7_200),
-            account_uuid: None,
+            answered_at: Some(NOW - 7_200),
+            lists_every_limit: true,
             source,
         }
     }
@@ -490,6 +491,19 @@ mod tests {
             "{personal}"
         );
         assert!(!personal.contains("runs out"), "{personal}");
+    }
+
+    /// A limit at 94.5 is the app's 95%, and the automatic switch's.
+    #[test]
+    fn a_half_is_drawn_as_the_app_draws_it() {
+        let mut work = row(Some("work"), true);
+        work.usage = Some(reading(94.5, Source::Live));
+        let text = plain(&human(&report(vec![work])));
+        assert!(
+            text.lines()
+                .any(|l| l.trim_start().starts_with("5h") && l.contains(" 95%")),
+            "{text}"
+        );
     }
 
     /// Under a minute, a limit running out is said in words rather than as "<1m".
@@ -767,6 +781,26 @@ mod tests {
         let line = text.lines().find(|l| l.contains(" beta ")).expect(&text);
         assert!(line.contains("login could not be read"), "{line}");
         assert!(!line.contains("--sign-in"), "{line}");
+    }
+
+    /// An account whose only login a sign-in outside Pitboard replaced says so beside it,
+    /// with what signs it in again, where it said only that nothing was parked.
+    #[test]
+    fn a_login_replaced_outside_pitboard_says_so_and_how_to_sign_in_again() {
+        let mut replaced = row(Some("beta"), false);
+        replaced.parked = None;
+        replaced.stale = Some(Stale::LoginReplaced);
+        let text = plain(&human(&report(vec![row(Some("alpha"), true), replaced])));
+        let line = text.lines().find(|l| l.contains(" beta ")).expect(&text);
+        assert!(
+            line.contains("login replaced outside Pitboard · pitboard enroll beta --sign-in"),
+            "{line}"
+        );
+        assert!(!line.contains("nothing parked"), "{line}");
+        assert!(
+            text.contains("its login was replaced by a sign-in outside Pitboard; sign in again"),
+            "{text}"
+        );
     }
 
     /// A login that was read and is not one account's, such as an API key, says it cannot

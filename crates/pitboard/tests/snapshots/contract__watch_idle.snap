@@ -10,7 +10,16 @@ expression: "serde_json :: json! ({ \"exit\" : code, \"envelope\" : value })"
     "ok": true,
     "data": {
       "event": "idle",
-      "threshold": 95
+      "threshold": 95,
+      "account": "beta",
+      "limit": {
+        "kind": "weekly_all",
+        "scope": null,
+        "percent": 30.0,
+        "resets_at": "[time]"
+      },
+      "as_of": "[time]",
+      "held_until": null
     },
     "warnings": [],
     "error": null

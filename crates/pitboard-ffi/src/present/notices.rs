@@ -10,8 +10,9 @@ use super::{
 use crate::model::RunOutNotice;
 use crate::model::advice::Advice;
 use crate::model::state::split;
-use crate::model::{Intent, LastSwitch, Pane};
-use crate::{Adoption, Warning};
+use crate::model::{Intent, LastSwitch, Pane, Sheet};
+use crate::{Adoption, Held, Warning};
+use pitboard_core::provider::ProviderId;
 use pitboard_core::words as said;
 
 /// Where a person goes to install Claude Code, the tool a machine without one is told
@@ -97,8 +98,18 @@ pub(crate) fn restart_line(last: &LastSwitch) -> Option<String> {
     Some(words::restart_notice(&restart.program, &restart.from))
 }
 
-/// A stable mark for a warning's message, so its notice keeps its identity from one snapshot
-/// to the next and two messages of one code are two notices: FNV-1a, which needs no seed.
+/// What a warning's notice is known by from one snapshot to the next: the account it stands
+/// for, where its words change while it stands, and otherwise its words, so two messages of
+/// one code are two notices.
+fn warning_id(warning: &Warning) -> String {
+    let mark = warning
+        .account
+        .clone()
+        .unwrap_or_else(|| mark(&warning.message));
+    format!("warning/{}/{mark}", warning.code)
+}
+
+/// A stable mark for a warning's message: FNV-1a, which needs no seed.
 fn mark(message: &str) -> String {
     let hash = message
         .bytes()
@@ -185,8 +196,12 @@ pub(crate) fn notices(seen: &Seen, footing: &Footing) -> Vec<PanelNotice> {
         if shown.contains(&warning) || (state.stuck && warning.code == "recovery_undetermined") {
             continue;
         }
-        let mut id = format!("warning/{}/{}", warning.code, mark(&warning.message));
-        let twice = ids.iter().filter(|seen| seen.starts_with(&id)).count();
+        let mut id = warning_id(warning);
+        let copy = format!("{id}/");
+        let twice = ids
+            .iter()
+            .filter(|seen| **seen == id || seen.starts_with(&copy))
+            .count();
         if twice > 0 {
             id = format!("{id}/{twice}");
         }
@@ -196,7 +211,7 @@ pub(crate) fn notices(seen: &Seen, footing: &Footing) -> Vec<PanelNotice> {
             Severity::Warning,
             words::warning_heading(warning).into(),
             vec![warning.message.clone()],
-            Vec::new(),
+            warning_actions(seen, warning),
         ));
     }
     if let Some(abandoned) = &state.abandoned {
@@ -212,7 +227,57 @@ pub(crate) fn notices(seen: &Seen, footing: &Footing) -> Vec<PanelNotice> {
             vec![dismiss(Intent::DismissAbandoned)],
         ));
     }
+    if let Some(stowed) = &state.stowed {
+        said.push(notice(
+            "stowed".into(),
+            Severity::Info,
+            "Put away the login left in a file".into(),
+            said::stowed_lines(stowed),
+            vec![dismiss(Intent::DismissStowed)],
+        ));
+    }
     said
+}
+
+/// What a warning's notice offers to do about it. Claude Code's config naming another account
+/// than the one in use is put right by writing the account in use there, which moves no
+/// login; an account in use that is not enrolled has no name to write. A file left behind the
+/// keychain is put away from a sheet of its own, which says whose its login is first, where
+/// Pitboard can read it: one it cannot read it cannot put away, and the warning says why.
+fn warning_actions(seen: &Seen, warning: &Warning) -> Vec<NoticeAction> {
+    match warning.code.as_str() {
+        "config_names_another" => update_config_action(seen),
+        "fallback_login" if warning.held != Some(Held::Unreadable) => {
+            vec![NoticeAction {
+                title: "Put Away…".into(),
+                intent: Intent::PresentSheet { sheet: Sheet::Stow },
+                dismisses: false,
+                switches: false,
+                enabled: true,
+                confirm: None,
+            }]
+        }
+        _ => Vec::new(),
+    }
+}
+
+/// Writing the account in use into Claude Code's config, held back while a switch is under
+/// way, where that account is enrolled.
+fn update_config_action(seen: &Seen) -> Vec<NoticeAction> {
+    seen.accounts()
+        .iter()
+        .find(|account| account.provider == ProviderId::Claude.code() && account.signed_in)
+        .and_then(|account| account.qualified.clone())
+        .map(|qualified| NoticeAction {
+            title: "Update Claude Code’s Config".into(),
+            intent: Intent::UpdateConfig { qualified },
+            dismisses: false,
+            switches: false,
+            enabled: seen.state.switch_under_way().is_none(),
+            confirm: None,
+        })
+        .into_iter()
+        .collect()
 }
 
 /// What one tool's last switch still has to say. Sessions of a tool that follows a switch by
@@ -272,8 +337,9 @@ pub(crate) fn run_out_notice(advice: &Advice) -> RunOutNotice {
 
 /// What Pitboard switched by itself, posted since nobody was there to ask for it: "Switched
 /// Claude Code to home", and "work had used 96% of its 5-hour limit. Sessions already running
-/// follow within 33 seconds." It has nothing to switch to: the account left has reached the
-/// share it was switched away at.
+/// follow within 33 seconds.", or, while a file sits behind the keychain, when they do
+/// instead. It has nothing to switch to: the account left has reached the share it was
+/// switched away at.
 pub(crate) fn auto_switched_notice(
     from: &str,
     to: &str,
@@ -285,6 +351,10 @@ pub(crate) fn auto_switched_notice(
         Adoption::Follows { within_seconds } => {
             format!("Sessions already running follow within {within_seconds} seconds.")
         }
+        Adoption::Renewal { path } => format!(
+            "Sessions already running {}: {path} is there.",
+            said::kept_until_renewed()
+        ),
         Adoption::Restart { program } => {
             format!("Restart any running `{program}` for this to take effect.")
         }
@@ -299,13 +369,38 @@ pub(crate) fn auto_switched_notice(
 }
 
 /// Where Pitboard would have switched Claude Code by itself and did not: how much of which
-/// limit, and why, in the core's words.
-pub(crate) fn auto_skipped_notice(from: &str, used: &str, code: &str, why: &str) -> RunOutNotice {
+/// limit, and why, in the core's words. Identified by what tells the reason apart, `key`.
+pub(crate) fn auto_skipped_notice(key: &str, from: &str, used: &str, why: &str) -> RunOutNotice {
     RunOutNotice {
-        id: format!("auto-skipped/{code}"),
+        id: format!("auto-{key}"),
         title: "Claude Code was not switched".into(),
         subtitle: None,
         body: format!("{from} has used {used}. {}.", capitalised(why)),
+        switch_to: None,
+    }
+}
+
+/// Where Pitboard cannot judge whether to switch Claude Code by itself: why, in the core's
+/// words. Identified by what tells the reason apart, `key`.
+pub(crate) fn auto_not_watching_notice(key: &str, why: &str) -> RunOutNotice {
+    RunOutNotice {
+        id: format!("auto-{key}"),
+        title: "Pitboard is not switching Claude Code".into(),
+        subtitle: None,
+        body: format!("{}.", capitalised(why)),
+        switch_to: None,
+    }
+}
+
+/// A warning that stands until somebody acts, posted once while it does, since nobody may
+/// have the window open: a login replaced outside Pitboard. Titled and identified as its
+/// notice in the window is, and said in the core's words.
+pub(crate) fn standing_notice(warning: &Warning) -> RunOutNotice {
+    RunOutNotice {
+        id: warning_id(warning),
+        title: words::warning_heading(warning).into(),
+        subtitle: None,
+        body: warning.message.clone(),
         switch_to: None,
     }
 }

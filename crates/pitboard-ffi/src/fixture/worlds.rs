@@ -397,7 +397,8 @@ impl Machine {
         usage::Snapshot {
             windows,
             observed_at: Some(self.now),
-            account_uuid: None,
+            answered_at: Some(self.now),
+            lists_every_limit: person.tool == ProviderId::Claude,
             source: usage::Source::Live,
         }
     }

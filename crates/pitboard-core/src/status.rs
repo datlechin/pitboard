@@ -1,9 +1,9 @@
 //! `pitboard status`: who is signed in, what each account has left, and which accounts can
 //! be switched to.
 //!
-//! Numbers are asked of each tool's own service rather than read from a tool's cache, which
-//! only moves when the tool itself asks. Every account is asked at once, so the command
-//! costs one round trip, not one per account.
+//! Numbers are asked of each tool's own service and never read from a tool's cache. Claude
+//! Code's is stamped with the account its config names, whichever login it was asked with.
+//! Every account is asked at once, so the command costs one round trip, not one per account.
 //!
 //! Every row says which tool it belongs to. There is no such thing as "the account signed
 //! in on this machine": each tool has a live login of its own or none, and a row is about
@@ -12,10 +12,12 @@
 use crate::api::{self, ApiError, Owner};
 use crate::context::Context;
 use crate::error::Cause;
+use crate::in_use::{self, InUse};
 use crate::provider::claude::paths as claude;
 use crate::provider::{ProviderError, ProviderId};
 use crate::state::{Key, Park, State};
-use crate::usage::{Snapshot, Source, merge};
+use crate::switch::identify;
+use crate::usage::{Snapshot, Source};
 use crate::{budget, park, readings};
 use serde_json::Value;
 use std::collections::{BTreeMap, HashMap};
@@ -41,6 +43,10 @@ pub enum Stale {
     /// A parked login's access token has expired and could not be renewed this time.
     ParkedAccessExpired,
     NothingParked,
+    /// Nothing parked, because a sign-in outside Pitboard replaced the account's only login:
+    /// its tool's store held it, and its service then named another login there, or none.
+    /// Pitboard keeps no copy of a login in use, so nothing brings it back.
+    LoginReplaced,
     ParkUnreadable,
     RateLimited,
     Unreachable,
@@ -86,6 +92,7 @@ impl Stale {
             Stale::SessionExpired => "session_expired",
             Stale::ParkedAccessExpired => "parked_access_expired",
             Stale::NothingParked => "nothing_parked",
+            Stale::LoginReplaced => "login_replaced",
             Stale::ParkUnreadable => "park_unreadable",
             Stale::RateLimited => "rate_limited",
             Stale::Unreachable => "unreachable",
@@ -133,6 +140,9 @@ impl Stale {
                 "Codex's session has expired; `codex` renews it",
             )),
             Stale::ParkedAccessExpired | Stale::NothingParked => None,
+            Stale::LoginReplaced => {
+                Some("its login was replaced by a sign-in outside Pitboard; sign in again")
+            }
             Stale::ParkUnreadable => Some("its parked login cannot be read; run `pitboard doctor`"),
             Stale::RateLimited => Some(per_tool(
                 "Anthropic is rate limiting usage checks",
@@ -237,8 +247,8 @@ impl Row {
 pub struct Report {
     pub now: i64,
     pub rows: Vec<Row>,
-    /// Who the default tool's live login belongs to, as its service says: Claude Code's
-    /// config can be a day behind. Every tool's answer is in the rows.
+    /// Who the default tool's live login belongs to, as its service says, or offline as it
+    /// last said. Every tool's answer is in the rows.
     pub signed_in: Result<Owner, String>,
     /// Which credential slot this report speaks for.
     ///
@@ -271,10 +281,11 @@ struct LiveLogin {
     /// the other says the account in use is gone. `Some(Err)` is a login whose owner could
     /// not be learned this time, and says why.
     signed_in: Option<Result<Owner, String>>,
-    /// The id of the account the tool's own local record names, where it keeps one. It can
-    /// be behind the login it describes, so it never decides a switch; it keeps the row
-    /// that is signed in from reading as though nobody is, when the service cannot be asked.
-    recorded_id: Option<String>,
+    /// Whose login the store holds as far as Pitboard knows without an answer this time,
+    /// which keeps the row in use from reading as though nobody is where nobody could say or
+    /// nobody was asked: what its service last said, or what a login that names its own
+    /// account names ([`in_use::known`]).
+    known: Option<Owner>,
     usage: Option<Result<Snapshot, Stale>>,
     /// There is a login and Pitboard cannot use it: it could not be read, or it was read and
     /// is not one account's login. A tool in this state whose record names none of its
@@ -292,9 +303,9 @@ impl LiveLogin {
 struct Facts {
     live: BTreeMap<ProviderId, LiveLogin>,
     asked: bool,
-    /// One per enrolled account, in order.
-    parked_usage: Vec<Result<Snapshot, Stale>>,
-    claude_code_cache: Option<Snapshot>,
+    /// What asking about each account's parked login came to, by the account's id. An
+    /// account with none here was not asked about.
+    parked: BTreeMap<String, Result<Snapshot, Stale>>,
 }
 
 impl Facts {
@@ -328,15 +339,6 @@ fn slot_of(ctx: &Context) -> Slot {
     }
 }
 
-/// What is known without asking anyone: who each tool's own record says is signed in, and
-/// the last numbers Pitboard measured. Touches no network, so it answers at once and works
-/// on a train.
-///
-/// Each tool is asked for what it keeps without anybody's agreement: Claude Code's config,
-/// which can be a day behind the login it describes, and a Codex login's own claims. Good
-/// enough to say who is in use; never good enough to move a login. It used to read Claude
-/// Code's alone, so a signed-in Codex account read as parked whenever the app had no
-/// network.
 /// Which tools a report is about: the one a bare name means, which is what Pitboard was
 /// before there was a second, and every other tool somebody has enrolled an account of.
 ///
@@ -344,7 +346,7 @@ fn slot_of(ctx: &Context) -> Slot {
 /// of it and asks its service nothing: somebody who uses Pitboard for Claude Code and also
 /// has Codex installed has not asked for their Codex login to be read, or sent to OpenAI on
 /// every refresh of a menu bar.
-fn in_use(state: &State) -> Vec<ProviderId> {
+fn tools(state: &State) -> Vec<ProviderId> {
     ProviderId::ALL
         .iter()
         .copied()
@@ -354,21 +356,25 @@ fn in_use(state: &State) -> Vec<ProviderId> {
         .collect()
 }
 
+/// What is known without asking anyone: whose login each tool has stored, as its service last
+/// said, and the last numbers Pitboard measured. Touches no network, so it answers at once
+/// and works on a train.
+///
+/// Whose a login is comes from Pitboard's record of what Anthropic last said, and from a
+/// Codex login's own claims ([`in_use::known`]). Not from Claude Code's config, which a
+/// Claude Code process started or signed in on another login can rewrite with its own
+/// account.
 pub fn gather_offline(ctx: &Context, state: &State) -> Report {
-    let tools = in_use(state);
-    let recorded: BTreeMap<ProviderId, Owner> = tools
-        .iter()
-        .filter_map(|&which| {
-            let found = crate::provider::of(which).recorded_identity(ctx)?;
-            Some((which, Owner::from(found)))
-        })
+    let known: BTreeMap<ProviderId, Option<Owner>> = tools(state)
+        .into_iter()
+        .map(|which| (which, in_use::known(ctx, state, which).owner().cloned()))
         .collect();
     let facts = Facts {
-        live: tools
+        live: known
             .iter()
-            .map(|&which| {
+            .map(|(&which, owner)| {
                 let login = LiveLogin {
-                    recorded_id: recorded.get(&which).map(|owner| state.id_of(which, owner)),
+                    known: owner.clone(),
                     usage: Some(Err(Stale::NotAsked)),
                     ..LiveLogin::default()
                 };
@@ -376,15 +382,7 @@ pub fn gather_offline(ctx: &Context, state: &State) -> Report {
             })
             .collect(),
         asked: false,
-        parked_usage: state
-            .accounts
-            .iter()
-            .map(|_| Err(Stale::NotAsked))
-            .collect(),
-        claude_code_cache: claude::load_config(ctx)
-            .ok()
-            .as_ref()
-            .and_then(crate::usage::from_config_cache),
+        parked: BTreeMap::new(),
     };
     let remembered = readings::load(ctx);
     Report {
@@ -396,9 +394,10 @@ pub fn gather_offline(ctx: &Context, state: &State) -> Report {
             |uuid| remembered.get(uuid).cloned(),
             ctx.now(),
         ),
-        signed_in: recorded
+        signed_in: known
             .get(&crate::label::DEFAULT)
             .cloned()
+            .flatten()
             .ok_or_else(|| "not asked".into()),
     }
 }
@@ -408,9 +407,32 @@ pub fn gather_offline(ctx: &Context, state: &State) -> Report {
 /// made it.
 type Asked = (Result<Snapshot, Stale>, Option<(String, budget::Outcome)>);
 
-/// What one tool's live login came to, and what the budget should learn from asking about
-/// it.
-type Answered = (LiveLogin, Option<(String, budget::Outcome)>);
+/// One tool's live login as a read finds it: what the tool's own record named, read first,
+/// and then the login whole, or why it could not be read.
+struct LiveRead {
+    named: Option<String>,
+    login: Result<Option<Value>, ProviderError>,
+}
+
+/// What one tool's live login came to: what its row says, what the budget should learn
+/// from asking about it, and whose login the store holds where that was found, to record.
+struct Answered {
+    login: LiveLogin,
+    learned: Option<(String, budget::Outcome)>,
+    found: Option<InUse>,
+}
+
+impl Answered {
+    /// A row from a read that asked no usage, so the budget learns nothing, and found no
+    /// owner of the login to record.
+    fn learning_nothing(login: LiveLogin) -> Answered {
+        Answered {
+            login,
+            learned: None,
+            found: None,
+        }
+    }
+}
 
 /// A provider's failure as the usage path has always classified one.
 fn to_api(error: crate::provider::ProviderError) -> ApiError {
@@ -428,21 +450,17 @@ fn to_api(error: crate::provider::ProviderError) -> ApiError {
     }
 }
 
-/// Ask about one account, or say why not.
+/// Ask about the account filed under `id`, or say why not.
 fn ask_usage(
     ctx: &Context,
     which: ProviderId,
-    id: Option<&str>,
+    id: &str,
     document: &Value,
     signed_in: bool,
     remembered: Option<&Snapshot>,
     fresh: bool,
 ) -> Asked {
-    // An account Pitboard cannot name cannot be budgeted for; it is asked about, which is
-    // what always happened.
-    if let Some(id) = id
-        && let Some(held) = budget::may_ask(ctx, id, remembered, fresh)
-    {
+    if let Some(held) = budget::may_ask(ctx, id, remembered, fresh) {
         let stale = match held {
             budget::Held::Fresh => Stale::AskedRecently,
             budget::Held::RateLimited => Stale::RateLimited,
@@ -469,22 +487,22 @@ fn ask_usage(
         return (Err(Stale::ParkUnreadable), None);
     }
     let answer = answer.map_err(to_api);
-    let learned = id.and_then(|id| {
-        let outcome = match &answer {
-            Ok(_) => budget::Outcome::Answered,
-            Err(api::ApiError::RateLimited { retry_after }) => {
-                budget::Outcome::RateLimited(*retry_after)
-            }
-            Err(api::ApiError::Network(_) | api::ApiError::Unexpected { .. }) => {
-                budget::Outcome::Unreachable
-            }
-            // A token that is refused, or an answer that is not understood, is not a reason
-            // to wait: waiting fixes neither.
-            Err(_) => return None,
-        };
-        Some((id.to_string(), outcome))
-    });
-    (answer.map_err(|e| Stale::of(&e, signed_in)), learned)
+    let learned = match &answer {
+        Ok(_) => Some(budget::Outcome::Answered),
+        Err(api::ApiError::RateLimited { retry_after }) => {
+            Some(budget::Outcome::RateLimited(*retry_after))
+        }
+        Err(api::ApiError::Network(_) | api::ApiError::Unexpected { .. }) => {
+            Some(budget::Outcome::Unreachable)
+        }
+        // A token that is refused, or an answer that is not understood, is not a reason to
+        // wait: waiting fixes neither.
+        Err(_) => None,
+    };
+    (
+        answer.map_err(|e| Stale::of(&e, signed_in)),
+        learned.map(|outcome| (id.to_string(), outcome)),
+    )
 }
 
 /// Ask about one tool's live login: whose it is, and what it has left.
@@ -494,32 +512,38 @@ fn ask_usage(
 /// is locked for the moment, and saying it is gone sends somebody to sign in again for
 /// nothing. It used to be read as exactly that.
 ///
-/// The account `state` last recorded as signed in to this tool stands in for the tool's own
-/// record when the login cannot be read at all. Codex keeps no
-/// record apart from the login itself, so without this a Codex login caught half written
-/// named nobody, and the account in use was told to sign in again while `doctor`, reading
-/// the same machine, called it signed in.
+/// Whose a login is comes from the record where it is the login the record was made for,
+/// and from the tool's service otherwise ([`identify::whose`]). Where nobody could say this
+/// time, because the login could not be read or its service could not be asked, whose
+/// Pitboard last recorded it to be stands in, so the account in use is not told to sign in
+/// again; what it has left is not asked, since asked under an account standing in, the
+/// numbers of a login a sign-in replaced would be filed under the account it replaced.
+/// Where no login is stored, nobody is recorded only if the tool's own record names nobody
+/// either ([`identify::nobody`]).
 fn ask_live(
     ctx: &Context,
     state: &State,
     which: ProviderId,
-    read: &Result<Option<Value>, ProviderError>,
+    read: &LiveRead,
     remembered: &HashMap<String, Snapshot>,
     fresh: bool,
 ) -> Answered {
     let tool = crate::provider::of(which);
-    let own_record = || recorded_id(ctx, state, which);
-    let document = match read {
+    let recorded = || last_known(state, which);
+    let nobody = || Answered {
+        found: identify::nobody(read.named.as_deref(), ctx.now()),
+        ..Answered::learning_nothing(LiveLogin::default())
+    };
+    let document = match &read.login {
         Ok(Some(document)) => document,
-        Ok(None) => return (LiveLogin::default(), None),
+        Ok(None) => return nobody(),
         Err(error) => {
-            let unreadable = LiveLogin {
+            return Answered::learning_nothing(LiveLogin {
                 signed_in: Some(Err(error.to_string())),
-                recorded_id: own_record().or_else(|| active_id(state, which).map(str::to_owned)),
+                known: recorded(),
                 usage: Some(Err(Stale::LoginUnreadable)),
                 out_of_reach: true,
-            };
-            return (unreadable, None);
+            });
         }
     };
     match tool.slice(document) {
@@ -529,61 +553,57 @@ fn ask_live(
         // asking Anthropic whose that was got an answer about a shape rather than a person,
         // and the row read as Anthropic answering badly when the truth is that nobody is
         // signed in.
-        Err(ProviderError::NoLogin { .. }) => return (LiveLogin::default(), None),
+        Err(ProviderError::NoLogin { .. }) => return nobody(),
         // A login that is there and is not one account's: signed in with an API key, or a
         // Codex login that a session still running from before a switch rewrote with its
         // own account's tokens under the other account's id. Something is signed in, so
         // it is not nobody; nobody is asked about it, because there is no one account's
-        // token to ask with. The tool's own record says whose it most likely is, and
-        // Pitboard's own record does not stand in, because what is there was read and is
-        // not that account's.
+        // token to ask with. Pitboard's record does not stand in, because what is there was
+        // read and is not that account's. A login that names its own account still says
+        // whose its tokens are, as Codex's ID token does.
         Err(unusable) => {
-            let login = LiveLogin {
+            let claimed = tool
+                .identifies_by_itself()
+                .then(|| {
+                    tool.identify(
+                        ctx,
+                        &crate::provider::Credential::new(which, document.clone()),
+                    )
+                })
+                .and_then(Result::ok)
+                .map(Owner::from);
+            return Answered::learning_nothing(LiveLogin {
                 signed_in: Some(Err(unusable.to_string())),
-                recorded_id: own_record(),
+                known: claimed,
                 usage: Some(Err(Stale::LoginUnusable)),
                 out_of_reach: true,
-            };
-            return (login, None);
+            });
         }
     }
-    let credential = crate::provider::Credential::new(which, document.clone());
-    // Who owns it is asked whatever the budget says: it decides which account a row
-    // belongs to, it is not a measurement, and a switch needs it.
-    let owner = tool
-        .identify(ctx, &credential)
-        .map(Owner::from)
-        .map_err(|e| to_api(e).to_string());
-    // The tool's own record, for when its service could not say whose the login is. It
-    // stands in twice: to keep the signed-in row signed in, and to key the budget. Without
-    // the second, a morning when identifying fails is a morning when every `status` asks
-    // about usage with no floor at all, which is what the budget exists to stop. Claude
-    // Code's account always came from its config here before there was a second tool.
-    let recorded = match &owner {
-        Ok(_) => None,
-        Err(_) => own_record(),
+    let found = match identify::whose(ctx, state, which, document) {
+        Ok(found) => found,
+        Err(error) => {
+            let error = to_api(error);
+            return Answered::learning_nothing(LiveLogin {
+                signed_in: Some(Err(error.to_string())),
+                known: recorded(),
+                usage: Some(Err(Stale::of(&error, true))),
+                out_of_reach: false,
+            });
+        }
     };
-    let id = owner
-        .as_ref()
-        .ok()
-        .map(|o| state.id_of(which, o))
-        .or_else(|| recorded.clone());
-    let (usage, learned) = ask_usage(
-        ctx,
-        which,
-        id.as_deref(),
-        document,
-        true,
-        id.as_deref().and_then(|id| remembered.get(id)),
-        fresh,
-    );
-    let login = LiveLogin {
-        signed_in: Some(owner),
-        recorded_id: recorded,
-        usage: Some(usage),
-        out_of_reach: false,
-    };
-    (login, learned)
+    let id = state.id_of(which, &found.owner);
+    let (usage, learned) = ask_usage(ctx, which, &id, document, true, remembered.get(&id), fresh);
+    Answered {
+        login: LiveLogin {
+            signed_in: Some(Ok(found.owner.clone())),
+            known: None,
+            usage: Some(usage),
+            out_of_reach: false,
+        },
+        learned,
+        found: Some(found.recorded(read.named.clone())),
+    }
 }
 
 /// Every tool's answer, filed under the tool it was asked about.
@@ -593,45 +613,54 @@ fn ask_live(
 /// been asking about, and because answers are collected in order, a Codex thread that
 /// panicked quietly erased Claude Code's signed-in row.
 fn settle(
-    ctx: &Context,
     state: &State,
     answers: Vec<(ProviderId, std::thread::Result<Answered>)>,
-) -> (
-    BTreeMap<ProviderId, LiveLogin>,
-    Vec<(String, budget::Outcome)>,
-) {
-    let mut live = BTreeMap::new();
-    let mut learned = Vec::new();
-    for (which, answer) in answers {
-        let (login, outcome) = answer.unwrap_or_else(|_| {
-            // Whose the login is was never learned, so the tool's own record stands in for
-            // it, the same as when its service cannot be reached.
-            let interrupted = LiveLogin {
-                signed_in: Some(Err("the check did not finish".into())),
-                recorded_id: recorded_id(ctx, state, which),
-                usage: Some(Err(Stale::Interrupted)),
-                out_of_reach: false,
-            };
-            (interrupted, None)
-        });
-        live.insert(which, login);
-        learned.extend(outcome);
-    }
-    (live, learned)
+) -> BTreeMap<ProviderId, Answered> {
+    answers
+        .into_iter()
+        .map(|(which, answer)| {
+            let answer = answer.unwrap_or_else(|_| {
+                // Whose the login is was never learned, so whose Pitboard last recorded it to
+                // be stands in for it, the same as when its service cannot be reached.
+                Answered::learning_nothing(LiveLogin {
+                    signed_in: Some(Err("the check did not finish".into())),
+                    known: last_known(state, which),
+                    usage: Some(Err(Stale::Interrupted)),
+                    out_of_reach: false,
+                })
+            });
+            (which, answer)
+        })
+        .collect()
 }
 
-pub fn gather(ctx: &Context, permit: crate::service::Permit, state: &State, fresh: bool) -> Report {
+/// What asking every tool's service came to, before anything of it is recorded.
+pub(crate) struct Answers {
+    live: BTreeMap<ProviderId, LiveLogin>,
+    parked: BTreeMap<String, Result<Snapshot, Stale>>,
+    learned: Vec<(String, budget::Outcome)>,
+    /// Whose login each tool has stored, where the read could tell, for
+    /// [`identify::record_read`] to record.
+    pub(crate) found: Vec<(ProviderId, InUse)>,
+}
+
+/// Ask every tool's service about its live login, and about every parked login, all at once,
+/// so a read costs one round trip and not one per account. Nothing is recorded: what the
+/// answers teach is recorded by [`report`], and whose each login is by the caller.
+pub(crate) fn ask(ctx: &Context, state: &State, fresh: bool) -> Answers {
     let now = ctx.now();
     // Each tool's live login, whole, or why it could not be read. Not a token out of it:
     // what a usage call needs is not the same everywhere, and pulling one field out here
-    // would decide that for all of them.
-    let live_documents: Vec<(ProviderId, Result<Option<Value>, ProviderError>)> = in_use(state)
+    // would decide that for all of them. What the tool's own record names is read first,
+    // as `in_use::named` says why.
+    let live_reads: Vec<(ProviderId, LiveRead)> = tools(state)
         .into_iter()
         .map(|which| {
-            let read = crate::provider::of(which)
+            let named = in_use::named(ctx, which);
+            let login = crate::provider::of(which)
                 .read_live(ctx)
                 .map(|found| found.map(|credential| credential.raw));
-            (which, read)
+            (which, LiveRead { named, login })
         })
         .collect();
     let parked_documents: Vec<Result<Value, Stale>> = state
@@ -639,14 +668,13 @@ pub fn gather(ctx: &Context, permit: crate::service::Permit, state: &State, fres
         .iter()
         .map(|a| parked_document(ctx, &a.key(), a.parked.as_ref(), now))
         .collect();
-    let config = claude::load_config(ctx).ok();
     let remembered = readings::load(ctx);
 
     let (answers, parked_asked): (Vec<(ProviderId, std::thread::Result<Answered>)>, Vec<Asked>) =
         std::thread::scope(|scope| {
             // Each handle stays with the tool it asks about, so a thread that panics can
             // only ever stand in for its own tool.
-            let per_tool: Vec<_> = live_documents
+            let per_tool: Vec<_> = live_reads
                 .iter()
                 .map(|(which, read)| {
                     let remembered = &remembered;
@@ -666,7 +694,7 @@ pub fn gather(ctx: &Context, permit: crate::service::Permit, state: &State, fres
                         Ok(document) => ask_usage(
                             ctx,
                             account.provider(),
-                            Some(&account.id),
+                            &account.id,
                             document,
                             false,
                             remembered.get(&account.id),
@@ -686,33 +714,54 @@ pub fn gather(ctx: &Context, permit: crate::service::Permit, state: &State, fres
                     .collect(),
             )
         });
-    let (live, live_learned) = settle(ctx, state, answers);
 
-    // Once, from one thread. Every account's record lives in one file, so a thread each
-    // reading it, changing one entry and writing it back would erase what the others
-    // learned.
-    let learned: Vec<(String, budget::Outcome)> = live_learned
-        .into_iter()
-        .chain(
-            parked_asked
-                .iter()
-                .filter_map(|(_, learned)| learned.clone()),
-        )
-        .collect();
-    budget::record(ctx, permit, &learned);
+    let mut live = BTreeMap::new();
+    let mut learned = Vec::new();
+    let mut found = Vec::new();
+    for (which, answered) in settle(state, answers) {
+        live.insert(which, answered.login);
+        learned.extend(answered.learned);
+        found.extend(answered.found.map(|found| (which, found)));
+    }
+    let mut parked = BTreeMap::new();
+    for (account, (usage, outcome)) in state.accounts.iter().zip(parked_asked) {
+        parked.insert(account.id.clone(), usage);
+        learned.extend(outcome);
+    }
+    Answers {
+        live,
+        parked,
+        learned,
+        found,
+    }
+}
 
-    let signed_in_default = live
+/// What `answers` came to, as rows of the accounts `state` holds, which may have changed
+/// since they were asked about: whose login each tool has stored may have been recorded
+/// since. What the answers teach is recorded here, once, from one thread: every account's
+/// record lives in one file, so a thread each reading it, changing one entry and writing it
+/// back would erase what the others learned.
+pub(crate) fn report(
+    ctx: &Context,
+    permit: crate::service::Permit,
+    state: &State,
+    answers: Answers,
+) -> Report {
+    let now = ctx.now();
+    budget::record(ctx, permit, &answers.learned);
+    let signed_in_default = answers
+        .live
         .get(&crate::label::DEFAULT)
         .and_then(|login| login.signed_in.clone());
     let facts = Facts {
-        live,
+        live: answers.live,
         asked: true,
-        parked_usage: parked_asked.into_iter().map(|(usage, _)| usage).collect(),
-        claude_code_cache: config.as_ref().and_then(crate::usage::from_config_cache),
+        parked: answers.parked,
     };
+    let remembered = readings::load(ctx);
     let rows = assemble(state, &facts, |uuid| remembered.get(uuid).cloned(), now);
     crate::home::remove_retired(ctx, permit);
-    readings::remember(
+    readings::answered(
         ctx,
         permit,
         &rows
@@ -741,19 +790,9 @@ pub fn gather(ctx: &Context, permit: crate::service::Permit, state: &State, fres
     }
 }
 
-/// The account Pitboard last recorded as signed in to this tool, by its id.
-fn active_id(state: &State, which: ProviderId) -> Option<&str> {
-    let label = state.active_for(which)?;
-    state
-        .get(&Key::new(which, label))
-        .map(|account| account.id.as_str())
-}
-
-/// The id of the account the tool's own record names as signed in.
-fn recorded_id(ctx: &Context, state: &State, which: ProviderId) -> Option<String> {
-    crate::provider::of(which)
-        .recorded_identity(ctx)
-        .map(|found| state.id_of(which, &Owner::from(found)))
+/// Whose login Pitboard last recorded `which`'s store to hold.
+fn last_known(state: &State, which: ProviderId) -> Option<Owner> {
+    state.in_use(which)?.owner.clone()
 }
 
 /// Where a tool comes in a listing: the order [`ProviderId::ALL`] gives them.
@@ -773,66 +812,52 @@ fn assemble(
     // Per tool, because an account is signed in to its own tool or to nothing. Comparing
     // every account against one machine-wide answer would have marked a Codex account
     // signed in because a Claude Code account with the same uuid was.
-    let live_ids: BTreeMap<ProviderId, String> = ProviderId::ALL
+    let in_use: BTreeMap<ProviderId, &Owner> = ProviderId::ALL
         .iter()
         .filter_map(|&which| {
             let live = facts.live_for(which)?;
-            let id = match (&live.signed_in, facts.asked) {
-                (Some(Ok(owner)), _) => Some(state.id_of(which, owner)),
+            let owner = match (&live.signed_in, facts.asked) {
+                (Some(Ok(owner)), _) => Some(owner),
                 // Unreachable, unreadable, or never asked. The service decides who is
-                // signed in; without its answer, the tool's own local record is the only
-                // one there is.
-                (Some(Err(_)), _) | (None, false) => live.recorded_id.clone(),
+                // signed in; without its answer this time, what it last said stands in.
+                (Some(Err(_)), _) | (None, false) => live.known.as_ref(),
                 (None, true) => None,
             }?;
-            Some((which, id))
+            Some((which, owner))
         })
         .collect();
-    // Claude Code's cache counts only for Claude Code's accounts, and only when it was
-    // measured for the account in question.
-    let cached_for = |which: ProviderId, uuid: &str| {
-        facts
-            .claude_code_cache
-            .clone()
-            .filter(|c| which == ProviderId::Claude && c.account_uuid.as_deref() == Some(uuid))
-    };
-    // What was asked, or Claude Code's cache when nothing was, folded into what every front
-    // end has recorded. So a row shows the one reading the status lines show, and neither
-    // an answer that lags a session's latest response nor a cache that moves only when
-    // Claude Code asks can take it backwards.
-    let reading = |id: &str, asked: &Result<Snapshot, Stale>, cached: Option<Snapshot>| {
-        let recalled = recall(id);
-        match asked {
-            Ok(live) => (merge(recalled.as_ref(), Some(live), now), None),
-            Err(stale) => (merge(recalled.as_ref(), cached.as_ref(), now), Some(*stale)),
-        }
+    let live_ids: BTreeMap<ProviderId, String> = in_use
+        .iter()
+        .map(|(&which, owner)| (which, state.id_of(which, owner)))
+        .collect();
+    // The service's answer folded into what every front end has recorded, or what they
+    // recorded where none came. So a row shows the one reading the status lines show, and an
+    // answer that lags a session's latest response cannot take its share back.
+    let reading = |id: &str, asked: &Result<Snapshot, Stale>| match asked {
+        Ok(live) => (
+            Some(crate::usage::answered(recall(id).as_ref(), live, now)),
+            None,
+        ),
+        Err(stale) => (recall(id), Some(*stale)),
     };
 
     let mut rows: Vec<Row> = state
         .accounts
         .iter()
-        .zip(&facts.parked_usage)
-        .map(|(account, parked)| {
+        .map(|account| {
             let id = account.id.as_str();
             let which = account.provider();
             let signed_in = live_ids.get(&which).is_some_and(|live| live == id);
-            let live_unreadable = facts
-                .live_for(which)
-                .is_some_and(|live| live.usage() == Err(Stale::LoginUnreadable));
             let (usage, stale) = if signed_in {
                 let live = facts
                     .live_for(which)
                     .map_or(Err(Stale::NothingSignedIn), LiveLogin::usage);
-                reading(id, &live, cached_for(which, &account.account_uuid))
-            } else if account.parked.is_none()
-                && live_unreadable
-                && state.active_for(which) == Some(account.label.as_str())
-            {
-                // Nothing parked because Pitboard put its login in use, and that login is
-                // the one that could not be read: unknown, not gone.
-                reading(id, &Err(Stale::LoginUnreadable), None)
+                reading(id, &live)
+            } else if account.parked.is_none() && account.replaced_at.is_some() {
+                reading(id, &Err(Stale::LoginReplaced))
             } else {
-                reading(id, parked, None)
+                let parked = facts.parked.get(id).cloned();
+                reading(id, &parked.unwrap_or(Err(Stale::NotAsked)))
             };
             Row {
                 provider: which,
@@ -850,20 +875,19 @@ fn assemble(
         .collect();
 
     // A tool signed in to an account nothing has enrolled still gets a row, so somebody can
-    // see what is there and give it a name. One per tool, because each can have its own,
-    // and told apart by tool as well as by account: two tools' identities are two
-    // namespaces, and one tool's row must never stand in for another's.
+    // see what is there and give it a name, offline as well as online. One per tool, because
+    // each can have its own, and told apart by tool as well as by account: two tools'
+    // identities are two namespaces, and one tool's row must never stand in for another's.
     for &which in ProviderId::ALL {
         let Some(live) = facts.live_for(which) else {
             continue;
         };
-        if let Some(Ok(owner)) = &live.signed_in {
+        if let Some(owner) = in_use.get(&which) {
             let id = state.id_of(which, owner);
             if rows.iter().any(|r| r.provider == which && r.id == id) {
                 continue;
             }
-            let (usage, stale) =
-                reading(&id, &live.usage(), cached_for(which, &owner.account_uuid));
+            let (usage, stale) = reading(&id, &live.usage());
             rows.push(Row {
                 provider: which,
                 label: None,
@@ -879,14 +903,13 @@ fn assemble(
             });
             continue;
         }
-        // A login that could not be read, or was read and is not one account's, and that no
-        // record pins on any of the tool's accounts. Said, rather than left out, because
-        // leaving it out reads as nobody being signed in; but only for a tool somebody uses
-        // through Pitboard, so a machine that has never enrolled a Codex account sees
-        // nothing about Codex at all.
+        // A login that could not be read, or was read and is not one account's, and that
+        // nothing pins on any account. Said, rather than left out, because leaving it out
+        // reads as nobody being signed in; but only for a tool somebody uses through
+        // Pitboard, so a machine that has never enrolled a Codex account sees nothing about
+        // Codex at all.
         let enrolled = state.accounts.iter().any(|a| a.provider() == which);
-        let placed = rows.iter().any(|r| r.provider == which && r.signed_in);
-        if live.out_of_reach && enrolled && !placed {
+        if live.out_of_reach && enrolled {
             rows.push(Row {
                 provider: which,
                 label: None,
@@ -914,6 +937,7 @@ mod tests {
     use super::*;
     use crate::api::scripted::{Asked as Question, ScriptedApi, Trouble};
     use crate::host::memory::MemoryHost;
+    use crate::in_use::InUse;
     use crate::service::Permit;
     use crate::state::Account;
     use crate::store::memory::Fault;
@@ -932,7 +956,7 @@ mod tests {
         }
     }
 
-    fn reading(percent: f64, source: Source, account: Option<&str>) -> Snapshot {
+    fn reading(percent: f64, source: Source) -> Snapshot {
         Snapshot {
             windows: vec![Window {
                 kind: "session".into(),
@@ -944,7 +968,8 @@ mod tests {
                 length_seconds: None,
             }],
             observed_at: Some(NOW - 7_200),
-            account_uuid: account.map(str::to_owned),
+            answered_at: Some(NOW - 7_200),
+            lists_every_limit: true,
             source,
         }
     }
@@ -962,6 +987,7 @@ mod tests {
     fn account(label: &str) -> Account {
         Account {
             last_used_at: None,
+            replaced_at: None,
             label: label.into(),
             id: format!("{label}-uuid"),
             account_uuid: format!("{label}-uuid"),
@@ -984,7 +1010,7 @@ mod tests {
     fn facts(
         signed_in: &str,
         live: Result<Snapshot, Stale>,
-        parked: Vec<Result<Snapshot, Stale>>,
+        parked: &[(&str, Result<Snapshot, Stale>)],
     ) -> Facts {
         only_claude(
             LiveLogin {
@@ -997,13 +1023,22 @@ mod tests {
     }
 
     /// The one-tool case every test here was written for, in the shape facts now take.
-    fn only_claude(live: LiveLogin, parked: Vec<Result<Snapshot, Stale>>) -> Facts {
+    fn only_claude(live: LiveLogin, parked: &[(&str, Result<Snapshot, Stale>)]) -> Facts {
         Facts {
             live: std::iter::once((ProviderId::Claude, live)).collect(),
             asked: true,
-            parked_usage: parked,
-            claude_code_cache: None,
+            parked: asked_about(parked),
         }
+    }
+
+    /// What asking about parked logins came to, by the id of each account asked about.
+    fn asked_about(
+        answers: &[(&str, Result<Snapshot, Stale>)],
+    ) -> BTreeMap<String, Result<Snapshot, Stale>> {
+        answers
+            .iter()
+            .map(|(id, answer)| ((*id).to_owned(), answer.clone()))
+            .collect()
     }
 
     /// Anthropic decides who is signed in, but unreachable is not absent. Without this the
@@ -1017,15 +1052,14 @@ mod tests {
                 ProviderId::Claude,
                 LiveLogin {
                     signed_in: Some(Err("could not reach Anthropic: offline".into())),
-                    recorded_id: Some("alpha-uuid".into()),
+                    known: Some(owner("alpha-uuid")),
                     usage: Some(Err(Stale::Unreachable)),
                     out_of_reach: false,
                 },
             ))
             .collect(),
             asked: true,
-            parked_usage: vec![Err(Stale::Unreachable), Err(Stale::Unreachable)],
-            claude_code_cache: None,
+            parked: asked_about(&[("beta-uuid", Err(Stale::Unreachable))]),
         };
         let rows = assemble(&state, &facts, nothing_remembered, NOW);
         let a = rows
@@ -1044,6 +1078,20 @@ mod tests {
         None
     }
 
+    /// A read that asks, as `pitboard status` makes one, short of recording whose each
+    /// tool's login is.
+    fn gather(ctx: &Context, state: &State) -> Report {
+        report(ctx, Permit::for_a_test(), state, ask(ctx, state, true))
+    }
+
+    /// A tool's store holding `login`, read with nothing in the tool's own record.
+    fn stored(login: Value) -> LiveRead {
+        LiveRead {
+            named: None,
+            login: Ok(Some(login)),
+        }
+    }
+
     #[test]
     fn every_stale_code_is_its_json_form() {
         for stale in [
@@ -1053,6 +1101,7 @@ mod tests {
             Stale::SessionExpired,
             Stale::ParkedAccessExpired,
             Stale::NothingParked,
+            Stale::LoginReplaced,
             Stale::ParkUnreadable,
             Stale::RateLimited,
             Stale::Unreachable,
@@ -1100,67 +1149,31 @@ mod tests {
     }
 
     #[test]
-    fn a_live_reading_wins_over_claude_codes_cache() {
+    fn an_expired_session_shows_what_was_remembered_and_says_why() {
         let s = state(&["work"]);
-        let mut f = facts(
-            "work-uuid",
-            Ok(reading(30.0, Source::Live, None)),
-            vec![Err(Stale::NothingParked)],
-        );
-        f.claude_code_cache = Some(reading(2.0, Source::ClaudeCodeCache, Some("work-uuid")));
-        let rows = assemble(&s, &f, nothing_remembered, NOW);
-        let usage = rows[0].usage.as_ref().unwrap();
-        assert_eq!(usage.source, Source::Live);
-        assert_eq!(usage.windows[0].percent, 30.0);
-        assert_eq!(rows[0].stale, None);
-    }
-
-    #[test]
-    fn an_expired_session_falls_back_to_claude_codes_cache_and_says_why() {
-        let s = state(&["work"]);
-        let mut f = facts(
-            "work-uuid",
-            Err(Stale::SessionExpired),
-            vec![Err(Stale::NothingParked)],
-        );
-        f.claude_code_cache = Some(reading(2.0, Source::ClaudeCodeCache, Some("work-uuid")));
-        let rows = assemble(&s, &f, nothing_remembered, NOW);
-        assert_eq!(
-            rows[0].usage.as_ref().unwrap().source,
-            Source::ClaudeCodeCache
-        );
-        assert_eq!(rows[0].stale, Some(Stale::SessionExpired));
-    }
-
-    /// What the menu bar shows between its own reads, and all it shows offline. Claude Code's
-    /// cache moves only when Claude Code asks, and every session records its numbers into
-    /// Pitboard's readings, so showing the cache over them had the menu bar disagree with
-    /// every status line on the machine.
-    #[test]
-    fn offline_the_account_in_use_shows_the_newer_of_claude_codes_cache_and_the_readings() {
-        let s = state(&["work"]);
-        let mut f = facts(
-            "work-uuid",
-            Err(Stale::NotAsked),
-            vec![Err(Stale::NothingParked)],
-        );
-        f.asked = false;
-        f.claude_code_cache = Some(reading(20.0, Source::ClaudeCodeCache, Some("work-uuid")));
-        let recorded = |_: &str| Some(reading(22.0, Source::Remembered, Some("work-uuid")));
+        let f = facts("work-uuid", Err(Stale::SessionExpired), &[]);
+        let recorded = |_: &str| Some(reading(22.0, Source::Remembered));
         let rows = assemble(&s, &f, recorded, NOW);
         let usage = rows[0].usage.as_ref().unwrap();
         assert_eq!(usage.windows[0].percent, 22.0);
         assert_eq!(usage.source, Source::Remembered);
-        assert_eq!(rows[0].stale, Some(Stale::NotAsked));
+        assert_eq!(rows[0].stale, Some(Stale::SessionExpired));
+    }
 
-        f.claude_code_cache = Some(reading(25.0, Source::ClaudeCodeCache, Some("work-uuid")));
+    /// What the menu bar shows between its own reads, and all it shows offline: the reading
+    /// every front end and every session's status line records into, so all of them agree.
+    #[test]
+    fn offline_the_account_in_use_shows_the_readings() {
+        let s = state(&["work"]);
+        let mut f = facts("work-uuid", Err(Stale::NotAsked), &[]);
+        f.asked = false;
+        let recorded = |_: &str| Some(reading(22.0, Source::Remembered));
         let rows = assemble(&s, &f, recorded, NOW);
+        assert!(rows[0].signed_in);
         let usage = rows[0].usage.as_ref().unwrap();
-        assert_eq!(
-            usage.windows[0].percent, 25.0,
-            "and the cache where it is newer"
-        );
-        assert_eq!(usage.source, Source::ClaudeCodeCache);
+        assert_eq!(usage.windows[0].percent, 22.0);
+        assert_eq!(usage.source, Source::Remembered);
+        assert_eq!(rows[0].stale, Some(Stale::NotAsked));
     }
 
     /// Anthropic's usage answer can be behind the numbers a session has had in its latest
@@ -1169,13 +1182,9 @@ mod tests {
     #[test]
     fn a_live_reading_behind_what_a_session_recorded_does_not_move_the_row_back() {
         let s = state(&["work"]);
-        let f = facts(
-            "work-uuid",
-            Ok(reading(20.0, Source::Live, None)),
-            vec![Err(Stale::NothingParked)],
-        );
+        let f = facts("work-uuid", Ok(reading(20.0, Source::Live)), &[]);
         let recorded = |_: &str| {
-            let mut since = reading(22.0, Source::Remembered, Some("work-uuid"));
+            let mut since = reading(22.0, Source::Remembered);
             since.observed_at = Some(NOW - 60);
             Some(since)
         };
@@ -1183,11 +1192,7 @@ mod tests {
         assert_eq!(rows[0].usage.as_ref().unwrap().windows[0].percent, 22.0);
         assert_eq!(rows[0].stale, None);
 
-        let f = facts(
-            "work-uuid",
-            Ok(reading(30.0, Source::Live, None)),
-            vec![Err(Stale::NothingParked)],
-        );
+        let f = facts("work-uuid", Ok(reading(30.0, Source::Live)), &[]);
         let usage = assemble(&s, &f, recorded, NOW)[0].usage.clone().unwrap();
         assert_eq!(usage.windows[0].percent, 30.0);
         assert_eq!(
@@ -1203,25 +1208,14 @@ mod tests {
     #[test]
     fn a_live_reading_taken_after_what_was_recorded_is_shown_however_low() {
         let s = state(&["work"]);
-        let mut answered = reading(14.0, Source::Live, None);
+        let mut answered = reading(14.0, Source::Live);
         answered.observed_at = Some(NOW);
-        let f = facts("work-uuid", Ok(answered), vec![Err(Stale::NothingParked)]);
-        let recorded = |_: &str| Some(reading(100.0, Source::Remembered, Some("work-uuid")));
+        answered.answered_at = Some(NOW);
+        let f = facts("work-uuid", Ok(answered), &[]);
+        let recorded = |_: &str| Some(reading(100.0, Source::Remembered));
         let usage = assemble(&s, &f, recorded, NOW)[0].usage.clone().unwrap();
         assert_eq!(usage.windows[0].percent, 14.0);
         assert_eq!(usage.source, Source::Live);
-    }
-
-    #[test]
-    fn claude_codes_cache_for_another_account_is_never_shown_as_this_one() {
-        let s = state(&["work"]);
-        let mut f = facts(
-            "work-uuid",
-            Err(Stale::Unreachable),
-            vec![Err(Stale::NothingParked)],
-        );
-        f.claude_code_cache = Some(reading(99.0, Source::ClaudeCodeCache, Some("someone-else")));
-        assert!(assemble(&s, &f, nothing_remembered, NOW)[0].usage.is_none());
     }
 
     #[test]
@@ -1229,11 +1223,8 @@ mod tests {
         let s = state(&["work", "personal"]);
         let f = facts(
             "work-uuid",
-            Ok(reading(30.0, Source::Live, None)),
-            vec![
-                Err(Stale::NothingParked),
-                Ok(reading(12.0, Source::Live, None)),
-            ],
+            Ok(reading(30.0, Source::Live)),
+            &[("personal-uuid", Ok(reading(12.0, Source::Live)))],
         );
         let rows = assemble(&s, &f, nothing_remembered, NOW);
         let personal = rows
@@ -1259,7 +1250,7 @@ mod tests {
             ask_usage(
                 &ctx,
                 ProviderId::Claude,
-                None,
+                "t-uuid",
                 &login,
                 signed_in,
                 None,
@@ -1278,8 +1269,15 @@ mod tests {
     fn a_park_not_in_its_own_tools_shape_is_unreadable_rather_than_an_answer() {
         let ctx = Context::new(std::path::PathBuf::from("/nowhere"));
         let not_codex = serde_json::json!({"claudeAiOauth": {"accessToken": "t"}});
-        let (answer, learned) =
-            ask_usage(&ctx, ProviderId::Codex, None, &not_codex, false, None, true);
+        let (answer, learned) = ask_usage(
+            &ctx,
+            ProviderId::Codex,
+            "t-acc",
+            &not_codex,
+            false,
+            None,
+            true,
+        );
         assert_eq!(answer.unwrap_err(), Stale::ParkUnreadable);
         assert!(
             learned.is_none(),
@@ -1304,12 +1302,11 @@ mod tests {
         let s = state(&["work", "personal"]);
         let f = facts(
             "work-uuid",
-            Ok(reading(30.0, Source::Live, None)),
-            vec![Err(Stale::NothingParked), Err(Stale::ParkedAccessExpired)],
+            Ok(reading(30.0, Source::Live)),
+            &[("personal-uuid", Err(Stale::ParkedAccessExpired))],
         );
-        let remembered = |uuid: &str| {
-            (uuid == "personal-uuid").then(|| reading(44.0, Source::Remembered, Some(uuid)))
-        };
+        let remembered =
+            |uuid: &str| (uuid == "personal-uuid").then(|| reading(44.0, Source::Remembered));
         let rows = assemble(&s, &f, remembered, NOW);
         let personal = rows
             .iter()
@@ -1324,8 +1321,8 @@ mod tests {
         let s = state(&["alpha", "beta"]);
         let f = facts(
             "beta-uuid",
-            Ok(reading(5.0, Source::Live, None)),
-            vec![Err(Stale::NothingParked), Err(Stale::NothingParked)],
+            Ok(reading(5.0, Source::Live)),
+            &[("alpha-uuid", Err(Stale::NothingParked))],
         );
         let rows = assemble(&s, &f, nothing_remembered, NOW);
         assert_eq!(rows[0].label.as_deref(), Some("beta"));
@@ -1334,13 +1331,14 @@ mod tests {
     }
 
     /// Every stale reason, for the tests that hold each one to something.
-    const EVERY_STALE: [Stale; 15] = [
+    const EVERY_STALE: [Stale; 16] = [
         Stale::NothingSignedIn,
         Stale::LoginUnreadable,
         Stale::LoginUnusable,
         Stale::SessionExpired,
         Stale::ParkedAccessExpired,
         Stale::NothingParked,
+        Stale::LoginReplaced,
         Stale::ParkUnreadable,
         Stale::RateLimited,
         Stale::Unreachable,
@@ -1369,6 +1367,9 @@ mod tests {
             Stale::Interrupted => Some("the check did not finish"),
             Stale::NotAsked => Some("read without asking Anthropic"),
             // New, so there is no before to hold them to.
+            Stale::LoginReplaced => {
+                Some("its login was replaced by a sign-in outside Pitboard; sign in again")
+            }
             Stale::LoginUnreadable => {
                 Some("Claude Code's login could not be read; run `pitboard doctor`")
             }
@@ -1423,8 +1424,7 @@ mod tests {
         let f = Facts {
             live: BTreeMap::new(),
             asked: true,
-            parked_usage: vec![Err(Stale::Unreachable)],
-            claude_code_cache: None,
+            parked: asked_about(&[("work-acc", Err(Stale::Unreachable))]),
         };
         let rows = assemble(&s, &f, nothing_remembered, NOW);
         assert_eq!(rows[0].explanation(), Some("OpenAI could not be reached"));
@@ -1433,6 +1433,7 @@ mod tests {
     fn codex_account(label: &str, uuid: &str) -> Account {
         Account {
             last_used_at: None,
+            replaced_at: None,
             label: label.into(),
             id: uuid.into(),
             account_uuid: uuid.into(),
@@ -1463,18 +1464,17 @@ mod tests {
             live: [
                 (
                     ProviderId::Claude,
-                    live("same-uuid", Ok(reading(10.0, Source::Live, None))),
+                    live("same-uuid", Ok(reading(10.0, Source::Live))),
                 ),
                 (
                     ProviderId::Codex,
-                    live("same-uuid", Ok(reading(20.0, Source::Live, None))),
+                    live("same-uuid", Ok(reading(20.0, Source::Live))),
                 ),
             ]
             .into_iter()
             .collect(),
             asked: true,
-            parked_usage: vec![Err(Stale::NothingParked)],
-            claude_code_cache: None,
+            parked: BTreeMap::new(),
         };
         let rows = assemble(&s, &f, nothing_remembered, NOW);
         assert_eq!(rows.len(), 2, "one row per tool");
@@ -1484,6 +1484,54 @@ mod tests {
         assert_eq!(rows[1].label, None, "nothing has enrolled the Codex login");
         assert!(rows[1].signed_in);
         assert_eq!(rows[1].usage.as_ref().unwrap().windows[0].percent, 20.0);
+    }
+
+    /// OpenAI's answer does not list every limit, so a window it leaves out stands on a
+    /// Codex row while it runs, in its place.
+    #[test]
+    fn a_codex_row_keeps_a_running_window_openai_left_out() {
+        let s = State {
+            accounts: vec![codex_account("work", "work-acc")],
+            ..State::default()
+        };
+        let window = |kind: &str, percent: f64| Window {
+            kind: kind.into(),
+            scope: None,
+            severity: None,
+            percent,
+            resets_at: Some(NOW + 3_600),
+            is_active: true,
+            length_seconds: None,
+        };
+        let known = Snapshot {
+            windows: vec![window("five_hour", 30.0), window("seven_day", 40.0)],
+            observed_at: Some(NOW - 600),
+            answered_at: Some(NOW - 600),
+            lists_every_limit: false,
+            source: Source::Remembered,
+        };
+        let answer = Snapshot {
+            windows: vec![window("seven_day", 45.0)],
+            observed_at: Some(NOW),
+            answered_at: Some(NOW),
+            lists_every_limit: false,
+            source: Source::Live,
+        };
+        let f = Facts {
+            live: std::iter::once((ProviderId::Codex, live("work-acc", Ok(answer)))).collect(),
+            asked: true,
+            parked: BTreeMap::new(),
+        };
+        let rows = assemble(&s, &f, |_| Some(known.clone()), NOW);
+        let shares: Vec<(&str, f64)> = rows[0]
+            .usage
+            .as_ref()
+            .unwrap()
+            .windows
+            .iter()
+            .map(|w| (w.kind.as_str(), w.percent))
+            .collect();
+        assert_eq!(shares, [("five_hour", 30.0), ("seven_day", 45.0)]);
     }
 
     /// Grouped by tool in the order every listing uses, signed in first within each, and
@@ -1498,18 +1546,17 @@ mod tests {
             live: [
                 (
                     ProviderId::Claude,
-                    live("beta-uuid", Ok(reading(5.0, Source::Live, None))),
+                    live("beta-uuid", Ok(reading(5.0, Source::Live))),
                 ),
                 (
                     ProviderId::Codex,
-                    live("home-acc", Ok(reading(6.0, Source::Live, None))),
+                    live("home-acc", Ok(reading(6.0, Source::Live))),
                 ),
             ]
             .into_iter()
             .collect(),
             asked: true,
-            parked_usage: vec![Err(Stale::NothingParked); 4],
-            claude_code_cache: None,
+            parked: BTreeMap::new(),
         };
         let order: Vec<(ProviderId, String, bool)> = assemble(&s, &f, nothing_remembered, NOW)
             .into_iter()
@@ -1526,41 +1573,18 @@ mod tests {
         );
     }
 
-    /// Claude Code's cache is a Claude Code account's numbers and nobody else's, however
-    /// the identities happen to line up.
-    #[test]
-    fn claude_codes_cache_is_never_shown_for_another_tools_account() {
-        let mut s = State::default();
-        s.accounts.push(codex_account("work", "work-acc"));
-        let mut f = Facts {
-            live: std::iter::once((ProviderId::Codex, live("work-acc", Err(Stale::Unreachable))))
-                .collect(),
-            asked: true,
-            parked_usage: vec![Err(Stale::NothingParked)],
-            claude_code_cache: None,
-        };
-        f.claude_code_cache = Some(reading(77.0, Source::ClaudeCodeCache, Some("work-acc")));
-        let rows = assemble(&s, &f, nothing_remembered, NOW);
-        assert!(rows[0].signed_in);
-        assert!(rows[0].usage.is_none(), "{:?}", rows[0].usage);
-    }
-
     /// A thread that panicked stands in for its own tool and nobody else's. It used to be
     /// filed under Claude Code whichever tool it had been asking about, and since answers
     /// are collected in order, a Codex thread that panicked erased Claude Code's signed-in
     /// row.
     #[test]
-    #[cfg_attr(windows, ignore = "W15: files made private to the person on Windows")]
     fn a_thread_that_stopped_stands_in_for_its_own_tool_only() {
-        let home = scratch("panicked");
-        let (ctx, _mem, _api) = machine(&home.0, None);
-        let claude_answer: Answered = (
-            live("alpha-uuid", Ok(reading(30.0, Source::Live, None))),
-            Some(("alpha-uuid".into(), budget::Outcome::Answered)),
-        );
+        let claude_answer = Answered {
+            learned: Some(("alpha-uuid".into(), budget::Outcome::Answered)),
+            ..Answered::learning_nothing(live("alpha-uuid", Ok(reading(30.0, Source::Live))))
+        };
         let panicked: Box<dyn std::any::Any + Send> = Box::new("boom");
-        let (settled, learned) = settle(
-            &ctx,
+        let settled = settle(
             &state(&["alpha"]),
             vec![
                 (ProviderId::Claude, Ok(claude_answer)),
@@ -1568,23 +1592,26 @@ mod tests {
             ],
         );
         assert_eq!(
-            learned,
-            [("alpha-uuid".to_string(), budget::Outcome::Answered)]
+            settled[&ProviderId::Claude].learned,
+            Some(("alpha-uuid".to_string(), budget::Outcome::Answered))
         );
         let codex = &settled[&ProviderId::Codex];
-        assert_eq!(codex.usage().err(), Some(Stale::Interrupted));
+        assert_eq!(codex.login.usage().err(), Some(Stale::Interrupted));
         assert!(
-            matches!(codex.signed_in, Some(Err(_))),
+            matches!(codex.login.signed_in, Some(Err(_))),
             "unknown, not nobody"
         );
+        assert!(codex.learned.is_none() && codex.found.is_none());
 
         let mut s = state(&["alpha"]);
         s.accounts.push(codex_account("work", "work-acc"));
         let f = Facts {
-            live: settled,
+            live: settled
+                .into_iter()
+                .map(|(which, answered)| (which, answered.login))
+                .collect(),
             asked: true,
-            parked_usage: vec![Err(Stale::NothingParked), Err(Stale::NothingParked)],
-            claude_code_cache: None,
+            parked: BTreeMap::new(),
         };
         let rows = assemble(&s, &f, nothing_remembered, NOW);
         let alpha = rows
@@ -1604,17 +1631,23 @@ mod tests {
         let home = scratch("logged-out");
         let (ctx, _mem, api) = machine(&home.0, None);
         let logged_out = json!({"mcpOAuth": {"some-server": {"token": "unrelated"}}});
-        let (login, learned) = ask_live(
+        let answered = ask_live(
             &ctx,
             &State::default(),
             ProviderId::Claude,
-            &Ok(Some(logged_out)),
+            &stored(logged_out),
             &HashMap::new(),
             true,
         );
+        let login = &answered.login;
         assert!(login.signed_in.is_none(), "nobody, rather than unknown");
         assert_eq!(login.usage().err(), Some(Stale::NothingSignedIn));
-        assert!(learned.is_none());
+        assert!(answered.learned.is_none());
+        assert_eq!(
+            answered.found.map(|found| (found.owner, found.login)),
+            Some((None, String::new())),
+            "found holding no login, which a read records"
+        );
         assert_eq!(api.calls(), 0, "Anthropic was asked: {:?}", api.asked());
     }
 
@@ -1637,8 +1670,10 @@ mod tests {
         for a in &mut s.accounts {
             a.parked = None;
         }
+        let alpha = InUse::of(&s.accounts[0], "alpha-refresh", NOW);
+        s.identified(ProviderId::Claude, alpha, NOW);
 
-        let report = gather(&ctx, Permit::for_a_test(), &s, true);
+        let report = gather(&ctx, &s);
         let alpha = report
             .rows
             .iter()
@@ -1646,7 +1681,7 @@ mod tests {
             .unwrap();
         assert!(
             alpha.signed_in,
-            "Claude Code's own record still names the account in use"
+            "Pitboard's record of whose login is stored still names the account in use"
         );
         assert_eq!(alpha.stale, Some(Stale::LoginUnreadable));
         assert_eq!(
@@ -1658,38 +1693,45 @@ mod tests {
         assert_eq!(api.calls(), 0, "a login nobody could read was sent nowhere");
     }
 
-    /// While the login in use cannot be read, the account Pitboard last switched to has
-    /// nothing parked because its login is the one Pitboard put in use, which may be exactly
-    /// where it was. A `/login` where the keychain is locked moves Claude Code's record to
-    /// another account and leaves that login in the keychain, so the record's account reads
-    /// as signed in and this one was told to sign in again.
+    /// While the login in use cannot be read, the account Anthropic last named for it stays
+    /// in use, with why nothing new is shown, and is not told to sign in again. A `/login`
+    /// where the keychain is locked moves Claude Code's config to another account and leaves
+    /// that login in the keychain, so the config's account read as in use and the one whose
+    /// login was stored read as having nothing parked.
     #[test]
-    fn the_account_last_switched_to_is_not_sent_to_sign_in_while_the_login_cannot_be_read() {
+    #[cfg_attr(windows, ignore = "W15: files made private to the person on Windows")]
+    fn the_account_last_recorded_in_use_is_not_sent_to_sign_in_while_the_login_cannot_be_read() {
+        let home = scratch("unreadable-recorded");
+        let (ctx, mem, api) = machine(&home.0, Some("alpha-uuid"));
+        let service = claude::live_service(&ctx);
+        mem.live().plant(
+            &service,
+            &json!({"claudeAiOauth": {"refreshToken": "beta-refresh"}}).to_string(),
+        );
+        mem.live()
+            .fault(&service, Fault::Unreadable("the keychain is locked".into()));
         let mut s = state(&["alpha", "beta"]);
         s.accounts[1].parked = None;
-        s.set_active(ProviderId::Claude, Some("beta".into()));
-        let facts = only_claude(
-            LiveLogin {
-                signed_in: Some(Err("the keychain is locked".into())),
-                recorded_id: Some("alpha-uuid".into()),
-                usage: Some(Err(Stale::LoginUnreadable)),
-                out_of_reach: true,
-            },
-            vec![Err(Stale::NotAsked), Err(Stale::NothingParked)],
-        );
+        let beta = InUse::of(&s.accounts[1], "beta-refresh", NOW);
+        s.identified(ProviderId::Claude, beta, NOW);
 
-        let rows = assemble(&s, &facts, nothing_remembered, NOW);
-        let beta = rows
-            .iter()
-            .find(|r| r.label.as_deref() == Some("beta"))
-            .unwrap();
-        assert!(!beta.signed_in);
-        assert_eq!(beta.stale, Some(Stale::LoginUnreadable));
+        let report = gather(&ctx, &s);
+        let row = |label: &str| {
+            report
+                .rows
+                .iter()
+                .find(|r| r.label.as_deref() == Some(label))
+                .map(|r| (r.signed_in, r.stale))
+                .unwrap()
+        };
+        assert_eq!(row("beta"), (true, Some(Stale::LoginUnreadable)));
+        assert!(!row("alpha").0, "whatever Claude Code's config names");
+        assert_eq!(api.calls(), 0);
 
         // Once the login can be read, nothing parked means what it says.
         let readable = only_claude(
-            live("alpha-uuid", Ok(reading(5.0, Source::Live, None))),
-            vec![Err(Stale::NotAsked), Err(Stale::NothingParked)],
+            live("alpha-uuid", Ok(reading(5.0, Source::Live))),
+            &[("beta-uuid", Err(Stale::NothingParked))],
         );
         let rows = assemble(&s, &readable, nothing_remembered, NOW);
         let beta = rows
@@ -1699,10 +1741,10 @@ mod tests {
         assert_eq!(beta.stale, Some(Stale::NothingParked));
     }
 
-    /// A tool whose login could not be read and whose own record names none of its
-    /// accounts gets a row of its own, so its silence is not read as nobody signed in. Only
-    /// for a tool somebody uses through Pitboard: a machine that has never enrolled a Codex
-    /// account sees nothing about Codex.
+    /// A tool whose login could not be read, and whose account in use as Pitboard last
+    /// recorded it is none of its accounts, gets a row of its own, so its silence is not read
+    /// as nobody signed in. Only for a tool somebody uses through Pitboard: a machine that has
+    /// never enrolled a Codex account sees nothing about Codex.
     #[test]
     fn an_unreadable_login_gets_a_row_only_for_a_tool_with_accounts() {
         let unreadable = || LiveLogin {
@@ -1711,23 +1753,22 @@ mod tests {
             out_of_reach: true,
             ..LiveLogin::default()
         };
-        let facts_with = |parked: usize| Facts {
+        let facts = || Facts {
             live: [
                 (
                     ProviderId::Claude,
-                    live("alpha-uuid", Ok(reading(5.0, Source::Live, None))),
+                    live("alpha-uuid", Ok(reading(5.0, Source::Live))),
                 ),
                 (ProviderId::Codex, unreadable()),
             ]
             .into_iter()
             .collect(),
             asked: true,
-            parked_usage: vec![Err(Stale::NothingParked); parked],
-            claude_code_cache: None,
+            parked: BTreeMap::new(),
         };
 
         let claude_only = state(&["alpha"]);
-        let rows = assemble(&claude_only, &facts_with(1), nothing_remembered, NOW);
+        let rows = assemble(&claude_only, &facts(), nothing_remembered, NOW);
         assert_eq!(
             rows.len(),
             1,
@@ -1736,7 +1777,7 @@ mod tests {
 
         let mut both = state(&["alpha"]);
         both.accounts.push(codex_account("work", "work-acc"));
-        let rows = assemble(&both, &facts_with(2), nothing_remembered, NOW);
+        let rows = assemble(&both, &facts(), nothing_remembered, NOW);
         let said = rows
             .iter()
             .find(|r| r.provider == ProviderId::Codex && r.label.is_none())
@@ -1754,60 +1795,36 @@ mod tests {
         assert!(!work.signed_in);
     }
 
-    /// When whose the login is cannot be learned, the tool's own record keys the budget.
-    /// Keyed on nothing, a morning when Anthropic's profile endpoint is failing was a
-    /// morning when every `status` asked about usage with no floor at all. Before there was
-    /// a second tool the account always came from Claude Code's config here.
+    /// Where nobody could say whose the login is this time, what it has left is not asked
+    /// either: asked under an account standing in for it, Claude Code's config before there
+    /// was a second tool, the numbers of a login a sign-in replaced were filed under the
+    /// account it replaced. One request is made, the one that failed, and nothing is learned
+    /// for the budget or recorded of whose the login is.
     #[test]
-    #[cfg_attr(
-        windows,
-        ignore = "W16: Pitboard writing, replacing and removing files on Windows"
-    )]
-    fn a_failing_identify_still_keeps_the_ask_again_floor() {
-        let home = scratch("floor");
+    #[cfg_attr(windows, ignore = "W15: files made private to the person on Windows")]
+    fn a_login_nobody_could_name_this_time_is_not_asked_about_usage() {
+        let home = scratch("unnamed");
         let (ctx, _mem, api) = machine(&home.0, Some("acc-x"));
-        let nothing_enrolled = State::default();
-        let filed = nothing_enrolled.id_of(ProviderId::Claude, &owner("acc-x"));
         api.token_trouble("access-x", Trouble::Offline);
-        budget::record(
-            &ctx,
-            Permit::for_a_test(),
-            &[(filed.clone(), budget::Outcome::Answered)],
-        );
-        let login = json!({"claudeAiOauth": {"accessToken": "access-x"}});
 
-        let (live, learned) = ask_live(
+        let answered = ask_live(
             &ctx,
-            &nothing_enrolled,
+            &State::default(),
             ProviderId::Claude,
-            &Ok(Some(login.clone())),
-            &HashMap::new(),
-            false,
-        );
-        assert_eq!(live.usage().err(), Some(Stale::AskedRecently));
-        assert_eq!(live.recorded_id.as_deref(), Some(filed.as_str()));
-        assert!(learned.is_none());
-        assert_eq!(
-            api.asked(),
-            [Question::Owner("access-x".into())],
-            "whose it is is always asked; what it has left is not, inside the floor"
-        );
-
-        // Asked for anyway, what is learned is kept under the same account.
-        let (live, learned) = ask_live(
-            &ctx,
-            &nothing_enrolled,
-            ProviderId::Claude,
-            &Ok(Some(login)),
+            &stored(json!({"claudeAiOauth": {"accessToken": "access-x"}})),
             &HashMap::new(),
             true,
         );
-        assert_eq!(live.usage().err(), Some(Stale::Unreachable));
-        assert_eq!(learned, Some((filed, budget::Outcome::Unreachable)));
+
+        assert_eq!(answered.login.usage().err(), Some(Stale::Unreachable));
+        assert!(matches!(answered.login.signed_in, Some(Err(_))));
+        assert!(answered.learned.is_none() && answered.found.is_none());
+        assert_eq!(api.asked(), [Question::Owner("access-x".into())]);
     }
 
-    /// Offline, each tool is asked for its own record. It used to be Claude Code's config
-    /// alone, so on a plane a signed-in Codex account read as parked.
+    /// Offline, Claude Code's account in use is the one Anthropic last named for its login,
+    /// whatever its config names, and Codex's the one its login names, whatever Pitboard last
+    /// recorded, so on a plane a signed-in Codex account does not read as parked.
     #[test]
     #[cfg_attr(windows, ignore = "W21: switching Codex on Windows")]
     fn offline_every_tool_names_its_own_signed_in_account() {
@@ -1840,6 +1857,10 @@ mod tests {
         let mut s = state(&["alpha", "beta"]);
         s.accounts.push(codex_account("work", "work-acc"));
         s.accounts.push(codex_account("home", "home-acc"));
+        let beta = InUse::of(&s.accounts[1], "beta-refresh", NOW);
+        s.identified(ProviderId::Claude, beta, NOW);
+        let home = InUse::of(&s.accounts[3], "home-refresh", NOW);
+        s.identified(ProviderId::Codex, home, NOW);
         let report = gather_offline(&ctx, &s);
         let signed_in: Vec<(ProviderId, &str)> = report
             .rows
@@ -1849,13 +1870,57 @@ mod tests {
             .collect();
         assert_eq!(
             signed_in,
-            [(ProviderId::Claude, "alpha"), (ProviderId::Codex, "work")]
+            [(ProviderId::Claude, "beta"), (ProviderId::Codex, "work")]
         );
         assert_eq!(
-            report.signed_in.expect("Claude Code's config").account_uuid,
-            "alpha-uuid"
+            report
+                .signed_in
+                .expect("what Anthropic last said")
+                .account_uuid,
+            "beta-uuid"
         );
         assert_eq!(api.calls(), 0, "offline asks nobody");
+    }
+
+    /// Offline, the login of an account nobody enrolled is in use where Anthropic last named
+    /// it, and has its row with what was last measured, as it has online. Between the app's
+    /// reads it went, and the account Claude Code's config named was in use in its place.
+    #[test]
+    #[cfg_attr(windows, ignore = "W15: files made private to the person on Windows")]
+    fn offline_a_login_nobody_enrolled_has_its_row() {
+        let home = scratch("offline-unenrolled");
+        let (ctx, _mem, api) = machine(&home.0, Some("alpha-uuid"));
+        let mut s = state(&["alpha"]);
+        let stranger = InUse {
+            owner: Some(owner("stranger-uuid")),
+            login: "stranger-refresh".into(),
+            known_at: NOW,
+            named: in_use::named(&ctx, ProviderId::Claude),
+        };
+        s.identified(ProviderId::Claude, stranger, NOW);
+        readings::answered(
+            &ctx,
+            Permit::for_a_test(),
+            &[("stranger-uuid_org".into(), reading(30.0, Source::Live))],
+        );
+
+        let report = gather_offline(&ctx, &s);
+
+        let in_use: Vec<(Option<&str>, &str, Option<f64>)> = report
+            .rows
+            .iter()
+            .filter(|r| r.signed_in)
+            .map(|r| {
+                let share = r.usage.as_ref().map(|u| u.windows[0].percent);
+                (r.label.as_deref(), r.email.as_str(), share)
+            })
+            .collect();
+        assert_eq!(in_use, [(None, "stranger-uuid@example.com", Some(30.0))]);
+        assert_eq!(
+            report.signed_in.expect("the record's").account_uuid,
+            "stranger-uuid"
+        );
+        assert_eq!(api.calls(), 0);
     }
 
     /// Put `raw` where this machine's Codex keeps its login, exactly as written.
@@ -1886,16 +1951,17 @@ mod tests {
         .to_string()
     }
 
-    /// Two Codex accounts, `a` parked and `b` the one Pitboard last switched to, which has
-    /// no park because a Codex park is moved rather than copied.
-    fn codex_a_parked_b_active() -> State {
+    /// Two Codex accounts, `a` parked and `b` the one whose login Pitboard last recorded in
+    /// use, which has no park because a Codex park is moved rather than copied.
+    fn codex_a_parked_b_in_use() -> State {
         let mut b = codex_account("b", "acc-B");
         b.parked = None;
         let mut s = State {
             accounts: vec![codex_account("a", "acc-A"), b],
             ..State::default()
         };
-        s.set_active(ProviderId::Codex, Some("b".into()));
+        let b = InUse::of(&s.accounts[1], "refresh-acc-B", NOW);
+        s.identified(ProviderId::Codex, b, NOW);
         s
     }
 
@@ -1918,9 +1984,9 @@ mod tests {
         let home = scratch("mixed");
         let (ctx, _mem, api) = machine(&home.0, None);
         plant_codex(&ctx, &codex_login("acc-A", "acc-B"));
-        let s = codex_a_parked_b_active();
+        let s = codex_a_parked_b_in_use();
 
-        let report = gather(&ctx, Permit::for_a_test(), &s, true);
+        let report = gather(&ctx, &s);
         let a = codex_row(&report, "a");
         assert!(a.signed_in, "the tokens are a's, as its own record says");
         assert_eq!(a.stale, Some(Stale::LoginUnusable));
@@ -1951,7 +2017,8 @@ mod tests {
     }
 
     /// Signed in with an API key: something is signed in, and it is no account. Not nobody,
-    /// and not the account Pitboard last switched to either, whose login the key replaced.
+    /// and not the account whose login Pitboard last recorded in use either, which the key
+    /// replaced.
     #[test]
     #[cfg_attr(windows, ignore = "W21: switching Codex on Windows")]
     fn a_codex_login_with_an_api_key_is_said_and_pinned_on_no_account() {
@@ -1961,9 +2028,9 @@ mod tests {
             &ctx,
             &json!({"auth_mode": "apikey", "OPENAI_API_KEY": "sk-not-a-real-key"}).to_string(),
         );
-        let s = codex_a_parked_b_active();
+        let s = codex_a_parked_b_in_use();
 
-        let report = gather(&ctx, Permit::for_a_test(), &s, true);
+        let report = gather(&ctx, &s);
         assert!(
             report.rows.iter().all(|r| !r.signed_in),
             "no account is signed in"
@@ -1990,7 +2057,7 @@ mod tests {
         plant_codex(&ctx, &codex_login("acc-B", "acc-B"));
         let s = State::default();
 
-        let report = gather(&ctx, Permit::for_a_test(), &s, true);
+        let report = gather(&ctx, &s);
         assert!(
             report.rows.iter().all(|r| r.provider != ProviderId::Codex),
             "no Codex row for a machine that enrolled no Codex account"
@@ -2007,8 +2074,8 @@ mod tests {
 
     /// Codex writes its login with a plain truncating write, so a read can catch it half
     /// written. Codex keeps no record apart from the login, so its own record names nobody
-    /// then, and Pitboard's record of its last switch stands in for it the way `doctor`
-    /// already lets it. Without that, the account in use was told to sign in again.
+    /// then, and Pitboard's record of whose login is stored stands in for it the way
+    /// `doctor` already lets it. Without that, the account in use was told to sign in again.
     #[test]
     #[cfg_attr(windows, ignore = "W21: switching Codex on Windows")]
     fn a_codex_login_caught_half_written_still_names_the_account_in_use() {
@@ -2016,12 +2083,12 @@ mod tests {
         let (ctx, _mem, api) = machine(&home.0, None);
         let whole = codex_login("acc-B", "acc-B");
         plant_codex(&ctx, &whole[..whole.len() / 2]);
-        let s = codex_a_parked_b_active();
+        let s = codex_a_parked_b_in_use();
         crate::state::save(&ctx, Permit::for_a_test(), &s).expect("an account list");
 
-        let report = gather(&ctx, Permit::for_a_test(), &s, true);
+        let report = gather(&ctx, &s);
         let b = codex_row(&report, "b");
-        assert!(b.signed_in, "the account Pitboard last switched to");
+        assert!(b.signed_in, "the account Pitboard last recorded in use");
         assert_eq!(b.stale, Some(Stale::LoginUnreadable));
         assert!(!codex_row(&report, "a").signed_in);
         assert!(
@@ -2048,18 +2115,19 @@ mod tests {
     fn only_a_document_holding_no_login_is_nobody_signed_in() {
         let home = scratch("shapes");
         let (ctx, _mem, api) = machine(&home.0, Some("alpha-uuid"));
-        let mut last_switched_to_beta = state(&["alpha", "beta"]);
-        last_switched_to_beta.set_active(ProviderId::Claude, Some("beta".into()));
+        let mut beta_in_use = state(&["alpha", "beta"]);
+        let beta = InUse::of(&beta_in_use.accounts[1], "beta-refresh", NOW);
+        beta_in_use.identified(ProviderId::Claude, beta, NOW);
         let ask = |document: Value| {
             ask_live(
                 &ctx,
-                &last_switched_to_beta,
+                &beta_in_use,
                 ProviderId::Claude,
-                &Ok(Some(document)),
+                &stored(document),
                 &HashMap::new(),
                 true,
             )
-            .0
+            .login
         };
 
         let nobody = ask(json!({"mcpOAuth": {}}));
@@ -2071,9 +2139,8 @@ mod tests {
         assert!(unusable.out_of_reach);
         assert_eq!(unusable.usage().err(), Some(Stale::LoginUnusable));
         assert_eq!(
-            unusable.recorded_id.as_deref(),
-            Some("alpha-uuid"),
-            "Claude Code's config, never Pitboard's record of its last switch"
+            unusable.known, None,
+            "neither Claude Code's config nor Pitboard's record of whose login was stored"
         );
         assert_eq!(api.calls(), 0);
     }
@@ -2105,10 +2172,10 @@ mod tests {
                     email: "acc@example.com".into(),
                     organization_uuid: "org-b".into(),
                 })),
-                usage: Some(Ok(reading(30.0, Source::Live, None))),
+                usage: Some(Ok(reading(30.0, Source::Live))),
                 ..LiveLogin::default()
             },
-            vec![Err(Stale::NothingParked), Err(Stale::NothingParked)],
+            &[],
         );
 
         let rows = assemble(&state, &facts, nothing_remembered, NOW);

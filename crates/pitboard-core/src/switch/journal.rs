@@ -7,9 +7,10 @@
 
 use super::{Error, Result, identify_document};
 use crate::context::Context;
+use crate::in_use::{self, InUse};
 use crate::provider::ProviderId;
 use crate::service::Permit;
-use crate::state::{Key, Park, State};
+use crate::state::{Account, Key, Park, State};
 use crate::{atomic, home, park, state, store};
 use serde_json::Value;
 use std::path::PathBuf;
@@ -151,8 +152,18 @@ struct Repair {
     /// The interrupted run's park copies a login that is still signed in, so Claude Code
     /// will rotate past it.
     drop: bool,
-    /// The destination's login is live: it is active, and its park was consumed.
+    /// The destination's login is live: it is in use, and its park was consumed.
     landed: bool,
+}
+
+/// What recovery read of the tool's own record and of its store, which is what a switch
+/// that landed leaves recorded as in use.
+struct Seen {
+    /// What the tool's own record named, read before its store.
+    named: Option<String>,
+    /// The fingerprint of the login the store held: the one installed, or what Claude Code
+    /// rotated it to since. Empty where the store could not be read.
+    login: String,
 }
 
 /// `None` when the facts do not settle what happened.
@@ -181,24 +192,43 @@ fn repair_for(state: &State, journal: &Journal, found: &Found) -> Option<Repair>
     Some(repair)
 }
 
-fn apply(state: &mut State, journal: &Journal, repair: Repair) {
+/// A switch that landed leaves the login recovery `seen` in the store recorded as the
+/// destination's, at `at`.
+fn apply(state: &mut State, journal: &Journal, repair: Repair, seen: Seen, at: i64) {
     if repair.drop {
         state.discard(&journal.park_service);
     }
     if let Some((id, park)) = repair.hold {
-        match state
-            .by_id(journal.provider, &id)
-            .map(crate::state::Account::key)
-        {
+        match state.by_id(journal.provider, &id).map(Account::key) {
             Some(key) => state.park(&key, park),
             // The account it belongs to is gone, so nothing will ever restore this copy.
             // Listing it is what gets it deleted rather than left in the keychain.
             None => state.release(&park.service),
         }
     }
-    if repair.landed && state.get(&journal.to()).is_some() {
-        state.set_active(journal.provider, Some(journal.to_label.clone()));
-        state.discard(&journal.incoming_service);
+    if !repair.landed {
+        return;
+    }
+    match state
+        .by_id(journal.provider, &journal.to_id)
+        .map(Account::owner)
+    {
+        Some(owner) => {
+            let installed = InUse {
+                owner: Some(owner),
+                login: seen.login,
+                known_at: at,
+                named: seen.named,
+            };
+            state.identified(journal.provider, installed, at);
+            state.discard(&journal.incoming_service);
+        }
+        // The destination was forgotten since, whichever account holds its label now, and an
+        // id alone does not say whose its login is as the service names one. What the record
+        // said before the switch is past.
+        None => {
+            state.in_use.remove(journal.provider.code());
+        }
     }
 }
 
@@ -219,18 +249,24 @@ enum Owner {
     Unasked(Value),
 }
 
-/// Whose the live login is, read off the record and the login without asking anybody.
+/// Whose the live login is, read off the record and the login without asking anybody, and
+/// that login's fingerprint, empty where it could not be read.
 ///
 /// The fingerprints settle it without a round trip whenever they can, which is what makes
 /// an interrupted switch recoverable with no network at all.
-fn live_owner(ctx: &Context, journal: &Journal) -> Owner {
-    match crate::provider::of(journal.provider).read_live(ctx) {
-        Err(e) => Owner::Unknown(e.to_string()),
-        Ok(None) => Owner::Unknown("nothing is signed in".into()),
-        Ok(Some(live)) => match live_owner_by_fingerprint(journal, &live.raw) {
-            Some(id) => Owner::Is(id),
-            None => Owner::Unasked(live.raw),
-        },
+fn live_owner(ctx: &Context, journal: &Journal) -> (Owner, String) {
+    let tool = crate::provider::of(journal.provider);
+    match tool.read_live(ctx) {
+        Err(e) => (Owner::Unknown(e.to_string()), String::new()),
+        Ok(None) => (Owner::Unknown("nothing is signed in".into()), String::new()),
+        Ok(Some(live)) => {
+            let login = tool.fingerprint(&live.raw);
+            let owner = match live_owner_by_fingerprint(journal, &login) {
+                Some(id) => Owner::Is(id),
+                None => Owner::Unasked(live.raw),
+            };
+            (owner, login)
+        }
     }
 }
 
@@ -263,14 +299,13 @@ fn ask(
 /// It narrows the network dependency rather than removing it. A rotation inside the seconds
 /// of an interrupted switch leaves a fingerprint matching neither side, which is exactly
 /// when this says nothing and Anthropic is asked after all.
-fn live_owner_by_fingerprint(journal: &Journal, live: &Value) -> Option<String> {
+fn live_owner_by_fingerprint(journal: &Journal, found: &str) -> Option<String> {
     if journal.from_fingerprint.is_empty() || journal.to_fingerprint.is_empty() {
         return None;
     }
     if journal.from_fingerprint == journal.to_fingerprint {
         return None;
     }
-    let found = crate::provider::of(journal.provider).fingerprint(live);
     if found.is_empty() {
         return None;
     }
@@ -366,6 +401,7 @@ struct Waiting {
     /// The park the record reserved: written, never written, or `None` if unreadable.
     parked: Option<Option<Value>>,
     owner: Owner,
+    seen: Seen,
 }
 
 /// The record of an interrupted switch, where one is waiting, and what recovery decides it
@@ -394,11 +430,13 @@ fn read(ctx: &Context, state: &State) -> Result<Option<Waiting>> {
         }
     }
 
-    let owner = live_owner(ctx, &journal);
+    let named = in_use::named(ctx, journal.provider);
+    let (owner, login) = live_owner(ctx, &journal);
     Ok(Some(Waiting {
         parked: read_park(ctx, &journal.park_service),
         journal,
         owner,
+        seen: Seen { named, login },
     }))
 }
 
@@ -433,6 +471,7 @@ pub(super) fn reconcile(
         journal,
         parked,
         owner,
+        seen,
     }) = read(ctx, state)?
     else {
         return Ok(None);
@@ -440,7 +479,7 @@ pub(super) fn reconcile(
     let owner = ask(ctx, state, journal.provider, owner);
     let repair = decide(state, &journal, parked, owner)?;
     let finished = repair.landed;
-    apply(state, &journal, repair);
+    apply(state, &journal, repair, seen, ctx.now());
     state::save(ctx, permit, state)?;
     clear_journal(ctx, permit);
 
@@ -474,6 +513,7 @@ pub(super) fn refusal(ctx: &Context, state: &State, asking: Asking) -> Option<Er
         journal,
         parked,
         owner,
+        ..
     } = read(ctx, state).ok()??;
     if asking == Asking::Nobody
         && matches!(owner, Owner::Unasked(_))
@@ -488,8 +528,8 @@ pub(super) fn refusal(ctx: &Context, state: &State, asking: Asking) -> Option<Er
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::state::Account;
 
+    const NOW: i64 = 1_700_000_100;
     const PARK: &str = "pitboard-park-from-uuid-1700000000000";
     const INCOMING: &str = "pitboard-park-to-uuid-1690000000000";
 
@@ -540,7 +580,7 @@ mod tests {
         let mut j = journal();
         j.from_fingerprint = String::new();
         j.to_fingerprint = String::new();
-        assert_eq!(live_owner_by_fingerprint(&j, &live("refresh")), None);
+        assert_eq!(live_owner_by_fingerprint(&j, &fingerprint("refresh")), None);
     }
 
     /// Two sides that fingerprint the same are not two sides. Nothing can be read off that,
@@ -548,20 +588,43 @@ mod tests {
     #[test]
     fn identical_fingerprints_settle_nothing() {
         let mut j = journal();
-        let live = live("refresh");
-        j.from_fingerprint = crate::provider::of(ProviderId::Claude).fingerprint(&live);
+        j.from_fingerprint = fingerprint("refresh");
         j.to_fingerprint = j.from_fingerprint.clone();
-        assert_eq!(live_owner_by_fingerprint(&j, &live), None);
+        assert_eq!(live_owner_by_fingerprint(&j, &fingerprint("refresh")), None);
     }
 
-    /// A Claude Code login on `refresh`.
-    fn live(refresh: &str) -> Value {
-        serde_json::json!({"claudeAiOauth": {"refreshToken": refresh, "accessToken": "a"}})
+    /// The fingerprint of a Claude Code login on `refresh`.
+    fn fingerprint(refresh: &str) -> String {
+        let live =
+            serde_json::json!({"claudeAiOauth": {"refreshToken": refresh, "accessToken": "a"}});
+        crate::provider::of(ProviderId::Claude).fingerprint(&live)
+    }
+
+    /// The store holding the login fingerprinted `login`, with the tool's own record naming
+    /// nobody.
+    fn seen(login: &str) -> Seen {
+        Seen {
+            named: None,
+            login: login.into(),
+        }
+    }
+
+    /// What a switch's head records before anything moves: the store holds `from`'s login,
+    /// as Anthropic said.
+    fn identified_from(s: &mut State) {
+        let from = InUse {
+            owner: Some(account("from", None).owner()),
+            login: journal().from_fingerprint,
+            known_at: NOW - 60,
+            named: None,
+        };
+        s.identified(ProviderId::Claude, from, NOW - 60);
     }
 
     fn account(label: &str, parked: Option<&str>) -> Account {
         Account {
             last_used_at: None,
+            replaced_at: None,
             label: label.into(),
             id: format!("{label}-uuid"),
             account_uuid: format!("{label}-uuid"),
@@ -624,7 +687,13 @@ mod tests {
             assert!(repair.drop && repair.hold.is_none() && !repair.landed);
 
             let mut applied = s;
-            apply(&mut applied, &journal(), repair);
+            apply(
+                &mut applied,
+                &journal(),
+                repair,
+                seen(&journal().from_fingerprint),
+                NOW,
+            );
             assert!(!applied.references(PARK));
             assert!(applied.discarded.contains(&PARK.to_string()));
         }
@@ -635,25 +704,36 @@ mod tests {
     #[test]
     fn a_landed_switch_holds_the_outgoing_login_and_consumes_the_incoming_one() {
         let mut s = before();
+        identified_from(&mut s);
         let repair = repair_for(&s, &journal(), &found(written(), Some("to-uuid"))).unwrap();
         let (uuid, park) = repair.hold.clone().expect("the orphan must be recovered");
         assert_eq!(uuid, "from-uuid", "held by account id, never by a label");
         assert_eq!(park.service, PARK);
         assert!(repair.landed);
 
-        apply(&mut s, &journal(), repair);
-        assert_eq!(s.active_for(ProviderId::Claude), Some("to"));
+        let rotated = fingerprint("rotated-since");
+        apply(&mut s, &journal(), repair, seen(&rotated), NOW);
         assert_eq!(
-            s.get(&crate::state::Key::new(
+            s.account_in_use(ProviderId::Claude)
+                .map(|a| a.label.as_str()),
+            Some("to")
+        );
+        assert_eq!(
+            s.in_use(ProviderId::Claude)
+                .map(|r| (r.login.as_str(), r.known_at)),
+            Some((rotated.as_str(), NOW)),
+            "the login the store holds, which Claude Code may have rotated since the install"
+        );
+        let from = s
+            .get(&crate::state::Key::new(
                 crate::provider::ProviderId::Claude,
-                "from"
+                "from",
             ))
-            .unwrap()
-            .parked
-            .as_ref()
-            .unwrap()
-            .service,
-            PARK
+            .unwrap();
+        assert_eq!(from.parked.as_ref().unwrap().service, PARK);
+        assert_eq!(
+            from.replaced_at, None,
+            "its login is parked, so nothing of it was lost"
         );
         assert!(
             s.get(&crate::state::Key::new(
@@ -674,7 +754,7 @@ mod tests {
     fn a_third_account_signed_in_since_keeps_both_parks() {
         let mut s = before();
         let repair = repair_for(&s, &journal(), &found(written(), Some("other-uuid"))).unwrap();
-        apply(&mut s, &journal(), repair);
+        apply(&mut s, &journal(), repair, seen(&fingerprint("other")), NOW);
         assert!(s.references(PARK) && s.references(INCOMING));
         assert!(s.discarded.is_empty());
     }
@@ -707,16 +787,62 @@ mod tests {
             accounts: vec![account("other", None)],
             ..State::default()
         };
+        identified_from(&mut s);
         let repair = repair_for(&s, &journal(), &found(written(), Some("to-uuid"))).unwrap();
-        apply(&mut s, &journal(), repair);
+        apply(
+            &mut s,
+            &journal(),
+            repair,
+            seen(&journal().to_fingerprint),
+            NOW,
+        );
         assert!(
             !s.references(PARK),
             "a park must never be filed under whatever account happens to hold a label"
         );
         assert_eq!(
-            s.active_for(ProviderId::Claude),
+            s.in_use(ProviderId::Claude),
             None,
-            "a destination that is gone is not made active"
+            "the store no longer holds `from`'s login, and nobody here says whose it holds"
+        );
+    }
+
+    /// The destination forgotten and its label given to another account since. That account
+    /// is not the one whose login the switch installed, and the destination's park is not
+    /// its to consume.
+    #[test]
+    fn a_label_given_to_another_account_since_is_not_the_destination() {
+        const THEIRS: &str = "pitboard-park-someone-uuid-1695000000000";
+        let someone = Account {
+            id: "someone-uuid".into(),
+            account_uuid: "someone-uuid".into(),
+            ..account("to", Some(THEIRS))
+        };
+        let mut s = State {
+            accounts: vec![account("from", None), someone],
+            ..State::default()
+        };
+        identified_from(&mut s);
+        let repair = repair_for(&s, &journal(), &found(written(), Some("to-uuid"))).unwrap();
+        apply(
+            &mut s,
+            &journal(),
+            repair,
+            seen(&journal().to_fingerprint),
+            NOW,
+        );
+
+        assert_eq!(
+            s.in_use(ProviderId::Claude),
+            None,
+            "the login installed is not the account that holds the label now"
+        );
+        let to = s.get(&Key::new(ProviderId::Claude, "to")).unwrap();
+        assert_eq!(to.last_used_at, None, "never in use");
+        assert_eq!(to.parked.as_ref().map(|p| p.service.as_str()), Some(THEIRS));
+        assert!(
+            !s.discarded.contains(&INCOMING.to_string()),
+            "the destination's park is no account's here to consume"
         );
     }
 }

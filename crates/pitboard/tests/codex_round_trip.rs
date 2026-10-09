@@ -65,7 +65,7 @@ fn the_codex_account_in_use_is_enrolled_from_its_own_login() {
         work["parked"].is_null(),
         "a copy of a login still in use would be a twin"
     );
-    assert_eq!(env.state()["active"]["codex"], "work");
+    assert_eq!(env.in_use("codex").as_deref(), Some("work"));
 }
 
 /// A second account signs in through Codex's own login, pointed at a private home, so the
@@ -112,7 +112,7 @@ fn a_codex_switch_moves_the_login_and_says_to_restart_codex() {
         env.codex_live()["tokens"]["refresh_token"],
         "codex-refresh-p"
     );
-    assert_eq!(env.state()["active"]["codex"], "personal");
+    assert_eq!(env.in_use("codex").as_deref(), Some("personal"));
     assert!(account(&env, "codex", "personal")["parked"].is_null());
     let work_park = account(&env, "codex", "work")["parked"]["service"]
         .as_str()

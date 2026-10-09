@@ -51,7 +51,12 @@ fn a_codex_switch_moves_one_login_in_and_one_out() {
         "a running codex never notices, so it must not be told it will"
     );
     let state = state::load(&m.ctx).expect("state");
-    assert_eq!(state.active_for(ProviderId::Codex), Some("there"));
+    assert_eq!(
+        state
+            .account_in_use(ProviderId::Codex)
+            .map(|account| account.label.as_str()),
+        Some("there")
+    );
     assert!(state.get(&m.key("there")).unwrap().parked.is_none());
     let parked = state
         .get(&m.key("here"))
@@ -108,8 +113,13 @@ fn the_same_label_on_two_tools_is_two_accounts() {
     let claude = Key::new(ProviderId::Claude, "there");
     assert_eq!(state.get(&claude).unwrap().account_uuid, "claude-there");
     assert!(state.get(&claude).unwrap().parked.is_none());
-    assert_eq!(state.active_for(ProviderId::Claude), None);
-    assert_eq!(state.active_for(ProviderId::Codex), Some("there"));
+    assert_eq!(state.in_use(ProviderId::Claude), None);
+    assert_eq!(
+        state
+            .account_in_use(ProviderId::Codex)
+            .map(|account| account.key()),
+        Some(m.key("there"))
+    );
 }
 
 /// Codex's login names its account whether or not OpenAI still accepts it, so the park

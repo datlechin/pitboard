@@ -53,7 +53,9 @@ fn belongs_to(value: &Value, outgoing: &[&str]) -> bool {
 }
 
 /// Replace the recorded identity and drop what was derived from the previous one. Leaving
-/// out `profileFetchedAt` makes Claude Code refetch its profile rather than trust ours.
+/// out `profileFetchedAt` has the next Claude Code process to start fetch the profile of the
+/// login it starts with and write that account here, rather than trust a copy Pitboard wrote
+/// (the register's `config_identity_is_the_last_writers`).
 ///
 /// Returns the keys it dropped. Pitboard is editing the file that holds a person's whole
 /// Claude Code life and deciding what to remove from it by a shape rule, so what it

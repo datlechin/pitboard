@@ -101,6 +101,20 @@ pub fn storage_dir(ctx: &Context) -> String {
     )
 }
 
+/// What the lock a token refresh of the login takes first guards, as [`crate::lock::acquire`]
+/// takes it: `.oauth_refresh` in the storage directory, locked as `.oauth_refresh.lock`
+/// (the register's `refresh_lock`).
+pub fn refresh_lock(ctx: &Context) -> PathBuf {
+    PathBuf::from(storage_dir(ctx)).join(".oauth_refresh")
+}
+
+/// What the legacy lock a token refresh takes second guards: the storage directory itself,
+/// its links resolved where it is there, locked beside it.
+pub fn legacy_refresh_lock(ctx: &Context) -> PathBuf {
+    let dir = PathBuf::from(storage_dir(ctx));
+    std::fs::canonicalize(&dir).unwrap_or(dir)
+}
+
 fn storage_dir_from(secure: Option<&str>, home: &std::path::Path, config_dir: &str) -> String {
     use unicode_normalization::UnicodeNormalization;
     match secure {
@@ -152,8 +166,9 @@ pub fn load_config(ctx: &Context) -> Result<Value> {
     serde_json::from_str(&raw).map_err(|source| Error::ClaudeConfigNotJson { path, source })
 }
 
-/// Who Claude Code's config says is signed in. A cache, refreshed about once a day, so it
-/// can disagree with the credential; ask `api::owner` when it matters.
+/// The account Claude Code's config names, which can be another than the login stored's: a
+/// Claude Code process started or signed in on another login can write its own there (the
+/// register's `config_identity_is_the_last_writers`). Only Anthropic says whose a login is.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Identity {
     pub email: String,

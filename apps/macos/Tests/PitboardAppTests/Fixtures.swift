@@ -17,7 +17,8 @@ extension SiteLink {
 }
 
 /// An account as the core reports one. `label` nil is a login signed in and not enrolled.
-/// Switchable unless it is the one signed in, as a real one is.
+/// Switchable unless it is the one signed in, and its numbers every limit it has where its
+/// tool is Claude Code, as a real one is.
 func account(
     _ label: String?, of provider: String = "claude", email: String? = nil,
     signedIn: Bool = false, switchable: Bool? = nil, uuid: String? = nil
@@ -28,8 +29,9 @@ func account(
         qualified: label.map { "\(provider)/\($0)" }, unplaced: false,
         email: email ?? "\(label ?? uuid)@example.com", accountId: uuid, signedIn: signedIn,
         switchable: switchable ?? (!signedIn && label != nil), parked: nil,
-        usage: Usage(source: .live, observedAt: 0, windows: []), stale: nil,
-        staleExplanation: nil)
+        usage: Usage(
+            source: .live, observedAt: 0, windows: [], listsEveryLimit: provider == "claude"),
+        stale: nil, staleExplanation: nil)
 }
 
 func status(_ accounts: [Account], warnings: [Warning] = []) -> Status {
@@ -90,7 +92,7 @@ func snapshot(
         menuNotices: MenuNotices(install: nil, switches: [], others: nil), footing: .ready,
         setup: nil, accountsShown: .reading(title: "Reading accounts…"),
         menuAccountsNote: nil, updatedMenu: "", updatedWindow: "", sheetText: nil,
-        signingInText: nil, quitConfirmation: nil, failureAlert: nil,
+        signingInText: nil, stowText: nil, quitConfirmation: nil, failureAlert: nil,
         machine: MachineShown(
             schedule: ScheduleShown(
                 schedule: nil, on: false, changing: false, enabled: true, runs: nil,
@@ -104,7 +106,7 @@ func snapshot(
                 cannotLink: nil),
             autoSwitch: AutoSwitchShown(
                 on: false, at: 95, lowest: 50, highest: 99, enabled: true,
-                atLabel: "Switch when a limit reaches 95%", note: "")),
+                atLabel: "Switch when a limit reaches 95%", note: "", standing: nil)),
         accountWindows: windows ?? windowsShown(status?.accounts ?? []))
 }
 

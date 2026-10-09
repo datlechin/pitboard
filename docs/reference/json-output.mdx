@@ -99,8 +99,9 @@ The `data` of each command, in the order of `pitboard --help`:
 | --- | --- |
 | `status` | See [Status data](/reference/json-output#status-data). |
 | `enroll` | `label` as typed, `provider` (`claude` or `codex`), `email`, and `enrolled`: `current`, `signed_in`, `renewed` or `in_use`, as [Account commands](/reference/account-commands#enroll) explains. |
-| `use` | Already in use: `to`, and `changed` set to `false`. After a switch: `from`, `to`, `provider`, `changed` set to `true`, `parked_at` (when the login you left was parked), `adoption_ceiling_seconds` and `adoption`. |
+| `use` | Already in use: `to`, `changed` set to `false`, and `config_updated`, `true` where Claude Code's config named another account and `use` wrote the account in use into it. After a switch: `from`, `to`, `provider`, `changed` set to `true`, `parked_at` (when the login you left was parked), `adoption_ceiling_seconds` and `adoption`. |
 | `forget` | `label` and `email`. |
+| `stow` | `stowed`, `false` when nothing is behind the store Claude Code keeps its login in. When it is `true`, also `path`, the file put away; `login`, what became of its login, as [Account commands](/reference/account-commands#stow) lists: `no_login`, `stored`, `already_parked`, `second_sign_in`, `parked`, `park_kept` or `login_refused`; `account`, the label of the enrolled account the login was of, or `null`; and `dropped`, the names of the file's other keys, which went with it. |
 | `abandon` | `abandoned`, `false` when there was no interrupted switch. When it is `true`, also `from`, `to` and `logins_kept`, a count. |
 | `repair` | `given_back`, a list of objects with `label` and `service`, the parked login's name. `deleted`, `strangers` (left alone because they belong to no account this Pitboard knows) and `unreadable`, lists of parked login names. All four are always present. |
 | `adopt` | `adopted`, `false` when Pitboard's directory was already this computer's. When it is `true`, also `accounts`, the labels of the accounts kept, and `logins_dropped`, the labels whose parked login was dropped. |
@@ -110,11 +111,11 @@ The `data` of each command, in the order of `pitboard --help`:
 | `uninstall` | `parks_removed`, `parks_pending` (could not be deleted) and `parks_left` (left because another Pitboard may own them), counts. `home_removed` and `schedule_removed`, booleans. |
 | `rename` | `from`, `to` and `email`. |
 | `doctor` | `environment`: the paths and login stores Pitboard found, and the version of OpenAI's Codex CLI. `checks`, each with `code`, `name`, `level` (`ok`, `warn` or `fail`), `detail` and `advice`, as [Maintenance commands](/reference/maintenance-commands#doctor) lists. |
-| `statusline` | `line`, the status line without colour. |
+| `statusline` | `line`, the status line without colour. Its first label can end in `?`, or be `?` alone, as [Integration commands](/reference/integration-commands#statusline) says. |
 | `watch` | One envelope for each event: `event`, `threshold` and the fields of that event, as [Watch events](/reference/json-output#watch-events) lists. |
 | `generate` (`completions` and `manpage`) | `{}` |
 
-`adoption` says how sessions already running pick up a switch. For Claude Code it is `{"follows":"polling","within_seconds":33}`, and `adoption_ceiling_seconds` is `33`. For Codex it is `{"follows":"restart","program":"codex"}`, and `adoption_ceiling_seconds` is `null`.
+`adoption` says how sessions already running pick up a switch. For Claude Code it is `{"follows":"polling","within_seconds":33}`, and `adoption_ceiling_seconds` is `33`. On macOS, while `~/.claude/.credentials.json` sits behind the keychain, it is `{"follows":"renewal","path":"/Users/you/.claude/.credentials.json"}`, and `adoption_ceiling_seconds` is `null`: open sessions follow when their login is next renewed. For Codex it is `{"follows":"restart","program":"codex"}`, and `adoption_ceiling_seconds` is `null`.
 
 ## Status data
 
@@ -123,7 +124,7 @@ The `data` of `pitboard status` has four fields:
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `slot` | object | Which Claude Code login this output describes. On macOS, `service` is its keychain item name; on Linux it names no item. `default` is `true` for the login Claude Code uses when `CLAUDE_CONFIG_DIR` is not set. |
-| `signed_in` | object or null | The Claude Code account in use, never a Codex one: `account_uuid`, `email` and `organization_uuid`. |
+| `signed_in` | object or null | The Claude Code account in use, never a Codex one: `account_uuid`, `email` and `organization_uuid`. With `--offline`, the one Anthropic last named for the login stored, or the account Pitboard last switched to until it first asks Anthropic after an update from 0.9.0 or earlier. |
 | `signed_in_error` | string or null | Why `signed_in` is `null`, such as `nothing is signed in`. |
 | `accounts` | array | One object per enrolled account: Claude Code first, and the account in use first within each tool. A login in use that no account matches gets one too. |
 
@@ -146,7 +147,7 @@ Each object in `accounts` has these fields:
 | `provider` | string | `claude` or `codex`. |
 | `qualified` | string or null | The label with its tool, such as `claude/work`. `null` for a login nobody enrolled. |
 
-In `usage`, `source` is `live` when Pitboard asked the service this time. It is `claude_code_cache` for a reading copied from Claude Code's own cache, and `remembered` for the last reading Pitboard took itself.
+In `usage`, `source` is `live` when Pitboard asked the service this time, and `remembered` for the last reading Pitboard took itself.
 
 Each object in `windows` is one limit:
 
@@ -169,29 +170,54 @@ Each object in `windows` is one limit:
 | --- | --- | --- |
 | `watching` | `watch` starts. Not printed with `--once`. | None |
 | `switched` | Pitboard switched Claude Code. | `from`, `to`, `limit` and `adoption` |
-| `no_room` | A limit of the account in use reached the share, and no other account has room. | `from` and `limit` |
-| `skipped` | A limit reached the share and another account has room, but something stops the switch. | `from`, `limit` and `reason` |
-| `idle` | `--once` found nothing to do. Printed only with `--once`. | None |
+| `waiting` | A limit of the account in use reached the share, and a try at switching away from one came to nothing. Pitboard tries again at `until`, for `limit`. | `from`, `limit` and `until` |
+| `no_room` | A limit of the account in use reached the share, and no other account has room. | `from`, `limit` and `unread` |
+| `skipped` | A limit reached the share, and something else stops the switch. | `from`, `limit` and `reason`, and `until` for `settling` |
+| `not_watching` | Pitboard cannot decide whether to switch at all. | `reason`, and `email`, `account`, or `detail` and `until`, where the reason has them |
+| `idle` | No limit of the account in use has reached the share. | `account`, `limit`, `as_of` and `held_until` |
 
 The other fields are these:
 
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `from` | string | The Claude Code account in use, by its label as `pitboard use` takes it. |
+| `account` | string | The Claude Code account in use, by its label: for `idle`, the one Pitboard watches, and for `not_watching`, the one Anthropic has given no reading of. |
 | `to` | string | The account switched to, by its label. |
-| `limit` | object | The limit of `from` that reached the share, as Pitboard last read it: `kind`, `scope`, `percent` and `resets_at`, as in [Status data](/reference/json-output#status-data). |
-| `adoption` | object | How sessions already running pick up the switch: `{"follows":"polling","within_seconds":33}`, as for `use`. |
-| `reason` | string | Why Pitboard does not switch. |
+| `limit` | object or null | The limit of `from` that reached the share, as Pitboard last read it: `kind`, `scope`, `percent` and `resets_at`, as in [Status data](/reference/json-output#status-data). A limit reaches the share at its whole percentage, a half rounded up, so `percent` can be up to half a point under `threshold`, such as `94.5` for `95`. Once Pitboard has recorded a try or a reason for the limit, `resets_at` is the reset it recorded then. A later reading can give it a second or so apart. For `waiting`, the limit Pitboard tries to switch away from at `until`. For `idle`, the fullest limit of `account` whose reset has not passed, or `null` when it has none. |
+| `as_of` | integer or null | When the reading of `account` was taken, in epoch seconds. |
+| `held_until` | integer or null | When Pitboard may ask Anthropic about `account` again, in epoch seconds, while Anthropic holds it off, as after a rate limit. `null` otherwise. |
+| `unread` | array of strings | The accounts Pitboard could switch to that Anthropic has given no reading of yet, by label. Empty when there are none. |
+| `adoption` | object | How sessions already running pick up the switch: `{"follows":"polling","within_seconds":33}`, or `{"follows":"renewal","path":...}` while a login file sits behind the keychain, as for `use`. |
+| `reason` | string | Why Pitboard does not switch, or cannot decide. |
+| `email` | string | The account whose login Claude Code has stored, which is not enrolled. |
+| `detail` | string | Why Pitboard could not tell whose login Claude Code has stored, in a few words. |
+| `until` | integer | In epoch seconds: for `waiting`, when Pitboard tries again; for `settling`, when the account has been in use 5 minutes; for `not_identified`, when Pitboard asks whose login Claude Code has stored again. |
 
-`reason` is one of these:
+Until the next switch, `watch` prints each `no_room` and `skipped` event once for its account, limit, reset and `reason`, and each `waiting` event once for its `until`. It prints `idle` whenever its last event was not `idle` for the same `account`.
+
+`warnings` holds what a decision found on the way, such as `fallback_login` while a login file sits behind the keychain. `watch` prints each warning once until the next switch, even one that went away and came back. It prints an event or an error again to carry a warning it has not printed yet.
+
+For `skipped`, `reason` is one of these:
+
+| `reason` | Meaning |
+| --- | --- |
+| `already_switched` | Pitboard already switched away from this limit before it resets, and the account is back in use. |
+| `attempts_spent` | Three tries at switching away from this limit failed, and Pitboard tries no more before it resets. |
+| `settling` | The account was put in use less than 5 minutes ago. Pitboard decides again at `until`. |
+| `auth_overridden` | Claude Code signs in another way, such as with `ANTHROPIC_API_KEY` or `apiKeyHelper`, so a switch would change nothing its sessions use. |
+
+For `not_watching`, `reason` is one of these:
 
 | `reason` | Meaning |
 | --- | --- |
 | `switch_interrupted` | A switch did not finish. The next change you make finishes it, or `pitboard abandon` gives up on it. |
 | `custom_oauth_endpoint` | `CLAUDE_CODE_CUSTOM_OAUTH_URL` is set, so Pitboard does not act on Claude Code. |
-| `auth_overridden` | Claude Code signs in another way, such as with `ANTHROPIC_API_KEY` or `apiKeyHelper`, so a switch would change nothing its sessions use. |
+| `nothing_signed_in` | Claude Code has no login stored. |
+| `not_enrolled` | The login Claude Code has stored is of an account not enrolled, which `email` names. |
+| `not_identified` | Pitboard could not tell whose login Claude Code has stored, for `detail`, and asks again at `until`. |
+| `no_reading` | Anthropic has given no reading of the account in use, `account`, as after an update of Pitboard. A status line still running a `pitboard` from before 0.10.0 leaves none between Pitboard's reads. Pitboard decides once it next asks Anthropic about that account. |
 
-A switch that fails prints an envelope with `ok` set to `false`, `data` set to `null` and the `error`, as every command does. `watch` then goes on. An error that ends `watch` is printed the same way, and `watch` exits with its status.
+A switch that fails prints an envelope with `ok` set to `false`, `data` set to `null` and the `error`, as every command does. `watch` then goes on, and prints each error code once until the next switch. After an error it makes no decision that takes Pitboard's lock for 1 minute. It waits twice as long after each error in a row, up to 15 minutes. An error that ends `watch` is printed the same way, and `watch` exits with its status.
 
 A switch prints this on one line:
 
@@ -228,11 +254,12 @@ A switch prints this on one line:
 | `stale` | Meaning | Text |
 | --- | --- | --- |
 | `nothing_signed_in` | Nothing is signed in to the tool. | `nothing is signed in` |
-| `login_unreadable` | The tool's login is there but could not be read. Also on the account Pitboard last switched the tool to, where it has nothing parked, since its login may be the one that could not be read. | `` Claude Code's login could not be read; run `pitboard doctor` `` |
+| `login_unreadable` | The tool's login is there but could not be read. Also on the account whose login Pitboard last recorded the tool holding, where it has nothing parked, since its login may be the one that could not be read. | `` Claude Code's login could not be read; run `pitboard doctor` `` |
 | `login_unusable` | The tool's login is not one Pitboard can park or switch, such as one made with an API key. | `` Claude Code's login is not one Pitboard can park or switch; run `pitboard doctor` `` |
 | `session_expired` | The login in use has expired. The tool renews it the next time it runs. | `` Claude Code's session has expired; `claude` renews it `` |
 | `parked_access_expired` | The parked login's access token has expired and could not be renewed this time. | None |
 | `nothing_parked` | The account has no parked login. | None |
+| `login_replaced` | The account has no parked login, because a sign-in outside Pitboard replaced the only login it had, the one its tool had stored. | `its login was replaced by a sign-in outside Pitboard; sign in again` |
 | `park_unreadable` | The parked login could not be read. | `` its parked login cannot be read; run `pitboard doctor` `` |
 | `rate_limited` | The service asked for fewer usage requests, so Pitboard waits before asking again. | `Anthropic is rate limiting usage checks` |
 | `unreachable` | The service could not be reached. | `Anthropic could not be reached` |

@@ -211,6 +211,7 @@ mod tests {
             email: format!("{label}@example.com"),
             parked: None,
             last_used_at: None,
+            replaced_at: None,
             detail,
         }
     }

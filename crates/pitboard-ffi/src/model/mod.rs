@@ -59,6 +59,8 @@ mod reading;
 #[cfg(test)]
 mod signing;
 #[cfg(test)]
+mod stowing;
+#[cfg(test)]
 mod switching;
 #[cfg(test)]
 mod testing;
@@ -70,7 +72,7 @@ mod windowing;
 use crate::account_windows::AlertText;
 use crate::present::{
     AccountSection, AccountWindowsShown, AccountsShown, Footing, MachineShown, MenuBarText,
-    MenuNotices, PanelNotice, Question, SetupStep, SheetText, SigningInText, present,
+    MenuNotices, PanelNotice, Question, SetupStep, SheetText, SigningInText, StowText, present,
 };
 use crate::{Abandoned, AppCore, Status, Tool, Warning};
 use lanes::Lanes;
@@ -279,6 +281,22 @@ pub enum Intent {
     /// Drop the account `qualified` names, and the login parked for it, once somebody has
     /// answered the question its row asks first. What goes wrong is said in the window.
     Forget { qualified: String },
+    /// Write the account `qualified` names, the one in use, into its tool's config where that
+    /// names another account, as `pitboard use` with it does: the button on the notice that
+    /// says Claude Code's config names another account. A change like a rename and not a
+    /// switch, so nothing said about a switch or the account in use goes. Refused, writing
+    /// nothing, where another account is in use by then. What it warned of is said beside
+    /// the read after it, and what stopped it in the window.
+    UpdateConfig { qualified: String },
+    /// Put away the login left in the file behind Claude Code's store, as the sheet for it
+    /// says, `Sheet::Stow`: once that sheet has looked, and only while the file still holds
+    /// what it looked at. Not where the login is of an account nobody enrolled, which the sheet
+    /// says, and not a second time while one is under way. What goes wrong is said in the
+    /// sheet; once it is done the sheet closes, what it did is said until somebody puts it
+    /// away, and the accounts are read again.
+    Stow,
+    /// Somebody has read what putting away the login left in a file did, and put it away.
+    DismissStowed,
     /// `pane` of the main window is shown, or its own button asks for what it shows to be
     /// read again, as Check Again and the activity's Refresh do: what it shows is read every
     /// time, as the Swift panes read it on every visit, since an app runs for days and a check
@@ -300,8 +318,8 @@ pub enum Intent {
     /// Switch Claude Code by itself, or stop: the settings' switch, with the share of a limit
     /// it switches at, a whole percentage, taken as the nearest there can be. Kept in the
     /// app's preferences in Pitboard's directory, and taken only once they have been read,
-    /// as `MachineShown::auto_switch` says by `enabled`. Turned on, it looks at once at what
-    /// was read last.
+    /// as `MachineShown::auto_switch` says by `enabled`. Turned on, or at another share, the
+    /// core looks at once whether to switch.
     SetAutoSwitch { on: bool, at: u8 },
     /// Renew every parked login that is due, now, then read the accounts again once, asking
     /// every service, to show what it renewed. Never switches, and asks for no usage beyond
@@ -371,6 +389,10 @@ pub enum Sheet {
     Name { provider: String, email: String },
     /// A new name for an enrolled account.
     Rename { provider: String, label: String },
+    /// Putting away the login Claude Code left in a file behind the keychain: put up, it
+    /// looks at the file, and says whose the login is once that is known, before anything is
+    /// changed. `Snapshot::stow_text` is what it says.
+    Stow,
 }
 
 /// A sign-in under way, and what its tool has said so far.
@@ -573,10 +595,12 @@ pub struct Snapshot {
     pub updated_menu: String,
     /// The same, as the window's subtitle says it.
     pub updated_window: String,
-    /// What the sheet over the main window says, while one is up.
+    /// What the sheet over the main window says, while one is up that names an account.
     pub sheet_text: Option<SheetText>,
     /// What a sign-in under way says.
     pub signing_in_text: Option<SigningInText>,
+    /// What the sheet for putting away the login left in a file says, while it is up.
+    pub stow_text: Option<StowText>,
     /// What the quit question asks, while it is asked.
     pub quit_confirmation: Option<Question>,
     /// The alert for `failure`, while there is one to say.
@@ -621,7 +645,7 @@ pub struct RunOutNotice {
     pub title: String,
     /// The tool, beside another tool's accounts: "Claude Code".
     pub subtitle: Option<String>,
-    /// "spare has 80% of its own left."
+    /// "spare has 80% of its own left.", or "seat has no such limit."
     pub body: String,
     /// The account its Switch button switches to, its label with its tool, for
     /// `Intent::SwitchTo`. `None` for a notification with nothing to switch to, which has no

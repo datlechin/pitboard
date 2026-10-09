@@ -14,10 +14,12 @@ use crate::{
     Usage, Warning, found_command_line, tool,
 };
 use pitboard_core::app::AppContext;
+use pitboard_core::autoswitch::{Auto, Blind, Look, Skip, Threshold};
 use pitboard_core::context::Environment;
-use pitboard_core::provider::ProviderId;
+use pitboard_core::provider::{self, ProviderId};
 use pitboard_core::service::{self, Changing};
-use pitboard_core::{doctor, status, switch, usage};
+use pitboard_core::switch::{Left, Stowed};
+use pitboard_core::{doctor, status, switch, usage, words};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard};
@@ -63,8 +65,30 @@ fn warnings(found: &[service::Warning]) -> Vec<Warning> {
         .map(|w| Warning {
             code: w.code().to_string(),
             message: w.to_string(),
+            account: match w {
+                service::Warning::LoginReplaced { tool, id, .. } => Some(account_id(*tool, id)),
+                _ => None,
+            },
+            held: match w {
+                service::Warning::FallbackLogin { held, .. } => Some(match held {
+                    provider::Held::Login => crate::Held::Login,
+                    provider::Held::NoLogin => crate::Held::NoLogin,
+                    provider::Held::Unreadable => crate::Held::Unreadable,
+                }),
+                _ => None,
+            },
         })
         .collect()
+}
+
+/// An account's `Account.id`: its tool and what the core files it under, or the tool alone
+/// for a login that belongs to no account the core can name.
+fn account_id(tool: ProviderId, id: &str) -> String {
+    if id.is_empty() {
+        format!("{}:login", tool.code())
+    } else {
+        format!("{}:{id}", tool.code())
+    }
 }
 
 /// One change Pitboard made, as `pitboard log` shows them.
@@ -86,6 +110,9 @@ pub(crate) struct Change {
 pub(crate) enum Adoption {
     /// On its own, within this many seconds.
     Follows { within_seconds: u32 },
+    /// On its own, when its login is next renewed, because the file at `path` sits behind
+    /// the store the switch wrote.
+    Renewal { path: String },
     /// Never: `program` has to be quit and started again.
     Restart { program: String },
 }
@@ -160,24 +187,66 @@ pub(crate) struct Switched {
     pub(crate) warnings: Vec<Warning>,
 }
 
-/// What switching Claude Code by itself came to, as the model takes it.
+/// What switching Claude Code by itself came to, as the model takes it. Times are epoch
+/// seconds.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum AutoSwitched {
-    /// Nothing to do.
-    Idle,
-    /// A limit of the account in use reached the share, and no other account has room.
-    NoRoom,
-    /// What the switch said, as a switch somebody asked for says it, and how much the account
-    /// it left had used: "96% of its 5-hour limit".
-    Switched { switched: Switched, used: String },
-    /// A limit of `from` reached the share, `used` of it, and Pitboard did not switch, for
-    /// the reason `code` names and `why` says.
-    Skipped {
+    /// Nothing to do: no limit of `account`, the account in use, has reached the share.
+    /// `used` is how much of its fullest limit still running it has used, "62% of its 5-hour
+    /// limit", in the reading taken at `as_of`. Anthropic holds Pitboard off asking about it
+    /// again until `held_until`, where it does.
+    Watching {
+        account: String,
+        used: Option<String>,
+        as_of: Option<i64>,
+        held_until: Option<i64>,
+    },
+    /// `used` of a limit of `from` reached the share, and an attempt at switching away from a
+    /// limit of it came to nothing a moment ago: the next is not made before `until`.
+    Waiting {
         from: String,
         used: String,
-        code: String,
-        why: String,
+        until: i64,
     },
+    /// Claude Code was switched from `from` to `to`, which running sessions take as `adoption`
+    /// says, with what the switch warned of, and how much the account it left had used: "96%
+    /// of its 5-hour limit".
+    Switched {
+        from: String,
+        to: String,
+        adoption: Adoption,
+        warnings: Vec<Warning>,
+        used: String,
+    },
+    /// A limit of `from` reached the share, `used` of it, and Pitboard did not switch, for
+    /// the reason `why` says, until `until` where the reason ends then. `key` tells it apart
+    /// from another, as the core does (`Skip::told_apart`).
+    Skipped {
+        key: String,
+        from: String,
+        used: String,
+        why: String,
+        until: Option<i64>,
+    },
+    /// Pitboard cannot judge whether to switch, for the reason `why` says, and asks again at
+    /// `until` where it waits to. `key` tells it apart from another, as the core does
+    /// (`Blind::told_apart`).
+    NotWatching {
+        key: String,
+        why: String,
+        until: Option<i64>,
+    },
+}
+
+/// What the core's look at whether to switch Claude Code by itself came to, from its files
+/// alone.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum AutoLooked {
+    /// This stands, and nothing is to be decided under the core's lock.
+    Stands(AutoSwitched),
+    /// A switch may be due, or whose login Claude Code has stored is in doubt: only a
+    /// decision under the core's lock can say.
+    Act,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -242,11 +311,7 @@ fn account(row: status::Row, now: i64) -> Account {
     let key = row.key();
     let unplaced = row.unplaced();
     Account {
-        id: if row.id.is_empty() {
-            format!("{}:login", row.provider.code())
-        } else {
-            format!("{}:{}", row.provider.code(), row.id)
-        },
+        id: account_id(row.provider, &row.id),
         provider: row.provider.code().into(),
         qualified: key.map(|k| k.qualified()),
         unplaced,
@@ -262,10 +327,10 @@ fn account(row: status::Row, now: i64) -> Account {
         usage: row.usage.map(|u| Usage {
             source: match u.source {
                 usage::Source::Live => Source::Live,
-                usage::Source::ClaudeCodeCache => Source::ClaudeCodeCache,
                 usage::Source::Remembered => Source::Remembered,
             },
             observed_at: u.observed_at,
+            lists_every_limit: u.lists_every_limit,
             windows: u
                 .windows
                 .into_iter()
@@ -307,8 +372,64 @@ fn adoption_of(adoption: pitboard_core::provider::Adoption) -> Adoption {
         pitboard_core::provider::Adoption::PollingWithin(seconds) => Adoption::Follows {
             within_seconds: seconds,
         },
+        pitboard_core::provider::Adoption::AtRenewal { file } => Adoption::Renewal {
+            path: file.display().to_string(),
+        },
         pitboard_core::provider::Adoption::RestartRequired { program, .. } => Adoption::Restart {
             program: program.into(),
+        },
+    }
+}
+
+/// What switching Claude Code by itself at `threshold` came to, as the model takes it, with
+/// what a switch warned of.
+fn auto_switched(auto: Auto, warnings: Vec<Warning>, threshold: Threshold) -> AutoSwitched {
+    match auto {
+        Auto::Watching {
+            account,
+            nearest,
+            as_of,
+            held_until,
+        } => AutoSwitched::Watching {
+            account,
+            used: nearest.as_ref().map(words::share_of_limit),
+            as_of,
+            held_until,
+        },
+        Auto::Waiting { from, limit, until } => AutoSwitched::Waiting {
+            from,
+            used: words::share_of_limit(&limit),
+            until,
+        },
+        Auto::Switched {
+            from,
+            to,
+            limit,
+            adoption,
+        } => AutoSwitched::Switched {
+            from,
+            to,
+            adoption: adoption_of(adoption),
+            warnings,
+            used: words::share_of_limit(&limit),
+        },
+        Auto::Skipped { from, limit, why } => AutoSwitched::Skipped {
+            key: why.told_apart(&from, &limit),
+            used: words::share_of_limit(&limit),
+            why: words::not_switching(&why, threshold),
+            until: match why {
+                Skip::Settling { until } => Some(until),
+                _ => None,
+            },
+            from,
+        },
+        Auto::NotWatching { why } => AutoSwitched::NotWatching {
+            key: why.told_apart(),
+            why: words::not_watching(&why),
+            until: match why {
+                Blind::Unidentified { until, .. } => Some(until),
+                _ => None,
+            },
         },
     }
 }
@@ -701,50 +822,57 @@ impl AppCore {
                         to,
                         adoption: adoption_of(adoption),
                     },
-                    switch::Outcome::AlreadyActive { label } => Switch::AlreadyActive { label },
+                    switch::Outcome::AlreadyActive { label, .. } => Switch::AlreadyActive { label },
                 },
                 warnings,
             }
         })
     }
 
+    /// Writes the account `label` names into its tool's config where that names another
+    /// account, while it is in use, and refuses where it no longer is. Gives what it warned
+    /// of.
+    pub(crate) fn update_config(&self, label: String) -> Result<Vec<Warning>, PitboardError> {
+        changed(self.core().core.update_config(&label), |_, warnings| {
+            warnings
+        })
+    }
+
+    /// What is left in the file behind Claude Code's store, and what putting it away would do
+    /// with it, as `pitboard stow` asks first: `None` where nothing is. Takes no lock and writes
+    /// nothing, and may ask Anthropic whose the login in it is, and whose the login stored is.
+    pub(crate) fn left_login(&self) -> Result<Option<Left>, PitboardError> {
+        Ok(self.readable()?.core.left_login()?)
+    }
+
+    /// Puts away the file behind Claude Code's store, while it holds what `seen` was taken of,
+    /// as `pitboard stow` does. Gives what it did, and what it warned of.
+    pub(crate) fn stow(&self, seen: &str) -> Result<(Stowed, Vec<Warning>), PitboardError> {
+        changed(self.core().core.stow(seen), |stowed, warnings| {
+            (stowed, warnings)
+        })
+    }
+
     /// Switches Claude Code by itself where a limit of the account in use has reached `at`%
-    /// and another account has room, as the core decides. `at` is taken as the nearest share
-    /// there can be.
+    /// and another account has room, as the core decides under its lock. `at` is taken as the
+    /// nearest share there can be.
     pub(crate) fn auto_switch(&self, at: u8) -> Result<AutoSwitched, PitboardError> {
-        use pitboard_core::autoswitch::{Auto, Threshold};
-        use pitboard_core::words;
         let threshold = Threshold::clamped(i64::from(at));
-        changed(
-            self.core().core.auto_switch(threshold),
-            |auto, warnings| match auto {
-                Auto::Idle => AutoSwitched::Idle,
-                Auto::NoRoom { .. } => AutoSwitched::NoRoom,
-                Auto::Switched {
-                    from,
-                    to,
-                    limit,
-                    adoption,
-                } => AutoSwitched::Switched {
-                    switched: Switched {
-                        outcome: Switch::Switched {
-                            provider: pitboard_core::provider::ProviderId::Claude.code().into(),
-                            from,
-                            to,
-                            adoption: adoption_of(adoption),
-                        },
-                        warnings,
-                    },
-                    used: words::share_of_limit(&limit),
-                },
-                Auto::Skipped { from, limit, why } => AutoSwitched::Skipped {
-                    from,
-                    used: words::share_of_limit(&limit),
-                    code: why.code().into(),
-                    why: words::not_switching(&why),
-                },
-            },
-        )
+        changed(self.core().core.auto_switch(threshold), |auto, warnings| {
+            auto_switched(auto, warnings, threshold)
+        })
+    }
+
+    /// What switching Claude Code by itself at `at`% would come to, from the core's files
+    /// alone: what stands, or that only a decision under its lock can say. Takes no lock,
+    /// reads no keychain and asks nobody, so the model asks it after every read and every half
+    /// a minute.
+    pub(crate) fn auto_look(&self, at: u8) -> Result<AutoLooked, PitboardError> {
+        let threshold = Threshold::clamped(i64::from(at));
+        Ok(match self.readable()?.core.auto_look(threshold)? {
+            Look::Stands(auto) => AutoLooked::Stands(auto_switched(*auto, Vec::new(), threshold)),
+            Look::Act => AutoLooked::Act,
+        })
     }
 
     /// Enroll the account signed in now under `label`.
@@ -777,7 +905,7 @@ impl AppCore {
         changed(self.core().core.rename(&from, &to), |_, _| ())
     }
 
-    /// When Pitboard's account index last changed, in epoch seconds, or 0 when there is
+    /// When Pitboard's account index last changed, in epoch milliseconds, or 0 when there is
     /// none, or where nothing may be read here.
     ///
     /// One stat of one file, so the model asks often. A switch typed in a terminal used to
@@ -792,18 +920,19 @@ impl AppCore {
     /// When Pitboard's usage readings last changed, in epoch milliseconds, or 0 when there
     /// are none, or where nothing may be read here.
     ///
-    /// Every session's status line records what that session has seen, and a reading only
-    /// moves forward, so what is remembered is the newest any front end has. The model polls
-    /// this beside `changed_at`, and when it moves, takes the numbers from `status_offline`:
-    /// no network, and no keychain unless an interrupted switch is waiting. Only the numbers:
-    /// a reading moving says nothing about who is signed in, which is `changed_at`'s to say.
+    /// Every read records its answers, and every session's status line what that session has
+    /// seen where it moves a limit an answer gave, so what is remembered is the newest any
+    /// front end has. The model polls this beside `changed_at`, and when it moves, takes the
+    /// numbers from `status_offline`: no network, and no keychain unless an interrupted
+    /// switch is waiting. Only the numbers: a reading moving says nothing about who is signed
+    /// in, which is `changed_at`'s to say.
     pub(crate) fn readings_changed_at(&self) -> i64 {
         self.readable()
             .map_or(0, |made| made.core.readings_changed_at())
     }
 
-    /// The same report without asking anyone: the last numbers Pitboard measured, and who
-    /// Claude Code's config says is signed in.
+    /// The same report without asking anyone: the last numbers Pitboard measured, and whose
+    /// login each tool has stored, as its service last said.
     ///
     /// What the app shows on a plane, and what it shows while a live read is still in
     /// flight, rather than an empty panel and a spinner. It warns of an interrupted switch

@@ -45,7 +45,7 @@ Usage: pitboard repair [OPTIONS]
 
 On macOS, it lists keychain items whose names start with `pitboard-park-`. Listing reads only the names, so macOS does not ask for permission. On Linux, it lists `~/.pitboard/vault/`. It then reads each one the account list does not name.
 
-It also reads `~/.pitboard/pending`, where Pitboard writes each parked login's name before creating it. `use`, `enroll`, `forget`, `rename` and `uninstall` handle the logins on that list too, without searching the keychain.
+It also reads `~/.pitboard/pending`, where Pitboard writes each parked login's name before creating it. `use`, `enroll`, `forget`, `stow`, `rename` and `uninstall` handle the logins on that list too, without searching the keychain.
 
 A parked login is on neither `pending` nor the account list only when `~/.pitboard` was lost or restored from a backup. Only then is `repair` needed.
 

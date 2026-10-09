@@ -77,10 +77,12 @@ public final class AppModel {
     public private(set) var updatedMenu: String
     /// The same, as the window's subtitle says it.
     public private(set) var updatedWindow: String
-    /// What the sheet over the main window says, while one is up.
+    /// What the sheet over the main window says, while one is up that names an account.
     public private(set) var sheetText: SheetText?
     /// What a sign-in under way says.
     public private(set) var signingInText: SigningInText?
+    /// What the sheet for putting away a login left in a file says, while it is up.
+    public private(set) var stowText: StowText?
     /// What the quit question asks, while it is asked.
     public private(set) var quitConfirmation: Question?
     /// The alert for `failure`, while there is one to say.
@@ -133,6 +135,7 @@ public final class AppModel {
         updatedWindow = first.updatedWindow
         sheetText = first.sheetText
         signingInText = first.signingInText
+        stowText = first.stowText
         quitConfirmation = first.quitConfirmation
         failureAlert = first.failureAlert
         machine = first.machine
@@ -208,6 +211,7 @@ public final class AppModel {
         update(\.updatedWindow, snapshot.updatedWindow)
         update(\.sheetText, snapshot.sheetText)
         update(\.signingInText, snapshot.signingInText)
+        update(\.stowText, snapshot.stowText)
         update(\.quitConfirmation, snapshot.quitConfirmation)
         update(\.failureAlert, snapshot.failureAlert)
         update(\.machine, snapshot.machine)

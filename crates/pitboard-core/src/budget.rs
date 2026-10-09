@@ -255,6 +255,16 @@ fn doubling(first: i64, most: i64, before: u32) -> i64 {
     shifted.clamp(first, most)
 }
 
+/// When the account filed under `id` may be asked about again, where a refusal holds it off
+/// past now, in epoch seconds.
+pub(crate) fn held_until(ctx: &Context, id: &str) -> Option<i64> {
+    let now = ctx.now();
+    load(ctx)
+        .get(id)
+        .map(|entry| entry.record.held_until)
+        .filter(|until| *until > now)
+}
+
 /// Every account currently being held off, for `doctor` to report.
 pub fn holds(ctx: &Context) -> Vec<(String, i64)> {
     let now = ctx.now();
@@ -309,7 +319,8 @@ mod tests {
     fn reading(kinds: &[&str]) -> Snapshot {
         Snapshot {
             observed_at: Some(NOW),
-            account_uuid: None,
+            answered_at: Some(NOW),
+            lists_every_limit: true,
             source: Source::Live,
             windows: kinds
                 .iter()

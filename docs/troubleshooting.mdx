@@ -27,6 +27,24 @@ For every check, see [Maintenance commands](/reference/maintenance-commands#doct
 
 To fix it, see [Sign in to an account again](/guides/sign-in-again). To prevent it, see [Keep parked logins alive](/guides/renewal).
 
+## An account reads `login replaced outside Pitboard`
+
+`pitboard status` shows `login replaced outside Pitboard · pitboard enroll work --sign-in` beside `work`, and each read warns with `login_replaced`. The app posts **A login was replaced outside Pitboard**.
+
+A sign-in outside Pitboard, such as `/login` in Claude Code or `codex login`, wrote another login over the one `work` had in use. Pitboard parks the login in use only when it switches away from it, so it held no copy of that one, and nothing brings it back. The warning names whose login the tool has stored in its place. `pitboard log` records when Pitboard found it, with the verb `in-use`.
+
+To use `work` again, sign in to it: see [Sign in to an account again](/guides/sign-in-again). The warning stops once you do, or once you forget `work`. **Add Account** in the app and `pitboard enroll <label> --sign-in` sign in to another account without touching the login in use.
+
+## Claude Code shows another account than Pitboard
+
+`/status` in Claude Code names one account, and Pitboard shows another in use. `pitboard status` warns with `config_names_another`, or with `in_use_unconfirmed` where it could not ask Anthropic, and `pitboard doctor` warns on its `in use` line.
+
+`/status` shows the account Claude Code's config names. As read in Claude Code 2.1.294, a sign-in writes that account. A switch drops the time Claude Code last fetched its profile, so the first Claude Code process to start after it writes the account of the login it started with. Where that is another login, such as one over SSH that signs in with `~/.claude/.credentials.json`, the config names another account. The account Pitboard shows is the one Anthropic named for the login Claude Code has stored, which every new session uses.
+
+With `in_use_unconfirmed`, Pitboard has not asked Anthropic since the config changed, and the change may be a sign-in. Run `pitboard status` to ask. If a sign-in replaced the only login of the account in use, that account then reads `login replaced outside Pitboard`, as [An account reads `login replaced outside Pitboard`](#an-account-reads-login-replaced-outside-pitboard) says.
+
+With `config_names_another`, the login stored is still the one Pitboard shows. `/usage` and every request use the login a session holds, whatever the config names. To have `/status` name the account in use, run `pitboard use` with it, or click **Update Claude Code's Config** on the app's notice. It writes that account into the config and moves no login. A Claude Code process that starts on another login, such as one over SSH, can write its own account there again.
+
 ## Pitboard cannot confirm which account is signed in
 
 If the message says `Pitboard could not confirm`, check the connection and run the command again.
@@ -45,9 +63,21 @@ warning: ANTHROPIC_API_KEY in the environment is set, so Claude Code signs in wi
 
 Unset or remove what it names, then restart Claude Code.
 
-If the warning says Claude Code's config could not be updated, the switch worked, but the old name may show until the next switch.
+If the warning says Claude Code's config could not be updated, the switch worked, but the old name may show. Run `pitboard use` with the account switched to once the warning's cause is fixed: it writes that account into the config.
 
 A session started over SSH, or one where the keychain is locked, does not follow a switch. See [Claude Code over SSH uses another account](#claude-code-over-ssh-uses-another-account).
+
+If the switch said that open sessions keep their account until their login is next renewed, `~/.claude/.credentials.json` is behind the keychain. Each session follows when it next renews its login, or when you start it again. To have sessions follow within 33 seconds again, put the file away with `pitboard stow`, as [Claude Code over SSH uses another account](#claude-code-over-ssh-uses-another-account) says.
+
+If `/status` names the account you switched to and `/usage` shows the previous account's limits, see [`/usage` shows the previous account after a switch](#/usage-shows-the-previous-account-after-a-switch).
+
+## `/usage` shows the previous account after a switch
+
+After a switch, `/status` in an open Claude Code session names the account you switched to, and `/usage` shows the limits of the account you left.
+
+The two read different things. As read in Claude Code 2.1.294, `/status` shows the account Claude Code's config names, and a session reads the config again within about a second. The switch writes the account it puts in use there. `/usage` shows the session's last usage reading, then asks Anthropic with the login the session holds.
+
+A session holds the previous login until it follows the switch: within about 33 seconds, or, while `~/.claude/.credentials.json` is behind the keychain, when it next renews its login. Until then its requests go with the previous account too, whatever `/status` says. `pitboard use` with the account you switched to changes nothing here: the config already names it. Start the session again to have it take the login in use at once.
 
 ## A running codex still uses the old account
 
@@ -86,20 +116,24 @@ As read in Claude Code 2.1.294, a session keeps the login it last read while the
 
 ## Claude Code over SSH uses another account
 
-A Claude Code session started over SSH can use another account than the one Pitboard shows, and stay on it after every switch. `pitboard doctor` warns with `fallback login`, and each change to a Claude Code account warns with `fallback_login`.
+A Claude Code session started over SSH can use another account than the one Pitboard shows, and stay on it after every switch. `pitboard doctor` warns with `fallback login`, and each `pitboard status` without `--offline`, each read in the app and each change warns with `fallback_login`.
 
 The cause is a `/login` run where the keychain was locked. As read in Claude Code 2.1.294, it writes the login to `~/.claude/.credentials.json` and leaves the keychain's in place. Claude Code deletes that file only when it writes the keychain while the keychain is empty, so the file outlives every switch. A session that cannot read the keychain signs in with the file.
+
+While the file is there, sessions that read the keychain also stop following a switch within 33 seconds. Each keeps its account until its login is next renewed, or until it is started again. A file with no login in it, such as `{}`, does the same, and `pitboard doctor` says `no login in it`. So does a file Pitboard cannot read, and `pitboard doctor` says why.
 
 To have one login everywhere:
 
 <Steps>
-  <Step title="Delete the file">
-    Run `rm ~/.claude/.credentials.json`, or the path the warning names. A session that was using it is signed out.
+  <Step title="Put the file away">
+    In a terminal where the keychain is unlocked, such as one in your desktop session, run `pitboard stow`. Or in the app click **Put Away** on the notice **A login file is left behind the keychain**. Pitboard says whose login the file holds and asks first. It keeps that login for its account where it holds none it can switch to, then deletes the file. A session that was signing in with the file is signed out. Open sessions that read the keychain follow the next switch within 33 seconds. See [`stow`](/reference/account-commands#stow).
   </Step>
   <Step title="Reach the keychain">
     Run `security unlock-keychain ~/Library/Keychains/login.keychain-db` in the same session, or start the session from a desktop terminal. It then uses the account Pitboard switched to.
   </Step>
 </Steps>
+
+Where the file holds a login of an account Pitboard has not enrolled, `stow` names that account by its email and organisation, and deletes nothing. Enrol it with `pitboard enroll <label> --sign-in`, then run `pitboard stow` again. A file Pitboard cannot read it cannot put away either: make it readable to you, or delete it with `rm`, which takes whatever it holds with it.
 
 Do not run `/login` while the keychain is locked: it leaves the file again.
 

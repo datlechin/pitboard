@@ -37,7 +37,9 @@ pages load, as a browser would.
   - `provider/`: one module per tool, `claude` and `codex`, each implementing the
     `Provider` trait in `provider/mod.rs`. The trait covers where the tool keeps its login,
     whose it is, how to renew it, what it has left and what its sign-in prints, which
-    `provider::sign_in_view` reads for both apps. Each module's `assumptions.rs` is
+    `provider::sign_in_view` reads for both apps, and when a session already running takes
+    a switch made now (`Adoption`), which for Claude Code turns on whether a file sits behind
+    the keychain (`behind`). Each module's `assumptions.rs` is
     that tool's register of facts, with a table saying what each fact is on macOS, Linux
     and Windows. `provider/codex/holders.rs` names where a running
     `codex` can be, and what makes each take a switch. `provider/codex/layers.rs` reads
@@ -91,27 +93,95 @@ pages load, as a browser would.
     file, the vault of files and the stores in memory the tests use. On macOS, parked
     logins are keychain items. On Linux, they are files in the vault.
   - `switch/`: every change to Pitboard's index (switching, by hand or by itself in
-    `auto.rs`, enrolling, adopting, renaming, forgetting, renewing, repairing, abandoning
-    and uninstalling), and the journal that
-    finishes an interrupted switch. With `test-support`, a context may hold a
-    `SignInScript`, which plays a tool's own sign-in in place of its program, for a test or
-    a fixture that may start none; everything around it is the core's own.
+    `auto.rs`, enrolling, adopting, renaming, forgetting, renewing, repairing, abandoning,
+    uninstalling, and putting away a login Claude Code left in a file behind the keychain in
+    `stow.rs`), and the journal that finishes an interrupted switch. `identify.rs`
+    says whose login each tool has stored: the record's owner where the login's refresh
+    token has the fingerprint the record was made for, which asks nobody, and the tool's
+    service otherwise (`whose`). A store with no login is recorded as holding none only
+    where the tool's own record names nobody either; where it names somebody, the login is
+    somewhere Pitboard does not look, and nothing is recorded. A change records what it
+    finds under the lock it holds (`now`, or `look` then `record` where enrolling the
+    account found names it first, or `look` then `keep` where the automatic switch has its
+    own to do when it cannot be told); a read records it afterwards (`record_read`), only
+    where it changed, only where it takes the lock without waiting, never while a switch
+    waits to be finished, and only where the tool's own record names what it named and the
+    store holds the login it asked about, both read again under the lock. Each writes an
+    `in-use` line in the activity log for what changed outside Pitboard. With
+    `test-support`, a context may hold a `SignInScript`, which plays a tool's own sign-in in
+    place of its program, for a test or a fixture that may start none; everything around
+    it is the core's own.
   - `state.rs`: `state.json`, the index of accounts and where each one's login is parked.
+  - `in_use.rs`: whose login each tool has stored, as its service last said, with the
+    fingerprint of that login and the account the tool's own record named then. It is
+    `state.json`'s `in_use`, written through `State::identified` by a switch, first for the
+    login it finds in the store and then for the one it installs, by enrolling the account
+    signed in, by a sign-in put in use, by finishing an interrupted switch, and by a read
+    that finds it changed. `known` is what every reader that does not read the store takes
+    as the account in use: `status --offline`, the automatic switch's look, `doctor`'s
+    accounts. It is the record, in doubt where there is none, where it came forward from
+    schema 5, or where Claude Code's config names another account than when the record was
+    checked against the store; for Codex, the login's own claims, and the record where the
+    login cannot be read. `Provider::own_record` reads the config for that doubt and for
+    the words that say it, never for whose a login is.
   - `autoswitch.rs`: switching Claude Code by itself, for a front end somebody asked to: the
     app with its setting on, or `pitboard watch`. `Threshold` is the share a limit switches
-    at, 50 to 99, 95 unless chosen. `decide` is the rule, from the readings Pitboard already
-    holds: which limit of the account in use reached the share, and which switchable account
-    has room under it in every limit it reports. `Ledger` is `autoswitch.json`, what was
-    tried for each limit of each account until that limit resets: the attempts, how many in
-    a row failed for a reason waiting may mend, when the last began, whether one switched
-    and the accounts passed over, written only under `state.lock`. `look` decides from files
-    alone, and says why where Pitboard will not switch. `switch/auto.rs` decides again under
-    the lock and switches only for the same plan, through `switch_held` given the account it
-    expects to leave, which refuses with `switch_overtaken`, changing nothing, once that
-    account is no longer the one signed in; the switch takes that as nothing to do.
-    `service::Pitboard::auto_switch` joins the two, and the audit log records a switch, or
-    the error that stopped one, as `auto-switch`.
-  - `lock.rs`: the lock Claude Code takes around credential writes, taken the same way.
+    at, 50 to 99, 95 unless chosen. `decide` is the rule, from the readings Anthropic gave
+    that Pitboard already holds, `NoReading` where it gave none of the account in use. Every
+    limit of that account at the share is judged, the furthest past it first: one already
+    switched away from, or tried `ATTEMPTS` times, before it resets leaves the next to be
+    judged, and where none is left it says why of the furthest at once. Where one is left,
+    the account put in use within `SETTLING_SECONDS` holds it back, and so does an attempt
+    at any limit that came to nothing, until its wait is over (`Waiting`); either is said of
+    the first limit left, the one tried next. For the first limit left, it picks a switchable account with room under it in every limit it has, by
+    `usage::room`, which the app's advice asks at 100. A limit a reading that lists every
+    limit leaves out is one the account does not have. Any other reading leaves no room
+    unless it gives every limit of the account in use, except a model's limit other than the
+    one at the share where it gives the five-hour and weekly limits. `usage::roomiest` picks
+    the account with the most room in that limit, then the least full in its others. Below
+    the share it is `Below`, with the fullest limit still running. A limit at the share not
+    switched away from is a `Hold` with its `Skip`: no room, naming the accounts it could go
+    to that Anthropic gave no reading of, the limit already left, the attempts spent, the
+    account settling, or Claude Code signed in another way. `judge` turns a decision into
+    what a front end is told: `Auto::Watching` carries the account, its fullest limit, when
+    that was read and until when its budget holds Anthropic's next answer off
+    (`budget::held_until`). Each limit a decision gives carries the reset the ledger first
+    kept its window under, where it keeps one, which a later answer may give a second apart,
+    so a front end that tells one window from the next by it says once what was recorded
+    once. `Ledger` is `autoswitch.json`, what was tried and said for each limit of each
+    account until a minute after that limit resets, as late as another answer may give that
+    reset (`usage::may_still_run`), or, with no reset, for a week after anything was last
+    kept of it, as it is read and as it is written: the attempts, how many in a row failed
+    for a reason waiting may mend, when the last began, whether one switched, the accounts
+    passed over, and each `Skip` code said, with when; and `asked`, where whose login Claude
+    Code has stored could not be told, when it was last asked, how many times in a row and
+    why. A record of whose it is made since `asked`, by a read or a switch, ends that row.
+    It is written only under `state.lock`. `look` judges from files alone, with the account
+    in use from `in_use::known`: what stands (`Look::Stands`), or `Look::Act` where a switch
+    may be due, that account is in doubt, or a `Hold` was not said yet in that limit's
+    window. `Blind` is why nothing can be judged at all: a switch waiting to be finished, a
+    custom OAuth endpoint, no login stored, a login of an account nobody enrolled, one
+    nobody could tell whose it is, which `asked` paces as attempts are paced, or no reading
+    Anthropic gave of the account in use. `asked` holds only what every front end would meet
+    alike: a store this process cannot read, such as a keychain locked over SSH, is returned
+    as its error, for its front end to pace by `retry_after`, the wait attempts and `asked`
+    take. A front end decides with nothing written every `DECIDE_EVERY_SECONDS`, 30.
+    `Auto::told_apart` is what every front end that says each outcome once tells one from
+    another by: a `Skip` by the account, the limit, the reset the ledger kept it under and
+    its code (`Skip::told_apart`), a `Blind` by its code and the email, the cause or the
+    account it names, never by when it asks again (`Blind::told_apart`), and a wait by the
+    account and when it ends. Nothing tells a switch apart, nor watching.
+    `switch/auto.rs` tells whose login is stored under the lock, as a switch does, records
+    it, decides once from that, and switches from that same login through
+    `switch::switch_from`, or records the `Hold` once. An attempt that failed is judged
+    again with it counted, and where that leaves no limit to try, its `Hold` is recorded
+    with the failure. `service::Pitboard::auto_look` is the look and `auto_switch` joins
+    the two. The audit log records a switch, or the error that stopped one, as
+    `auto-switch`, of `claude` where no account was chosen yet; and as
+    `auto-stay`, a login nobody could tell whose it is, of the account last known in use,
+    once per wait, and each `Hold`, of the account in use, once per limit, reset and code.
+  - `lock.rs`: the locks Claude Code takes around writes and renewals of its login, each
+    taken the same way and kept with Claude Code's own numbers (`Timing`).
   - `context.rs`: what the core takes from its environment, read from a map of variables
     by the same code for every front end, apart from the `PATH` that `host/linux` reads to
     find the program daily renewal runs.
@@ -139,15 +209,52 @@ pages load, as a browser would.
     rate taken across fourteen days of readings in `readings/`, through every reset in
     them; `home::remove_retired` deletes the files that kept, and the folder where nothing
     else is in it.
+  - `usage.rs` and `readings.rs`: an account's usage, and `usage.json`, the one reading of
+    each account that every front end records into and shows. The service's answer about an
+    account founds its reading and replaces what it gives (`usage::answered`), and a share a
+    session moved after the answer was taken stands. Anthropic's answer lists every limit an
+    account has, so where `usage::from_usage_object` read every row of its `limits`, the
+    answer says so (`Snapshot::lists_every_limit`) and a limit it does not give is gone at
+    once. Any other answer leaves a window it does not give standing, in its place, until
+    its reset: one with a row that did not normalise, one in the older named shape, and
+    every one of OpenAI's, which gives two windows, either of them null, with nothing
+    measured to say what a null one is. A Claude Code session's numbers only move a limit
+    an answer gave (`usage::moved`): a higher share in the same window, or the next window
+    once the last has reset. They never add a limit or found a reading, since they do not
+    say whose they are. A reading's `answered_at` is when its service last answered, absent
+    from one an older Pitboard wrote.
   - `status.rs`, `doctor.rs`, `statusline.rs` and `schedule.rs` serve the commands of the
-    same names. `schedule.rs` decides what daily renewal runs and whose it is, and refuses a
-    program in the temporary copy macOS runs an app from, by `in_a_temporary_copy`, which an
-    app asks of the command line inside it too; the host's scheduler writes it.
+    same names. A row's numbers in `status.rs` are its service's answer folded into the
+    reading every front end records in `usage.json`, or that reading alone where no answer
+    came, and never a tool's own cache (see [Claude Code](#claude-code)). A read asks first
+    (`ask`), and makes its rows (`report`) once whose each login is has been recorded, so an
+    account whose only login a sign-in outside Pitboard replaced reads `login_replaced` from
+    that read on. The usage of a login nobody could name is not asked, and the account the
+    record names stands in for it. Offline rows (`gather_offline`) take the account in use
+    from `in_use::known`, an account nobody enrolled included, which gets its row as it does
+    online. `Pitboard::standing` says what stands on every read: `login_replaced`,
+    `in_use_unconfirmed` where Claude Code's config has moved since the record was checked
+    and the read could not ask, and `config_names_another` where it names another account
+    than the one in use. `statusline.rs` files what a Claude Code session passed under the
+    account its windows prove: the one account whose reading, as Anthropic last answered
+    for it, holds a window the session passed and does not rule the session out. A reading
+    rules it out with another running window of a limit passed, or by listing every limit
+    its account has and not one passed. It files only what moved since the session's last
+    run, which `sessions.rs` keeps. Numbers that prove no account are shown as the session's
+    and filed nowhere, under the account in use from `in_use::known` marked `?`, or under
+    none where that account's reading rules the session out. A session that passed none
+    shows the account in use, marked while the record is in doubt. Where the record names no
+    enrolled account, both show `unenrolled`, or `?` while the record is in doubt.
+    `schedule.rs` decides what daily renewal runs and whose it is, and refuses a program in
+    the temporary copy macOS runs an app from, by `in_a_temporary_copy`, which an app asks
+    of the command line inside it too; the host's scheduler writes it.
   - `words.rs`: the sentences and column words Pitboard says in more than one place, each
     a function of typed values: spans of time, a limit's names, when it resets, its pace and
-    when it runs out, a parked login's life, a renewal run and doctor's summary. It also holds
-    `usage_level`, the steps at which a limit's colour changes. A thing said both in a
-    column and in a sentence has a function for each form. The command line calls these
+    when it runs out, a parked login's life, a renewal run, doctor's summary, and what is
+    left in a file behind the keychain and what putting it away does and did (`left_lines`,
+    `stowed_lines`, `nothing_left`), which `pitboard stow` and the app's sheet both say. It
+    also holds `usage_level`, the steps at which a limit's colour changes. A thing said both
+    in a column and in a sentence has a function for each form. The command line calls these
     functions directly, and so does `pitboard-ffi`'s `present/` as it makes the snapshot,
     which carries what an app shows of them. The bindings export none of them. Clock times
     are not in it.
@@ -161,8 +268,18 @@ pages load, as a browser would.
   300 seconds, as the app does, looks every 2 seconds at when the index and the readings
   were last written, and decides again whenever either changed and at least every 30
   seconds. It says every switch, and each thing that stopped one once until the next
-  switch, and ends on a refusal watching cannot mend: running elevated, a Windows build or
-  Pitboard's own files unusable.
+  switch, told apart as the core tells it (`Auto::told_apart`): a reason not to switch away
+  from a limit once for that limit and its reset, a reason it cannot judge once for what it
+  names, and a wait once for when it ends. An error is said once for its code. It says the
+  account it watches, `idle` with its fullest limit, when that was read and until when
+  Anthropic holds Pitboard off asking again, whenever its last line said something else.
+  Each warning a decision found is said once until the next switch, even one that went away
+  and came back, with that decision's line, which is said again to carry it where it was
+  said before. A refusal is paced as the app paces one: no decision under the lock until
+  `autoswitch::retry_after` of the refusals in a row has passed, only the look meanwhile,
+  and any outcome ends the row, as the look standing on what the core recorded with an
+  attempt that failed, its own wait or why it tries no more, does. It ends on a refusal
+  watching cannot mend: running elevated, a Windows build or Pitboard's own files unusable.
 - `crates/pitboard-ffi`: the core as UniFFI bindings, for the apps: a static library for
   the macOS app, a dynamic one for the Windows app. An app reaches the core through the
   model alone.
@@ -204,12 +321,13 @@ pages load, as a browser would.
   - `model/` is the app model the macOS app shows and the Windows app is to show. An app
     makes a `PitboardModel`, sends it an `Intent` for each thing asked of it, and its
     `ModelListener` is told of each numbered `Snapshot`; its `AppControl` quits and opens
-    other apps, and its `Notifications` posts what has run out. `state.rs` holds what the
-    model knows and decides what follows each message, `advice.rs` which account to offer
-    once the one in use has run out, `preferences.rs` what the app's own preferences are,
-    `machine.rs` what the model knows of this machine rather than its accounts, and
-    `windows.rs` the account windows' bookkeeping; `lanes.rs` runs what it decides, on a
-    lane of reads, which reads the schedule, doctor's checks and the log too, a lane of
+    other apps, and its `Notifications` posts what has run out and a login replaced outside
+    Pitboard. `state.rs` holds what the model knows and decides what follows each message,
+    `advice.rs` which account to offer once the one in use has run out, `preferences.rs`
+    what the app's own preferences are, `machine.rs` what the model knows of this machine
+    rather than its accounts, and `windows.rs` the account windows' bookkeeping; `lanes.rs`
+    runs what it decides, on a lane of reads, which reads the schedule, doctor's checks and
+    the log too and asks the core's look whether to switch Claude Code by itself, a lane of
     changes, one at a time, which also repairs and changes the schedule and renews, a lane
     that lists processes and asks the app's `AppControl` about other apps, a lane that asks
     what is installed and looks for the `pitboard` a terminal runs, a thread of its own for
@@ -221,17 +339,21 @@ pages load, as a browser would.
     made elsewhere, asks which tools are installed, switches, quits the app holding a tool's
     login when the person lets it, gives up on a stuck switch, keeps what each tool's last
     switch said, runs each tool's own sign-in, enrols the login signed in now, renames and
-    forgets, keeps the sheet over the main window, says which account to switch to once the
-    one in use has run out, notified once for each reset, keeps the app's own preferences,
-    and keeps the daily renewal schedule, renews now, makes doctor's checks, reads the
-    activity log and finds the `pitboard` a terminal runs. It keeps the account windows'
-    books too: which store is whose and each window's last page, which windows close and
-    which stores go after a read, the link waiting for an account, with the wait before it
-    can be opened, and the downloads. Its tests are files of their own there:
-    `reading.rs`, `switching.rs`, `signing.rs`, `changing.rs`, `advising.rs`, `keeping.rs`,
-    `maintaining.rs`, `presenting.rs`, `windowing.rs` and `cadence.rs` drive the state by
-    hand, `lanes.rs` has the lanes' own, and `threaded.rs` drives the model through its
-    threads over the real core.
+    forgets, writes the account in use into Claude Code's config, puts away a login left in
+    a file behind the keychain from a sheet that looks first, keeps the sheet over the
+    main window, says which account to switch to once the one in use has run out, notified
+    once for each reset, switches Claude Code by itself with its setting on, asking the
+    core's look after every read and every 30 seconds and saying under the setting what it
+    came to, keeps the app's own preferences, and keeps the daily renewal schedule, renews
+    now, makes doctor's checks, reads the activity log and finds the `pitboard` a terminal
+    runs. It keeps the account windows' books too: which store is whose and each window's
+    last page, which windows close and which stores go after a read, the link waiting for an
+    account, with the wait before it can be opened, and the downloads. Its tests are files
+    of their own there: `reading.rs`, `switching.rs`, `automatic.rs`, `signing.rs`,
+    `changing.rs`, `stowing.rs`, `advising.rs`, `keeping.rs`, `maintaining.rs`,
+    `presenting.rs`, `windowing.rs` and `cadence.rs` drive the state by hand, `lanes.rs`
+    has the lanes' own, and `threaded.rs` drives the model through its threads over the
+    real core.
   - `present/` makes each `Snapshot` from the model's state: `present` takes the state and
     the moment, and builds every sentence and row the menu bar, the menu and the window
     show, so a view decides nothing. `accounts.rs` is the menu bar's words and the
@@ -650,28 +772,69 @@ pages load, as a browser would.
   app may close the question with `Intent::KeepAppOpen` before or after it sends the answer:
   a question closed unanswered is kept until another switch is asked for, and an answer is
   taken once.
-- A switch of Claude Code the app makes by itself, with its setting on, is claimed the same
-  way, with `switching` naming the tool rather than an account, since the core chooses
-  which: the model asks for one after it advises, where a limit of the Claude Code account
-  in use has reached the share, and not while another switch, the question before one or
-  another change of the app's own is under way, nor after a refusal until the app's next
-  read lands. It runs on the lane of changes, behind any switch asked for, and asks nobody
-  about quitting an app, since Claude Code follows a switch by itself. A switch it made is
-  taken as one asked for is, with the read after it, and said in a notification with no
-  button; a reason it did not switch, and a refusal, are said once each until it next
-  switches, and never in an alert, since nobody asked. The setting is kept in `app.json`
-  with the other preferences, and taken only once they are read.
+- With its setting on, the app asks the core's look whether to switch Claude Code by itself
+  after every read, after numbers or a change the poll found, as the setting is turned on or
+  its share changed, and every 30 seconds after the last look ended, the core's
+  `DECIDE_EVERY_SECONDS`, as `pitboard watch` decides. A launch looks first once its first
+  read has landed and the preferences are read, or 30 seconds after the preferences where
+  that read is slower: before it, the readings may be an older Pitboard's, which the look
+  cannot judge, and a reason posted then would be gone seconds later. The look runs on the
+  lane of reads and claims nothing. Only where it says a decision under the core's lock must
+  say is a switch asked for, claimed the same way as one somebody asks for, with `switching`
+  naming the tool rather than an account, since the core chooses which; and not while
+  another switch, the question before one or another change of the app's own is under way.
+  It runs on the lane of changes, behind any switch asked for, and asks nobody about
+  quitting an app, since Claude Code follows a switch by itself. A refusal is the app's to
+  pace, as it is `pitboard watch`'s, since the core records none it raised before deciding:
+  the next is asked for no sooner than the core waits after as many failed attempts in a
+  row, 60 seconds doubling to 15 minutes (`autoswitch::retry_after`), and any outcome, of a
+  look or of a decision, ends the row. A switch it made is taken as one asked for is, with
+  the read after it, and said in a notification with no button; a reason it did not switch
+  away from a limit, once for that limit and its reset, whether the decision gave it or a
+  look stood on one recorded since, a reason it cannot judge, by what it names, each told
+  apart as the core tells it (`Skip::told_apart`, `Blind::told_apart`), and a refusal, are
+  said once each until it next switches, and never in an alert, since nobody asked. What
+  the look or the decision came to last is said under the setting while it is on. Turned
+  off, it says nothing there, and a look or a decision answered since asks for nothing,
+  says nothing and holds nothing back, except a switch, which was made and is said. The
+  setting is kept in `app.json` with the other preferences, and taken only once they are
+  read.
+- The notice that Claude Code's config names another account offers to write the account
+  in use there: `Intent::UpdateConfig`, a change of the app's own like a rename and not a
+  switch, so the row never reads as switching and nothing said about a switch or the
+  account in use goes. The core refuses it, writing nothing, where another account is in
+  use by then, so a button drawn before a switch landed never switches back. What it warned
+  of is said beside the read after it, as a sign-in's is.
+- The notice that a login is left in a file behind the keychain offers to put it away:
+  `Sheet::Stow`, which looks first, on the lane of reads (`Job::LookLeft`), and says whose
+  the login is once that is known, in the words `pitboard stow` asks with, offering **Put
+  Away** only for a login it can put away. `Intent::Stow` puts away the file as that look
+  found it, on the lane of changes, a change of the app's own like a rename: what goes wrong
+  is said in the sheet, which looks again, since what it found is out of date by then, and
+  once it is done the sheet closes, what it did is said until it is dismissed, and the
+  accounts are read again.
+- A login replaced outside Pitboard, which every read says until it is put right
+  (`login_replaced`), is posted once for each account while the reads that ask say it, and
+  again only once one has stopped saying it and a later one says it, or after the app is
+  opened again. What was posted is kept by the account the warning is about (`Warning`'s
+  `account`), since its words name whose login is stored now, which every switch changes,
+  and not across launches.
+- A read that asks nobody, after another front end changed the index or a session recorded
+  numbers, that says Claude Code's config has named another account since Anthropic last
+  named the login stored (`in_use_unconfirmed`) starts one read that asks, which settles
+  whose the login is. Once for each thing it says, so a config that stays as it is costs no
+  more reads.
 - Every other change this app makes to the account index holds it as a switch does, and the
   poll leaves the index alone meanwhile: naming the login signed in now, a sign-in's
-  enrolment, a rename, forgetting, giving up on an interrupted switch and renewing parked
-  logins. Each holds the index inside `State::apply` from the
-  moment its intent is taken, a sign-in's from the moment its thread is told to enrol, until
-  the read after it is over, landed, dropped or failed, or until the change itself has
-  failed, so a change made elsewhere is noticed by the next look once none is under way. A
-  look can find the index as such a change wrote it and land after the change has answered,
-  before the read the change asked for: taken for a change made elsewhere, it dropped that
-  read as one that started before a change, and a look that landed while a rename was made
-  put away what the account's last switch said
+  enrolment, a rename, forgetting, writing the account in use into Claude Code's config,
+  giving up on an interrupted switch and renewing parked logins. Each holds the index inside
+  `State::apply` from the moment its intent is taken, a sign-in's from the moment its thread
+  is told to enrol, until the read after it is over, landed, dropped or failed, or until the
+  change itself has failed, so a change made elsewhere is noticed by the next look once none
+  is under way. A look can find the index as such a change wrote it and land after the
+  change has answered, before the read the change asked for: taken for a change made
+  elsewhere, it dropped that read as one that started before a change, and a look that
+  landed while a rename was made put away what the account's last switch said
   ([A look and the app's own changes](#a-look-and-the-apps-own-changes)).
 - What a tool's last switch said is kept apart from the read's warnings, one per tool, until
   that tool no longer has the account it switched to signed in or the person puts it away:
@@ -815,36 +978,173 @@ pages load, as a browser would.
   Pitboard's parked items. No keychain item is touched through the Security framework. The
   reason is under [macOS](#macos) in Measured facts.
 - Pitboard takes Claude Code's write lock, the same way Claude Code takes it, before writing
-  Claude Code's login. It writes the login where it already lives.
+  Claude Code's login. It writes the login where it already lives. A switch takes Claude
+  Code's refresh lock before that, as a renewal does (the register's `refresh_lock`), and
+  holds it from before it reads the outgoing login for the last time until it has recorded
+  the login installed: a session renewing meanwhile waits for it, so the copy parked for the
+  account switched from is never one a session spent, with its renewal lost at a save that
+  found another login stored. A renewal already under way holds that lock, and a switch
+  waits for it as it waits for the write lock, then stops with `switch_in_progress`.
 - Codex takes no lock on `auth.json`, so a switch reads the file again before replacing
   it. Every switch reads the live login back rather than trusting its own write.
 - Pitboard never answers a failed keychain write by writing Claude Code's plaintext file.
   That demotion is Claude Code's to make.
+- While Claude Code's `.credentials.json` sits behind the keychain, with a login in it,
+  none, or what Pitboard cannot read, a session already running keeps its account after a
+  switch until its login is next renewed. Pitboard tells the file by a look at it, as the
+  session does, not by reading it. A switch, by hand or by itself, says so in place of a
+  number of seconds (`Adoption::AtRenewal`), and every read that reads the keychain and
+  every change warns while the file is there (`fallback_login`). The automatic switch still
+  switches: new sessions take the account switched to at once, and running ones at their
+  next renewal. A read and a switch never touch the file.
+- Only `pitboard stow`, and the app's **Put Away** after its sheet, write or delete
+  `.credentials.json` while the keychain holds the login in use, and only once somebody has
+  confirmed what the file holds. It looks first, taking no lock and writing nothing:
+  `stow::find` reads the file, tells whose its login is by its refresh token's fingerprint
+  where that is the login stored, a park's that reads back, or the record's, and otherwise
+  asks Anthropic with the login's own access token, never with one that has expired; where
+  that names an enrolled account, it tells whose the login stored is as a read does. Whether
+  the file holds a login at all is `claude::live::holds_a_login`, a `claudeAiOauth` with a
+  token in it, which every `fallback_login` warning and doctor tell it by too: a file that
+  is not a JSON object, or holds no token, signs nobody in and is deleted as holding none,
+  and a login with no refresh token whose access token has expired is dead. What the look
+  found is shown with `Left::seen`, a fingerprint of the file's bytes, and `stow` goes ahead
+  only while the file still holds those bytes, read again under `state.lock`, again under
+  Claude Code's refresh lock (the register's `refresh_lock`), and again as the file goes.
+  The refresh lock is held from that reading until the file is gone, taken as Claude Code
+  takes it, `.oauth_refresh.lock` and then the legacy `<storage dir>.lock` with its 60
+  second staleness: a session renewing a login takes it before it sends the refresh token,
+  and saves the answer only where the stored login still holds the token it sent, so a
+  renewal under way while the file went would spend the token Pitboard counted on and save
+  nowhere. Claude Code's write lock, which excludes sign-ins but not that renewal, is taken
+  after it, as Claude Code takes them, around the renewed login's write and the file's
+  deletion only, so no network round trip holds up Claude Code's writes; a `/logout` that
+  gave up waiting writes with no lock, so the file is read again under it. Additive before
+  destructive: the file goes only once its login is parked for its account, or is shown to
+  be kept already (the very login stored, or a park's that reads back), a second sign-in of
+  the account in use, whose own login the keychain holds, or another login of an account
+  holding a park it can be switched to, or dead, with Anthropic refusing its refresh token.
+  A park that copies the file's login is written down as one, in `state.json`'s `from_file`,
+  before the copy is written and until the file has gone. A run that stopped between parking
+  the login and deleting the file leaves it in both, and a session that signs in with the
+  file can renew it there, which spends the copy, and nothing local can tell that it did. So
+  such a copy is never kept in place of what the file holds by then, which is parked in its
+  place; any other park that reads back and has not expired is kept, whichever login is the
+  newer. Where the file goes because of the login stored, the very login stored or a second
+  sign-in, that login is read again as the file goes, and one a sign-in replaced meanwhile
+  keeps the file (`stored_login_changed`). A login whose access token has expired is renewed
+  as a park is and written back into the file before anything else, so the token the
+  exchange rotates is on disk at once. What could refuse that write is asked before the
+  refresh token is sent: Claude Code's write lock is taken once and the file read again
+  under it, so a writer in the way stops it with nothing changed. Once Anthropic has
+  answered, that lock is asked for again for 30 seconds, twice its staleness, and the login
+  is then saved without it, as Claude Code writes on once its own lock is lost. The answer
+  is saved as Claude Code saves a renewal (`refresh_lock`): read from the file itself, not
+  through the keychain in front of it, and written over the login the file holds by then
+  where that still has the refresh token sent, with the file's other keys as they are by
+  then. A login of an account nobody enrolled is refused, named by its email and
+  organisation, without asking whose the login stored is, and nothing is deleted; the
+  command line refuses it from the look, asking and trying nothing. Its other keys, such as
+  `mcpOAuth`, are not Pitboard's to move: they go with the file, by name. Every error it
+  stops with says how far it went (`Error::StowStopped`, with the code, cause and exit
+  status of what stopped it): nothing changed, the login renewed and written back, renewed
+  and not written back, which leaves it spent, or parked, which stays. A run that stops
+  anywhere leaves the login in the file, in a park, or in both, but for the moment between
+  Anthropic answering a renewal and the answer reaching the file, which every renewal has: a
+  run killed then, a sign-in or a `/logout` that replaced the file's login meanwhile, or a
+  file that can no longer be read or written. A session that signed in with the file, as one
+  over SSH does, is signed out once it is gone. The activity log records it as `stow`. On
+  Linux the file is the store, nothing is behind it, and there is nothing to put away.
 - A Codex login is moved, never copied (`ParkSemantics::MoveOnly`). The parked login is
   read back before the incoming login is written. Codex's own sign-in and sign-out revoke
   the stored refresh token, so two usable copies of one login must never be at rest.
-- No login moves until Pitboard knows whose it is. A Claude Code login's account is asked of
-  Anthropic; a Codex login's is read from its ID token.
+- No login moves until Pitboard knows whose it is: asked of its service, which for a Codex
+  login is its ID token, or known by its refresh token's fingerprint from an earlier answer
+  about that very login. A login with no refresh token has no fingerprint and is always
+  asked about.
+- Who is in use is one record per tool, `state.json`'s `in_use`, written under `state.lock`
+  only where a service has just answered for that login or a fingerprint ties it to an
+  earlier answer. Every reader that does not read the store takes it from there, and
+  `forget` asks as a switch does. Otherwise Claude Code's config is a sign that something
+  signed in, and the words of a warning, never whose a login is: a Claude Code process
+  started or signed in on another login can rewrite it with its own account.
+  Of Pitboard, only a switch writes it, and `use` of the account already in use where it
+  names another; the app's button for that is `use` refused where another account is in
+  use by then. Each records `named` once the write lands, and keeps what the config named
+  when the store was read where it fails, so every read says the config names another
+  account. A read never writes it: a process starting on another login writes its own
+  account back. A read records nothing for a tool whose config names another account than
+  when the read began, so it never files what it saw over what a change wrote since.
 - Pitboard never renews the login in use. That is the tool's own job, and a second renewer
   would break it.
 - Nothing outside `pitboard-core` writes Pitboard's index. Every change goes through
   `switch`, which records what it is about to do first and finishes an interrupted change
   before starting another.
+- An answer from Anthropic that Pitboard read whole replaces a Claude Code account's
+  reading, and a session only moves that reading, within the limits the answer gave. So
+  numbers filed under the wrong account go at that account's next answer.
+- Pitboard files usage only under the account it is proven to be of: an answer for that
+  account's own login, or a session's numbers whose windows that account's answered reading
+  holds, where no other account's reading does. That reading holds no other running window
+  of a limit the session passed, and where it lists every limit of its account, it lists
+  each one passed. Never under the account Claude Code's config names, nor by the time
+  since a switch: a session goes on with the login it holds for as long as it takes to
+  follow one. Windows are told apart by their resets, to the minute. So a session in a
+  window its account's reading does not hold yet can be filed under another account whose
+  window resets within a minute of it, for as long as both windows run: each answer for
+  that account puts its reading right only until the session's next response. A weekly
+  window passed with it tells the two apart where that account's reading holds another
+  running weekly window for all models, or lists every limit and none such. A session that
+  passes the five-hour limit alone tells nothing apart.
 - Pitboard switches by itself only for a front end somebody asked to: the app with its
   setting on, or `pitboard watch` running. It never switches Codex by itself, since a
   running `codex` never follows a switch. The status line and the daily renewal schedule
   never switch, and an automatic switch never quits an app.
-- An automatic switch is decided twice. `autoswitch::look` decides from files alone: it
-  takes no lock, sends no request, reads no keychain and records nothing, so a look that
-  finds nothing to do costs nobody anything. `switch/auto.rs` decides again under
-  `state.lock`, from the files as they are then, and switches only for the same plan and
-  only away from the account still signed in. So the app, `pitboard watch` and a person's
-  own `pitboard use` never make two switches from one reading. The attempt is written to
-  `autoswitch.json` before anything moves, so a switch killed midway still counts against
-  that limit's attempts. One that failed for a reason trying again may mend, Anthropic out
-  of reach or Claude Code writing its login, is taken back out of them, so an outage never
-  uses them up. The next try waits a minute, then twice as long after each such failure in
-  a row, up to 15 minutes.
+- An automatic switch is decided once, under `state.lock`, from one telling of whose login
+  Claude Code has stored, and made from that same login, so nothing comes between the
+  decision and the switch. `autoswitch::look` comes first, from files alone: it takes no
+  lock, sends no request, reads no keychain and records nothing, so a look that finds
+  nothing to do costs nobody anything. It goes on to the lock only where a switch may be
+  due, the record of whose login is stored is in doubt, a reason not to switch was not
+  recorded yet, or another run is in the middle of a switch. A switch's record,
+  `journal.json`, is of one interrupted (`switch_interrupted`) only while no run holds
+  `state.lock`. So where the record is there, the look asks whether the lock is held, and
+  still waits for nobody (`switch::unfinished`): it opens the lock's file to read, never
+  making it, asks for the lock shared without waiting, and lets go at once. Held, the
+  switch is that run's, and the decision waits for the lock and judges what that run
+  leaves. Under the lock, `switch/auto.rs` tells whose it is as a switch does, by its
+  fingerprint or by asking Anthropic, records it, and decides from that and the files as
+  they are then. So the app, `pitboard watch` and a person's own `pitboard use` never make
+  two switches from one reading, and a sign-in outside Pitboard is judged as the account it
+  signed in. Where whose login is stored cannot be told, nothing is judged from the record,
+  which may be another account's: that is recorded once, and asked again a minute later,
+  then twice as long after each such failure in a row, up to 15 minutes. A record of whose
+  it is made since, by a read or a switch, ends both the wait and the row. Only what every
+  front end would meet alike is waited on so: a store one process cannot read, such as a
+  keychain locked over SSH, is that front end's refusal, and holds back no other. The
+  attempt is written to `autoswitch.json` once the switch is decided and before anything
+  moves, so a switch killed midway still counts against that limit's attempts. One that
+  failed for a reason trying again may mend, Anthropic out of reach or Claude Code writing
+  its login, is taken back out of them, so an outage never uses them up. The next try waits
+  as long, for every limit of the account, since what failed was the moment. One refused
+  over the account switched to passes that account over for every limit of the account in
+  use until the limit it was refused for resets; any other refusal counts, a login too
+  large to write among them, which is about the machine and not the account.
+- The automatic switch judges only a reading Anthropic gave for the account's own login, of
+  the account in use and of each it could go to, and judges every limit at the share: one
+  already switched away from, or tried three times, before it resets never hides another.
+  Where none is left to try, that is said at once, never as a wait or the account settling,
+  and recorded with the attempt that failed and left none, so a front end that waits after
+  that failure finds it standing. A wait or the account settling is said of the limit tried
+  next. Each reason it does not switch away from a limit at the share is said and recorded
+  once for the account, the limit, its reset and the reason: under the lock, in
+  `autoswitch.json` and as `auto-stay`. The look after that stands on the record and takes
+  no lock. A front end is told the reset the reason was recorded under, and says it once
+  for the same four. What is recorded of a window is kept until a minute past its reset, as
+  late as an answer may give it, so an answer a second later neither forgets a limit
+  already left nor says a reason again. What tells one reason, or one wait, from another
+  is the core's one rule, `Auto::told_apart`, and every front end says by it, building no
+  key of its own, so the app and `pitboard watch` never tell them apart differently.
 - Additive writes become durable before destructive ones. A run that dies midway leaves a
   spare copy of a login, never a missing one.
 - The `--json` contract changes only on purpose. A change to a snapshot is a change to the
@@ -879,8 +1179,8 @@ pages load, as a browser would.
 
 ## The state file
 
-`~/.pitboard/state.json` is Pitboard's index: which accounts it knows, and where each one's
-login is parked. It carries a `schema` number.
+`~/.pitboard/state.json` is Pitboard's index: which accounts it knows, where each one's login
+is parked, and whose login each tool has stored. It carries a `schema` number.
 
 The app and the command line inside it update together. A command line installed another
 way updates by its own route. So on one machine, an older Pitboard can meet a file a newer
@@ -892,9 +1192,9 @@ it, so a file two versions behind comes forward in one read.
 Reading backwards is not possible. The older Pitboard refuses the file and says to update
 it. A bump needs a test that loads a file the previous version wrote.
 
-Schema 4 records each account's tool, and which account is signed in for each tool. A
-schema 3 file is brought forward on its first read, with no keychain item or vault file
-touched.
+Schema 4 records each account's tool, and for each tool the account Pitboard last switched
+to. A schema 3 file is brought forward on its first read, with no keychain item or vault
+file touched.
 
 Schema 5 gives each account an `id`, set at enrolment and never changed. Its parked logins,
 readings, usage history, budget and windows are filed under it. A login is matched to its
@@ -902,6 +1202,35 @@ account by its tool's identity, which for Claude Code is the account and the org
 together (`Account::owned_by`), so one person's two organisations are two accounts. An
 account brought forward from schema 4 keeps its account uuid as its `id`, and nothing filed
 under it moves.
+
+Schema 6 records whose login each tool has stored, as its service last said (`in_use`), in
+place of the account Pitboard last switched to (`active`). A tool's record holds the owner the
+service named, the fingerprint of the login it named it for, when, and the account the tool's
+own record named then. A switch first records the login it finds in the store, then the one
+it installs with what the tool's own record named, then, once it has written the incoming
+account there, that it names that one. Enrolling the account signed in, a sign-in put in use
+and finishing an interrupted switch record theirs, and a read records what it finds where
+that changed. Each goes through `State::identified`. Where the owner changes and the account
+before it has nothing parked and no other slot's record names it, that account's only login
+is gone, and the account says when (`replaced_at`) until it holds a parked login or is in
+use again: its row reads `login_replaced`, and every read warns with `login_replaced`.
+Adopting a directory from another computer clears it, with the records, since both were of
+that computer's stores.
+
+Each `CLAUDE_CONFIG_DIR` or `CODEX_HOME` names a store of its own, its credential slot, so a
+tool has a record for each slot it was read under. `in_use` holds the one of the slot `slot`
+names; the others wait in `other_slots`, by slot, and `load` puts the slot it reads in place
+of the one `slot` names. A read records what it finds, so two front ends under two slots
+take turns writing the file, and a record either dropped would leave the next read under the
+other nothing to tell a sign-in outside Pitboard by. An account another slot's record names
+still has a login stored there, so a sign-in that replaces its login in one slot leaves it
+that one, and nothing says it was replaced.
+
+A schema 5 file comes forward with each tool's `active` label as that account's record, with
+no login and `known_at` 0: nothing established which login the store held. A label naming no
+account names nobody. Schema 6 is a bump rather than a field beside `active`, so an older
+app or `pitboard watch` running beside a newer one refuses the file and says to update, and
+does not go on deciding who is in use from Claude Code's config.
 
 A file naming a tool this build does not know is reported as written by a newer Pitboard,
 not as corrupt. The advice for a corrupt file is to delete it, and following that here would
@@ -967,6 +1296,18 @@ Windows build was run:
   other seven wait on the Windows work.
 - The same run read the macOS and Linux builds of both versions, and every fact read there
   still holds. Claude Code 2.1.110 and Codex 0.99.0 still go red.
+
+On 8 and 9 October 2026 Claude Code 2.1.294 was read again: its macOS build on the 8th and
+the 9th, and its `linux-x64`, `win32-x64` and `win32-arm64` builds on the 9th, as bytes on a
+Mac, and none was run. All four are built from commit 8f033c6. For each fact read from them,
+the code it names was compared with the macOS build's token by token, minified names apart,
+and is the same in all four: `usage_cache_stamp_is_the_configs`,
+`status_reads_the_config_usage_the_token`, `config_identity_is_the_last_writers`,
+`status_line_input_names_no_account` and `fallback_file_pins_session_login`, read in the
+macOS build on the 8th, and `refresh_lock`, read in all four on the 9th. The fallback file's
+fact is read on macOS alone: on Linux the file is Claude Code's only store, and on Windows
+it is too unless Credential Manager is turned on, which W22 reads. The checker finds every
+fact each build was read for.
 
 `.github/workflows/conformance.yml` checks the newest builds of each tool against its
 register on Mondays and Thursdays, or a version given by hand. It reads four builds of each
@@ -1396,7 +1737,18 @@ runtime Claude Code ships in. The one real change, in 2.1.281, is how a locked k
 treated, and only the macOS build shows it. The run reads both builds since.
 
 - A running session serves its login from a 30 second cache, so it picks up a switch within
-  about 33 seconds.
+  about 33 seconds, where no `.credentials.json` sits behind the keychain.
+- Read on 8 October 2026 from the macOS build of 2.1.294, and on 9 October from its Linux
+  and Windows builds, whose code here is the same, and not measured against a running
+  session: before each request a session looks at `.credentials.json`, by its modification
+  time alone. Where it is not there, or the look fails, the session reads the keychain
+  through its 30 second cache. Where it is there, whatever it holds, `{}` included, and
+  whether or not it can be read, the session keeps the login it holds while that login is
+  usable. It reads again when the file's modification time changes, after a 401, at its own
+  sign-in, and 5 minutes before its login expires, when it takes the store's login where it
+  differs. So while the file sits behind the keychain, a session already running keeps its
+  account after a switch until its login is next renewed or it is started again. On Linux
+  the file is the store, and a switch's write changes its modification time.
 - Every write of the login takes proper-lockfile's directory lock at
   `<storage dir>/.storage-write`: stale after 15000 ms, ten retries, 100 ms to 1000 ms of
   backoff. `lock.rs` carries the same numbers.
@@ -1404,6 +1756,16 @@ treated, and only the macOS build shows it. The run reads both builds since.
   and abandons the write when that read fails. A stale account cannot be written back. From
   2.1.281, a locked keychain counts as a failed read here once the process has seen its
   item; before, it read as empty.
+- A renewal of the login takes another lock first, proper-lockfile's directory lock at
+  `<storage dir>/.oauth_refresh.lock`, stale after 60000 ms and touched every 5000 ms, then
+  the legacy `<storage dir, links resolved>.lock` the same way, going without the second
+  where it cannot be made. Under them it reads the login again and sends the refresh token,
+  and takes the write lock only to save the answer, where the login stored still holds the
+  token it sent; otherwise it saves nothing. So the write lock does not keep a renewal from
+  spending a refresh token, and the refresh lock does. A holder is taken over before the
+  lock is stale only where its owner record, `.oauth_refresh.lock.owner`, proves it gone,
+  and Pitboard writes none. Read on 9 October 2026 in the macOS, Linux and Windows builds of
+  2.1.294, whose code here is the same.
 - Claude Code treats its own lock going missing as a warning and keeps writing. Pitboard
   cannot expect the other side to stop.
 - A write can be marked as already locked without the lock being taken. `/logout` does this
@@ -1437,8 +1799,9 @@ treated, and only the macOS build shows it. The run reads both builds since.
 - A keychain write that lands deletes `.credentials.json` only when the keychain held
   nothing before it. Once both hold a login, the file's outlives every token refresh, every
   sign-in from a desktop session and every switch, and a session that cannot read the
-  keychain signs in with it. `doctor` names it as `fallback_login`, and every change to a
-  Claude Code account warns while it is there.
+  keychain signs in with it. `doctor` names it as `fallback_login`, and every read that
+  reads the keychain and every change warns while it is there, each naming `pitboard stow`,
+  the one thing of Pitboard's that deletes it.
 - While the keychain is locked, a session keeps serving the login it last read, cached again
   every 30 seconds, and follows no switch. One that has read none reads the keychain as
   empty and signs in with the file, or is signed out.
@@ -1461,9 +1824,17 @@ treated, and only the macOS build shows it. The run reads both builds since.
   document. On one real account, measured on 22 September 2026, the slice was 524 bytes
   against 506 for the OAuth block alone. An account holding a device token has not been
   measured.
-- Claude Code's config file can be a day behind the login it describes, so Pitboard asks
-  Anthropic whose a login is. This was written down on 21 September 2026, with no build
-  named.
+- Claude Code's config can name another account than the login stored. Read from 2.1.294 in
+  its macOS build on 8 October 2026 and in its Linux x64, Windows x64 and Windows arm64
+  builds on 9 October, the same code in all four: a sign-in writes `oauthAccount`, and so
+  does a process start where `profileFetchedAt` is missing, over 24 hours old or missing a
+  profile field, from that process's own login. Every start signed in to claude.ai also
+  writes the email and organisation Anthropic's bootstrap gives its login, where that names
+  the config's account or none, so a process on another organisation of the same person
+  moves it too. A token refresh writes none of them. On 8 October one machine's config named
+  another account than the keychain's login for three hours. So Pitboard asks Anthropic
+  whose a login is, records the answer (`in_use`), and takes a change of the config since as
+  a sign that something signed in (the register's `config_identity_is_the_last_writers`).
 - On 22 September 2026, the machine measured sat within 0.75 seconds of the `Date` header
   of api.anthropic.com across eight requests. `Date` has a granularity of one second.
 - That spread is inside the noise, so Pitboard keeps no estimate of clock skew. A renewal's
@@ -1513,9 +1884,41 @@ treated, and only the macOS build shows it. The run reads both builds since.
   reads the file and the slot as Claude Code does. The win32-x64 build's JavaScript refuses
   a relative config dir itself in one of its features: "the configuration home
   (CLAUDE_CONFIG_DIR) is not an absolute path".
+- Read on 8 October 2026 from the macOS build of 2.1.294, and on 9 October from its Linux
+  and Windows builds, whose code here is the same: Claude Code fills `cachedUsageUtilization`
+  in its config with the answer to a usage request made with the login its session holds,
+  and stamps it with the `accountUuid` the config names. Nothing compares the two. A session
+  that has not yet taken a switch writes the numbers of the account switched away from under
+  the account switched to. Of five caches captured on one machine on 8 October, four held
+  the numbers of another login than the account they named, one with no switch near it. So
+  Pitboard takes no usage from the cache. Taken as the reading of the account in use, it
+  showed the previous account's numbers after a switch, and the automatic switch acted on
+  them.
+- Read on the same days from the same four builds, whose code here is the same: `/status`
+  prints the email and organisation of the config's `oauthAccount`, and a running session
+  reads the config again within about a second of a change. `/usage` shows the numbers of
+  the session's last response, or, where it has none, the config's usage cache where its
+  stamp is the config's account and it is under an hour old. It then answers from that
+  cache where the cache is under 60 seconds old and newer than the session's last response,
+  and otherwise asks with the login the session holds. So a session that has not taken a
+  switch names the account switched to in `/status`, while `/usage` and every request go on
+  with the login it holds. What a switch says of running sessions names no account for that
+  reason.
+- Read on the same days from the same four builds, whose code here is the same: the JSON a
+  session passes its status line holds `rate_limits.five_hour` and `seven_day`, each a share
+  used and a reset, taken whole from one response's headers and only for windows whose
+  reset is ahead. It names no account, organisation or email. Only the process's own
+  sign-in or sign-out, the end of a remote attach after one, or a response while it holds no
+  claude.ai login empties it. So a session passes the numbers of the login it holds,
+  whatever the config names, and the status line tells whose they are by their windows (the
+  register's `status_line_input_names_no_account`). The two windows of one run are of one
+  response, so a five-hour window no answer has given yet is taken on the word of the weekly
+  window passed with it.
 
-Not measured. Switching by itself rests on the session cache's 33 seconds. These were not
-measured, and the register cannot hold them, since every fact in it is read from a build:
+Not measured. Switching by itself rests on the session cache's 33 seconds, measured on
+2.1.278, and, while a file sits behind the keychain, on a reading of 2.1.294 that no running
+session has been measured against. These were not measured, and the register cannot hold
+them, since every fact in it is read from a build:
 
 - Whether a request a session has under way at the moment of a switch finishes, on either
   account.
@@ -1524,12 +1927,48 @@ measured, and the register cannot hold them, since every fact in it is read from
   share under 100% so that a session following within the 33 seconds need not meet it,
   and the docs say neither is known.
 - A busy session renewing its login while an automatic switch is under way, against a
-  running build. The write lock and the read again under it (`write_lock`) keep the two
-  apart, as for any switch. `a_login_claude_code_renews_partway_through_is_not_written_over`
-  in `switch/auto.rs` plays it on the stores in memory: the switch stops with
-  `signed_in_account_changed`, nothing is written over the renewed login, the account it
-  would have switched to keeps its parked login, and the next attempt, a minute on,
-  switches.
+  running build. The refresh lock a switch holds (`refresh_lock`) keeps a renewal from
+  starting while the outgoing login is parked, and the read again under the write lock
+  (`write_lock`) finds one that finished before it, as for any switch.
+  `a_session_renewing_the_outgoing_login_during_a_switch_waits_for_it` in `switch/mod.rs`
+  plays the first on the stores in memory, with a session that takes the refresh lock as
+  2.1.294 does. `a_login_claude_code_renews_partway_through_is_not_written_over` in
+  `switch/auto.rs` plays a login that changed under the switch all the same: the switch
+  stops with `signed_in_account_changed`, nothing is written over the renewed login, the
+  account it would have switched to keeps its parked login, and the next attempt, a minute
+  on, switches.
+
+### Anthropic's usage answer
+
+Read on 8 October 2026, on one machine. Claude Code 2.1.294 keeps the `utilization` object
+of its last `GET /api/oauth/usage` in `~/.claude.json`, and five backups of that file held
+one each. Four, each a Team seat's, hold `limits` `session` and one model's `weekly_scoped`,
+and no `weekly_all`. The fifth, an answer from 16:13:36, was noted with `session` alone and
+not read again to say whether that was all it held. Pitboard's own reading of a personal Max
+account that day, taken from Anthropic's answers, holds `session`, `weekly_all` and
+`weekly_scoped`. So an answer lists every limit its account has, and one it leaves out is
+one the account does not have. Anthropic documents none of this, and it was seen on one
+machine on one day.
+
+- `usage::answered` rests on it: an answer whose every row of `limits` was read replaces the
+  reading whole (`Snapshot::lists_every_limit`).
+- `usage::room` rests on it: a limit such a reading leaves out counts as one with none used,
+  so a Team seat is a place to go once a personal account's weekly limit for all models
+  reaches the share, or runs out for the app's advice.
+- The status line rests on it: a session that passes a limit such a reading leaves out is
+  not on that account. What 0.9.0's status line kept in `~/.pitboard/sessions.json` on
+  that machine the same day agrees: the last runs of ten sessions in two Team seats'
+  five-hour windows passed that window alone, and those of four sessions of personal
+  accounts each passed a weekly window. Were a seat's session to pass one, nothing it
+  passed would be filed under the seat.
+- Other readings say nothing of a limit they leave out: one in the older named shape, one
+  with a row that did not normalise, one an older Pitboard wrote, and every one of
+  OpenAI's. Such a reading leaves no room unless it gives every limit of the account in
+  use. It may leave out a model's limit other than the one at the share where it gives the
+  five-hour and weekly limits: the older named shape names no model's, and plans limit
+  models apart.
+- Whether a plan with no limit for a model offers that model at all is not known. Pitboard
+  counts it as room.
 
 ### Codex
 
@@ -2042,6 +2481,11 @@ with Swift 6.4.
 - The 30 seconds an app is given to quit run on `Instant` too, where the Swift model's ran
   on `ContinuousClock`: a machine put to sleep while an app is asked to quit gives it its
   30 seconds of waking time, where the Swift gave it none once the machine woke.
+- The look whether to switch Claude Code by itself every 30 seconds, and the wait after a
+  refused switch, run on `Instant` too, so they count waking time. After a sleep the read
+  that `Intent::Woke` asks for is followed by a look at once where it lands, and one that
+  fails, as before the network is back, leaves the next look to its timer. A refusal's
+  wait goes on where it stopped.
 - On Linux the standard library reads `CLOCK_MONOTONIC`, and on Windows
   `QueryPerformanceCounter`. How either counts a sleep was not read.
 

@@ -6,12 +6,10 @@ expression: "serde_json :: json! ({ \"exit\" : code, \"envelope\" : value })"
   "exit": 0,
   "envelope": {
     "v": 1,
-    "command": "use",
+    "command": "stow",
     "ok": true,
     "data": {
-      "to": "beta",
-      "changed": false,
-      "config_updated": false
+      "stowed": false
     },
     "warnings": [],
     "error": null

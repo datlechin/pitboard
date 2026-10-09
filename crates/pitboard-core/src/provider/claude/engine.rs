@@ -8,9 +8,10 @@
 use super::{configfile, document, live, paths as claude};
 use crate::api::{self, ApiError};
 use crate::context::Context;
+use crate::host::{OS, Os};
 use crate::provider::{
-    Adoption, Credential, Expiry, Identity, Isolation, LiveStore, ParkSemantics, Provider,
-    ProviderError, ProviderId, SignInView,
+    Adoption, Behind, Credential, Expiry, Held, Identity, Isolation, LiveStore, ParkSemantics,
+    Provider, ProviderError, ProviderId, SignInView,
 };
 use crate::service::Permit;
 use crate::switch;
@@ -23,9 +24,29 @@ use std::path::PathBuf;
 pub(crate) struct Claude;
 
 /// Claude Code serves its credential from a 30 second cache, so a session already running
-/// picks a switch up on its own. Measured against a running session; the three seconds of
-/// margin are for the round trip that follows the cache expiring.
+/// picks a switch up on its own where nothing sits behind the keychain. Measured against a
+/// running session; the three seconds of margin are for the round trip that follows the
+/// cache expiring.
 const ADOPTION_SECONDS: u32 = switch::ADOPTION_CEILING_SECONDS;
+
+/// When a session already running takes a switch on `os`, with `behind` behind the store a
+/// switch writes. Every system's answer, so each is tested on every system.
+fn adoption_on(os: Os, behind: Option<&Behind>) -> Adoption {
+    match (os, behind) {
+        // Read in 2.1.294 (`fallback_file_pins_session_login`): while the file is there,
+        // whatever it holds, a session keeps the login it holds until it renews it, a request
+        // is refused, it signs in, or the file's mtime changes.
+        (Os::MacOs, Some(behind)) => Adoption::AtRenewal {
+            file: behind.path.clone(),
+        },
+        (Os::MacOs, None) => Adoption::PollingWithin(ADOPTION_SECONDS),
+        // The file is the store, so nothing is behind it, and a switch changes its mtime.
+        (Os::Linux, _) => Adoption::PollingWithin(ADOPTION_SECONDS),
+        // How soon a session takes a new `.credentials.json` there, and one behind Credential
+        // Manager, is W22's reading (`windows_file_adoption`).
+        (Os::Windows, _) => Adoption::PollingWithin(ADOPTION_SECONDS),
+    }
+}
 
 /// What `claude auth login` prints to say it reads a code typed back: the start of its
 /// prompt `Paste code here if prompted > `, which the register's `sign_in_output` holds
@@ -120,24 +141,32 @@ impl Provider for Claude {
         Some(PathBuf::from(claude::storage_dir(ctx)).join(".storage-write"))
     }
 
-    /// The identity cached in Claude Code's config, which it refreshes about once a day. One
-    /// that names no organisation does not say which of the person's logins is in use.
-    fn recorded_identity(&self, ctx: &Context) -> Option<Identity> {
+    /// The lock a renewal takes before it reads the login again and sends its refresh token,
+    /// and the legacy one it takes after it (the register's `refresh_lock`). The write lock
+    /// does not keep a renewal from spending a refresh token: these do.
+    fn refresh_lock(&self, ctx: &Context) -> Option<(PathBuf, PathBuf)> {
+        Some((claude::refresh_lock(ctx), claude::legacy_refresh_lock(ctx)))
+    }
+
+    /// The account Claude Code's config names, as written there. One that names no
+    /// organisation, as a sign-in that could not read the profile leaves it, is named with
+    /// none (the register's `config_may_name_no_organisation`).
+    fn own_record(&self, ctx: &Context) -> Option<Identity> {
         let config = claude::load_config(ctx).ok()?;
         let found = claude::identity(&config)?;
-        if found.organization_uuid.is_empty() {
-            return None;
-        }
         Some(Identity {
             account_id: found.account_uuid,
             email: found.email,
-            group: Some(found.organization_uuid),
+            group: Some(found.organization_uuid).filter(|group| !group.is_empty()),
         })
     }
 
     /// Record the new identity in Claude Code's config. Runs after the login is in place,
-    /// so the config never names an account before its login is live. Claude Code does not
-    /// correct a stale config on its own; it refetches its profile only once a day.
+    /// so the config never names an account before its login is live. It drops
+    /// `profileFetchedAt`, so the next Claude Code process to start writes the account of
+    /// the login it started with, and a sign-in writes its own. Either can be another login
+    /// than the one stored, such as the one a session over SSH takes from a file behind the
+    /// keychain (the register's `config_identity_is_the_last_writers`).
     fn after_switch(
         &self,
         ctx: &Context,
@@ -227,15 +256,20 @@ impl Provider for Claude {
             .collect()
     }
 
-    fn fallback_login(&self, ctx: &Context) -> Option<PathBuf> {
-        live::fallback_login(ctx)
-            .ok()
-            .flatten()
-            .map(|_| live::credential_file(ctx))
+    fn behind(&self, ctx: &Context) -> Option<Behind> {
+        let held = match live::behind(ctx)? {
+            Ok(held) if live::login_in(&held).is_some() => Held::Login,
+            Ok(_) => Held::NoLogin,
+            Err(_) => Held::Unreadable,
+        };
+        Some(Behind {
+            path: live::credential_file(ctx),
+            held,
+        })
     }
 
-    fn adoption(&self) -> Adoption {
-        Adoption::PollingWithin(ADOPTION_SECONDS)
+    fn adoption(&self, behind: Option<&Behind>) -> Adoption {
+        adoption_on(OS, behind)
     }
 
     /// A copy may sit in the vault while the same login is still signed in: nothing of
@@ -412,9 +446,10 @@ mod tests {
     }
 
     /// Claude Code keeps the token's own account when the profile could not be read, and
-    /// that can name no organisation.
+    /// that can name no organisation. The config names that account as written, which is
+    /// what a change of it since the last answer is told by.
     #[test]
-    fn a_config_that_names_no_organisation_names_no_login() {
+    fn a_config_naming_no_organisation_names_its_account_with_no_group() {
         let home = std::env::temp_dir().join(format!(
             "pitboard-config-org-{}-{:?}",
             std::process::id(),
@@ -432,13 +467,20 @@ mod tests {
         };
 
         config(serde_json::json!({"accountUuid": "acc", "emailAddress": "a@b.c"}));
-        assert_eq!(Claude.recorded_identity(&ctx), None);
+        assert_eq!(
+            Claude.own_record(&ctx),
+            Some(Identity {
+                account_id: "acc".into(),
+                email: "a@b.c".into(),
+                group: None,
+            })
+        );
 
         config(serde_json::json!({
             "accountUuid": "acc", "emailAddress": "a@b.c", "organizationUuid": "org"
         }));
         assert_eq!(
-            Claude.recorded_identity(&ctx),
+            Claude.own_record(&ctx),
             Some(Identity {
                 account_id: "acc".into(),
                 email: "a@b.c".into(),
@@ -446,6 +488,37 @@ mod tests {
             })
         );
         let _ = std::fs::remove_dir_all(&home);
+    }
+
+    /// Every system's answer, asked on every system. On macOS a session already running
+    /// takes a switch within 33 seconds, unless `.credentials.json` sits behind the
+    /// keychain, whatever it holds and whether or not it can be read: then at its login's
+    /// next renewal. On Linux the file is the store, and a switch writes it. On Windows it
+    /// waits on W22's reading.
+    #[test]
+    fn sessions_follow_within_33_seconds_unless_a_file_is_behind_the_keychain_on_macos() {
+        let file = PathBuf::from("/Users/x/.claude/.credentials.json");
+        let holding = |held: Held| Behind {
+            path: file.clone(),
+            held,
+        };
+        for os in [Os::MacOs, Os::Linux, Os::Windows] {
+            assert_eq!(adoption_on(os, None), Adoption::PollingWithin(33), "{os:?}");
+        }
+        for held in [Held::Login, Held::NoLogin, Held::Unreadable] {
+            assert_eq!(
+                adoption_on(Os::MacOs, Some(&holding(held))),
+                Adoption::AtRenewal { file: file.clone() },
+                "{held:?}"
+            );
+            for os in [Os::Linux, Os::Windows] {
+                assert_eq!(
+                    adoption_on(os, Some(&holding(held))),
+                    Adoption::PollingWithin(33),
+                    "{os:?}"
+                );
+            }
+        }
     }
 
     /// The prompt looked for is one the conformance run reads out of every build, so a

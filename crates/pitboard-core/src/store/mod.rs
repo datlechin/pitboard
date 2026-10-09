@@ -279,25 +279,31 @@ pub fn resolve(live: &Live, service: &str) -> Result<Backend, Error> {
     })
 }
 
-/// What the backends after the one holding `service` hold under it, in chain order.
-fn behind_in(chain: &[&dyn RawStore], service: &str) -> Result<Vec<String>, Error> {
-    let mut behind = Vec::new();
+/// The nearest backend after the one in `chain` holding `service` that holds it too, by its
+/// own look. The chain is a parameter so tests can pass backends that fail on demand.
+fn behind_in<'a>(
+    chain: &[&'a dyn RawStore],
+    service: &str,
+) -> Result<Option<&'a dyn RawStore>, Error> {
     let mut in_use = false;
     for backend in chain {
-        if in_use {
-            behind.extend(backend.read(service)?);
-        } else {
+        if !in_use {
             in_use = backend.contains(service)?;
+        } else if backend.contains(service)? {
+            return Ok(Some(*backend));
         }
     }
-    Ok(behind)
+    Ok(None)
 }
 
-/// Logins in the backends after the one holding the login in use: what a reader that cannot
-/// reach that backend signs in with instead, and what no write to it reaches. Empty where
-/// the login in use is in the last backend, or nowhere.
-pub fn behind(live: &Live, service: &str) -> Result<Vec<String>, Error> {
-    with_live(live, |chain| behind_in(chain, service))
+/// The backend after the one holding the login in use that holds something under `service`
+/// too, a login or not: what a reader that cannot reach that backend signs in with instead,
+/// and what no write to it reaches. A backend is behind wherever its own look says it is
+/// there, so a file is behind holding `{}`, nothing at all, or what cannot be read, as a file
+/// that is not text or that this user may not read: reading it then gives the error. `None`
+/// where the login in use is in the last backend, or nowhere.
+pub fn behind<'a>(live: &'a Live, service: &str) -> Result<Option<&'a dyn RawStore>, Error> {
+    behind_in(&live.refs(), service)
 }
 
 pub fn read_raw(live: &Live, service: &str) -> Result<Option<String>, Error> {
@@ -394,30 +400,66 @@ mod tests {
         s
     }
 
-    /// What the backends after the one in use hold is what a reader that cannot reach that
-    /// one gets instead. Nothing is behind a login that is in the last backend, or in none.
+    /// What the next backend after the one in use holds is what a reader that cannot reach
+    /// that one gets instead. Nothing is behind a login that is in the last backend, or in
+    /// none.
     #[test]
-    fn what_is_behind_the_login_in_use_is_read_from_every_later_backend() {
+    fn what_is_behind_the_login_in_use_is_the_next_backend_that_holds_it() {
         let keychain = store(Backend::Keychain);
+        let between = store(Backend::File);
         let plaintext = store(Backend::File);
-        let chain: [&dyn RawStore; 2] = [&keychain, &plaintext];
-        assert_eq!(behind_in(&chain, "svc").unwrap(), Vec::<String>::new());
+        let chain: [&dyn RawStore; 3] = [&keychain, &between, &plaintext];
+        let held = |chain: &[&dyn RawStore]| -> Option<String> {
+            behind_in(chain, "svc")
+                .unwrap()
+                .map(|behind| behind.read("svc").unwrap().expect("there"))
+        };
+        assert_eq!(held(&chain), None);
 
         plaintext.plant("svc", "left");
         assert_eq!(
-            behind_in(&chain, "svc").unwrap(),
-            Vec::<String>::new(),
+            held(&chain),
+            None,
             "the file is the login when the keychain holds none"
         );
 
         keychain.plant("svc", "in use");
-        assert_eq!(behind_in(&chain, "svc").unwrap(), ["left"]);
+        assert_eq!(held(&chain).as_deref(), Some("left"));
+        between.plant("svc", "nearer");
+        assert_eq!(held(&chain).as_deref(), Some("nearer"));
 
         keychain.fault("svc", Fault::Locked);
         assert!(
             matches!(behind_in(&chain, "svc"), Err(Error::Locked)),
             "which backend is in use cannot be told, so neither can what is behind it"
         );
+    }
+
+    /// Claude Code tells a file behind the keychain by a look at it, not by reading it
+    /// (`fallback_file_pins_session_login`), so neither does this. A file that is there and
+    /// cannot be read is behind, with why it cannot be read, and not a chain that cannot be
+    /// told. A real file, since what a look and a read each say of one is the point.
+    #[test]
+    fn a_file_that_cannot_be_read_is_still_behind() {
+        let dir = std::env::temp_dir().join(format!(
+            "pitboard-store-behind-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join(".credentials.json");
+        std::fs::write(&path, [0xff, 0xfe, 0x00]).unwrap();
+        let keychain = holding(Backend::Keychain, "svc", "in use");
+        let file = PlainFile::at(path);
+        let chain: [&dyn RawStore; 2] = [&keychain, &file];
+
+        let behind = behind_in(&chain, "svc")
+            .expect("which backend is in use is told")
+            .expect("the file is behind")
+            .read("svc");
+        let _ = std::fs::remove_dir_all(&dir);
+        assert!(matches!(behind, Err(Error::Unreadable(_))), "{behind:?}");
     }
 
     #[test]

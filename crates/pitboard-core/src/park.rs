@@ -82,6 +82,29 @@ pub fn price(
         }))
 }
 
+/// A new park of `document`, a login of the account filed under `id`, which `label` names:
+/// what it costs is asked first, then a free name is reserved and written. The caller
+/// records it, and deletes it where that fails. What parking it warns of comes with it.
+pub fn keep(
+    ctx: &Context,
+    permit: Permit,
+    provider: ProviderId,
+    label: &str,
+    id: &str,
+    document: &Value,
+) -> Result<(Park, Option<crate::service::Warning>)> {
+    let parking = price(
+        ctx,
+        provider,
+        label,
+        &service_name(id, ctx.now_millis()),
+        document,
+    )?;
+    let service = reserve(ctx, permit, id)?;
+    let park = store_at(ctx, permit, provider, &service, document)?;
+    Ok((park, parking))
+}
+
 /// Write a login into a reserved name and prove it reads back.
 pub fn store_at(
     ctx: &Context,

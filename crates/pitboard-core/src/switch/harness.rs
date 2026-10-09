@@ -191,7 +191,12 @@ pub(crate) fn machine(name: &str) -> Machine {
     let mut state = State::default();
     state.accounts.push(account("here", "here", None));
     state.accounts.push(account("there", "there", Some(parked)));
-    state.set_active(ProviderId::Claude, Some("here".into()));
+    record_in_use(
+        &ctx,
+        &mut state,
+        ProviderId::Claude,
+        &document("here-refresh"),
+    );
     state::save(&ctx, Permit::for_a_test(), &state).expect("saved");
 
     Machine {
@@ -202,6 +207,54 @@ pub(crate) fn machine(name: &str) -> Machine {
         service,
         which: ProviderId::Claude,
     }
+}
+
+/// [`machine`], where `elsewhere`, enrolled with nothing parked, has since signed in to
+/// Claude Code outside Pitboard over `here`, whose only login that was, as `/login` does:
+/// its login in the keychain and its account in the config.
+pub(crate) fn signed_in_outside(name: &str) -> Machine {
+    let m = machine(name);
+    m.api
+        .owned_by("access-elsewhere-refresh", owner("elsewhere"));
+    let mut state = state::load(&m.ctx).expect("state");
+    state.accounts.push(account("elsewhere", "elsewhere", None));
+    state::save(&m.ctx, Permit::for_a_test(), &state).expect("saved");
+    m.sign_in(&document("elsewhere-refresh"));
+    config_names(&m, "elsewhere");
+    m
+}
+
+/// Claude Code's config naming `who`, as another Claude Code process that started or signed
+/// in on `who`'s login writes it, with the login in the keychain left as it was.
+pub(crate) fn config_names(m: &Machine, who: &str) {
+    let path = m.root.join(".claude.json");
+    let mut config: Value =
+        serde_json::from_str(&std::fs::read_to_string(&path).expect("a config")).expect("JSON");
+    let owner = owner(who);
+    config["oauthAccount"] = json!({
+        "accountUuid": owner.account_uuid,
+        "emailAddress": owner.email,
+        "organizationUuid": owner.organization_uuid,
+    });
+    std::fs::write(&path, config.to_string()).expect("the config is written");
+}
+
+/// The activity log's lines of `verb`, as subject and outcome.
+pub(crate) fn audit_lines(m: &Machine, verb: &str) -> Vec<(String, String)> {
+    crate::audit::read(&m.ctx, 100)
+        .into_iter()
+        .filter(|entry| entry.verb == verb)
+        .map(|entry| (entry.subject, entry.outcome))
+        .collect()
+}
+
+/// `state.json` as it is on disk, with when it was last written.
+pub(crate) fn state_file(m: &Machine) -> (Vec<u8>, std::time::SystemTime) {
+    let path = crate::home::dir(&m.ctx).join("state.json");
+    let written = std::fs::metadata(&path)
+        .and_then(|meta| meta.modified())
+        .expect("a state file");
+    (std::fs::read(&path).expect("a state file"), written)
 }
 
 /// Where OpenAI puts its own claims in a standard token.
@@ -244,16 +297,19 @@ pub(crate) fn codex_access(refresh: &str) -> String {
     crate::provider::jwt::unsigned(&json!({"exp": NOW + 10 * 86_400, "for": refresh}))
 }
 
-pub(crate) fn codex_account(label: &str, uuid: &str, parked: Option<Park>) -> Account {
+/// `who`'s Codex account, as enrolling it from [`codex_login`] writes one: its ChatGPT
+/// account is its workspace, as Codex's own claims give it.
+pub(crate) fn codex_account(label: &str, who: &str, parked: Option<Park>) -> Account {
     Account {
         last_used_at: None,
+        replaced_at: None,
         label: label.into(),
-        id: uuid.into(),
-        account_uuid: uuid.into(),
-        email: format!("{uuid}@example.com"),
+        id: codex_id(who),
+        account_uuid: codex_id(who),
+        email: format!("{who}@example.com"),
         parked,
         detail: crate::state::Detail::Codex {
-            workspace_id: None,
+            workspace_id: Some(who.into()),
             plan: Some("pro".into()),
         },
     }
@@ -293,7 +349,8 @@ pub(crate) fn codex_machine(name: &str) -> Machine {
             crate::usage::Snapshot {
                 windows: Vec::new(),
                 observed_at: Some(NOW),
-                account_uuid: None,
+                answered_at: Some(NOW),
+                lists_every_limit: false,
                 source: crate::usage::Source::Live,
             },
         );
@@ -312,15 +369,35 @@ pub(crate) fn codex_machine(name: &str) -> Machine {
     .expect("parked");
 
     let mut state = State::default();
+    state.accounts.push(codex_account("here", "here", None));
     state
         .accounts
-        .push(codex_account("here", &codex_id("here"), None));
-    state
-        .accounts
-        .push(codex_account("there", &codex_id("there"), Some(parked)));
-    state.set_active(ProviderId::Codex, Some("here".into()));
+        .push(codex_account("there", "there", Some(parked)));
+    record_in_use(
+        &machine.ctx,
+        &mut state,
+        ProviderId::Codex,
+        &codex_login("here", "here-refresh"),
+    );
     state::save(&machine.ctx, Permit::for_a_test(), &state).expect("saved");
     machine
+}
+
+/// `here`'s login on `login`, recorded as its service said it now, with what the tool's own
+/// record names: what enrolling `here` while signed in records. When `here` came to be in use
+/// stays unrecorded, so no test starts inside the minutes the automatic switch leaves an
+/// account to settle.
+fn record_in_use(ctx: &Context, state: &mut State, which: ProviderId, login: &Value) {
+    let here = state
+        .get(&Key::new(which, "here"))
+        .expect("`here` is enrolled");
+    let found = crate::in_use::InUse {
+        owner: Some(here.owner()),
+        login: crate::provider::of(which).fingerprint(login),
+        known_at: NOW,
+        named: crate::in_use::named(ctx, which),
+    };
+    state.in_use.insert(which.code().to_string(), found);
 }
 
 /// A login of the account `who` as this machine's tool writes one, with the service taught
@@ -376,6 +453,102 @@ pub(crate) fn renews(m: &Machine, refresh: &str, renewed: &str) {
     }
 }
 
+/// What a Claude Code session did while renewing the login a store holds, as
+/// [`renews_meanwhile`] plays it.
+#[derive(Default)]
+pub(crate) struct Session {
+    /// It found Claude Code's refresh lock held, so it waited.
+    pub(crate) waited: std::cell::Cell<bool>,
+    /// The refresh token it sent, and the login it was renewed to, to save once Claude Code's
+    /// write lock is let go of.
+    saving: std::cell::RefCell<Option<(String, Value)>>,
+}
+
+impl Session {
+    pub(crate) fn new() -> std::rc::Rc<Session> {
+        std::rc::Rc::new(Session::default())
+    }
+}
+
+/// Where `target`'s lock is, as [`lock::acquire`] and proper-lockfile make it.
+pub(crate) fn lock_dir(target: &std::path::Path) -> PathBuf {
+    PathBuf::from(format!("{}.lock", target.display()))
+}
+
+/// What Claude Code's write lock guards.
+pub(crate) fn write_target(m: &Machine) -> PathBuf {
+    crate::provider::of(ProviderId::Claude)
+        .write_lock(&m.ctx)
+        .expect("Claude Code takes one")
+}
+
+/// A session renewing the login `store` holds at the moment it is called, as Claude Code
+/// 2.1.294 does (the register's `refresh_lock`): the keychain's, or the file's for a session
+/// that signed in with the file. It takes the refresh lock, as a directory, without waiting
+/// here: held, it waits, which is all that happens. Taken, it sends the refresh token stored,
+/// which spends it, then saves the renewed login under the write lock where it can take it,
+/// and otherwise once [`saves`] says it is let go of.
+pub(crate) fn renews_meanwhile(
+    m: &Machine,
+    store: Arc<crate::store::memory::MemoryStore>,
+    session: &std::rc::Rc<Session>,
+) -> impl FnOnce() + 'static {
+    let (service, api) = (m.service.clone(), Arc::clone(&m.api));
+    let refreshing = lock_dir(&claude::refresh_lock(&m.ctx));
+    let writing = lock_dir(&write_target(m));
+    let session = std::rc::Rc::clone(session);
+    move || {
+        let parent = refreshing.parent().expect("the storage directory");
+        std::fs::create_dir_all(parent).expect("the storage directory is made");
+        match std::fs::create_dir(&refreshing) {
+            Ok(()) => {}
+            Err(held) if held.kind() == std::io::ErrorKind::AlreadyExists => {
+                session.waited.set(true);
+                return;
+            }
+            Err(error) => panic!("the refresh lock: {error}"),
+        }
+        let held = store.peek(&service).expect("a login is stored");
+        let mut login: Value = serde_json::from_str(&held).expect("JSON");
+        let sent = login["claudeAiOauth"]["refreshToken"]
+            .as_str()
+            .expect("a refresh token")
+            .to_string();
+        api.renew_trouble(&sent, crate::api::scripted::Trouble::InvalidGrant);
+        login["claudeAiOauth"]["refreshToken"] = json!(format!("{sent}-by-a-session"));
+        *session.saving.borrow_mut() = Some((sent, login));
+        if std::fs::create_dir(&writing).is_ok() {
+            save(&store, &service, &session);
+            let _ = std::fs::remove_dir(&writing);
+            let _ = std::fs::remove_dir(&refreshing);
+        }
+    }
+}
+
+/// The session's save, held up by Claude Code's write lock, once that is let go of: only
+/// where `store` still holds the refresh token it sent, as Claude Code's save compares it, so
+/// nothing where that login has gone.
+pub(crate) fn saves(m: &Machine, store: &crate::store::memory::MemoryStore, session: &Session) {
+    if session.saving.borrow().is_none() {
+        return;
+    }
+    save(store, &m.service, session);
+    let _ = std::fs::remove_dir(lock_dir(&claude::refresh_lock(&m.ctx)));
+}
+
+fn save(store: &crate::store::memory::MemoryStore, service: &str, session: &Session) {
+    let Some((sent, login)) = session.saving.borrow_mut().take() else {
+        return;
+    };
+    let holds = store
+        .peek(service)
+        .and_then(|held| serde_json::from_str::<Value>(&held).ok())
+        .is_some_and(|held| held["claudeAiOauth"]["refreshToken"] == sent.as_str());
+    if holds {
+        store.plant(service, &login.to_string());
+    }
+}
+
 /// A limit of `kind`, `percent` used, resetting an hour from now: what Anthropic answers of
 /// one, for the tests of what Pitboard switches by itself.
 pub(crate) fn window(kind: &str, percent: f64) -> crate::usage::Window {
@@ -390,9 +563,31 @@ pub(crate) fn window(kind: &str, percent: f64) -> crate::usage::Window {
     }
 }
 
+/// Anthropic's usage answer for a five-hour limit `percent` used, resetting an hour from now,
+/// in the shape `GET /api/oauth/usage` gives it and Claude Code caches it.
+pub(crate) fn usage_answer(percent: f64) -> Value {
+    let resets_at = jiff::Timestamp::from_second(NOW + 3600).expect("a time");
+    json!({"limits": [{"kind": "session", "percent": percent, "resets_at": resets_at.to_string()}]})
+}
+
+/// Claude Code's usage cache, put in its config as 2.1.294 writes one: stamped with `here`,
+/// the account the config names, whichever login `answer` was asked with.
+pub(crate) fn cache_usage(m: &Machine, answer: Value) {
+    let path = m.root.join(".claude.json");
+    let mut config: Value =
+        serde_json::from_str(&std::fs::read_to_string(&path).expect("a config")).expect("JSON");
+    config["cachedUsageUtilization"] = json!({
+        "fetchedAtMs": NOW * 1000,
+        "accountUuid": "here",
+        "utilization": answer,
+    });
+    std::fs::write(&path, config.to_string()).expect("the config is written");
+}
+
 pub(crate) fn account(label: &str, uuid: &str, parked: Option<Park>) -> Account {
     Account {
         last_used_at: None,
+        replaced_at: None,
         label: label.into(),
         id: uuid.into(),
         account_uuid: uuid.into(),
@@ -417,6 +612,7 @@ pub(crate) fn in_organisation(label: &str, who: &str, org: &str, parked: Option<
     };
     Account {
         last_used_at: None,
+        replaced_at: None,
         label: label.into(),
         id: crate::state::new_id(ProviderId::Claude, &owner),
         account_uuid: owner.account_uuid,

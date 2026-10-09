@@ -1501,6 +1501,80 @@ fn a_switch_names_its_tool_only_beside_another() {
     );
 }
 
+/// While a file sits behind the keychain, Claude Code sessions already running take a switch
+/// at their login's next renewal, which is theirs to know and no moment to count down to. The
+/// switch's notice counts down to nothing, and the warning every read carries while the file
+/// is there says when they follow, once, in a notice of its own. The notification of a
+/// switch made by itself says it in place of a countdown.
+#[test]
+fn a_switch_that_sessions_take_at_renewal_counts_down_nothing() {
+    let path = "/Users/x/.claude/.credentials.json";
+    let left = warning(
+        "fallback_login",
+        &format!("{path} is there with no Claude Code login in it."),
+    );
+    let mut model = at_noon();
+    let mut machine = Machine::reading(Ok(warned(
+        vec![
+            account(Some("work")).signed_in().build(),
+            account(Some("personal")).build(),
+        ],
+        vec![left.clone()],
+    )));
+    model.refresh(&mut machine);
+    machine.switched = Ok(crate::Switched {
+        outcome: crate::Switch::Switched {
+            provider: "claude".into(),
+            from: "personal".into(),
+            to: "work".into(),
+            adoption: crate::Adoption::Renewal { path: path.into() },
+        },
+        warnings: vec![left.clone()],
+    });
+    switch(&mut model, &mut machine, "claude/work");
+
+    let shown = model.shown();
+    assert_eq!(shown.last_switches[0].follows_at, None);
+    assert_eq!(shown.last_switches[0].restart, None);
+    let [switched, left_behind] = shown.notices.as_slice() else {
+        panic!("{:?}", shown.notices);
+    };
+    assert_eq!(
+        *switched,
+        notice(
+            "switch/claude",
+            Severity::Info,
+            "Switched to work",
+            &[],
+            vec![dismiss(Intent::DismissSwitch {
+                provider: "claude".into(),
+            })],
+        )
+    );
+    assert_eq!(left_behind.severity, Severity::Warning);
+    assert_eq!(
+        left_behind.title,
+        "A login file is left behind the keychain"
+    );
+    assert_eq!(left_behind.lines, [left.message]);
+    assert_eq!(left_behind.until, None);
+    assert_eq!(
+        crate::present::auto_switched_notice(
+            "personal",
+            "work",
+            "96% of its 5-hour limit",
+            &crate::Adoption::Renewal { path: path.into() },
+            NOON,
+        )
+        .body,
+        format!(
+            "personal had used 96% of its 5-hour limit. Sessions already running keep the \
+             account they are on until their login is next renewed, or until they are started \
+             again: {path} is there."
+        )
+    );
+}
+
 /// A running `codex` never picks a switch up, so a countdown would promise what does not
 /// happen. The notice is a warning that says to start its sessions again, or, once the core
 /// has counted them, the core's own warning, which says the same with the count.
@@ -1735,6 +1809,45 @@ fn two_warnings_alike_are_two_notices() {
     assert_ne!(shown.notices[0].id, shown.notices[1].id);
 }
 
+/// A warning about one account keeps its notice by that account while its words change, and
+/// one account's id beginning another's does not make the second a copy of the first.
+#[test]
+fn a_warning_about_an_account_is_its_notice_by_that_account() {
+    let replaced = |account: &str, now: &str| Warning {
+        account: Some(account.into()),
+        held: None,
+        ..warning(
+            "login_replaced",
+            &format!("Claude Code now has `{now}`'s login stored"),
+        )
+    };
+    let mut model = at_noon();
+    let mut machine = Machine::reading(Ok(warned(
+        vec![account(Some("work")).signed_in().build()],
+        vec![
+            replaced("claude:here2", "work"),
+            replaced("claude:here", "work"),
+        ],
+    )));
+    model.refresh(&mut machine);
+    let expected = [
+        "warning/login_replaced/claude:here2",
+        "warning/login_replaced/claude:here",
+    ];
+    assert_eq!(ids(&model.shown()), expected);
+
+    machine.answer = Ok(warned(
+        vec![account(Some("work")).signed_in().build()],
+        vec![
+            replaced("claude:here2", "spare"),
+            replaced("claude:here", "spare"),
+        ],
+    ));
+    model.send(Intent::Refresh { asked: true });
+    model.run(&mut machine);
+    assert_eq!(ids(&model.shown()), expected);
+}
+
 /// Giving up on an interrupted switch deletes nothing, and says so, with how many logins were
 /// kept, until somebody puts it away.
 ///
@@ -1913,6 +2026,25 @@ fn advice_offers_the_account_with_room_and_names_its_tool_only_beside_another() 
     assert_eq!(titles, ["Claude Code: work has no 5-hour limit left"]);
 }
 
+/// An account offered on a plan without the limit that ran out is said to have no such
+/// limit, not all of it left.
+#[test]
+fn an_account_offered_without_the_limit_that_ran_out_is_said_to_have_no_such_limit() {
+    let (model, _) = reading(vec![
+        account(Some("work"))
+            .signed_in()
+            .limits(vec![window("session", 20.0), window("weekly_all", 100.0)])
+            .build(),
+        account(Some("seat"))
+            .limits(vec![window("session", 10.0)])
+            .build(),
+    ]);
+    let notices = model.shown().notices;
+    assert_eq!(notices.len(), 1);
+    assert_eq!(notices[0].title, "work has no weekly limit left");
+    assert_eq!(notices[0].lines, ["seat has no such limit."]);
+}
+
 /// A switch of one tool leaves another tool's accounts as they were. Advice about a Claude
 /// Code account still out, beside another that still has room, is as true after a Codex
 /// switch as before it, and it is never told again, so putting it away loses it.
@@ -1995,6 +2127,54 @@ fn a_notice_offers_an_account_only_when_it_can_switch_to_one() {
     let shown = model.shown();
     assert!(!shown.menu_notices.switches[0].enabled);
     assert!(!shown.notices[0].actions[0].enabled);
+}
+
+/// Claude Code's config naming another account than the one in use is put right by writing
+/// the account in use there, so its notice offers that. It moves no account, so the menu
+/// does not offer it as a switch. An account in use that is not enrolled has no name to
+/// write, and is offered nothing.
+#[test]
+fn the_config_names_another_notice_offers_to_update_it() {
+    let names_another = warning(
+        "config_names_another",
+        "Claude Code's config names `spare`, and the login Claude Code has stored is `work`'s.",
+    );
+    let accounts = |in_use: Account| {
+        vec![
+            in_use,
+            account(Some("spare")).build(),
+            account(Some("main")).of("codex").signed_in().build(),
+        ]
+    };
+    let mut model = at_noon();
+    let mut machine = Machine::reading(Ok(warned(
+        accounts(account(Some("work")).signed_in().build()),
+        vec![names_another.clone()],
+    )));
+    model.refresh(&mut machine);
+
+    let shown = model.shown();
+    assert_eq!(
+        shown.notices[0].actions,
+        [NoticeAction {
+            title: "Update Claude Code’s Config".into(),
+            intent: Intent::UpdateConfig {
+                qualified: "claude/work".into()
+            },
+            dismisses: false,
+            switches: false,
+            enabled: true,
+            confirm: None,
+        }]
+    );
+    assert!(shown.menu_notices.switches.is_empty());
+
+    machine.answer = Ok(warned(
+        accounts(account(None).signed_in().uuid("u").build()),
+        vec![names_another],
+    ));
+    model.refresh(&mut machine);
+    assert!(model.shown().notices[0].actions.is_empty());
 }
 
 /// What can be done about a notice is a button under it, and putting it away is the icon at

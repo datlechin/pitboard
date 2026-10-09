@@ -67,7 +67,8 @@ Once both tools have accounts, the app and the command line list each tool's acc
     | `ready` alone | You can switch to the account. Codex accounts show this, because Codex states no expiry. |
     | `ready · expires in 2d 3h · pitboard enroll work --sign-in` | You can switch to the account, but its parked login expires in under 3 days. Run `pitboard renew` to renew it, or the command shown to sign in to it again. To renew parked logins every day, see [Keep parked logins alive](/guides/renewal). |
     | `login expired` or `nothing parked`, then a command | Pitboard holds no parked login it can use for the account. Run the command shown, or see [Sign in to an account again](/guides/sign-in-again). |
-    | `login could not be read` | The tool's login could not be read, and it may be this account's, which Pitboard last switched to. Run `pitboard doctor`. |
+    | `login replaced outside Pitboard`, then a command | A sign-in outside Pitboard replaced the account's only login, and Pitboard held no copy of it. Run the command shown. See [An account reads `login replaced outside Pitboard`](/troubleshooting#an-account-reads-login-replaced-outside-pitboard). |
+    | `login could not be read` | The tool's login could not be read, and it may be this account's, whose login Pitboard last recorded the tool holding. Run `pitboard doctor`. |
     | `signed in · not enrolled: pitboard enroll <label>` | The tool is signed in to an account Pitboard has not enrolled. Run the command with a label you choose in place of `<label>`. |
     | `5h`, `week` | The five-hour limit and the weekly limit. A limit for one model adds the model's name. |
     | `██████░░░░   59%` | How much of the limit is used: green under 70%, yellow from 70%, red from 90%. |
@@ -101,7 +102,7 @@ For why numbers can be a few minutes old, see [How usage is read](/concepts/usag
 
 ## When the numbers are old
 
-When the command line shows numbers from an earlier reading, it says when they were measured, as in `measured 14:02, 3m ago`. A line such as `from Claude Code, measured 14:02` means the numbers are the ones Claude Code last recorded for the account in use.
+When the command line shows numbers from an earlier reading, it says when they were measured, as in `measured 14:02, 3m ago`.
 
 If Pitboard could not get newer numbers, the reason follows, as in `measured 14:02, 3m ago · Anthropic could not be reached`. The app shows the reason under the account in the window.
 

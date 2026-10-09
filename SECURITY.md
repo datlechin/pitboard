@@ -58,9 +58,14 @@ A report is in scope when Pitboard fails at one of these.
   as empty could make Pitboard park or overwrite the wrong login.
 - Pitboard never installs a login Claude Code has since renewed, because presenting a
   replaced refresh token makes Claude Code discard the login. It deletes a parked login
-  once installed, keeps no copy of a login in use and refuses an expired one. It renews
-  only a parked login, which it alone holds, because a second renewer would break a login.
-  It stores the renewed login before deleting the old one, under its lock.
+  once installed, keeps no copy of a login in use and refuses an expired one. It renews a
+  parked login, which it alone holds, because a second renewer would break a login. It
+  stores the renewed login before deleting the old one, under its lock.
+- The one other login Pitboard renews is one `pitboard stow` puts away from
+  `.credentials.json` whose access token has expired, which a session may be using. It holds
+  the lock every Claude Code renewal takes before it sends a refresh token, as read in Claude
+  Code 2.1.294, so no session renews that login meanwhile. It writes the renewed login back
+  to the file before anything else.
 - Pitboard takes the lock Claude Code takes around each write of its login. As read in
   Claude Code 2.1.284, sessions and the supervisor daemon wait for that lock and read the
   login again inside it. So neither can write an older account back over a switch. A

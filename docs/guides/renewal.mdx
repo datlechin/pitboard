@@ -15,7 +15,7 @@ OpenAI's Codex CLI states no expiry, so a parked Codex login shows only `ready`.
 
 Pitboard renews parked logins only when it runs. Running `pitboard` or the app renews a parked login only when Pitboard can no longer ask for usage with it, or 2 minutes before. `pitboard renew` and daily renewal also renew every parked login that expires within 3 days.
 
-Pitboard never renews the login a tool is using. The tool refreshes its own.
+The tool renews the login it is using itself. Pitboard renews one only when [`pitboard stow`](/reference/account-commands#stow) puts away a login left in `.credentials.json` whose access token has expired, under the lock Claude Code takes for its own renewals.
 
 ## Turn on daily renewal
 

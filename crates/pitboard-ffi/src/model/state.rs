@@ -44,13 +44,14 @@ use super::{Failure, Intent, LastSwitch, Pane, QuitQuestion, ReadFailure, Restar
 use super::{RunOutNotice, RunningSignIn, Sheet, WindowRequest};
 use crate::account_windows::records::{Entry, Loaded};
 use crate::{
-    Abandoned, Account, Adoption, AutoSwitched, Change, Check, Enrolled, EnrolledAs,
+    Abandoned, Account, Adoption, AutoLooked, AutoSwitched, Change, Check, Enrolled, EnrolledAs,
     FoundCommandLine, OwnCommandLine, PitboardError, Renewed, Schedule, Status, Switch, Switched,
     Tool, Usage, Warning,
 };
-use pitboard_core::autoswitch::Threshold;
+use pitboard_core::autoswitch::{self, Threshold};
 use pitboard_core::label::SEPARATOR;
 use pitboard_core::provider::{self, ProviderId};
+use pitboard_core::switch::{Foreseen, Left, Stowed};
 use pitboard_core::usage::same_reset;
 use std::collections::{BTreeSet, HashMap};
 use std::time::Duration;
@@ -66,6 +67,11 @@ pub(crate) struct Cadence {
     /// How often it reads every account by itself. Usage is asked of each tool's service
     /// for every account, so it is asked sparingly.
     pub(crate) read_every: Duration,
+    /// How often, with switching Claude Code by itself on, it asks the core's look though
+    /// nothing was written: an account put in use stops settling, and the wait after a
+    /// failed attempt ends, with nobody writing anything. As often as `pitboard watch`
+    /// decides.
+    pub(crate) decide_every: Duration,
     /// How old the numbers shown may be before somebody glancing at them has them read
     /// again: a menu is opened far more often than the numbers change.
     pub(crate) stale_after: Duration,
@@ -90,6 +96,7 @@ impl Cadence {
     pub(crate) const APP: Cadence = Cadence {
         look_every: Duration::from_secs(2),
         read_every: Duration::from_secs(300),
+        decide_every: Duration::from_secs(autoswitch::DECIDE_EVERY_SECONDS.unsigned_abs()),
         stale_after: Duration::from_secs(60),
         quit_within: Duration::from_secs(30),
         quit_checked_every: Duration::from_millis(200),
@@ -140,8 +147,8 @@ pub(crate) enum Job {
     /// written, as they stand before the read, then the read itself. `fresh` asks each tool's
     /// service about every account whatever it was asked moments ago.
     Read { ticket: Ticket, fresh: bool },
-    /// Read what is already known, asking nobody: the last numbers measured, and who each
-    /// tool's own files say is signed in.
+    /// Read what is already known, asking nobody: the last numbers measured, and whose login
+    /// each tool has stored, as its service last said.
     ReadOffline { why: Why },
     /// When the account index and the usage readings were last written.
     Look,
@@ -160,9 +167,13 @@ pub(crate) enum Job {
         qualified: String,
         reopen: Option<String>,
     },
+    /// Ask the core's look whether to switch Claude Code by itself at `at`%, from its files
+    /// alone: what stands, or that only a decision under its lock can say. It claims nothing.
+    AutoLook { at: u8 },
     /// Switch Claude Code by itself where a limit of the account in use has reached `at`%
-    /// and another account has room: the core decides whether, and to which, from what it
-    /// knows, and decides again under its lock.
+    /// and another account has room: asked once the look says only a decision under the
+    /// core's lock can say, which decides whether, and to which, from whose login Claude Code
+    /// has stored.
     AutoSwitch { at: u8 },
     /// Open the app at `location` again.
     Open { location: String },
@@ -196,6 +207,15 @@ pub(crate) enum Job {
     },
     /// Drop the account `qualified` names, and the login parked for it.
     Forget { qualified: String },
+    /// Write the account `qualified` names into its tool's config, while it is in use.
+    UpdateConfig { qualified: String },
+    /// Look at the file behind Claude Code's store: what it holds, and whose the login in it
+    /// is, which may ask Anthropic with that login's own access token, and whose the login
+    /// stored is, as a read asks it. It changes nothing.
+    LookLeft,
+    /// Put away the file behind Claude Code's store, while it holds what `seen` was taken of.
+    /// `from` is the sheet that was up when it was asked for, where what goes wrong is said.
+    Stow { seen: String, from: Option<Sheet> },
     /// Read what the model keeps of its own in Pitboard's directory: the record of what was
     /// told, and the app's preferences.
     LoadKept,
@@ -243,8 +263,9 @@ pub(crate) struct Ticket {
     timed: bool,
     /// Whether it is the read after a switch, whose landing ends the switch.
     after_switch: bool,
-    /// The sign-in it is the read after, whose warnings are said once it has landed.
-    after_sign_in: Option<u64>,
+    /// What the change it is the read after warned of, by its number in `said_after_read`,
+    /// which is said once it has landed.
+    saying: Option<u64>,
     /// Whether it is the read after a renewal, whose landing ends the renewal.
     after_renewal: bool,
     /// Whether it is the read after a change of this app's own to the account index other
@@ -286,7 +307,7 @@ pub(crate) enum Answer {
         ticket: Ticket,
         /// When the usage readings were last written, in epoch milliseconds, before the read.
         readings_before: i64,
-        /// When the account index was last written, in epoch seconds, before the read.
+        /// When the account index was last written, in epoch milliseconds, before the read.
         changed_before: i64,
         read: Result<Status, PitboardError>,
     },
@@ -295,7 +316,7 @@ pub(crate) enum Answer {
         read: Result<Status, PitboardError>,
     },
     Looked {
-        /// When the account index was last written, in epoch seconds.
+        /// When the account index was last written, in epoch milliseconds.
         changed: i64,
         /// When the usage readings were last written, in epoch milliseconds.
         measured: i64,
@@ -316,6 +337,10 @@ pub(crate) enum Answer {
         qualified: String,
         reopen: Option<String>,
         done: Result<Switched, PitboardError>,
+    },
+    /// What the core's look at whether to switch Claude Code by itself came to.
+    AutoLooked {
+        looked: Result<AutoLooked, PitboardError>,
     },
     /// What switching Claude Code by itself came to.
     AutoSwitched {
@@ -370,6 +395,17 @@ pub(crate) enum Answer {
     Forgot {
         qualified: String,
         done: Result<(), PitboardError>,
+    },
+    /// What writing the account in use into its tool's config came to, with what its tool
+    /// warned of.
+    ConfigUpdated(Result<Vec<Warning>, PitboardError>),
+    /// What is left in the file behind Claude Code's store, and what putting it away would
+    /// do with it: `None` where nothing is.
+    LookedLeft(Result<Option<Left>, PitboardError>),
+    /// What putting away the file behind Claude Code's store came to, with what it warned of.
+    Stowed {
+        from: Option<Sheet>,
+        done: Result<(Stowed, Vec<Warning>), PitboardError>,
     },
     /// What the model keeps of its own, as it was read: nothing told where nothing was kept
     /// or it could not be read, and the app's preferences, with whether they came from their
@@ -456,6 +492,27 @@ enum Timer {
     Running,
 }
 
+/// What the sheet for putting away the login left in a file has found of it.
+#[derive(Debug)]
+pub(crate) enum Leftover {
+    /// It is looking.
+    Looking,
+    /// What it found: `None` where nothing is left behind Claude Code's store.
+    Found(Option<Left>),
+    /// It could not look, which its failure says.
+    Unknown,
+}
+
+/// What switching Claude Code by itself last came to, which the settings say under it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum AutoStanding {
+    /// What the core's look, or its decision under its lock, came to.
+    Came(AutoSwitched),
+    /// What stopped the core, in its words. After a refused switch, `until` is when the model
+    /// asks for the next, in epoch seconds; a look the core could not make has none.
+    Stopped { message: String, until: Option<i64> },
+}
+
 /// A read somebody or something asked for. By default, a read whatever the age of the
 /// numbers, which nobody asked for.
 #[derive(Debug, Clone, Copy, Default)]
@@ -468,8 +525,9 @@ struct Asked {
     timed: bool,
     /// Whether a switch asked, which is over once this read lands.
     after_switch: bool,
-    /// The sign-in that asked, whose warnings are said once this read lands.
-    after_sign_in: Option<u64>,
+    /// What the change that asked warned of, by its number in `said_after_read`, which is
+    /// said once this read lands.
+    saying: Option<u64>,
     /// Whether a renewal asked, which is over once this read is.
     after_renewal: bool,
     /// Whether a change of this app's own to the account index asked, other than a switch,
@@ -536,6 +594,12 @@ fn could_not_forget(qualified: &str) -> String {
 fn could_not_rename(label: &str) -> String {
     format!("Couldn’t rename {label}")
 }
+
+const COULD_NOT_UPDATE_CONFIG: &str = "Couldn’t update Claude Code’s config";
+
+const COULD_NOT_TELL_WHOSE: &str = "Couldn’t tell whose login it is";
+
+const COULD_NOT_STOW: &str = "Couldn’t put the login away";
 
 const COULD_NOT_NAME: &str = "Couldn’t name this account";
 
@@ -712,17 +776,21 @@ pub(crate) struct State {
     readings_at: Option<i64>,
     look: Timer,
     timed_read: Timer,
+    /// The core's look at whether to switch Claude Code by itself, `decide_every` after the
+    /// last one ended, while switching by itself is on.
+    decide: Timer,
     /// The account a switch is running for, as its label with its tool: from the moment it
     /// is asked for, through asking what holds its tool's login, quitting an app and the
     /// switch itself, until the read after it lands.
     switching: Option<String>,
     /// How many of this app's other changes to the account index are under way: naming the
-    /// login signed in now, a sign-in's enrolment, a rename, forgetting, giving up on an
-    /// interrupted switch and renewing parked logins. Each holds the index from the moment it
-    /// is asked for, a sign-in's from the moment it is told to enrol, until the read after it
-    /// is over, or until it has failed. Meanwhile the change poll leaves the index alone, as
-    /// it does while a switch runs: what it finds there may be the change's own, which taken
-    /// for one made elsewhere dropped the read the change asked for.
+    /// login signed in now, a sign-in's enrolment, a rename, forgetting, writing the account
+    /// in use into its tool's config, giving up on an interrupted switch and renewing parked
+    /// logins. Each holds the index from the moment it is asked for, a sign-in's from the
+    /// moment it is told to enrol, until the read after it is over, or until it has failed.
+    /// Meanwhile the change poll leaves the index alone, as it does while a switch runs: what
+    /// it finds there may be the change's own, which taken for one made elsewhere dropped the
+    /// read the change asked for.
     changing: u32,
     /// A switch waiting for the person to let Pitboard quit an app first: the question last
     /// asked, while it is asked and after it is closed unanswered, until another switch is
@@ -732,6 +800,11 @@ pub(crate) struct State {
     pub(crate) last_switches: Vec<LastSwitch>,
     /// What giving up on an interrupted switch kept, until somebody has read it.
     pub(crate) abandoned: Option<Abandoned>,
+    /// What the sheet for putting away the login left in a file has found of it, while that
+    /// sheet is up.
+    pub(crate) left: Option<Leftover>,
+    /// What putting away the login left in a file did, until somebody has read it.
+    pub(crate) stowed: Option<Stowed>,
     /// The last thing asked for that did not happen.
     pub(crate) presented: Option<Failure>,
     /// How many failures have been said, which numbers the next.
@@ -748,9 +821,11 @@ pub(crate) struct State {
     sign_in_holding: Option<u64>,
     /// How many sign-ins have been asked for, which numbers the next.
     sign_ins: u64,
-    /// What a finished sign-in warned about, said beside the read after it once that read has
-    /// landed, which would otherwise put it away: by the sign-in's id.
+    /// What a finished sign-in or a config update warned about, said beside the read after it
+    /// once that read has landed, which would otherwise put it away: by a number of its own.
     said_after_read: Vec<(u64, Vec<Warning>)>,
+    /// How many have been kept there, which numbers the next.
+    sayings: u64,
     /// The sheet over the main window.
     pub(crate) sheet: Option<Sheet>,
     /// What went wrong in the sheet that is up.
@@ -775,12 +850,25 @@ pub(crate) struct State {
     pub(crate) told: Told,
     /// What switching Claude Code by itself has told about in a notification since the
     /// model started, or since the last switch it made, by what it was: each reason it did
-    /// not switch and each refusal, said once rather than at every look.
+    /// not switch away from a limit, for that limit and its reset, each reason it cannot judge
+    /// and each refusal, said once rather than at every look.
     auto_told: BTreeSet<String>,
-    /// Whether the last switch by itself was refused, so the next waits for the app's next
-    /// read rather than for every number a session records: each refusal is a line in the
-    /// activity log.
-    auto_refused: bool,
+    /// The accounts whose login was replaced outside Pitboard that the last read said and a
+    /// notification has told about, by `Account.id`.
+    replaced_told: BTreeSet<String>,
+    /// What the last read that asked nobody said of Claude Code's config naming another
+    /// account since Anthropic last named the login stored, which one read that asks has
+    /// been started for.
+    unconfirmed_asked: Option<String>,
+    /// What switching Claude Code by itself last came to, said under its setting while that
+    /// is on.
+    pub(crate) auto_standing: Option<AutoStanding>,
+    /// Since a switch by itself was last refused: until when, since the model started, the
+    /// next is not asked for, and how many were refused in a row. As long as the core waits
+    /// after attempts that failed in a row, since a refusal raised before the core could
+    /// record it is a line in the activity log each time. Any outcome, of a look or of a
+    /// decision, ends the row.
+    auto_wait: Option<(Duration, u32)>,
     /// The app's own preferences, kept in Pitboard's directory.
     pub(crate) preferences: Preferences,
     /// Whether the preferences have been read. Until they are, and for good where they
@@ -820,11 +908,14 @@ impl State {
             readings_at: None,
             look: Timer::Off,
             timed_read: Timer::Off,
+            decide: Timer::Off,
             switching: None,
             changing: 0,
             quitting: None,
             last_switches: Vec::new(),
             abandoned: None,
+            left: None,
+            stowed: None,
             presented: None,
             failures: 0,
             window: WindowRequest {
@@ -835,6 +926,7 @@ impl State {
             sign_in_holding: None,
             sign_ins: 0,
             said_after_read: Vec::new(),
+            sayings: 0,
             sheet: None,
             sheet_failure: None,
             saving: Vec::new(),
@@ -842,7 +934,10 @@ impl State {
             advice: Vec::new(),
             told_this_launch: Told::new(),
             auto_told: BTreeSet::new(),
-            auto_refused: false,
+            replaced_told: BTreeSet::new(),
+            unconfirmed_asked: None,
+            auto_standing: None,
+            auto_wait: None,
             told: Told::new(),
             preferences: Preferences::default(),
             preferences_read: false,
@@ -881,7 +976,7 @@ impl State {
 
     /// When the next timer is due, since the model started, if any is set.
     pub(crate) fn next_due(&self) -> Option<Duration> {
-        [self.look, self.timed_read, self.tick]
+        [self.look, self.timed_read, self.tick, self.decide]
             .into_iter()
             .filter_map(|timer| match timer {
                 Timer::Due(at) => Some(at),
@@ -991,6 +1086,7 @@ impl State {
             Intent::CloseSheet => {
                 self.sheet = None;
                 self.sheet_failure = None;
+                self.left = None;
             }
             Intent::ShowWindow { pane } => self.show_window(pane),
             Intent::DismissFailure => self.presented = None,
@@ -1030,6 +1126,11 @@ impl State {
                 }
             }
             Intent::Forget { qualified } => self.change(Job::Forget { qualified }, jobs),
+            Intent::UpdateConfig { qualified } => {
+                self.change(Job::UpdateConfig { qualified }, jobs);
+            }
+            Intent::Stow => self.stow(jobs),
+            Intent::DismissStowed => self.stowed = None,
             Intent::PaneShown { pane } => self.pane_shown(pane, now, jobs),
             Intent::ReadSchedule => jobs.push(Job::ReadSchedule {
                 after_change: false,
@@ -1233,6 +1334,12 @@ impl State {
             }
             if self.sheet.as_ref() != Some(&sheet) {
                 self.sheet_failure = None;
+                // The sheet for a login left in a file looks each time it is put up, since the
+                // file may have changed since it last did, and what it found goes with it.
+                self.left = (sheet == Sheet::Stow).then_some(Leftover::Looking);
+                if self.left.is_some() {
+                    jobs.push(Job::LookLeft);
+                }
             }
             self.sheet = Some(sheet);
         }
@@ -1287,6 +1394,9 @@ impl State {
                 jobs,
             );
         }
+        if matches!(self.decide, Timer::Due(at) if at <= now.running) {
+            self.look_to_switch(jobs);
+        }
     }
 
     /// A read, once what is installed is known. The first read asks which tools are
@@ -1309,11 +1419,17 @@ impl State {
     /// once. The first time the app has ever been opened, the window opens, once. Where they
     /// could not be read, `None`, nothing is kept in place of what may be there, then or
     /// later, and the window does not open as though for the first time.
+    ///
+    /// With switching by itself on, the core's look waits for the launch's first read, which
+    /// asks Anthropic for the reading it judges by: before it, the readings may be an older
+    /// Pitboard's, which the look cannot judge, and a reason posted then is gone seconds
+    /// later. Only what was read while the preferences were is looked at now.
     fn kept(
         &mut self,
         told: Told,
         preferences: Option<(Preferences, bool)>,
         windows: Option<Loaded>,
+        now: Now,
         jobs: &mut Vec<Job>,
     ) {
         self.windows.loaded(windows, jobs);
@@ -1342,6 +1458,9 @@ impl State {
             && !self.standing_in
         {
             self.advise(&status, jobs);
+            self.look_to_switch(jobs);
+        } else {
+            self.decide_later(now);
         }
     }
 
@@ -1391,13 +1510,13 @@ impl State {
             .filter_map(|provider| standing.iter().find(|a| &a.provider == provider))
             .cloned()
             .collect();
-        self.auto(read, jobs);
     }
 
     /// The settings' switch for switching Claude Code by itself, with its share. Taken only
     /// once the preferences have been read, so it is never kept over a file that could not
-    /// be, and never lost under what the file says once it is. Turned on, what was read last
-    /// is looked at at once.
+    /// be, and never lost under what the file says once it is. Turned on, or at another
+    /// share, the core looks at once. Turned off, nothing is said under it, and a refusal's
+    /// wait is over: turned on again, it is somebody asking.
     fn auto_switch_set(&mut self, on: bool, at: u8, jobs: &mut Vec<Job>) {
         if !self.preferences_read {
             return;
@@ -1411,108 +1530,192 @@ impl State {
         jobs.push(Job::KeepPreferences {
             preferences: self.preferences.clone(),
         });
-        if let Some(status) = self.status.clone()
-            && !self.standing_in
-        {
-            self.auto(&status, jobs);
+        if !on {
+            self.auto_standing = None;
+            self.auto_wait = None;
+        }
+        self.look_to_switch(jobs);
+    }
+
+    /// Asks the core's look whether to switch Claude Code by itself, where somebody turned
+    /// that on: after every read, after numbers or a change the poll found, as it is turned
+    /// on, and every `decide_every`. The look reads files alone and claims nothing, so it is
+    /// asked whatever else is under way.
+    fn look_to_switch(&mut self, jobs: &mut Vec<Job>) {
+        if !self.preferences_read || !self.preferences.auto_switch {
+            self.decide = Timer::Off;
+            return;
+        }
+        self.decide = Timer::Running;
+        jobs.push(Job::AutoLook {
+            at: self.preferences.threshold().percent(),
+        });
+    }
+
+    /// The core's look is next due `decide_every` from now, or as a refusal's wait ends where
+    /// that comes first, while switching by itself is on and the model runs by itself.
+    fn decide_later(&mut self, now: Now) {
+        self.decide = if self.started && self.preferences.auto_switch {
+            let next = now.running + self.cadence.decide_every;
+            Timer::Due(match self.auto_wait {
+                Some((until, _)) if until > now.running => next.min(until),
+                _ => next,
+            })
+        } else {
+            Timer::Off
+        };
+    }
+
+    /// What the core's look came to, unless switching by itself was turned off meanwhile.
+    /// What stands is said, and where only a decision under the core's lock can say, that is
+    /// asked for. Files the core could not read decide nothing, which each read says too.
+    fn auto_looked(
+        &mut self,
+        looked: Result<AutoLooked, PitboardError>,
+        now: Now,
+        jobs: &mut Vec<Job>,
+    ) {
+        self.decide_later(now);
+        if !self.preferences.auto_switch {
+            return;
+        }
+        match looked {
+            Ok(AutoLooked::Stands(outcome)) => self.auto_stands(outcome, jobs),
+            Ok(AutoLooked::Act) => self.auto_act(now, jobs),
+            Err(PitboardError::Failed { message, .. }) => {
+                self.auto_standing = Some(AutoStanding::Stopped {
+                    message,
+                    until: None,
+                });
+            }
         }
     }
 
-    /// Asks the core to switch Claude Code by itself where somebody turned that on and a
-    /// limit of the account in use, as `read` has it, has reached their share. The core
-    /// decides whether, and to which account. Claimed as a switch is, so nothing else
-    /// switches meanwhile and the poll takes its change for this app's own; and not while
-    /// another switch, the question before one, or any other change of this app's own is
-    /// under way, behind which it would wait on the lane of changes holding every switch
-    /// somebody asks for.
-    fn auto(&mut self, read: &Status, jobs: &mut Vec<Job>) {
-        if !self.preferences_read
-            || !self.preferences.auto_switch
-            || self.switch_under_way().is_some()
+    /// The look says only a decision under the core's lock can say: asked for, and claimed
+    /// as a switch is, so nothing else switches meanwhile and the poll takes its change for
+    /// this app's own. Not while another switch, the question before one, or any other change
+    /// of this app's own is under way, behind which it would wait on the lane of changes
+    /// holding every switch somebody asks for, nor while a refusal's wait runs: a later look
+    /// asks again.
+    fn auto_act(&mut self, now: Now, jobs: &mut Vec<Job>) {
+        if self.switch_under_way().is_some()
             || self.changing > 0
-            || self.auto_refused
+            || self.auto_wait.is_some_and(|(until, _)| now.running < until)
         {
             return;
         }
-        let at = self.preferences.threshold();
-        let reached = read
-            .accounts
-            .iter()
-            .filter(|account| {
-                account.provider == ProviderId::Claude.code()
-                    && account.signed_in
-                    && account.label.is_some()
-            })
-            .flat_map(|account| account.usage.iter().flat_map(|usage| &usage.windows))
-            .any(|limit| {
-                limit.percent >= f64::from(at.percent())
-                    && limit.resets_at.is_none_or(|resets| resets > read.now)
-            });
-        if reached {
-            self.switching = Some(AUTOMATICALLY.to_owned());
-            jobs.push(Job::AutoSwitch { at: at.percent() });
-        }
+        self.switching = Some(AUTOMATICALLY.to_owned());
+        jobs.push(Job::AutoSwitch {
+            at: self.preferences.threshold().percent(),
+        });
     }
 
-    /// What switching Claude Code by itself came to. A switch is taken as one somebody asked
-    /// for is, and said in a notification, since nobody was there to ask for it; a reason it
-    /// did not switch, and a refusal, are said once each until it next switches. Nothing to
-    /// do, and no account with room, say nothing: a run-out is advised as it always was.
+    /// What the core's decision under its lock came to. A switch is taken as one somebody
+    /// asked for is, and said in a notification, since nobody was there to ask for it, even
+    /// where the setting was turned off while it was made. Anything else it came to after it
+    /// was turned off moved nothing, and is neither said nor waited on: turned on again, it
+    /// is somebody asking. A refusal is said once for its code until the next switch, and the
+    /// next is asked for no sooner than the core waits after as many attempts failed in a row.
     fn auto_switched(
         &mut self,
         done: Result<AutoSwitched, PitboardError>,
         now: Now,
         jobs: &mut Vec<Job>,
     ) {
-        let told = match done {
-            Ok(AutoSwitched::Switched { switched, used }) => {
-                if let Switch::Switched {
-                    from, to, adoption, ..
-                } = &switched.outcome
-                {
-                    jobs.push(Job::Post {
-                        notice: crate::present::auto_switched_notice(
-                            from,
-                            to,
-                            &used,
-                            adoption,
-                            now.epoch(),
-                        ),
-                    });
-                    let qualified = qualified_claude(to);
-                    self.auto_told.clear();
-                    self.switched(&qualified, None, Ok(switched), now, jobs);
-                    return;
-                }
-                self.switching = None;
-                return;
+        match done {
+            Ok(AutoSwitched::Switched {
+                from,
+                to,
+                adoption,
+                warnings,
+                used,
+            }) => {
+                jobs.push(Job::Post {
+                    notice: crate::present::auto_switched_notice(
+                        &from,
+                        &to,
+                        &used,
+                        &adoption,
+                        now.epoch(),
+                    ),
+                });
+                self.auto_told.clear();
+                self.auto_wait = None;
+                let qualified = qualified_claude(&to);
+                let switched = Switched {
+                    outcome: Switch::Switched {
+                        provider: ProviderId::Claude.code().into(),
+                        from: from.clone(),
+                        to: to.clone(),
+                        adoption: adoption.clone(),
+                    },
+                    warnings: warnings.clone(),
+                };
+                self.auto_standing = Some(AutoStanding::Came(AutoSwitched::Switched {
+                    from,
+                    to,
+                    adoption,
+                    warnings,
+                    used,
+                }));
+                self.switched(&qualified, None, Ok(switched), now, jobs);
             }
-            Ok(AutoSwitched::Skipped {
+            _ if !self.preferences.auto_switch => self.switching = None,
+            Ok(outcome) => {
+                self.switching = None;
+                self.auto_stands(outcome, jobs);
+            }
+            Err(PitboardError::Failed { code, message, .. }) => {
+                self.switching = None;
+                let refusals = self.auto_wait.map_or(0, |(_, refusals)| refusals) + 1;
+                let wait = autoswitch::retry_after(refusals);
+                self.auto_wait = Some((
+                    now.running + Duration::from_secs(wait.unsigned_abs()),
+                    refusals,
+                ));
+                self.auto_standing = Some(AutoStanding::Stopped {
+                    message: message.clone(),
+                    until: Some(now.epoch() + wait),
+                });
+                if self.auto_told.insert(format!("refused/{code}")) {
+                    jobs.push(Job::Post {
+                        notice: crate::present::auto_refused_notice(&code, &message),
+                    });
+                }
+            }
+        }
+    }
+
+    /// The core's look or its decision came to `outcome`, which is no switch and ends a row of
+    /// refusals. Said under the setting, and a reason it did not switch away from a limit, or
+    /// cannot judge at all, posted once for what tells it apart until the next switch.
+    fn auto_stands(&mut self, outcome: AutoSwitched, jobs: &mut Vec<Job>) {
+        self.auto_wait = None;
+        let told = match &outcome {
+            AutoSwitched::Skipped {
+                key,
                 from,
                 used,
-                code,
                 why,
-            }) => (
-                format!("skipped/{code}"),
-                crate::present::auto_skipped_notice(&from, &used, &code, &why),
-            ),
-            Err(PitboardError::Failed { code, message, .. }) => {
-                self.auto_refused = true;
-                (
-                    format!("refused/{code}"),
-                    crate::present::auto_refused_notice(&code, &message),
-                )
-            }
-            Ok(AutoSwitched::Idle | AutoSwitched::NoRoom) => {
-                self.switching = None;
-                return;
-            }
+                ..
+            } => Some((
+                key.clone(),
+                crate::present::auto_skipped_notice(key, from, used, why),
+            )),
+            AutoSwitched::NotWatching { key, why, .. } => Some((
+                key.clone(),
+                crate::present::auto_not_watching_notice(key, why),
+            )),
+            AutoSwitched::Watching { .. }
+            | AutoSwitched::Waiting { .. }
+            | AutoSwitched::Switched { .. } => None,
         };
-        self.switching = None;
-        let (key, notice) = told;
-        if self.auto_told.insert(key) {
+        if let Some((key, notice)) = told
+            && self.auto_told.insert(key)
+        {
             jobs.push(Job::Post { notice });
         }
+        self.auto_standing = Some(AutoStanding::Came(outcome));
     }
 
     fn read(&mut self, asked: Asked, now: Now, jobs: &mut Vec<Job>) {
@@ -1521,7 +1724,7 @@ impl State {
             changes_seen: self.changes_seen,
             timed: asked.timed,
             after_switch: asked.after_switch,
-            after_sign_in: asked.after_sign_in,
+            saying: asked.saying,
             after_renewal: asked.after_renewal,
             after_change: asked.after_change,
         };
@@ -1552,9 +1755,9 @@ impl State {
     }
 
     /// A read is over, or was not needed. The read after a switch ending ends the switch, the
-    /// read after any other change of this app's own ends that change, and what a sign-in
-    /// warned about is said once the read after it is over, whatever it came to, as the Swift
-    /// model said it once its `refresh` had returned.
+    /// read after any other change of this app's own ends that change, and what a sign-in or
+    /// a config update warned about is said once the read after it is over, whatever it came
+    /// to, as the Swift model said a sign-in's once its `refresh` had returned.
     fn over(&mut self, ticket: Ticket, now: Now) {
         if ticket.after_switch {
             self.switching = None;
@@ -1565,8 +1768,11 @@ impl State {
         if ticket.after_renewal {
             self.machine.renewing = false;
         }
-        if let Some(id) = ticket.after_sign_in
-            && let Some(at) = self.said_after_read.iter().position(|(of, _)| *of == id)
+        if let Some(number) = ticket.saying
+            && let Some(at) = self
+                .said_after_read
+                .iter()
+                .position(|(of, _)| *of == number)
         {
             let (_, said) = self.said_after_read.remove(at);
             let new: Vec<Warning> = said
@@ -1608,13 +1814,14 @@ impl State {
                 reopen,
                 done,
             } => self.switched(&qualified, reopen, done.map_err(Some), now, jobs),
+            Answer::AutoLooked { looked } => self.auto_looked(looked, now, jobs),
             Answer::AutoSwitched { done } => self.auto_switched(done, now, jobs),
             Answer::Opened | Answer::Pasted | Answer::Stopped | Answer::Saved | Answer::Posted => {}
             Answer::Kept {
                 told,
                 preferences,
                 windows,
-            } => self.kept(told, preferences, windows, jobs),
+            } => self.kept(told, preferences, windows, now, jobs),
             Answer::WindowsKept { write } => self.windows.written(write),
             Answer::SharedChecked { stores, shared } => {
                 self.windows.shared(stores, shared, jobs);
@@ -1644,6 +1851,11 @@ impl State {
             }
             Answer::Forgot { qualified, done } => {
                 self.forgot(&qualified, done.map_err(Some), now, jobs);
+            }
+            Answer::ConfigUpdated(done) => self.config_updated(done.map_err(Some), now, jobs),
+            Answer::LookedLeft(found) => self.looked_left(found.map_err(Some)),
+            Answer::Stowed { from, done } => {
+                self.stowed(from.as_ref(), done.map_err(Some), now, jobs);
             }
             Answer::Abandoned(done) => self.abandon_over(done.map_err(Some), now, jobs),
             Answer::SignInStarted { id, started } => {
@@ -1719,6 +1931,8 @@ impl State {
                 Job::Switch { qualified, reopen } => {
                     self.switched(&qualified, reopen, Err(None), now, jobs);
                 }
+                // Nothing is said of a look that came to nothing: the next is at its time.
+                Job::AutoLook { .. } => self.decide_later(now),
                 // Whether it switched is not known, and nothing is said of it: the accounts
                 // are read again to show who is in use, and the next look decides again.
                 Job::AutoSwitch { .. } => {
@@ -1761,9 +1975,12 @@ impl State {
                     self.renamed(&renaming, Err(None), now, jobs);
                 }
                 Job::Forget { qualified } => self.forgot(&qualified, Err(None), now, jobs),
+                Job::UpdateConfig { .. } => self.config_updated(Err(None), now, jobs),
+                Job::LookLeft => self.looked_left(Err(None)),
+                Job::Stow { from, .. } => self.stowed(from.as_ref(), Err(None), now, jobs),
                 // Nothing kept could be read: nothing was told before, as far as anyone knows,
                 // and the windows' records are held for this launch, never written.
-                Job::LoadKept => self.kept(Told::new(), None, None, jobs),
+                Job::LoadKept => self.kept(Told::new(), None, None, now, jobs),
                 Job::KeepTold { .. } | Job::KeepPreferences { .. } | Job::Post { .. } => {}
                 // What it wrote is not known: a window waiting for it opens all the same, and
                 // the next write writes the records whole.
@@ -1857,10 +2074,7 @@ impl State {
                     self.sheet = None;
                     self.sheet_failure = None;
                     let said = self.enrolled(&signing, done);
-                    if !said.is_empty() {
-                        self.said_after_read.push((id, said));
-                    }
-                    asked.after_sign_in = Some(id);
+                    asked.saying = self.say_after_read(said);
                 }
                 self.refresh(asked, now, jobs);
             }
@@ -1966,8 +2180,8 @@ impl State {
                     .iter()
                     .any(|w| w.code == "recovery_undetermined");
                 self.forget_switches_undone(&read);
+                self.tell_replaced(&read.warnings, jobs);
                 self.warnings = read.warnings.clone();
-                self.auto_refused = false;
                 self.advise(&read, jobs);
                 self.windows.read_enrolled(&read, jobs);
                 self.status = Some(read);
@@ -1982,11 +2196,7 @@ impl State {
                 self.changed_at = Some(changed_before);
                 self.readings_at = Some(readings_before);
                 self.landed(ticket, now);
-                // The read after a switch or another change held the index as it was
-                // advised on, and lets it go only now that it has landed.
-                if let Some(read) = self.status.clone() {
-                    self.auto(&read, jobs);
-                }
+                self.look_to_switch(jobs);
             }
             Err(PitboardError::Failed {
                 code,
@@ -2015,6 +2225,45 @@ impl State {
         }
     }
 
+    /// A login replaced outside Pitboard is said by every read until it is put right, and
+    /// posted once for its account while it stands, since nobody may have the window open to
+    /// see it: again only once a read no longer says it and a later one does. Its words name
+    /// whose login is stored now, which every switch changes, so it is known by its account.
+    fn tell_replaced(&mut self, warnings: &[Warning], jobs: &mut Vec<Job>) {
+        let replaced: Vec<(&str, &Warning)> = warnings
+            .iter()
+            .filter(|warning| warning.code == "login_replaced")
+            .filter_map(|warning| Some((warning.account.as_deref()?, warning)))
+            .collect();
+        for (account, warning) in &replaced {
+            if !self.replaced_told.contains(*account) {
+                jobs.push(Job::Post {
+                    notice: crate::present::standing_notice(warning),
+                });
+            }
+        }
+        self.replaced_told = replaced
+            .into_iter()
+            .map(|(account, _)| account.to_owned())
+            .collect();
+    }
+
+    /// Whether `read`, which asked nobody, says Claude Code's config has named another
+    /// account since Anthropic last named the login stored, in words no read that asks has
+    /// been started for yet. A sign-in leaves the config so, and a session's status line
+    /// records numbers soon after one, so the read after them asks Anthropic whose the login
+    /// is now, once for each thing the config is said to name.
+    fn unconfirmed(&mut self, read: &Status) -> bool {
+        let said = read
+            .warnings
+            .iter()
+            .find(|warning| warning.code == "in_use_unconfirmed")
+            .map(|warning| warning.message.clone());
+        let new = said.is_some() && said != self.unconfirmed_asked;
+        self.unconfirmed_asked = said;
+        new
+    }
+
     /// What is already known came in, or could not be read.
     fn known(&mut self, why: Why, read: Option<Status>, now: Now, jobs: &mut Vec<Job>) {
         match why {
@@ -2028,18 +2277,19 @@ impl State {
                 self.landed(ticket, now);
             }
             Why::Changed { measured } => {
+                self.look_to_switch(jobs);
                 if let Some(read) = read {
                     // A read that asks nobody says a switch is stuck wherever that can be
                     // told without a request. Saying nothing, it cannot tell a switch given
                     // up on or finished elsewhere from one only a service could judge, so
                     // where one is offered the read that asks says which.
-                    if read
+                    let waiting = read
                         .warnings
                         .iter()
-                        .any(|w| w.code == "recovery_undetermined")
-                    {
-                        self.stuck = true;
-                    } else if self.stuck {
+                        .any(|w| w.code == "recovery_undetermined");
+                    let unsaid = self.stuck && !waiting;
+                    self.stuck |= waiting;
+                    if self.unconfirmed(&read) || unsaid {
                         self.refresh(Asked::default(), now, jobs);
                     }
                     self.forget_switches_undone(&read);
@@ -2055,6 +2305,10 @@ impl State {
                 self.look_over(now);
             }
             Why::Numbers { measured } => {
+                self.look_to_switch(jobs);
+                if read.as_ref().is_some_and(|read| self.unconfirmed(read)) {
+                    self.refresh(Asked::default(), now, jobs);
+                }
                 // Onto what is shown as the numbers land, which a read may have replaced
                 // while they were read. The Swift put them onto what was shown when the
                 // look found them, and so put back what that read had replaced.
@@ -2075,9 +2329,7 @@ impl State {
     /// Two things are looked at, because they mean different things. The account index
     /// changing can be a switch made somewhere else, so who is signed in is read again. The
     /// readings changing is only numbers, newer ones a session or the command line has seen,
-    /// so only the numbers are taken. Read again every time, who is signed in would come from
-    /// each tool's own files several times a minute, and a switch that could not update
-    /// Claude Code's config leaves it naming the account before.
+    /// so only the numbers are taken: a reading moving says nothing about who is signed in.
     fn looked(&mut self, changed: i64, measured: i64, now: Now, jobs: &mut Vec<Job>) {
         // The first look only records where things stand; there is nothing to compare to.
         let (Some(seen), Some(seen_readings)) = (self.changed_at, self.readings_at) else {
@@ -2206,7 +2458,9 @@ impl State {
     ///
     /// What the switch means for sessions already running depends on the tool. One that
     /// follows by itself gets when it will have; one that never does gets said so, since a
-    /// countdown there would promise something that is not going to happen.
+    /// countdown there would promise something that is not going to happen. One that follows
+    /// at its login's next renewal gets neither: when that happens is up to the session, and
+    /// the switch's warning about the file that holds it back says the rest.
     fn switched(
         &mut self,
         qualified: &str,
@@ -2224,11 +2478,15 @@ impl State {
         match done {
             Ok(done) => {
                 self.changes_seen += 1;
-                self.said(qualified, done, now);
                 // Advice about this tool is about the account it has just left. Another
-                // tool's stays: it is as true as it was, and it is never told again.
-                let provider = split(qualified).0;
-                self.advice.retain(|advice| advice.provider != provider);
+                // tool's stays: it is as true as it was, and it is never told again. Nothing
+                // moved where the account was already in use, and advice about it stands
+                // until a read no longer bears it out.
+                if matches!(done.outcome, Switch::Switched { .. }) {
+                    let provider = split(qualified).0;
+                    self.advice.retain(|advice| advice.provider != provider);
+                }
+                self.said(qualified, done, now);
                 self.updated_ms = None;
                 self.refresh(
                     Asked {
@@ -2267,6 +2525,7 @@ impl State {
                     Adoption::Follows { within_seconds } => {
                         (Some(now.epoch() + i64::from(within_seconds)), None)
                     }
+                    Adoption::Renewal { .. } => (None, None),
                     Adoption::Restart { program } => (
                         None,
                         Some(RestartNeeded {
@@ -2481,6 +2740,130 @@ impl State {
         }
     }
 
+    /// Writing the account in use into its tool's config is over. Nothing moved, so what was
+    /// said of the last switch and of the account in use stands. What it warned of, such as a
+    /// config it could not write, is said beside the read after it, and what refused it in
+    /// the window.
+    fn config_updated(
+        &mut self,
+        done: Result<Vec<Warning>, Option<PitboardError>>,
+        now: Now,
+        jobs: &mut Vec<Job>,
+    ) {
+        match done {
+            Ok(warned) => {
+                self.changes_seen += 1;
+                self.updated_ms = None;
+                let saying = self.say_after_read(warned);
+                self.refresh(
+                    Asked {
+                        after_change: true,
+                        saying,
+                        ..Asked::default()
+                    },
+                    now,
+                    jobs,
+                );
+            }
+            Err(error) => {
+                self.change_over();
+                self.present(match error {
+                    Some(error) => Refused::of(COULD_NOT_UPDATE_CONFIG.into(), error),
+                    None => Refused::lost(COULD_NOT_UPDATE_CONFIG.into()),
+                });
+            }
+        }
+    }
+
+    /// Puts away the file the sheet for it looked at, as it found it, from that sheet, which
+    /// holds back until it answers. Nothing is asked before the look has found a login it can
+    /// put away, nor while one is being put away.
+    fn stow(&mut self, jobs: &mut Vec<Job>) {
+        if self.sheet != Some(Sheet::Stow) || self.saving.contains(&Sheet::Stow) {
+            return;
+        }
+        let Some(Leftover::Found(Some(left))) = &self.left else {
+            return;
+        };
+        if let Foreseen::NotEnrolled(_) = left.login {
+            return;
+        }
+        let seen = left.seen.clone();
+        self.sheet_failure = None;
+        let from = self.saving_from();
+        self.change(Job::Stow { seen, from }, jobs);
+    }
+
+    /// What the look at the file behind Claude Code's store found, taken in while its sheet
+    /// is up, or why it could not look, said in that sheet. `Err(None)` is a look that came
+    /// to nothing.
+    fn looked_left(&mut self, found: Result<Option<Left>, Option<PitboardError>>) {
+        if self.sheet != Some(Sheet::Stow) {
+            return;
+        }
+        match found {
+            Ok(found) => self.left = Some(Leftover::Found(found)),
+            Err(error) => {
+                self.left = Some(Leftover::Unknown);
+                let refused = match error {
+                    Some(error) => Refused::of(COULD_NOT_TELL_WHOSE.into(), error),
+                    None => Refused::lost(COULD_NOT_TELL_WHOSE.into()),
+                };
+                self.sheet_failure = Some(self.number(refused));
+            }
+        }
+    }
+
+    /// Putting away the file behind Claude Code's store is over. Done, its sheet closes,
+    /// what it did is said until somebody puts it away, what it warned of beside the read
+    /// after it, and the accounts are read again. Refused, it is said in the sheet it was
+    /// asked from, which looks at the file again, and in the window where that has gone.
+    fn stowed(
+        &mut self,
+        from: Option<&Sheet>,
+        done: Result<(Stowed, Vec<Warning>), Option<PitboardError>>,
+        now: Now,
+        jobs: &mut Vec<Job>,
+    ) {
+        self.saved(from);
+        match done {
+            Ok((stowed, warned)) => {
+                self.changes_seen += 1;
+                if self.sheet == Some(Sheet::Stow) {
+                    self.sheet = None;
+                    self.sheet_failure = None;
+                    self.left = None;
+                }
+                self.stowed = Some(stowed);
+                self.updated_ms = None;
+                let saying = self.say_after_read(warned);
+                self.refresh(
+                    Asked {
+                        after_change: true,
+                        saying,
+                        ..Asked::default()
+                    },
+                    now,
+                    jobs,
+                );
+            }
+            Err(error) => {
+                self.change_over();
+                let refused = match error {
+                    Some(error) => Refused::of(COULD_NOT_STOW.into(), error),
+                    None => Refused::lost(COULD_NOT_STOW.into()),
+                };
+                self.save_failed(from, refused);
+                // What it found is out of date: the file may have changed, or been renewed
+                // and written back, before it stopped, and Put Away would only send it again.
+                if self.sheet == Some(Sheet::Stow) {
+                    self.left = Some(Leftover::Looking);
+                    jobs.push(Job::LookLeft);
+                }
+            }
+        }
+    }
+
     /// Giving up on an interrupted switch is over: what it kept is said and the accounts are
     /// read again, asking each service, or what stopped it is said in the window.
     fn abandon_over(
@@ -2525,6 +2908,18 @@ impl State {
     /// One of this app's own changes to the account index is over, and no longer holds it.
     fn change_over(&mut self) {
         self.changing = self.changing.saturating_sub(1);
+    }
+
+    /// Keeps what a change warned about to be said beside the read after it once that read is
+    /// over, which would otherwise put it away: the number that read is asked with, where
+    /// there is anything to say.
+    fn say_after_read(&mut self, said: Vec<Warning>) -> Option<u64> {
+        if said.is_empty() {
+            return None;
+        }
+        self.sayings += 1;
+        self.said_after_read.push((self.sayings, said));
+        Some(self.sayings)
     }
 
     /// The read after one of this app's own changes, which ends that change once it is over.

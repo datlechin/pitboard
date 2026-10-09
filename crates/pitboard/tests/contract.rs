@@ -36,9 +36,12 @@ macro_rules! contract {
             ".envelope.data.accounts[].parked.refresh_expires_at" => "[time]",
             ".envelope.data.parked_at" => "[time]",
             ".envelope.data.limit.resets_at" => "[time]",
+            ".envelope.data.as_of" => "[time]",
             // Hashed from the config directory, so it is this machine's; `slot` has its
             // own tests.
             ".envelope.data.slot.service" => "[slot]",
+            // In the test's own scratch home.
+            ".envelope.data.path" => "[path]",
         });
     };
 }
@@ -201,8 +204,8 @@ fn enroll() {
 
 /// The last thing a person runs, and the one whose shape matters to whatever wrapper runs
 /// it: how many parked logins went, how many did not, and whether the home is gone.
-/// The reading that asks nobody anything: what was last measured, and who Claude Code's
-/// config says is signed in. Its envelope is a contract like any other.
+/// The reading that asks nobody anything: what was last measured, and whose login each tool
+/// has stored, as its service last said. Its envelope is a contract like any other.
 #[test]
 #[cfg_attr(windows, ignore = "W22: switching Claude Code on Windows")]
 fn status_offline() {
@@ -468,4 +471,27 @@ fn watch() {
     contract!("watch_switched", value, code);
     let (value, code) = json(&env, &["watch", "--once"]);
     contract!("watch_idle", value, code);
+}
+
+/// Nothing behind the store Claude Code keeps its login in is nothing to put away, and is
+/// not asked about: so on Linux, where the file is that store, always.
+#[test]
+#[cfg_attr(windows, ignore = "W22: switching Claude Code on Windows")]
+fn stow_with_nothing_left() {
+    let env = two_accounts("contract-stow-nothing");
+    let (value, code) = json(&env, &["stow"]);
+    contract!("stow_nothing_left", value, code);
+}
+
+/// The login Claude Code has stored, left in `.credentials.json` behind the keychain too, goes
+/// with the file. Only macOS keeps a file behind a keychain.
+#[test]
+#[cfg(target_os = "macos")]
+fn stow() {
+    let env = two_accounts("contract-stow");
+    let left = env.root.join(".credentials.json");
+    common::os::write_private(&left, &common::credential("refresh-a").to_string());
+    let (value, code) = json(&env, &["stow"]);
+    assert!(!left.exists(), "the file is gone");
+    contract!("stow", value, code);
 }
