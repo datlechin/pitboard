@@ -89,7 +89,8 @@ pub enum Warning {
         label: String,
     },
     RenewalFailed(Error),
-    /// The tool's write lock stopped being Pitboard's while a change was under way.
+    /// The tool's write lock, or its refresh lock, stopped being Pitboard's while a change was
+    /// under way.
     LockCompromised {
         tool: ProviderId,
     },
@@ -236,10 +237,11 @@ impl fmt::Display for Warning {
             Warning::Recovered(r) => write!(f, "{r}"),
             Warning::LockCompromised { tool } => write!(
                 f,
-                "{} reclaimed the credential write lock while this change was under way, so \
-                 it may have written the login at the same time. Pitboard read the slot back \
+                "{} reclaimed a credential lock while this change was under way, so it may \
+                 have written or renewed a login at the same time. Pitboard read the slot back \
                  and the change stood, but check with `pitboard` that the right account is \
-                 signed in.",
+                 signed in. A login Pitboard parked meanwhile may need signing in to again \
+                 when it is next used.",
                 tool.name()
             ),
             Warning::ConfigNotUpdated(e) | Warning::RenewalFailed(e) | Warning::SwitchStuck(e) => {
