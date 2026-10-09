@@ -28,8 +28,12 @@ Automatic switching is off until you turn it on. It never switches Codex, becaus
 
     ```text
     Watching Claude Code. Pitboard switches to another of your accounts once a limit of the one in use reaches 90%. Stop with Ctrl-C.
+    13:41:05 Watching work: 82% of its 5-hour limit, as of 13:41.
     14:02:11 Switched Claude Code from work to personal: work has used 91% of its 5-hour limit. Claude Code sessions already running follow within 33 seconds.
+    14:02:13 Watching personal: 12% of its 5-hour limit, as of 14:01.
     ```
+
+    It prints a line for each switch and each reason it does not switch. It also names the account it watches and how much of its fullest limit is used.
 
     Control-C stops it. Nothing installs it, and it starts nothing that outlives it. See [`watch`](/reference/account-commands#watch).
   </Tab>
@@ -109,9 +113,9 @@ Once a limit reaches the share, Pitboard does not switch away from it in these c
 
 The app says why in a notification titled **Claude Code was not switched**. `pitboard log` records each reason as `auto-stay`, once for each limit and its reset.
 
-When a try fails, the app posts **Pitboard could not switch Claude Code**. `pitboard watch` says when it tries again, and for which limit. After the third failed try at a limit, Pitboard says at once that it tries no more, where no other limit at the share is left to try. The app and `pitboard watch` say each failure once until the next switch. They say each reason a limit is not switched away from once for that limit and its reset.
+When a try fails, the app posts **Pitboard could not switch Claude Code**. `pitboard watch` says when it tries again, and for which limit. The app and `pitboard watch` say each failure once until the next switch. After the third failed try at a limit, Pitboard records at once that it tries no more, where no other limit at the share is left to try. Both say so within 30 seconds, without waiting out the minute after a failure. They say each reason a limit is not switched away from once for that limit and its reset.
 
-A keychain that one run cannot read, such as `pitboard watch` over SSH while the keychain is locked, fails that run's tries alone. Another run that can read it, such as the app, still switches.
+A keychain that one run cannot read, such as `pitboard watch` over SSH while the keychain is locked, fails that run's tries alone. Another run that can read it, such as the app, still switches. After a failure, each run asks again no sooner than 1 minute later. It waits twice as long after each failure in a row, up to 15 minutes.
 
 A login file behind the keychain, `~/.claude/.credentials.json` on macOS, does not stop a switch. Sessions started after the switch use the account switched to at once, and open ones when their login is next renewed. The switch's notification and line say so in place of the 33 seconds. See [Open sessions](/concepts/switching#open-sessions).
 

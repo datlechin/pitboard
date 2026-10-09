@@ -263,11 +263,14 @@ A switch is the one `pitboard use` makes, with the same checks and journal. [`pi
 
 `watch`, the app and your own `pitboard use` can run at once without making two switches from one reading. See [Who starts a switch](/concepts/switching#who-starts-a-switch).
 
-`watch` prints a line when it starts, then a line for each switch. It prints each thing that stops a switch once, until the next switch: a reason a limit is not switched away from once for that limit and its reset, and a wait once for when it ends. Each of these lines but the first starts with the local time, such as `14:02:11`.
+`watch` prints a line when it starts, then a line for each switch. Each line but the first starts with the local time, such as `14:02:11`.
+
+It names the account it watches whenever its last line said something else. That is once it has read your accounts, and after a switch, a reason, a wait or an error. It prints each thing that stops a switch once, until the next switch. A reason not to switch away from a limit is printed once for that limit and its reset. A wait is printed once for when it ends.
 
 | Output | When |
 | --- | --- |
 | `Watching Claude Code. Pitboard switches to another of your accounts once a limit of the one in use reaches 95%. Stop with Ctrl-C.` | `watch` starts. |
+| `Watching work: 62% of its 5-hour limit, as of 14:00.` | No limit of the account in use has reached the share. The line names its fullest limit that has not reset, and when Pitboard read it. While Anthropic holds Pitboard off asking about the account, as after a rate limit, the line ends `Anthropic holds Pitboard off asking again until 15:28.` |
 | `Switched Claude Code from work to personal: work has used 96% of its 5-hour limit. Claude Code sessions already running follow within 33 seconds.` | It switched. While a login file sits behind the keychain, the last sentence says when open sessions follow instead, as for `use`. |
 | `work has used 97% of its 5-hour limit, and no other Claude Code account has room below 95% in every limit.` | A limit reached the share, and no other account has room. Nothing moves. Where Anthropic has given no reading of an account it could switch to yet, the line ends `, and there is no reading of personal from Anthropic yet.` |
 | `work has used 96% of its 5-hour limit. Pitboard tries again at 14:03.` | A try at switching away from a limit came to nothing, and Pitboard waits before the next. The line names the limit it tries then. |
@@ -290,13 +293,17 @@ A limit for one model is named with its model, as in `97% of its weekly Opus lim
 | `whose login Claude Code has stored could not be told (could not reach Anthropic: timed out). It asks again at 14:03` | Pitboard could not tell whose the login is, for the reason in brackets. It tries again at that time, as [When it holds back](/guides/automatic-switching#when-it-holds-back) describes. |
 | `there is no reading of work from Anthropic yet` | Anthropic has given no reading of the account in use, as after an update of Pitboard. |
 
-A switch that fails prints its error on standard error, as `pitboard use` would, and `watch` goes on. Each error code is printed once until the next switch. When it tries again depends on the error, as [Switch before an account runs out](/guides/automatic-switching) describes.
+A switch that fails prints its error on standard error, as `pitboard use` would, and `watch` goes on. Each error code is printed once until the next switch. [What it never does](/guides/automatic-switching#what-it-never-does) says how Pitboard waits after a try that came to nothing.
+
+After an error, `watch` makes no decision that takes Pitboard's lock for 1 minute. It waits twice as long after each error in a row, up to 15 minutes, and any other outcome ends the row. Meanwhile it still reads Pitboard's files and prints what they show.
+
+Warnings found while deciding, such as `fallback_login` while a login file sits behind the keychain, follow the line on standard error. Each is printed once until the next switch, even if it goes away and comes back. A warning not printed yet comes with the line of the decision that found it, even when that line was printed before.
 
 `watch` ends, with the error and its exit status, when it may change nothing or cannot use Pitboard's own files. That is when it runs as root or with `sudo` (`elevated`), or on a Windows build (`windows_not_released`). It also ends with any error from [The Pitboard directory](/reference/errors#the-pitboard-directory).
 
 If you press Control-C while a switch runs, the next change Pitboard makes finishes or undoes it, as [Interrupted switches](/concepts/switching#interrupted-switches) describes.
 
-With `--once`, `watch` decides once from the usage Pitboard last measured, without asking any service for usage. It prints what it came to, without a start line or the time, and `Nothing to switch now.` when there is nothing to do. A decision that takes Pitboard's lock may ask Anthropic whose login Claude Code has stored, as a switch does. A switch it makes still checks the parked login with Anthropic, as `pitboard use` does. It exits 0, or with the error's status if it ends with one.
+With `--once`, `watch` decides once from the usage Pitboard last measured, without asking any service for usage. It prints what it came to, without a start line or the time. When there is nothing to do, that is the line naming the account it watches. A decision that takes Pitboard's lock may ask Anthropic whose login Claude Code has stored, as a switch does. A switch it makes still checks the parked login with Anthropic, as `pitboard use` does. It exits 0, or with the error's status if it ends with one.
 
 With `--json`, `watch` prints one line of JSON for each event, and `--once` prints one. For the fields, see [Watch events](/reference/json-output#watch-events).
 
@@ -308,5 +315,7 @@ pitboard watch --at 90
 
 ```text
 Watching Claude Code. Pitboard switches to another of your accounts once a limit of the one in use reaches 90%. Stop with Ctrl-C.
+13:41:05 Watching work: 82% of its 5-hour limit, as of 13:41.
 14:02:11 Switched Claude Code from work to personal: work has used 91% of its 5-hour limit. Claude Code sessions already running follow within 33 seconds.
+14:02:13 Watching personal: 12% of its 5-hour limit, as of 14:01.
 ```

@@ -10,10 +10,10 @@
 //! Anthropic no more than the app would.
 
 use crate::{Report, emit, followed, ui};
-use pitboard_core::autoswitch::{Auto, Blind, DECIDE_EVERY_SECONDS, Skip, Threshold};
-use pitboard_core::error::Error;
+use pitboard_core::autoswitch::{self, Auto, Blind, DECIDE_EVERY_SECONDS, Look, Skip, Threshold};
+use pitboard_core::error::{self, Error};
 use pitboard_core::provider::ProviderId;
-use pitboard_core::service::{Changing, Done, Pitboard};
+use pitboard_core::service::{Changing, Done, Failed, Pitboard};
 use pitboard_core::usage::Window;
 use pitboard_core::words;
 use serde_json::{Value, json};
@@ -33,12 +33,12 @@ const READ_EVERY: i64 = 300;
 /// asked for usage; a decision under the lock may ask Anthropic whose login Claude Code has
 /// stored, as a switch does.
 pub fn once(pitboard: &Pitboard, threshold: Threshold) -> Report {
-    match said(pitboard.auto_switch(threshold), threshold, false) {
-        Said::Idle(report) | Said::Event(report) | Said::Stop(report) => report,
-    }
+    said(pitboard.auto_switch(threshold), threshold, false)
 }
 
-/// Watches until it is stopped, saying each switch, and each thing that stops one, once.
+/// Watches until it is stopped, saying the account it watches whenever its last line said
+/// something else, every switch, and each thing that stops one once. A refusal is asked again
+/// no sooner than the core waits after as many failed attempts, as the app does.
 pub fn run(pitboard: &Pitboard, threshold: Threshold, as_json: bool) -> ExitCode {
     if let Err(refused) = pitboard.permit() {
         return emit(Report::failed(Some("watch"), refused), as_json);
@@ -55,7 +55,8 @@ pub fn run(pitboard: &Pitboard, threshold: Threshold, as_json: bool) -> ExitCode
         ),
         as_json,
     );
-    let mut told: HashSet<String> = HashSet::new();
+    let mut told = Told::default();
+    let mut refusals = Refusals::default();
     let (mut read_at, mut decided_at, mut seen) = (None::<i64>, 0, None);
     loop {
         let now = epoch();
@@ -66,15 +67,21 @@ pub fn run(pitboard: &Pitboard, threshold: Threshold, as_json: bool) -> ExitCode
             read_at = Some(now);
         }
         let written = Some((pitboard.changed_at(), pitboard.readings_changed_at()));
-        if written != seen || now - decided_at >= DECIDE_EVERY_SECONDS || now < decided_at {
+        if written != seen || now >= refusals.due(decided_at) || now < decided_at {
             (seen, decided_at) = (written, now);
-            match said(pitboard.auto_switch(threshold), threshold, true) {
-                Said::Idle(_) => {}
-                Said::Stop(report) => return emit(report, as_json),
-                Said::Event(report) => {
-                    if untold(&mut told, &report) {
-                        emit(report, as_json);
-                    }
+            let outcome = decided(
+                refusals.wait(now),
+                || pitboard.auto_look(threshold),
+                || pitboard.auto_switch(threshold),
+            );
+            if let Some(outcome) = outcome {
+                refusals.after(&outcome, now);
+                let report = said(outcome, threshold, true);
+                if matches!(&report.result, Err(error) if ends_watching(error)) {
+                    return emit(report, as_json);
+                }
+                if let Some(report) = told.untold(report) {
+                    emit(report, as_json);
                 }
             }
         }
@@ -82,85 +89,188 @@ pub fn run(pitboard: &Pitboard, threshold: Threshold, as_json: bool) -> ExitCode
     }
 }
 
-/// Whether this report says something not said since the last switch, recording that it
-/// has been said. A switch is always said, and after it everything may be said again: what
-/// stopped the last one may stop the next. A reason not to switch away from a limit is told
-/// apart by the account, the limit and the reset the core recorded it under. A wait is told
-/// apart by the account and when it ends, which each failed attempt moves, and not by the
+/// What deciding comes to now: `decide`, under the lock, or while `waiting` on a refusal only
+/// `look`, which takes no lock and records nothing. Nothing comes of a look where only a
+/// decision under the lock can say.
+fn decided(
+    waiting: bool,
+    look: impl FnOnce() -> error::Result<Look>,
+    decide: impl FnOnce() -> Changing<Auto>,
+) -> Option<Changing<Auto>> {
+    if !waiting {
+        return Some(decide());
+    }
+    match look() {
+        Ok(Look::Stands(value)) => Some(Ok(Done {
+            value: *value,
+            warnings: Vec::new(),
+        })),
+        Ok(Look::Act) => None,
+        Err(error) => Some(Err(Failed {
+            error,
+            warnings: Vec::new(),
+        })),
+    }
+}
+
+/// Refusals of switching by itself in a row, and the wait after them, so the next decision
+/// under the lock is no sooner than the core waits after as many failed attempts in a row. A
+/// refusal the core raised before it could record anything would otherwise be asked again,
+/// and written in the audit log, at every decision. One it recorded, after an attempt, is
+/// followed by a look that stands on what the core recorded with it, its own wait or why it
+/// tries no more, which ends the row.
+#[derive(Default)]
+struct Refusals {
+    in_a_row: u32,
+    /// When the last was.
+    at: i64,
+    /// Until when the next decision under the lock waits.
+    until: i64,
+}
+
+impl Refusals {
+    /// Whether a decision under the lock waits at `now`. A clock gone back before the last
+    /// refusal waits on nothing.
+    fn wait(&self, now: i64) -> bool {
+        (self.at..self.until).contains(&now)
+    }
+
+    /// When to decide next after deciding at `at`: `DECIDE_EVERY_SECONDS` later, or as the
+    /// wait ends where that comes first.
+    fn due(&self, at: i64) -> i64 {
+        let every = at + DECIDE_EVERY_SECONDS;
+        if self.wait(at) {
+            every.min(self.until)
+        } else {
+            every
+        }
+    }
+
+    /// Counts what deciding at `at` came to: a refusal waits longer than the one before it,
+    /// and anything else ends the row.
+    fn after(&mut self, outcome: &Changing<Auto>, at: i64) {
+        *self = match outcome {
+            Ok(_) => Refusals::default(),
+            Err(_) => {
+                let in_a_row = self.in_a_row + 1;
+                Refusals {
+                    in_a_row,
+                    at,
+                    until: at + autoswitch::retry_after(in_a_row),
+                }
+            }
+        };
+    }
+}
+
+/// What `watch` has said since the last switch.
+#[derive(Default)]
+struct Told {
+    /// The account the last line said it watches, while that is the last line.
+    watching: Option<String>,
+    /// Each reason, wait and error said, by what tells it apart.
+    said: HashSet<String>,
+    /// Each warning said, by its code and its words.
+    warned: HashSet<String>,
+}
+
+impl Told {
+    /// What of `report` has not been said since the last switch, recorded as said: `report`
+    /// with only the warnings not said yet, or nothing where it says nothing new. A switch is
+    /// always said, and after it everything may be said again: what stopped the last one may
+    /// stop the next. The account it watches is said whenever the last line said something
+    /// else. A reason, a wait or an error is said once. A warning not said yet is said with
+    /// the line of the decision that found it, though that line was said before. One that
+    /// went away and came back is not said again before the next switch: only a decision
+    /// under the lock finds warnings, and none may come between to find it gone.
+    fn untold(&mut self, mut report: Report) -> Option<Report> {
+        let (untold, watching) = match &report.result {
+            Ok(data) if data["event"] == "switched" => {
+                *self = Told::default();
+                (true, None)
+            }
+            Ok(data) if data["event"] == "idle" => {
+                let account = data["account"].as_str().map(str::to_owned);
+                (self.watching != account, account)
+            }
+            Ok(data) => (self.said.insert(told_apart(data)), None),
+            Err(error) => (self.said.insert(format!("error/{}", error.code())), None),
+        };
+        report
+            .warnings
+            .retain(|warning| self.warned.insert(warning.to_string()));
+        if !untold && report.warnings.is_empty() {
+            return None;
+        }
+        self.watching = watching;
+        Some(report)
+    }
+}
+
+/// What tells a reason or a wait apart from another. A reason not to switch away from a limit
+/// is told apart by the account, the limit and the reset the core recorded it under. A wait is
+/// told apart by the account and when it ends, which each failed attempt moves, and not by the
 /// limit it names: the wait is the moment's, and that limit may be one nothing was recorded
 /// for, whose reset each answer can give a second apart. A reason it cannot watch is told
 /// apart by the account or the cause it names, and not by when it asks again.
-fn untold(told: &mut HashSet<String>, report: &Report) -> bool {
-    let key = match &report.result {
-        Ok(data) if data["event"] == "switched" => {
-            told.clear();
-            return true;
-        }
-        Ok(data) => {
-            let named = if data["event"] == "waiting" {
-                vec![&data["event"], &data["from"], &data["until"]]
-            } else {
-                vec![
-                    &data["event"],
-                    &data["from"],
-                    &data["account"],
-                    &data["limit"]["kind"],
-                    &data["limit"]["scope"],
-                    &data["limit"]["resets_at"],
-                    &data["reason"],
-                    &data["email"],
-                    &data["detail"],
-                ]
-            };
-            named
-                .into_iter()
-                .map(Value::to_string)
-                .collect::<Vec<_>>()
-                .join("/")
-        }
-        Err(error) => format!("error/{}", error.code()),
+fn told_apart(data: &Value) -> String {
+    let named = if data["event"] == "waiting" {
+        vec![&data["event"], &data["from"], &data["until"]]
+    } else {
+        vec![
+            &data["event"],
+            &data["from"],
+            &data["account"],
+            &data["limit"]["kind"],
+            &data["limit"]["scope"],
+            &data["limit"]["resets_at"],
+            &data["reason"],
+            &data["email"],
+            &data["detail"],
+        ]
     };
-    told.insert(key)
+    named
+        .into_iter()
+        .map(Value::to_string)
+        .collect::<Vec<_>>()
+        .join("/")
 }
 
-enum Said {
-    /// Nothing to do: said only where somebody asked once.
-    Idle(Report),
-    Event(Report),
-    /// Something no amount of watching mends, such as running as root: said, and the end.
-    Stop(Report),
+/// What deciding came to, as a report with what it found on the way: `stamped` puts the time
+/// before its line, for a terminal left open for hours.
+fn said(outcome: Changing<Auto>, threshold: Threshold, stamped: bool) -> Report {
+    crate::changed("watch", outcome, |value| {
+        let (data, line) = event(value, threshold);
+        (data, if stamped { stamp(line) } else { line })
+    })
 }
 
-/// What a decision came to, as a report: `stamped` puts the time before each line, for a
-/// terminal left open for hours.
-fn said(outcome: Changing<Auto>, threshold: Threshold, stamped: bool) -> Said {
-    let at = |line: String| {
-        if stamped {
-            format!(
-                "{} {line}",
-                ui::paint(ui::DIM, pitboard_core::time::local(epoch(), "%H:%M:%S"))
-            )
-        } else {
-            line
-        }
-    };
-    let value = match outcome {
-        Ok(Done { value, .. }) => value,
-        Err(failed) if ends_watching(&failed.error) => {
-            return Said::Stop(Report::refused("watch", failed));
-        }
-        Err(failed) => return Said::Event(Report::refused("watch", failed)),
-    };
+/// `line` after the local time.
+fn stamp(line: String) -> String {
+    format!(
+        "{} {line}",
+        ui::paint(ui::DIM, pitboard_core::time::local(epoch(), "%H:%M:%S"))
+    )
+}
+
+/// What `value` says, as `--json` gives it and as a person reads it.
+fn event(value: Auto, threshold: Threshold) -> (Value, String) {
+    let moment = |at| pitboard_core::time::moment(at, epoch());
     let percent = threshold.percent();
-    let report = match value {
+    match value {
         Auto::Watching {
             account,
             nearest,
             as_of,
             held_until,
         } => {
-            return Said::Idle(Report::done(
-                "watch",
+            let line = words::watching(
+                &ui::paint(ui::BOLD, &account),
+                nearest.as_ref().map(words::share_of_limit).as_deref(),
+                as_of.map(moment).as_deref(),
+                held_until.map(moment).as_deref(),
+            );
+            (
                 json!({
                     "event": "idle",
                     "threshold": percent,
@@ -169,11 +279,10 @@ fn said(outcome: Changing<Auto>, threshold: Threshold, stamped: bool) -> Said {
                     "as_of": as_of,
                     "held_until": held_until,
                 }),
-                "Nothing to switch now.\n".into(),
-            ));
+                format!("{line}\n"),
+            )
         }
-        Auto::Waiting { from, limit, until } => Report::done(
-            "watch",
+        Auto::Waiting { from, limit, until } => (
             json!({
                 "event": "waiting",
                 "threshold": percent,
@@ -181,12 +290,12 @@ fn said(outcome: Changing<Auto>, threshold: Threshold, stamped: bool) -> Said {
                 "limit": limit_json(&limit),
                 "until": until,
             }),
-            at(format!(
+            format!(
                 "{} has used {}. Pitboard tries again at {}.\n",
                 ui::paint(ui::BOLD, &from),
                 words::share_of_limit(&limit),
-                pitboard_core::time::moment(until, epoch()),
-            )),
+                moment(until),
+            ),
         ),
         Auto::Switched {
             from,
@@ -195,8 +304,7 @@ fn said(outcome: Changing<Auto>, threshold: Threshold, stamped: bool) -> Said {
             adoption,
         } => {
             let (_, follows, adoption_json) = followed(ProviderId::Claude, &adoption);
-            Report::done(
-                "watch",
+            (
                 json!({
                     "event": "switched",
                     "threshold": percent,
@@ -205,12 +313,12 @@ fn said(outcome: Changing<Auto>, threshold: Threshold, stamped: bool) -> Said {
                     "limit": limit_json(&limit),
                     "adoption": adoption_json,
                 }),
-                at(format!(
+                format!(
                     "Switched Claude Code from {} to {}: {from} has used {}. {follows}",
                     ui::paint(ui::BOLD, &from),
                     ui::paint(ui::BOLD, &to),
                     words::share_of_limit(&limit),
-                )),
+                ),
             )
         }
         Auto::Skipped { from, limit, why } => {
@@ -220,7 +328,7 @@ fn said(outcome: Changing<Auto>, threshold: Threshold, stamped: bool) -> Said {
                 words::share_of_limit(&limit)
             );
             let reason = words::not_switching(&why, threshold);
-            let (data, line) = match &why {
+            match &why {
                 // No room has an event of its own, as it always had.
                 Skip::NoRoom { unread } => (
                     json!({
@@ -243,7 +351,7 @@ fn said(outcome: Changing<Auto>, threshold: Threshold, stamped: bool) -> Said {
                     }),
                     format!(
                         "{used}. Pitboard is not switching: {reason}. It decides again at {}.\n",
-                        pitboard_core::time::moment(*until, epoch())
+                        moment(*until)
                     ),
                 ),
                 Skip::AlreadyLeft | Skip::GaveUp | Skip::Overridden(_) => (
@@ -256,8 +364,7 @@ fn said(outcome: Changing<Auto>, threshold: Threshold, stamped: bool) -> Said {
                     }),
                     format!("{used}. Pitboard is not switching: {reason}.\n"),
                 ),
-            };
-            Report::done("watch", data, at(line))
+            }
         }
         Auto::NotWatching { why } => {
             let mut data = json!({
@@ -277,21 +384,16 @@ fn said(outcome: Changing<Auto>, threshold: Threshold, stamped: bool) -> Said {
                 Blind::Unidentified { detail, until } => {
                     data["detail"] = json!(detail);
                     data["until"] = json!(until);
-                    line = format!(
-                        "{line}. It asks again at {}",
-                        pitboard_core::time::moment(*until, epoch())
-                    );
+                    line = format!("{line}. It asks again at {}", moment(*until));
                 }
                 Blind::CustomOauth | Blind::NothingSignedIn => {}
             }
-            Report::done(
-                "watch",
+            (
                 data,
-                at(format!("Pitboard is not switching Claude Code: {line}.\n")),
+                format!("Pitboard is not switching Claude Code: {line}.\n"),
             )
         }
-    };
-    Said::Event(report)
+    }
 }
 
 fn limit_json(limit: &Window) -> Value {
@@ -338,6 +440,9 @@ fn epoch() -> i64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use pitboard_core::autoswitch::RETRY_MOST_SECONDS;
+    use pitboard_core::provider::{Adoption, Held};
+    use pitboard_core::service::Warning;
 
     /// What watching cannot mend ends it; what a later look may get past is said and watched
     /// on.
@@ -357,19 +462,42 @@ mod tests {
         }));
     }
 
-    /// What `watch` prints of `value`, where that is an event.
-    fn told(value: Auto) -> Report {
-        let looked = Ok(Done {
-            value,
-            warnings: Vec::new(),
-        });
-        let Said::Event(report) = said(looked, Threshold::DEFAULT, false) else {
-            panic!("an event");
-        };
-        report
+    impl Told {
+        /// Whether `report` says anything not said since the last switch.
+        fn says(&mut self, report: Report) -> bool {
+            self.untold(report).is_some()
+        }
     }
 
-    fn event(why: Blind) -> Report {
+    /// What `watch` prints of `value`.
+    fn told(value: Auto) -> Report {
+        found(value, Vec::new())
+    }
+
+    /// What `watch` prints of `value`, as a decision that found `warnings` came to it.
+    fn found(value: Auto, warnings: Vec<Warning>) -> Report {
+        said(Ok(Done { value, warnings }), Threshold::DEFAULT, false)
+    }
+
+    fn watching(account: &str) -> Auto {
+        Auto::Watching {
+            account: account.into(),
+            nearest: None,
+            as_of: None,
+            held_until: None,
+        }
+    }
+
+    /// The codes of the warnings `report` says.
+    fn warned(report: &Report) -> Vec<&str> {
+        report
+            .warnings
+            .iter()
+            .filter_map(|warning| warning["code"].as_str())
+            .collect()
+    }
+
+    fn blind(why: Blind) -> Report {
         told(Auto::NotWatching { why })
     }
 
@@ -451,14 +579,11 @@ mod tests {
             plain(&settling)
         );
 
-        let mut said = HashSet::new();
-        assert!(untold(&mut said, &skipped(9_000, Skip::GaveUp)));
-        assert!(!untold(&mut said, &skipped(9_000, Skip::GaveUp)));
-        assert!(untold(&mut said, &skipped(9_000, Skip::AlreadyLeft)));
-        assert!(
-            untold(&mut said, &skipped(27_000, Skip::GaveUp)),
-            "the next window"
-        );
+        let mut said = Told::default();
+        assert!(said.says(skipped(9_000, Skip::GaveUp)));
+        assert!(!said.says(skipped(9_000, Skip::GaveUp)));
+        assert!(said.says(skipped(9_000, Skip::AlreadyLeft)));
+        assert!(said.says(skipped(27_000, Skip::GaveUp)), "the next window");
     }
 
     /// A wait after an attempt that came to nothing says when it ends, once for each end,
@@ -485,11 +610,11 @@ mod tests {
             "{}",
             plain(&report)
         );
-        let mut said = HashSet::new();
-        assert!(untold(&mut said, &waiting(1_760_000_060)));
-        assert!(!untold(&mut said, &waiting(1_760_000_060)));
+        let mut said = Told::default();
+        assert!(said.says(waiting(1_760_000_060)));
+        assert!(!said.says(waiting(1_760_000_060)));
         assert!(
-            !untold(&mut said, &waiting_at(limit(9_001), 1_760_000_060)),
+            !said.says(waiting_at(limit(9_001), 1_760_000_060)),
             "a reset a second off"
         );
         let weekly = Window {
@@ -497,28 +622,25 @@ mod tests {
             ..limit(600_000)
         };
         assert!(
-            !untold(&mut said, &waiting_at(weekly, 1_760_000_060)),
+            !said.says(waiting_at(weekly, 1_760_000_060)),
             "another limit tried at the same end"
         );
-        assert!(untold(&mut said, &waiting(1_760_000_180)));
+        assert!(said.says(waiting(1_760_000_180)));
     }
 
-    /// With nothing to do, `--once` says which account it watches, its fullest limit, when that
-    /// was read and until when Anthropic holds Pitboard off asking again.
+    /// With nothing to do, it says which account it watches, its fullest limit, when that was
+    /// read and until when Anthropic holds Pitboard off asking again.
     #[test]
     fn nothing_to_do_names_the_account_it_watches() {
-        let looked = Ok(Done {
-            value: Auto::Watching {
+        let watching = |held_until| {
+            told(Auto::Watching {
                 account: "work".into(),
                 nearest: Some(limit(9_000)),
                 as_of: Some(1_760_000_000),
-                held_until: None,
-            },
-            warnings: Vec::new(),
-        });
-        let Said::Idle(report) = said(looked, Threshold::DEFAULT, false) else {
-            panic!("nothing to do");
+                held_until,
+            })
         };
+        let report = watching(None);
         let data = report.result.as_ref().expect("an event");
         assert_eq!(
             (
@@ -536,14 +658,226 @@ mod tests {
                 &Value::Null
             )
         );
-        assert_eq!(report.human, "Nothing to switch now.\n");
+        let at = |epoch| pitboard_core::time::moment(epoch, super::epoch());
+        assert_eq!(
+            plain(&report),
+            format!(
+                "Watching work: 97% of its 5-hour limit, as of {}.\n",
+                at(1_760_000_000)
+            )
+        );
+        assert_eq!(
+            plain(&watching(Some(1_760_003_600))),
+            format!(
+                "Watching work: 97% of its 5-hour limit, as of {}. Anthropic holds Pitboard off \
+                 asking again until {}.\n",
+                at(1_760_000_000),
+                at(1_760_003_600)
+            )
+        );
+    }
+
+    /// The account it watches is said whenever the last line said something else: another
+    /// account, a reason, a wait or an error. Said, it is not said again.
+    #[test]
+    fn the_account_it_watches_is_said_when_that_changes() {
+        let watching = |account| told(watching(account));
+        let mut said = Told::default();
+        assert!(said.says(watching("work")));
+        assert!(!said.says(watching("work")));
+        assert!(said.says(watching("personal")));
+        assert!(said.says(watching("work")), "a switch back by hand");
+        assert!(said.says(skipped(9_000, Skip::GaveUp)));
+        assert!(said.says(watching("work")), "watching again");
+        assert!(!said.says(skipped(9_000, Skip::GaveUp)), "told once");
+        assert!(
+            !said.says(watching("work")),
+            "the last line still names work"
+        );
+    }
+
+    /// A warning a decision found is said once until the next switch, with the line of the
+    /// decision that found it, though that line was said before: a sign-in that leaves a login
+    /// in a file puts whose login is stored in doubt, and the decision that settles it comes to
+    /// the account already watched.
+    #[test]
+    fn a_warning_is_said_once_with_the_line_of_the_decision_that_found_it() {
+        let fallback = || Warning::FallbackLogin {
+            tool: ProviderId::Claude,
+            path: "/Users/me/.claude/.credentials.json".into(),
+            held: Held::Login,
+        };
+        let overridden = || Warning::AuthOverridden {
+            tool: ProviderId::Claude,
+            names: vec!["ANTHROPIC_API_KEY".into()],
+        };
+        let mut said = Told::default();
+        assert!(said.says(told(watching("work"))));
+        let again = said
+            .untold(found(watching("work"), vec![fallback()]))
+            .expect("a warning not said yet");
+        assert_eq!(plain(&again), "Watching work.\n");
+        assert_eq!(warned(&again), ["fallback_login"]);
+        assert!(
+            !said.says(found(watching("work"), vec![fallback()])),
+            "said once"
+        );
+        let more = said
+            .untold(found(watching("work"), vec![fallback(), overridden()]))
+            .expect("another warning");
+        assert_eq!(warned(&more), ["auth_overridden"], "and only that one");
+
+        assert!(said.says(skipped(9_000, Skip::GaveUp)));
+        let refused = Report::refused(
+            "watch",
+            Failed {
+                error: Error::SignedInAccountChanged,
+                warnings: vec![fallback()],
+            },
+        );
+        assert!(said.says(refused), "an error is said once");
+        let refused_again = Report::refused(
+            "watch",
+            Failed {
+                error: Error::SignedInAccountChanged,
+                warnings: vec![
+                    overridden(),
+                    Warning::LockCompromised {
+                        tool: ProviderId::Claude,
+                    },
+                ],
+            },
+        );
+        let refused_again = said
+            .untold(refused_again)
+            .expect("with a warning not said yet");
+        assert_eq!(warned(&refused_again), ["lock_compromised"]);
+        assert!(
+            said.says(told(watching("work"))),
+            "the last line said something else"
+        );
+
+        let switched = found(
+            Auto::Switched {
+                from: "work".into(),
+                to: "personal".into(),
+                limit: limit(9_000),
+                adoption: Adoption::PollingWithin(33),
+            },
+            vec![fallback()],
+        );
+        let switched = said.untold(switched).expect("a switch");
+        assert_eq!(
+            warned(&switched),
+            ["fallback_login"],
+            "said again after a switch"
+        );
+    }
+
+    /// While a refusal's wait runs only the look is asked, and nothing comes of it where only a
+    /// decision under the lock can say. Otherwise only the decision is made, which looks for
+    /// itself.
+    #[test]
+    fn while_a_refusal_waits_only_the_look_is_asked() {
+        let under_the_lock = || -> Changing<Auto> { panic!("a decision under the lock") };
+        assert!(decided(true, || Ok(Look::Act), under_the_lock).is_none());
+        let stands = decided(
+            true,
+            || Ok(Look::Stands(Box::new(watching("work")))),
+            under_the_lock,
+        );
+        assert!(
+            matches!(stands, Some(Ok(Done { value: Auto::Watching { account, .. }, .. })) if account == "work")
+        );
+        let unread = decided(true, || Err(Error::SignedInAccountChanged), under_the_lock);
+        assert!(matches!(unread, Some(Err(_))));
+
+        let made = decided(
+            false,
+            || panic!("a look of its own"),
+            || {
+                Ok(Done {
+                    value: watching("personal"),
+                    warnings: Vec::new(),
+                })
+            },
+        );
+        assert!(
+            matches!(made, Some(Ok(Done { value: Auto::Watching { account, .. }, .. })) if account == "personal")
+        );
+    }
+
+    /// After a refusal the next decision under the lock waits as long as the core waits after
+    /// as many failed attempts in a row. The look goes on meanwhile, and anything it or a
+    /// decision comes to ends the row, as the core's own wait after an attempt it recorded
+    /// does.
+    #[test]
+    fn a_refusal_is_tried_again_only_after_the_cores_wait() {
+        const AT: i64 = 1_760_000_000;
+        let refused = || {
+            Err(Failed {
+                error: Error::SignedInAccountChanged,
+                warnings: Vec::new(),
+            })
+        };
+        let mut refusals = Refusals::default();
+        assert!(!refusals.wait(AT));
+        assert_eq!(refusals.due(AT), AT + DECIDE_EVERY_SECONDS);
+
+        refusals.after(&refused(), AT);
+        assert!(refusals.wait(AT + 59));
+        assert!(!refusals.wait(AT + 60));
+        assert!(
+            !refusals.wait(AT - 1),
+            "a clock gone backwards waits on nothing"
+        );
+        assert_eq!(
+            refusals.due(AT),
+            AT + DECIDE_EVERY_SECONDS,
+            "it looks meanwhile"
+        );
+        assert_eq!(
+            refusals.due(AT + 45),
+            AT + 60,
+            "and decides as the wait ends"
+        );
+
+        refusals.after(&refused(), AT + 60);
+        assert!(refusals.wait(AT + 179));
+        assert!(!refusals.wait(AT + 180));
+        for _ in 0..8 {
+            refusals.after(&refused(), AT);
+        }
+        assert!(refusals.wait(AT + RETRY_MOST_SECONDS - 1));
+        assert!(
+            !refusals.wait(AT + RETRY_MOST_SECONDS),
+            "at most a quarter of an hour"
+        );
+
+        let recorded = Auto::Waiting {
+            from: "work".into(),
+            limit: limit(9_000),
+            until: AT + 260,
+        };
+        let looked = decided(
+            refusals.wait(AT + 200),
+            || Ok(Look::Stands(Box::new(recorded))),
+            || panic!("a decision under the lock while it waits"),
+        );
+        refusals.after(&looked.expect("what the look stands on"), AT + 200);
+        assert!(!refusals.wait(AT + 200));
+        refusals.after(&refused(), AT + 200);
+        assert!(
+            !refusals.wait(AT + 260),
+            "a row ended starts again at a minute"
+        );
     }
 
     /// A reason Pitboard cannot judge whether to switch at all is an event of its own, with
     /// no account or limit, and says what to do where the command line has a command for it.
     #[test]
     fn a_reason_it_cannot_watch_is_an_event_of_its_own() {
-        let interrupted = event(Blind::SwitchInterrupted);
+        let interrupted = blind(Blind::SwitchInterrupted);
         let data = interrupted.result.as_ref().expect("an event");
         assert_eq!(
             (&data["event"], &data["reason"], &data["threshold"]),
@@ -559,7 +893,7 @@ mod tests {
              change you make finishes it, or give up on it with `pitboard abandon`.\n"
         );
 
-        let unread = event(Blind::NoReading {
+        let unread = blind(Blind::NoReading {
             account: "work".into(),
         });
         let data = unread.result.as_ref().expect("an event");
@@ -573,7 +907,7 @@ mod tests {
              yet.\n"
         );
 
-        let stranger = event(Blind::NotEnrolled {
+        let stranger = blind(Blind::NotEnrolled {
             email: "me@example.com".into(),
         });
         let data = stranger.result.as_ref().expect("an event");
@@ -582,7 +916,7 @@ mod tests {
             (&json!("not_enrolled"), &json!("me@example.com"))
         );
 
-        let unidentified = event(Blind::Unidentified {
+        let unidentified = blind(Blind::Unidentified {
             detail: "could not reach Anthropic: no route to host".into(),
             until: 1_760_000_060,
         });
@@ -610,26 +944,20 @@ mod tests {
     /// stored for one cause are one reason, whenever each asks again.
     #[test]
     fn a_reason_it_cannot_watch_is_said_once_for_what_it_names() {
-        let mut told = HashSet::new();
+        let mut told = Told::default();
         let unidentified = |until| {
-            event(Blind::Unidentified {
+            blind(Blind::Unidentified {
                 detail: "could not reach Anthropic: no route to host".into(),
                 until,
             })
         };
-        assert!(untold(&mut told, &unidentified(60)));
-        assert!(!untold(&mut told, &unidentified(180)));
-        assert!(untold(
-            &mut told,
-            &event(Blind::NotEnrolled {
-                email: "me@example.com".into()
-            })
-        ));
-        assert!(untold(
-            &mut told,
-            &event(Blind::NotEnrolled {
-                email: "you@example.com".into()
-            })
-        ));
+        assert!(told.says(unidentified(60)));
+        assert!(!told.says(unidentified(180)));
+        assert!(told.says(blind(Blind::NotEnrolled {
+            email: "me@example.com".into()
+        })));
+        assert!(told.says(blind(Blind::NotEnrolled {
+            email: "you@example.com".into()
+        })));
     }
 }

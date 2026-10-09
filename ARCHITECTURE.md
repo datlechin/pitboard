@@ -167,9 +167,11 @@ pages load, as a browser would.
     take. A front end decides with nothing written every `DECIDE_EVERY_SECONDS`, 30.
     `switch/auto.rs` tells whose login is stored under the lock, as a switch does, records
     it, decides once from that, and switches from that same login through
-    `switch::switch_from`, or records the `Hold` once. `service::Pitboard::auto_look` is the
-    look and `auto_switch` joins the two. The audit log records a switch, or the error that
-    stopped one, as `auto-switch`, of `claude` where no account was chosen yet; and as
+    `switch::switch_from`, or records the `Hold` once. An attempt that failed is judged
+    again with it counted, and where that leaves no limit to try, its `Hold` is recorded
+    with the failure. `service::Pitboard::auto_look` is the look and `auto_switch` joins
+    the two. The audit log records a switch, or the error that stopped one, as
+    `auto-switch`, of `claude` where no account was chosen yet; and as
     `auto-stay`, a login nobody could tell whose it is, of the account last known in use,
     once per wait, and each `Hold`, of the account in use, once per limit, reset and code.
   - `lock.rs`: the lock Claude Code takes around credential writes, taken the same way.
@@ -258,10 +260,16 @@ pages load, as a browser would.
   were last written, and decides again whenever either changed and at least every 30
   seconds. It says every switch, and each thing that stopped one once until the next
   switch: a reason not to switch away from a limit once for that limit and its reset, and a
-  wait once for when it ends. It ends on a refusal watching cannot mend: running elevated,
-  a Windows build or Pitboard's own files unusable. With `--once --json`, `idle` carries
-  the account it watches, its fullest limit, when that was read and until when Anthropic
-  holds Pitboard off asking again.
+  wait once for when it ends. It says the account it watches, `idle` with its fullest
+  limit, when that was read and until when Anthropic holds Pitboard off asking again,
+  whenever its last line said something else. Each warning a decision found is said once
+  until the next switch, even one that went away and came back, with that decision's line,
+  which is said again to carry it where it was said before. A refusal is paced as the app
+  paces one: no decision under the lock until `autoswitch::retry_after` of the refusals in
+  a row has passed, only the look meanwhile, and any outcome ends the row, as the look
+  standing on what the core recorded with an attempt that failed, its own wait or why it
+  tries no more, does. It ends on a refusal watching cannot mend: running elevated, a
+  Windows build or Pitboard's own files unusable.
 - `crates/pitboard-ffi`: the core as UniFFI bindings, for the apps: a static library for
   the macOS app, a dynamic one for the Windows app. An app reaches the core through the
   model alone.
@@ -765,18 +773,19 @@ pages load, as a browser would.
   another switch, the question before one or another change of the app's own is under way.
   It runs on the lane of changes, behind any switch asked for, and asks nobody about
   quitting an app, since Claude Code follows a switch by itself. A refusal is the app's to
-  pace, since the core records none it raised before deciding: the next is asked for no
-  sooner than the core waits after as many failed attempts in a row, 60 seconds doubling to
-  15 minutes (`autoswitch::retry_after`), and any outcome, of a look or of a decision, ends
-  the row. A switch it made is taken as one asked for is, with the read after it, and said
-  in a notification with no button; a reason it did not switch away from a limit, once for
-  that limit and its reset, whether the decision gave it or a look stood on one recorded
-  since, a reason it cannot judge, by what it names, and a refusal, are said once each until
-  it next switches, and never in an alert, since nobody asked. What the look or the decision
-  came to last is said under the setting while it is on. Turned off, it says nothing there,
-  and a look or a decision answered since asks for nothing, says nothing and holds nothing
-  back, except a switch, which was made and is said. The setting is kept in `app.json` with
-  the other preferences, and taken only once they are read.
+  pace, as it is `pitboard watch`'s, since the core records none it raised before deciding:
+  the next is asked for no sooner than the core waits after as many failed attempts in a
+  row, 60 seconds doubling to 15 minutes (`autoswitch::retry_after`), and any outcome, of a
+  look or of a decision, ends the row. A switch it made is taken as one asked for is, with
+  the read after it, and said in a notification with no button; a reason it did not switch
+  away from a limit, once for that limit and its reset, whether the decision gave it or a
+  look stood on one recorded since, a reason it cannot judge, by what it names, and a
+  refusal, are said once each until it next switches, and never in an alert, since nobody
+  asked. What the look or the decision came to last is said under the setting while it is
+  on. Turned off, it says nothing there, and a look or a decision answered since asks for
+  nothing, says nothing and holds nothing back, except a switch, which was made and is said.
+  The setting is kept in `app.json` with the other preferences, and taken only once they are
+  read.
 - The notice that Claude Code's config names another account offers to write the account
   in use there: `Intent::UpdateConfig`, a change of the app's own like a rename and not a
   switch, so the row never reads as switching and nothing said about a switch or the
@@ -1033,14 +1042,16 @@ pages load, as a browser would.
 - The automatic switch judges only a reading Anthropic gave for the account's own login, of
   the account in use and of each it could go to, and judges every limit at the share: one
   already switched away from, or tried three times, before it resets never hides another.
-  Where none is left to try, that is said at once, never as a wait or the account settling.
-  A wait or the account settling is said of the limit tried next. Each reason it does not
-  switch away from a limit at the share is said and recorded once for the account, the
-  limit, its reset and the reason: under the lock, in `autoswitch.json` and as `auto-stay`.
-  The look after that stands on the record and takes no lock. A front end is told the reset
-  the reason was recorded under, and says it once for the same four. What is recorded of a
-  window is kept until a minute past its reset, as late as an answer may give it, so an
-  answer a second later neither forgets a limit already left nor says a reason again.
+  Where none is left to try, that is said at once, never as a wait or the account settling,
+  and recorded with the attempt that failed and left none, so a front end that waits after
+  that failure finds it standing. A wait or the account settling is said of the limit tried
+  next. Each reason it does not switch away from a limit at the share is said and recorded
+  once for the account, the limit, its reset and the reason: under the lock, in
+  `autoswitch.json` and as `auto-stay`. The look after that stands on the record and takes
+  no lock. A front end is told the reset the reason was recorded under, and says it once
+  for the same four. What is recorded of a window is kept until a minute past its reset, as
+  late as an answer may give it, so an answer a second later neither forgets a limit
+  already left nor says a reason again.
 - Additive writes become durable before destructive ones. A run that dies midway leaves a
   spare copy of a login, never a missing one.
 - The `--json` contract changes only on purpose. A change to a snapshot is a change to the

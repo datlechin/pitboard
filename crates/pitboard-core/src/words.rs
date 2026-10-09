@@ -91,6 +91,32 @@ pub fn share_of_limit(limit: &crate::usage::Window) -> String {
     format!("{}% of its {name} limit", whole(limit.percent))
 }
 
+/// What the automatic switch watches where it has nothing to do: "Watching work: 62% of its
+/// 5-hour limit, as of 16:40." `used` is [`share_of_limit`] of its fullest limit, and the
+/// clock times come as each front end writes them: `as_of`, when that was read, and
+/// `held_until`, until when Anthropic holds Pitboard off asking about the account.
+pub fn watching(
+    account: &str,
+    used: Option<&str>,
+    as_of: Option<&str>,
+    held_until: Option<&str>,
+) -> String {
+    let mut said = format!("Watching {account}");
+    if let Some(used) = used {
+        said.push_str(&format!(": {used}"));
+    }
+    if let Some(as_of) = as_of {
+        said.push_str(&format!(", as of {as_of}"));
+    }
+    said.push('.');
+    if let Some(until) = held_until {
+        said.push_str(&format!(
+            " Anthropic holds Pitboard off asking again until {until}."
+        ));
+    }
+    said
+}
+
 /// Why Pitboard does not switch Claude Code away from a limit at `threshold`, as a clause
 /// that says what to do about it where anything can be done. It names no command, and no
 /// time, which each front end says in its own way: the app says it too.

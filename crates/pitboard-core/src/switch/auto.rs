@@ -28,8 +28,10 @@ use crate::service::Warning;
 /// its reset. The attempt is recorded once the switch is decided and before anything moves,
 /// so however the switch ends, killed included, it counts against the limit's attempts, and
 /// the front ends never try one limit more often than [`crate::autoswitch::ATTEMPTS`] times
-/// between them. A switch, and anything that stopped one, is recorded as `auto-switch`, with
-/// the account it went to, or `claude` before there was one.
+/// between them. Where an attempt that failed leaves no limit to try, why is recorded with
+/// the failure, as a decision records it, so the look a front end makes while it waits after
+/// the failure stands on that. A switch, and anything that stopped one, is recorded as
+/// `auto-switch`, with the account it went to, or `claude` before there was one.
 pub(crate) fn automatically(
     settled: Settled,
     threshold: Threshold,
@@ -112,6 +114,7 @@ pub(crate) fn automatically(
         .get(&plan.to)
         .map(|account| account.id.clone())
         .unwrap_or_default();
+    let decided_from = state.clone();
     ledger.attempt(&plan, now);
     ledger
         .save(ctx, permit)
@@ -142,12 +145,31 @@ pub(crate) fn automatically(
         Err(error) => {
             if over_the_account_switched_to(&error) {
                 ledger.pass_over(&plan, &to_id);
-                let _ = ledger.save(ctx, permit);
             } else if mended_by_waiting(&error) {
                 ledger.waited(&plan);
-                let _ = ledger.save(ctx, permit);
             }
-            Err(stopped(&to, error))
+            let error = stopped(&to, error);
+            let judged = decided_from.get(&plan.from).map(|account| {
+                autoswitch::judge(ctx, &decided_from, account, &ledger, threshold, now)
+            });
+            let spent = match judged {
+                Some(Judged::Hold(hold)) => ledger.say(&hold, now).then_some(hold),
+                _ => None,
+            };
+            // A record that could not be written costs at most one more attempt at a limit of
+            // this account, or one more decision saying why none is made.
+            if ledger.save(ctx, permit).is_ok()
+                && let Some(hold) = spent
+            {
+                audit::record(
+                    ctx,
+                    permit,
+                    "auto-stay",
+                    &decided_from.typed(&hold.from),
+                    hold.why.code(),
+                );
+            }
+            Err(error)
         }
     }
 }
@@ -828,7 +850,9 @@ mod tests {
     /// allowed, is refused before anything moves, over the login going out. It is about this
     /// machine and not the account switched to, so it counts as an attempt as any refusal
     /// that waiting will not mend does. It passed that account over, and then each other in
-    /// turn, until the account in use read as having nowhere to go.
+    /// turn, until the account in use read as having nowhere to go. The failure that spends
+    /// the last attempt records why at once, and the look after it stands on that: a front end
+    /// waiting after the failure said it only once its wait was over.
     #[test]
     #[cfg_attr(
         windows,
@@ -851,12 +875,21 @@ mod tests {
             panic!("a switch decided");
         };
 
-        for _ in 0..ATTEMPTS {
+        for _ in 1..ATTEMPTS {
             let failed = auto(&m).expect_err("too large to park");
             assert_eq!(failed.error.code(), "credential_too_large");
+            assert!(stays(&m).is_empty());
             clock.advance(RETRY_SECONDS);
         }
-        let looked = auto(&m).expect("a look").value;
+        let last = auto(&m).expect_err("the last attempt");
+        assert_eq!(last.error.code(), "credential_too_large");
+        assert_eq!(
+            stays(&m),
+            [("here".to_string(), "attempts_spent".to_string())],
+            "recorded with the failure that left nothing to try"
+        );
+        let spent_at = clock.now();
+        let looked = stands(&m);
         assert!(
             matches!(
                 looked,
@@ -865,12 +898,17 @@ mod tests {
                     ..
                 }
             ),
-            "{looked:?}"
+            "the look stands on it, which ends a front end's refusals in a row: {looked:?}"
         );
-        assert_eq!(
-            stays(&m),
-            [("here".to_string(), "attempts_spent".to_string())]
-        );
+        clock.advance(RETRY_SECONDS);
+        assert!(matches!(
+            auto(&m).expect("a look").value,
+            Auto::Skipped {
+                why: Skip::GaveUp,
+                ..
+            }
+        ));
+        assert_eq!(stays(&m).len(), 1, "recorded once");
 
         let mut tried = Ledger::default();
         for attempt in 0..ATTEMPTS {
@@ -882,13 +920,53 @@ mod tests {
             limit: plan.limit.clone(),
             why: Skip::GaveUp,
         };
-        tried.say(&spent, clock.now());
+        tried.say(&spent, spent_at);
         assert_eq!(
             Ledger::load(&m.ctx),
             tried,
             "every attempt counted, and no account passed over"
         );
         assert_eq!(live_refresh(&m).as_deref(), Some("here-refresh"));
+    }
+
+    /// The attempts at one limit spent, another at the share is still tried, so nothing is
+    /// recorded until none is left, and then of the furthest past the share.
+    #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
+    )]
+    fn the_attempts_spent_are_recorded_once_no_limit_is_left_to_try() {
+        let (mut m, clock) = nearly_out("auto-spent-two-limits", 96.0);
+        measured(&m, "here", 96.0, 97.0);
+        m.ctx = m.ctx.clone().with_argv_fallback(false);
+        m.mem.vault().takes_on_stdin(16);
+        for _ in 0..ATTEMPTS {
+            auto(&m).expect_err("too large to park");
+            clock.advance(RETRY_SECONDS);
+        }
+        assert!(stays(&m).is_empty(), "the five-hour limit is left to try");
+        for _ in 1..ATTEMPTS {
+            auto(&m).expect_err("too large to park");
+            clock.advance(RETRY_SECONDS);
+        }
+        auto(&m).expect_err("the last attempt");
+        assert_eq!(
+            stays(&m),
+            [("here".to_string(), "attempts_spent".to_string())]
+        );
+        let looked = stands(&m);
+        assert!(
+            matches!(
+                &looked,
+                Auto::Skipped {
+                    why: Skip::GaveUp,
+                    limit,
+                    ..
+                } if limit.kind == "weekly_all"
+            ),
+            "{looked:?}"
+        );
     }
 
     /// Automatic switches happen while Claude Code is busy, which is when it renews its
@@ -1022,6 +1100,10 @@ mod tests {
 
         let failed = auto(&m).expect_err("a refused login is not a switch");
         assert_eq!(failed.error.code(), "parked_login_refused");
+        assert!(
+            matches!(stands(&m), Auto::Waiting { until, .. } if until == NOW + RETRY_SECONDS),
+            "the look stands on the attempt's wait, which ends a front end's refusals in a row"
+        );
         clock.advance(RETRY_SECONDS);
         let Auto::Switched { to, .. } = auto(&m).expect("a switch").value else {
             panic!("a switch to the other account");

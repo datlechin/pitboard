@@ -258,23 +258,12 @@ fn auto_standing(seen: &Seen, standing: &AutoStanding) -> String {
             used,
             as_of,
             held_until,
-        }) => {
-            let mut said = format!("Watching {account}");
-            if let Some(used) = used {
-                said.push_str(&format!(": {used}"));
-            }
-            if let Some(at) = as_of {
-                said.push_str(&format!(", as of {}", seen.clock(*at)));
-            }
-            said.push('.');
-            if let Some(until) = held_until {
-                said.push_str(&format!(
-                    " Anthropic holds Pitboard off asking again until {}.",
-                    seen.clock(*until)
-                ));
-            }
-            said
-        }
+        }) => pitboard_core::words::watching(
+            account,
+            used.as_deref(),
+            as_of.map(|at| seen.clock(at)).as_deref(),
+            held_until.map(|until| seen.clock(until)).as_deref(),
+        ),
         AutoStanding::Came(AutoSwitched::Waiting { from, used, until }) => format!(
             "{from} has used {used}. Pitboard tries again at {}.",
             seen.clock(*until)

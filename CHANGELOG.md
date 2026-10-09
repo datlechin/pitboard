@@ -111,11 +111,22 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   as long after each failure in a row, up to 15 minutes, as Pitboard waits after failed
   tries at a limit. It tried again at its next read of usage, so a failure that lasted was
   tried, and recorded in `pitboard log`, every 5 minutes.
+- `pitboard watch` names the account it watches, how much of its fullest limit is used and
+  when that was read, whenever its last line said something else: once it has read the
+  accounts, after a switch, and after a reason, a wait or an error. With `--json` that is
+  the event `idle`, which only `--once` printed, and `--once` prints the line in place of
+  `Nothing to switch now.` Each warning a decision found, such as `fallback_login` and
+  `auth_overridden`, is printed once until the next switch, with that decision's line, even
+  one printed before. It printed only those of a decision that failed. After an error it
+  makes no decision under Pitboard's lock for a minute, then twice as long after each error
+  in a row, up to 15 minutes, as the app does. It decided again every 30 seconds, and each
+  error was another line in `pitboard log`.
 - In `pitboard-core`, `autoswitch::Blind`, `autoswitch::Look`, the variants
   `autoswitch::Auto::NotWatching`, `Auto::Watching` and `Auto::Waiting`,
   `autoswitch::Skip`'s `NoRoom`, `AlreadyLeft`, `GaveUp` and `Settling`,
   `autoswitch::DECIDE_EVERY_SECONDS`, `autoswitch::retry_after`,
-  `service::Pitboard::auto_look`, `budget::held_until` and `words::not_watching` are new.
+  `service::Pitboard::auto_look`, `budget::held_until`, `words::not_watching` and
+  `words::watching` are new.
   `autoswitch::Skip`'s `SwitchInterrupted` and `CustomOauth` are `Blind::SwitchInterrupted`
   and `Blind::CustomOauth`, `Auto::Idle` is `Auto::Watching`, `Auto::NoRoom` is
   `Auto::Skipped` with `Skip::NoRoom`, `words::not_switching` takes the share, and
@@ -201,6 +212,10 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - A login too large to write without the argument line, where `PITBOARD_NO_ARGV` forbids
   it, counts as one of the automatic switch's three attempts at a limit. It passed the
   account to go to over, then every other in turn, until no account read as having room.
+- The app and `pitboard watch` see a change to Pitboard's accounts made in the same second
+  as the last one they saw, such as a `pitboard use` typed in a terminal. Pitboard told when
+  its account index was written in whole seconds, so the app showed such a switch only at
+  its next read, up to 5 minutes later, and `pitboard watch` named it up to 30 seconds late.
 
 ## [0.9.0] - 2026-10-08
 

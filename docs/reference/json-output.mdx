@@ -173,7 +173,7 @@ Each object in `windows` is one limit:
 | `no_room` | A limit of the account in use reached the share, and no other account has room. | `from`, `limit` and `unread` |
 | `skipped` | A limit reached the share, and something else stops the switch. | `from`, `limit` and `reason`, and `until` for `settling` |
 | `not_watching` | Pitboard cannot decide whether to switch at all. | `reason`, and `email`, `account`, or `detail` and `until`, where the reason has them |
-| `idle` | `--once` found nothing to do. Printed only with `--once`. | `account`, `limit`, `as_of` and `held_until` |
+| `idle` | No limit of the account in use has reached the share. | `account`, `limit`, `as_of` and `held_until` |
 
 The other fields are these:
 
@@ -192,7 +192,9 @@ The other fields are these:
 | `detail` | string | Why Pitboard could not tell whose login Claude Code has stored, in a few words. |
 | `until` | integer | In epoch seconds: for `waiting`, when Pitboard tries again; for `settling`, when the account has been in use 5 minutes; for `not_identified`, when Pitboard asks whose login Claude Code has stored again. |
 
-Until the next switch, `watch` prints each `no_room` and `skipped` event once for its account, limit, reset and `reason`, and each `waiting` event once for its `until`.
+Until the next switch, `watch` prints each `no_room` and `skipped` event once for its account, limit, reset and `reason`, and each `waiting` event once for its `until`. It prints `idle` whenever its last event was not `idle` for the same `account`.
+
+`warnings` holds what a decision found on the way, such as `fallback_login` while a login file sits behind the keychain. `watch` prints each warning once until the next switch, even one that went away and came back. It prints an event or an error again to carry a warning it has not printed yet.
 
 For `skipped`, `reason` is one of these:
 
@@ -214,7 +216,7 @@ For `not_watching`, `reason` is one of these:
 | `not_identified` | Pitboard could not tell whose login Claude Code has stored, for `detail`, and asks again at `until`. |
 | `no_reading` | Anthropic has given no reading of the account in use, `account`, as after an update of Pitboard. Pitboard decides once it next asks Anthropic about that account. |
 
-A switch that fails prints an envelope with `ok` set to `false`, `data` set to `null` and the `error`, as every command does. `watch` then goes on. An error that ends `watch` is printed the same way, and `watch` exits with its status.
+A switch that fails prints an envelope with `ok` set to `false`, `data` set to `null` and the `error`, as every command does. `watch` then goes on, and prints each error code once until the next switch. After an error it makes no decision that takes Pitboard's lock for 1 minute. It waits twice as long after each error in a row, up to 15 minutes. An error that ends `watch` is printed the same way, and `watch` exits with its status.
 
 A switch prints this on one line:
 
