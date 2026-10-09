@@ -59,7 +59,6 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   and until when Anthropic holds Pitboard off asking again. `no_room` gains `unread`, the
   accounts it could switch to that Anthropic has given no reading of yet, and `skipped` the
   reasons `already_switched`, `attempts_spent` and `settling`, the last with `until`.
-  `not_watching` gains the reason `no_reading`, with the `account` in use.
 
 ### Changed
 
@@ -120,11 +119,11 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - `pitboard watch --json` prints the event `not_watching` where Pitboard cannot decide
   whether to switch at all, with a `reason`: `switch_interrupted` and
   `custom_oauth_endpoint`, which were reasons of `skipped`, and `nothing_signed_in`,
-  `not_enrolled` with the `email` of the account, and `not_identified` with a `detail` and
-  the time it asks again, `until`. Breaking for a script that reads the first two from
-  `skipped`. `pitboard watch` says each once, as `Pitboard is not switching Claude Code:`
-  and the reason, and so does the app, in a notification titled **Pitboard is not
-  switching Claude Code**. An `auto-switch` line in `pitboard log` whose error came before
+  `not_enrolled` with the `email` of the account, `not_identified` with a `detail` and the
+  time it asks again, `until`, and `no_reading` with the `account` in use. Breaking for a
+  script that reads the first two from `skipped`. `pitboard watch` says each once, as
+  `Pitboard is not switching Claude Code:` and the reason, and so does the app, in a
+  notification titled **Pitboard is not switching Claude Code**. An `auto-switch` line in `pitboard log` whose error came before
   Pitboard chose an account names `claude`.
 - The app asks whether to switch Claude Code by itself every 30 seconds, as `pitboard
   watch` decides, and after every read and every change of numbers, so an account put in
