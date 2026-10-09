@@ -130,7 +130,9 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   `autoswitch::Skip`'s `SwitchInterrupted` and `CustomOauth` are `Blind::SwitchInterrupted`
   and `Blind::CustomOauth`, `Auto::Idle` is `Auto::Watching`, `Auto::NoRoom` is
   `Auto::Skipped` with `Skip::NoRoom`, `words::not_switching` takes the share, and
-  `error::Error::SwitchOvertaken` is gone. These change the crate's public API.
+  `error::Error::SwitchOvertaken` is gone. `state::changed_at` and
+  `service::Pitboard::changed_at` are in epoch milliseconds, as `readings::changed_at` is.
+  These change the crate's public API.
 
 ### Removed
 

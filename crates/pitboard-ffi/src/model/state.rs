@@ -299,7 +299,7 @@ pub(crate) enum Answer {
         ticket: Ticket,
         /// When the usage readings were last written, in epoch milliseconds, before the read.
         readings_before: i64,
-        /// When the account index was last written, in epoch seconds, before the read.
+        /// When the account index was last written, in epoch milliseconds, before the read.
         changed_before: i64,
         read: Result<Status, PitboardError>,
     },
@@ -308,7 +308,7 @@ pub(crate) enum Answer {
         read: Result<Status, PitboardError>,
     },
     Looked {
-        /// When the account index was last written, in epoch seconds.
+        /// When the account index was last written, in epoch milliseconds.
         changed: i64,
         /// When the usage readings were last written, in epoch milliseconds.
         measured: i64,

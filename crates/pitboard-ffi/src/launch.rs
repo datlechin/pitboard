@@ -916,7 +916,7 @@ impl AppCore {
         changed(self.core().core.rename(&from, &to), |_, _| ())
     }
 
-    /// When Pitboard's account index last changed, in epoch seconds, or 0 when there is
+    /// When Pitboard's account index last changed, in epoch milliseconds, or 0 when there is
     /// none, or where nothing may be read here.
     ///
     /// One stat of one file, so the model asks often. A switch typed in a terminal used to

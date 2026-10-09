@@ -416,7 +416,7 @@ pub(super) struct Machine {
     pub answer: Result<Status, Refusal>,
     /// What reading what is already known gives.
     pub offline: Result<Status, Refusal>,
-    /// When the account index was last written, in seconds.
+    /// When the account index was last written, in milliseconds.
     pub changed: i64,
     /// When the usage readings were last written. A read moves it, as the core's does: what
     /// it measured is recorded.

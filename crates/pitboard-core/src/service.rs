@@ -1114,8 +1114,9 @@ impl Pitboard {
         }
     }
 
-    /// When Pitboard's account index last changed, for a front end that wants to know
-    /// whether another one has done something without asking Anthropic about it.
+    /// When Pitboard's account index last changed, in epoch milliseconds, for a front end
+    /// that wants to know whether another one has done something without asking Anthropic
+    /// about it.
     pub fn changed_at(&self) -> i64 {
         state::changed_at(&self.ctx)
     }

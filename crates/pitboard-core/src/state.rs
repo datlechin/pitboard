@@ -594,7 +594,8 @@ fn file(ctx: &Context) -> PathBuf {
     home::dir(ctx).join("state.json")
 }
 
-/// When Pitboard's account index last changed, in epoch seconds, or 0 when there is none.
+/// When Pitboard's account index last changed, in epoch milliseconds, or 0 when there is
+/// none.
 ///
 /// Three front ends run on one machine and none of them could tell when another had
 /// changed anything. A switch typed in a terminal left the menu bar naming the account the
@@ -605,13 +606,15 @@ fn file(ctx: &Context) -> PathBuf {
 /// account index alone and not the whole directory. The status line writes usage readings
 /// after a message in any open session, and those say nothing about who is signed in: a
 /// front end follows them with `readings::changed_at`, and takes only the numbers.
+/// Milliseconds rather than seconds, as there: a switch made in the second of the last write
+/// a front end saw would otherwise go unseen.
 pub fn changed_at(ctx: &Context) -> i64 {
     std::fs::metadata(file(ctx))
         .and_then(|m| m.modified())
         .ok()
         .and_then(|at| at.duration_since(std::time::UNIX_EPOCH).ok())
         .map_or(0, |since| {
-            i64::try_from(since.as_secs()).unwrap_or(i64::MAX)
+            i64::try_from(since.as_millis()).unwrap_or(i64::MAX)
         })
 }
 
@@ -1259,6 +1262,35 @@ mod tests {
         assert_eq!(err.code(), "state_names_unknown_tool");
         assert!(err.to_string().contains("somethingnew"), "{err}");
         assert!(!err.to_string().contains("Delete"), "{err}");
+        let _ = std::fs::remove_dir_all(&home);
+    }
+
+    /// Two writes of the index within one second are two changes to a front end that follows
+    /// it: a switch typed in a terminal in the second of the last write it saw went unseen
+    /// until it next looked for another reason.
+    #[test]
+    fn two_writes_within_one_second_are_two_changes() {
+        let home = std::env::temp_dir().join(format!(
+            "pitboard-changed-at-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let _ = std::fs::remove_dir_all(&home);
+        std::fs::create_dir_all(&home).unwrap();
+        let ctx = Context::new(home.clone()).with_pitboard_home(home.clone());
+        std::fs::write(home.join("state.json"), "{}").unwrap();
+        let second = std::time::UNIX_EPOCH + std::time::Duration::from_secs(1_760_000_000);
+        let written_at = |millis| {
+            std::fs::File::options()
+                .write(true)
+                .open(home.join("state.json"))
+                .and_then(|index| {
+                    index.set_modified(second + std::time::Duration::from_millis(millis))
+                })
+                .expect("the index's time set");
+            changed_at(&ctx)
+        };
+        assert_ne!(written_at(100), written_at(600));
         let _ = std::fs::remove_dir_all(&home);
     }
 
