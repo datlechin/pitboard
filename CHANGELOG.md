@@ -6,6 +6,8 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-10-10
+
 ### Added
 
 - `pitboard stow`, and **Put Away** on the app's notice **A login file is left behind the
@@ -1851,7 +1853,8 @@ First release.
 - Schema 3: one parked login per account, with when it expires. Earlier files are refused
   rather than migrated; nothing was ever released that wrote them.
 
-[Unreleased]: https://github.com/datlechin/pitboard/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/datlechin/pitboard/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/datlechin/pitboard/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/datlechin/pitboard/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/datlechin/pitboard/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/datlechin/pitboard/compare/v0.6.0...v0.7.0

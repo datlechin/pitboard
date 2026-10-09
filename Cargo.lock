@@ -1301,7 +1301,7 @@ checksum = "a89322df9ebe1c1578d689c92318e070967d1042b512afbe49518723f4e6d5cd"
 
 [[package]]
 name = "pitboard"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "anstream",
  "anstyle",
@@ -1319,7 +1319,7 @@ dependencies = [
 
 [[package]]
 name = "pitboard-conformance"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "pitboard-core",
  "serde_json",
@@ -1327,7 +1327,7 @@ dependencies = [
 
 [[package]]
 name = "pitboard-core"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "core-foundation",
  "core-foundation-sys",
@@ -1348,7 +1348,7 @@ dependencies = [
 
 [[package]]
 name = "pitboard-ffi"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "pitboard-core",
  "pitboard-sites",
@@ -1363,7 +1363,7 @@ dependencies = [
 
 [[package]]
 name = "pitboard-probe"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "clap 4.6.7",
  "hex",
@@ -1377,7 +1377,7 @@ dependencies = [
 
 [[package]]
 name = "pitboard-share-ffi"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "pitboard-sites",
  "uniffi",
@@ -1385,7 +1385,7 @@ dependencies = [
 
 [[package]]
 name = "pitboard-sites"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "url",
 ]
@@ -2216,14 +2216,14 @@ dependencies = [
 
 [[package]]
 name = "uniffi-bindgen-csharp"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "uniffi-bindgen-cs",
 ]
 
 [[package]]
 name = "uniffi-bindgen-swift"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "uniffi",
 ]
