@@ -30,7 +30,7 @@ It records a fingerprint of each parked login's refresh token, and refuses a par
 Every switch runs under Pitboard's own lock, `state.lock`, which lets one change run at a time. Holding it, a switch first finishes or undoes any [interrupted switch](/concepts/switching#interrupted-switches). Then it:
 
 1. Checks the incoming parked login with Anthropic or OpenAI, renewing it if needed. So every switch needs the network, a Codex switch included.
-2. For Claude Code, takes the lock Claude Code holds while it writes its login. Pitboard and Claude Code both treat a lock untouched for 15 seconds as abandoned, and touch their own every 7.5 seconds. Codex takes no lock.
+2. For Claude Code, takes the lock a Claude Code session takes before it renews its login, then the lock Claude Code holds while it writes its login. It holds the first until the switch is recorded, so no session spends the refresh token of the login it parks. Pitboard and Claude Code both treat the write lock as abandoned once untouched for 15 seconds, and the renewal lock after 60. Codex takes no lock.
 3. Parks the outgoing login. Other entries beside it, such as Claude Code's MCP server tokens, stay in place. For Codex, Pitboard parks the whole `auth.json`.
 4. Writes the incoming login where the tool reads it. On macOS, if writing Claude Code's keychain item fails, Pitboard does not fall back to Claude Code's plaintext file.
 5. Reads the login back to check the write held. A Claude Code `/logout` that gives up waiting for the lock deletes the login anyway.
@@ -70,7 +70,7 @@ On macOS, `~/.claude/.credentials.json` can sit behind the keychain, left by a s
 
 Until it follows, `/status` in that session already names the account switched to, since it reads Claude Code's config, which a switch rewrites. `/usage` and every request still use the login the session holds.
 
-Claude Code sessions, and the daemon that refreshes their login, take the same Claude Code lock as a switch. Each reads the login again under the lock, so none can write the previous account back.
+Claude Code sessions, and the daemon that refreshes their login, take the same Claude Code lock as a switch. Each reads the login again under the lock, so none can write the previous account back. A session that starts to renew its login during a switch waits for the switch, as read in Claude Code 2.1.294.
 
 Everything that runs Codex holds its login in memory until it stops. Each of these needs to be started again: a `codex` session, the ChatGPT app, Codex's background app server and Codex in an editor.
 

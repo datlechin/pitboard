@@ -24,11 +24,13 @@
 //! with the file may have renewed it since, spending the park's refresh token. Any other park
 //! the account can be switched to is kept, and the file's login goes with the file.
 
-use super::{Settled, identify, live_store, purge, read_stored, shape, to_body, write_lock};
+use super::{
+    Refreshing, Settled, identify, live_store, purge, read_stored, shape, to_body, write_lock,
+};
 use crate::api::Owner;
 use crate::context::Context;
 use crate::error::{Cause, Error, Partway, Result};
-use crate::provider::claude::{live, paths as claude};
+use crate::provider::claude::live;
 use crate::provider::{self, ProviderError, ProviderId};
 use crate::service::{Permit, Warning};
 use crate::state::{self, Account, State};
@@ -260,7 +262,7 @@ impl Putting<'_> {
         };
         fault::point("stow.identified");
 
-        let refreshing = Refreshing::take(ctx, permit)?;
+        let refreshing = Refreshing::take(ctx, permit, TOOL)?;
         if unchanged(&live, &raw)?.is_none() {
             return Err(self.changed());
         }
@@ -292,7 +294,7 @@ impl Putting<'_> {
         if state.file_gone() {
             let _ = state::save(ctx, permit, state);
         }
-        self.lock_lost |= let_go(writing) | refreshing.let_go();
+        self.lock_lost |= let_go(writing) | Refreshing::let_go(refreshing);
         if self.lock_lost {
             self.warnings.push(Warning::LockCompromised { tool: TOOL });
         }
@@ -410,32 +412,6 @@ impl Putting<'_> {
         Error::LeftLoginChanged {
             path: self.path.clone(),
         }
-    }
-}
-
-/// Claude Code's refresh lock, held: its own, then the legacy one beside the storage
-/// directory, taken as a renewal takes them (the register's `refresh_lock`), so no session
-/// renews a login of Claude Code's meanwhile. The legacy one is gone without where it cannot
-/// be made, as Claude Code goes without it, and let go of first, as Claude Code lets go of it.
-struct Refreshing {
-    legacy: Option<lock::Guard>,
-    own: lock::Guard,
-}
-
-impl Refreshing {
-    fn take(ctx: &Context, permit: Permit) -> Result<Refreshing> {
-        let own = lock::acquire(permit, &claude::refresh_lock(ctx), lock::REFRESH)?;
-        let legacy = match lock::acquire(permit, &claude::legacy_refresh_lock(ctx), lock::REFRESH) {
-            Ok(legacy) => Some(legacy),
-            Err(lock::LockError::Io(_)) => None,
-            Err(busy) => return Err(busy.into()),
-        };
-        Ok(Refreshing { legacy, own })
-    }
-
-    /// Lets go of it, saying whether it stopped being Pitboard's meanwhile.
-    fn let_go(self) -> bool {
-        self.own.compromised() || self.legacy.as_ref().is_some_and(lock::Guard::compromised)
     }
 }
 
@@ -682,7 +658,8 @@ fn not_identified(path: &Path, error: ProviderError) -> Error {
 #[cfg(test)]
 mod tests {
     use super::super::harness::{
-        Machine, NOW, account, audit_lines, document, machine, oauth, owner, renews, state_file,
+        Machine, NOW, Session, account, audit_lines, document, lock_dir, machine, oauth, owner,
+        renews, renews_meanwhile, saves, state_file, write_target,
     };
     use super::super::settle;
     use super::*;
@@ -690,7 +667,6 @@ mod tests {
     use crate::service::Pitboard;
     use crate::store::memory::Fault;
     use serde_json::json;
-    use std::sync::Arc;
 
     /// `contents` left in `.credentials.json` behind the keychain, as a sign-in where the
     /// keychain could not be read leaves it.
@@ -778,91 +754,6 @@ mod tests {
         let mut login = document(refresh);
         login["claudeAiOauth"]["expiresAt"] = json!((NOW + 7200) * 1000);
         login
-    }
-
-    /// What a Claude Code session that signed in with the file did while renewing its login,
-    /// as [`renews_meanwhile`] plays it.
-    #[derive(Default)]
-    struct Session {
-        /// It found Claude Code's refresh lock held, so it waited.
-        waited: std::cell::Cell<bool>,
-        /// The refresh token it sent, and the login it was renewed to, to save once Claude
-        /// Code's write lock is let go of.
-        saving: std::cell::RefCell<Option<(String, Value)>>,
-    }
-
-    /// Where `target`'s lock is, as [`lock::acquire`] and proper-lockfile make it.
-    fn lock_dir(target: &Path) -> PathBuf {
-        PathBuf::from(format!("{}.lock", target.display()))
-    }
-
-    /// A session that signed in with the file renewing its login at the moment it is called,
-    /// as Claude Code 2.1.294 does (the register's `refresh_lock`). It takes the refresh lock,
-    /// as a directory, without waiting here: held, it waits, which is all that happens. Taken,
-    /// it sends the file's refresh token, which spends it, then saves the renewed login under
-    /// the write lock where it can take it, and otherwise once [`saves`] says it is let go of.
-    fn renews_meanwhile(m: &Machine, session: &std::rc::Rc<Session>) -> impl FnOnce() + 'static {
-        let (file, service, api) = (left_file(m), m.service.clone(), Arc::clone(&m.api));
-        let refreshing = lock_dir(&claude::refresh_lock(&m.ctx));
-        let writing = lock_dir(&write_target(m));
-        let session = std::rc::Rc::clone(session);
-        move || {
-            let parent = refreshing.parent().expect("the storage directory");
-            std::fs::create_dir_all(parent).expect("the storage directory is made");
-            match std::fs::create_dir(&refreshing) {
-                Ok(()) => {}
-                Err(held) if held.kind() == std::io::ErrorKind::AlreadyExists => {
-                    session.waited.set(true);
-                    return;
-                }
-                Err(error) => panic!("the refresh lock: {error}"),
-            }
-            let held = file.peek(&service).expect("the file is there");
-            let mut login: Value = serde_json::from_str(&held).expect("JSON");
-            let sent = login["claudeAiOauth"]["refreshToken"]
-                .as_str()
-                .expect("a refresh token")
-                .to_string();
-            api.renew_trouble(&sent, Trouble::InvalidGrant);
-            login["claudeAiOauth"]["refreshToken"] = json!(format!("{sent}-by-a-session"));
-            *session.saving.borrow_mut() = Some((sent, login));
-            if std::fs::create_dir(&writing).is_ok() {
-                save(&file, &service, &session);
-                let _ = std::fs::remove_dir(&writing);
-                let _ = std::fs::remove_dir(&refreshing);
-            }
-        }
-    }
-
-    /// The session's save, held up by Claude Code's write lock, once that is let go of: only
-    /// where the file still holds the refresh token it sent, as Claude Code's save compares
-    /// it, so nothing where the file has gone.
-    fn saves(m: &Machine, session: &Session) {
-        if session.saving.borrow().is_none() {
-            return;
-        }
-        save(&left_file(m), &m.service, session);
-        let _ = std::fs::remove_dir(lock_dir(&claude::refresh_lock(&m.ctx)));
-    }
-
-    fn save(file: &crate::store::memory::MemoryStore, service: &str, session: &Session) {
-        let Some((sent, login)) = session.saving.borrow_mut().take() else {
-            return;
-        };
-        let holds = file
-            .peek(service)
-            .and_then(|held| serde_json::from_str::<Value>(&held).ok())
-            .is_some_and(|held| held["claudeAiOauth"]["refreshToken"] == sent.as_str());
-        if holds {
-            file.plant(service, &login.to_string());
-        }
-    }
-
-    /// What Claude Code's write lock guards.
-    fn write_target(m: &Machine) -> PathBuf {
-        provider::of(TOOL)
-            .write_lock(&m.ctx)
-            .expect("Claude Code takes one")
     }
 
     fn parked_fingerprint(m: &Machine, label: &str) -> Option<String> {
@@ -2095,10 +1986,10 @@ mod tests {
             m.api.owned_by("access-left-refresh", owner("elsewhere"));
             m.api.owned_by("access-left-renewed", owner("elsewhere"));
             leave(&m, &left);
-            let session = std::rc::Rc::new(Session::default());
+            let session = Session::new();
 
-            let done = put_away_while(&m, point, renews_meanwhile(&m, &session));
-            saves(&m, &session);
+            let done = put_away_while(&m, point, renews_meanwhile(&m, left_file(&m), &session));
+            saves(&m, &left_file(&m), &session);
 
             assert!(
                 session.waited.get(),
@@ -2119,7 +2010,7 @@ mod tests {
             );
             assert_eq!(in_the_file(&m), None, "{point}");
             assert!(
-                !lock_dir(&claude::refresh_lock(&m.ctx)).exists(),
+                !lock_dir(&crate::provider::claude::paths::refresh_lock(&m.ctx)).exists(),
                 "{point}: the refresh lock is let go of"
             );
         }
@@ -2130,10 +2021,14 @@ mod tests {
         enrolled(&m, "elsewhere");
         m.api.owned_by("access-left-refresh", owner("elsewhere"));
         leave(&m, &document("left-refresh"));
-        let session = std::rc::Rc::new(Session::default());
+        let session = Session::new();
 
-        let refused = put_away_while(&m, "stow.identified", renews_meanwhile(&m, &session))
-            .expect_err("it changed");
+        let refused = put_away_while(
+            &m,
+            "stow.identified",
+            renews_meanwhile(&m, left_file(&m), &session),
+        )
+        .expect_err("it changed");
 
         assert!(!session.waited.get());
         assert_eq!(refused.code(), "left_login_changed");

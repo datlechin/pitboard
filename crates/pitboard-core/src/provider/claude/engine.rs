@@ -141,6 +141,13 @@ impl Provider for Claude {
         Some(PathBuf::from(claude::storage_dir(ctx)).join(".storage-write"))
     }
 
+    /// The lock a renewal takes before it reads the login again and sends its refresh token,
+    /// and the legacy one it takes after it (the register's `refresh_lock`). The write lock
+    /// does not keep a renewal from spending a refresh token: these do.
+    fn refresh_lock(&self, ctx: &Context) -> Option<(PathBuf, PathBuf)> {
+        Some((claude::refresh_lock(ctx), claude::legacy_refresh_lock(ctx)))
+    }
+
     /// The account Claude Code's config names, as written there. One that names no
     /// organisation, as a sign-in that could not read the profile leaves it, is named with
     /// none (the register's `config_may_name_no_organisation`).

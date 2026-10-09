@@ -263,6 +263,15 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   as the last one they saw, such as a `pitboard use` typed in a terminal. Pitboard told when
   its account index was written in whole seconds, so the app showed such a switch only at
   its next read, up to 5 minutes later, and `pitboard watch` named it up to 30 seconds late.
+- A switch of Claude Code, by hand or by itself, holds the lock a Claude Code session takes
+  before it renews its login, from before it last reads the login it switches away from
+  until the switch is recorded. A session that renewed that login at the same moment used up
+  the refresh token Pitboard had just parked, then saved its renewed login nowhere, since
+  another login was stored by then. The account switched from was left with a parked login
+  Anthropic refuses. Read in Claude Code 2.1.294, not measured against a running session.
+  Where a session is renewing its login just then, the switch waits for it, and fails with
+  `switch_in_progress` after about 7.5 seconds, as it does while Claude Code writes its
+  login.
 - The app and `pitboard watch` no longer say a switch was interrupted while another
   `pitboard` is in the middle of one, such as a `pitboard use` typed in a terminal. Every
   switch keeps a record until it is done, and they read that record as left by a switch

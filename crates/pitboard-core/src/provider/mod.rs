@@ -454,6 +454,11 @@ pub(crate) trait Provider: Send + Sync + std::fmt::Debug {
     /// is nothing to hold and nothing it could wait for.
     fn write_lock(&self, ctx: &Context) -> Option<std::path::PathBuf>;
 
+    /// What the locks this tool takes before it renews its login guard: its own, then one
+    /// beside it that it goes without where that cannot be made. Pitboard holds them too while
+    /// it counts on the refresh token stored. `None` for a tool that takes none.
+    fn refresh_lock(&self, ctx: &Context) -> Option<(std::path::PathBuf, std::path::PathBuf)>;
+
     /// The account a tool that keeps a record of its own apart from its login names there,
     /// read from its files without asking anybody. `None` for a tool whose login names its
     /// own account, and where the record names nobody.

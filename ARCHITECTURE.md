@@ -971,7 +971,13 @@ pages load, as a browser would.
   Pitboard's parked items. No keychain item is touched through the Security framework. The
   reason is under [macOS](#macos) in Measured facts.
 - Pitboard takes Claude Code's write lock, the same way Claude Code takes it, before writing
-  Claude Code's login. It writes the login where it already lives.
+  Claude Code's login. It writes the login where it already lives. A switch takes Claude
+  Code's refresh lock before that, as a renewal does (the register's `refresh_lock`), and
+  holds it from before it reads the outgoing login for the last time until it has recorded
+  the login installed: a session renewing meanwhile waits for it, so the copy parked for the
+  account switched from is never one a session spent, with its renewal lost at a save that
+  found another login stored. A renewal already under way holds that lock, and a switch
+  waits for it as it waits for the write lock, then stops with `switch_in_progress`.
 - Codex takes no lock on `auth.json`, so a switch reads the file again before replacing
   it. Every switch reads the live login back rather than trusting its own write.
 - Pitboard never answers a failed keychain write by writing Claude Code's plaintext file.
@@ -1911,12 +1917,16 @@ them, since every fact in it is read from a build:
   share under 100% so that a session following within the 33 seconds need not meet it,
   and the docs say neither is known.
 - A busy session renewing its login while an automatic switch is under way, against a
-  running build. The write lock and the read again under it (`write_lock`) keep the two
-  apart, as for any switch. `a_login_claude_code_renews_partway_through_is_not_written_over`
-  in `switch/auto.rs` plays it on the stores in memory: the switch stops with
-  `signed_in_account_changed`, nothing is written over the renewed login, the account it
-  would have switched to keeps its parked login, and the next attempt, a minute on,
-  switches.
+  running build. The refresh lock a switch holds (`refresh_lock`) keeps a renewal from
+  starting while the outgoing login is parked, and the read again under the write lock
+  (`write_lock`) finds one that finished before it, as for any switch.
+  `a_session_renewing_the_outgoing_login_during_a_switch_waits_for_it` in `switch/mod.rs`
+  plays the first on the stores in memory, with a session that takes the refresh lock as
+  2.1.294 does. `a_login_claude_code_renews_partway_through_is_not_written_over` in
+  `switch/auto.rs` plays a login that changed under the switch all the same: the switch
+  stops with `signed_in_account_changed`, nothing is written over the renewed login, the
+  account it would have switched to keeps its parked login, and the next attempt, a minute
+  on, switches.
 
 ### Anthropic's usage answer
 

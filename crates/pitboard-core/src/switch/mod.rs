@@ -481,6 +481,11 @@ fn switch_from(
     // does not hold up its writes.
     let (held, incoming) = prove_incoming(ctx, permit, &mut state, key, &target, held, incoming)?;
 
+    // A renewal by a running session spends the refresh token it sends, and the tool's write
+    // lock does not keep one from starting. So the lock a renewal takes first is held from
+    // before the outgoing login is read for the last time until the login installed in its
+    // place is recorded: the copy parked is then never one a session has spent.
+    let refreshing = Refreshing::take(ctx, permit, key.provider)?;
     let guard = write_lock(ctx, permit, key.provider)?;
     let Readied {
         before_raw,
@@ -649,6 +654,7 @@ fn switch_from(
     state::save(ctx, permit, &state)?;
     fault::point("switch.recorded");
     drop(guard);
+    let lock_lost = lock_lost | Refreshing::let_go(refreshing);
 
     let outgoing_identity = provider::Identity {
         account_id: outgoing.account_uuid.clone(),
@@ -779,6 +785,44 @@ fn write_lock(ctx: &Context, permit: Permit, which: ProviderId) -> Result<Option
         .write_lock(ctx)
         .map(|dir| lock::acquire(permit, &dir, lock::WRITE))
         .transpose()?)
+}
+
+/// The locks `which`'s tool takes before it renews its login, held: its own, then the one
+/// beside it, taken as a renewal takes them (Claude Code's are the register's `refresh_lock`),
+/// so no session renews the login stored meanwhile. The second is gone without where it
+/// cannot be made, as the tool goes without it, and let go of first, as the tool lets go of
+/// it.
+pub(super) struct Refreshing {
+    legacy: Option<lock::Guard>,
+    own: lock::Guard,
+}
+
+impl Refreshing {
+    /// `None` for a tool that takes no such lock. Taken before the tool's write lock, as the
+    /// tool takes them.
+    pub(super) fn take(
+        ctx: &Context,
+        permit: Permit,
+        which: ProviderId,
+    ) -> Result<Option<Refreshing>> {
+        let Some((own, legacy)) = provider::of(which).refresh_lock(ctx) else {
+            return Ok(None);
+        };
+        let own = lock::acquire(permit, &own, lock::REFRESH)?;
+        let legacy = match lock::acquire(permit, &legacy, lock::REFRESH) {
+            Ok(legacy) => Some(legacy),
+            Err(lock::LockError::Io(_)) => None,
+            Err(busy) => return Err(busy.into()),
+        };
+        Ok(Some(Refreshing { legacy, own }))
+    }
+
+    /// Lets go of it, saying whether it stopped being Pitboard's meanwhile.
+    pub(super) fn let_go(held: Option<Refreshing>) -> bool {
+        held.is_some_and(|held| {
+            held.own.compromised() || held.legacy.as_ref().is_some_and(lock::Guard::compromised)
+        })
+    }
 }
 
 /// Readies `incoming` to go in place of the login read earlier as `first`, which was
@@ -1100,6 +1144,58 @@ mod tests {
                 .parked
                 .is_some()
         );
+    }
+
+    /// A session renewing Claude Code's login takes the refresh lock before it sends the
+    /// refresh token, and saves the answer only where the login stored still holds the token
+    /// it sent (the register's `refresh_lock`). A switch holds that lock from before it reads
+    /// the outgoing login until it has recorded the one it installed, so a session renewing
+    /// meanwhile waits: the login parked for the account switched from is never one a session
+    /// spent, with its renewal lost at a save that found another login stored.
+    #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
+    )]
+    fn a_session_renewing_the_outgoing_login_during_a_switch_waits_for_it() {
+        use harness::{Session, lock_dir, renews_meanwhile, saves};
+        let refreshing =
+            |m: &harness::Machine| lock_dir(&provider::claude::paths::refresh_lock(&m.ctx));
+        for point in ["switch.journal_written", "switch.park_recorded"] {
+            let m = harness::machine(&format!("refresh-lock-{point}"));
+            let keychain = std::sync::Arc::clone(m.mem.live());
+            let session = Session::new();
+            let settled = settle(&m.ctx, Permit::for_a_test(), None)
+                .expect("nothing to recover")
+                .0;
+
+            let done = fault::meanwhile(
+                point,
+                renews_meanwhile(&m, std::sync::Arc::clone(&keychain), &session),
+                || switch(settled, &m.key("there")),
+            );
+            saves(&m, &keychain, &session);
+
+            assert!(
+                session.waited.get(),
+                "{point}: a session spent the refresh token Pitboard parked"
+            );
+            done.expect("switched");
+            let state = state::load(&m.ctx).expect("state");
+            let parked = state
+                .get(&m.key("here"))
+                .and_then(|account| account.parked.clone())
+                .expect("the outgoing login is parked");
+            assert_eq!(
+                parked.refresh_fingerprint,
+                store::fingerprint("here-refresh"),
+                "{point}"
+            );
+            assert!(
+                !refreshing(&m).exists(),
+                "{point}: the refresh lock is let go of"
+            );
+        }
     }
 
     #[test]

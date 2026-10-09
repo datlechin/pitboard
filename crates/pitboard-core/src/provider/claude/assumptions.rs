@@ -352,11 +352,14 @@ pub const ASSUMPTIONS: &[Assumption] = &[
         // Read on 2026-10-09 from the macOS, Linux x64, Windows x64 and Windows arm64 builds of
         // 2.1.294, whose code here is the same.
         verified_against: "2.1.294",
-        depends: "lock::REFRESH, and `pitboard stow`, which holds it from its last reading of \
-                  a login left in `.credentials.json` until the file is gone, so no session \
-                  spends the refresh token of the login it parks, drops or renews meanwhile, \
-                  writes no owner record, so no session takes it over, and saves the login it \
-                  renewed as this save does, where the file still holds the token it sent",
+        depends: "lock::REFRESH, a switch, which holds it from before it reads the outgoing login \
+                  a last time until it has recorded the login installed, so no session spends the \
+                  refresh token of the copy it parks, and `pitboard stow`, which holds it from its \
+                  last reading of a login left in `.credentials.json` until the file is gone, so \
+                  no session spends the refresh token of the login it parks, drops or renews \
+                  meanwhile, and saves the login it renewed as this save does, where the file \
+                  still holds the token it sent. Neither writes an owner record, so no session \
+                  takes the lock over",
         probe: &[
             "\".oauth_refresh.lock\"),realpath:!1,stale:60000,update:5000",
             "tengu_oauth_refresh_legacy_lock_contended",

@@ -212,6 +212,11 @@ impl Provider for Codex {
         None
     }
 
+    /// Nor does a running `codex` take one to renew its login.
+    fn refresh_lock(&self, _ctx: &Context) -> Option<(std::path::PathBuf, std::path::PathBuf)> {
+        None
+    }
+
     /// Codex keeps no record apart from its login, whose ID token names the account.
     fn own_record(&self, _ctx: &Context) -> Option<Identity> {
         None

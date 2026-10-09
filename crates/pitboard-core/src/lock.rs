@@ -28,7 +28,8 @@
 //! takes a lock of its own ([`REFRESH`]), reads the login again under it, sends the refresh
 //! token, and takes the write lock only to save the answer, where the login stored still
 //! holds the token it sent. Only the refresh lock keeps a refresh from spending a token
-//! Pitboard is about to count on.
+//! Pitboard is about to count on. So a switch holds it while it parks the outgoing login,
+//! and `pitboard stow` while it keeps the login left in a file.
 //!
 //! The writers are a session and [`crate::daemon`], the supervisor that outlives sessions
 //! and refreshes on a timer of its own. Both come through here.
@@ -73,9 +74,11 @@ const MAX_BACKOFF: Duration = Duration::from_millis(1_000);
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum LockError {
-    #[error("another process is writing credentials right now; try again in a few seconds")]
+    #[error(
+        "another process is writing or renewing credentials right now; try again in a few seconds"
+    )]
     Busy,
-    #[error("cannot take the credential write lock: {0}")]
+    #[error("cannot take the credential lock: {0}")]
     Io(#[source] io::Error),
 }
 

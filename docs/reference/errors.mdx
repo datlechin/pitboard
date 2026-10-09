@@ -114,8 +114,8 @@ For each exit status, see [Exit codes](/reference/commands#exit-codes). In the t
 | `credential_not_json` | 3 | A stored login is not valid JSON. | Run `pitboard doctor`. |
 | `credential_write_failed` | 1 | Writing a login failed. | Fix the reason the message gives, then try again. |
 | `credential_not_durable` | 1 | A login read back different or empty after it was written. | Run `pitboard doctor`. |
-| `switch_in_progress` | 1 | Another process held Claude Code's login write lock for the whole wait, about 7.5 seconds. | Try again in a few seconds. |
-| `lock_unavailable` | 1 | Pitboard could not take Claude Code's login write lock, for a reason other than another process holding it. | Fix the reason the message gives, then try again. |
+| `switch_in_progress` | 1 | Another process held Claude Code's login write lock, or the lock a Claude Code session takes to renew its login, for the whole wait, about 7.5 seconds. | Try again in a few seconds. A lock left by a Claude Code session that was killed clears within a minute. |
+| `lock_unavailable` | 1 | Pitboard could not take one of those two locks of Claude Code's, for a reason other than another process holding it. | Fix the reason the message gives, then try again. |
 
 ## Renewal schedule
 

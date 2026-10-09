@@ -453,6 +453,102 @@ pub(crate) fn renews(m: &Machine, refresh: &str, renewed: &str) {
     }
 }
 
+/// What a Claude Code session did while renewing the login a store holds, as
+/// [`renews_meanwhile`] plays it.
+#[derive(Default)]
+pub(crate) struct Session {
+    /// It found Claude Code's refresh lock held, so it waited.
+    pub(crate) waited: std::cell::Cell<bool>,
+    /// The refresh token it sent, and the login it was renewed to, to save once Claude Code's
+    /// write lock is let go of.
+    saving: std::cell::RefCell<Option<(String, Value)>>,
+}
+
+impl Session {
+    pub(crate) fn new() -> std::rc::Rc<Session> {
+        std::rc::Rc::new(Session::default())
+    }
+}
+
+/// Where `target`'s lock is, as [`lock::acquire`] and proper-lockfile make it.
+pub(crate) fn lock_dir(target: &std::path::Path) -> PathBuf {
+    PathBuf::from(format!("{}.lock", target.display()))
+}
+
+/// What Claude Code's write lock guards.
+pub(crate) fn write_target(m: &Machine) -> PathBuf {
+    crate::provider::of(ProviderId::Claude)
+        .write_lock(&m.ctx)
+        .expect("Claude Code takes one")
+}
+
+/// A session renewing the login `store` holds at the moment it is called, as Claude Code
+/// 2.1.294 does (the register's `refresh_lock`): the keychain's, or the file's for a session
+/// that signed in with the file. It takes the refresh lock, as a directory, without waiting
+/// here: held, it waits, which is all that happens. Taken, it sends the refresh token stored,
+/// which spends it, then saves the renewed login under the write lock where it can take it,
+/// and otherwise once [`saves`] says it is let go of.
+pub(crate) fn renews_meanwhile(
+    m: &Machine,
+    store: Arc<crate::store::memory::MemoryStore>,
+    session: &std::rc::Rc<Session>,
+) -> impl FnOnce() + 'static {
+    let (service, api) = (m.service.clone(), Arc::clone(&m.api));
+    let refreshing = lock_dir(&claude::refresh_lock(&m.ctx));
+    let writing = lock_dir(&write_target(m));
+    let session = std::rc::Rc::clone(session);
+    move || {
+        let parent = refreshing.parent().expect("the storage directory");
+        std::fs::create_dir_all(parent).expect("the storage directory is made");
+        match std::fs::create_dir(&refreshing) {
+            Ok(()) => {}
+            Err(held) if held.kind() == std::io::ErrorKind::AlreadyExists => {
+                session.waited.set(true);
+                return;
+            }
+            Err(error) => panic!("the refresh lock: {error}"),
+        }
+        let held = store.peek(&service).expect("a login is stored");
+        let mut login: Value = serde_json::from_str(&held).expect("JSON");
+        let sent = login["claudeAiOauth"]["refreshToken"]
+            .as_str()
+            .expect("a refresh token")
+            .to_string();
+        api.renew_trouble(&sent, crate::api::scripted::Trouble::InvalidGrant);
+        login["claudeAiOauth"]["refreshToken"] = json!(format!("{sent}-by-a-session"));
+        *session.saving.borrow_mut() = Some((sent, login));
+        if std::fs::create_dir(&writing).is_ok() {
+            save(&store, &service, &session);
+            let _ = std::fs::remove_dir(&writing);
+            let _ = std::fs::remove_dir(&refreshing);
+        }
+    }
+}
+
+/// The session's save, held up by Claude Code's write lock, once that is let go of: only
+/// where `store` still holds the refresh token it sent, as Claude Code's save compares it, so
+/// nothing where that login has gone.
+pub(crate) fn saves(m: &Machine, store: &crate::store::memory::MemoryStore, session: &Session) {
+    if session.saving.borrow().is_none() {
+        return;
+    }
+    save(store, &m.service, session);
+    let _ = std::fs::remove_dir(lock_dir(&claude::refresh_lock(&m.ctx)));
+}
+
+fn save(store: &crate::store::memory::MemoryStore, service: &str, session: &Session) {
+    let Some((sent, login)) = session.saving.borrow_mut().take() else {
+        return;
+    };
+    let holds = store
+        .peek(service)
+        .and_then(|held| serde_json::from_str::<Value>(&held).ok())
+        .is_some_and(|held| held["claudeAiOauth"]["refreshToken"] == sent.as_str());
+    if holds {
+        store.plant(service, &login.to_string());
+    }
+}
+
 /// A limit of `kind`, `percent` used, resetting an hour from now: what Anthropic answers of
 /// one, for the tests of what Pitboard switches by itself.
 pub(crate) fn window(kind: &str, percent: f64) -> crate::usage::Window {
