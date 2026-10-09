@@ -115,7 +115,7 @@ pub fn whole(percent: f64) -> i64 {
 
 /// Whether a limit `percent` used has reached `share` as it is drawn: one drawn at 95% has
 /// reached 95%.
-pub fn reached(percent: f64, share: u8) -> bool {
+pub(crate) fn reached(percent: f64, share: u8) -> bool {
     whole(percent) >= i64::from(share)
 }
 

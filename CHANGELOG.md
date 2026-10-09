@@ -148,40 +148,34 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   makes no decision under Pitboard's lock for a minute, then twice as long after each error
   in a row, up to 15 minutes, as the app does. It decided again every 30 seconds, and each
   error was another line in `pitboard log`.
-- In `pitboard-core`, `autoswitch::Blind`, `autoswitch::Look`, the variants
-  `autoswitch::Auto::NotWatching`, `Auto::Watching` and `Auto::Waiting`,
-  `autoswitch::Skip`'s `NoRoom`, `AlreadyLeft`, `GaveUp` and `Settling`,
-  `autoswitch::DECIDE_EVERY_SECONDS`, `autoswitch::retry_after`,
-  `service::Pitboard::auto_look`, `budget::held_until`, `words::not_watching` and
-  `words::watching` are new.
-  `autoswitch::Skip`'s `SwitchInterrupted` and `CustomOauth` are `Blind::SwitchInterrupted`
-  and `Blind::CustomOauth`, `Auto::Idle` is `Auto::Watching`, `Auto::NoRoom` is
-  `Auto::Skipped` with `Skip::NoRoom`, `words::not_switching` takes the share, and
-  `error::Error::SwitchOvertaken` is gone. `state::changed_at` and
-  `service::Pitboard::changed_at` are in epoch milliseconds, as `readings::changed_at` is.
-  These change the crate's public API.
 - In `pitboard-core`, `state::State::in_use` records whose login each tool has stored, in
   place of `State::active`, and `State::active_for`, `set_active`, `slot_for`, `set_slot`
-  and `used` are gone. `State::account_in_use`, `identified`, `forget_in_use`, `other_slots`
-  and `from_file`, `state::Account::replaced_at` and `owner`, and the module `in_use` are
-  new, and `api::Owner` is `Serialize` and `Deserialize`.
-  `usage::Source::ClaudeCodeCache`, `usage::from_config_cache`,
-  `usage::Snapshot::account_uuid` and `status::gather` are gone, and
-  `usage::Snapshot::answered_at` and `lists_every_limit`, `usage::Room`, `usage::room`,
-  `usage::roomiest`, `usage::reached`, `usage::whole` and `autoswitch::Threshold::reached`
-  are new. `provider::Adoption` is no longer `Copy` and has the variant `AtRenewal`,
+  and `used` are gone. `autoswitch::Skip`'s `SwitchInterrupted` and `CustomOauth` are
+  `Blind::SwitchInterrupted` and `Blind::CustomOauth`, `Auto::Idle` is `Auto::Watching`,
+  `Auto::NoRoom` is `Auto::Skipped` with `Skip::NoRoom`, and `words::not_switching` takes
+  the share. `usage::Source::ClaudeCodeCache`, `usage::from_config_cache`,
+  `usage::Snapshot::account_uuid`, `status::gather` and `error::Error::SwitchOvertaken` are
+  gone. `state::changed_at` and `service::Pitboard::changed_at` are in epoch milliseconds.
+  `provider::Adoption` is no longer `Copy` and has the variant `AtRenewal`,
   `service::Warning::FallbackLogin` has the field `held`, a `provider::Held`, and
   `doctor::FallbackLogin::fingerprint` is `Ok(None)` where the file holds no login and an
   error where it cannot be read. `switch::Outcome::AlreadyActive` has the field
-  `config_updated` and `statusline::StatusLine` the field `sure`.
-  `status::Stale::LoginReplaced`, `service::Warning`'s `LoginReplaced`, `InUseUnconfirmed`
-  and `ConfigNamesAnother`, `service::Stored`, `provider::Behind` and `provider::Held`,
-  `doctor::Facts::in_use`, `service::Pitboard::update_config`, `left_login` and `stow`,
-  `switch::update_config`, `switch::stow` with `Left`, `Stowed`, `Kept` and `Foreseen`,
-  `error::Partway`, the errors `AccountNotInUse`, `LeftLoginChanged`,
-  `StoredLoginChanged`, `LeftLoginNotEnrolled`, `LeftLoginUnidentified` and
-  `PutAwayStopped`, and `words::kept_until_renewed`, `left_lines`, `nothing_left` and
-  `stowed_lines` are new. These change the crate's public API.
+  `config_updated`, `statusline::StatusLine` the field `sure`, and `api::Owner` is
+  `Serialize` and `Deserialize`. New are `autoswitch::Blind` and `autoswitch::Look`, the
+  variants `autoswitch::Auto::NotWatching`, `Auto::Watching` and `Auto::Waiting`,
+  `autoswitch::Skip`'s `NoRoom`, `AlreadyLeft`, `GaveUp` and `Settling`,
+  `autoswitch::DECIDE_EVERY_SECONDS` and `autoswitch::retry_after`,
+  `service::Pitboard::auto_look`, `update_config`, `left_login` and `stow`,
+  `State::account_in_use`, `identified`, `other_slots` and `from_file`,
+  `state::Account::replaced_at` and `owner`, the module `in_use`,
+  `usage::Snapshot::answered_at` and `lists_every_limit`, `usage::Room`, `usage::room`,
+  `usage::roomiest` and `usage::whole`, `status::Stale::LoginReplaced`, `service::Warning`'s
+  `LoginReplaced`, `InUseUnconfirmed` and `ConfigNamesAnother`, `service::Stored`,
+  `provider::Held`, `doctor::Facts::in_use`, `switch::update_config`, `switch::stow` with
+  `Left`, `Stowed`, `Kept` and `Foreseen`, `error::Partway`, the errors `AccountNotInUse`,
+  `LeftLoginChanged`, `StoredLoginChanged`, `LeftLoginNotEnrolled`, `LeftLoginUnidentified`
+  and `PutAwayStopped`, and `words::not_watching`, `watching`, `kept_until_renewed`,
+  `left_lines`, `nothing_left` and `stowed_lines`. These change the crate's public API.
 
 ### Removed
 

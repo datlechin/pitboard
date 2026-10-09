@@ -35,7 +35,7 @@ pub struct InUse {
 impl InUse {
     /// Whether `other` says what this says of `which`'s store: the same account, the same
     /// login and the same account named. When it was said is not part of it.
-    pub fn agrees(&self, which: ProviderId, other: &InUse) -> bool {
+    pub(crate) fn agrees(&self, which: ProviderId, other: &InUse) -> bool {
         self.account(which) == other.account(which)
             && self.login == other.login
             && self.named == other.named
@@ -100,7 +100,7 @@ impl Known {
 
     /// The account the tool's own record names in place of the one whose login is stored,
     /// where nothing is in doubt. `/status` in Claude Code shows that one.
-    pub fn named_another(&self, which: ProviderId) -> Option<&Owner> {
+    pub(crate) fn named_another(&self, which: ProviderId) -> Option<&Owner> {
         let owner = self.owner()?;
         let named = self.own_record.as_ref()?;
         (self.doubt.is_none() && new_id(which, named) != new_id(which, owner)).then_some(named)

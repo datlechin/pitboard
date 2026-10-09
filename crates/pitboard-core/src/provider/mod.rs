@@ -280,7 +280,7 @@ pub enum Adoption {
 /// What it holds can matter less than that it is there: a session can watch it by a look,
 /// whatever is in it.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Behind {
+pub(crate) struct Behind {
     pub path: std::path::PathBuf,
     pub held: Held,
 }

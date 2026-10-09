@@ -257,7 +257,7 @@ fn doubling(first: i64, most: i64, before: u32) -> i64 {
 
 /// When the account filed under `id` may be asked about again, where a refusal holds it off
 /// past now, in epoch seconds.
-pub fn held_until(ctx: &Context, id: &str) -> Option<i64> {
+pub(crate) fn held_until(ctx: &Context, id: &str) -> Option<i64> {
     let now = ctx.now();
     load(ctx)
         .get(id)

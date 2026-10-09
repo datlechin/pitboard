@@ -369,7 +369,7 @@ impl State {
     }
 
     /// Forget whose login every tool has stored, in every slot.
-    pub fn forget_in_use(&mut self) {
+    pub(crate) fn forget_in_use(&mut self) {
         self.in_use.clear();
         self.slot.clear();
         self.other_slots.clear();

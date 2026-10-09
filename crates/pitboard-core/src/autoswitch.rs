@@ -81,7 +81,7 @@ impl Threshold {
     }
 
     /// Whether a limit `percent` used has reached the share as it is drawn.
-    pub fn reached(self, percent: f64) -> bool {
+    pub(crate) fn reached(self, percent: f64) -> bool {
         usage::reached(percent, self.0)
     }
 
