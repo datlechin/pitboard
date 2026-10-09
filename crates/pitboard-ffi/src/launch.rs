@@ -220,8 +220,7 @@ pub(crate) enum AutoSwitched {
     },
     /// A limit of `from` reached the share, `used` of it, and Pitboard did not switch, for
     /// the reason `why` says, until `until` where the reason ends then. `key` tells it apart
-    /// from another, as the core does (`Skip::told_apart`): the account, the limit, its reset
-    /// and the reason's code.
+    /// from another, as the core does (`Skip::told_apart`).
     Skipped {
         key: String,
         from: String,
@@ -231,7 +230,7 @@ pub(crate) enum AutoSwitched {
     },
     /// Pitboard cannot judge whether to switch, for the reason `why` says, and asks again at
     /// `until` where it waits to. `key` tells it apart from another, as the core does
-    /// (`Blind::told_apart`): its code, and the email, the cause or the account it names.
+    /// (`Blind::told_apart`).
     NotWatching {
         key: String,
         why: String,
