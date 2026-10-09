@@ -1543,9 +1543,9 @@ impl World {
         std::fs::write(&path, state.to_string()).expect("the account index written");
     }
 
-    /// Says the account index was written `seconds` later than it was. The index's time is
-    /// kept to the second, so a write within the same second as the last one looks like
-    /// none; a test says it came later rather than waiting a second.
+    /// Says the account index was written `seconds` later than it was. Two writes close
+    /// together need not get two times on every file system, so a test says the later one
+    /// came later rather than waiting for its time to move.
     pub(super) fn index_written_later(&self, seconds: u64) {
         self.index_written(|written| written + Duration::from_secs(seconds));
     }

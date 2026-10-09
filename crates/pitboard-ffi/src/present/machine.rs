@@ -249,8 +249,9 @@ fn auto_switch(seen: &Seen) -> AutoSwitchShown {
     }
 }
 
-/// What switching Claude Code by itself came to last, in the words `pitboard watch` says it
-/// in, with its clock times as the person's own clock says them.
+/// What switching Claude Code by itself came to last, as the line under the setting says it:
+/// the core's words for the account watched and each reason, in sentences of the app's own,
+/// which `pitboard watch` frames apart, with clock times as the person's own clock says them.
 fn auto_standing(seen: &Seen, standing: &AutoStanding) -> String {
     match standing {
         AutoStanding::Came(AutoSwitched::Watching {

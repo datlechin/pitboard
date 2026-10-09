@@ -839,9 +839,8 @@ fn giving_up_on_the_interrupted_switch_happens_once() {
 /// keeps as `in-use` once work is enrolled, under its label.
 ///
 /// FixtureTests.swift's theLogRecordsChangesNewestLastAsTheyAreTyped, but for when the
-/// account index last changed, which is kept to the second, so a change within the second
-/// the world was made in does not move it: that a change made elsewhere is noticed is
-/// threaded.rs's `a_change_another_front_end_makes_is_told_without_asking_anyone`.
+/// account index last changed: that a change made elsewhere is noticed is threaded.rs's
+/// `a_change_another_front_end_makes_is_told_without_asking_anyone`.
 #[test]
 #[cfg_attr(
     windows,

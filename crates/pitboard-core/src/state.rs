@@ -225,10 +225,6 @@ pub struct State {
     pub accounts: Vec<Account>,
     /// Whose login each tool has stored, as its service last said, by the tool's code: the
     /// record of the credential slot `slot` names for that tool.
-    ///
-    /// Until schema 6 the account Pitboard last switched to stood in for this, as `active`.
-    /// A sign-in outside Pitboard left that naming an account whose login was gone, and
-    /// nothing read the store to notice.
     #[serde(default)]
     pub in_use: BTreeMap<String, InUse>,
     /// The credential slot each tool's `in_use` was recorded for. One state file serves
@@ -350,7 +346,7 @@ impl State {
 
     /// Make `which`'s record the one of `slot`. Where it is of another slot, that one waits
     /// with the other slots' records, and the record `slot` was last given, where there is
-    /// one, comes back. A record with no slot named is taken as `slot`'s, as it always was.
+    /// one, comes back. A record with no slot named is taken as `slot`'s.
     fn in_slot(&mut self, which: ProviderId, slot: String) {
         let code = which.code();
         if let Some(recorded) = self.slot.get(code).filter(|recorded| **recorded != slot) {

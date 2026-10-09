@@ -1481,8 +1481,8 @@ mod tests {
 
     /// A sign-in to the account the look found a switch due to, landing before the lock is
     /// held, leaves Claude Code's config naming the account it would have left. Only a switch
-    /// and `use` write the config, so the switch there is no longer any need for leaves the
-    /// config as it is, and the login too.
+    /// and `use` write the config, so the switch it no longer needs leaves the config and the
+    /// login as they are.
     #[test]
     #[cfg_attr(
         windows,

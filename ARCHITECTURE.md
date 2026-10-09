@@ -1211,10 +1211,9 @@ that computer's stores.
 Each `CLAUDE_CONFIG_DIR` or `CODEX_HOME` names a store of its own, its credential slot, so a
 tool has a record for each slot it was read under. `in_use` holds the one of the slot `slot`
 names; the others wait in `other_slots`, by slot, and `load` puts the slot it reads in place
-of the one `slot` names. `active` was dropped when read under another slot, and only a
-change wrote the file. A read records what it finds, so two front ends under two slots take
-turns writing it, and a record one of them dropped would leave the next read under the other
-nothing to tell a sign-in outside Pitboard by. An account another slot's record names still
+of the one `slot` names. A read records what it finds, so two front ends under two slots
+take turns writing the file, and a record either dropped would leave the next read under the
+other nothing to tell a sign-in outside Pitboard by. An account another slot's record names still
 has a login stored there, so a sign-in that replaces its login in one slot leaves it that
 one, and nothing says it was replaced.
 

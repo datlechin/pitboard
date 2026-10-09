@@ -361,10 +361,9 @@ fn tools(state: &State) -> Vec<ProviderId> {
 /// and works on a train.
 ///
 /// Whose a login is comes from Pitboard's record of what Anthropic last said, and from a
-/// Codex login's own claims ([`in_use::known`]). It came from Claude Code's config, which a
+/// Codex login's own claims ([`in_use::known`]). Not from Claude Code's config, which a
 /// Claude Code process started or signed in on another login can rewrite with its own
-/// account, so on one machine it named another account than the login stored for three
-/// hours.
+/// account.
 pub fn gather_offline(ctx: &Context, state: &State) -> Report {
     let known: BTreeMap<ProviderId, Option<Owner>> = tools(state)
         .into_iter()
@@ -1825,8 +1824,7 @@ mod tests {
 
     /// Offline, Claude Code's account in use is the one Anthropic last named for its login,
     /// whatever its config names, and Codex's the one its login names, whatever Pitboard last
-    /// recorded. It used to be Claude Code's config alone, so on a plane a signed-in Codex
-    /// account read as parked.
+    /// recorded, so on a plane a signed-in Codex account does not read as parked.
     #[test]
     #[cfg_attr(windows, ignore = "W21: switching Codex on Windows")]
     fn offline_every_tool_names_its_own_signed_in_account() {
