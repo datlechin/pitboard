@@ -31,6 +31,24 @@ anything public in `pitboard-core` is a new minor version, as Cargo reads one: 0
   macOS and Linux alone until Windows is released. No release builds anything for Windows
   while the version's major is 0, and nothing a release builds, scripts or packages passes
   `--cfg pitboard_unreleased_windows`, `test-support` or `fixture`.
+- The first release after 0.9.0 is 0.10.0. In `pitboard-core`, `state::State::active`,
+  with `active_for`, `set_active`, `slot_for`, `set_slot` and `used`, is gone, now that
+  the account index records whose login each tool has stored. So are
+  `usage::Source::ClaudeCodeCache`, `usage::from_config_cache` and
+  `usage::Snapshot::account_uuid`, now that Pitboard takes no usage from Claude Code's
+  cache. `status::gather`, `autoswitch::Auto::Idle` and `Auto::NoRoom`,
+  `autoswitch::Skip::SwitchInterrupted` and `Skip::CustomOauth`, and
+  `error::Error::SwitchOvertaken` are gone too. `provider::Adoption`, `autoswitch::Auto`
+  and `autoswitch::Skip` have new variants, which break an exhaustive `match` on them, and
+  `Adoption` is no longer `Copy`. `usage::Snapshot`, `state::State`, `state::Account`,
+  `statusline::StatusLine`, `service::Warning::FallbackLogin` and
+  `switch::Outcome::AlreadyActive` have new fields. `doctor::FallbackLogin::fingerprint`
+  and `words::not_switching` changed shape. The `--json` contract loses the check
+  `usage_cache`, the `usage.source` value `claude_code_cache` and the error code
+  `switch_overtaken`, and `pitboard watch` gives `switch_interrupted` and
+  `custom_oauth_endpoint` as reasons of `not_watching`, where they were reasons of
+  `skipped`. The account index is schema 6, which 0.9.0 refuses, so the release's notes
+  say to update the command line and the app together.
 
 1. In CHANGELOG.md, add `## [<version>] - YYYY-MM-DD` directly under `## [Unreleased]`, so
    the entries there fall under the version. The guard looks for a line that starts

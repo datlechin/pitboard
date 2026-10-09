@@ -154,6 +154,28 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   `error::Error::SwitchOvertaken` is gone. `state::changed_at` and
   `service::Pitboard::changed_at` are in epoch milliseconds, as `readings::changed_at` is.
   These change the crate's public API.
+- In `pitboard-core`, `state::State::in_use` records whose login each tool has stored, in
+  place of `State::active`, and `State::active_for`, `set_active`, `slot_for`, `set_slot`
+  and `used` are gone. `State::account_in_use`, `identified`, `forget_in_use` and
+  `other_slots`, `state::Account::replaced_at` and `owner`, and the module `in_use` are
+  new, and `api::Owner` is `Serialize` and `Deserialize`.
+  `usage::Source::ClaudeCodeCache`, `usage::from_config_cache`,
+  `usage::Snapshot::account_uuid` and `status::gather` are gone, and
+  `usage::Snapshot::answered_at` and `lists_every_limit`, `usage::Room`, `usage::room`,
+  `usage::roomiest`, `usage::reached`, `usage::whole` and `autoswitch::Threshold::reached`
+  are new. `provider::Adoption` is no longer `Copy` and has the variant `AtRenewal`,
+  `service::Warning::FallbackLogin` has the field `held`, a `provider::Held`, and
+  `doctor::FallbackLogin::fingerprint` is `Ok(None)` where the file holds no login and an
+  error where it cannot be read. `switch::Outcome::AlreadyActive` has the field
+  `config_updated` and `statusline::StatusLine` the field `sure`.
+  `status::Stale::LoginReplaced`, `service::Warning`'s `LoginReplaced`, `InUseUnconfirmed`
+  and `ConfigNamesAnother`, `service::Stored`, `provider::Behind` and `provider::Held`,
+  `doctor::Facts::in_use`, `service::Pitboard::update_config`, `left_login` and `stow`,
+  `switch::update_config`, `switch::stow` with `Left`, `Stowed`, `Kept` and `Foreseen`,
+  `error::Partway`, the errors `AccountNotInUse`, `LeftLoginChanged`,
+  `StoredLoginChanged`, `LeftLoginNotEnrolled`, `LeftLoginUnidentified` and
+  `PutAwayStopped`, and `words::kept_until_renewed`, `left_lines`, `nothing_left` and
+  `stowed_lines` are new. These change the crate's public API.
 
 ### Removed
 
