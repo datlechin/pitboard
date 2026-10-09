@@ -91,12 +91,41 @@ pub fn share_of_limit(limit: &crate::usage::Window) -> String {
     format!("{}% of its {name} limit", whole(limit.percent))
 }
 
-/// Why Pitboard does not switch Claude Code by itself where it would have, as a clause that
-/// says what to do about it where anything can be done. It names no command: the app says
-/// it too.
-pub fn not_switching(why: &crate::autoswitch::Skip) -> String {
-    use crate::autoswitch::Skip;
+/// Why Pitboard does not switch Claude Code away from a limit at `threshold`, as a clause
+/// that says what to do about it where anything can be done. It names no command, and no
+/// time, which each front end says in its own way: the app says it too.
+pub fn not_switching(
+    why: &crate::autoswitch::Skip,
+    threshold: crate::autoswitch::Threshold,
+) -> String {
+    use crate::autoswitch::{ATTEMPTS, SETTLING_SECONDS, Skip};
     match why {
+        Skip::NoRoom { unread } => {
+            let room = format!(
+                "no other Claude Code account has room below {}% in every limit",
+                threshold.percent()
+            );
+            if unread.is_empty() {
+                room
+            } else {
+                format!(
+                    "{room}, and there is no reading of {} from Anthropic yet",
+                    listed(unread.clone())
+                )
+            }
+        }
+        Skip::AlreadyLeft => {
+            "this limit was switched away from once already, and is not again before it resets"
+                .into()
+        }
+        Skip::GaveUp => format!(
+            "{ATTEMPTS} attempts to switch away from this limit failed, and none is made again \
+             before it resets"
+        ),
+        Skip::Settling { .. } => format!(
+            "the account was put in use less than {} minutes ago",
+            SETTLING_SECONDS / 60
+        ),
         Skip::Overridden(names) => format!(
             "Claude Code signs in another way, set by {}, so a switch would change nothing its \
              sessions use",
@@ -123,6 +152,9 @@ pub fn not_watching(why: &crate::autoswitch::Blind) -> String {
         }
         Blind::Unidentified { detail, .. } => {
             format!("whose login Claude Code has stored could not be told ({detail})")
+        }
+        Blind::NoReading { account } => {
+            format!("there is no reading of {account} from Anthropic yet")
         }
     }
 }
@@ -387,9 +419,19 @@ mod tests {
     /// so it names no command: the app gives up on an interrupted switch with a button.
     #[test]
     fn why_it_did_not_switch_names_no_command() {
-        use crate::autoswitch::{Blind, Skip};
-        let why = Skip::Overridden(vec!["apiKeyHelper".into()]);
-        assert!(!not_switching(&why).contains("pitboard "), "{why:?}");
+        use crate::autoswitch::{Blind, Skip, Threshold};
+        for why in [
+            Skip::NoRoom {
+                unread: vec!["spare".into()],
+            },
+            Skip::AlreadyLeft,
+            Skip::GaveUp,
+            Skip::Settling { until: 0 },
+            Skip::Overridden(vec!["apiKeyHelper".into()]),
+        ] {
+            let said = not_switching(&why, Threshold::DEFAULT);
+            assert!(!said.contains("pitboard "), "{why:?}");
+        }
         for why in [
             Blind::SwitchInterrupted,
             Blind::CustomOauth,
@@ -400,6 +442,9 @@ mod tests {
             Blind::Unidentified {
                 detail: "could not reach Anthropic: no route to host".into(),
                 until: 0,
+            },
+            Blind::NoReading {
+                account: "work".into(),
             },
         ] {
             assert!(!not_watching(&why).contains("pitboard "), "{why:?}");

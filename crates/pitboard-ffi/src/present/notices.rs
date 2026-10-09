@@ -342,10 +342,10 @@ pub(crate) fn auto_switched_notice(
 }
 
 /// Where Pitboard would have switched Claude Code by itself and did not: how much of which
-/// limit, and why, in the core's words.
-pub(crate) fn auto_skipped_notice(from: &str, used: &str, code: &str, why: &str) -> RunOutNotice {
+/// limit, and why, in the core's words. Identified by what tells the reason apart, `key`.
+pub(crate) fn auto_skipped_notice(key: &str, from: &str, used: &str, why: &str) -> RunOutNotice {
     RunOutNotice {
-        id: format!("auto-skipped/{code}"),
+        id: format!("auto-{key}"),
         title: "Claude Code was not switched".into(),
         subtitle: None,
         body: format!("{from} has used {used}. {}.", capitalised(why)),

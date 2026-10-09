@@ -141,7 +141,7 @@ The **Activity** pane lists the last 500 changes Pitboard made, newest first, fr
 
 **Automatic switch** is a switch Pitboard made or tried by itself before a Claude Code account ran out. Its **Account** is the account it switched to, or tried to, or `claude` for a try that failed before Pitboard chose one. Its **Asked By** is **Pitboard app** for the app's own, and **Command line** for `pitboard watch`. A look that finds nothing to switch adds no line.
 
-**Automatic switch not made** is a try at telling whose login Claude Code has stored that failed, so Pitboard did not decide whether to switch. Its **Account** is the account last known in use, and its **Result** is **Not identified**.
+**Automatic switch not made** is a switch Pitboard did not make by itself. Its **Result** is **Not identified** where Pitboard could not tell whose login Claude Code has stored, so it did not decide. Its **Account** is then the account last known in use. Otherwise a limit of the account in use reached the share, and Pitboard did not switch away from it. Its **Account** is then that account. Its **Result** is the reason, such as **No room**, **Already switched**, **Attempts spent**, **Settling** or **Auth overridden**. Each such reason has one line for each limit and its reset.
 
 **Login in use changed** is a change Pitboard found made outside it, such as `/login` in Claude Code. Its **Result** is **Signed in outside** with the account signed in, **Signed out outside** with none, or **Login replaced** with the account whose only login went.
 
@@ -397,7 +397,7 @@ In these examples, `work` is the account in use:
 | --- | --- | --- | --- |
 | **work has no 5-hour limit left** | `work` has used all of a limit, and another account of the same tool has room in every limit it has. | **personal has 58% of its own left.**, or **seat has no such limit.** for an account without that limit | **Switch**, which switches to `personal` |
 | **Switched Claude Code to personal** | The app switched Claude Code from `work` to `personal` by itself. | **work had used 96% of its 5-hour limit. Sessions already running follow within 33 seconds.**, or, while a login file is left behind the keychain, **work had used 96% of its 5-hour limit. Sessions already running keep the account they are on until their login is next renewed, or until they are started again: /Users/you/.claude/.credentials.json is there.** | None |
-| **Claude Code was not switched** | A limit of `work` reached the share in **Switch when a limit reaches**, and one of the [reasons](#when-the-app-switches-by-itself) stops the switch. | **work has used 96% of its 5-hour limit.**, then the reason | None |
+| **Claude Code was not switched** | A limit of `work` reached the share in **Switch when a limit reaches**, and Pitboard does not switch away from it, for one of the [reasons](#when-the-app-switches-by-itself). | **work has used 96% of its 5-hour limit.**, then the reason | None |
 | **Pitboard is not switching Claude Code** | Pitboard cannot decide whether to switch at all, for one of the [reasons](#when-the-app-switches-by-itself). | The reason | None |
 | **Pitboard could not switch Claude Code** | An automatic switch failed. | Why it failed, in the words of the error | None |
 | **A login was replaced outside Pitboard** | A read finds that a sign-in outside Pitboard, such as `/login` in Claude Code, replaced the only login of `work`. | **`work`'s login was replaced by a sign-in outside Pitboard: Claude Code now has `personal`'s login stored, and Pitboard holds no login for `work`.**, then the command that signs in to `work` again | None |
@@ -422,10 +422,14 @@ The app posts it once each time a limit runs out, however often you quit and reo
 
 After an automatic switch, the Pitboard window shows the notice **Switched to personal**, as after a switch you make. While the switch runs, the app counts it as a switch under way, so no other switch starts until it ends.
 
-**Claude Code was not switched** gives this reason:
+**Claude Code was not switched** gives one of these reasons:
 
 | Reason | Given while |
 | --- | --- |
+| **No other Claude Code account has room below 95% in every limit.** | No account qualifies, as [Which account it switches to](/guides/automatic-switching#which-account-it-switches-to) describes. Where Anthropic has given no reading of an account it could switch to yet, the reason ends **, and there is no reading of personal from Anthropic yet.** |
+| **This limit was switched away from once already, and is not again before it resets.** | Pitboard switched away from that limit before, and the account was put back in use before the limit reset. |
+| **3 attempts to switch away from this limit failed, and none is made again before it resets.** | Three tries at that limit failed for a reason that trying again does not mend. |
+| **The account was put in use less than 5 minutes ago.** | A switch, a sign-in or enrolling the account signed in put it in use less than 5 minutes ago. Pitboard decides again once 5 minutes have passed. |
 | **Claude Code signs in another way, set by** `apiKeyHelper in /Users/me/.claude/settings.json`**, so a switch would change nothing its sessions use.** | Claude Code signs in with an API key, `apiKeyHelper`, `CLAUDE_CODE_OAUTH_TOKEN` or a cloud provider, as [`pitboard doctor`](/reference/maintenance-commands#doctor) warns. The reason names each setting and the file that sets it. |
 
 **Pitboard is not switching Claude Code** gives one of these reasons:
@@ -437,10 +441,11 @@ After an automatic switch, the Pitboard window shows the notice **Switched to pe
 | **Claude Code has no login stored.** | Claude Code is signed out. |
 | **Claude Code has me@example.com's login stored, and that account is not enrolled.** | Claude Code is signed in to an account you have not enrolled. |
 | **Whose login Claude Code has stored could not be told (could not reach Anthropic: timed out).** | Pitboard could not tell whose the login is, for the reason in brackets. It tries again as [When it holds back](/guides/automatic-switching#when-it-holds-back) describes. |
+| **There is no reading of work from Anthropic yet.** | Anthropic has given no reading of the account in use, as after an update of Pitboard. Pitboard decides once it next asks Anthropic about that account. |
 
-The app posts each reason, each account or cause a reason names, and each kind of failure, once until it next switches. A failure never opens an alert. After one, the app tries again only after its next read of usage.
+The app posts **Claude Code was not switched** once for each limit, its reset and the reason. It posts every other reason, each account or cause a reason names, and each kind of failure, once until it next switches. A failure never opens an alert. After one, the app tries again only after its next read of usage. After a try that came to nothing, Pitboard waits before the next and the app posts nothing meanwhile.
 
-When no account qualifies, the app switches nothing and posts nothing. The run-out notification still comes if `work` runs out and another account has room. For which accounts qualify, see [Switch before an account runs out](/guides/automatic-switching).
+When no account qualifies, the app switches nothing. The run-out notification still comes if `work` runs out and another account has room. For which accounts qualify, see [Switch before an account runs out](/guides/automatic-switching).
 
 ## Keyboard shortcuts
 

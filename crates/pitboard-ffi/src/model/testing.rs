@@ -522,7 +522,7 @@ impl Machine {
             found: vec![claude_code()],
             switched: already_active("work", Vec::new()),
             switched_to: Vec::new(),
-            auto: Ok(AutoSwitched::Idle),
+            auto: Ok(AutoSwitched::Watching),
             auto_at: Vec::new(),
             held: HashMap::new(),
             apps: StandInApps::new(&[], true),

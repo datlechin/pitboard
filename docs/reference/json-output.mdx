@@ -169,25 +169,39 @@ Each object in `windows` is one limit:
 | --- | --- | --- |
 | `watching` | `watch` starts. Not printed with `--once`. | None |
 | `switched` | Pitboard switched Claude Code. | `from`, `to`, `limit` and `adoption` |
-| `no_room` | A limit of the account in use reached the share, and no other account has room. | `from` and `limit` |
-| `skipped` | A limit reached the share and another account has room, but something stops the switch. | `from`, `limit` and `reason` |
-| `not_watching` | Pitboard cannot decide whether to switch at all. | `reason`, and `email`, or `detail` and `until`, where the reason has them |
-| `idle` | `--once` found nothing to do. Printed only with `--once`. | None |
+| `waiting` | A limit of the account in use reached the share, and a try at switching away from one came to nothing. Pitboard tries again at `until`, for `limit`. | `from`, `limit` and `until` |
+| `no_room` | A limit of the account in use reached the share, and no other account has room. | `from`, `limit` and `unread` |
+| `skipped` | A limit reached the share, and something else stops the switch. | `from`, `limit` and `reason`, and `until` for `settling` |
+| `not_watching` | Pitboard cannot decide whether to switch at all. | `reason`, and `email`, `account`, or `detail` and `until`, where the reason has them |
+| `idle` | `--once` found nothing to do. Printed only with `--once`. | `account`, `limit`, `as_of` and `held_until` |
 
 The other fields are these:
 
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `from` | string | The Claude Code account in use, by its label as `pitboard use` takes it. |
+| `account` | string | The Claude Code account in use, by its label: for `idle`, the one Pitboard watches, and for `not_watching`, the one Anthropic has given no reading of. |
 | `to` | string | The account switched to, by its label. |
-| `limit` | object | The limit of `from` that reached the share, as Pitboard last read it: `kind`, `scope`, `percent` and `resets_at`, as in [Status data](/reference/json-output#status-data). A limit reaches the share at its whole percentage, a half rounded up, so `percent` can be up to half a point under `threshold`, such as `94.5` for `95`. |
+| `limit` | object or null | The limit of `from` that reached the share, as Pitboard last read it: `kind`, `scope`, `percent` and `resets_at`, as in [Status data](/reference/json-output#status-data). A limit reaches the share at its whole percentage, a half rounded up, so `percent` can be up to half a point under `threshold`, such as `94.5` for `95`. Once Pitboard has recorded a try or a reason for the limit, `resets_at` is the reset it recorded then. A later reading can give it a second or so apart. For `waiting`, the limit Pitboard tries to switch away from at `until`. For `idle`, the fullest limit of `account` whose reset has not passed, or `null` when it has none. |
+| `as_of` | integer or null | When the reading of `account` was taken, in epoch seconds. |
+| `held_until` | integer or null | When Pitboard may ask Anthropic about `account` again, in epoch seconds, while Anthropic holds it off, as after a rate limit. `null` otherwise. |
+| `unread` | array of strings | The accounts Pitboard could switch to that Anthropic has given no reading of yet, by label. Empty when there are none. |
 | `adoption` | object | How sessions already running pick up the switch: `{"follows":"polling","within_seconds":33}`, or `{"follows":"renewal","path":...}` while a login file sits behind the keychain, as for `use`. |
 | `reason` | string | Why Pitboard does not switch, or cannot decide. |
 | `email` | string | The account whose login Claude Code has stored, which is not enrolled. |
 | `detail` | string | Why Pitboard could not tell whose login Claude Code has stored, in a few words. |
-| `until` | integer | When Pitboard asks whose login Claude Code has stored again, in epoch seconds. |
+| `until` | integer | In epoch seconds: for `waiting`, when Pitboard tries again; for `settling`, when the account has been in use 5 minutes; for `not_identified`, when Pitboard asks whose login Claude Code has stored again. |
 
-For `skipped`, `reason` is `auth_overridden`: Claude Code signs in another way, such as with `ANTHROPIC_API_KEY` or `apiKeyHelper`, so a switch would change nothing its sessions use.
+Until the next switch, `watch` prints each `no_room` and `skipped` event once for its account, limit, reset and `reason`, and each `waiting` event once for its `until`.
+
+For `skipped`, `reason` is one of these:
+
+| `reason` | Meaning |
+| --- | --- |
+| `already_switched` | Pitboard already switched away from this limit before it resets, and the account is back in use. |
+| `attempts_spent` | Three tries at switching away from this limit failed, and Pitboard tries no more before it resets. |
+| `settling` | The account was put in use less than 5 minutes ago. Pitboard decides again at `until`. |
+| `auth_overridden` | Claude Code signs in another way, such as with `ANTHROPIC_API_KEY` or `apiKeyHelper`, so a switch would change nothing its sessions use. |
 
 For `not_watching`, `reason` is one of these:
 
@@ -198,6 +212,7 @@ For `not_watching`, `reason` is one of these:
 | `nothing_signed_in` | Claude Code has no login stored. |
 | `not_enrolled` | The login Claude Code has stored is of an account not enrolled, which `email` names. |
 | `not_identified` | Pitboard could not tell whose login Claude Code has stored, for `detail`, and asks again at `until`. |
+| `no_reading` | Anthropic has given no reading of the account in use, `account`, as after an update of Pitboard. Pitboard decides once it next asks Anthropic about that account. |
 
 A switch that fails prints an envelope with `ok` set to `false`, `data` set to `null` and the `error`, as every command does. `watch` then goes on. An error that ends `watch` is printed the same way, and `watch` exits with its status.
 

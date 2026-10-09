@@ -263,13 +263,17 @@ A switch is the one `pitboard use` makes, with the same checks and journal. [`pi
 
 `watch`, the app and your own `pitboard use` can run at once without making two switches from one reading. See [Who starts a switch](/concepts/switching#who-starts-a-switch).
 
-`watch` prints a line when it starts, then a line for each switch. It prints each thing that stops a switch once, until the next switch. Each of these lines but the first starts with the local time, such as `14:02:11`.
+`watch` prints a line when it starts, then a line for each switch. It prints each thing that stops a switch once, until the next switch: a reason a limit is not switched away from once for that limit and its reset, and a wait once for when it ends. Each of these lines but the first starts with the local time, such as `14:02:11`.
 
 | Output | When |
 | --- | --- |
 | `Watching Claude Code. Pitboard switches to another of your accounts once a limit of the one in use reaches 95%. Stop with Ctrl-C.` | `watch` starts. |
 | `Switched Claude Code from work to personal: work has used 96% of its 5-hour limit. Claude Code sessions already running follow within 33 seconds.` | It switched. While a login file sits behind the keychain, the last sentence says when open sessions follow instead, as for `use`. |
-| `work has used 97% of its 5-hour limit, and no other Claude Code account has room below 95% in every limit.` | A limit reached the share, and no other account has room. Nothing moves. |
+| `work has used 97% of its 5-hour limit, and no other Claude Code account has room below 95% in every limit.` | A limit reached the share, and no other account has room. Nothing moves. Where Anthropic has given no reading of an account it could switch to yet, the line ends `, and there is no reading of personal from Anthropic yet.` |
+| `work has used 96% of its 5-hour limit. Pitboard tries again at 14:03.` | A try at switching away from a limit came to nothing, and Pitboard waits before the next. The line names the limit it tries then. |
+| `work has used 96% of its 5-hour limit. Pitboard is not switching: this limit was switched away from once already, and is not again before it resets.` | Pitboard switched away from the limit before, and the account was put back in use before it reset. |
+| `work has used 96% of its 5-hour limit. Pitboard is not switching: 3 attempts to switch away from this limit failed, and none is made again before it resets.` | Three tries at the limit failed for a reason that trying again does not mend. |
+| `work has used 96% of its 5-hour limit. Pitboard is not switching: the account was put in use less than 5 minutes ago. It decides again at 14:07.` | The account was put in use less than 5 minutes ago. |
 | `work has used 96% of its 5-hour limit. Pitboard is not switching: Claude Code signs in another way, set by ANTHROPIC_API_KEY in the environment, so a switch would change nothing its sessions use.` | A limit reached the share and another account has room, but something other than the login Pitboard switches signs Claude Code in, as `pitboard doctor` warns. The line names each setting and where it is set. |
 | `Pitboard is not switching Claude Code: <reason>.` | Pitboard cannot decide whether to switch at all. |
 
@@ -284,6 +288,7 @@ A limit for one model is named with its model, as in `97% of its weekly Opus lim
 | `Claude Code has no login stored` | Claude Code is signed out. |
 | `Claude Code has me@example.com's login stored, and that account is not enrolled` | Claude Code is signed in to an account you have not enrolled. |
 | `whose login Claude Code has stored could not be told (could not reach Anthropic: timed out). It asks again at 14:03` | Pitboard could not tell whose the login is, for the reason in brackets. It tries again at that time, as [When it holds back](/guides/automatic-switching#when-it-holds-back) describes. |
+| `there is no reading of work from Anthropic yet` | Anthropic has given no reading of the account in use, as after an update of Pitboard. |
 
 A switch that fails prints its error on standard error, as `pitboard use` would, and `watch` goes on. Each error code is printed once until the next switch. When it tries again depends on the error, as [Switch before an account runs out](/guides/automatic-switching) describes.
 

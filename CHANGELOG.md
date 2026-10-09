@@ -23,9 +23,18 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   another account in use since the notice was drawn, it writes nothing and says so, with
   the error `account_not_in_use`.
 - The `pitboard log` verb `auto-stay`, which the app's **Activity** pane names **Automatic
-  switch not made**: Pitboard could not tell whose login Claude Code has stored, so the
-  automatic switch decided nothing. Its outcome is `not_identified`, and its subject the
-  account last known in use.
+  switch not made**: the automatic switch did not switch, and why. `not_identified`, with
+  the account last known in use: Pitboard could not tell whose login Claude Code has
+  stored, so it decided nothing. `no_room`, `already_switched`, `attempts_spent`,
+  `settling` and `auth_overridden`, with the account in use: a limit reached the share and
+  Pitboard did not switch away from it, recorded once for each limit and its reset.
+- `pitboard watch --json` events `waiting`, with `from`, `limit` and `until`, the time it
+  tries again after a try that came to nothing, and the fields `account`, `limit`, `as_of`
+  and `held_until` of `idle`: the account it watches, its fullest limit, when that was read
+  and until when Anthropic holds Pitboard off asking again. `no_room` gains `unread`, the
+  accounts it could switch to that Anthropic has given no reading of yet, and `skipped` the
+  reasons `already_switched`, `attempts_spent` and `settling`, the last with `until`.
+  `not_watching` gains the reason `no_reading`, with the `account` in use.
 
 ### Changed
 
@@ -92,11 +101,14 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   and the reason, and so does the app, in a notification titled **Pitboard is not
   switching Claude Code**. An `auto-switch` line in `pitboard log` whose error came before
   Pitboard chose an account names `claude`.
-- In `pitboard-core`, `autoswitch::Blind`, `autoswitch::Look`, the variant
-  `autoswitch::Auto::NotWatching`, `service::Pitboard::auto_look` and `words::not_watching`
-  are new. `autoswitch::Skip`'s `SwitchInterrupted` and `CustomOauth` are
-  `Blind::SwitchInterrupted` and `Blind::CustomOauth`, and `error::Error::SwitchOvertaken`
-  is gone. These change the crate's public API.
+- In `pitboard-core`, `autoswitch::Blind`, `autoswitch::Look`, the variants
+  `autoswitch::Auto::NotWatching`, `Auto::Watching` and `Auto::Waiting`,
+  `autoswitch::Skip`'s `NoRoom`, `AlreadyLeft`, `GaveUp` and `Settling`,
+  `service::Pitboard::auto_look`, `budget::held_until` and `words::not_watching` are new.
+  `autoswitch::Skip`'s `SwitchInterrupted` and `CustomOauth` are `Blind::SwitchInterrupted`
+  and `Blind::CustomOauth`, `Auto::Idle` is `Auto::Watching`, `Auto::NoRoom` is
+  `Auto::Skipped` with `Skip::NoRoom`, `words::not_switching` takes the share, and
+  `error::Error::SwitchOvertaken` is gone. These change the crate's public API.
 
 ### Removed
 
@@ -160,6 +172,21 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   such failure in a row, up to 15 minutes, until a read records whose it is. It was tried
   as a switch, and said as one that failed. A keychain one front end cannot read, as over
   SSH, fails that front end's tries alone, and the app still switches.
+- The automatic switch judges every limit of the account in use at the share. One it already
+  switched away from, or tried three times, before it resets no longer hides another, such
+  as the five-hour limit of an account put back in use after its weekly limit was left. Each
+  reason it does not switch away from a limit at the share is said once for that limit and
+  its reset, by `pitboard watch` and in the app's notification **Claude Code was not
+  switched**, and recorded once in `pitboard log`: no account with room, naming any that
+  Anthropic has given no reading of yet, the limit already switched away from, three failed
+  tries, the account put in use less than 5 minutes ago, and Claude Code signed in another
+  way. Only the last was said by the app, and `pitboard watch` said no room and the last;
+  none was recorded. A try that came to nothing holds back every limit left to try until its
+  wait is over, which `pitboard watch` says of the limit it tries then, and an account a
+  switch was refused over is passed over for every limit of the account in use until the
+  limit it was refused for resets. It judges only a reading Anthropic gave, of the account
+  in use and of each it could switch to: one an earlier Pitboard wrote is not acted on, and
+  `no_reading` says so, until Pitboard next asks Anthropic about that account.
 - A login too large to write without the argument line, where `PITBOARD_NO_ARGV` forbids
   it, counts as one of the automatic switch's three attempts at a limit. It passed the
   account to go to over, then every other in turn, until no account read as having room.

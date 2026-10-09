@@ -10,7 +10,7 @@
 //! Anthropic no more than the app would.
 
 use crate::{Report, emit, followed, ui};
-use pitboard_core::autoswitch::{Auto, Blind, Threshold};
+use pitboard_core::autoswitch::{Auto, Blind, Skip, Threshold};
 use pitboard_core::error::Error;
 use pitboard_core::provider::ProviderId;
 use pitboard_core::service::{Changing, Done, Pitboard};
@@ -38,12 +38,7 @@ const DECIDE_EVERY: i64 = 30;
 /// stored, as a switch does.
 pub fn once(pitboard: &Pitboard, threshold: Threshold) -> Report {
     match said(pitboard.auto_switch(threshold), threshold, false) {
-        Said::Event(report) | Said::Stop(report) => report,
-        Said::Idle => Report::done(
-            "watch",
-            json!({ "event": "idle", "threshold": threshold.percent() }),
-            "Nothing to switch now.\n".into(),
-        ),
+        Said::Idle(report) | Said::Event(report) | Said::Stop(report) => report,
     }
 }
 
@@ -78,7 +73,7 @@ pub fn run(pitboard: &Pitboard, threshold: Threshold, as_json: bool) -> ExitCode
         if written != seen || now - decided_at >= DECIDE_EVERY || now < decided_at {
             (seen, decided_at) = (written, now);
             match said(pitboard.auto_switch(threshold), threshold, true) {
-                Said::Idle => {}
+                Said::Idle(_) => {}
                 Said::Stop(report) => return emit(report, as_json),
                 Said::Event(report) => {
                     if untold(&mut told, &report) {
@@ -93,33 +88,48 @@ pub fn run(pitboard: &Pitboard, threshold: Threshold, as_json: bool) -> ExitCode
 
 /// Whether this report says something not said since the last switch, recording that it
 /// has been said. A switch is always said, and after it everything may be said again: what
-/// stopped the last one may stop the next. A reason it cannot watch is told apart by the
-/// account or the cause it names, and not by when it asks again.
+/// stopped the last one may stop the next. A reason not to switch away from a limit is told
+/// apart by the account, the limit and the reset the core recorded it under. A wait is told
+/// apart by the account and when it ends, which each failed attempt moves, and not by the
+/// limit it names: the wait is the moment's, and that limit may be one nothing was recorded
+/// for, whose reset each answer can give a second apart. A reason it cannot watch is told
+/// apart by the account or the cause it names, and not by when it asks again.
 fn untold(told: &mut HashSet<String>, report: &Report) -> bool {
     let key = match &report.result {
         Ok(data) if data["event"] == "switched" => {
             told.clear();
             return true;
         }
-        Ok(data) => [
-            &data["event"],
-            &data["from"],
-            &data["limit"]["kind"],
-            &data["limit"]["scope"],
-            &data["limit"]["resets_at"],
-            &data["reason"],
-            &data["email"],
-            &data["detail"],
-        ]
-        .map(Value::to_string)
-        .join("/"),
+        Ok(data) => {
+            let named = if data["event"] == "waiting" {
+                vec![&data["event"], &data["from"], &data["until"]]
+            } else {
+                vec![
+                    &data["event"],
+                    &data["from"],
+                    &data["account"],
+                    &data["limit"]["kind"],
+                    &data["limit"]["scope"],
+                    &data["limit"]["resets_at"],
+                    &data["reason"],
+                    &data["email"],
+                    &data["detail"],
+                ]
+            };
+            named
+                .into_iter()
+                .map(Value::to_string)
+                .collect::<Vec<_>>()
+                .join("/")
+        }
         Err(error) => format!("error/{}", error.code()),
     };
     told.insert(key)
 }
 
 enum Said {
-    Idle,
+    /// Nothing to do: said only where somebody asked once.
+    Idle(Report),
     Event(Report),
     /// Something no amount of watching mends, such as running as root: said, and the end.
     Stop(Report),
@@ -147,7 +157,41 @@ fn said(outcome: Changing<Auto>, threshold: Threshold, stamped: bool) -> Said {
     };
     let percent = threshold.percent();
     let report = match value {
-        Auto::Idle => return Said::Idle,
+        Auto::Watching {
+            account,
+            nearest,
+            as_of,
+            held_until,
+        } => {
+            return Said::Idle(Report::done(
+                "watch",
+                json!({
+                    "event": "idle",
+                    "threshold": percent,
+                    "account": account,
+                    "limit": nearest.as_ref().map(limit_json),
+                    "as_of": as_of,
+                    "held_until": held_until,
+                }),
+                "Nothing to switch now.\n".into(),
+            ));
+        }
+        Auto::Waiting { from, limit, until } => Report::done(
+            "watch",
+            json!({
+                "event": "waiting",
+                "threshold": percent,
+                "from": from,
+                "limit": limit_json(&limit),
+                "until": until,
+            }),
+            at(format!(
+                "{} has used {}. Pitboard tries again at {}.\n",
+                ui::paint(ui::BOLD, &from),
+                words::share_of_limit(&limit),
+                pitboard_core::time::moment(until, epoch()),
+            )),
+        ),
         Auto::Switched {
             from,
             to,
@@ -173,37 +217,52 @@ fn said(outcome: Changing<Auto>, threshold: Threshold, stamped: bool) -> Said {
                 )),
             )
         }
-        Auto::NoRoom { from, limit } => Report::done(
-            "watch",
-            json!({
-                "event": "no_room",
-                "threshold": percent,
-                "from": from,
-                "limit": limit_json(&limit),
-            }),
-            at(format!(
-                "{} has used {}, and no other Claude Code account has room below {percent}% in \
-                 every limit.\n",
+        Auto::Skipped { from, limit, why } => {
+            let used = format!(
+                "{} has used {}",
                 ui::paint(ui::BOLD, &from),
-                words::share_of_limit(&limit),
-            )),
-        ),
-        Auto::Skipped { from, limit, why } => Report::done(
-            "watch",
-            json!({
-                "event": "skipped",
-                "threshold": percent,
-                "from": from,
-                "limit": limit_json(&limit),
-                "reason": why.code(),
-            }),
-            at(format!(
-                "{} has used {}. Pitboard is not switching: {}.\n",
-                ui::paint(ui::BOLD, &from),
-                words::share_of_limit(&limit),
-                words::not_switching(&why),
-            )),
-        ),
+                words::share_of_limit(&limit)
+            );
+            let reason = words::not_switching(&why, threshold);
+            let (data, line) = match &why {
+                // No room has an event of its own, as it always had.
+                Skip::NoRoom { unread } => (
+                    json!({
+                        "event": "no_room",
+                        "threshold": percent,
+                        "from": from,
+                        "limit": limit_json(&limit),
+                        "unread": unread,
+                    }),
+                    format!("{used}, and {reason}.\n"),
+                ),
+                Skip::Settling { until } => (
+                    json!({
+                        "event": "skipped",
+                        "threshold": percent,
+                        "from": from,
+                        "limit": limit_json(&limit),
+                        "reason": why.code(),
+                        "until": until,
+                    }),
+                    format!(
+                        "{used}. Pitboard is not switching: {reason}. It decides again at {}.\n",
+                        pitboard_core::time::moment(*until, epoch())
+                    ),
+                ),
+                Skip::AlreadyLeft | Skip::GaveUp | Skip::Overridden(_) => (
+                    json!({
+                        "event": "skipped",
+                        "threshold": percent,
+                        "from": from,
+                        "limit": limit_json(&limit),
+                        "reason": why.code(),
+                    }),
+                    format!("{used}. Pitboard is not switching: {reason}.\n"),
+                ),
+            };
+            Report::done("watch", data, at(line))
+        }
         Auto::NotWatching { why } => {
             let mut data = json!({
                 "event": "not_watching",
@@ -218,6 +277,7 @@ fn said(outcome: Changing<Auto>, threshold: Threshold, stamped: bool) -> Said {
                     line.push_str(", or give up on it with `pitboard abandon`")
                 }
                 Blind::NotEnrolled { email } => data["email"] = json!(email),
+                Blind::NoReading { account } => data["account"] = json!(account),
                 Blind::Unidentified { detail, until } => {
                     data["detail"] = json!(detail);
                     data["until"] = json!(until);
@@ -301,15 +361,186 @@ mod tests {
         }));
     }
 
-    fn event(why: Blind) -> Report {
+    /// What `watch` prints of `value`, where that is an event.
+    fn told(value: Auto) -> Report {
         let looked = Ok(Done {
-            value: Auto::NotWatching { why },
+            value,
             warnings: Vec::new(),
         });
         let Said::Event(report) = said(looked, Threshold::DEFAULT, false) else {
             panic!("an event");
         };
         report
+    }
+
+    fn event(why: Blind) -> Report {
+        told(Auto::NotWatching { why })
+    }
+
+    /// A line as it reads with its styles dropped, as anything but a terminal gets it.
+    fn plain(report: &Report) -> String {
+        anstream::adapter::strip_str(&report.human).to_string()
+    }
+
+    /// `work`'s five-hour limit at 97%, resetting at `resets_at`.
+    fn limit(resets_at: i64) -> Window {
+        Window {
+            kind: "session".into(),
+            scope: None,
+            percent: 97.0,
+            resets_at: Some(resets_at),
+            is_active: true,
+            severity: None,
+            length_seconds: Some(5 * 3600),
+        }
+    }
+
+    fn skipped(resets_at: i64, why: Skip) -> Report {
+        told(Auto::Skipped {
+            from: "work".into(),
+            limit: limit(resets_at),
+            why,
+        })
+    }
+
+    /// Each reason not to switch away from a limit has its code, and no room its own event,
+    /// with the accounts Anthropic gave no reading of. Each is said once for the limit and its
+    /// reset.
+    #[test]
+    fn a_reason_not_to_switch_is_said_once_for_a_limit_and_its_reset() {
+        let no_room = skipped(
+            9_000,
+            Skip::NoRoom {
+                unread: vec!["spare".into()],
+            },
+        );
+        let data = no_room.result.as_ref().expect("an event");
+        assert_eq!(
+            (&data["event"], &data["unread"], &data["reason"]),
+            (&json!("no_room"), &json!(["spare"]), &Value::Null)
+        );
+        assert_eq!(
+            plain(&no_room),
+            "work has used 97% of its 5-hour limit, and no other Claude Code account has room \
+             below 95% in every limit, and there is no reading of spare from Anthropic yet.\n"
+        );
+        for (why, code) in [
+            (Skip::AlreadyLeft, "already_switched"),
+            (Skip::GaveUp, "attempts_spent"),
+            (Skip::Settling { until: 9_000 }, "settling"),
+        ] {
+            let report = skipped(9_000, why);
+            let data = report.result.as_ref().expect("an event");
+            assert_eq!(
+                (&data["event"], &data["reason"]),
+                (&json!("skipped"), &json!(code))
+            );
+        }
+        let settling = skipped(
+            9_000,
+            Skip::Settling {
+                until: 1_760_000_300,
+            },
+        );
+        assert_eq!(
+            settling.result.as_ref().expect("an event")["until"],
+            1_760_000_300
+        );
+        assert!(
+            plain(&settling).starts_with(
+                "work has used 97% of its 5-hour limit. Pitboard is not switching: the account \
+                 was put in use less than 5 minutes ago. It decides again at "
+            ),
+            "{}",
+            plain(&settling)
+        );
+
+        let mut said = HashSet::new();
+        assert!(untold(&mut said, &skipped(9_000, Skip::GaveUp)));
+        assert!(!untold(&mut said, &skipped(9_000, Skip::GaveUp)));
+        assert!(untold(&mut said, &skipped(9_000, Skip::AlreadyLeft)));
+        assert!(
+            untold(&mut said, &skipped(27_000, Skip::GaveUp)),
+            "the next window"
+        );
+    }
+
+    /// A wait after an attempt that came to nothing says when it ends, once for each end,
+    /// whichever limit it names and whatever that limit's reset.
+    #[test]
+    fn a_wait_is_said_once_for_when_it_ends() {
+        let waiting_at = |limit: Window, until| {
+            told(Auto::Waiting {
+                from: "work".into(),
+                limit,
+                until,
+            })
+        };
+        let waiting = |until| waiting_at(limit(9_000), until);
+        let report = waiting(1_760_000_060);
+        let data = report.result.as_ref().expect("an event");
+        assert_eq!(
+            (&data["event"], &data["from"], &data["until"]),
+            (&json!("waiting"), &json!("work"), &json!(1_760_000_060))
+        );
+        assert!(
+            plain(&report)
+                .starts_with("work has used 97% of its 5-hour limit. Pitboard tries again at "),
+            "{}",
+            plain(&report)
+        );
+        let mut said = HashSet::new();
+        assert!(untold(&mut said, &waiting(1_760_000_060)));
+        assert!(!untold(&mut said, &waiting(1_760_000_060)));
+        assert!(
+            !untold(&mut said, &waiting_at(limit(9_001), 1_760_000_060)),
+            "a reset a second off"
+        );
+        let weekly = Window {
+            kind: "weekly_all".into(),
+            ..limit(600_000)
+        };
+        assert!(
+            !untold(&mut said, &waiting_at(weekly, 1_760_000_060)),
+            "another limit tried at the same end"
+        );
+        assert!(untold(&mut said, &waiting(1_760_000_180)));
+    }
+
+    /// With nothing to do, `--once` says which account it watches, its fullest limit, when that
+    /// was read and until when Anthropic holds Pitboard off asking again.
+    #[test]
+    fn nothing_to_do_names_the_account_it_watches() {
+        let looked = Ok(Done {
+            value: Auto::Watching {
+                account: "work".into(),
+                nearest: Some(limit(9_000)),
+                as_of: Some(1_760_000_000),
+                held_until: None,
+            },
+            warnings: Vec::new(),
+        });
+        let Said::Idle(report) = said(looked, Threshold::DEFAULT, false) else {
+            panic!("nothing to do");
+        };
+        let data = report.result.as_ref().expect("an event");
+        assert_eq!(
+            (
+                &data["event"],
+                &data["account"],
+                &data["limit"]["kind"],
+                &data["as_of"],
+                &data["held_until"]
+            ),
+            (
+                &json!("idle"),
+                &json!("work"),
+                &json!("session"),
+                &json!(1_760_000_000),
+                &Value::Null
+            )
+        );
+        assert_eq!(report.human, "Nothing to switch now.\n");
     }
 
     /// A reason Pitboard cannot judge whether to switch at all is an event of its own, with
@@ -330,6 +561,20 @@ mod tests {
             interrupted.human,
             "Pitboard is not switching Claude Code: a switch was interrupted, and the next \
              change you make finishes it, or give up on it with `pitboard abandon`.\n"
+        );
+
+        let unread = event(Blind::NoReading {
+            account: "work".into(),
+        });
+        let data = unread.result.as_ref().expect("an event");
+        assert_eq!(
+            (&data["reason"], &data["account"]),
+            (&json!("no_reading"), &json!("work"))
+        );
+        assert_eq!(
+            unread.human,
+            "Pitboard is not switching Claude Code: there is no reading of work from Anthropic \
+             yet.\n"
         );
 
         let stranger = event(Blind::NotEnrolled {

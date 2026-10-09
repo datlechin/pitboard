@@ -787,7 +787,8 @@ pub(crate) struct State {
     pub(crate) told: Told,
     /// What switching Claude Code by itself has told about in a notification since the
     /// model started, or since the last switch it made, by what it was: each reason it did
-    /// not switch and each refusal, said once rather than at every look.
+    /// not switch away from a limit, for that limit and its reset, each reason it cannot judge
+    /// and each refusal, said once rather than at every look.
     auto_told: BTreeSet<String>,
     /// The accounts whose login was replaced outside Pitboard that the last read said and a
     /// notification has told about, by `Account.id`.
@@ -1480,9 +1481,9 @@ impl State {
 
     /// What switching Claude Code by itself came to. A switch is taken as one somebody asked
     /// for is, and said in a notification, since nobody was there to ask for it; a reason it
-    /// did not switch, a reason it cannot judge, and a refusal, are said once each until it
-    /// next switches. Nothing to do, and no account with room, say nothing: a run-out is
-    /// advised as it always was.
+    /// did not switch away from a limit, once for the limit and its reset, and a reason it
+    /// cannot judge and a refusal, once each, until it next switches. Nothing to do, and a wait
+    /// after an attempt, say nothing.
     fn auto_switched(
         &mut self,
         done: Result<AutoSwitched, PitboardError>,
@@ -1513,14 +1514,14 @@ impl State {
                 return;
             }
             Ok(AutoSwitched::Skipped {
+                key,
                 from,
                 used,
-                code,
                 why,
-            }) => (
-                format!("skipped/{code}"),
-                crate::present::auto_skipped_notice(&from, &used, &code, &why),
-            ),
+            }) => {
+                let notice = crate::present::auto_skipped_notice(&key, &from, &used, &why);
+                (key, notice)
+            }
             Ok(AutoSwitched::NotWatching { key, why }) => {
                 let notice = crate::present::auto_not_watching_notice(&key, &why);
                 (key, notice)
@@ -1532,7 +1533,7 @@ impl State {
                     crate::present::auto_refused_notice(&code, &message),
                 )
             }
-            Ok(AutoSwitched::Idle | AutoSwitched::NoRoom) => {
+            Ok(AutoSwitched::Watching | AutoSwitched::Waiting) => {
                 self.switching = None;
                 return;
             }

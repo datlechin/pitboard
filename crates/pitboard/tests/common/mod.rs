@@ -1009,9 +1009,9 @@ impl Env {
         std::fs::write(self.root.join("pitboard/state.json"), state.to_string()).unwrap();
     }
 
-    /// What Pitboard has measured of each Claude Code account's five-hour and weekly limits,
-    /// by label, written where every front end records what it measured. Each limit resets
-    /// an hour and a day from now.
+    /// What Anthropic last answered of each Claude Code account's five-hour and weekly limits,
+    /// by label, written where and as every front end records an answer. Each limit resets an
+    /// hour and a day from now.
     pub fn measured(&self, shares: &[(&str, f64, f64)]) {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -1036,7 +1036,8 @@ impl Env {
                         window("weekly_all", weekly, 86_400),
                     ],
                     "observed_at": now,
-                    "account_uuid": id,
+                    "answered_at": now,
+                    "lists_every_limit": true,
                     "source": "live",
                 });
                 (id, reading)
@@ -1047,6 +1048,15 @@ impl Env {
             serde_json::Value::Object(readings).to_string(),
         )
         .unwrap();
+    }
+
+    /// Change the readings by account id, as a later answer from Anthropic would.
+    pub fn edit_readings(&self, edit: impl FnOnce(&mut serde_json::Value)) {
+        let path = self.root.join("pitboard/usage.json");
+        let mut readings: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        edit(&mut readings);
+        std::fs::write(path, readings.to_string()).unwrap();
     }
 
     /// Every account was last put in use an hour ago. Enrolling the account signed in puts

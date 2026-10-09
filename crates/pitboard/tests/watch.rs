@@ -99,6 +99,40 @@ fn with_no_account_to_go_to_it_says_so_and_nothing_moves() {
     assert_eq!(env.live()["claudeAiOauth"]["refreshToken"], "refresh-a");
 }
 
+/// A reason is said with the reset it was recorded under, so a later answer giving the same
+/// window's reset a second off is told as the same reason, and recorded once.
+#[test]
+#[cfg_attr(windows, ignore = "W22: switching Claude Code on Windows")]
+fn a_reason_is_said_with_the_reset_it_was_recorded_under() {
+    let env = two_accounts("watch-said-window");
+    env.an_hour_on();
+    env.measured(&[("alpha", 97.0, 20.0), ("beta", 10.0, 99.0)]);
+    let said = || {
+        let (out, err, code) = env.run(&["watch", "--once", "--json"]);
+        assert_eq!(code, 0, "{err}");
+        let data = envelope(&out)["data"].clone();
+        assert_eq!(data["event"], "no_room", "{out}");
+        data["limit"]["resets_at"].clone()
+    };
+    let recorded = said();
+    let alpha = env.account_id("alpha");
+    env.edit_readings(|readings| {
+        let session = &mut readings[&alpha]["windows"][0];
+        session["resets_at"] = json!(session["resets_at"].as_i64().expect("a reset") - 1);
+    });
+    assert_eq!(said(), recorded);
+
+    let (out, _, _) = env.run(&["log", "--json"]);
+    let stays: Vec<Value> = envelope(&out)["data"]["entries"]
+        .as_array()
+        .expect("entries")
+        .iter()
+        .filter(|entry| entry["verb"] == "auto-stay")
+        .map(|entry| entry["outcome"].clone())
+        .collect();
+    assert_eq!(stays, [json!("no_room")]);
+}
+
 #[test]
 fn a_share_outside_fifty_to_ninety_nine_is_refused() {
     let env = Env::new("watch-share");

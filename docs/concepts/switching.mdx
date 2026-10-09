@@ -44,7 +44,7 @@ A switch Pitboard starts by itself is the switch `pitboard use` makes, with the 
 
 Pitboard first looks at whether to switch by itself from files alone, such as its accounts, its record of whose login is stored and its usage readings. That look takes no lock and sends no request. One that finds nothing to do records nothing.
 
-Pitboard takes its lock only where a switch may be due, or where its record of whose login is stored is in doubt. That record is in doubt where Claude Code's config has named another account since Anthropic last named the login. It is also in doubt until Pitboard has first asked Anthropic.
+Pitboard takes its lock only where a switch may be due, where its record of whose login is stored is in doubt, or to record a reason it does not switch. That record is in doubt where Claude Code's config has named another account since Anthropic last named the login. It is also in doubt until Pitboard has first asked Anthropic.
 
 Holding the lock, Pitboard tells whose login Claude Code has stored, as any switch does, and records it. Then it decides once, from that and the files as they are then, and switches from that same login.
 
@@ -55,6 +55,8 @@ If Pitboard cannot tell whose login Claude Code has stored, it decides nothing u
 Pitboard also does not switch away by itself from an account within 5 minutes of its being put in use. Any switch puts an account in use, as does enrolling it signed in. The app and `pitboard watch` read every account every 5 minutes, so Pitboard can read the account switched to before leaving it.
 
 Pitboard records each attempt in `autoswitch.json` before anything moves. The app and `pitboard watch` share that record, and a switch stopped partway still counts as a try.
+
+When a limit reaches the share and Pitboard does not switch away from it, Pitboard records the reason in `autoswitch.json` and in `pitboard log`, as `auto-stay`. It does so once for each limit and its reset, so a later look reads the record and takes no lock.
 
 ## Open sessions
 

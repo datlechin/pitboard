@@ -58,15 +58,15 @@ Plans have different limits. A Team seat can have a five-hour limit and a weekly
 
 Anthropic's answer lists every limit an account has, so an account without the limit that reached the share qualifies, whichever limit that is. Whether a plan with no limit for a model offers that model at all is not known.
 
-Pitboard never switches to an account it has no reading of. A reading may leave a limit out if Anthropic answered without its list of limits, or if Pitboard could not read the answer in full.
+Pitboard decides only from readings Anthropic gave. It never switches to an account without one. A reading an earlier version of Pitboard recorded does not count, so after you update Pitboard, each account has none until Pitboard next asks Anthropic about it.
 
-So may a reading an earlier version of Pitboard recorded. After you update Pitboard, each account has one until Pitboard next asks Anthropic about that account.
-
-Such a reading qualifies only if it gives every limit the account in use has. The exception is a model's weekly limit other than the one that reached the share, where the reading gives the five-hour and weekly limits.
+A reading may leave a limit out if Anthropic answered without its list of limits, or if Pitboard could not read the answer in full. Such a reading qualifies only if it gives every limit the account in use has. The exception is a model's weekly limit other than the one that reached the share, where the reading gives the five-hour and weekly limits.
 
 Pitboard takes the account with the most room in the limit that reached the share. An account without that limit counts as one with none of it used. Then Pitboard takes the one least full in its other limits. A limit whose reset time has passed counts as reset.
 
-If none qualifies, nothing moves, and `pitboard watch` says so once. When the account runs out, the app offers a switch if another account has room then, as [When an account runs out](/guides/switch#when-an-account-runs-out) describes.
+If several limits reach the share, Pitboard takes the fullest first. A limit it already switched away from, or tried three times, before it resets leaves the next one to be judged on its own.
+
+If none qualifies, nothing moves. The app and `pitboard watch` say so once for that limit and its reset, and name any account Anthropic has given no reading of yet. When the account runs out, the app offers a switch if another account has room then, as [When an account runs out](/guides/switch#when-an-account-runs-out) describes.
 
 The switch is the one `pitboard use` makes, with the same checks, and `pitboard log` records it as `auto-switch`.
 
@@ -75,10 +75,10 @@ The switch is the one `pitboard use` makes, with the same checks, and `pitboard 
 - Switch back by itself. The next time the account in use reaches the share, Pitboard chooses again, perhaps the account it left.
 - Switch away from one limit of an account twice before that limit resets. If you put the account back in use, it stays.
 - Switch away from an account within 5 minutes of its being put in use, by anyone.
-- Try one limit more than three times before it resets, or twice within 1 minute.
+- Try one limit more than three times before it resets, or try any limit within 1 minute of a try that failed.
 - Quit an app.
 
-Pitboard passes over an account whose parked login was refused, has expired or is missing, and the next try goes to another.
+Pitboard passes over an account whose parked login was refused, has expired or is missing, and the next try goes to another, for any limit, until the limit it was refused for resets.
 
 Some tries fail for a reason that may pass: Anthropic out of reach or overloaded, or Claude Code writing its login. Those do not count toward the three. Pitboard tries again after 1 minute, then waits twice as long after each such failure, up to 15 minutes.
 
@@ -91,6 +91,7 @@ Pitboard does not decide whether to switch at all in these cases:
 - Claude Code has no login stored.
 - The login Claude Code has stored is of an account you have not enrolled.
 - Pitboard cannot tell whose login Claude Code has stored, for example while Anthropic is out of reach.
+- Anthropic has given no reading of the account in use, as after you update Pitboard, until Pitboard next asks.
 
 When Pitboard cannot tell whose the login is, it tries again after 1 minute. It then waits twice as long after each such failure in a row, up to 15 minutes.
 
@@ -98,9 +99,17 @@ A read of your accounts that records whose a changed login is ends the wait, and
 
 The app says why in a notification titled **Pitboard is not switching Claude Code**.
 
-Pitboard does not switch if Claude Code signs in another way that `pitboard doctor` warns about, such as `apiKeyHelper`. The app says so in a notification titled **Claude Code was not switched**.
+Once a limit reaches the share, Pitboard does not switch away from it in these cases:
 
-When a try fails, the app posts **Pitboard could not switch Claude Code**. The app and `pitboard watch` say each reason and each failure once until the next switch.
+- No other account qualifies.
+- Pitboard already switched away from that limit before it resets, and the account is back in use.
+- Three tries at that limit failed.
+- The account was put in use less than 5 minutes ago.
+- Claude Code signs in another way that `pitboard doctor` warns about, such as `apiKeyHelper`.
+
+The app says why in a notification titled **Claude Code was not switched**. `pitboard log` records each reason as `auto-stay`, once for each limit and its reset.
+
+When a try fails, the app posts **Pitboard could not switch Claude Code**. `pitboard watch` says when it tries again, and for which limit. After the third failed try at a limit, Pitboard says at once that it tries no more, where no other limit at the share is left to try. The app and `pitboard watch` say each failure once until the next switch. They say each reason a limit is not switched away from once for that limit and its reset.
 
 A keychain that one run cannot read, such as `pitboard watch` over SSH while the keychain is locked, fails that run's tries alone. Another run that can read it, such as the app, still switches.
 

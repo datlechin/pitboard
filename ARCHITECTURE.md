@@ -125,32 +125,52 @@ pages load, as a browser would.
     the words that say it, never for whose a login is.
   - `autoswitch.rs`: switching Claude Code by itself, for a front end somebody asked to: the
     app with its setting on, or `pitboard watch`. `Threshold` is the share a limit switches
-    at, 50 to 99, 95 unless chosen. `decide` is the rule, from the readings Pitboard already
-    holds: which limit of the account in use reached the share, and which switchable account
-    has room under it in every limit it has, by `usage::room`, which the app's advice asks
-    at 100. A limit a reading that lists every limit leaves out is one the account does not
-    have. Any other reading leaves no room unless it gives every limit of the account in
-    use, except a model's limit other than the one at the share where it gives the five-hour
-    and weekly limits. `usage::roomiest` picks the account with the most room in that limit,
-    then the least full in its others. `Ledger` is `autoswitch.json`, what was tried for
-    each limit of each account until that limit resets: the attempts, how many in a row
-    failed for a reason waiting may mend, when the last began, whether one switched and the
-    accounts passed over; and `asked`, where whose login Claude Code has stored could not be
-    told, when it was last asked, how many times in a row and why. A record of whose it is
-    made since `asked`, by a read or a switch, ends that row. It is written only under
-    `state.lock`. `look` judges from files alone, with the account in use from
-    `in_use::known`: what stands (`Look::Stands`), or `Look::Act` where a switch may be due
-    or that account is in doubt. `Blind` is why nothing can be judged at all: a switch
-    waiting to be finished, a custom OAuth endpoint, no login stored, a login of an account
-    nobody enrolled, or one nobody could tell whose it is, which `asked` paces as attempts
-    are paced. `asked` holds only what every front end would meet alike: a store this
-    process cannot read, such as a keychain locked over SSH, is returned as its error, for
-    its front end to pace. `switch/auto.rs` tells whose login is stored under the lock, as
-    a switch does, records it, decides once from that, and switches from that same login
-    through `switch::switch_from`. `service::Pitboard::auto_look` is the look and
-    `auto_switch` joins the two. The audit log records a switch, or the error that stopped
-    one, as `auto-switch`, of `claude` where no account was chosen yet, and a login nobody
-    could tell whose it is as `auto-stay`, of the account last known in use, once per wait.
+    at, 50 to 99, 95 unless chosen. `decide` is the rule, from the readings Anthropic gave
+    that Pitboard already holds, `NoReading` where it gave none of the account in use. Every
+    limit of that account at the share is judged, the furthest past it first: one already
+    switched away from, or tried `ATTEMPTS` times, before it resets leaves the next to be
+    judged, and where none is left it says why of the furthest at once. Where one is left,
+    the account put in use within `SETTLING_SECONDS` holds it back, and so does an attempt
+    at any limit that came to nothing, until its wait is over (`Waiting`); either is said of
+    the first limit left, the one tried next. For the first limit left, it picks a switchable account with room under it in every limit it has, by
+    `usage::room`, which the app's advice asks at 100. A limit a reading that lists every
+    limit leaves out is one the account does not have. Any other reading leaves no room
+    unless it gives every limit of the account in use, except a model's limit other than the
+    one at the share where it gives the five-hour and weekly limits. `usage::roomiest` picks
+    the account with the most room in that limit, then the least full in its others. Below
+    the share it is `Below`, with the fullest limit still running. A limit at the share not
+    switched away from is a `Hold` with its `Skip`: no room, naming the accounts it could go
+    to that Anthropic gave no reading of, the limit already left, the attempts spent, the
+    account settling, or Claude Code signed in another way. `judge` turns a decision into
+    what a front end is told: `Auto::Watching` carries the account, its fullest limit, when
+    that was read and until when its budget holds Anthropic's next answer off
+    (`budget::held_until`). Each limit a decision gives carries the reset the ledger first
+    kept its window under, where it keeps one, which a later answer may give a second apart,
+    so a front end that tells one window from the next by it says once what was recorded
+    once. `Ledger` is `autoswitch.json`, what was tried and said for each limit of each
+    account until a minute after that limit resets, as late as another answer may give that
+    reset (`usage::may_still_run`), or, with no reset, for a week after anything was last
+    kept of it, as it is read and as it is written: the attempts, how many in a row failed
+    for a reason waiting may mend, when the last began, whether one switched, the accounts
+    passed over, and each `Skip` code said, with when; and `asked`, where whose login Claude
+    Code has stored could not be told, when it was last asked, how many times in a row and
+    why. A record of whose it is made since `asked`, by a read or a switch, ends that row.
+    It is written only under `state.lock`. `look` judges from files alone, with the account
+    in use from `in_use::known`: what stands (`Look::Stands`), or `Look::Act` where a switch
+    may be due, that account is in doubt, or a `Hold` was not said yet in that limit's
+    window. `Blind` is why nothing can be judged at all: a switch waiting to be finished, a
+    custom OAuth endpoint, no login stored, a login of an account nobody enrolled, one
+    nobody could tell whose it is, which `asked` paces as attempts are paced, or no reading
+    Anthropic gave of the account in use. `asked` holds only what every front end would meet
+    alike: a store this process cannot read, such as a keychain locked over SSH, is returned
+    as its error, for its front end to pace. `switch/auto.rs` tells whose login is stored
+    under the lock, as a switch does, records it, decides once from that, and switches from
+    that same login through `switch::switch_from`, or records the `Hold` once.
+    `service::Pitboard::auto_look` is the look and `auto_switch` joins the two. The audit
+    log records a switch, or the error that stopped one, as `auto-switch`, of `claude` where
+    no account was chosen yet; and as `auto-stay`, a login nobody could tell whose it is, of
+    the account last known in use, once per wait, and each `Hold`, of the account in use,
+    once per limit, reset and code.
   - `lock.rs`: the lock Claude Code takes around credential writes, taken the same way.
   - `context.rs`: what the core takes from its environment, read from a map of variables
     by the same code for every front end, apart from the `PATH` that `host/linux` reads to
@@ -236,8 +256,11 @@ pages load, as a browser would.
   300 seconds, as the app does, looks every 2 seconds at when the index and the readings
   were last written, and decides again whenever either changed and at least every 30
   seconds. It says every switch, and each thing that stopped one once until the next
-  switch, and ends on a refusal watching cannot mend: running elevated, a Windows build or
-  Pitboard's own files unusable.
+  switch: a reason not to switch away from a limit once for that limit and its reset, and a
+  wait once for when it ends. It ends on a refusal watching cannot mend: running elevated,
+  a Windows build or Pitboard's own files unusable. With `--once --json`, `idle` carries
+  the account it watches, its fullest limit, when that was read and until when Anthropic
+  holds Pitboard off asking again.
 - `crates/pitboard-ffi`: the core as UniFFI bindings, for the apps: a static library for
   the macOS app, a dynamic one for the Windows app. An app reaches the core through the
   model alone.
@@ -735,10 +758,10 @@ pages load, as a browser would.
   read lands. It runs on the lane of changes, behind any switch asked for, and asks nobody
   about quitting an app, since Claude Code follows a switch by itself. A switch it made is
   taken as one asked for is, with the read after it, and said in a notification with no
-  button; a reason it did not switch, a reason it cannot judge, each by what it names, and
-  a refusal, are said once each until it next switches, and never in an alert, since
-  nobody asked. The setting is kept in `app.json` with the other preferences, and taken
-  only once they are read.
+  button; a reason it did not switch away from a limit, once for that limit and its reset, a
+  reason it cannot judge, by what it names, and a refusal, are said once each until it next
+  switches, and never in an alert, since nobody asked. The setting is kept in `app.json`
+  with the other preferences, and taken only once they are read.
 - The notice that Claude Code's config names another account offers to write the account
   in use there: `Intent::UpdateConfig`, a change of the app's own like a rename and not a
   switch, so the row never reads as switching and nothing said about a switch or the
@@ -973,24 +996,36 @@ pages load, as a browser would.
   decision and the switch. `autoswitch::look` comes first, from files alone: it takes no
   lock, sends no request, reads no keychain and records nothing, so a look that finds
   nothing to do costs nobody anything. It goes on to the lock only where a switch may be
-  due or the record of whose login is stored is in doubt. Under the lock, `switch/auto.rs`
-  tells whose it is as a switch does, by its fingerprint or by asking Anthropic, records
-  it, and decides from that and the files as they are then. So the app, `pitboard watch`
-  and a person's own `pitboard use` never make two switches from one reading, and a
-  sign-in outside Pitboard is judged as the account it signed in. Where whose login is
-  stored cannot be told, nothing is judged from the record, which may be another
-  account's: that is recorded once, and asked again a minute later, then twice as long
-  after each such failure in a row, up to 15 minutes. A record of whose it is made since,
-  by a read or a switch, ends both the wait and the row. Only what every front end would
-  meet alike is waited on so: a store one process cannot read, such as a keychain locked
-  over SSH, is that front end's refusal, and holds back no other. The attempt is written
-  to `autoswitch.json` once the switch is decided and before anything moves, so a switch
-  killed midway still counts against that limit's attempts. One that failed for a reason
-  trying again may mend, Anthropic out of reach or Claude Code writing its login, is taken
-  back out of them, so an outage never uses them up. The next try waits as long. One
-  refused over the account switched to passes that account over; any other refusal
-  counts, a login too large to write among them, which is about the machine and not the
-  account.
+  due, the record of whose login is stored is in doubt, or a reason not to switch was not
+  recorded yet. Under the lock, `switch/auto.rs` tells whose it is as a switch does, by its
+  fingerprint or by asking Anthropic, records it, and decides from that and the files as
+  they are then. So the app, `pitboard watch` and a person's own `pitboard use` never make
+  two switches from one reading, and a sign-in outside Pitboard is judged as the account it
+  signed in. Where whose login is stored cannot be told, nothing is judged from the record,
+  which may be another account's: that is recorded once, and asked again a minute later,
+  then twice as long after each such failure in a row, up to 15 minutes. A record of whose
+  it is made since, by a read or a switch, ends both the wait and the row. Only what every
+  front end would meet alike is waited on so: a store one process cannot read, such as a
+  keychain locked over SSH, is that front end's refusal, and holds back no other. The
+  attempt is written to `autoswitch.json` once the switch is decided and before anything
+  moves, so a switch killed midway still counts against that limit's attempts. One that
+  failed for a reason trying again may mend, Anthropic out of reach or Claude Code writing
+  its login, is taken back out of them, so an outage never uses them up. The next try waits
+  as long, for every limit of the account, since what failed was the moment. One refused
+  over the account switched to passes that account over for every limit of the account in
+  use until the limit it was refused for resets; any other refusal counts, a login too
+  large to write among them, which is about the machine and not the account.
+- The automatic switch judges only a reading Anthropic gave for the account's own login, of
+  the account in use and of each it could go to, and judges every limit at the share: one
+  already switched away from, or tried three times, before it resets never hides another.
+  Where none is left to try, that is said at once, never as a wait or the account settling.
+  A wait or the account settling is said of the limit tried next. Each reason it does not
+  switch away from a limit at the share is said and recorded once for the account, the
+  limit, its reset and the reason: under the lock, in `autoswitch.json` and as `auto-stay`.
+  The look after that stands on the record and takes no lock. A front end is told the reset
+  the reason was recorded under, and says it once for the same four. What is recorded of a
+  window is kept until a minute past its reset, as late as an answer may give it, so an
+  answer a second later neither forgets a limit already left nor says a reason again.
 - Additive writes become durable before destructive ones. A run that dies midway leaves a
   spare copy of a login, never a missing one.
 - The `--json` contract changes only on purpose. A change to a snapshot is a change to the

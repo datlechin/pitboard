@@ -10,11 +10,11 @@
 //! switch; one that decided from numbers a switch has since made untrue makes none.
 
 use super::{Settled, Switched, identify, switch_from};
-use crate::autoswitch::{self, Auto, Blind, Judged, Ledger, Threshold, decide};
+use crate::audit;
+use crate::autoswitch::{self, Auto, Blind, Judged, Ledger, Threshold};
 use crate::error::{Error, Result};
 use crate::provider::ProviderId;
 use crate::service::Warning;
-use crate::{audit, status};
 
 /// Switches Claude Code where a limit of the account in use has reached `threshold` and
 /// another account has room, as [`crate::autoswitch`] says, and records what it came to.
@@ -23,12 +23,13 @@ use crate::{audit, status};
 /// from what Pitboard last knew, which may be another account's: that is recorded once, as
 /// `auto-stay`, and nobody is asked again until the wait after it is over, as an attempt
 /// waits. A store this process cannot read is refused with its error and kept for nobody to
-/// wait on, since another front end may read it. The attempt is recorded once the switch is
-/// decided and before anything moves, so however the switch ends, killed included, it counts
-/// against the limit's attempts, and the front ends never try one limit more often than
-/// [`crate::autoswitch::ATTEMPTS`] times between them. A switch, and anything that stopped
-/// one, is recorded as `auto-switch`, with the account it went to, or `claude` before there
-/// was one.
+/// wait on, since another front end may read it. A reason not to switch away from a limit at
+/// the share is recorded as `auto-stay` too, of the account in use, once for that limit and
+/// its reset. The attempt is recorded once the switch is decided and before anything moves,
+/// so however the switch ends, killed included, it counts against the limit's attempts, and
+/// the front ends never try one limit more often than [`crate::autoswitch::ATTEMPTS`] times
+/// between them. A switch, and anything that stopped one, is recorded as `auto-switch`, with
+/// the account it went to, or `claude` before there was one.
 pub(crate) fn automatically(
     settled: Settled,
     threshold: Threshold,
@@ -83,13 +84,27 @@ pub(crate) fn automatically(
             Vec::new(),
         ));
     };
-    if let Some(why) = autoswitch::unwatched(&state, Some(&outgoing.owner)) {
-        return Ok((Auto::NotWatching { why }, Vec::new()));
-    }
-    let rows = status::gather_offline(ctx, &state).rows;
-    let plan = match autoswitch::judged(ctx, &state, decide(&state, &rows, &ledger, threshold, now))
-    {
+    let judged = match autoswitch::watched(&state, Some(&outgoing.owner)) {
+        Ok(account) => autoswitch::judge(ctx, &state, account, &ledger, threshold, now),
+        Err(why) => return Ok((Auto::NotWatching { why }, Vec::new())),
+    };
+    let plan = match judged {
         Judged::Switch(plan) => plan,
+        Judged::Hold(hold) => {
+            if ledger.say(&hold, now) {
+                ledger
+                    .save(ctx, permit)
+                    .map_err(|error| stopped(unchosen, error))?;
+                audit::record(
+                    ctx,
+                    permit,
+                    "auto-stay",
+                    &state.typed(&hold.from),
+                    hold.why.code(),
+                );
+            }
+            return Ok((hold.skipped(&state), Vec::new()));
+        }
         Judged::Stands(stands) => return Ok((stands, Vec::new())),
     };
     let to = state.typed(&plan.to);
@@ -187,7 +202,7 @@ mod tests {
     use crate::service::{Permit, Pitboard};
     use crate::store::memory::Fault;
     use crate::time::{Clock, FixedClock};
-    use crate::usage::{Snapshot, Source};
+    use crate::usage::{Snapshot, Source, Window};
     use std::sync::Arc;
 
     /// What Anthropic has just answered of `uuid`'s five-hour and weekly limits.
@@ -233,6 +248,19 @@ mod tests {
             Look::Stands(stands) => *stands,
             Look::Act => panic!("the look goes on to the lock"),
         }
+    }
+
+    /// The account the automatic switch watches, where it found nothing to do.
+    fn watching(looked: &Auto) -> Option<&str> {
+        match looked {
+            Auto::Watching { account, .. } => Some(account),
+            _ => None,
+        }
+    }
+
+    /// The reasons not to switch the audit log records, and of which account.
+    fn stays(m: &Machine) -> Vec<(String, String)> {
+        super::super::harness::audit_lines(m, "auto-stay")
     }
 
     fn live_refresh(m: &Machine) -> Option<String> {
@@ -284,8 +312,9 @@ mod tests {
         hold(&m, "after an automatic switch");
 
         let lines = crate::audit::read(&m.ctx, 100).len();
-        assert!(
-            matches!(auto(&m).expect("a look").value, Auto::Idle),
+        assert_eq!(
+            watching(&auto(&m).expect("a look").value),
+            Some("there"),
             "the account switched to has room, and nothing more is done"
         );
         assert_eq!(
@@ -370,8 +399,8 @@ mod tests {
     fn a_limit_below_the_share_takes_no_lock_and_changes_nothing() {
         let (m, _) = nearly_out("auto-below", 94.0);
         let before = m.mem.live().peek(&m.service);
-        assert!(matches!(stands(&m), Auto::Idle));
-        assert!(matches!(auto(&m).expect("a look").value, Auto::Idle));
+        assert_eq!(watching(&stands(&m)), Some("here"));
+        assert_eq!(watching(&auto(&m).expect("a look").value), Some("here"));
         assert_eq!(m.mem.live().peek(&m.service), before);
         assert!(crate::audit::read(&m.ctx, 100).is_empty());
         assert!(!m.ctx_home().join(".pitboard/autoswitch.json").exists());
@@ -386,18 +415,234 @@ mod tests {
     #[test]
     #[cfg_attr(
         windows,
-        ignore = "W16: Pitboard writing, replacing and removing files on Windows"
+        ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
     )]
     fn with_no_account_to_go_to_nothing_moves() {
         let (m, _) = nearly_out("auto-no-room", 97.0);
         measured(&m, "there", 96.0, 30.0);
         let before = m.mem.live().peek(&m.service);
-        let Auto::NoRoom { from, limit } = auto(&m).expect("a look").value else {
+        let Auto::Skipped { from, limit, why } = auto(&m).expect("a look").value else {
             panic!("no room");
         };
         assert_eq!((from.as_str(), limit.kind.as_str()), ("here", "session"));
+        assert_eq!(why, Skip::NoRoom { unread: Vec::new() });
         assert_eq!(m.mem.live().peek(&m.service), before);
         assert!(logged(&m).is_empty());
+    }
+
+    /// Below the share it says which account it watches, how full its fullest limit is, and
+    /// when that was read.
+    #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W16: Pitboard writing, replacing and removing files on Windows"
+    )]
+    fn below_the_share_it_says_which_account_it_watches() {
+        let (m, _) = nearly_out("auto-watching", 94.0);
+        let looked = stands(&m);
+        let Auto::Watching {
+            account,
+            nearest,
+            as_of,
+            held_until,
+        } = looked
+        else {
+            panic!("watching, not {looked:?}");
+        };
+        assert_eq!(account, "here");
+        assert_eq!(nearest, Some(window("session", 94.0)));
+        assert_eq!((as_of, held_until), (Some(NOW), None));
+    }
+
+    /// Anthropic asking for less traffic about the account in use holds back its next reading,
+    /// which is what the automatic switch judges, so that is said with what it watches.
+    #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W16: Pitboard writing, replacing and removing files on Windows"
+    )]
+    fn a_rate_limit_hold_is_said_with_what_it_watches() {
+        let (m, _) = nearly_out("auto-held", 60.0);
+        crate::budget::record(
+            &m.ctx,
+            Permit::for_a_test(),
+            &[(
+                "here".into(),
+                crate::budget::Outcome::RateLimited(Some(3600)),
+            )],
+        );
+        let looked = stands(&m);
+        assert!(
+            matches!(
+                looked,
+                Auto::Watching {
+                    held_until: Some(until),
+                    ..
+                } if until == NOW + 3600
+            ),
+            "{looked:?}"
+        );
+    }
+
+    /// No account with room is said and recorded once for the limit and its reset: the first
+    /// look goes to the lock to record it, and the next stands on that record.
+    #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
+    )]
+    fn no_room_is_recorded_once_for_a_limit_and_its_reset() {
+        let (m, _) = nearly_out("auto-no-room-once", 97.0);
+        measured(&m, "there", 96.0, 30.0);
+        let no_room = |looked: &Auto| {
+            matches!(
+                looked,
+                Auto::Skipped {
+                    why: Skip::NoRoom { .. },
+                    ..
+                }
+            )
+        };
+        let looked = auto(&m).expect("a look").value;
+        assert!(no_room(&looked), "{looked:?}");
+        let looked = stands(&m);
+        assert!(no_room(&looked), "the next look takes no lock: {looked:?}");
+        let looked = auto(&m).expect("a look").value;
+        assert!(no_room(&looked), "{looked:?}");
+        assert_eq!(stays(&m), [("here".to_string(), "no_room".to_string())]);
+        assert!(logged(&m).is_empty(), "nothing attempted");
+    }
+
+    /// A reason is told of the window it was recorded under. Anthropic's answers can give one
+    /// window's reset a second apart, and front ends tell one reason from another by its
+    /// reset, so a reason told with each answer's own was said again for a window it was
+    /// recorded once for.
+    #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
+    )]
+    fn a_reason_is_told_of_the_window_it_was_recorded_under() {
+        let (m, _) = nearly_out("auto-said-window", 97.0);
+        measured(&m, "there", 96.0, 30.0);
+        let reset = |looked: Auto| match looked {
+            Auto::Skipped { limit, .. } => limit.resets_at,
+            other => panic!("skipped, not {other:?}"),
+        };
+        assert_eq!(reset(auto(&m).expect("a look").value), Some(NOW + 3600));
+        let a_second_off = Snapshot {
+            windows: vec![
+                Window {
+                    resets_at: Some(NOW + 3599),
+                    ..window("session", 97.0)
+                },
+                window("weekly_all", 20.0),
+            ],
+            ..answer(&m, 97.0, 20.0)
+        };
+        crate::readings::answered(
+            &m.ctx,
+            Permit::for_a_test(),
+            &[("here".to_owned(), a_second_off)],
+        );
+        assert_eq!(reset(stands(&m)), Some(NOW + 3600));
+        assert_eq!(reset(auto(&m).expect("a look").value), Some(NOW + 3600));
+        assert_eq!(stays(&m), [("here".to_string(), "no_room".to_string())]);
+    }
+
+    /// A reason said is kept until no answer of its window can still run: the next answer
+    /// gave that window's reset a second after the one it was said under. Forgotten at its
+    /// own reset, it was recorded and told again, under the later reset, in the second between.
+    #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
+    )]
+    fn a_reason_said_is_kept_while_a_later_answer_of_its_window_runs() {
+        let (m, clock) = nearly_out("auto-said-past-reset", 97.0);
+        let session_resets = |uuid: &str, session: f64, resets_at: i64| {
+            let answer = Snapshot {
+                windows: vec![
+                    Window {
+                        resets_at: Some(resets_at),
+                        ..window("session", session)
+                    },
+                    window("weekly_all", 20.0),
+                ],
+                ..answer(&m, session, 20.0)
+            };
+            crate::readings::answered(&m.ctx, Permit::for_a_test(), &[(uuid.to_owned(), answer)]);
+        };
+        session_resets("there", 96.0, NOW + 7200);
+        let reset = |looked: Auto| match looked {
+            Auto::Skipped {
+                limit,
+                why: Skip::NoRoom { .. },
+                ..
+            } => limit.resets_at,
+            other => panic!("no room, not {other:?}"),
+        };
+        assert_eq!(reset(auto(&m).expect("a look").value), Some(NOW + 3600));
+        session_resets("here", 97.0, NOW + 3601);
+
+        clock.advance(3600);
+        assert_eq!(reset(stands(&m)), Some(NOW + 3600));
+        assert_eq!(reset(auto(&m).expect("a look").value), Some(NOW + 3600));
+        assert_eq!(stays(&m), [("here".to_string(), "no_room".to_string())]);
+    }
+
+    /// A reason said of a limit that gives no reset is kept as an attempt at one is, for a week
+    /// after it was said: no look says it again within the week, and the first after it does.
+    #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
+    )]
+    fn a_reason_said_of_a_limit_with_no_reset_is_kept_for_a_week() {
+        let (m, clock) = nearly_out("auto-said-no-reset", 97.0);
+        let unending = |kind: &str, percent: f64| Window {
+            resets_at: None,
+            ..window(kind, percent)
+        };
+        for (uuid, session) in [("here", 97.0), ("there", 96.0)] {
+            crate::readings::answered(
+                &m.ctx,
+                Permit::for_a_test(),
+                &[(
+                    uuid.to_owned(),
+                    Snapshot {
+                        windows: vec![unending("session", session), unending("weekly_all", 20.0)],
+                        ..answer(&m, session, 20.0)
+                    },
+                )],
+            );
+        }
+        let no_room = |looked: &Auto| {
+            matches!(
+                looked,
+                Auto::Skipped {
+                    why: Skip::NoRoom { .. },
+                    ..
+                }
+            )
+        };
+        let looked = auto(&m).expect("a look").value;
+        assert!(no_room(&looked), "{looked:?}");
+        assert_eq!(stays(&m).len(), 1);
+
+        clock.advance(7 * 86_400 - 1);
+        let looked = stands(&m);
+        assert!(no_room(&looked), "within the week: {looked:?}");
+
+        clock.advance(1);
+        let state = state::load(&m.ctx).expect("state");
+        assert!(matches!(
+            crate::autoswitch::look(&m.ctx, &state, Threshold::DEFAULT),
+            Look::Act
+        ));
+        let looked = auto(&m).expect("a look").value;
+        assert!(no_room(&looked), "{looked:?}");
+        assert_eq!(stays(&m).len(), 2, "said again after the week");
     }
 
     /// Claude Code stamps its usage cache with the account its config names, whichever login
@@ -413,7 +658,7 @@ mod tests {
         let (m, _) = nearly_out("auto-cache", 10.0);
         cache_usage(&m, usage_answer(100.0));
         let looked = auto(&m).expect("a look").value;
-        assert!(matches!(looked, Auto::Idle), "{looked:?}");
+        assert_eq!(watching(&looked), Some("here"), "{looked:?}");
         assert_eq!(live_refresh(&m).as_deref(), Some("here-refresh"));
     }
 
@@ -432,9 +677,14 @@ mod tests {
             assert!(matches!(looked, Look::Act), "{looked:?}");
         }
         let rows = crate::status::gather_offline(&m.ctx, &state).rows;
-        let Decision::Switch(plan) =
-            decide(&state, &rows, &Ledger::default(), Threshold::DEFAULT, NOW)
-        else {
+        let Decision::Switch(plan) = decide(
+            &state,
+            &m.key("here"),
+            &rows,
+            &Ledger::default(),
+            Threshold::DEFAULT,
+            NOW,
+        ) else {
             panic!("a switch decided");
         };
 
@@ -450,7 +700,10 @@ mod tests {
             );
         }
         assert!(
-            matches!(came_to[..], [Auto::Switched { .. }, Auto::Idle]),
+            matches!(
+                &came_to[..],
+                [Auto::Switched { .. }, Auto::Watching { account, .. }] if account == "there"
+            ),
             "{came_to:?}"
         );
         assert_eq!(live_refresh(&m).as_deref(), Some("there-refresh"));
@@ -488,7 +741,10 @@ mod tests {
         measured(&m, "elsewhere", 20.0, 20.0);
         m.sign_in(&elsewhere);
 
-        assert!(matches!(auto(&m).expect("no failure").value, Auto::Idle));
+        assert_eq!(
+            watching(&auto(&m).expect("no failure").value),
+            Some("elsewhere")
+        );
         assert_eq!(m.live(), Some(elsewhere), "the login in use stays in use");
         assert_eq!(
             crate::autoswitch::Ledger::load(&m.ctx),
@@ -542,7 +798,7 @@ mod tests {
         config_names(&m, "there");
 
         let looked = auto(&m).expect("a look").value;
-        assert!(matches!(looked, Auto::Idle), "{looked:?}");
+        assert_eq!(watching(&looked), Some("here"), "{looked:?}");
         assert_eq!(m.api.calls(), 0, "{:?}", m.api.asked());
         let state = state::load(&m.ctx).expect("state");
         assert_eq!(
@@ -555,9 +811,9 @@ mod tests {
         let before = state_file(&m);
 
         let looked = stands(&m);
-        assert!(matches!(looked, Auto::Idle), "{looked:?}");
+        assert_eq!(watching(&looked), Some("here"), "{looked:?}");
         let looked = auto(&m).expect("a look").value;
-        assert!(matches!(looked, Auto::Idle), "{looked:?}");
+        assert_eq!(watching(&looked), Some("here"), "{looked:?}");
         assert_eq!(m.api.calls(), 0);
         assert_eq!(state_file(&m), before, "nothing left to settle");
         assert!(!m.ctx_home().join(".pitboard/autoswitch.json").exists());
@@ -584,9 +840,14 @@ mod tests {
         m.mem.vault().takes_on_stdin(16);
         let state = state::load(&m.ctx).expect("state");
         let rows = crate::status::gather_offline(&m.ctx, &state).rows;
-        let Decision::Switch(plan) =
-            decide(&state, &rows, &Ledger::default(), Threshold::DEFAULT, NOW)
-        else {
+        let Decision::Switch(plan) = decide(
+            &state,
+            &m.key("here"),
+            &rows,
+            &Ledger::default(),
+            Threshold::DEFAULT,
+            NOW,
+        ) else {
             panic!("a switch decided");
         };
 
@@ -596,12 +857,32 @@ mod tests {
             clock.advance(RETRY_SECONDS);
         }
         let looked = auto(&m).expect("a look").value;
-        assert!(matches!(looked, Auto::Idle), "{looked:?}");
+        assert!(
+            matches!(
+                looked,
+                Auto::Skipped {
+                    why: Skip::GaveUp,
+                    ..
+                }
+            ),
+            "{looked:?}"
+        );
+        assert_eq!(
+            stays(&m),
+            [("here".to_string(), "attempts_spent".to_string())]
+        );
 
         let mut tried = Ledger::default();
         for attempt in 0..ATTEMPTS {
             tried.attempt(&plan, NOW + i64::from(attempt) * RETRY_SECONDS);
         }
+        let spent = crate::autoswitch::Hold {
+            from: plan.from.clone(),
+            from_id: plan.from_id.clone(),
+            limit: plan.limit.clone(),
+            why: Skip::GaveUp,
+        };
+        tried.say(&spent, clock.now());
         assert_eq!(
             Ledger::load(&m.ctx),
             tried,
@@ -653,9 +934,10 @@ mod tests {
         );
         hold(&m, "after a renewal partway through an automatic switch");
 
+        let looked = auto(&m).expect("a look").value;
         assert!(
-            matches!(auto(&m).expect("a look").value, Auto::Idle),
-            "not straight away"
+            matches!(looked, Auto::Waiting { until, .. } if until == NOW + RETRY_SECONDS),
+            "not straight away: {looked:?}"
         );
         clock.advance(RETRY_SECONDS);
         assert!(matches!(
@@ -902,7 +1184,7 @@ mod tests {
         m.api.using("access-here-renewed", answer(&m, 50.0, 20.0));
         Pitboard::new(m.ctx.clone()).status(false).expect("a read");
         let looked = stands(&m);
-        assert!(matches!(looked, Auto::Idle), "{looked:?}");
+        assert_eq!(watching(&looked), Some("here"), "{looked:?}");
 
         clock.advance(10 * 60);
         m.api.token_trouble("access-here-again", Trouble::Offline);
@@ -1012,7 +1294,7 @@ mod tests {
     #[test]
     #[cfg_attr(
         windows,
-        ignore = "W16: Pitboard writing, replacing and removing files on Windows"
+        ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
     )]
     fn claude_code_signed_in_some_other_way_is_not_switched() {
         let (m, _) = nearly_out("auto-overridden", 96.0);
@@ -1024,12 +1306,22 @@ mod tests {
         )
         .expect("settings");
         let before = m.mem.live().peek(&m.service);
-        let Auto::Skipped { why, .. } = auto(&m).expect("a look").value else {
-            panic!("skipped");
-        };
-        let Skip::Overridden(names) = why;
-        assert!(names[0].starts_with("apiKeyHelper in "), "{names:?}");
+        for _ in 0..2 {
+            let Auto::Skipped {
+                why: Skip::Overridden(names),
+                ..
+            } = auto(&m).expect("a look").value
+            else {
+                panic!("skipped");
+            };
+            assert!(names[0].starts_with("apiKeyHelper in "), "{names:?}");
+        }
         assert_eq!(m.mem.live().peek(&m.service), before);
+        assert_eq!(
+            stays(&m),
+            [("here".to_string(), "auth_overridden".to_string())],
+            "said once"
+        );
     }
 
     #[test]
@@ -1068,7 +1360,7 @@ mod tests {
 
         let done = auto(&m).expect("nothing to do");
 
-        assert!(matches!(done.value, Auto::Idle), "{:?}", done.value);
+        assert_eq!(watching(&done.value), Some("there"), "{:?}", done.value);
         assert_eq!(config(), before);
         assert_eq!(live_refresh(&m).as_deref(), Some("there-again-refresh"));
     }

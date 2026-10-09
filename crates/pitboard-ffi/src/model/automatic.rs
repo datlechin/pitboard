@@ -218,14 +218,15 @@ fn a_reason_it_did_not_switch_is_said_once() {
     let mut model = Hand::new();
     read_preferences(&mut model, true);
     let mut machine = Machine::reading(Ok(status(vec![work(97.0), personal()])));
-    machine.auto = Ok(AutoSwitched::Skipped {
+    let overridden = |resets: i64| AutoSwitched::Skipped {
+        key: format!("skipped/work/session//{resets}/auth_overridden"),
         from: "work".into(),
         used: "97% of its 5-hour limit".into(),
-        code: "auth_overridden".into(),
         why: "Claude Code signs in another way, set by apiKeyHelper, so a switch would change \
               nothing its sessions use"
             .into(),
-    });
+    };
+    machine.auto = Ok(overridden(9_000));
     model.refresh(&mut machine);
     model.refresh(&mut machine);
     assert_eq!(machine.auto_at.len(), 2);
@@ -237,6 +238,10 @@ fn a_reason_it_did_not_switch_is_said_once() {
          apiKeyHelper, so a switch would change nothing its sessions use."
     );
     assert_eq!(machine.posted[0].switch_to, None);
+
+    machine.auto = Ok(overridden(27_000));
+    model.refresh(&mut machine);
+    assert_eq!(machine.posted.len(), 2, "the limit's next window");
 }
 
 /// A reason the core cannot judge whether to switch at all is said once for each reason and
@@ -329,16 +334,35 @@ fn after_a_refusal_it_waits_for_the_next_read() {
     assert_eq!(machine.auto_at.len(), 2, "at the next read");
 }
 
+/// No account with room is said once for the limit and its reset, and again once the limit's
+/// next window reaches the share.
 #[test]
-fn no_account_with_room_says_nothing_beyond_what_a_run_out_says() {
+fn no_account_with_room_is_said_once_for_a_limit_and_its_reset() {
     let mut model = Hand::new();
     read_preferences(&mut model, true);
     let mut machine = Machine::reading(Ok(status(vec![work(97.0), personal()])));
-    machine.auto = Ok(AutoSwitched::NoRoom);
+    let no_room = |resets: i64| AutoSwitched::Skipped {
+        key: format!("skipped/work/session//{resets}/no_room"),
+        from: "work".into(),
+        used: "97% of its 5-hour limit".into(),
+        why: "no other Claude Code account has room below 95% in every limit".into(),
+    };
+    machine.auto = Ok(no_room(9_000));
     model.refresh(&mut machine);
-    assert_eq!(machine.auto_at.len(), 1);
-    assert!(machine.posted.is_empty());
+    model.refresh(&mut machine);
+    assert_eq!(machine.auto_at.len(), 2);
+    assert_eq!(machine.posted.len(), 1, "{:?}", machine.posted);
+    assert_eq!(machine.posted[0].title, "Claude Code was not switched");
+    assert_eq!(
+        machine.posted[0].body,
+        "work has used 97% of its 5-hour limit. No other Claude Code account has room below \
+         95% in every limit."
+    );
     assert!(model.state.switch_under_way().is_none());
+
+    machine.auto = Ok(no_room(27_000));
+    model.refresh(&mut machine);
+    assert_eq!(machine.posted.len(), 2, "the limit's next window");
 }
 
 /// Not while a switch somebody asked for is under way: theirs is the one to make.

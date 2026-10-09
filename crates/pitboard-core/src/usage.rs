@@ -135,6 +135,12 @@ pub fn same_reset(a: i64, b: i64) -> bool {
     a.abs_diff(b) < SAME_RESET
 }
 
+/// Whether a reading of the window that resets at `at` may still be running at `now`: until
+/// `SAME_RESET` past it, since another source can give that window's reset as late.
+pub(crate) fn may_still_run(at: i64, now: i64) -> bool {
+    at > now || same_reset(at, now)
+}
+
 /// One account's reading once its service has answered `answer` for that account's own
 /// login, as of the answer's `answered_at`.
 ///
@@ -535,6 +541,17 @@ mod tests {
             !same_reset(0, NOW),
             "no reset known is no reset in particular"
         );
+    }
+
+    /// One reading of a window can give its reset up to a minute after another, so the window
+    /// may still run until a minute past the reset it was first given.
+    #[test]
+    fn a_window_may_still_run_until_a_minute_past_its_reset() {
+        assert!(may_still_run(NOW, NOW - 1));
+        assert!(may_still_run(NOW, NOW));
+        assert!(may_still_run(NOW, NOW + 59));
+        assert!(!may_still_run(NOW, NOW + 60));
+        assert!(!may_still_run(0, NOW));
     }
 
     /// An answer lists every limit the account has. Kept until its reset, a weekly limit
