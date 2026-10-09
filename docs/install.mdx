@@ -1,113 +1,100 @@
 ---
 title: "Install Pitboard"
 sidebarTitle: "Install"
-description: "Get the command line or the menu bar app from Homebrew, a release download or Cargo, and keep it updated."
+description: "Install the command line or the menu bar app from Homebrew, Cargo or a release file, and keep it updated."
 ---
-
-Pitboard is a command line for macOS and Linux, and a menu bar app for macOS. The app includes the command line, so install one or the other.
 
 ## What you need
 
 - For the command line: macOS on Apple silicon or Intel, or Linux on x86_64 or aarch64.
 - For the app: macOS 14 or later, on Apple silicon or Intel.
-- Claude Code or OpenAI's Codex CLI, installed and signed in to one of your accounts.
+- Claude Code or OpenAI's Codex CLI, signed in to one of your accounts.
 
-For what Codex needs, see [Use Pitboard with Codex](/guides/codex#before-you-enrol-a-codex-account).
+The app includes the command line, so install one or the other. For Codex, read [Before you enrol a Codex account](/guides/codex#before-you-enrol-a-codex-account) first.
 
-Linux builds are static, so one file runs on any distribution. Windows is not supported: Claude Code keeps its login differently there, and Pitboard has not been written for it.
+The Linux builds are static and run on any distribution. Pitboard is tested on macOS. On Linux it builds and passes its tests, but has not been run with real logins.
 
-Pitboard is pre-release. macOS is tested. On Linux, Pitboard builds and its tests pass. It has not been run with a real signed-in Claude Code or Codex.
+There is no Windows release. A Windows build answers only `--version`, `--help`, `completions` and `manpage`, and refuses the rest with [`windows_not_released`](/reference/errors#windows).
 
 ## Install with Homebrew
 
 ```sh
-brew install datlechin/tap/pitboard            # the command line, macOS and Linux
-brew install --cask datlechin/tap/pitboard-app # the menu bar app, macOS 14 or later
+brew install datlechin/tap/pitboard              # the command line
+brew install --cask datlechin/tap/pitboard-app   # the app
 ```
 
-The `pitboard` cask installs the command line with its man page and its completions for bash, zsh and fish. The `pitboard-app` cask installs the app and puts the app's command line on your `PATH`, with the same man page and completions.
+- Both casks install the man page and the bash, zsh and fish completions.
+- The `pitboard-app` cask also puts the command line inside the app on your `PATH`.
+- Homebrew installs only one of the two, since both put `pitboard` on your `PATH`.
 
-Homebrew refuses to install one while the other is installed, because both put `pitboard` on your `PATH`.
-
-To check the command line, run `pitboard --version`. The app shows Pitboard's item in the menu bar, and has a Dock icon only while one of its windows is open.
+The app shows Pitboard's item in the menu bar, and a Dock icon only while one of its windows is open.
 
 ## Install without Homebrew
 
-Without Homebrew, install Pitboard with Cargo, from a release file or from source.
-
-### Fetch the release build with Cargo
-
-[cargo-binstall](https://github.com/cargo-bins/cargo-binstall) downloads Pitboard's own release build for your machine. Install it first, then run:
+[cargo-binstall](https://github.com/cargo-bins/cargo-binstall) downloads Pitboard's own release build for your machine:
 
 ```sh
 cargo binstall pitboard
 ```
 
-### Download a release file
-
-The [latest release](https://github.com/datlechin/pitboard/releases/latest) has these files, where `<version>` is the release's version:
-
-| For | File |
-| --- | --- |
-| Command line, macOS on Apple silicon | `pitboard-v<version>-aarch64-apple-darwin.tar.gz` |
-| Command line, macOS on Intel | `pitboard-v<version>-x86_64-apple-darwin.tar.gz` |
-| Command line, Linux on x86_64 | `pitboard-v<version>-x86_64-unknown-linux-musl.tar.gz` |
-| Command line, Linux on aarch64 | `pitboard-v<version>-aarch64-unknown-linux-musl.tar.gz` |
-| The app, macOS 14 or later | `Pitboard-v<version>-macos.zip` |
-
-Each tarball holds `pitboard`, its man page `pitboard.1`, completions for bash, zsh and fish, and `LICENSE`, `NOTICE` and `README.md`. Unpack it and copy `pitboard` to a directory on your `PATH`.
-
-For the app, move `Pitboard.app` to your Applications folder before you open it. Until then, macOS runs it from a temporary copy, where the app cannot turn on [daily renewal](/guides/renewal) or put its command line on your `PATH`.
-
-To check a file before you run it, see [Verify a download](/install/verify).
-
-### Build from source
-
-Building [Pitboard from crates.io](https://crates.io/crates/pitboard) needs Rust 1.91 or later and a C compiler.
+Building from source needs Rust 1.91 or later and a C compiler:
 
 ```sh
 cargo install --locked pitboard
 ```
 
-Without `--locked`, Cargo ignores the `Cargo.lock` Pitboard was released with and may pick newer dependencies.
+Neither installs the man page or the completions. [`pitboard manpage`](/reference/integration-commands#manpage) and [`pitboard completions`](/reference/integration-commands#completions) print them.
 
-Neither Cargo route installs the man page or the completions. `pitboard manpage` and `pitboard completions` print them; see [Integration commands](/reference/integration-commands).
+### Download a release file
 
-To build the app, you need Xcode, Rust and [XcodeGen](https://github.com/yonaskolb/XcodeGen), which generates the Xcode project. In a clone of [Pitboard's repository](https://github.com/datlechin/pitboard), run:
+The [Releases page](https://github.com/datlechin/pitboard/releases/latest) has these archives:
 
-```sh
-rustup target add aarch64-apple-darwin x86_64-apple-darwin
-brew install xcodegen
-./apps/macos/scripts/build-app.sh
-cp -R apps/macos/build/Pitboard.app /Applications/
-```
+| For | File |
+| --- | --- |
+| macOS on Apple silicon | `pitboard-v<version>-aarch64-apple-darwin.tar.gz` |
+| macOS on Intel | `pitboard-v<version>-x86_64-apple-darwin.tar.gz` |
+| Linux on x86_64 | `pitboard-v<version>-x86_64-unknown-linux-musl.tar.gz` |
+| Linux on aarch64 | `pitboard-v<version>-aarch64-unknown-linux-musl.tar.gz` |
+| The app | `Pitboard-v<version>-macos.zip` |
 
-An app you build does not update itself, because it carries no update key. For working on the app and running its tests, see [CONTRIBUTING.md](https://github.com/datlechin/pitboard/blob/main/CONTRIBUTING.md#the-app).
+Each tarball holds `pitboard`, `pitboard.1`, `completions/`, `LICENSE`, `NOTICE` and `README.md`. Copy `pitboard` to a directory on your `PATH`.
 
-## Add the app's command line to your PATH
+Move `Pitboard.app` to your Applications folder before you open it. Until then, macOS runs it from a temporary copy, and the app cannot turn on [daily renewal](/guides/renewal) or link its command line.
 
-The `pitboard-app` cask does this for you. Without the cask, Settings can do it when no other `pitboard` is installed:
+To check a file before you open it, follow [Verify a download](/install/verify).
+
+### Build the app from source
+
+In a clone of [Pitboard's repository](https://github.com/datlechin/pitboard), `./apps/macos/scripts/build-app.sh` writes `apps/macos/build/Pitboard.app`. Copy it to your Applications folder. [CONTRIBUTING.md](https://github.com/datlechin/pitboard/blob/main/CONTRIBUTING.md#the-app) lists what it needs. An app you build has no updater.
+
+## Put the bundled command line on your PATH
+
+Without the `pitboard-app` cask, link it from the app:
 
 1. Click Pitboard's item in the menu bar, choose **Settings**, then click **Command Line**.
-2. Click **Install Command Line Tool**, and enter an administrator's password when macOS asks. The **In your terminal** row shows `/usr/local/bin/pitboard`.
+2. Click **Install Command Line Tool**, then enter an administrator's password when macOS asks.
 
-That path is a link to `Pitboard.app/Contents/Helpers/pitboard`, so the command line updates with the app.
+`/usr/local/bin/pitboard` then points into the app, so the command line updates with it. The button shows only when Pitboard finds no other `pitboard`. [Command Line](/reference/settings#command-line) lists every case.
 
-With another `pitboard` installed, the tab shows its path and no button.
+You can also run it as `/Applications/Pitboard.app/Contents/Helpers/pitboard`.
 
 ## Update Pitboard
 
 | Installed with | To update |
 | --- | --- |
-| The `pitboard` cask | Run `brew upgrade`. |
-| The `pitboard-app` cask, or the app from a release | The app checks once a day, and Pitboard's menu shows **Install Pitboard** `<version>` when it finds an update. The update replaces the command line inside the app too. To check at once, choose **Check for Updates** in Pitboard's menu. `brew upgrade` skips this cask unless you add `--greedy`. |
-| `cargo binstall` | Run `cargo binstall pitboard` again. |
-| `cargo install` | Run `cargo install --locked pitboard` again. |
-| A release tarball | Replace the files with those from the next release. |
+| The `pitboard` cask | `brew upgrade pitboard` |
+| The app, from its cask or a release file | It updates itself. |
+| `cargo binstall` | `cargo binstall pitboard` |
+| `cargo install` | `cargo install --locked pitboard` |
+| A release tarball | Replace the files with the next release's. |
 | An app you built | Build it again. |
 
-For the app's update settings, see [Settings](/reference/settings#updates).
+- The app checks for an update once a day.
+- When it finds one, Pitboard's menu shows **Install Pitboard** and the version.
+- **Check for Updates** in Pitboard's menu checks at once.
+- `brew upgrade --greedy` also upgrades the `pitboard-app` cask.
+- [Updates](/reference/settings#updates) lists the app's update settings.
 
-The app and a command line installed apart from it update separately, so keep them at the same version. An older Pitboard stops with an error saying a file `was written by a newer Pitboard`. Update the older one the way you installed it.
+Keep a command line installed apart from the app at the app's version. An older one refuses a file the app wrote, with `was written by a newer Pitboard`.
 
-Next, add your accounts: follow the [Quickstart](/quickstart) from its second step, or in the app, see [Add and manage accounts](/guides/accounts).
+Next, [add your accounts](/guides/accounts), or follow the [Quickstart](/quickstart) from its second step.

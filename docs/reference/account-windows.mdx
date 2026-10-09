@@ -1,0 +1,182 @@
+---
+title: "Account windows and shared links"
+sidebarTitle: "Windows and links"
+description: "Look up account windows, the sign-in window, downloads, the Open Link window, refused links and the Share extension."
+---
+
+Each enrolled account has one window on its tool's site: claude.ai for Claude Code, chatgpt.com for Codex. A login with no label has none. For signing in and a window's limits, see [Use each account's site](/guides/account-windows).
+
+## Account windows
+
+| Opens from | Item |
+| --- | --- |
+| Pitboard's item in the menu bar, the **File** menu and the Dock icon's menu | **Open claude.ai as work**, or **Open claude.ai** and then the account when the site has several |
+| An account's shortcut menu in the **Accounts** pane | **Open claude.ai** or **Open chatgpt.com** |
+| The [**Open Link** window](#open-link-window) | **Open** |
+
+Opening an open window brings it to the front.
+
+The title is the account's label. When the other site has an account with the same label, the title adds the site: **work (claude.ai)**. The subtitle is the page's title, or the site's name.
+
+The window opens at the last page of its site it showed, other than a sign-in page. Otherwise it opens at `https://claude.ai/` or `https://chatgpt.com/`.
+
+Until the app has read the accounts, the window shows **Reading accounts**. A failed read shows **Couldn't Read Accounts**, the reason and **Try Again**. The window closes once a read no longer lists its account.
+
+| Action | Toolbar | Menu |
+| --- | --- | --- |
+| Previous or next page | **Back**, **Forward** or a two-finger swipe | **Go** > **Back** (Command-Left Bracket), **Forward** (Command-Right Bracket) |
+| Reload | **Reload**, which **Stop** replaces while a page loads | **View** > **Reload Page** (Command-R) |
+| Zoom | A pinch | **View** > **Zoom In** (Command-Plus), **Zoom Out** (Command-Minus), **Actual Size** (Command-0) |
+| Find | None | **Edit** > **Find** > **Find** (Command-F) |
+
+Zoom steps from 50% to 300%, as in Safari. It resets when the window closes. **Actual Size** also undoes a pinch. The find bar searches when you press Return.
+
+The page's shortcut menu has no **Download Linked File**, **Download Image** or **Download Video**: WebKit would cancel those downloads.
+
+## Notes
+
+Notes show one at a time at the top of the window. **Dismiss** (an x) closes one.
+
+| Note | Shown when |
+| --- | --- |
+| **Sign in to claude.ai as me@example.com. Google's sign-in does not work inside apps.**, then the site's sign-in steps | The first time this [Pitboard directory](/reference/files#the-pitboard-directory) opens the window, and after **Remove Website Data** |
+| **Google does not allow its pages inside apps, so Pitboard stopped it. Sign in as me@example.com another way.**, then the steps and the Google services the window cannot connect | A page went to Google's sign-in |
+| **claude.ai opened a page in your browser. Anything you connect there goes to the claude.ai account your browser is signed in to, which may not be "work".** | A page sent a web page to your browser without a click |
+| **This window doesn't open links to other apps, such as this vscode: link.** | A link to another app was stopped |
+
+## Pages and links
+
+| Address | Goes to |
+| --- | --- |
+| The site's pages, on its host or [an alias](#refused-links) | The window, even from a link that asks for a new tab |
+| chatgpt.com's sign-in pages, on `auth.openai.com`, `login.live.com`, `login.microsoftonline.com` and `appleid.apple.com` | The window, or a [sign-in window](#sign-in-window) |
+| Google's sign-in, `accounts.google.com` | Nowhere, with a [note](#notes) |
+| Any other web page | Your default browser |
+| An email address, `mailto:` | Your default email app |
+| A link to another app, such as `vscode:` | Nowhere, with a [note](#notes) |
+
+Email and app links act only when clicked or opened in a new window.
+
+A frame inside the page, such as an artifact, loads any address but a file on your Mac.
+
+A page's alert, confirmation or question opens as a dialog titled with the asking host: **claude.ai says**. A frame's is titled **An embedded page at artifact.example says**, or **An embedded page says** when it has no host.
+
+A file upload opens the standard Open dialog.
+
+A page that fails to load or keeps crashing shows **Couldn't Load the Page**: see [A window does not load its page](/troubleshooting/account-windows#a-window-does-not-load-its-page).
+
+## Sign-in window
+
+A page opens a sign-in window when it opens a sign-in page or a blank page in a new window. Only the site's page or a sign-in page in the account's window can, never a frame.
+
+It opens centred on the account's window, at the size the page asks for. It defaults to 500 by 640 points and is never smaller than 320 by 400.
+
+It shares the account's website data, so a sign-in there is the account's.
+
+Its title is the page's title, or the page's host until it has one. Its subtitle is the host.
+
+Its page loads only the site, the site's sign-in pages and a blank page. Anything else goes where the account's window would send it, and notes show there.
+
+It has no toolbar and opens no window of its own. It closes when:
+
+- its page closes it, as a finished sign-in does
+- you close it or the account's window
+- you choose **Remove Website Data**
+- another sign-in window opens in its place
+
+Whether chatgpt.com's **Continue with Microsoft** and **Continue with Apple** open a sign-in window is not known.
+
+## Downloads
+
+Downloads go to your Downloads folder. If you denied Pitboard that folder, see [Downloads are not saved](/troubleshooting/account-windows#downloads-are-not-saved).
+
+A download never replaces a file: a second `report.pdf` is saved as `report 2.pdf`, then `report 3.pdf`.
+
+| Download | Saved |
+| --- | --- |
+| Started by the site's own page | At once |
+| Started by anything else, such as an artifact | After you click **Download** in **Download "report.csv" from example.com?**, or **Download "report.csv"?** when the host is not known |
+| Started in a sign-in window, or from an address that is not `https:`, `blob:` or `data:` | Never |
+
+**Downloads** in the toolbar appears once the window has a download, and lists them newest first. An ended one shows **Downloaded**, **Cancelled** or why it failed.
+
+**Cancel** (an x) stops a running download and deletes what it wrote. **Show in Finder** (a magnifying glass) shows a finished file. **Clear** takes the ended downloads off the list.
+
+A failed download's partial file is deleted. Downloads go on after the window closes.
+
+Quitting Pitboard while a download runs asks **A download is in progress. Quit anyway?**, with the count when there are several. **Quit** stops every download and deletes what each wrote.
+
+## Remove Website Data
+
+**File** > **Remove Website Data** acts on the account's window in front. It asks **Remove claude.ai data for "work"?**, with **Remove** and **Cancel**.
+
+**Remove** clears everything the site keeps in that window. That signs the window out on this Mac only. The site is not told.
+
+The window starts again at the site's home, at 100% zoom, with the sign-in note.
+
+Forgetting an account also deletes its window's data: see [Where account windows keep their data](/security#where-account-windows-keep-their-data).
+
+## Open Link window
+
+The **Open Link** window asks which account opens a shared link. Nothing opens until you choose, even when the site has one account.
+
+| Shows | When | Buttons |
+| --- | --- | --- |
+| **Open this claude.ai link as:**, the link and the accounts | The link's site has an account with a window | **Cancel**, **Open** |
+| **No claude.ai Account**, the link and **None of the accounts Pitboard has opens claude.ai. Add one, and this link waits here until you choose it.** | No account has a window on the link's site | **Open in Browser**, **Cancel**, **Add Account** |
+| **Can't Open This Link** and the reason | The link is [refused](#refused-links) | **OK** |
+| **Reading accounts**, or **Couldn't Read Accounts** and the reason | As in an [account window](#account-windows) | **Cancel**, and **Try Again** after a failure |
+| **No Link to Open** and how to share a page | No link is waiting, as in a window macOS restored | **Close** |
+
+An account whose window is open shows **me@example.com, window open** under its label.
+
+It selects the account you last chose for the site since Pitboard started, else the account in use, else the first.
+
+For 750 ms after the accounts appear, **Open** is dimmed and a double-click on an account does nothing. That stops a Return meant for another app.
+
+A link brings the window to the front. A second link replaces the first, and the selection and the 750 ms wait start again.
+
+If the account's window is open, it loads the link, and **Back** returns to the page before. Otherwise the window opens on the link.
+
+**Add Account** opens the Pitboard window's **Add Account** dialog for the site's tool.
+
+## Refused links
+
+The Share extension and the **Open Link** window refuse these links. Only the **Open Link** window gives the last reason.
+
+| Link | Reason |
+| --- | --- |
+| On another site, such as `example.com` or `www.claude.ai`, or with a port | **Pitboard opens claude.ai and chatgpt.com links only. This link is on example.com.**, naming the host and any port |
+| With a user name before the host | **Pitboard opens claude.ai and chatgpt.com links only.** |
+| A sign-in link: under `/magic-link` on claude.ai, or `/api/auth` on chatgpt.com | **Pitboard doesn't open claude.ai sign-in links from outside: one would sign the window in as whoever the link belongs to. Sign in inside the account's claude.ai window.** |
+| Not `http` or `https`, or with a `.` or `..` path segment | **There is no claude.ai or chatgpt.com link in what was shared.** |
+| Longer than 8192 characters | **What was shared is too long to be a claude.ai or chatgpt.com link.** |
+| A [Pitboard link](#pitboard-links) this version cannot read | **This Pitboard link isn't one this version of Pitboard can read. Update Pitboard and share the page again.** |
+
+Pitboard opens an `http` link, or one with no scheme such as `claude.ai/new`, as `https`. A link on `chat.openai.com`, `www.chatgpt.com` or `chat.com` opens as the same link on `chatgpt.com`. Each of those hosts redirects there with the path kept, measured on 29 September 2026.
+
+## Pitboard links
+
+The Share extension hands a page to the app as a Pitboard link: `pitboard://open?url=` followed by the page's link, percent-encoded.
+
+```text
+pitboard://open?url=https%3A%2F%2Fclaude.ai%2Fchat%2F0e5a
+```
+
+Anything on your Mac can open a Pitboard link, so one only ever shows the **Open Link** window.
+
+The app [refuses](#refused-links) one with a port, a user name, a fragment, a host other than `open` or a path other than `/`. Its query must be one non-empty `url` and nothing else.
+
+## Share extension
+
+The app includes a Share extension, **Pitboard** in a browser's Share menu. If it is missing, see [Pitboard is missing from the Share menu](/troubleshooting/account-windows#pitboard-is-missing-from-the-share-menu).
+
+It is offered for one web page at a time. It checks the page against the [refused links](#refused-links), then hands it to the app it came in as a [Pitboard link](#pitboard-links).
+
+| Shows | When | Buttons |
+| --- | --- | --- |
+| **Opening in Pitboard** | While it hands the page over | None |
+| **Can't Open This Link** and the reason | The page is refused. Pitboard does not start. | **OK** |
+| **Couldn't Open Pitboard** and the reason | macOS could not open the app, or the extension cannot find it: **Pitboard couldn't find the app this extension came with.** | **OK** |
+
+For what the extension can reach, see [Links shared from a browser](/security#links-shared-from-a-browser).

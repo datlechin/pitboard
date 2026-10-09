@@ -1,80 +1,121 @@
 ---
 title: "Files and environment variables"
 sidebarTitle: "Files and variables"
-description: "Pitboard keeps its files in `~/.pitboard`, parked logins in the keychain or a vault, and reads these environment variables."
+description: "Where Pitboard keeps its files, which Claude Code and Codex files it reads, and the environment variables it reads."
 ---
 
-The paths shown are defaults that [environment variables](/reference/files#environment-variables) can move.
+Paths here are defaults. [Environment variables](/reference/files#environment-variables) can move them.
 
 ## The Pitboard directory
 
 Pitboard's directory is `~/.pitboard`, or the path in `PITBOARD_HOME`. The command line and the app share it.
 
-Pitboard creates each directory at mode 0700 and each file at 0600, except those in `backups/`. An existing directory keeps its mode.
+Pitboard creates each directory at mode 0700 and each file at 0600. A directory that already exists keeps its mode. A copy in `backups/` keeps the mode of Claude Code's config.
 
-Pitboard refuses a directory that a sync client copies to other machines, because parked logins belong to one machine. It refuses one whose path contains `Dropbox`, `Google Drive`, `OneDrive`, `com~apple~CloudDocs` or `Sync`, written so. It also refuses one inside `~/Library/CloudStorage` or `~/Library/Mobile Documents`, and one inside a folder with one of these names, in any case and wherever it is in the path, your home's own folders included: `OneDrive`, `OneDrive - <organisation>`, `OneDrive-<kind>`, `Dropbox`, `Dropbox (<team>)`, `Google Drive`, `GoogleDrive-<account>`, `com~apple~CloudDocs` or `Sync`.
-
-| File | Holds | Written by |
+| File | Holds | Written or taken by |
 | --- | --- | --- |
-| `state.json` | The enrolled accounts: label, tool, email address, account identifiers, a Codex account's ChatGPT plan such as `plus` or `team`, each parked login's name and expiry, and when a sign-in outside Pitboard replaced an account's only login. For each tool, and each `CLAUDE_CONFIG_DIR` or `CODEX_HOME` it was read under, whose login it has stored, as Anthropic or the login itself last said, with a fingerprint of that login, when that was said, and the account the tool's own record named then. | Every change Pitboard makes, renewals, and a read that finds whose login a tool has stored changed |
-| `state.lock` | The lock that lets one change or renewal run at a time | Every change Pitboard makes, renewals, and a read that records whose login a tool has stored |
-| `journal.json` | The record of a switch while it runs. An interrupted switch leaves it behind, and the next change Pitboard makes finishes or undoes it; see [Interrupted switches](/concepts/switching#interrupted-switches). | A switch |
-| `autoswitch.json` | What [automatic switching](/guides/automatic-switching) has tried and said for each limit of a Claude Code account that reached the share it switches at. Each entry holds when the limit resets, how many tries count against it, how many in a row failed for a reason that may pass, such as Anthropic being out of reach, when the last try began, whether one switched, the accounts passed over, and in `said`, each reason it did not switch away from the limit that it recorded, with when. Where Pitboard could not tell whose login Claude Code has stored, `asked` holds when it last asked, how many times in a row and why, until it can. It holds account ids, limit names, times, counts, codes and those reasons, and nothing secret. An entry counts until 1 minute after its limit resets, since Anthropic can give the same reset up to a minute later. Where that time is unknown, it counts for 7 days after its last try or reason. It is dropped at the first write after that. | An automatic switch, from the app or `pitboard watch`, under `state.lock` |
-| `pending` | Names of parked logins about to be written, one per line. If a run is killed midway, the next change Pitboard makes finds each login by its name here. Absent when there are none. | Switches, sign-ins and renewals |
+| `state.json` | The enrolled accounts with their email addresses and ids, their parked logins' names and expiry, and whose login each tool has stored | Every change and renewal, and a read that finds a tool's stored login changed |
+| `state.lock` | The lock that lets one change run at a time | As `state.json`, and every automatic switch |
+| `journal.json` | The record of a switch until it is done. One left behind marks an [interrupted switch](/concepts/switching#interrupted-switches). | A switch |
+| `pending` | Names of parked logins about to be written, one per line, which the next change resolves. Absent when empty. | Anything that parks a login |
+| `autoswitch.json` | What the automatic switch tried and said at each limit, until a minute after it resets, or 7 days with no reset known. When it last failed to identify Claude Code's login. | The automatic switch |
 | `signin.lock` | The lock that allows one sign-in at a time | A sign-in |
-| `signin/` | The config directory a tool is given during a sign-in, so the login in use is left alone. Removed when the sign-in ends, or by the next sign-in if Pitboard was stopped during one. | A sign-in |
-| `vault/` | Linux only: parked logins, one file each | Switches, sign-ins and renewals |
-| `usage.json` | The newest usage reading for each account | Reading usage, and the status line |
-| `usage.lock` | The lock around `usage.json` and `sessions.json` | Reading usage, and the status line |
-| `asking.json` | When Pitboard last asked Anthropic or OpenAI for each account's usage, and how long to wait before asking again | Reading usage |
-| `sessions.json` | The usage each Claude Code session last gave `pitboard statusline`. A session not seen for 7 days is dropped. | The status line |
-| `backups/` | Copies of Claude Code's config from before each switch, or `pitboard use` of the account in use, rewrote it. Each is named after the time it was made, in seconds since 1 January 1970, such as `claude.json.1790000000`. The 10 newest are kept. They hold no login, but do hold your email address, your Anthropic account and organisation identifiers, and the path of each project Claude Code has opened. Each keeps the mode of Claude Code's file. | A Claude Code switch, and `pitboard use` of the account in use where the config names another |
-| `audit.log` | One tab-separated line per change or renewal: the time, `cli` or `app` for where it was made, the verb such as `use`, the subject and the outcome. It holds no email address, and holds an account id only in a `reclaim` line with the outcome `discarded`, whose subject is a parked login's name. [`pitboard log`](/reference/maintenance-commands#log) prints it. | Every change Pitboard makes, and renewals |
-| `audit.log.1` | The previous `audit.log`, moved aside once it passed 256 KiB | Every change Pitboard makes, and renewals |
-| `app.json` | The app's own preferences: the tools for which you clicked **Not Now** when the **Accounts** pane suggested a second account, whether the app has opened its window at first launch, and the **Before an account runs out** settings. `auto_switch` is `true` while **Switch Claude Code automatically** is on, and left out while it is off. `auto_switch_at` is the share it switches at, as a whole percentage, and 95 while it is left out. | The app |
-| `told.json` | Each limit the app has notified you ran out, by tool, account and limit, with the time it resets, so the app notifies each run-out once | The app |
+| `signin/` | Where a tool signs in, apart from the login in use. Removed when the sign-in ends, or by the next one. | A sign-in |
+| `vault/` | Linux: the parked logins, one file each | Anything that parks or renews a login |
+| `usage.json` | The newest usage reading of each account | Reading usage, and the status line |
+| `usage.lock` | The lock around `usage.json` and `sessions.json` | As `usage.json` |
+| `asking.json` | When Pitboard last asked Anthropic or OpenAI about each account, and any wait before it asks again | Reading usage |
+| `sessions.json` | What each Claude Code session last passed the status line. A session unseen for 7 days is dropped. | The status line |
+| `backups/` | Claude Code's config as it was before Pitboard rewrote it, named `claude.json.<seconds since 1970>`. The 10 newest stay. | A Claude Code switch, and `pitboard use` of the account in use where the config names another |
+| `audit.log`, `audit.log.1` | The activity log that [`pitboard log`](/reference/maintenance-commands#log) prints, and the one before it | Every change, renewal and automatic switch, and a read that finds a sign-in outside Pitboard |
+| `app.json` | The app's preferences, listed in [The app](/reference/files#the-app) | The app |
+| `told.json` | Each run-out the app has notified you of, by account and limit, with its reset | The app |
 
-Only files in `vault/` and `signin/` can hold a login. To delete the directory, see [Remove Pitboard](/install/remove#delete-parked-logins-and-pitboard%E2%80%99s-files).
+Only `vault/` and `signin/` can hold a login. `backups/` holds your email address, account ids and the path of each project Claude Code has opened.
+
+Pitboard refuses a directory that a sync client copies to other machines, with `state_on_synced_drive`. It reads the path with links resolved:
+
+| Where in the path | Refused |
+| --- | --- |
+| Anywhere as written, or as a whole folder name in any case | `Dropbox`, `Google Drive`, `OneDrive`, `com~apple~CloudDocs`, `Sync` |
+| A folder named like these, in any case | `OneDrive - <organisation>`, `OneDrive-<kind>`, `Dropbox (<team>)`, `GoogleDrive-<account>` |
+| Two adjacent folders, in any case | `Library/CloudStorage`, `Library/Mobile Documents` |
+
+Your home's own folders count, so `/home/sync/.pitboard` is refused.
 
 ## Parked logins
 
-On macOS, each parked login is an item in your default keychain, named `pitboard-park-<account id>-<time>`. Its keychain account is the one Claude Code's item uses, usually your user name from `USER`.
+On macOS, each parked login is an item in your default keychain, named `pitboard-park-<account id>-<time>`. Its keychain account is the one Claude Code's own item uses, from `USER`.
 
-`<account id>` is the id Pitboard keeps for the account. For Claude Code, it is the Anthropic account UUID and the organisation UUID joined with `_`, and an account enrolled by Pitboard 0.8.0 or earlier keeps its account UUID alone. For OpenAI's Codex CLI, it is built from the account's ChatGPT ids. `<time>` is when the login was parked or last renewed, in milliseconds since 1 January 1970.
+On Linux, each is a file in `~/.pitboard/vault/`, named `pitboard-park-<account id>-<time>.json`.
 
-On Linux, each parked login is a file in `~/.pitboard/vault/`, named `pitboard-park-<account id>-<time>.json`.
+| Part | What it is |
+| --- | --- |
+| `<account id>` | The id Pitboard gives the account at enrolment, which never changes. Claude Code: the Anthropic account UUID and organisation UUID joined by `_`, or the account UUID alone for an older account. Codex: built from the account's ChatGPT ids. |
+| `<time>` | When the login was parked or last renewed, in milliseconds since 1 January 1970 |
 
-For why parked logins are kept there, see [Security and privacy](/security#where-parked-logins-are-kept).
+[Where parked logins are kept](/security#where-parked-logins-are-kept) says who can read them.
 
-## Claude Code and Codex files
+## Claude Code files
+
+Each place was read in Claude Code builds 2.1.278 to 2.1.294.
 
 | Path | What Pitboard does with it |
 | --- | --- |
-| `~/.claude.json` | Reads which account it names, which can be another than the one whose login is stored. Pitboard takes a change of it since Anthropic last named the login stored as a sign that something signed in, never as the account in use. After a Claude Code switch, copies it to `backups/` and writes the incoming account into it. `pitboard use` of the account in use does the same where it names another account. A `~/.claude/.config.json`, where one exists, is used instead. |
-| Keychain item `Claude Code-credentials` | macOS: the Claude Code login in use. A switch reads and replaces it. With `CLAUDE_CONFIG_DIR` set, the name ends in `-` and 8 hex characters from a hash of the directory's path. |
-| `~/.claude/.credentials.json` | Linux: the Claude Code login in use. macOS: Claude Code's fallback when a keychain write fails for good, which Pitboard reads after the keychain item. A locked keychain whose item Claude Code has seen does not count, from Claude Code 2.1.281. Where the keychain holds a login too, only [`pitboard stow`](/reference/account-commands#stow) writes or deletes the file: it writes back a login it renewed, and deletes the file once its login is kept. While it is there, whatever it holds, `doctor`, each change and each read but `status --offline` warn. See [Claude Code over SSH uses another account](/troubleshooting#claude-code-over-ssh-uses-another-account). |
-| `~/.claude/.storage-write.lock` | The lock Claude Code takes around each write of its login. Pitboard takes it during a switch, and while `pitboard stow` writes a renewed login back to `.credentials.json` or deletes the file. |
-| `~/.claude/.oauth_refresh.lock` and `~/.claude.lock` | The locks Claude Code takes, in that order, around each renewal of its login. `pitboard stow` takes both from its last reading of `.credentials.json` until the file is gone. |
-| `~/.claude/settings.json` | Read for `apiKeyHelper`, and for an `env` block that sets `CLAUDE_CODE_CUSTOM_OAUTH_URL` or a variable that overrides Claude Code's login, listed in [Environment variables](/reference/files#environment-variables). Managed settings are read too: `managed-settings.json` and `managed-settings.d/*.json` in `/Library/Application Support/ClaudeCode` on macOS or `/etc/claude-code` on Linux. A project's settings are not read. |
-| `~/.codex/auth.json` | The Codex login in use. A switch reads and replaces it. |
-| `~/.codex/config.toml` | Read for `cli_auth_credentials_store`, and for `secret_auth_storage` in `[features]`. For the values Pitboard refuses, see [Use Pitboard with Codex](/guides/codex#before-you-enrol-a-codex-account). |
-| `/etc/codex/config.toml`, `/etc/codex/managed_config.toml` and `/etc/codex/requirements.toml` | Read for the same two settings, never written. On macOS, so are the managed preferences `config_toml_base64` and `requirements_toml_base64` of `com.openai.codex`, which a configuration profile sets. For the order Codex reads them in, see [Where Codex reads the setting](/guides/codex#where-codex-reads-the-setting). A project's own `.codex/config.toml`, a profile's `<name>.config.toml` and configuration an enterprise manages are not read. |
+| `~/.claude.json` | Read for the account it names: see [How Pitboard knows whose login it is](/concepts/switching#how-pitboard-knows-whose-login-it-is). A Claude Code switch copies it to `backups/`, then writes the incoming account into it. A `.config.json` in Claude Code's config directory wins over it. |
+| Keychain item `Claude Code-credentials` | macOS: the login in use. A switch reads and replaces it. With `CLAUDE_CONFIG_DIR` or `CLAUDE_SECURESTORAGE_CONFIG_DIR` set, the name ends in `-` and the first 8 hex characters of the SHA-256 of that path as written. |
+| `~/.claude/.credentials.json` | Linux: the login in use. macOS: a [login file behind the keychain](/concepts/switching#open-sessions), read after the keychain item. Pitboard writes it only where the keychain holds no login. Otherwise only [`pitboard stow`](/reference/recovery-commands#stow) changes or deletes it. |
+| `~/.claude/.storage-write.lock` | The lock Claude Code takes around each write of its login. Pitboard takes it whenever it writes the login in use: a switch, a sign-in to the account in use, and `pitboard stow`. |
+| `~/.claude/.oauth_refresh.lock` and `~/.claude.lock` | The locks Claude Code takes, in that order, before it renews its login. Pitboard holds both through every Claude Code switch and `pitboard stow`. |
+| `~/.claude/daemon.lock` | Read by `pitboard doctor` for the daemon Claude Code last started and its version. |
+| `~/.claude/settings.json` | Read for `apiKeyHelper` and for an `env` block that sets a [variable Pitboard checks](/reference/files#variables-that-override-the-login) or `CLAUDE_CODE_CUSTOM_OAUTH_URL`. There, `""`, `"0"` and `"false"` count as unset. A project's settings are not read. |
+| `managed-settings.json` and `managed-settings.d/*.json` | Read as `settings.json` is, in `/Library/Application Support/ClaudeCode` on macOS or `/etc/claude-code` on Linux. |
 
-For how a switch changes these files, see [How switching works](/concepts/switching#what-a-switch-does).
+[What a switch does](/concepts/switching#what-a-switch-does) says how long Pitboard waits for a lock.
+
+## Codex files
+
+Each place was read in Codex 0.160.0.
+
+| Path | What Pitboard does with it |
+| --- | --- |
+| `~/.codex/auth.json` | The login in use. A switch reads and replaces it. |
+| `~/.codex/config.toml` | Read for the settings that choose Codex's login store. Never written. |
+
+Pitboard switches Codex only while `auth.json` is its store: see [Before you enrol a Codex account](/guides/codex#before-you-enrol-a-codex-account). Codex reads `cli_auth_credentials_store`, and `secret_auth_storage` under `[features]`, from these places, each over the one before:
+
+1. Codex's own default, `file`.
+2. `/etc/codex/config.toml`.
+3. `config.toml` in `~/.codex` or `CODEX_HOME`.
+4. `/etc/codex/managed_config.toml`.
+5. On macOS, the managed preference `config_toml_base64` of `com.openai.codex`, which a configuration profile sets.
+
+`/etc/codex/requirements.toml`, then on macOS the managed preference `requirements_toml_base64`, pin the store over all five.
+
+The `Codex login store` line of `pitboard doctor` names the place that chose. Codex does not start while one of them is there and unreadable. Pitboard then refuses with `live_store_unsupported`.
+
+Pitboard reads a `profile = "<name>"` line as choosing the `[profiles.<name>]` table, which never sets the store. It refuses a line that names a profile no table defines.
+
+Pitboard does not read three places Codex also reads:
+
+- A trusted project's `.codex/config.toml`, which can move the login while Codex runs there.
+- A profile's `<name>.config.toml`, read only with `--profile`, which `codex login` refuses.
+- An enterprise's cloud configuration, which `codex login` does not load. Whether a running Codex follows its store is not known.
 
 ## Renewal schedule
 
-`pitboard schedule install`, or turning on **Renew parked logins daily** in **Settings** > **General**, writes these files. `pitboard schedule uninstall`, or turning it off, removes them. So does `pitboard uninstall` when Pitboard's directory is `~/.pitboard`.
+`pitboard schedule install`, or turning on **Renew parked logins daily** in **Settings** > **General**, writes these files. `pitboard schedule uninstall`, or turning it off, removes them. So does `pitboard uninstall` while Pitboard's directory is `~/.pitboard`.
 
 | Item | macOS | Linux |
 | --- | --- | --- |
-| Files | `~/Library/LaunchAgents/com.datlechin.pitboard.renew.plist` | `~/.config/systemd/user/pitboard-renew.service` and `~/.config/systemd/user/pitboard-renew.timer`, even when `XDG_CONFIG_HOME` is set |
-| Name | launchd label `com.datlechin.pitboard.renew` | unit `pitboard-renew.timer` |
-| Program | The `pitboard` that installed it, by the path it was started with, such as Homebrew's link, so an upgrade does not break it. From the app: `Pitboard.app/Contents/Helpers/pitboard` | The `pitboard` that installed it, by the path it was started with, such as Homebrew's link, so an upgrade does not break it |
-| Runs | `<program> renew` | `<program> renew --scheduled`, where a timer installed by an earlier Pitboard runs `<program> renew` |
-| When | Once a day, first a day after it is written: `StartInterval` 86400, `RunAtLoad` false | Once a day: `OnUnitActiveSec=86400`, `OnStartupSec=900` |
-| Environment | `EnvironmentVariables`: `PITBOARD_NO_ARGV` and the [proxy variables](#environment-variables), as they were set where it was installed | One `Environment=` line in the service for each of the same variables |
-| Access | Only you can read or change it: mode 600, since a proxy's address can hold a password | Only you can read or change either file: mode 600 |
+| Files | `~/Library/LaunchAgents/com.datlechin.pitboard.renew.plist` | `pitboard-renew.service` and `pitboard-renew.timer` in `~/.config/systemd/user`, even with `XDG_CONFIG_HOME` set |
+| Runs | `<program> renew` | `<program> renew --scheduled` |
+| When | `StartInterval` 86400 and `RunAtLoad` false: first a day after it is written | `OnUnitActiveSec=86400`, `OnStartupSec=900` and `Persistent=true` |
+| Environment | `EnvironmentVariables` | One `Environment=` line each |
+
+`<program>` is the `pitboard` that installed the job, by the path it was started with, such as Homebrew's link. From the app, it is `Pitboard.app/Contents/Helpers/pitboard`.
+
+The environment holds `PITBOARD_NO_ARGV` and the proxy variables as they were set at install: see [`schedule`](/reference/maintenance-commands#schedule). Each file is mode 600, since a proxy's address can hold a password.
 
 ## The app
 
@@ -85,66 +126,106 @@ The app is `Pitboard.app`, with the bundle identifier `com.usepitboard.Pitboard`
 | `Contents/Helpers/pitboard` | The command line |
 | `Contents/Resources/man/pitboard.1` | The man page |
 | `Contents/Resources/completions/pitboard.bash`, `pitboard.zsh` and `pitboard.fish` | Shell completions |
-| `Contents/PlugIns/PitboardShare.appex` | The [Share extension](/reference/app#share-extension), **Pitboard** in a browser's Share menu |
+| `Contents/PlugIns/PitboardShare.appex` | The [Share extension](/reference/account-windows#share-extension) |
 
-The app stores these keys in `~/Library/Preferences/com.usepitboard.Pitboard.plist`:
+The app keeps these keys in `~/Library/Preferences/com.usepitboard.Pitboard.plist`:
 
 | Key | Holds |
 | --- | --- |
-| `menuBarShows` | **Menu bar shows**: `nameAndUsage`, `usage` or `icon` |
+| `menuBarShows` | [Menu bar shows](/reference/settings#menu-bar-shows): `nameAndUsage`, `usage` or `icon` |
 | `settingsTab` | The Settings tab shown last: `general`, `commandLine` or `updates` |
 | Keys of Sparkle, the app's updater | Its update settings and when it last checked |
 
-macOS keeps **Open Pitboard at login** as a login item, outside this file.
+It keeps these in `app.json` in Pitboard's directory, so they follow `PITBOARD_HOME`:
 
-Earlier versions of the app kept `hasBeenSeen` and `secondAccountDeclined` in this file, and before them `hideSecondAccountNudge`. The app takes what they held into `app.json` the first time it opens a Pitboard directory without one, and removes them from this file once `app.json` is there.
+| Key | Holds |
+| --- | --- |
+| `second_account_declined` | The tools, `claude` or `codex`, whose second-account tip you dismissed with **Not Now** |
+| `has_been_seen` | Whether the app has opened its window at first launch |
+| `auto_switch` | `true` while **Switch Claude Code automatically** is on. Left out while it is off. |
+| `auto_switch_at` | The share it switches at, a whole percentage. 95 while left out. A value outside 50 to 99 reads as the nearer end. |
 
-Earlier versions also kept the [account windows'](#account-windows) records here, as `webStores` and `windowPages`. The app takes what they held into `windows.json` the first time it opens without one, and removes them from this file once `windows.json` is there.
+macOS keeps **Open Pitboard at login** as a login item.
 
-The app's files can also be in `~/Library/Application Support`, `~/Library/Caches`, `~/Library/HTTPStorages` and `~/Library/Saved Application State`, named after `com.usepitboard.Pitboard`. In `Saved Application State`, macOS keeps the windows that were open, to restore them. To remove these files, see [Remove Pitboard](/install/remove#remove-pitboard-itself).
+The app's other files are in `~/Library/Application Support`, `~/Library/Caches`, `~/Library/HTTPStorages` and `~/Library/Saved Application State`, each named after `com.usepitboard.Pitboard`.
 
-### Account windows
+## Account windows
 
-The [account windows](/reference/app#account-windows) and the Share extension keep their files in these places:
+[Account windows](/guides/account-windows) keep their data and records under your own `~/Library`, whatever `HOME` says. [Where account windows keep their data](/security#where-account-windows-keep-their-data) has the rules.
 
 | Path | What it is |
 | --- | --- |
-| `~/Library/WebKit/com.usepitboard.Pitboard/WebsiteDataStore/<id>` | One account window's website data: the site's cookies, the sign-in among them, its storage and its caches. WebKit writes it, and a sign-in window shares its account's folder. Pitboard never reads, copies or changes what is in it. |
-| `~/Library/Application Support/com.usepitboard.Pitboard/windows.json` | The windows' records: the data folders the app made, listed under the path of the Pitboard directory it made them for, and the page each window was last on. The app deletes only these folders. Only a site's own pages are kept, never its sign-in pages. Removing a window's data or forgetting its account takes its page away. Readable only by you. |
+| `~/Library/WebKit/com.usepitboard.Pitboard/WebsiteDataStore/<id>` | One account window's website data, sign-in included |
+| `~/Library/Application Support/com.usepitboard.Pitboard/windows.json` | The windows' records: the data folders the app made, by Pitboard directory, and the page each window was last on |
 | `~/Library/Containers/com.usepitboard.Pitboard.share` and `~/Library/Application Scripts/com.usepitboard.Pitboard.share` | Folders macOS makes for the sandboxed Share extension. Pitboard writes nothing there. |
-| `~/Downloads` | Where account windows save downloads. A name already taken gets a number, as in `report 2.pdf`. |
+| `~/Downloads` | Where account windows save [downloads](/reference/account-windows#downloads) |
 
-`<id>` is a version 5 UUID made from `claude:` or `codex:` and the account's id, so the folder's name does not show the id. A renamed account keeps its folder, and with it the window's sign-in.
-
-WebKit keeps the windows' folders under your own `~/Library`, whatever `HOME` says. So the app records in `windows.json`, beside them, the folders it made for its Pitboard directory, `~/.pitboard` or `PITBOARD_HOME`. It deletes only those, and a copy run with another `HOME` or `PITBOARD_HOME` leaves them alone. If `windows.json` is there but the app cannot read it, or cannot read records in it, the app deletes no folder. It never writes over that file. Each window then opens at its site's home with the sign-in note at each launch, and keeps its data.
-
-The app deletes a folder once a successful read of the accounts no longer lists its account. That happens after you forget the account, in the app or with `pitboard forget`. A folder WebKit still holds is tried a few more times, then again at the next read.
-
-A folder that another Pitboard directory also recorded is kept, and only the record of the directory the app reads is removed. Both record it when the same account's window has opened from each. If that other directory no longer exists, the app deletes the folder.
-
-**Remove Website Data** in the **File** menu removes the data in a folder and keeps the folder.
+`<id>` is a version 5 UUID of `claude:` or `codex:` and the account's id.
 
 ## Environment variables
 
-Opened from Finder, the app does not see your shell's variables, so the defaults apply. Daily renewal runs with the scheduler's environment, not your shell's.
+The app reads the environment macOS starts it with, not your shell's. `launchctl setenv` adds to it. Daily renewal gets launchd's or systemd's, plus what [`schedule`](/reference/maintenance-commands#schedule) gives it.
 
-Pitboard refuses an empty `HOME`, `PITBOARD_HOME` or `CLAUDE_CONFIG_DIR`, and a path that does not start at the root in any of them or in `CLAUDE_SECURESTORAGE_CONFIG_DIR` or `CODEX_HOME`, with the error `home_not_absolute`. The folder such a path names depends on where each program runs.
+A variable that names a folder must hold a full path: [`home_not_absolute`](/reference/errors#the-pitboard-directory) lists which may be empty.
 
 | Variable | Read by | Effect |
 | --- | --- | --- |
-| `HOME` | Both | Your home directory, the `~` in every path here. |
-| `PITBOARD_HOME` | Both | Pitboard's directory, in place of `~/.pitboard`. Daily renewal always renews `~/.pitboard`, even when its job is given this variable, and Pitboard refuses to turn it on while this names another directory. |
-| `PITBOARD_NO_ARGV` | Both | On macOS, when it is `1`, Pitboard refuses to write a large login on `security`'s argument line, and does not renew a parked login it could not write back. A renewal schedule installed while it is set keeps it. See [Large logins on macOS](/security#large-logins-on-macos). |
-| `PITBOARD_API_BASE` | Command line | For Pitboard's tests. Sends the requests meant for Anthropic and OpenAI to this URL, if it is an `http` URL whose host is a loopback IP address, such as `http://127.0.0.1:8080`. |
-| `CLAUDE_CONFIG_DIR` | Both | Claude Code's config directory, in place of `~/.claude`. The config file becomes `$CLAUDE_CONFIG_DIR/.claude.json`, and the keychain item's name gets a suffix. Set but empty, Claude Code keeps its config directory in whatever folder it runs in, so Pitboard refuses it. |
-| `CLAUDE_SECURESTORAGE_CONFIG_DIR` | Both | The directory that picks Claude Code's keychain item, `.credentials.json` and lock, in place of the config directory. Set but empty, it picks `~/.claude` and `Claude Code-credentials`. |
-| `USER` | Both | macOS: the keychain account of Claude Code's item and of parked logins. Unset or empty, your login name is used. A name with characters other than letters, digits, `.`, `_` and `-` becomes `claude-code-user`. |
-| `CLAUDE_CODE_CUSTOM_OAUTH_URL` | Command line | Not empty: Pitboard refuses every change to a Claude Code account, `abandon` of a Claude Code switch, `repair` and `uninstall`, with the error `custom_oauth_endpoint`. Claude Code then keeps its login under a name Pitboard does not read. Automatic switching holds back and says why. The command line and the app also read it from an `env` block in Claude Code's settings. |
-| `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `CLAUDE_CODE_OAUTH_TOKEN`, `CLAUDE_CODE_USE_BEDROCK`, `CLAUDE_CODE_USE_VERTEX`, `CLAUDE_CODE_USE_FOUNDRY`, `CLAUDE_CODE_USE_GATEWAY`, `CLAUDE_CODE_USE_ANTHROPIC_AWS`, `CLAUDE_CODE_USE_ANTHROPIC_GOOGLE_CLOUD` | Command line | Any of these not empty: Claude Code uses something other than the login Pitboard switches. Changes to Claude Code accounts warn with `auth_overridden`, and `pitboard doctor` warns. Automatic switching holds back and says why. The command line and the app also read these, and `apiKeyHelper`, from Claude Code's settings. |
+| `HOME` | Both | Your home, the `~` in every path here. Unset, your account's home. |
+| `PITBOARD_HOME` | Both | Pitboard's directory, in place of `~/.pitboard`. Daily renewal renews `~/.pitboard` whatever this says. |
+| `PITBOARD_NO_ARGV` | Both | `1`: on macOS, Pitboard never writes a login on `security`'s argument line. See [Large logins on macOS](/security#large-logins-on-macos). |
+| `PITBOARD_API_BASE` | Both | For Pitboard's tests. An `http` URL on a loopback IP address gets Pitboard's requests. |
+| `PITBOARD_CLAUDE`, `PITBOARD_CODEX` | Both | The `claude` or `codex` program to sign in with, in place of the one Pitboard finds. Empty counts as unset. |
+| `CLAUDE_CONFIG_DIR` | Both | Claude Code's config directory, in place of `~/.claude`. The config file, `.credentials.json`, the locks and `settings.json` follow it, and the keychain item's name gains a suffix. |
+| `CLAUDE_SECURESTORAGE_CONFIG_DIR` | Both | The directory that holds `.credentials.json` and the locks and picks the keychain item's suffix, in place of the config directory. Set but empty: `~/.claude` and `Claude Code-credentials`. |
+| `USER` | Both | macOS: the keychain account of Claude Code's item and of parked logins. Unset or empty, your login name. With a character other than letters, digits, `.`, `_` and `-`, `claude-code-user`. |
+| `CLAUDE_CODE_CUSTOM_OAUTH_URL` | Both | Not empty: Pitboard does not act on Claude Code. See [Custom OAuth endpoint](/reference/files#custom-oauth-endpoint). |
+| `ANTHROPIC_API_KEY` and eight more | Both | Not empty: Claude Code ignores the login Pitboard switches. See [Variables that override the login](/reference/files#variables-that-override-the-login). |
+| `CLAUDE_CODE_HOVER_REST` | Both | `1` or `true`: `pitboard doctor`'s `storage v5` check reads as on. Measured in 2.1.278, the login stays in the keychain. |
 | `CODEX_HOME` | Both | Codex's directory, in place of `~/.codex`. Empty counts as unset. |
-| `SUDO_UID` | Both | Not empty, as `sudo` sets it: Pitboard runs with `sudo`, so it refuses every command that changes something, with the error `elevated`. See [Pitboard changes nothing as root](/troubleshooting#pitboard-changes-nothing-as-root). |
-| `PATH` | Command line | Where the command line looks for `claude` and `codex`, which it runs to sign in. Only absolute directories are searched. |
-| `NO_COLOR` | Command line | Not empty: no colour in any output. `pitboard statusline` also drops its colour when `NO_COLOR` is set but empty. |
-| `ALL_PROXY`, `HTTPS_PROXY`, `HTTP_PROXY` | Both | The proxy Pitboard's requests to Anthropic and OpenAI go through. Pitboard reads `ALL_PROXY`, `all_proxy`, `HTTPS_PROXY`, `https_proxy`, `HTTP_PROXY`, then `http_proxy`, and takes the first that holds a proxy's address. An address with no scheme is `http://`. Pitboard goes through `http://` and `https://` proxies. It does not go through SOCKS proxies, `socks4://`, `socks4a://`, `socks5://`, `socks5h://` and `socks://`, and sends nothing around one: while the variable Pitboard takes names one, each request to a host `NO_PROXY` does not name fails before anything is sent, saying which variable named it. A renewal schedule installed while these are set keeps them, as written, even after you change them. |
-| `NO_PROXY` | Both | The hosts Pitboard reaches without the proxy, separated by commas and compared without regard to case. Pitboard does not look up the proxy's own name for them, so they are reached where that name is not found, such as off a company network. While a SOCKS proxy is named, Pitboard still reaches these hosts directly, and does not follow a redirect from one. `*` is every host. An entry starting with `*` is every host ending with what follows the `*`, and one starting with `.` every host ending with the whole entry. So `*.example.com` and `.example.com` are the hosts under `example.com`, and `*example.com` is also `badexample.com`. An entry ending with `*` is every host starting with what comes before it, and one ending with `.` every host starting with the whole entry, so `10.` is every address starting `10.`. Any other entry is that host alone. A space is part of the entry. When `NO_PROXY` is unset, Pitboard reads `no_proxy`. A renewal schedule installed while either is set keeps it. |
-| `PITBOARD_CLAUDE`, `PITBOARD_CODEX` | App | The path of the `claude` or `codex` program the app runs to sign in, in place of the one it finds. |
+| `SUDO_UID` | Both | Not empty, as `sudo` sets it: Pitboard refuses every change with `elevated`. See [Pitboard changes nothing as root](/troubleshooting#pitboard-changes-nothing-as-root). |
+| `PATH` | Both | Where `claude` and `codex` are looked for, in directories named from the root. The app asks your login shell for its `PATH` instead: see [Pitboard cannot find Claude Code](/troubleshooting#pitboard-cannot-find-claude-code). |
+| `SHELL` | App | The login shell the app asks for its `PATH`. Unset or empty, your account's shell. |
+| `NO_COLOR` | Command line | Not empty: no colour in the output. For the status line, see [`statusline`](/reference/integration-commands#statusline). |
+| `XPC_SERVICE_NAME` | Command line | macOS: set by launchd. `com.datlechin.pitboard.renew` marks a run of daily renewal. |
+| `ALL_PROXY`, `HTTPS_PROXY`, `HTTP_PROXY`, `NO_PROXY`, each also in lower case | Both | The proxy for Pitboard's requests. See [Proxies](/reference/files#proxies). |
+
+### Custom OAuth endpoint
+
+`CLAUDE_CODE_CUSTOM_OAUTH_URL` counts when set in the environment or in an `env` block of Claude Code's settings. As read in Claude Code 2.1.284 and 2.1.289, Claude Code then keeps its login and config under names Pitboard does not read. Pitboard refuses these with `custom_oauth_endpoint`:
+
+- `enroll`, `use`, `forget`, `rename` and `stow` of a Claude Code account, and the same in the app.
+- `repair` and `uninstall`.
+- `abandon` of a Claude Code switch, and every change while one is interrupted.
+
+Changes to Codex accounts go ahead. The automatic switch does not watch Claude Code, and says so: see [When it holds back](/guides/automatic-switching#when-it-holds-back).
+
+### Variables that override the login
+
+As read in Claude Code 2.1.278, each of these makes Claude Code ignore the login Pitboard switches:
+
+`ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `CLAUDE_CODE_OAUTH_TOKEN`, `CLAUDE_CODE_USE_BEDROCK`, `CLAUDE_CODE_USE_VERTEX`, `CLAUDE_CODE_USE_FOUNDRY`, `CLAUDE_CODE_USE_GATEWAY`, `CLAUDE_CODE_USE_ANTHROPIC_AWS`, `CLAUDE_CODE_USE_ANTHROPIC_GOOGLE_CLOUD`.
+
+Pitboard reads them from its environment and from Claude Code's settings, along with `apiKeyHelper`. While any is set, changes to Claude Code accounts go ahead but warn with `auth_overridden`, as does `pitboard doctor`. The automatic switch holds back.
+
+### Proxies
+
+Pitboard's requests go through the proxy these variables name. It does not read the system's proxy settings.
+
+- Pitboard reads `ALL_PROXY`, `all_proxy`, `HTTPS_PROXY`, `https_proxy`, `HTTP_PROXY`, then `http_proxy`, and takes the first that holds a proxy's address.
+- An address with no scheme is `http://`.
+- Pitboard goes through `http://` and `https://` proxies, not SOCKS ones: `socks://`, `socks4://`, `socks4a://`, `socks5://` and `socks5h://`.
+- While a SOCKS proxy is named, each request to a host outside `NO_PROXY` fails before anything is sent, naming the variable.
+- Pitboard then follows no redirect.
+
+`NO_PROXY` lists the hosts Pitboard reaches directly, separated by commas. Pitboard reads `no_proxy` only while `NO_PROXY` is unset. Entries ignore case, and a space is part of an entry.
+
+| Entry | Hosts it names |
+| --- | --- |
+| `*` | Every host |
+| `*example.com` | Every host ending with `example.com`, `badexample.com` included |
+| `.example.com` | Every host ending with `.example.com` |
+| `api*` | Every host starting with `api` |
+| `10.` | Every host starting with `10.` |
+| Anything else | That host alone |
+
+Pitboard reaches these hosts without looking up the proxy's name, which need not resolve.

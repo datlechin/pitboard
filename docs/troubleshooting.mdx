@@ -1,161 +1,146 @@
 ---
 title: "Troubleshooting"
-description: "Find the problem you see, what causes it and how to fix it, starting with `pitboard doctor`."
+description: "Find the symptom you see, its cause and its fix, starting with `pitboard doctor`."
 ---
-
-Start with `pitboard doctor`. For an interrupted switch, lost parked logins or a directory from another computer, see [Recover after a crash, a restore or a move](/troubleshooting/recovery). For other messages, see [Error and warning codes](/reference/errors).
 
 ## Check first
 
-`pitboard doctor` checks what Pitboard relies on and marks each check `✓` (holds), `!` (worth a look) or `✗` (broken). Its last line is one of these:
-
-```text
-Everything Pitboard checks is in order.
-2 things are worth looking at.
-1 broken: do not switch accounts until fixed.
+```sh
+pitboard doctor
 ```
 
-`pitboard log` lists Pitboard's last 20 changes and how each ended.
+Each check is marked `✓` (holds), `!` (worth a look) or `✗` (broken). Do not switch accounts while any check shows `✗`. [`doctor`](/reference/maintenance-commands#doctor) lists every check.
 
-In the app, click Pitboard's item in the menu bar, then choose **Open Pitboard**. The window's **This Mac** pane makes the same checks and heads them with the same line, and **Activity** shows the log.
+`pitboard log` lists the last 20 changes and how each ended; `-n 50` lists 50.
 
-For every check, see [Maintenance commands](/reference/maintenance-commands#doctor).
+In the app, choose **Open Pitboard** from Pitboard's menu. The **This Mac** pane makes the same checks, and **Activity** shows the log.
+
+Other pages cover:
+
+- An interrupted switch, lost parked logins or a directory from another computer: [Recover after a crash, a restore or a move](/troubleshooting/recovery).
+- An account window: [Fix problems in account windows](/troubleshooting/account-windows).
+- Any other message: [Error and warning codes](/reference/errors).
 
 ## A parked login has expired
 
-`pitboard status` shows `login expired` beside a Claude Code account, and Pitboard's menu shows **Needs signing in again**. Pitboard renews [parked logins](/concepts/switching#parked-logins) only when it runs, so a Claude Code one left for weeks expires.
+`pitboard status` shows `login expired` beside a Claude Code account, and Pitboard's menu shows **Needs signing in again**. Pitboard renews [parked logins](/concepts/switching#parked-logins) only when it runs.
 
-To fix it, see [Sign in to an account again](/guides/sign-in-again). To prevent it, see [Keep parked logins alive](/guides/renewal).
+- To fix it, [sign in to the account again](/guides/sign-in-again).
+- To prevent it, [turn on daily renewal](/guides/renewal#turn-on-daily-renewal).
 
 ## An account reads `login replaced outside Pitboard`
 
-`pitboard status` shows `login replaced outside Pitboard · pitboard enroll work --sign-in` beside `work`, and each read warns with `login_replaced`. The app posts **A login was replaced outside Pitboard**.
+Every read also warns with `login_replaced`, and the app posts **A login was replaced outside Pitboard** once. `pitboard log` records it with the verb `in-use`.
 
-A sign-in outside Pitboard, such as `/login` in Claude Code or `codex login`, wrote another login over the one `work` had in use. Pitboard parks the login in use only when it switches away from it, so it held no copy of that one, and nothing brings it back. The warning names whose login the tool has stored in its place. `pitboard log` records when Pitboard found it, with the verb `in-use`.
+A sign-in outside Pitboard, such as `/login` in Claude Code or `codex login`, wrote over the only login of the account in use. Pitboard held no copy, so that login is gone.
 
-To use `work` again, sign in to it: see [Sign in to an account again](/guides/sign-in-again). The warning stops once you do, or once you forget `work`. **Add Account** in the app and `pitboard enroll <label> --sign-in` sign in to another account without touching the login in use.
+[Sign in to the account again](/guides/sign-in-again), or [forget it](/guides/accounts#forget-an-account). Either stops the warning.
+
+To add an account without touching the login in use, click **Add Account** in the app or run `pitboard enroll personal --sign-in`.
 
 ## Claude Code shows another account than Pitboard
 
-`/status` in Claude Code names one account, and Pitboard shows another in use. `pitboard status` warns with `config_names_another`, or with `in_use_unconfirmed` where it could not ask Anthropic, and `pitboard doctor` warns on its `in use` line.
+`/status` in Claude Code shows the account its config names. [How Pitboard knows whose login it is](/concepts/switching#how-pitboard-knows-whose-login-it-is) says what writes it.
 
-`/status` shows the account Claude Code's config names. As read in Claude Code 2.1.294, a sign-in writes that account. A switch drops the time Claude Code last fetched its profile, so the first Claude Code process to start after it writes the account of the login it started with. Where that is another login, such as one over SSH that signs in with `~/.claude/.credentials.json`, the config names another account. The account Pitboard shows is the one Anthropic named for the login Claude Code has stored, which every new session uses.
-
-With `in_use_unconfirmed`, Pitboard has not asked Anthropic since the config changed, and the change may be a sign-in. Run `pitboard status` to ask. If a sign-in replaced the only login of the account in use, that account then reads `login replaced outside Pitboard`, as [An account reads `login replaced outside Pitboard`](#an-account-reads-login-replaced-outside-pitboard) says.
-
-With `config_names_another`, the login stored is still the one Pitboard shows. `/usage` and every request use the login a session holds, whatever the config names. To have `/status` name the account in use, run `pitboard use` with it, or click **Update Claude Code's Config** on the app's notice. It writes that account into the config and moves no login. A Claude Code process that starts on another login, such as one over SSH, can write its own account there again.
-
-## Pitboard cannot confirm which account is signed in
-
-If the message says `Pitboard could not confirm`, check the connection and run the command again.
-
-If it also says `Pitboard does not use SOCKS proxies yet, and ALL_PROXY names one`, the variable it names holds a SOCKS proxy's address. Pitboard does not go through SOCKS proxies, and sends nothing around one. Set that variable to an HTTP proxy's address, or unset it, then run the command again. `pitboard doctor` names the proxy on its `network` line.
-
-If it says `session has expired`, run the program it names once, then run the command again.
-
-## Claude Code still shows the previous account
-
-An open Claude Code session follows a switch within about 33 seconds. If not, the switch may have warned why:
-
-```text
-warning: ANTHROPIC_API_KEY in the environment is set, so Claude Code signs in with it and not with the login Pitboard moved. Unset it for the switch to take effect.
-```
-
-Unset or remove what it names, then restart Claude Code.
-
-If the warning says Claude Code's config could not be updated, the switch worked, but the old name may show. Run `pitboard use` with the account switched to once the warning's cause is fixed: it writes that account into the config.
-
-A session started over SSH, or one where the keychain is locked, does not follow a switch. See [Claude Code over SSH uses another account](#claude-code-over-ssh-uses-another-account).
-
-If the switch said that open sessions keep their account until their login is next renewed, `~/.claude/.credentials.json` is behind the keychain. Each session follows when it next renews its login, or when you start it again. To have sessions follow within 33 seconds again, put the file away with `pitboard stow`, as [Claude Code over SSH uses another account](#claude-code-over-ssh-uses-another-account) says.
-
-If `/status` names the account you switched to and `/usage` shows the previous account's limits, see [`/usage` shows the previous account after a switch](#/usage-shows-the-previous-account-after-a-switch).
-
-## `/usage` shows the previous account after a switch
-
-After a switch, `/status` in an open Claude Code session names the account you switched to, and `/usage` shows the limits of the account you left.
-
-The two read different things. As read in Claude Code 2.1.294, `/status` shows the account Claude Code's config names, and a session reads the config again within about a second. The switch writes the account it puts in use there. `/usage` shows the session's last usage reading, then asks Anthropic with the login the session holds.
-
-A session holds the previous login until it follows the switch: within about 33 seconds, or, while `~/.claude/.credentials.json` is behind the keychain, when it next renews its login. Until then its requests go with the previous account too, whatever `/status` says. `pitboard use` with the account you switched to changes nothing here: the config already names it. Start the session again to have it take the login in use at once.
-
-## A running codex still uses the old account
-
-A running `codex` keeps its account until you restart it. To do that without losing a login, see [Switch accounts](/guides/switch#what-happens-to-open-sessions).
-
-## Pitboard refuses Codex's login store
-
-Pitboard switches OpenAI's Codex CLI only when Codex keeps its login in `auth.json` and signs in with ChatGPT; see [Use Pitboard with Codex](/guides/codex#before-you-enrol-a-codex-account).
-
-## Usage shows old numbers
-
-Old numbers say when they were measured, as in `measured 14:02, 1m ago`, and may give a reason. For Codex, read OpenAI for Anthropic:
-
-| Reason | Cause and fix |
-| --- | --- |
-| No reason | Pitboard asked moments ago. For an account with a five-hour limit, it does not ask again for 3 minutes. To ask anyway, run `pitboard status --fresh` or choose **Refresh** in Pitboard's menu. |
-| `Anthropic is rate limiting usage checks` | Anthropic asked for fewer requests. Pitboard waits, then asks again. `--fresh` and **Refresh** wait too. |
-| `Anthropic could not be reached` | Check the connection. Pitboard waits, then asks again. |
-| `Anthropic answered with an error; try again later` | Anthropic returned an error. Pitboard waits, then asks again. |
-
-For why Pitboard waits, see [How usage is read](/concepts/usage#how-often-pitboard-asks).
-
-## macOS says the keychain is locked
-
-Where macOS cannot show a password prompt, as over SSH, a locked keychain stops Pitboard with the error `credential_store_locked`:
-
-```text
-the keychain is locked and cannot ask to be unlocked from here; unlock it with `security unlock-keychain`, or run Pitboard from a desktop session
-```
-
-Do what the message says. If a switch was stopped, run it again: Pitboard first finishes or undoes it.
-
-`pitboard doctor` fails its `credential` check once and marks each parked login `not read: the keychain is locked`. Nothing is wrong with those logins, so do not sign in to them again.
-
-As read in Claude Code 2.1.294, a session keeps the login it last read while the keychain is locked, and follows no switch. One started then signs in with `.credentials.json`, or is signed out.
+| Symptom | Cause | Fix |
+| --- | --- | --- |
+| `config_names_another` | A sign-in, or a session started on another login, wrote its account into the config. | Run `pitboard use` with the account in use, or click **Update Claude Code's Config**. Neither moves a login. |
+| `in_use_unconfirmed` | A sign-in may have replaced the login since Pitboard last asked Anthropic. | Run `pitboard status` while Anthropic can be reached. |
+| After a switch, a session keeps the old account, or `/usage` shows its limits | Open sessions follow [within about 33 seconds](/concepts/switching#open-sessions). | Wait, or restart the session. |
+| `auth_overridden` | What the warning names, such as `ANTHROPIC_API_KEY`, signs Claude Code in another way. | Unset it, then restart Claude Code. |
+| `config_write_failed` | The switch worked, but the config still names the old account. | Fix the cause the warning names, then run `pitboard use` with the account in use. |
+| Sessions keep their account `until their login is next renewed` | A login file sits behind the keychain. | See [Claude Code over SSH uses another account](#claude-code-over-ssh-uses-another-account). |
 
 ## Claude Code over SSH uses another account
 
-A Claude Code session started over SSH can use another account than the one Pitboard shows, and stay on it after every switch. `pitboard doctor` warns with `fallback login`, and each `pitboard status` without `--offline`, each read in the app and each change warns with `fallback_login`.
+On macOS, a session started over SSH can stay on another account than Pitboard shows, through every switch. `pitboard doctor` warns on its `fallback login` line; `pitboard status` and each change warn with `fallback_login`.
 
-The cause is a `/login` run where the keychain was locked. As read in Claude Code 2.1.294, it writes the login to `~/.claude/.credentials.json` and leaves the keychain's in place. Claude Code deletes that file only when it writes the keychain while the keychain is empty, so the file outlives every switch. A session that cannot read the keychain signs in with the file.
+As read in Claude Code 2.1.294, `/login` with the keychain locked, as over SSH, writes the login to `~/.claude/.credentials.json`. No switch removes that file. A session that cannot read the keychain signs in with it.
 
-While the file is there, sessions that read the keychain also stop following a switch within 33 seconds. Each keeps its account until its login is next renewed, or until it is started again. A file with no login in it, such as `{}`, does the same, and `pitboard doctor` says `no login in it`. So does a file Pitboard cannot read, and `pitboard doctor` says why.
+Any file there, even `{}`, also keeps [open sessions](/concepts/switching#open-sessions) on their account until their next renewal.
 
-To have one login everywhere:
+1. In a desktop terminal, where the keychain is unlocked, run `pitboard stow`. Or click **Put Away** on the app's notice **A login file is left behind the keychain**.
+2. Before you start Claude Code over SSH, run `security unlock-keychain ~/Library/Keychains/login.keychain-db`. Or start it from a desktop terminal.
 
-<Steps>
-  <Step title="Put the file away">
-    In a terminal where the keychain is unlocked, such as one in your desktop session, run `pitboard stow`. Or in the app click **Put Away** on the notice **A login file is left behind the keychain**. Pitboard says whose login the file holds and asks first. It keeps that login for its account where it holds none it can switch to, then deletes the file. A session that was signing in with the file is signed out. Open sessions that read the keychain follow the next switch within 33 seconds. See [`stow`](/reference/account-commands#stow).
-  </Step>
-  <Step title="Reach the keychain">
-    Run `security unlock-keychain ~/Library/Keychains/login.keychain-db` in the same session, or start the session from a desktop terminal. It then uses the account Pitboard switched to.
-  </Step>
-</Steps>
+`pitboard stow` asks first. It parks the file's login if that account has no parked login, then deletes the file and its other keys, such as `mcpOAuth`. A session signed in with the file is signed out.
 
-Where the file holds a login of an account Pitboard has not enrolled, `stow` names that account by its email and organisation, and deletes nothing. Enrol it with `pitboard enroll <label> --sign-in`, then run `pitboard stow` again. A file Pitboard cannot read it cannot put away either: make it readable to you, or delete it with `rm`, which takes whatever it holds with it.
+- A login of an account you have not enrolled: `pitboard stow` deletes nothing. Enrol it with `pitboard enroll work --sign-in`, then stow again.
+- A file Pitboard cannot read: make it readable to you, or delete it, login and all, with `rm ~/.claude/.credentials.json`.
+- Do not run `/login` while the keychain is locked.
 
-Do not run `/login` while the keychain is locked: it leaves the file again.
+[`stow`](/reference/recovery-commands#stow) lists every outcome.
+
+## macOS says the keychain is locked
+
+Where macOS cannot ask for your password, as over SSH, a locked keychain stops Pitboard with `credential_store_locked`:
+
+```text
+error: the credential store could not be read: the keychain is locked and cannot ask to be unlocked from here; unlock it with `security unlock-keychain`, or run Pitboard from a desktop session
+```
+
+Unlock it, then run the command again.
+
+`pitboard doctor` fails its `credential` check and marks each parked login `not read: the keychain is locked`. Those parked logins need no sign-in.
+
+As read in Claude Code 2.1.294, an open session keeps its login while the keychain is locked, and follows no switch. A session started then signs in with `~/.claude/.credentials.json`, or is signed out without one.
+
+## Pitboard cannot confirm which account is signed in
+
+| The error says | Fix |
+| --- | --- |
+| `Pitboard does not use SOCKS proxies yet, and ALL_PROXY names one` | Set the variable it names to an HTTP proxy, or unset it. [Proxies](/reference/files#proxies) lists the variables. |
+| `session has expired` | Run the program it names once, such as `claude`, then try again. |
+| `could not confirm`, with any other reason | Check the connection, then try again. |
+
+## Codex keeps the old account
+
+Everything that runs Codex keeps its account until it starts again. [What happens to open sessions](/guides/switch#what-happens-to-open-sessions) says how to restart each without losing a login.
+
+If the switch refused Codex's login store, see [Before you enrol a Codex account](/guides/codex#before-you-enrol-a-codex-account).
+
+## Usage shows old numbers
+
+Old numbers carry their age and often a reason, as in `measured 14:02, 3m ago · Anthropic could not be reached`. For Codex, the reason says OpenAI, Codex and `codex`.
+
+| Reason starts | What to do |
+| --- | --- |
+| No reason | Pitboard asked moments ago, and [waits](/concepts/usage#how-often-pitboard-asks) 3 minutes for a five-hour limit. `pitboard status --fresh` or **Refresh** asks anyway. |
+| `read without asking Anthropic` | Run `pitboard status` without `--offline`, and not as root. |
+| `the check did not finish` | Run the command again. |
+| `Anthropic could not be reached` | Check the connection, then run `pitboard status --fresh`. |
+| `Anthropic answered with an error` | Run `pitboard status --fresh` later. |
+| `Anthropic is rate limiting usage checks` | Wait. `--fresh` waits too. |
+| `Anthropic's answer was not understood` | [Report a problem](#report-a-problem). |
+| `Claude Code's session has expired` | Run `claude` once. |
+| `nothing is signed in` | Run `claude` and sign in, or `codex login` for Codex. |
+| `Claude Code's login` | Run `pitboard doctor`. |
+| `its parked login cannot be read` | Run `pitboard doctor`. |
+| `its parked login is no longer accepted` | [Sign in to the account again](/guides/sign-in-again). |
+| `its login was replaced by a sign-in outside Pitboard` | [Sign in to the account again](/guides/sign-in-again). |
 
 ## Pitboard cannot find Claude Code
-
-Without `claude`, a Claude Code sign-in stops like this:
 
 ```text
 error: `claude` is not on this machine, and Pitboard signs in with Claude Code's own sign-in. Install Claude Code, or point Pitboard at it.
 ```
 
-Install Claude Code, then run `claude` once and sign in. If `claude` is installed, add its folder to your `PATH`.
+Install Claude Code. If it is installed, add its folder to your `PATH`, or set `PITBOARD_CLAUDE` to its path. The app sees `PITBOARD_CLAUDE` only when `launchctl setenv` set it.
 
-The app looks for `claude` only when it opens: on your login shell's `PATH`, then in `~/.local/bin`, `/opt/homebrew/bin` and `/usr/local/bin`. After you install Claude Code, quit Pitboard and open it again.
+The app looks for `claude` on your login shell's `PATH`, then in `~/.local/bin`, `/opt/homebrew/bin` and `/usr/local/bin`. It looks when it opens, and again a minute later if the shell took over 5 seconds to answer. After you install Claude Code, quit Pitboard and open it again.
 
 ## Pitboard does not open at login
 
-Pitboard opens at login only when **Open Pitboard at login** is on in **Settings** > **General**. If macOS is waiting for you there, click **Open Login Items Settings** and allow Pitboard.
+Turn on **Open Pitboard at login** in **Settings** > **General**. If macOS is waiting for you to allow it, click **Open Login Items Settings** and allow Pitboard there.
 
 ## Daily renewal stopped working
 
-`pitboard doctor` fails its `renewal schedule` check with `which is not there any more`. The app moved, or the Pitboard the schedule ran was removed.
+`pitboard doctor` flags its `renewal schedule` line:
+
+| The line says | Cause |
+| --- | --- |
+| `which is not there any more` | The Pitboard the schedule runs was moved or removed. |
+| `which is the app itself and not a command line` | The schedule runs the app, which renews nothing. |
+| `does not say which Pitboard it runs` | The schedule's file names no program. |
 
 Turn **Renew parked logins daily** off and on in **Settings** > **General**, or run:
 
@@ -164,131 +149,52 @@ pitboard schedule uninstall
 pitboard schedule install
 ```
 
-### The schedule's proxy differs
+### The schedule uses another proxy
 
-`pitboard doctor` warns with `renewal schedule's proxy` when daily renewal goes through another proxy than the one your shell names, or through none. Daily renewal keeps the proxy it was installed with. From a shell where the proxy variables are as you want them, run:
+`pitboard doctor` warns on its `renewal schedule's proxy` line when the schedule's proxy differs from your shell's. The schedule keeps the proxy variables it was installed with. Run `pitboard schedule install` from a shell where they are right.
 
-```sh
-pitboard schedule install
-```
-
-The app's **This Mac** pane shows the same line without a warning. The app compares with its own proxy variables, which macOS gives it, and those name no proxy unless `launchctl setenv` set one. Turning **Renew parked logins daily** off and on in the app gives daily renewal the app's variables, so it would drop a proxy that a shell gave it.
+In the app, turning **Renew parked logins daily** off and on gives the schedule only the proxy variables `launchctl setenv` set.
 
 ## A file was written by a newer Pitboard
 
-The Pitboard you ran is older than another using the same files. Update it: see [Update Pitboard](/install#update-pitboard).
+`pitboard` stops with `state_from_newer_version` or `state_names_unknown_tool`: the copy you ran is older than the one that wrote its files. [Update Pitboard](/install#update-pitboard) the way you installed it. Until then, a status line that runs the older copy shows `unenrolled`.
 
 ## Pitboard refuses a folder that syncs
 
-Pitboard refuses to keep its files, `~/.pitboard` or `PITBOARD_HOME`, in a folder that syncs to other machines, such as Dropbox or iCloud Drive. Parked logins belong to one machine. Set `PITBOARD_HOME` to a local folder. For the names Pitboard refuses, see [Files and environment variables](/reference/files#the-pitboard-directory).
+Pitboard stops with `state_on_synced_drive` when `~/.pitboard`, or `PITBOARD_HOME`, syncs to other machines, as in Dropbox or iCloud Drive. Two machines taking turns with one parked login end it for both.
+
+Set `PITBOARD_HOME` to a local folder. [The Pitboard directory](/reference/files#the-pitboard-directory) lists the folder names Pitboard refuses.
 
 ## Pitboard changes nothing as root
 
-Run as root or with `sudo`, Pitboard refuses every command that changes something, with the error `elevated`. This includes a container or a WSL distribution whose only user is root. A file Pitboard made as root would belong to root, and a keychain item might too, so your own runs might not read or replace it.
+As root or with `sudo`, Pitboard refuses every change with `elevated`. A container whose only user is root counts too. A file or keychain item made as root would be out of reach of your own runs.
 
-`pitboard status` and the status line still answer, from what Pitboard last measured, and renew and write nothing. `pitboard doctor` fails its `elevated` check. Run Pitboard as yourself, without `sudo`.
+`pitboard status` and the status line still answer from the last measured numbers, and write nothing. `pitboard doctor` fails its `runs as` check. Run Pitboard as yourself.
+
+[Remove files Pitboard made as root](/install/remove#remove-files-pitboard-made-as-root) cleans up after an earlier Pitboard run as root.
 
 ### `SUDO_UID` is set in your own shell
 
-Pitboard takes a run as one with `sudo` when `SUDO_UID` is set and not empty, as `sudo` sets it. A shell started with `sudo -iu` and your own name passes `SUDO_UID` to everything started from it, such as a tmux server or an editor's server. Pitboard run from there refuses, though it runs as you.
+Pitboard takes any run with a non-empty `SUDO_UID` as one under `sudo`. A shell started with `sudo -iu` and your own name passes it on, such as to a tmux server. Pitboard refuses there, though it runs as you.
 
-If `id -un` prints your own name, run the command without `SUDO_UID`:
+If `id -un` prints your own name, run the command without it:
 
 ```sh
 env -u SUDO_UID pitboard use work
 ```
 
-To stop it for good, start the shell, tmux or the editor again without `sudo`.
-
-### Remove what Pitboard made as root
-
-Pitboard 0.7.0 and earlier ran as root and with `sudo`. `pitboard schedule uninstall` and `pitboard uninstall` refuse to remove what it made that way, so remove it by hand from a root shell: as root, or after `sudo -i`.
-
-On Linux, turn off the daily renewal schedule, delete its files, then delete Pitboard's directory:
-
-```sh
-systemctl --user disable --now pitboard-renew.timer
-rm ~/.config/systemd/user/pitboard-renew.service ~/.config/systemd/user/pitboard-renew.timer
-rm -r ~/.pitboard
-```
-
-On macOS:
-
-```sh
-launchctl bootout gui/$(id -u)/com.datlechin.pitboard.renew
-rm ~/Library/LaunchAgents/com.datlechin.pitboard.renew.plist
-rm -r ~/.pitboard
-```
-
-Where no schedule runs, `systemctl` or `launchctl` says so; go on to the next command. If `PITBOARD_HOME` named another directory, delete that one. Deleting the directory deletes the parked logins kept in it, except on macOS, where they are in the keychain, as [Remove Pitboard](/install/remove#delete-parked-logins-and-pitboard%E2%80%99s-files) says.
-
-In a root shell, `~` is root's home. Under `sudo`, Pitboard used the home `sudo` passed on, which can be yours. Pitboard has not measured which home that is, or which keychain `security` wrote to as root. Look in your own as well, writing your home by its path, such as `/Users/me`.
-
-## Account windows
-
-These problems happen in an [account's window](/guides/account-windows), the claude.ai or chatgpt.com window the app opens for an account.
-
-### Google's sign-in is refused
-
-Google does not allow its sign-in pages inside apps, so the window stops them and says so. It does not send them to your browser, where they would sign in your browser instead.
-
-Sign in with the account's email address, as the note at the top of the window says. For the steps on each site, see [Sign in](/guides/account-windows#sign-in).
-
-For the same reason, Gmail, Google Drive and Google Calendar cannot be connected in the window. claude.ai's Google single sign-on does not work there either.
-
-### A passkey does not work
-
-Passkeys do not work in an account's window. macOS gives passkeys to a web page only in an app it lets act as a browser, and Pitboard is not one. On chatgpt.com, sign in with the password or the code chatgpt.com emails you.
-
-### Pitboard is missing from the Share menu
-
-In Safari, the Share menu is the toolbar's **Share** button or **File** > **Share**. In Chrome and Firefox, it is **File** > **Share**. If **Pitboard** is not listed there, turn it on in System Settings:
-
-- macOS 15 and later: **System Settings** > **General** > **Login Items & Extensions** > **Sharing**.
-- macOS 14: **System Settings** > **Privacy & Security** > **Extensions** > **Sharing**.
-
-Whether other browsers list Pitboard is not known. If your browser has no Share menu, open the account's window and go to the page there.
-
-### An account's window does not load its page
-
-When a page does not load, the window shows **Couldn't Load the Page** with the reason, such as a lost connection. Fix what the reason names, then click **Try Again**.
-
-A page that stops working is loaded again. If it stops again within 60 seconds, the window shows **Couldn't Load the Page** and **The page stopped working.**
-
-The window sends WebKit's own user agent. Whether the sites' checks for automated traffic ever stop it is not known.
-
-### Downloads are not saved
-
-An account's window saves downloads in your Downloads folder. The first time, macOS may ask whether Pitboard can use that folder. If you clicked **Don't Allow**, open **System Settings** > **Privacy & Security** > **Files & Folders** and turn on **Downloads Folder** for Pitboard.
-
-A download that fails shows why in the window's **Downloads** list, which the toolbar's **Downloads** button opens.
-
-### An account's window is signed in as the wrong account
-
-Pitboard cannot see which account a window is signed in to, because it never reads what the window keeps. The window's title is the label of the account it belongs to, whoever signed in. To start again:
-
-<Steps>
-  <Step title="Remove the window's data">
-    With the window in front, choose **File** > **Remove Website Data**.
-  </Step>
-  <Step title="Confirm">
-    Click **Remove**. The window signs out and starts again at the site's home, with a note that names the email address to sign in as.
-  </Step>
-  <Step title="Sign in">
-    Sign in as that email address. See [Sign in](/guides/account-windows#sign-in).
-  </Step>
-</Steps>
-
-Removing the data does not tell the site, so neither account is signed out anywhere else.
+To stop it for good, start that shell or tmux again without `sudo`.
 
 ## Report a problem
 
 Open a [GitHub issue](https://github.com/datlechin/pitboard/issues/new/choose) with:
 
 - What you ran, what it printed and what you expected.
-- The output of `pitboard --version`, `pitboard doctor --json` and the last lines of `pitboard log`.
+- The output of `pitboard doctor --json`.
+- `pitboard --version`, and `claude --version` or `codex --version`.
 - How you installed Pitboard, and your macOS or Linux version.
+- The last lines of `pitboard log`, if they help. A `reclaim` line can name an account identifier.
 
-`pitboard doctor --json` hides email addresses, account identifiers and your home folder; plain `pitboard doctor` does not.
+`pitboard doctor --json` replaces email addresses and account identifiers with digests, and your home with `~`. Plain `pitboard doctor` does not.
 
-For a security problem, see [Security and privacy](/security#report-a-vulnerability).
+For a security problem, see [Report a vulnerability](/security#report-a-vulnerability).

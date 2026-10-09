@@ -4,106 +4,128 @@ sidebarTitle: "Error codes"
 description: "Error codes, cause codes and warning codes are stable; each is listed with its exit status and what to do."
 ---
 
-Every error and warning Pitboard reports has a stable code. Adding a code is not a breaking change; renaming or removing one is.
+Adding a code is not a breaking change; renaming or removing one is.
 
-The command line prints only the message, after `error:` or `warning:` on standard error. With `--json`, the code is in `error.code` or `warnings[].code`, as [JSON output](/reference/json-output) describes. The app shows the same message under a title that says what failed, such as **Couldn't switch to work** or **Couldn't read usage**.
+The command line prints the message after `error:` or `warning:` on standard error. With `--json`, the code is in `error.code` or `warnings[].code`, as [The envelope](/reference/json-output#the-envelope) shows. The app shows the message under a title that names what failed, such as **Couldn't switch to work**.
 
-For each exit status, see [Exit codes](/reference/commands#exit-codes). In the tables, `<label>` is the account's label, such as `work` or `codex/work`.
+[Exit codes](/reference/commands#exit-codes) says what each exit status means. `label_unusable` appears only in [`pitboard log`](/reference/maintenance-commands#log).
 
 ## Accounts and labels
 
 | Code | Exit | Meaning | What to do |
 | --- | --- | --- | --- |
-| `account_unknown` | 1 | No account is enrolled under that label. The message lists the labels that are. | Check the label. To add the account, run `pitboard enroll <label> --sign-in`. |
-| `label_taken` | 1 | The label already belongs to another account of the same tool. When that account has the same email in another organisation or workspace, the message says so. | Choose a different label. |
-| `already_enrolled` | 1 | The account is already enrolled under another label, which the message names. The same email in another organisation or workspace is another account. | Use that label. To add a different account, run `pitboard enroll <label> --sign-in`. |
-| `label_ambiguous` | 1 | A label without `claude/` or `codex/` in front, such as `work`, names an account in each tool. | Add the tool, as in `claude/work` or `codex/work`. |
-| `provider_unknown` | 1 | A label given to `use` or `forget`, or the first label given to `rename`, starts with a tool Pitboard does not know, such as `codx/work`. | Start the label with `claude/` or `codex/`, or leave the tool out. |
-| `live_account_not_enrolled` | 1 | The account in use is not enrolled, so a switch cannot [park](/concepts/switching#parked-logins) its login. | Enrol it first with `pitboard enroll <label>`, or `pitboard enroll codex/<label>` for OpenAI's Codex CLI. |
+| `account_unknown` | 1 | No account is enrolled under that label. The message lists the labels that are. | Check the label, or add the account with `pitboard enroll <label> --sign-in`. |
+| `label_taken` | 1 | The label belongs to another account of the same tool. | Choose another label. |
+| `already_enrolled` | 1 | The account is enrolled under the label the message names. | Use that label. |
+| `label_ambiguous` | 1 | A label with no tool, such as `work`, names an account of each tool. | Add the tool: `claude/work` or `codex/work`. |
+| `provider_unknown` | 1 | A label for `use`, `forget` or the first of `rename` starts with an unknown tool, such as `codx/work`. | Start it with `claude/` or `codex/`, or leave the tool out. |
+| `live_account_not_enrolled` | 1 | The account in use is not enrolled, so a switch cannot [park](/concepts/switching#parked-logins) its login. | Enrol it with `pitboard enroll <label>`, or `pitboard enroll codex/<label>` for Codex. |
 | `cannot_forget_active_account` | 1 | The account is in use. | Switch to another account, then forget it. |
-| `account_not_in_use` | 1 | You clicked **Update Claude Code's Config** in the app for an account that is no longer in use, as after a switch made since the notice was drawn. Pitboard wrote nothing. | Nothing. A switch writes the account it puts in use into Claude Code's config. If the notice is still there, click its button again. |
-| `usage` | 2 | The command line was wrong, or a label given to `enroll`, or the second label given to `rename`, breaks the [label rules](/reference/commands#labels). | Check the command with `--help`. |
+| `account_not_in_use` | 1 | You clicked **Update Claude Code's Config** for an account no longer in use. Pitboard wrote nothing. | Nothing. A switch writes the config itself. |
+| `usage` | 2 | The command line is wrong. | Check it with `--help`. |
+| `usage` | 2 | A label for `enroll`, or the second label for `rename`, breaks the [label rules](/reference/commands#labels). | Choose a label the rules allow. |
+| `usage` | 2 | The second label for `rename` names the other tool, as in `pitboard rename work codex/job`. | Keep the account's tool. To move it, enrol the account in the other tool. |
 
 ## Parked logins
 
 | Code | Exit | Meaning | What to do |
 | --- | --- | --- | --- |
-| `nothing_parked` | 1 | The account has no parked login: its last one went back into use and the tool has moved on from it, or Anthropic or OpenAI refused it and Pitboard dropped it. | [Sign in to the account again](/guides/sign-in-again) with `pitboard enroll <label> --sign-in`. |
-| `parked_login_expired` | 1 | The parked login has expired. | Sign in to the account again with `pitboard enroll <label> --sign-in`. |
-| `parked_login_refused` | 1 | Anthropic or OpenAI no longer accepts the parked login. Pitboard dropped it and moved nothing. | Sign in to the account again with `pitboard enroll <label> --sign-in`. |
-| `parked_login_belongs_elsewhere` | 1 | The parked login belongs to a different account from the one under that label. Nothing moved. | Run `pitboard doctor`, then `pitboard enroll <label> --sign-in` to replace the login. |
-| `parked_credential_missing` | 1 | The parked login is missing from the keychain, or from `~/.pitboard/vault/` on Linux. | Sign in to the account again with `pitboard enroll <label> --sign-in`. |
-| `parked_credential_corrupt` | 1 | The parked login is not the one Pitboard recorded. | Replace it with `pitboard enroll <label> --sign-in`. |
+| `nothing_parked` | 1 | The account has no parked login. The last one went back into use, and the tool moved on from it. | [Sign in to it again](/guides/sign-in-again) with `pitboard enroll <label> --sign-in`. |
+| `parked_login_expired` | 1 | The parked login has expired. | Run `pitboard enroll <label> --sign-in`. |
+| `parked_login_refused` | 1 | Anthropic or OpenAI no longer accepts the parked login. Pitboard dropped it and moved nothing. | Run `pitboard enroll <label> --sign-in`. |
+| `parked_login_belongs_elsewhere` | 1 | The parked login belongs to another account than the label's. Nothing moved. | Run `pitboard doctor`, then `pitboard enroll <label> --sign-in`. |
+| `parked_credential_missing` | 1 | The parked login is missing from the keychain, or from `~/.pitboard/vault/` on Linux. | Run `pitboard enroll <label> --sign-in`. |
+| `parked_credential_corrupt` | 1 | The parked login is not the one Pitboard recorded. | Run `pitboard enroll <label> --sign-in`. |
 | `park_slot_exhausted` | 1 | Pitboard found no free name to park a login under. | Run `pitboard doctor`. |
 | `renewal_failed` | 1 | Pitboard could not [renew](/guides/renewal) a parked login. | Run `pitboard doctor` if it keeps happening. |
-| `credential_too_large` | 3 | On macOS, the login is too large for `security` to read from standard input, and `PITBOARD_NO_ARGV=1` forbids the argument line. A renewal refused this way asks nothing and keeps the parked login. | Unset `PITBOARD_NO_ARGV`. For Claude Code, signing out of MCP servers you no longer use also makes the login smaller. See [Large logins on macOS](/security#large-logins-on-macos). |
+| `credential_too_large` | 3 | On macOS, the login is too large for `security` to read from standard input, and `PITBOARD_NO_ARGV=1` forbids the argument line. | Unset `PITBOARD_NO_ARGV`. Or, for Claude Code, sign out of MCP servers you no longer use. See [Large logins on macOS](/security#large-logins-on-macos). |
 
 ## Switching
 
 | Code | Exit | Meaning | What to do |
 | --- | --- | --- | --- |
-| `switch_rolled_back` | 1 | Pitboard could not write the login of the account you switched to. The account you switched from is still in use, and nothing was lost. | Fix the reason the message gives, then switch again. |
-| `switch_did_not_hold` | 3 | The login of the account you switched to was written, then removed before the switch finished. For Claude Code, a `/logout` removed it; for Codex, a `codex` session still running from before the switch rewrote `auth.json`. | For Claude Code, both logins are parked: run `claude`, sign in to any enrolled account, then run `pitboard use` again for the account you switched to. For Codex, quit every running `codex`, then run `pitboard` to see what is signed in. Do not run `codex login` or `codex logout` before that, because either revokes the login it finds. |
-| `switch_unverified` | 3 | Pitboard could not read the tool's login back after writing it, so it cannot tell whether the switch took. Nothing was deleted. | For Claude Code on macOS, see [macOS says the keychain is locked](/troubleshooting#macos-says-the-keychain-is-locked). On Linux, make `.credentials.json` in Claude Code's config directory, `~/.claude` by default, readable to you. For Codex, make `auth.json` readable to you. Then switch again: Pitboard finishes or undoes the interrupted switch first. |
-| `switch_corrupted` | 3 | Pitboard could not write the login of the account you switched to, or put back the login it replaced. The account you switched from is still parked. | Sign in to any enrolled account with `claude` or `codex login`, then run `pitboard use` for the account you switched from. |
-| `signed_in_account_changed` | 1 | The account in use changed while Pitboard was switching. Nothing moved. | Try again. |
-| `identity_unverifiable` | 1 | Pitboard could not confirm with Anthropic or OpenAI whose login it was about to move, so it moved nothing. `error.cause` says why; see [Cause codes](/reference/errors#cause-codes). | Check the connection and try again. |
-| `session_expired` | 1 | The tool's login in use has expired, so Pitboard cannot confirm whose it is. | Run `claude` or `codex` once so it refreshes, then try again. |
-| `config_backup_failed` | 0 | Reported only as a warning, so the command exits 0. The Claude Code switch went ahead, or the account was already in use. Pitboard could not back up Claude Code's config, so it left the config as it was. | Check that you can write to `~/.pitboard/backups`, then run `pitboard use` with the account in use. Until then, Claude Code may show another account's name. |
-| `config_write_failed` | 0 | Reported only as a warning, so the command exits 0. The Claude Code switch went ahead, or the account was already in use. Pitboard could not update Claude Code's config. | Run `pitboard use` with the account in use. Until then, Claude Code may show another account's name. |
+| `switch_rolled_back` | 1 | Pitboard could not write the incoming login, so it put the outgoing one back. Nothing was lost. | Fix the reason the message gives, then switch again. |
+| `switch_did_not_hold` | 3 | Claude Code: a `/logout` removed the incoming login before the switch finished. Both logins are parked. | Run `claude`, sign in to any enrolled account, then run `pitboard use` with the account you switched to. |
+| `switch_did_not_hold` | 3 | Codex: a `codex` process started before the switch rewrote `auth.json` during it. The incoming login is still parked. | Quit every `codex`, then run `pitboard`. Run neither `codex login` nor `codex logout` first: each revokes the login it finds. |
+| `switch_unverified` | 3 | Writing the incoming login failed, and Pitboard could not read the login back to see what changed. Nothing was deleted. | Unlock the keychain, or make `.credentials.json` or `auth.json` readable to you. Then run the same `pitboard use` again. |
+| `switch_corrupted` | 3 | Pitboard could not write the incoming login or put the outgoing one back. The outgoing login is still parked. | Sign in to any enrolled account with `claude` or `codex login`, then run `pitboard use` with the account you switched from. |
+| `signed_in_account_changed` | 1 | The account in use changed during the switch. Nothing moved. | Try again. |
+| `identity_unverifiable` | 1 | Pitboard could not confirm with Anthropic or OpenAI whose login it was about to move, so it moved nothing. | Check the connection and try again. See [Pitboard cannot confirm which account is signed in](/troubleshooting#pitboard-cannot-confirm-which-account-is-signed-in). |
+| `session_expired` | 1 | The tool's login in use has expired, so Pitboard cannot identify it. | Run `claude` or `codex` once so it renews its login, then try again. |
 
 ## Signing in
 
 | Code | Exit | Meaning | What to do |
 | --- | --- | --- | --- |
-| `sign_in_incomplete` | 1 | The tool's sign-in stopped before it finished, so nothing was enrolled. | Run `pitboard enroll <label> --sign-in` again. |
-| `sign_in_not_isolated` | 1 | Codex keeps its login in memory only, so a sign-in would write over the login in use. Pitboard refuses it. | See [Before you enrol a Codex account](/guides/codex#before-you-enrol-a-codex-account). |
-| `sign_in_in_progress` | 1 | Another sign-in, started by `pitboard enroll --sign-in` or by the app, is still waiting. | Finish or cancel that one first. |
-| `sign_in_not_installed` | 3 | After you signed in again, Pitboard could not confirm that the new login replaced the one in use. The tool may have no login. | Follow the error message: it says whether the new login was parked and what to run next. |
-| `sign_in_not_kept` | 1 | The new login could not be put in use, so Pitboard did not keep it. The tool keeps the login it has. | Run `pitboard enroll <label> --sign-in` again. |
-| `claude_program_missing`, `codex_program_missing` | 1 | Pitboard signs in through `claude` or `codex`, and cannot find it. | Install the tool, or put the folder that holds it on your `PATH`, the only place the command line looks. For the app, see [Pitboard cannot find Claude Code](/troubleshooting#pitboard-cannot-find-claude-code). |
-| `claude_not_found`, `codex_not_found` | 1 | The sign-in could not start, because `claude` or `codex` was not found on `PATH`. | Install the tool, run it once, then try again. |
+| `sign_in_incomplete` | 1 | The tool's sign-in stopped before it finished. Nothing was enrolled. | Run `pitboard enroll <label> --sign-in` again. |
+| `sign_in_not_isolated` | 1 | Codex keeps its login in memory only, so a sign-in would leave nothing to enrol. | See [Before you enrol a Codex account](/guides/codex#before-you-enrol-a-codex-account). |
+| `sign_in_in_progress` | 1 | Another sign-in, from `pitboard enroll --sign-in` or the app, is still waiting. | Finish or cancel that one first. |
+| `sign_in_not_installed` | 3 | Pitboard could not confirm the new login replaced the one in use, so it parked it. | Run `pitboard`. If nothing is signed in, sign in to any enrolled account with `claude` or `codex login`. Then run `pitboard use <label>`. |
+| `sign_in_not_installed` | 3 | The same, and Pitboard could not park it either. | Sign in to the account with `claude` or `codex login`. |
+| `sign_in_not_kept` | 1 | The new login could not be put in use, so Pitboard did not keep it. The tool keeps its login. | Run `pitboard enroll <label> --sign-in` again. |
+| `claude_program_missing`, `codex_program_missing`, `claude_not_found`, `codex_not_found` | 1 | Pitboard cannot find `claude` or `codex` to sign in with. | Install the tool, put its folder on your `PATH`, or set `PITBOARD_CLAUDE` or `PITBOARD_CODEX` to its full path. For the app, see [Pitboard cannot find Claude Code](/troubleshooting#pitboard-cannot-find-claude-code). |
 
 ## Interrupted switches
 
+`recovery_undetermined` shows wherever a switch was interrupted and the next change cannot finish it.
+
+| Where | How |
+| --- | --- |
+| Every change | An error. The change stops and changes nothing. |
+| `pitboard status` | A warning. |
+| Each read in the app | The notice **An interrupted switch is waiting**, with a **Give Up** button. |
+| `pitboard status --offline` | A warning. |
+| `pitboard doctor` and the app's **This Mac** pane | Listed under `interrupted switch`. |
+
+When only Anthropic can identify the login in use, the last two rows show nothing.
+
 | Code | Exit | Meaning | What to do |
 | --- | --- | --- | --- |
-| `recovery_undetermined` | 1 | An earlier switch was interrupted, and Pitboard cannot yet tell whether it finished. Nothing changed. | Run `claude` or `codex` once, then try again. If it still fails, run `pitboard abandon`, which gives up on the switch and keeps every login. In the app, the notice **An interrupted switch is waiting** has a **Give Up** button that does the same. See [Recover after a crash, a restore or a move](/troubleshooting/recovery#an-interrupted-switch-cannot-be-finished). |
-| `recovery_elsewhere` | 1 | `CLAUDE_CONFIG_DIR` or `CODEX_HOME` has changed since the interrupted switch, so Pitboard reads another folder and cannot tell what that switch did. Nothing changed. | Set the variable back and try again, or run `pitboard abandon`. |
-| `recovery_failed` | 1 | Pitboard could not read or write its record of a switch in progress, `journal.json`. | Check that you can read and write the file the message names. |
-| `recovery_record_corrupt` | 3 | The record of the interrupted switch is damaged. Nothing changed. | Check that `pitboard status` shows the account you expect in use, then delete the file the message names. |
+| `recovery_undetermined` | 1 | An earlier switch was interrupted, and Pitboard cannot yet tell whether it finished. Nothing changed. | Run `claude` or `codex` once, then try again. If it still fails, see [An interrupted switch cannot be finished](/troubleshooting/recovery#an-interrupted-switch-cannot-be-finished). |
+| `recovery_elsewhere` | 1 | `CLAUDE_CONFIG_DIR` or `CODEX_HOME` differs from the interrupted switch's, so Pitboard cannot tell what it did. Nothing changed. | Set the variable back and try again, or run [`pitboard abandon`](/reference/recovery-commands#abandon). |
+| `recovery_failed` | 1 | Pitboard could not read or write `journal.json`, its record of a switch in progress. | Check that you can read and write the file the message names. |
+| `recovery_record_corrupt` | 3 | `journal.json` is damaged. Nothing changed. | Check that `pitboard status` shows the account you expect in use, then delete the file the message names. |
 
 ## The Pitboard directory
 
 | Code | Exit | Meaning | What to do |
 | --- | --- | --- | --- |
-| `home_not_absolute` | 1 | `HOME`, `PITBOARD_HOME` or `CLAUDE_CONFIG_DIR` is empty, or one of them, `CLAUDE_SECURESTORAGE_CONFIG_DIR` or `CODEX_HOME` holds a path that does not start at the root, such as `pitboard`. The folder it names would depend on where each program runs, so Pitboard reads and changes nothing. | Set the variable the message names to a full path, or unset it. |
-| `state_on_synced_drive` | 1 | Pitboard's directory, `~/.pitboard` unless `PITBOARD_HOME` is set, is inside a folder that syncs to other machines, such as Dropbox or iCloud Drive. | Set `PITBOARD_HOME` to a local folder. See [Pitboard refuses a folder that syncs](/troubleshooting#pitboard-refuses-a-folder-that-syncs). |
+| `home_not_absolute` | 1 | A variable naming a folder is empty or relative. Pitboard reads and changes nothing. | Set the variable the message names to a full path, or unset it. |
+| `state_on_synced_drive` | 1 | Pitboard's directory is inside a folder that syncs to other machines, such as Dropbox or iCloud Drive. | Set `PITBOARD_HOME` to a local folder. See [Pitboard refuses a folder that syncs](/troubleshooting#pitboard-refuses-a-folder-that-syncs). |
 | `state_unreadable` | 1 | Pitboard could not read its account list, `state.json`. | Check that you can read the file the message names. |
 | `state_corrupt` | 1 | The account list is not valid. | Delete the file the message names and enrol your accounts again. Their parked logins are lost. |
 | `state_from_newer_version` | 1 | A newer Pitboard wrote the account list. | [Update Pitboard](/install#update-pitboard). |
 | `state_version_unknown` | 1 | The account list is in a format no Pitboard has written. | Delete the file the message names and enrol your accounts again. |
-| `state_names_unknown_tool` | 1 | The account list has an account for a tool this Pitboard does not know, so a newer Pitboard wrote it. | [Update Pitboard](/install#update-pitboard). |
-| `state_wrong_machine` | 1 | The account list was written on another computer, so Pitboard does not use it. Only `pitboard adopt` takes it over. | Run `pitboard adopt`, then sign in to each account again. See [Recover after a crash, a restore or a move](/troubleshooting/recovery#the-pitboard-directory-came-from-another-computer). |
+| `state_names_unknown_tool` | 1 | The account list has an account of a tool this Pitboard does not know. | [Update Pitboard](/install#update-pitboard). |
+| `state_wrong_machine` | 1 | The account list was written on another computer, so Pitboard does not use it. | Run `pitboard adopt`, then sign in to each account again. See [The Pitboard directory came from another computer](/troubleshooting/recovery#the-pitboard-directory-came-from-another-computer). |
 | `state_write_failed` | 1 | Pitboard could not save its account list. | Check that you can write to the file the message names. |
-| `home_unwritable` | 1 | Pitboard could not write to its directory, a lock file in it, or the renewal schedule's files. | Check that you can write to the path the message names. |
+| `home_unwritable` | 1 | Pitboard could not write to its directory, a lock file in it or the renewal schedule's files. | Check that you can write to the path the message names. |
+
+`home_not_absolute` refuses these values:
+
+| Variable | Refused when |
+| --- | --- |
+| `HOME`, `PITBOARD_HOME`, `CLAUDE_CONFIG_DIR` | Empty or relative, such as `pitboard` |
+| `CLAUDE_SECURESTORAGE_CONFIG_DIR`, `CODEX_HOME` | Relative |
 
 ## Claude Code and Codex files
 
 | Code | Exit | Meaning | What to do |
 | --- | --- | --- | --- |
-| `claude_config_missing` | 1 | Claude Code has not run on this machine: its config file does not exist. | Run `claude` once, sign in, then try again. |
+| `claude_config_missing` | 1 | Claude Code has not run on this machine: its config file is missing. | Run `claude` once, sign in, then try again. |
 | `claude_config_unreadable` | 1 | Pitboard could not read Claude Code's config. | Check that you can read the file the message names. |
-| `claude_config_not_json` | 3 | Claude Code's config is not valid JSON, perhaps because Claude Code is writing it. | Wait a few seconds and try again. |
-| `live_credential_absent` | 1 | Nothing is signed in to the tool. | Sign in with `claude`, or with `codex login` for Codex, then try again. |
-| `live_credential_elsewhere` | 3 | Claude Code's config names an account in use, but Pitboard cannot find that account's login. Claude Code may keep logins somewhere Pitboard does not read, so Pitboard does not write one. | Check for a Pitboard update. If there is none, [report a problem](/troubleshooting#report-a-problem) with `pitboard doctor --json`. |
+| `claude_config_not_json` | 3 | Claude Code's config is not valid JSON, perhaps because it is mid-write. | Wait a few seconds and try again. |
+| `live_credential_absent` | 1 | Nothing is signed in to the tool. | Sign in with `claude` or `codex login`, then try again. |
+| `live_credential_elsewhere` | 3 | Claude Code's config names an account in use, and Pitboard cannot find its login where it reads. | Check for a Pitboard update. If there is none, [report a problem](/troubleshooting#report-a-problem) with `pitboard doctor --json`. |
 | `live_credential_shape_unexpected` | 3 | The login in use is not shaped like a Claude Code or Codex login. | Run `pitboard doctor` before you switch again. |
-| `live_store_unsupported` | 3 | Codex keeps its login in memory or in the keychain, or is signed in with an API key. Pitboard switches only a ChatGPT login in `auth.json`. The message names the file or managed preference that chose the store. If a place Codex reads the store from is there and Codex cannot read it, or has a `profile = "<name>"` line that names a profile no `[profiles.<name>]` table defines, the message names that place. | See [Before you enrol a Codex account](/guides/codex#before-you-enrol-a-codex-account). If a requirements file, `managed_config.toml` or a managed preference chose the store, only an administrator can change it. |
-| `custom_oauth_endpoint` | 3 | `CLAUDE_CODE_CUSTOM_OAUTH_URL` is set, in the environment or a Claude Code settings file. Claude Code then keeps its login under a name Pitboard does not read, so Pitboard does not act on Claude Code. | Unset it, and remove it from the `env` block of any Claude Code settings file that sets it. |
-| `left_login_changed` | 1 | [`pitboard stow`](/reference/account-commands#stow) found the file behind the keychain changed since it said what the file held, or gone, as when a session renewed its login meanwhile. It deleted nothing. The message says whether it had renewed the login and written it back to the file, or parked it for its account, first. Where it had renewed the login and the file held another login by then, the message says the renewed login could not be written back and no longer works. | Run `pitboard stow` again, which reads the file afresh and says what it holds. |
-| `left_login_not_enrolled` | 1 | The file behind the keychain holds a login of an account not enrolled here, which the message names by its email and organisation, so `pitboard stow` deleted nothing. The message says whether it had renewed the login and written it back to the file first. | Enrol that account with `pitboard enroll <label> --sign-in`, or with `pitboard enroll <label>` while Claude Code is signed in to it, then run `pitboard stow` again. |
-| `left_login_unidentified` | 1 | `pitboard stow` could not ask Anthropic whose the login in the file behind the keychain is, or could not renew it, so it deleted nothing. The message says whether it had renewed the login and written it back to the file first. `error.cause` says why; see [Cause codes](/reference/errors#cause-codes). | Check the connection and try again. |
-| `stored_login_changed` | 1 | `pitboard stow` was deleting the file because of the login Claude Code has stored: the file held that very login, or another login of the same account. A sign-in replaced the stored login before the file went, so it deleted nothing. The message says whether it had renewed the file's login and written it back first. | Run `pitboard stow` again, which says first what it would do with the file. |
+| `live_store_unsupported` | 3 | Codex keeps its login outside `auth.json`, is signed in with an API key or has settings Pitboard cannot read. The message names the setting. | See [Codex files](/reference/files#codex-files). |
+| `custom_oauth_endpoint` | 3 | `CLAUDE_CODE_CUSTOM_OAUTH_URL` is set, so Pitboard does not act on Claude Code. | Unset it in the environment and in the `env` block of any Claude Code settings file. See [Environment variables](/reference/files#environment-variables). |
+| `left_login_changed` | 1 | The login file behind the keychain changed, or is gone, since [`pitboard stow`](/reference/recovery-commands#stow) said what it held. | Run `pitboard stow` again. |
+| `left_login_not_enrolled` | 1 | The login file behind the keychain holds the login of an account not enrolled here, which the message names. | Enrol that account, then run `pitboard stow` again. |
+| `left_login_unidentified` | 1 | `pitboard stow` could not ask Anthropic whose login the file holds, or could not renew it. | Check the connection and try again. |
+| `stored_login_changed` | 1 | A sign-in replaced Claude Code's stored login while `pitboard stow` was deleting the file because of that login. | Run `pitboard stow` again. |
+
+An error that stops `pitboard stow` keeps its own code, cause and exit status. The file stays, and the message ends with what `stow` did first. An ending of `that login no longer works` means `stow` renewed the file's login and could not write it back.
 
 ## Keychain and locks
 
@@ -114,42 +136,52 @@ For each exit status, see [Exit codes](/reference/commands#exit-codes). In the t
 | `credential_not_json` | 3 | A stored login is not valid JSON. | Run `pitboard doctor`. |
 | `credential_write_failed` | 1 | Writing a login failed. | Fix the reason the message gives, then try again. |
 | `credential_not_durable` | 1 | A login read back different or empty after it was written. | Run `pitboard doctor`. |
-| `switch_in_progress` | 1 | Another process held Claude Code's login write lock, or the lock a Claude Code session takes to renew its login, for the whole wait, about 7.5 seconds. | Try again in a few seconds. A lock left by a Claude Code session that was killed clears within a minute. |
-| `lock_unavailable` | 1 | Pitboard could not take one of those two locks of Claude Code's, for a reason other than another process holding it. | Fix the reason the message gives, then try again. |
+| `switch_in_progress` | 1 | Another process held Claude Code's write lock or refresh lock for the whole wait, about 7.5 seconds. | Try again in a few seconds. A lock left by a killed Claude Code session clears within a minute. |
+| `lock_unavailable` | 1 | Pitboard could not take one of those locks for another reason. | Fix the reason the message gives, then try again. |
 
 ## Renewal schedule
 
 | Code | Exit | Meaning | What to do |
 | --- | --- | --- | --- |
-| `schedule_unsupported` | 1 | This system is neither macOS nor Linux, and Pitboard has no scheduler to write for it. | Run `pitboard renew` yourself from time to time. |
-| `schedule_not_default_home` | 1 | `PITBOARD_HOME` names a directory other than `~/.pitboard`, and daily renewal renews only the parked logins in `~/.pitboard`. Pitboard compares the two as paths, so a link to `~/.pitboard` counts as another directory. Nothing was scheduled. | Unset `PITBOARD_HOME`, then [turn on daily renewal](/guides/renewal#turn-on-daily-renewal) again. To renew the parked logins in the other directory, run `pitboard renew` with `PITBOARD_HOME` set. |
-| `schedule_refused` | 1 | `launchctl` on macOS, or `systemctl` on Linux, refused the schedule. The message gives its answer. | Fix what it names, then [turn on daily renewal](/guides/renewal#turn-on-daily-renewal) again. |
-| `schedule_program_missing` | 1 | The app only: the command line inside the app, which the schedule would run, is not there. Nothing was scheduled. | Install the app again. |
-| `schedule_program_temporary` | 1 | The app only: it runs from a temporary copy macOS made, which is gone once the app quits. | Move Pitboard to your Applications folder, open it from there, and turn on daily renewal again. |
-| `schedule_program_unnamed` | 1 | The app only: this copy has no command line inside it for the schedule to run. | Install the app with Homebrew or from a release download, as [Install Pitboard](/install) describes, then open that copy. |
+| `schedule_unsupported` | 1 | This system has no scheduler Pitboard writes to. | Run `pitboard renew` yourself from time to time. |
+| `schedule_not_default_home` | 1 | `PITBOARD_HOME` names a directory other than `~/.pitboard`, and the schedule renews only `~/.pitboard`. A link to `~/.pitboard` counts as another directory. | Unset `PITBOARD_HOME`, then [turn on daily renewal](/guides/renewal#turn-on-daily-renewal) again. For the other directory, run `pitboard renew` with `PITBOARD_HOME` set. |
+| `schedule_refused` | 1 | `launchctl` on macOS, or `systemctl` on Linux, refused the schedule. The message gives its answer. | Fix what it names, then turn on daily renewal again. |
+| `schedule_program_missing` | 1 | The app only: the command line inside the app, which the schedule would run, is not there. | Install the app again. |
+| `schedule_program_temporary` | 1 | The app only: it runs from a temporary copy macOS made, which is gone once the app quits. | Move Pitboard to your Applications folder, open it from there and turn on daily renewal again. |
+| `schedule_program_unnamed` | 1 | The app only: this copy has no command line inside it for the schedule to run. | Install the app as [Install Pitboard](/install) describes, then open that copy. |
 
 ## Root and sudo
 
 | Code | Exit | Meaning | What to do |
 | --- | --- | --- | --- |
-| `elevated` | 1 | Pitboard runs as root or with `sudo`, which it tells by `SUDO_UID` being set, or cannot tell whether it does, so it changed nothing. A file it made as root would belong to root, and a keychain item might too. | Run the command as yourself, without `sudo`. See [Pitboard changes nothing as root](/troubleshooting#pitboard-changes-nothing-as-root). |
+| `elevated` | 1 | Pitboard runs as root or with `sudo`, so it refuses every change. `pitboard status` and the app's reads warn `read_only` instead. | Run the command as yourself. See [Pitboard changes nothing as root](/troubleshooting#pitboard-changes-nothing-as-root). |
 
 ## Windows
 
 | Code | Exit | Meaning | What to do |
 | --- | --- | --- | --- |
-| `windows_not_released` | 1 | This is a Windows build of Pitboard, and Pitboard for Windows is not released. The build reads and changes nothing. Only `--version`, `--help`, `completions` and `manpage` answer. | Nothing makes this build work. Pitboard runs on macOS and Linux. |
+| `windows_not_released` | 1 | There is no Windows release. A Windows build changes nothing and answers only `--version`, `--help`, `completions` and `manpage`. | Run Pitboard on macOS or Linux. |
 
 ## Command output
 
 | Code | Exit | Meaning | What to do |
 | --- | --- | --- | --- |
 | `checks_failed` | 3 | `pitboard doctor` found at least one broken check. `data.checks` lists every check. | Follow the advice under each broken check. |
-| `output_is_not_a_report` | 2 | `pitboard completions` or `pitboard manpage` was given `--json`. They print a generated file to standard output, so they have no JSON form. | Run the command without `--json`. |
+| `output_is_not_a_report` | 2 | `pitboard completions` or `pitboard manpage` was given `--json`. Each prints a generated file, which has no JSON form. | Run the command without `--json`. |
 
 ## Cause codes
 
-Three errors carry `error.cause`, which says what went wrong underneath: `identity_unverifiable`, `session_expired` (always `token_expired`) and `renewal_failed` (when known). Other errors have `null`, except `checks_failed` and `output_is_not_a_report`, which have no `cause`.
+`error.cause` says what went wrong in a request to Anthropic or OpenAI. These errors carry one:
+
+| Error | `error.cause` |
+| --- | --- |
+| `identity_unverifiable` | Always |
+| `left_login_unidentified` | Always |
+| `session_expired` | Always `token_expired` |
+| `renewal_failed` | When known |
+| An error that stops `pitboard stow` | That error's own |
+
+Every other error has `null`. `checks_failed` and `output_is_not_a_report` have no `cause` field.
 
 `error.cause.worth_retrying` says whether asking again later could get a different answer.
 
@@ -157,34 +189,35 @@ Three errors carry `error.cause`, which says what went wrong underneath: `identi
 | --- | --- | --- |
 | `unreachable` | `true` | Anthropic or OpenAI could not be reached. |
 | `rate_limited` | `true` | Anthropic or OpenAI asked for fewer requests. |
-| `server_error` | `true` | Anthropic or OpenAI answered with an error, and a later request may succeed. |
-| `answer_not_understood` | `false` | Pitboard did not understand the answer. Asking again gets the same answer. |
-| `login_refused` | `false` | The login no longer works: it was revoked, or already used somewhere else. |
-| `token_expired` | `false` | The token has expired. |
+| `server_error` | `true` | Anthropic or OpenAI answered with an error. |
+| `answer_not_understood` | `false` | Pitboard did not understand the answer. |
+| `login_refused` | `false` | The login was revoked, or already used somewhere else. |
+| `token_expired` | `false` | The login's access token has expired. |
 
 ## Warning codes
 
-A warning does not stop the command. The Pitboard window shows it in the notice about the switch that caused it, or in a notice with the title in this table.
+A warning does not stop the command or change its exit status. In the Pitboard window, it joins the notice of the switch that raised it, or gets its own notice under the title in this table.
 
-| Code | Title in the app | Meaning |
-| --- | --- | --- |
-| `interrupted_switch_finished` | **An interrupted switch was finished** | An earlier switch was interrupted, but it had already finished. Pitboard recorded it as finished. |
-| `interrupted_switch_undone` | **An interrupted switch was undone** | An earlier switch was interrupted before it finished. Pitboard undid it, and nothing was lost. |
-| `sessions_still_running` | **Open sessions still use the previous account** | After a Codex switch, what runs Codex and started before it still uses the previous account: `codex` sessions, the ChatGPT app, Codex's background app server or Codex in an editor. The warning names which, and what to do for each. See [What happens to open sessions](/guides/switch#what-happens-to-open-sessions). |
-| `sessions_keep_old_login` | **Open sessions still use the old login** | After you signed in to a Codex account again, what runs Codex and started before it still uses its old login. The warning names which, and how to start each again. Otherwise one of them can put the old login back when it refreshes. |
-| `sessions_unknown` | **Couldn’t tell which sessions are open** | After a Codex switch, Pitboard could not read the list of running processes, so it cannot tell whether anything that runs Codex and started before the switch still uses the previous account. Do not sign out in any of them: that revokes the login Pitboard parked. To use the account you switched to, start each one again as [What happens to open sessions](/guides/switch#what-happens-to-open-sessions) says. When this follows a sign-in to a Codex account again, Pitboard cannot tell whether any of them still uses the old login. Start each one again, or one of them can put the old login back when it refreshes. |
-| `auth_overridden` | **An environment variable overrides the login** | Something such as `ANTHROPIC_API_KEY` or `apiKeyHelper` makes Claude Code sign in another way. Unset what the message names for the switch to take effect. |
-| `fallback_login` | **A login file is left behind the keychain** | On macOS, the file the message names, `~/.claude/.credentials.json` by default, is there besides the login in the keychain. Where it holds a Claude Code login, a session that cannot read the keychain, such as one over SSH, signs in with it. No switch reaches that login. Open Claude Code sessions keep their account after a switch until their login is next renewed. That is so whatever the file holds, and whether or not Pitboard can read it. Each change and each read but `pitboard status --offline` warn while it is there. [`pitboard stow`](/reference/account-commands#stow), or **Put Away** on the notice in the app, puts it away. See [Claude Code over SSH uses another account](/troubleshooting#claude-code-over-ssh-uses-another-account). |
-| `parked_login_refused` | **A parked login was refused** | Anthropic or OpenAI refused a parked login when Pitboard renewed it. Sign in to the account again. |
-| `login_replaced` | **A login was replaced outside Pitboard** | From each `status`, `status --offline` and each read in the app: a sign-in outside Pitboard, such as `/login` in Claude Code, replaced the only login of the account the message names. Pitboard held no copy of that login. The message also names whose login the tool has stored in its place, as Pitboard last recorded it. It stays until you sign in to that account again or forget it. The app posts it once as a notification. See [An account reads `login replaced outside Pitboard`](/troubleshooting#an-account-reads-login-replaced-outside-pitboard). |
-| `in_use_unconfirmed` | **The account in use is not confirmed** | From `status --offline`, from `status` where Anthropic could not be asked, and in the app between its reads: Claude Code's config has named another account since Anthropic last named the login Claude Code has stored, as a sign-in leaves it, or names another account than the one Pitboard last switched to where it has not asked Anthropic since an update from 0.9.0 or earlier. Another login may be stored. The message names the account the config names, and the account Pitboard takes as in use until a read asks. Run `pitboard status`; the app asks by itself. See [Claude Code shows another account than Pitboard](/troubleshooting#claude-code-shows-another-account-than-pitboard). |
-| `config_names_another` | **Claude Code’s config names another account** | From `status`, `status --offline` and each read in the app: Claude Code's config names another account than the one whose login Claude Code has stored, as Anthropic named it. `/status` in Claude Code shows the config's account, and every request goes with the stored login. A Claude Code process started or signed in on another login can write its account there, and a switch that could not update the config leaves the previous one. `pitboard use` with the account in use writes it there, as the message says, and so does the notice's **Update Claude Code's Config** button. See [Claude Code shows another account than Pitboard](/troubleshooting#claude-code-shows-another-account-than-pitboard). |
-| `lock_compromised` | **The login may have been written twice** | Claude Code took back its write or refresh lock during the change. The change stood; run `pitboard` to check which account is signed in. A login parked meanwhile may need signing in to again. |
-| `parks_pending_removal` | **Old parked logins are still there** | Parked logins Pitboard no longer needs could not be deleted yet. Pitboard tries again on its next change. |
-| `written_on_the_command_line` | **A login was passed on the command line** | On macOS, a login too large for `security` to read from standard input went on its argument line. See [Large logins on macOS](/security#large-logins-on-macos). |
-| `sign_in_parked_not_in_use` | **The new login was parked, not put in use** | After you signed in again, Pitboard could not tell whose login the tool has in use, so it parked the new one. See [Sign in to an account again](/guides/sign-in-again#if-pitboard-cannot-tell-whose-login-is-in-use). |
-| `recovery_undetermined` | **An interrupted switch is waiting** | From `status`, from `status --offline` unless only Anthropic can tell, and in the app from each read: an earlier switch was interrupted, and every change stops at it with the same message until it can be finished. The read changes nothing. The notice has a **Give Up** button. See [Interrupted switches](#interrupted-switches). |
-| `read_only` | **Pitboard has a warning** | From `status`, and in the app from each read, where Pitboard runs as root or with `sudo`. The read shows what Pitboard last measured, as `status --offline` does, and renews and writes nothing. See [Root and sudo](#root-and-sudo). |
-| An error code, such as `config_write_failed` or `renewal_failed` | **Pitboard has a warning** | That error happened without stopping the command. See the code's row earlier. |
-
-`label_unusable` appears only in `pitboard log`, where it records a label refused with `usage`.
+| Code | Title in the app | Meaning | What to do |
+| --- | --- | --- | --- |
+| `interrupted_switch_finished` | **An interrupted switch was finished** | An earlier switch was interrupted after it had finished. Pitboard recorded it as finished. | Nothing. |
+| `interrupted_switch_undone` | **An interrupted switch was undone** | An earlier switch was interrupted before it finished. Pitboard undid it, and nothing was lost. | Nothing. |
+| `recovery_undetermined` | **An interrupted switch is waiting** | A switch was interrupted, and the next change cannot finish it. | See [Interrupted switches](#interrupted-switches). |
+| `config_backup_failed` | **Pitboard has a warning** | Pitboard could not back up Claude Code's config after a switch, so it left the config as it was. | Check that you can write to `~/.pitboard/backups`, then run `pitboard use` with the account in use. |
+| `config_write_failed` | **Pitboard has a warning** | Pitboard could not update Claude Code's config after a switch, so `/status` may show another account. | Run `pitboard use` with the account in use. |
+| `renewal_failed` | **Pitboard has a warning** | A read could not renew a parked login. The account shows its last reading. | Run `pitboard doctor` if it keeps happening. |
+| `parked_login_refused` | **A parked login was refused** | Anthropic or OpenAI refused a parked login when Pitboard renewed it. | Run `pitboard enroll <label> --sign-in`. |
+| `parks_pending_removal` | **Old parked logins are still there** | Parked logins Pitboard no longer needs could not be deleted yet. | Nothing. Pitboard tries again at its next change. |
+| `lock_compromised` | **The login may have been written twice** | Claude Code took back its write or refresh lock during the change. The change stood. | Run `pitboard` to check which account is signed in. A login parked meanwhile may need a sign-in again. |
+| `written_on_the_command_line` | **A login was passed on the command line** | On macOS, a login too large for `security` to read from standard input went on its argument line. | See [Large logins on macOS](/security#large-logins-on-macos). |
+| `auth_overridden` | **An environment variable overrides the login** | A variable such as `ANTHROPIC_API_KEY`, or `apiKeyHelper` in a settings file, makes Claude Code sign in another way. | Unset what the message names. See [Environment variables](/reference/files#environment-variables). |
+| `fallback_login` | **A login file is left behind the keychain** | On macOS, a login file sits behind the keychain, `~/.claude/.credentials.json` by default. Open Claude Code sessions follow a switch only at their next renewal. | Run `pitboard stow`, or click **Put Away** on the notice. If Pitboard cannot read the file, run `pitboard doctor`. See [Claude Code over SSH uses another account](/troubleshooting#claude-code-over-ssh-uses-another-account). |
+| `sessions_still_running` | **Open sessions still use the previous account** | After a Codex switch, Codex processes started before it still use the previous account. The message names them. | Start each again, as [What happens to open sessions](/guides/switch#what-happens-to-open-sessions) says. Do not sign out in any: that revokes the parked login. |
+| `sessions_keep_old_login` | **Open sessions still use the old login** | After you sign in again to a Codex account, Codex processes started before still use the old login. | Start each again. Otherwise one can put the old login back when it renews. |
+| `sessions_unknown` | **Couldn't tell which sessions are open** | After a Codex switch or sign-in, Pitboard could not read the list of processes. | Start each Codex process again. Do not sign out in any. |
+| `sign_in_parked_not_in_use` | **The new login was parked, not put in use** | After a sign-in again, Pitboard could not identify the login the tool has in use, so it parked the new one. | See [If Pitboard cannot identify the login in use](/guides/sign-in-again#if-pitboard-cannot-identify-the-login-in-use). |
+| `login_replaced` | **A login was replaced outside Pitboard** | A sign-in outside Pitboard, such as `/login` in Claude Code, replaced the only login of the account the message names. | Run `pitboard enroll <label> --sign-in`, or forget the account. See [An account reads `login replaced outside Pitboard`](/troubleshooting#an-account-reads-login-replaced-outside-pitboard). |
+| `in_use_unconfirmed` | **The account in use is not confirmed** | Claude Code's config has named another account since Anthropic last identified the stored login, so another login may be stored. | Run `pitboard status` to ask Anthropic. The app asks by itself. See [Claude Code shows another account than Pitboard](/troubleshooting#claude-code-shows-another-account-than-pitboard). |
+| `config_names_another` | **Claude Code's config names another account** | Claude Code's config names another account than the stored login's, so `/status` shows an account that requests do not use. | Run `pitboard use` with the account in use, or click **Update Claude Code's Config** on the notice. |
+| Any other error code | **Pitboard has a warning** | A renewal or a config update failed with that error without stopping the command. | See that code's row. |
+| `read_only` | **Pitboard has a warning** | Pitboard runs as root or with `sudo`. A read shows the last numbers, and renews and writes nothing. | See [Root and sudo](#root-and-sudo). |

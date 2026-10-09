@@ -1,35 +1,41 @@
 ---
 title: "Remove Pitboard"
-description: "Delete parked logins and Pitboard's files with `pitboard uninstall`, then remove Pitboard the way you installed it."
+description: "Delete parked logins with `pitboard uninstall`, then remove Pitboard the way you installed it."
 ---
 
-To remove Pitboard and the logins it parked, run `pitboard uninstall` before you remove Pitboard itself. A parked login is the login Pitboard holds for an account that is not in use.
+Removing the program alone leaves every parked login on the machine.
 
-## Delete parked logins and Pitboard's files
+## Delete parked logins first
 
-`pitboard uninstall` turns off the daily renewal schedule and deletes every parked login it wrote. Then it deletes Pitboard's own directory, `~/.pitboard`.
+`pitboard uninstall` turns off daily renewal, deletes every parked login this Pitboard wrote, then deletes `~/.pitboard`.
 
 <Warning>
   `pitboard uninstall` cannot be undone. Claude Code and OpenAI's Codex CLI stay signed in to the accounts in use. Every other account needs a browser sign-in before you can use it again.
 </Warning>
 
-1. If the app is open, quit it: click Pitboard's item in the menu bar, then choose **Quit Pitboard**. While it runs, it recreates `~/.pitboard`.
-2. If Claude Code's status line runs `pitboard statusline`, remove it: delete the `statusLine` field from `~/.claude/settings.json`, or the call from your own script. Claude Code runs it after each response, and each run recreates `~/.pitboard`.
-3. Run `pitboard uninstall`:
+<Steps>
+  <Step title="Quit the app">
+    If the app is open, click Pitboard's item in the menu bar, then choose **Quit Pitboard**. While it runs, it recreates `~/.pitboard`.
+  </Step>
+  <Step title="Remove the status line">
+    If Claude Code's status line runs `pitboard statusline`, delete the `statusLine` field from `~/.claude/settings.json`, or the call from your own script. Each run recreates `~/.pitboard`.
+  </Step>
+  <Step title="Delete the parked logins">
+    ```sh
+    pitboard uninstall
+    ```
 
-   ```sh
-   pitboard uninstall
-   ```
+    It asks first. Enter `y`, or add `--yes` to skip the question.
 
-   It asks before it deletes anything. Type `y`, then press Return. To skip the question, add `--yes`.
+    If your shell cannot find `pitboard`, run the copy inside the app:
 
-   If you have only the app from a release download and your shell cannot find `pitboard`, run the command line inside the app:
+    ```sh
+    /Applications/Pitboard.app/Contents/Helpers/pitboard uninstall
+    ```
+  </Step>
+</Steps>
 
-   ```sh
-   /Applications/Pitboard.app/Contents/Helpers/pitboard uninstall
-   ```
-
-With two parked logins and daily renewal on, `pitboard uninstall` prints:
+With two parked logins and daily renewal on, it prints:
 
 ```text
 Removed 2 parked login(s). The login each tool is signed in with is untouched.
@@ -37,23 +43,11 @@ Turned off the daily renewal schedule.
 ~/.pitboard is gone. Remove Pitboard itself the way you installed it.
 ```
 
-On macOS, deleting `~/.pitboard` by hand leaves parked logins in the keychain, still valid. Only the account list in `~/.pitboard` records their names, so without it `pitboard uninstall` cannot find them. If you already deleted `~/.pitboard`, delete the `pitboard-park-` items in Keychain Access.
-
 If a parked login cannot be deleted, Pitboard keeps `~/.pitboard`. Run `pitboard uninstall` again.
 
-If you set `PITBOARD_HOME` to move Pitboard's directory, `pitboard uninstall` deletes that directory. It leaves the daily renewal schedule, which renews only `~/.pitboard`. If you do not use `~/.pitboard` either, turn the schedule off with `pitboard schedule uninstall`.
+On macOS, deleting `~/.pitboard` by hand leaves the parked logins in the keychain, still valid. Nothing else names them, so `pitboard uninstall` cannot find them. If you already deleted it, delete the `pitboard-park-` items in Keychain Access.
 
-On macOS, Pitboard leaves any parked login that `pitboard repair` found in the keychain but this directory did not write. Another Pitboard directory on the Mac may own it. The output says how many it left.
-
-If `CLAUDE_CODE_CUSTOM_OAUTH_URL` is set in your environment or in Claude Code's settings, `pitboard uninstall` refuses to run. Unset it, then run `pitboard uninstall` again.
-
-## Remove the account windows' data
-
-Each [account's window](/guides/account-windows) keeps its site's cookies and storage, its claude.ai or chatgpt.com sign-in included. They are in `~/Library/WebKit/com.usepitboard.Pitboard`, and `pitboard uninstall` does not delete them.
-
-To sign one window out and keep the app, bring that account's window to the front. Choose **File** > **Remove Website Data**, then click **Remove**. The site is not told, so the account stays signed in on your other devices and browsers.
-
-To delete every window's data, remove the app's files in `~/Library` as [Remove Pitboard itself](/install/remove#remove-pitboard-itself) describes.
+If you set `PITBOARD_HOME`, or `pitboard uninstall` refuses or leaves parked logins, see [`uninstall`](/reference/maintenance-commands#uninstall).
 
 ## Remove Pitboard itself
 
@@ -62,19 +56,45 @@ To delete every window's data, remove the app's files in `~/Library` as [Remove 
 | `pitboard` cask | `brew uninstall --cask pitboard` |
 | `pitboard-app` cask | `brew uninstall --cask pitboard-app` |
 | `cargo binstall` or `cargo install` | `cargo uninstall pitboard` |
-| A release tarball | Delete `pitboard` and any man page or completion files you copied from it. |
-| The app from a release download | Quit the app, then move `Pitboard.app` to the Trash. |
+| A release tarball | Delete `pitboard`, and the man page and completion files if you copied them. |
+| The app from a release download | Move `Pitboard.app` to the Trash. |
 
-Adding `--zap` to either `brew uninstall` removes the daily renewal schedule, if `pitboard uninstall` left it. Neither cask's `--zap` deletes `~/.pitboard`.
+- `--zap` on either cask also removes a daily renewal schedule that `pitboard uninstall` left.
+- `--zap` on `pitboard-app` also removes the app's files in `~/Library`.
+- Neither cask's `--zap` deletes `~/.pitboard`.
 
-For `pitboard-app`, `--zap` also removes the app's files in `~/Library`. They include each account window's data, the open windows macOS saved and the folders macOS made for the Share extension.
+If the app came from the `pitboard` cask of 0.3.0 or earlier, leave out `--zap`: see [From the old app cask](/install/upgrade-from-0-3-0#from-the-old-app-cask).
 
-If you installed the app with the `pitboard` cask of 0.3.0 or earlier, leave out `--zap`. For the reason, see [Upgrade from 0.3.0 or earlier](/install/upgrade-from-0-3-0#from-the-old-app-cask).
+Otherwise the app's files in `~/Library` stay. They hold each account window's claude.ai or chatgpt.com sign-in, and `pitboard uninstall` does not delete them. To remove them, move each `com.usepitboard.Pitboard` item that [The app](/reference/files#the-app) and [Account windows](/reference/files#account-windows) list to the Trash. To sign out one window and keep the app, see [Sign a window out](/guides/account-windows#sign-a-window-out).
 
-Moving the app to the Trash leaves its files in `~/Library`, the account windows' data in `~/Library/WebKit/com.usepitboard.Pitboard` included. To remove them, move each `com.usepitboard.Pitboard` item that [Files and environment variables](/reference/files#the-app) lists to the Trash.
-
-If you clicked **Install Command Line Tool** in **Settings** > **Command Line**, remove the link it made, because nothing else does:
+If you clicked **Install Command Line Tool** in **Settings** > **Command Line**, delete the link it made. Nothing else removes it.
 
 ```sh
 sudo rm /usr/local/bin/pitboard
 ```
+
+## Remove files Pitboard made as root
+
+Pitboard 0.7.0 and earlier did not refuse to run as root or under `sudo`. What those runs made belongs to root, and Pitboard [changes nothing as root](/troubleshooting#pitboard-changes-nothing-as-root). Delete it by hand from a root shell, such as `sudo -i` starts.
+
+On Linux:
+
+```sh
+systemctl --user disable --now pitboard-renew.timer
+rm ~/.config/systemd/user/pitboard-renew.service ~/.config/systemd/user/pitboard-renew.timer
+rm -r ~/.pitboard
+```
+
+On macOS:
+
+```sh
+launchctl bootout gui/$(id -u)/com.datlechin.pitboard.renew
+rm ~/Library/LaunchAgents/com.datlechin.pitboard.renew.plist
+rm -r ~/.pitboard
+```
+
+Where a command finds nothing to remove, go on to the next. If `PITBOARD_HOME` named another directory, delete that one instead of `~/.pitboard`.
+
+In a root shell, `~` is root's home. Under `sudo`, Pitboard used the home `sudo` passed on, which can be yours. Run the `rm` commands again with `~` written as your home's full path, such as `/Users/me`.
+
+On Linux, the parked logins go with the directory. On macOS, they stay in a keychain. Which keychain a run as root wrote to is not measured, so search Keychain Access for `pitboard-park-`.

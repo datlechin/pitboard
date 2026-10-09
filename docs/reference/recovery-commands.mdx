@@ -1,25 +1,88 @@
 ---
 title: "Recovery commands"
-description: "`abandon`, `repair` and `adopt` set Pitboard's directory right after an interrupted switch, a restore or a move."
+description: "`stow`, `abandon`, `repair` and `adopt` set things right after a locked-keychain sign-in, a crash, a restore or a move."
 ---
 
-These three commands fix Pitboard's directory, `~/.pitboard`, after an interrupted switch, a restore from a backup or a move from another computer. An [interrupted switch](/concepts/switching#interrupted-switches) is one that stopped partway, for example in a crash.
+None of these commands takes an argument. [JSON output](/reference/json-output#data-by-command) lists what each prints with `--json`.
 
-None of them takes an argument. Their only options are `--json` and `--help`, described in [Global options](/reference/commands#global-options). For their JSON output, see [JSON output](/reference/json-output#data-by-command).
+## `stow`
+
+On macOS, `pitboard stow` puts away `~/.claude/.credentials.json` where it sits behind the keychain. The [`fallback_login`](/reference/errors#warning-codes) warning names that file. While it is there, open Claude Code sessions follow a switch only at their next renewal, as [Open sessions](/concepts/switching#open-sessions) explains. [Claude Code over SSH uses another account](/troubleshooting#claude-code-over-ssh-uses-another-account) says how the file gets there.
+
+| Option | Description |
+| --- | --- |
+| `-y, --yes` | Do not ask first |
+
+At a terminal, `stow` says what the file holds and asks first, as [Questions before deleting](/reference/commands#questions-before-deleting) describes.
+
+<Warning>
+  Deleting the file signs out a Claude Code session that signed in with it, as one over SSH does while the keychain is locked.
+</Warning>
+
+`stow` identifies the login in the file by its refresh token where Pitboard knows that token. Otherwise it asks Anthropic, with the login's own access token.
+
+It never sends an expired access token. It renews such a login first and writes it back to the file before anything else. That write keeps the file's other keys.
+
+It then keeps the login where it is not kept already, and deletes the file:
+
+| The file holds | What `stow` does | `login` |
+| --- | --- | --- |
+| No Claude Code login, such as `{}`, an empty file or one that is not JSON | Deletes the file | `no_login` |
+| The login Claude Code has stored | Deletes the file | `stored` |
+| The login parked for an account | Deletes the file | `already_parked` |
+| Another login of the account in use | Deletes the file and that second sign-in. The keychain keeps the account's own login | `second_sign_in` |
+| A login of an enrolled account with no parked login it can switch to | Parks the login for that account in place of any other, then deletes the file | `parked` |
+| Another login of an account with a parked login it can switch to | Keeps that parked login and deletes the file | `park_kept` |
+| A login Anthropic no longer accepts, or one with no refresh token whose access token has expired | Deletes the file | `login_refused` |
+
+`login` is the `--json` field, and the outcome [`log`](/reference/maintenance-commands#log) records.
+
+A parked login that an earlier, stopped `stow` copied from the file does not count as one the account can switch to. A session using the file may have renewed the login since, spending the copy.
+
+From its last reading of the file until the file is gone, `stow` holds the locks Claude Code takes before it renews a login. [Claude Code files](/reference/files#claude-code-files) names them.
+
+Parking a login too large for the keychain's standard input warns `written_on_the_command_line`. See [Large logins on macOS](/security#large-logins-on-macos).
+
+These errors stop it:
+
+| Error | When |
+| --- | --- |
+| `left_login_not_enrolled` | The login is of an account not enrolled here. The message names it and says how to enrol it |
+| `left_login_changed` | The file changed or went after `stow` read it |
+| `stored_login_changed` | The file was going because of the login Claude Code has stored, and a sign-in replaced that login meanwhile |
+| `left_login_unidentified` | Pitboard could not identify or renew the login with Anthropic. A [cause code](/reference/errors#cause-codes) says why |
+| `credential_store_locked` | The keychain is locked |
+| `credential_store_unreadable` | Pitboard cannot read the file or the keychain |
+| `custom_oauth_endpoint` | `CLAUDE_CODE_CUSTOM_OAUTH_URL` is set, as [Environment variables](/reference/files#environment-variables) describes. Exit status 3 |
+
+None of them deletes the file. Once `stow` begins putting the file away, an error ends with how far it got:
+
+- `Pitboard changed nothing.`
+- `Pitboard deleted nothing, having renewed the login in the file and written it back there.`
+- ``Pitboard deleted nothing, having parked the login in the file for `work`.``
+- `Pitboard deleted nothing. It renewed the login the file held and could not write the renewed login back there, so that login no longer works.`
+
+With nothing behind the keychain, `stow` changes nothing. It prints `Nothing is left behind the store Claude Code keeps its login in, so there is nothing to put away.` On Linux it always prints that: the file is where Claude Code keeps its login.
+
+```sh
+pitboard stow --yes
+```
+
+```text
+Parked the login /Users/you/.claude/.credentials.json held for `work`, then deleted the file.
+It also held 1 other key, `mcpOAuth`, which went with the file: Pitboard does not move it, and Claude Code's document in the keychain keeps its own.
+Once the file is gone, Claude Code sessions already running follow a switch within 33 seconds again, and one that signed in with its login, such as one over SSH, is signed out.
+```
+
+In the app, **Put Away** on the notice **A login file is left behind the keychain** does the same, as [Accounts pane](/reference/app#accounts-pane) lists.
 
 ## `abandon`
 
-```text
-Give up on an interrupted switch that cannot be finished, keeping every login
+`pitboard abandon` deletes `~/.pitboard/journal.json`, the record of an [interrupted switch](/concepts/switching#interrupted-switches). It writes no login. Each tool keeps the login it has, and both accounts of the switch keep their parked logins.
 
-Usage: pitboard abandon [OPTIONS]
-```
+For OpenAI's Codex CLI, it also drops a parked login that copies the login in use. [Why Codex logins are moved, not copied](/concepts/switching#why-codex-logins-are-moved-not-copied) says why.
 
-`pitboard abandon` deletes `~/.pitboard/journal.json`, Pitboard's record of an interrupted switch. It writes no login, so each tool keeps the login it has. For the same reason, it takes Pitboard's lock but not the one Claude Code writes its login under.
-
-The accounts the switch was moving from and to keep their [parked logins](/concepts/switching#parked-logins). For OpenAI's Codex CLI, `abandon` drops a parked login that copies the login in use.
-
-`abandon` refuses a Claude Code switch while `CLAUDE_CODE_CUSTOM_OAUTH_URL` is set, in the environment or in Claude Code's settings. It exits 3 with the error `custom_oauth_endpoint`. It gives up on a Codex switch whether or not that variable is set.
+While `CLAUDE_CODE_CUSTOM_OAUTH_URL` is set, `abandon` gives up only on a Codex switch. Otherwise it refuses with `custom_oauth_endpoint`, exit status 3.
 
 ```sh
 pitboard abandon
@@ -31,55 +94,45 @@ Gave up on the interrupted switch from work to personal. 2 login(s) kept; nothin
 
 With no interrupted switch, it prints `There is no interrupted switch to give up on.` and changes nothing.
 
-For when to use it, see [An interrupted switch cannot be finished](/troubleshooting/recovery#an-interrupted-switch-cannot-be-finished).
+[An interrupted switch cannot be finished](/troubleshooting/recovery#an-interrupted-switch-cannot-be-finished) says when to run it.
 
 ## `repair`
 
-```text
-Ask the credential store what parked logins are here, and account for every one
+`pitboard repair` finds parked logins that Pitboard's account list does not name.
 
-Usage: pitboard repair [OPTIONS]
-```
+On macOS, it lists keychain items whose names start with `pitboard-park-`. Listing reads only names, so macOS does not ask for permission. On Linux, it lists files in `~/.pitboard/vault/`. It adds the names in `~/.pitboard/pending`, then reads each one the account list does not name.
 
-`pitboard repair` looks for parked logins that Pitboard's account list does not name. It gives each back to its account, deletes it or leaves it alone.
+Pitboard writes a parked login's name to `pending` before creating it. Every switch, enrolment, `forget`, `rename`, `stow` and `uninstall` resolves the names on that list as it starts, without listing the keychain. A parked login is missing from both only after `~/.pitboard` is lost or restored from a backup. That is when `repair` is needed.
 
-On macOS, it lists keychain items whose names start with `pitboard-park-`. Listing reads only the names, so macOS does not ask for permission. On Linux, it lists `~/.pitboard/vault/`. It then reads each one the account list does not name.
+Like `use`, it first finishes or undoes an interrupted switch, and stops if it cannot.
 
-It also reads `~/.pitboard/pending`, where Pitboard writes each parked login's name before creating it. `use`, `enroll`, `forget`, `stow`, `rename` and `uninstall` handle the logins on that list too, without searching the keychain.
+It gives a parked login back to the enrolled account whose id is in its name when:
 
-A parked login is on neither `pending` nor the account list only when `~/.pitboard` was lost or restored from a backup. Only then is `repair` needed.
+- its refresh token has not expired
+- the account holds no parked login, or `pending` names this one and the account holds an older one
+- it is not a copy of the Codex login in use
 
-Like `use`, `repair` first finishes or undoes an interrupted switch, and stops if it cannot.
-
-It prints a line for each parked login it gives back, and one for each other kind of result:
-
-| Output | What it did |
+| Output | When |
 | --- | --- |
-| `Gave personal back a parked login that nothing named.` | Gave the parked login to the enrolled account whose id is in the login's name. That account had none, or an older one, and the login has not expired. |
-| `Deleted 1 parked login(s) Pitboard wrote down here and nothing recorded.` | Deleted parked logins named in `pending` that no account could take. |
-| `1 parked login(s) here belong to no account Pitboard knows and were not written down by this one. Left alone: the keychain is shared by the whole machine, and they may be another Pitboard's.` | Left alone parked logins it could not give back and that are not named in `pending`. On macOS, every Pitboard directory you use, such as one set with `PITBOARD_HOME`, shares the keychain. |
-| `1 could not be read this time and were left alone. Unlock the keychain and run this again.` | Left alone parked logins it could not read, for example while the keychain is locked. |
-| `Every parked login here is accounted for.` | Found nothing to do. |
+| `Gave personal back a parked login that nothing named.` | It gave a login back. One line per login |
+| `Deleted 1 parked login(s) Pitboard wrote down here and nothing recorded.` | No account could take logins that `pending` names |
+| `1 parked login(s) here belong to no account Pitboard knows and were not written down by this one. Left alone: the keychain is shared by the whole machine, and they may be another Pitboard's.` | No account could take logins that `pending` does not name |
+| `1 could not be read this time and were left alone. Unlock the keychain and run this again.` | It could not read logins, as while the keychain is locked |
+| `Every parked login here is accounted for.` | It found nothing to do |
 
-On Linux, "keychain" in these lines means `~/.pitboard/vault/`, which no other Pitboard directory shares.
+On Linux, "keychain" in these lines means `~/.pitboard/vault/`, which no other Pitboard directory uses.
 
-While `CLAUDE_CODE_CUSTOM_OAUTH_URL` is set, in the environment or in Claude Code's settings, `repair` refuses for every tool. It exits 3 with the error `custom_oauth_endpoint`.
+While `CLAUDE_CODE_CUSTOM_OAUTH_URL` is set, `repair` refuses with `custom_oauth_endpoint`, exit status 3.
 
-For when to use it, see [Pitboard lost track of parked logins](/troubleshooting/recovery#pitboard-lost-track-of-parked-logins).
+[Pitboard lost track of parked logins](/troubleshooting/recovery#pitboard-lost-track-of-parked-logins) says when to run it.
 
 ## `adopt`
 
-```text
-Take over a Pitboard directory another computer wrote, keeping the accounts
+`pitboard adopt` takes over a Pitboard directory another computer wrote. Until you run it, commands that read the account list refuse that directory with `state_wrong_machine`.
 
-Usage: pitboard adopt [OPTIONS]
-```
+It keeps every account with its label, email and remembered usage. It drops every parked login without asking Anthropic or OpenAI whether it still works. Asking means renewing the login, and nobody has measured whether that ends the other computer's copy. [What Pitboard will not do](/concepts/limits#rules) says why a parked login never moves between computers.
 
-`pitboard adopt` takes over a Pitboard directory another computer wrote, so this one can use it. Until you run it, most commands refuse the directory with the error `state_wrong_machine`.
-
-It keeps every account with its label, email and remembered usage. It drops every parked login without asking Anthropic or OpenAI whether it still works. Asking means renewing the login, which could end the other computer's copy.
-
-It does not first finish or undo an interrupted switch. A later change, such as `pitboard use`, does that; see [Interrupted switches](/concepts/switching#interrupted-switches).
+It leaves an interrupted switch for the next change to finish or undo.
 
 ```sh
 pitboard adopt
@@ -92,6 +145,6 @@ Sign in to each again:
   pitboard enroll personal --sign-in
 ```
 
-It prints a `pitboard enroll` line for each account whose parked login it dropped. If the directory is already this computer's, it prints `This Pitboard directory was already written on this computer.` and changes nothing.
+If the directory is already this computer's, `adopt` prints `This Pitboard directory was already written on this computer.` and changes nothing.
 
-For when to use it, see [The Pitboard directory came from another computer](/troubleshooting/recovery#the-pitboard-directory-came-from-another-computer).
+[The Pitboard directory came from another computer](/troubleshooting/recovery#the-pitboard-directory-came-from-another-computer) says when to run it.

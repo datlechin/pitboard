@@ -3,99 +3,85 @@ title: "How switching works"
 description: "Every switch parks the login in use and puts a parked one in its place, whoever starts it."
 ---
 
-A switch moves the login Claude Code or OpenAI's Codex CLI is using into Pitboard's store, and puts a parked login in its place. You start a switch, or Pitboard starts one by itself for Claude Code when you ask it to.
+Claude Code and OpenAI's Codex CLI each read one stored login. Pitboard keeps every other account's login in its own store.
 
 ## Parked logins
 
 A parked login is the login Pitboard holds for an account not in use. Each account has at most one.
 
-Switching to an account puts its parked login in use. Switching away from it parks a fresh one.
+Enrolling the account in use parks nothing: a copy would go stale as the tool renews its login. The first switch away parks it.
 
-Enrolling the account in use, which adds it to Pitboard, parks nothing. A copy would go stale as the tool refreshes its login, so the first switch away parks it instead.
-
-For where parked logins are kept and why they expire, see [Security and privacy](/security#where-parked-logins-are-kept) and [Keep parked logins alive](/guides/renewal#why-parked-logins-expire).
+See [Where parked logins are kept](/security#where-parked-logins-are-kept) and [Why parked logins expire](/guides/renewal#why-parked-logins-expire).
 
 ## How Pitboard knows whose login it is
 
-Pitboard moves no login until it knows whose it is.
+Pitboard moves no login until it identifies it: one filed under the wrong account would cost two accounts their login.
 
-For Claude Code, it asks Anthropic. Claude Code's config file can name another account than the one whose login is stored: a Claude Code process started or signed in on another login can write its own there. For Codex, it reads the account from the login's ID token. It records the answer with a fingerprint of the login's refresh token, and asks again only about a login with another fingerprint: one the tool renewed, or one a sign-in outside Pitboard put there.
+For Codex, it reads the account from the login itself, with no request, as read in Codex 0.154.0.
 
-These take the account in use from that record without asking: `pitboard status --offline`, the app between its reads, `pitboard doctor` and Pitboard's first look at whether to switch by itself. `pitboard forget` asks as a switch does. Claude Code's config naming another account since the last answer only tells Pitboard that something may have signed in. A read that asks settles it, and so does Pitboard before it decides whether to switch by itself.
+For Claude Code, it asks Anthropic, because the config can name another account. As read in Claude Code 2.1.294, a sign-in writes its account there. So does any process that starts while `profileFetchedAt` is missing or over 24 hours old. A switch removes that field, so a process started on another login, as over SSH, writes that login's account.
 
-It records a fingerprint of each parked login's refresh token, and refuses a parked login that no longer matches.
+Pitboard records each answer with the login's fingerprint, and asks again only once that changes, as after a renewal or a sign-in. A switch and `pitboard forget` also ask once it has changed. Reads that send no request, such as `pitboard status --offline`, use the record.
+
+When the config has named another account since Anthropic last answered, something may have signed in. Reads that send no request then warn with `in_use_unconfirmed`. `pitboard status` settles it, and the app starts such a read once by itself.
+
+Pitboard also records each parked login's fingerprint, and refuses one that no longer matches.
 
 ## What a switch does
 
-Every switch runs under Pitboard's own lock, `state.lock`, which lets one change run at a time. Holding it, a switch first finishes or undoes any [interrupted switch](/concepts/switching#interrupted-switches). Then it:
+1. Takes Pitboard's own lock, `state.lock`, so one change runs at a time. Finishes or undoes any [interrupted switch](#interrupted-switches).
+2. Identifies the login in use.
+3. Checks the incoming parked login with Anthropic or OpenAI, and renews it if it has lapsed. Every switch needs the network.
+4. For Claude Code, takes the lock a session takes to renew its login, then Claude Code's write lock. No session can then renew the login being parked. Codex takes no lock.
+5. Records the switch in `journal.json`, with fingerprints of both logins.
+6. Parks the outgoing login: Claude Code's OAuth block and account entries, not its MCP server logins, or Codex's whole `auth.json`.
+7. Reads the login in use again, and stops with `signed_in_account_changed` if it changed.
+8. Writes the incoming login. On macOS, a failed keychain write never falls back to Claude Code's plaintext file.
+9. Reads the login back and records the incoming account as in use, then releases Claude Code's locks. The read-back comes first because, as read in 2.1.284, a `/logout` that gives up waiting for the write lock deletes the login anyway.
+10. For Claude Code, backs up the config to `~/.pitboard/backups/`, keeping 10 copies, then writes the incoming account into it without `profileFetchedAt`.
 
-1. Checks the incoming parked login with Anthropic or OpenAI, renewing it if needed. So every switch needs the network, a Codex switch included.
-2. For Claude Code, takes the lock a Claude Code session takes before it renews its login, then the lock Claude Code holds while it writes its login. It holds the first until the switch is recorded, so no session spends the refresh token of the login it parks. Pitboard and Claude Code both treat the write lock as abandoned once untouched for 15 seconds, and the renewal lock after 60. Codex takes no lock.
-3. Parks the outgoing login. Other entries beside it, such as Claude Code's MCP server tokens, stay in place. For Codex, Pitboard parks the whole `auth.json`.
-4. Writes the incoming login where the tool reads it. On macOS, if writing Claude Code's keychain item fails, Pitboard does not fall back to Claude Code's plaintext file.
-5. Reads the login back to check the write held. A Claude Code `/logout` that gives up waiting for the lock deletes the login anyway.
-6. For Claude Code, copies Claude Code's config file to `~/.pitboard/backups/`, keeping the 10 newest copies. Then it writes the incoming account into the config file.
+Pitboard waits about 7.5 seconds for a held Claude Code lock, then stops with `switch_in_progress`. As read in 2.1.294 and 2.1.284, Claude Code takes over a renewal lock after 60 untouched seconds and a write lock after 15.
 
 ## Who starts a switch
 
-You start a switch from Pitboard's menu, the Pitboard window, a notification or `pitboard use`. Pitboard starts one by itself only for Claude Code, and only when you ask. It does so while the app is open with **Switch Claude Code automatically** on, or while `pitboard watch` runs. For when it switches and to which account, see [Switch before an account runs out](/guides/automatic-switching).
+You start a switch in the app or with `pitboard use`. Pitboard starts one by itself only for Claude Code, while **Switch Claude Code automatically** is on in the app or `pitboard watch` runs. [Switch before an account runs out](/guides/automatic-switching) has the rules.
 
-A switch Pitboard starts by itself is the switch `pitboard use` makes, with the same checks, steps and locks. [`pitboard log`](/reference/maintenance-commands#log) records it with the verb `auto-switch`, and the app's **Activity** pane names it **Automatic switch**.
+That switch runs the same steps, and `pitboard log` records it as `auto-switch`. Pitboard decides once under its lock, from the login and files as they are then. Two runs reading the same numbers make one switch.
 
-Pitboard first looks at whether to switch by itself from files alone, such as its accounts, its record of whose login is stored and its usage readings. That look takes no lock and sends no request. One that finds nothing to do records nothing.
-
-Pitboard takes its lock only where a switch may be due, where its record of whose login is stored is in doubt, or to record a reason it does not switch. That record is in doubt where Claude Code's config has named another account since Anthropic last named the login. It is also in doubt until Pitboard has first asked Anthropic.
-
-Holding the lock, Pitboard tells whose login Claude Code has stored, as any switch does, and records it. Then it decides once, from that and the files as they are then, and switches from that same login.
-
-The app, `pitboard watch` and your own `pitboard use` can all run at once. So two runs that read the same numbers make one switch between them. A run that read the numbers before someone else switched, or before a sign-in outside Pitboard, decides from what it finds under the lock.
-
-If Pitboard cannot tell whose login Claude Code has stored, it decides nothing until it can. [When it holds back](/guides/automatic-switching#when-it-holds-back) says when it tries again.
-
-Pitboard also does not switch away by itself from an account within 5 minutes of its being put in use. Any switch puts an account in use, as does enrolling it signed in. The app and `pitboard watch` read every account every 5 minutes, so Pitboard can read the account switched to before leaving it.
-
-Pitboard records each attempt in `autoswitch.json` before anything moves. The app and `pitboard watch` share that record, and a switch stopped partway still counts as a try.
-
-When a limit reaches the share and Pitboard does not switch away from it, Pitboard records the reason in `autoswitch.json` and in `pitboard log`, as `auto-stay`. It does so once for each limit and its reset, so a later look reads the record and takes no lock.
+Pitboard records each try in `autoswitch.json` before anything moves. A try stopped partway still counts.
 
 ## Open sessions
 
-An open Claude Code session follows a switch within about 33 seconds, with no restart. Claude Code caches its login for 30 seconds, and the other 3 are margin for its next read.
+An open Claude Code session follows a switch within about 33 seconds, with no restart. It caches its login for 30 seconds, plus 3 for its next read. On one Mac with Claude Code 2.1.278, switches made 8, 20 and 28 seconds into a session took effect 32.3 to 33.5 seconds in.
 
-On one Mac with Claude Code 2.1.278, switches 8, 20 and 28 seconds into a session took effect 32.3 to 33.5 seconds in.
+Until then the session uses the account it is leaving. As read in 2.1.294, its `/status` already names the account switched to, from the rewritten config. `/usage` and every request still use the login it holds.
 
-Until a session follows, it keeps using the account it is leaving. So when Pitboard switches by itself, it switches before a limit, not at it. Whether a request under way at the moment of a switch finishes has not been measured.
+As read in 2.1.284, sessions and the daemon that renews their login read it again under the write lock before writing. None can write the previous account back.
 
-On macOS, `~/.claude/.credentials.json` can sit behind the keychain, left by a sign-in where the keychain was locked. A session then keeps the login it holds while the file is there, whatever the file holds. This was read in Claude Code 2.1.294, and not measured. It reads the keychain again about 5 minutes before that login expires, to renew it, and takes the account switched to then. So while the file is there, an open session follows a switch at its next renewal, or when you start it again. A switch says so in place of the 33 seconds. Each change and each read but `pitboard status --offline` warn with `fallback_login`. Sessions started after the switch use the account switched to.
+Not known: whether a request under way during a switch finishes, and what Claude Code does at a limit.
 
-Until it follows, `/status` in that session already names the account switched to, since it reads Claude Code's config, which a switch rewrites. `/usage` and every request still use the login the session holds.
+On macOS, a `/login` while the keychain is locked leaves a login file behind the keychain, `~/.claude/.credentials.json`. Any file there pins open sessions: a login, `{}` or a file Pitboard cannot read.
 
-Claude Code sessions, and the daemon that refreshes their login, take the same Claude Code lock as a switch. Each reads the login again under the lock, so none can write the previous account back. A session that starts to renew its login during a switch waits for the switch, as read in Claude Code 2.1.294.
+As read in 2.1.294 and not measured, a pinned session keeps its login until it renews it, 5 minutes before expiry, or restarts. Sessions started later use the account switched to.
 
-Everything that runs Codex holds its login in memory until it stops. Each of these needs to be started again: a `codex` session, the ChatGPT app, Codex's background app server and Codex in an editor.
+A switch then says so in place of the 33 seconds. Other changes and reads warn with `fallback_login`. `pitboard status --offline` does not look for the file. [Claude Code over SSH uses another account](/troubleshooting#claude-code-over-ssh-uses-another-account) has the fix.
 
-That is why Pitboard never switches Codex by itself. For how to start each again, see [What happens to open sessions](/guides/switch#what-happens-to-open-sessions).
+As read in Codex 0.154.0, everything that runs Codex holds its login in memory until it stops. None follows a switch, so Pitboard never switches Codex by itself. [What happens to open sessions](/guides/switch#what-happens-to-open-sessions) says what to restart.
 
 ## Why Codex logins are moved, not copied
 
-`codex login` and `codex logout` ask OpenAI to revoke the stored refresh token. If Pitboard kept a copy beside the login in use, your next sign-in or sign-out would revoke both.
+As read in Codex 0.154.0, `codex login` and `codex logout` ask OpenAI to revoke the stored login. A copy beside the login in use would be revoked with it at your next sign-in or sign-out.
 
-So Pitboard moves the outgoing login into its store, and reads it back before it writes the incoming one. Finishing or undoing an interrupted switch, `pitboard abandon` and `pitboard repair` keep no copy of the login in use either.
+So a switch moves the outgoing login into Pitboard's store, and reads it back there before writing the incoming one. Finishing or undoing an interrupted switch, `pitboard abandon` and `pitboard repair` keep no copy of the login in use either.
 
 ## Interrupted switches
 
-Before moving any login, a switch records what it is about to do in `journal.json`, with fingerprints of the outgoing and incoming login.
+A crash or Control-C can stop a switch partway, leaving `journal.json` behind.
 
-A switch can stop partway, for example in a crash or when you stop `pitboard watch` during one. The next command that changes something then finishes or undoes it first. It compares the login in use with the record, which needs no network.
+The next change finishes or undoes it first: `pitboard use`, `enroll`, `forget`, `rename`, `stow`, `repair`, `uninstall` or the same in the app. It compares the login in use with the journal's two fingerprints, with no request. `pitboard status`, `doctor`, `log` and `renew` leave it.
 
-Those commands are `pitboard use`, `enroll`, `forget`, `stow`, `rename`, `repair` and `uninstall`, and the same changes in the app. `pitboard`, `pitboard doctor`, `pitboard log` and `pitboard renew` do not finish it.
+Pitboard does not switch by itself meanwhile: finishing it is your change to make.
 
-Pitboard does not start a switch by itself while one is interrupted, because finishing it is a change for you to make. The app or `pitboard watch` says so once.
+A login matching neither fingerprint, usually one the tool renewed since, must be identified first, for Claude Code by Anthropic. Until then, every change stops without changing anything.
 
-A login matching neither fingerprint usually means the tool refreshed it after the switch stopped. Pitboard must then identify the login, which for Claude Code means asking Anthropic. Until it can, every such command stops without changing anything.
-
-`pitboard status` warns about such a switch with `recovery_undetermined`, in the words those commands stop with, and changes nothing. `pitboard status --offline` gives the same warning, unless only Anthropic can tell whose the login is.
-
-The app shows the notice **An interrupted switch is waiting** each time it reads your accounts. A switch the next command can finish gets no such warning.
-
-To give up on the switch, see [Recover after a crash, a restore or a move](/troubleshooting/recovery#an-interrupted-switch-cannot-be-finished).
+[Interrupted switches](/reference/errors#interrupted-switches) lists what Pitboard says meanwhile. [An interrupted switch cannot be finished](/troubleshooting/recovery#an-interrupted-switch-cannot-be-finished) says how to give up on it.

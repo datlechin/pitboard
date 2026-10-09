@@ -3,10 +3,6 @@ title: "Integration commands"
 description: "`statusline`, `completions` and `manpage` produce output for Claude Code's status line, your shell and `man`."
 ---
 
-These three commands print text for another program to read. None of them makes a network request or touches a login.
-
-Their only options are `--json` and `--help`, which [Global options](/reference/commands#global-options) describes.
-
 ## `statusline`
 
 ```text
@@ -15,31 +11,66 @@ One line for Claude Code's status bar; reads its session JSON on stdin
 Usage: pitboard statusline [OPTIONS]
 ```
 
-`pitboard statusline` reads the session JSON that Claude Code passes on standard input. It uses only `session_id`, `rate_limits.five_hour.used_percentage`, `rate_limits.five_hour.resets_at`, `rate_limits.seven_day.used_percentage` and `rate_limits.seven_day.resets_at`.
+It uses these fields of the session JSON:
 
-When standard input is a terminal, it reads nothing. Input that is not JSON counts as empty, and the command always exits 0.
-
-It prints one line: the account the session is on, then every other enrolled Claude Code account, two spaces apart.
-
-| Part | Meaning |
+| Field | Use |
 | --- | --- |
-| `work 46%·70%` | `work` has used 46% of its five-hour limit and 70% of its weekly limit. Percentages are whole numbers, a half rounded up, as the app shows them. |
+| `session_id` | Compares this run with the session's last one. Without it, Pitboard records nothing. |
+| `rate_limits.five_hour.used_percentage`, `rate_limits.five_hour.resets_at` | The five-hour limit |
+| `rate_limits.seven_day.used_percentage`, `rate_limits.seven_day.resets_at` | The weekly limit |
+
+When standard input is a terminal, it reads nothing. Input that is not JSON counts as empty.
+
+It prints the session's account, then every other enrolled Claude Code account, two spaces apart. Limits for a single model and accounts of OpenAI's Codex CLI never appear.
+
+| Value | Meaning |
+| --- | --- |
+| `46%·70%` | 46% of the five-hour limit and 70% of the weekly limit are used. Whole numbers, a half rounded up. |
 | `?` | Pitboard has no reading of that limit. |
-| `0%` | None of that limit is used, or it has reset since Pitboard last read it. |
-| `(3h 00m)` | The age of another account's reading, shown once it is older than 15 minutes. |
-| `work?` | Shown in place of the first label when Pitboard cannot tell which account the session is on. `work` is the account in use. The percentages are the session's own where it passed some. Otherwise they are `work`'s, and Claude Code's config has named another account since Pitboard last asked Anthropic, or Pitboard has not asked yet. |
-| `?` | Shown in place of the first label when Pitboard can name no account the session may be on. That is when the account in use is in other windows than the session's, or lacks a limit the session passed. It is also when Pitboard knows of no enrolled account in use and has not asked Anthropic since Claude Code's config last changed. Running `pitboard` asks. |
-| `unenrolled` | Shown in place of the first label when Claude Code's login, as Anthropic last named it, is of an account you have not enrolled. Also shown when Claude Code has no login stored. |
+| `0%` | None of that limit is used, or its period has reset since Pitboard's reading. |
+| `▲` | First account only: that limit is used faster than an even [pace](/concepts/usage#pace). |
+| `▼` | First account only: that limit is used slower than an even pace. |
+| No triangle | On pace, or no pace for that limit. |
+| `(3h 00m)` | The age of another account's reading, once older than 15 minutes. The first account never shows one. |
 
-Limits for a single model and accounts of OpenAI's Codex CLI never appear.
+The first label comes from the session's periods when they [identify its account](/concepts/usage#what-the-status-line-adds). Otherwise it comes from the account in use: Pitboard's [record](/concepts/switching#how-pitboard-knows-whose-login-it-is) of Anthropic's last answer about Claude Code's login.
 
-The first label is bold. Other labels, `·`, `?` and ages are dim. A percentage is green under 70%, yellow from 70% and red from 90%.
+That record is unconfirmed before Pitboard first asks, and while Claude Code's config names another account than at that answer. `pitboard status` confirms it.
 
-The colour stays on through a pipe unless `NO_COLOR` is set, as [Commands](/reference/commands#output) describes. With `--json`, the [JSON output](/reference/json-output#data-by-command) field `data.line` holds the line without colour.
+| First label | When | Percentages |
+| --- | --- | --- |
+| `work` | The session's periods identify `work`. | `work`'s reading |
+| `work` | The session passed no running period. `work` is in use, confirmed. | `work`'s reading |
+| `work?` | The same, unconfirmed. | `work`'s reading |
+| `work?` | The session's running periods identify no account, or several. `work` is in use. | The session's own |
+| `?` | The same, but `work`'s reading rules the session out. It holds another running period of a limit the session passed, or lists every limit `work` has without that one. | The session's own |
+| `?` | The session's periods identify no account. The record names no enrolled account, unconfirmed. | The session's own |
+| `unenrolled` | The same, confirmed: Claude Code's login is an account you have not enrolled, or there is none. | The session's own |
 
-It takes the account in use from what Anthropic last said of Claude Code's login, as Pitboard recorded it. It reads Claude Code's config only to tell whether it has named another account since. It also reads Pitboard's accounts and readings, never the keychain.
+| Part | Style |
+| --- | --- |
+| The first account's label, or `unenrolled` | Bold |
+| Other labels, `·`, `?` and ages | Dim |
+| A percentage | Green under 70%, yellow from 70%, red from 90% |
+| `▲` | Red |
+| `▼` | Green |
 
-It keeps what each session passed at its last run in `~/.pitboard/sessions.json`. It records a session's numbers in `~/.pitboard/usage.json`, the readings `pitboard` and the app show, for the account whose windows they are. For when it records them, see [How usage is read](/concepts/usage#what-the-status-line-adds).
+Without `NO_COLOR`, the line has colour through a pipe too. With `NO_COLOR` set, even to an empty value, it follows the [colour rules](/reference/commands#output) of other commands.
+
+With `--json`, [`data.line`](/reference/json-output#data-by-command) holds the line without colour.
+
+It sends no request and never reads the keychain or a login. It reads Pitboard's own files, and Claude Code's config only to check whether the record is unconfirmed.
+
+It writes two files in the [Pitboard directory](/reference/files#the-pitboard-directory):
+
+| File | What it writes |
+| --- | --- |
+| `sessions.json` | What each session passed at its last run |
+| `usage.json` | Limits that moved since the session's last run, into the reading of the account its periods identify |
+
+As root or under `sudo`, it writes nothing.
+
+It exits 0 whatever its input. When a home variable is empty or not a full path, it prints no line and exits 1 with [`home_not_absolute`](/reference/errors#the-pitboard-directory).
 
 At a prompt, it prints Pitboard's last readings:
 
@@ -48,10 +79,10 @@ pitboard statusline
 ```
 
 ```text
-work 46%·70%  personal 12%·40% (3h 00m)  side ?·?
+work 46%·70%  personal 12%·40%  side ?·? (3h 00m)
 ```
 
-To add it to Claude Code, see [Show usage in Claude Code's status line](/guides/status-line).
+[Show usage in Claude Code's status line](/guides/status-line) adds it to Claude Code.
 
 ## `completions`
 
@@ -65,17 +96,24 @@ Usage: pitboard completions [OPTIONS] <SHELL>
 | --- | --- |
 | `<SHELL>` | `bash`, `elvish`, `fish`, `powershell`, `zsh` |
 
-`pitboard completions` prints the completion script for that shell on standard output.
+It writes the script to standard output. With `--json`, it prints no script and exits 2 with [`output_is_not_a_report`](/reference/errors#command-output).
 
-With `--json`, it prints no script and exits 2 with the error `output_is_not_a_report`.
+| Install | Scripts |
+| --- | --- |
+| Either Homebrew cask | `etc/bash_completion.d/pitboard`, `share/zsh/site-functions/_pitboard` and `share/fish/vendor_completions.d/pitboard.fish`, under `$(brew --prefix)` |
+| Release tarball | `completions/pitboard.bash`, `pitboard.zsh` and `pitboard.fish` |
+| The app | The same three files in `Pitboard.app/Contents/Resources/completions/` |
 
-The Homebrew casks install the bash, zsh and fish scripts. Each release tarball includes them in `completions/`, and the app in `Pitboard.app/Contents/Resources/completions/`. No release includes the elvish or PowerShell script.
+No release includes the elvish or PowerShell script.
 
-zsh loads `_pitboard` from any directory on its `fpath`. This example writes it to the current directory:
+zsh loads `_pitboard` from any folder on its `fpath`:
 
 ```sh
-pitboard completions zsh > _pitboard
+mkdir -p ~/.zfunc
+pitboard completions zsh > ~/.zfunc/_pitboard
 ```
+
+Then add `fpath=(~/.zfunc $fpath)` to `~/.zshrc`, before `compinit` runs.
 
 ## `manpage`
 
@@ -85,13 +123,17 @@ Print the man page
 Usage: pitboard manpage [OPTIONS]
 ```
 
-`pitboard manpage` prints Pitboard's man page in roff on standard output. `pitboard --help` does not list it. With `--json`, it exits 2 with the error `output_is_not_a_report`.
+It writes roff to standard output. With `--json`, it exits 2 with `output_is_not_a_report`.
 
-The man page gives the synopsis, the global options, and each command with its arguments and options. It is Pitboard's only man page.
+It is one page, with the sections `NAME`, `SYNOPSIS`, `DESCRIPTION`, `OPTIONS`, `COMMANDS` and `VERSION`. `COMMANDS` gives every command but `help` and `manpage`, each with its arguments and options.
 
-The Homebrew casks install it. Each release tarball includes it as `pitboard.1`, and the app as `Pitboard.app/Contents/Resources/man/pitboard.1`.
+| Install | Man page |
+| --- | --- |
+| Either Homebrew cask | `share/man/man1/pitboard.1`, under `$(brew --prefix)` |
+| Release tarball | `pitboard.1` |
+| The app | `Pitboard.app/Contents/Resources/man/pitboard.1` |
 
-This example opens it in `man`:
+To read it without installing it:
 
 ```sh
 pitboard manpage > pitboard.1

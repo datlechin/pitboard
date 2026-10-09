@@ -1,0 +1,38 @@
+---
+title: "Fix problems in account windows"
+sidebarTitle: "Account windows"
+description: "Fix Pitboard missing from the Share menu, or an account window failing to load or save, or signed in wrongly."
+---
+
+Google's sign-in and passkeys never work in an account window. [Sign in](/guides/account-windows#sign-in) lists the ways that do.
+
+## Pitboard is missing from the Share menu
+
+In Safari, Chrome and Firefox, the Share menu is **File** > **Share**. Safari also has a **Share** button in its toolbar.
+
+If **Pitboard** is not listed, turn it on in System Settings:
+
+- macOS 15 and later: **System Settings** > **General** > **Login Items & Extensions** > **Sharing**.
+- macOS 14: **System Settings** > **Privacy & Security** > **Extensions** > **Sharing**.
+
+Whether other browsers list Pitboard is not known. If your browser has no Share menu, open the account window and go to the page there.
+
+## A window does not load its page
+
+The window shows **Couldn't Load the Page** and the reason, such as a lost connection. Fix what the reason names, then click **Try Again**.
+
+The window sends WebKit's own user agent. Whether a site's check for automated traffic stops it is not known.
+
+When a page crashes, the window loads it again. If it crashes again within 60 seconds, the reason is **The page stopped working.**
+
+## Downloads are not saved
+
+Downloads go to `~/Downloads`. If you clicked **Don't Allow** when macOS asked for that folder, Pitboard cannot save there. Open **System Settings** > **Privacy & Security** > **Files & Folders** and turn on **Downloads Folder** for Pitboard.
+
+A download that fails says why in the window's **Downloads** list, which the toolbar's **Downloads** button opens.
+
+## A window is signed in as the wrong account
+
+Pitboard never reads what a window keeps, so it cannot see who is signed in. The window's title is the label of the account it belongs to, whoever signed in.
+
+[Sign the window out](/guides/account-windows#sign-a-window-out), then sign in as the email address in the note at its top.

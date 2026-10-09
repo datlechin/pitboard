@@ -1,78 +1,39 @@
 ---
 title: "What Pitboard will not do"
-description: "Pitboard switches by itself only when you ask, never pools requests or syncs logins, and every switch has costs."
+description: "What Pitboard leaves alone, what a switch costs you, and which tools and sign-ins it does not support."
 ---
 
-Pitboard switches two tools, Claude Code and OpenAI's Codex CLI, between accounts you own. It leaves some things alone on purpose. The tools, their services, Google and macOS rule out others.
+Pitboard is for one person with several accounts of their own in Claude Code or OpenAI's Codex CLI.
 
 ## Rules
 
-These are rules, not gaps.
-
-### Automatic switching
-
-Pitboard switches by itself only when you ask it to, and only Claude Code. You ask by turning on **Switch Claude Code automatically** in **Settings** > **General**, or by running `pitboard watch` in a terminal. The setting is off until you turn it on, and nothing starts `pitboard watch` for you.
-
-Pitboard then switches once a limit of the Claude Code account in use reaches a share you choose, 95% by default. It switches before the limit, not at it, because [open sessions](/concepts/switching#open-sessions) keep the account they leave for up to about 33 seconds. While a login file sits behind the keychain, they keep it until their next login renewal. Pitboard still switches then, for the sessions started after it.
-
-It never switches Codex by itself. A running `codex` keeps its account until it is started again, so a switch would not reach the session it was meant to help.
-
-It never switches back by itself, and never quits an app. For which account Pitboard picks, what else it never does and when it holds back, see [Switch before an account runs out](/guides/automatic-switching).
-
-Whether or not Pitboard switches by itself, the app offers a switch for you to make when an account runs out. See [When an account runs out](/guides/switch#when-an-account-runs-out).
-
-### A tool's requests
-
-Pitboard never sees a tool's requests. It does not pool them across accounts, or proxy them by pointing Claude Code's `ANTHROPIC_BASE_URL` at itself. So it does not switch when a request is refused or rate limited.
-
-Pitboard decides a switch it makes by itself from usage it has already read, and asks no service for usage to decide. Without Pitboard's status line, those numbers can be 5 minutes old or more. See [Keep the numbers fresh](/guides/automatic-switching#keep-the-numbers-fresh).
-
-### Logins
-
-Pitboard does not renew the login in use. The tool refreshes that login itself, and two programs renewing one login end it for both.
-
-Two machines renewing one login end it too. So Pitboard never copies a parked login, the login it holds for an account not in use, to another machine. Each machine signs in to each account itself.
-
-If `~/.pitboard` came from another computer, see [The Pitboard directory came from another computer](/troubleshooting/recovery#the-pitboard-directory-came-from-another-computer).
-
-Pitboard never reads, copies or changes what an [account's window](/guides/account-windows) keeps. It never makes a claude.ai or chatgpt.com sign-in from a tool's login.
+- Pitboard switches by itself only while [automatic switching](/guides/automatic-switching) is on in the app or `pitboard watch` is running.
+- It switches only Claude Code by itself. [What a switch costs you](#what-a-switch-costs-you) says why.
+- Pitboard never sees a tool's requests, so it never proxies or pools them.
+- It decides an automatic switch from usage it has already read, never from a refused or rate-limited request. [Keep the numbers fresh](/guides/automatic-switching#keep-the-numbers-fresh) says how old that usage can be.
+- Pitboard never renews the login in use. The tool renews it, and a renewal spends the refresh token a running session may still hold.
+- [`pitboard stow`](/reference/recovery-commands#stow) is the one exception. It can renew an expired login in a login file behind the keychain, under Claude Code's refresh lock.
+- Pitboard never copies a parked login to another machine. Once one machine renews it, the other machine's copy is spent.
+- Each machine signs in to each account itself. [The Pitboard directory came from another computer](/troubleshooting/recovery#the-pitboard-directory-came-from-another-computer) covers a copied `~/.pitboard`.
 
 ## What a switch costs you
 
-Every switch has costs, whoever starts it. They come from Claude Code, Codex and their services.
+Open Claude Code sessions keep the account they leave for up to about 33 seconds. Everything that runs Codex, the ChatGPT app included, keeps its account until it starts again. [Open sessions](/concepts/switching#open-sessions) explains both.
 
-Claude Code's prompt cache belongs to one account, so the first message after a switch rebuilds it. Pitboard's author measured that at about the cost of resuming a session after an idle hour. Waiting for a five-hour limit to reset instead usually leaves a session idle that long anyway.
-
-A switch also has these costs:
-
-- Claude Code's Remote Control stops for a conversation started under the account you switched away from.
-- Usage for an account not in use counts its work on other machines too.
-- A running `codex` keeps its account until you restart it. See [What happens to open sessions](/guides/switch#what-happens-to-open-sessions).
+An automatic switch would miss the `codex` session it was meant to keep going, so Pitboard never switches Codex by itself. [What happens to open sessions](/guides/switch#what-happens-to-open-sessions) lists what to restart.
 
 ## Is this allowed
 
-Pitboard moves only logins you already hold, between its own store and the place each tool reads them from. It does not share an account between people, pool requests or touch an account you do not own.
+Pitboard moves only logins you already hold, between its own store and the place each tool reads them. It has no way to share an account between people.
 
-Whether several subscriptions suit your work depends on Anthropic's or OpenAI's terms.
-
-An account's window is the site's own page, which you sign in to by hand. WebKit keeps that sign-in in the app's website data. For what Anthropic's terms say about that, see [Anthropic's terms](/security#anthropic%E2%80%99s-terms).
-
-## What an account's window cannot do
-
-An account's window shows claude.ai or chatgpt.com in WebKit. Google, macOS and Pitboard's own rules limit what it can do:
-
-- Google's sign-in does not work. Google does not allow its sign-in pages inside apps, so the window stops them. Connecting Gmail, Google Drive or Google Calendar fails the same way, as does claude.ai's Google single sign-on.
-- Passkeys do not work. macOS gives passkeys to a web page only in an app it lets act as a browser, and Pitboard is not one.
-- The window always refuses the camera and the microphone, so a site's voice mode does not work. Web notifications do not work either.
-- Pitboard cannot see which account a window is signed in to, because it never reads what the window keeps. The window's title names the account the window belongs to, not the one signed in.
-- A window never follows a switch. Each window belongs to one account and stays signed in as that account, whichever account a tool is using.
-
-To sign in without Google or a passkey, see [Sign in](/guides/account-windows#sign-in).
+Anthropic's and OpenAI's terms decide whether you may use several subscriptions this way. [Anthropic terms](/security#anthropic-terms) quotes what Anthropic says about third-party apps and logins.
 
 ## Tools and sign-ins Pitboard does not support
 
-- Gemini CLI. Since 18 June 2026, Google no longer offers Gemini CLI's **Login with Google** to individual, Google AI Pro and Google AI Ultra accounts. See [Gemini Code Assist consumer accounts](https://developers.google.com/gemini-code-assist/docs/deprecations/code-assist-individuals).
-- Codex signed in with an API key, or keeping its login in the keychain or in memory. See [Before you enrol a Codex account](/guides/codex#before-you-enrol-a-codex-account).
-- Windows. Claude Code keeps its login differently there.
-- Claude Code with `CLAUDE_CODE_CUSTOM_OAUTH_URL` set. Claude Code then keeps its login under another name. So Pitboard refuses to act on Claude Code, and does not switch it by itself either. It also refuses to give up on a Claude Code switch, or to run `repair` or `uninstall`. Codex accounts still switch, and `abandon` still gives up on a Codex switch.
-- Claude Code set to use an API key, `CLAUDE_CODE_OAUTH_TOKEN`, `ANTHROPIC_AUTH_TOKEN`, a cloud provider or `apiKeyHelper`. Its sessions ignore the login Pitboard moves, so a switch changes nothing they see. Pitboard warns when it finds one, and does not switch Claude Code by itself while one is set. See [Environment variables](/reference/files#environment-variables).
+- Gemini CLI. Since 18 June 2026, Google no longer offers Gemini CLI's **Login with Google** to individual, Google AI Pro and Google AI Ultra accounts. Google says so in [Gemini Code Assist consumer accounts](https://developers.google.com/gemini-code-assist/docs/deprecations/code-assist-individuals).
+- Codex signed in with an API key rather than ChatGPT.
+- Codex keeping its login anywhere but `auth.json`, its file store. [Before you enrol a Codex account](/guides/codex#before-you-enrol-a-codex-account) shows how to check.
+- Google sign-in and passkeys in an account's window. [Sign in](/guides/account-windows#sign-in) gives the ways that work.
+- Windows. A Windows build answers only `--version`, `--help`, `completions` and `manpage`, and refuses the rest with [`windows_not_released`](/reference/errors#windows).
+- Claude Code with `CLAUDE_CODE_CUSTOM_OAUTH_URL` set. Its login then sits under a name Pitboard does not read. [Custom OAuth endpoint](/reference/files#custom-oauth-endpoint) lists what Pitboard refuses.
+- Claude Code set to use `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `CLAUDE_CODE_OAUTH_TOKEN`, `apiKeyHelper` or a third-party provider. Its sessions ignore the login Pitboard switches. [Variables that override the login](/reference/files#variables-that-override-the-login) lists them all.

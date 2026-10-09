@@ -4,30 +4,28 @@ sidebarTitle: "Account windows"
 description: "Open claude.ai or chatgpt.com as each account in a window of its own, and send pages there from your browser."
 ---
 
-The menu bar app gives each enrolled account a window on its tool's site: claude.ai for Claude Code, chatgpt.com for Codex. Each window keeps website data of its own, so your accounts can be signed in side by side. Pitboard never reads, copies or changes what a window keeps.
+Each window keeps its own website data, so your accounts stay signed in side by side. A Claude Code account's window is on claude.ai, a Codex account's on chatgpt.com. [Where account windows keep their data](/security#where-account-windows-keep-their-data) says where it is and when Pitboard deletes it.
 
-## Open an account's window
+## Open an account window
 
-In Pitboard's menu, choose **Open claude.ai as work**. When the site has several accounts, choose **Open claude.ai**, then the account. In the Pitboard window, you can also Control-click an account and choose **Open claude.ai** or **Open chatgpt.com**.
+In Pitboard's menu in the menu bar, choose **Open claude.ai as work**. When the site has several accounts, choose **Open claude.ai**, then the account. In the Pitboard window, Control-click an account and choose **Open claude.ai** or **Open chatgpt.com**.
 
-While a Pitboard window is open, the **File** menu and the Dock icon's menu offer the same items.
+A window's title is its account's label. Renaming the account keeps the window signed in.
 
-Each account has one window, titled with its label, and a rename keeps it signed in. A login with no label has no window.
+Links to other sites open in your default browser. Anything you connect there goes to the account your browser is signed in to.
 
-Pages on other sites open in your default browser, so anything you connect there goes to the account your browser is signed in to.
-
-For every item, note and shortcut, see [Account windows](/reference/app#account-windows).
+[Account windows](/reference/account-windows#account-windows) lists every place a window opens from, and [Downloads](/reference/account-windows#downloads) where it saves files.
 
 ## Sign in
 
-The first time a window opens on this Mac, a note at its top says which email address to sign in with, and how.
+The first time Pitboard opens an account's window, a note at its top names the email address to sign in with and the steps.
 
-Google does not allow its sign-in inside apps, so the window stops it and does not send it to your browser. Gmail, Google Drive and Google Calendar cannot be connected in a window either.
+Google's sign-in does not work. Google does not allow it inside apps, so the window stops it.
 
 ### claude.ai
 
 <Steps>
-  <Step title="Ask for the email">
+  <Step title="Enter the email">
     Enter the email address the note names, then click **Continue with email**.
   </Step>
   <Step title="Tap the link on your phone">
@@ -38,48 +36,45 @@ Google does not allow its sign-in inside apps, so the window stops it and does n
   </Step>
 </Steps>
 
-Google single sign-on does not work in a claude.ai window.
-
 ### chatgpt.com
 
-Enter the account's email address, then its password or the code chatgpt.com emails you. You can also click **Continue with Microsoft** or **Continue with Apple**. Passkeys do not work in the window.
+Enter the account's email address, then its password or the code chatgpt.com emails you. Or click **Continue with Microsoft** or **Continue with Apple**.
 
-A sign-in page that chatgpt.com opens in a new window appears in a sign-in window, which shares the account's data.
+Passkeys do not work. macOS offers them to a web page only in an app it lets act as a browser.
+
+## What a window cannot do
+
+- Gmail, Google Drive and Google Calendar cannot be connected, since connecting them needs Google's sign-in.
+- In a claude.ai window, Google single sign-on does not work either.
+- The window refuses the camera and the microphone, so voice mode does not work.
+- Web notifications do not work.
+- Pitboard cannot see who is signed in to a window. Its title names the account it belongs to.
+- A window stays with its own account after a switch.
 
 ## Open a page from your browser
-
-Share a claude.ai or chatgpt.com page with Pitboard to open it as one of your accounts.
 
 <Steps>
   <Step title="Share the page">
     In Safari, click **Share** in the toolbar or choose **File** > **Share**. In Chrome or Firefox, choose **File** > **Share**. Then choose **Pitboard**.
   </Step>
   <Step title="Choose the account">
-    Select an account in the **Open Link** window. It first selects the one you chose last for that site, or else the account in use.
+    In the **Open Link** window, select an account. Pitboard first selects the one you chose last for that site, or else the account in use.
   </Step>
-  <Step title="Open the page">
-    Click **Open**. If the account's window is open, the page loads there, and **Back** returns to what it showed.
+  <Step title="Click Open">
+    The page opens in that account's window. If the window was already open, **Back** returns to what it showed.
   </Step>
 </Steps>
 
-Anything on your Mac can hand Pitboard a link, so nothing opens until you choose. Pitboard refuses a page on another site with **Can't Open This Link**. It refuses a site's sign-in link too, which would sign the window in as whoever it belongs to.
+Pitboard refuses a page on another site with **Can't Open This Link**. It refuses a site's sign-in link too, which would sign the window in as whoever the link belongs to. [Refused links](/reference/account-windows#refused-links) lists every case.
 
-With no account on the page's site, Pitboard shows **No claude.ai Account**. Click **Add Account**, and the link waits until you choose the account.
+With no account on the page's site, the **Open Link** window shows **No claude.ai Account**. Click **Add Account**, and the link waits there until you choose the account you added.
 
-If **Pitboard** is not in the Share menu, see [Pitboard is missing from the Share menu](/troubleshooting#pitboard-is-missing-from-the-share-menu).
+If **Pitboard** is not in the Share menu, see [Pitboard is missing from the Share menu](/troubleshooting/account-windows#pitboard-is-missing-from-the-share-menu).
 
-## Downloads
+## Sign a window out
 
-Downloads go to your Downloads folder and never replace a file: a second `report.pdf` becomes `report 2.pdf`.
-
-A download from the site's own page is saved at once. One from another site, or from a frame inside the page such as an artifact, asks first.
-
-The toolbar's **Downloads** button lists a window's downloads, and there you can cancel one or show it in Finder. Downloads go on after the window closes. Quitting Pitboard stops them for good and deletes what they wrote, so it asks first.
-
-## Remove a window's data
-
-To sign one window out, bring it to the front and choose **File** > **Remove Website Data**, then click **Remove**. Pitboard deletes the cookies and everything else the site keeps in that window on this Mac. The window starts again at the site's home page, with the sign-in note.
+Bring the account's window to the front, choose **File** > **Remove Website Data**, then click **Remove**. Pitboard deletes the cookies and everything else the site keeps in that window. The window starts again at the site's home page, with the sign-in note.
 
 The site is not told, so the account stays signed in on your other devices and browsers.
 
-Forgetting an account, in the app or with `pitboard forget`, deletes its window's data too. The app does it after its next successful read of the accounts. For the data it keeps for another Pitboard directory, see [Account windows](/reference/files#account-windows).
+Forgetting the account, in the app or with `pitboard forget`, deletes its window's data too.
