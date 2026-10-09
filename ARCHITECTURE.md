@@ -1213,15 +1213,15 @@ tool has a record for each slot it was read under. `in_use` holds the one of the
 names; the others wait in `other_slots`, by slot, and `load` puts the slot it reads in place
 of the one `slot` names. A read records what it finds, so two front ends under two slots
 take turns writing the file, and a record either dropped would leave the next read under the
-other nothing to tell a sign-in outside Pitboard by. An account another slot's record names still
-has a login stored there, so a sign-in that replaces its login in one slot leaves it that
-one, and nothing says it was replaced.
+other nothing to tell a sign-in outside Pitboard by. An account another slot's record names
+still has a login stored there, so a sign-in that replaces its login in one slot leaves it
+that one, and nothing says it was replaced.
 
 A schema 5 file comes forward with each tool's `active` label as that account's record, with
 no login and `known_at` 0: nothing established which login the store held. A label naming no
-account names nobody. Schema 6 is a bump rather than a field beside `active`, so an older app
-or `pitboard watch` running beside a newer one refuses the file and says to update, and does
-not go on deciding who is in use from Claude Code's config.
+account names nobody. Schema 6 is a bump rather than a field beside `active`, so an older
+app or `pitboard watch` running beside a newer one refuses the file and says to update, and
+does not go on deciding who is in use from Claude Code's config.
 
 A file naming a tool this build does not know is reported as written by a newer Pitboard,
 not as corrupt. The advice for a corrupt file is to delete it, and following that here would
@@ -1296,9 +1296,9 @@ and is the same in all four: `usage_cache_stamp_is_the_configs`,
 `status_reads_the_config_usage_the_token`, `config_identity_is_the_last_writers`,
 `status_line_input_names_no_account` and `fallback_file_pins_session_login`, read in the
 macOS build on the 8th, and `refresh_lock`, read in all four on the 9th. The fallback file's
-fact is read on macOS alone: on Linux the file is
-Claude Code's only store, and on Windows it is too unless Credential Manager is turned on,
-which W22 reads. The checker finds every fact each build was read for.
+fact is read on macOS alone: on Linux the file is Claude Code's only store, and on Windows
+it is too unless Credential Manager is turned on, which W22 reads. The checker finds every
+fact each build was read for.
 
 `.github/workflows/conformance.yml` checks the newest builds of each tool against its
 register on Mondays and Thursdays, or a version given by hand. It reads four builds of each
