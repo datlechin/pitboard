@@ -165,17 +165,18 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   `autoswitch::Blind` and `autoswitch::Look`, the variants `autoswitch::Auto::NotWatching`,
   `Auto::Watching` and `Auto::Waiting`, `autoswitch::Skip`'s `NoRoom`, `AlreadyLeft`,
   `GaveUp` and `Settling`, `autoswitch::DECIDE_EVERY_SECONDS` and `autoswitch::retry_after`,
-  `service::Pitboard::auto_look`, `update_config`, `left_login` and `stow`,
-  `State::account_in_use`, `identified`, `other_slots` and `from_file`,
-  `state::Account::replaced_at` and `owner`, the module `in_use`,
-  `usage::Snapshot::answered_at` and `lists_every_limit`, `usage::Room`, `usage::room`,
-  `usage::roomiest` and `usage::whole`, `status::Stale::LoginReplaced`, `service::Warning`'s
-  `LoginReplaced`, `InUseUnconfirmed` and `ConfigNamesAnother`, `service::Stored`,
-  `provider::Held`, `doctor::Facts::in_use`, `switch::update_config`, `switch::stow` with
-  `Left`, `Stowed`, `Kept` and `Foreseen`, `error::Partway`, the errors `AccountNotInUse`,
-  `LeftLoginChanged`, `StoredLoginChanged`, `LeftLoginNotEnrolled`, `LeftLoginUnidentified`
-  and `StowStopped`, and `words::not_watching`, `watching`, `kept_until_renewed`,
-  `left_lines`, `nothing_left` and `stowed_lines`. These change the crate's public API.
+  `autoswitch::Auto::told_apart` and `Skip::told_apart`, `service::Pitboard::auto_look`,
+  `update_config`, `left_login` and `stow`, `State::account_in_use`, `identified`,
+  `other_slots` and `from_file`, `state::Account::replaced_at` and `owner`, the module
+  `in_use`, `usage::Snapshot::answered_at` and `lists_every_limit`, `usage::Room`,
+  `usage::room`, `usage::roomiest` and `usage::whole`, `status::Stale::LoginReplaced`,
+  `service::Warning`'s `LoginReplaced`, `InUseUnconfirmed` and `ConfigNamesAnother`,
+  `service::Stored`, `provider::Held`, `doctor::Facts::in_use`, `switch::update_config`,
+  `switch::stow` with `Left`, `Stowed`, `Kept` and `Foreseen`, `error::Partway`, the errors
+  `AccountNotInUse`, `LeftLoginChanged`, `StoredLoginChanged`, `LeftLoginNotEnrolled`,
+  `LeftLoginUnidentified` and `StowStopped`, and `words::not_watching`, `watching`,
+  `kept_until_renewed`, `left_lines`, `nothing_left` and `stowed_lines`. These change the
+  crate's public API.
 
 ### Removed
 
