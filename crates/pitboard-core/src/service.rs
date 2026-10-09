@@ -2363,6 +2363,38 @@ mod tests {
         assert_eq!(m.api.calls(), 0);
     }
 
+    /// The same record where the config names that account, as on nearly every machine
+    /// updated from 0.9.0 until its first read that asks: nothing is said, and nobody is asked.
+    #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
+    )]
+    fn an_offline_read_of_a_record_never_asked_about_says_nothing_where_the_config_agrees() {
+        let m = machine("offline-never-asked-agrees");
+        let mut state = state::load(&m.ctx).expect("state");
+        let here = state.get(&m.key("here")).expect("here").owner();
+        state.in_use.insert(
+            ProviderId::Claude.code().into(),
+            crate::in_use::InUse {
+                owner: Some(here),
+                login: String::new(),
+                known_at: 0,
+                named: None,
+            },
+        );
+        state::save(&m.ctx, Permit::for_a_test(), &state).expect("saved");
+        crate::switch::harness::config_names(&m, "here");
+
+        let read = Pitboard::new(m.ctx.clone())
+            .status_offline()
+            .expect("a read");
+
+        assert_eq!(in_use(&read), ["here"]);
+        assert_eq!(said(&read), []);
+        assert_eq!(m.api.calls(), 0);
+    }
+
     /// A read that asks settles it: the login stored is the one Anthropic named, known by its
     /// fingerprint, so nobody is asked whose it is, and what stands is that the config names
     /// another account, which `/status` in Claude Code shows. Said by every read after it,
