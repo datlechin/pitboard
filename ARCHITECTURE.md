@@ -269,17 +269,17 @@ pages load, as a browser would.
   were last written, and decides again whenever either changed and at least every 30
   seconds. It says every switch, and each thing that stopped one once until the next
   switch, told apart as the core tells it (`Auto::told_apart`): a reason not to switch away
-  from a limit once for that limit and its reset, and a wait once for when it ends; an
-  error once for its code. It says the account it watches, `idle` with its fullest
-  limit, when that was read and until when Anthropic holds Pitboard off asking again,
-  whenever its last line said something else. Each warning a decision found is said once
-  until the next switch, even one that went away and came back, with that decision's line,
-  which is said again to carry it where it was said before. A refusal is paced as the app
-  paces one: no decision under the lock until `autoswitch::retry_after` of the refusals in
-  a row has passed, only the look meanwhile, and any outcome ends the row, as the look
-  standing on what the core recorded with an attempt that failed, its own wait or why it
-  tries no more, does. It ends on a refusal watching cannot mend: running elevated, a
-  Windows build or Pitboard's own files unusable.
+  from a limit once for that limit and its reset, a reason it cannot judge once for what it
+  names, and a wait once for when it ends. An error is said once for its code. It says the
+  account it watches, `idle` with its fullest limit, when that was read and until when
+  Anthropic holds Pitboard off asking again, whenever its last line said something else.
+  Each warning a decision found is said once until the next switch, even one that went away
+  and came back, with that decision's line, which is said again to carry it where it was
+  said before. A refusal is paced as the app paces one: no decision under the lock until
+  `autoswitch::retry_after` of the refusals in a row has passed, only the look meanwhile,
+  and any outcome ends the row, as the look standing on what the core recorded with an
+  attempt that failed, its own wait or why it tries no more, does. It ends on a refusal
+  watching cannot mend: running elevated, a Windows build or Pitboard's own files unusable.
 - `crates/pitboard-ffi`: the core as UniFFI bindings, for the apps: a static library for
   the macOS app, a dynamic one for the Windows app. An app reaches the core through the
   model alone.
