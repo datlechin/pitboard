@@ -333,7 +333,7 @@ mod tests {
                 code: "auth_overridden".into(),
                 message: "ANTHROPIC_API_KEY is set".into(),
                 account: None,
-                file_holds: None,
+                held: None,
             }],
         });
         assert_eq!(alert.title, "Couldn’t switch to personal");

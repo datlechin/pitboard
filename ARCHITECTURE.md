@@ -1046,7 +1046,7 @@ pages load, as a browser would.
   organisation, without asking whose the login stored is, and nothing is deleted; the
   command line refuses it from the look, asking and trying nothing. Its other keys, such as
   `mcpOAuth`, are not Pitboard's to move: they go with the file, by name. Every error it
-  stops with says how far it went (`Error::PutAwayStopped`, with the code, cause and exit
+  stops with says how far it went (`Error::StowStopped`, with the code, cause and exit
   status of what stopped it): nothing changed, the login renewed and written back, renewed
   and not written back, which leaves it spent, or parked, which stays. A run that stops
   anywhere leaves the login in the file, in a park, or in both, but for the moment between

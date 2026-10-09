@@ -10,8 +10,8 @@
 //! failed.
 
 use crate::{
-    Abandoned, Account, FileHolds, FoundCommandLine, Level, Limit, Parked, Schedule, Source,
-    Status, Tool, Usage, Warning, found_command_line, tool,
+    Abandoned, Account, FoundCommandLine, Level, Limit, Parked, Schedule, Source, Status, Tool,
+    Usage, Warning, found_command_line, tool,
 };
 use pitboard_core::app::AppContext;
 use pitboard_core::autoswitch::{Auto, Blind, Look, Skip, Threshold};
@@ -69,11 +69,11 @@ fn warnings(found: &[service::Warning]) -> Vec<Warning> {
                 service::Warning::LoginReplaced { tool, id, .. } => Some(account_id(*tool, id)),
                 _ => None,
             },
-            file_holds: match w {
+            held: match w {
                 service::Warning::FallbackLogin { held, .. } => Some(match held {
-                    provider::Held::Login => FileHolds::Login,
-                    provider::Held::NoLogin => FileHolds::NoLogin,
-                    provider::Held::Unreadable => FileHolds::Unreadable,
+                    provider::Held::Login => crate::Held::Login,
+                    provider::Held::NoLogin => crate::Held::NoLogin,
+                    provider::Held::Unreadable => crate::Held::Unreadable,
                 }),
                 _ => None,
             },

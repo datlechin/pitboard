@@ -174,7 +174,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   `provider::Held`, `doctor::Facts::in_use`, `switch::update_config`, `switch::stow` with
   `Left`, `Stowed`, `Kept` and `Foreseen`, `error::Partway`, the errors `AccountNotInUse`,
   `LeftLoginChanged`, `StoredLoginChanged`, `LeftLoginNotEnrolled`, `LeftLoginUnidentified`
-  and `PutAwayStopped`, and `words::not_watching`, `watching`, `kept_until_renewed`,
+  and `StowStopped`, and `words::not_watching`, `watching`, `kept_until_renewed`,
   `left_lines`, `nothing_left` and `stowed_lines`. These change the crate's public API.
 
 ### Removed

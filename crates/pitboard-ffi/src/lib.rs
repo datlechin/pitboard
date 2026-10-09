@@ -172,12 +172,12 @@ pub struct Warning {
     pub account: Option<String>,
     /// What the file a `fallback_login` warning is about holds, which says whether it can be
     /// put away: one Pitboard cannot read cannot. `None` for every other warning.
-    pub file_holds: Option<FileHolds>,
+    pub held: Option<Held>,
 }
 
 /// What a file behind a tool's store holds, as far as Pitboard can read it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
-pub enum FileHolds {
+pub enum Held {
     /// A login of the tool's, which a session that cannot read that store signs in with.
     Login,
     /// No login of the tool's.

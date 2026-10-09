@@ -11,7 +11,7 @@ use crate::model::RunOutNotice;
 use crate::model::advice::Advice;
 use crate::model::state::split;
 use crate::model::{Intent, LastSwitch, Pane, Sheet};
-use crate::{Adoption, FileHolds, Warning};
+use crate::{Adoption, Held, Warning};
 use pitboard_core::provider::ProviderId;
 use pitboard_core::words as said;
 
@@ -247,7 +247,7 @@ pub(crate) fn notices(seen: &Seen, footing: &Footing) -> Vec<PanelNotice> {
 fn warning_actions(seen: &Seen, warning: &Warning) -> Vec<NoticeAction> {
     match warning.code.as_str() {
         "config_names_another" => update_config_action(seen),
-        "fallback_login" if warning.file_holds != Some(FileHolds::Unreadable) => {
+        "fallback_login" if warning.held != Some(Held::Unreadable) => {
             vec![NoticeAction {
                 title: "Put Away…".into(),
                 intent: Intent::PresentSheet { sheet: Sheet::Stow },

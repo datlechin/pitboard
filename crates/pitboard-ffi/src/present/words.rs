@@ -1005,7 +1005,7 @@ mod tests {
             code: code.into(),
             message: String::new(),
             account: None,
-            file_holds: None,
+            held: None,
         };
         for (code, heading) in headings {
             assert_eq!(warning_heading(&warning(code)), heading, "{code}");

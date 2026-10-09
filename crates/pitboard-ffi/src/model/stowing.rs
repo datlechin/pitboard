@@ -5,7 +5,7 @@
 use super::state::{Answer, Job};
 use super::testing::{Hand, Machine, claude, refusal, warned, warning};
 use super::{Intent, Sheet};
-use crate::FileHolds;
+use crate::Held;
 use crate::present::Severity;
 use pitboard_core::api::Owner;
 use pitboard_core::switch::{Foreseen, Kept, Left, Stowed};
@@ -13,10 +13,10 @@ use std::path::PathBuf;
 
 const FILE: &str = "/Users/dana/.claude/.credentials.json";
 
-/// The warning every read gives while the file is behind the keychain, holding `holds`.
-fn fallback_login(holds: FileHolds) -> crate::Warning {
+/// The warning every read gives while the file is behind the keychain, holding `held`.
+fn fallback_login(held: Held) -> crate::Warning {
     crate::Warning {
-        file_holds: Some(holds),
+        held: Some(held),
         ..warning(
             "fallback_login",
             &format!(
@@ -45,21 +45,21 @@ pub(super) fn parked_now(label: &str) -> Kept {
 
 /// A model that has read `work` in use, with the file behind the keychain holding a login.
 fn with_a_file_left(machine: &mut Machine) -> Hand {
-    with_a_file_holding(machine, FileHolds::Login)
+    with_a_file_holding(machine, Held::Login)
 }
 
-/// A model that has read `work` in use, with the file behind the keychain holding `holds`.
-fn with_a_file_holding(machine: &mut Machine, holds: FileHolds) -> Hand {
+/// A model that has read `work` in use, with the file behind the keychain holding `held`.
+fn with_a_file_holding(machine: &mut Machine, held: Held) -> Hand {
     machine.answer = Ok(warned(
         vec![claude("work", true, 10.0)],
-        vec![fallback_login(holds)],
+        vec![fallback_login(held)],
     ));
     let mut model = Hand::new();
     model.refresh(machine);
     model
 }
 
-fn put_away_sheet() -> Intent {
+fn stow_sheet() -> Intent {
     Intent::PresentSheet { sheet: Sheet::Stow }
 }
 
@@ -77,9 +77,9 @@ fn a_stow(job: &Job) -> bool {
 /// words send somebody to `pitboard doctor`.
 #[test]
 fn the_notice_of_a_login_left_in_a_file_offers_to_put_it_away() {
-    for holds in [FileHolds::Login, FileHolds::NoLogin, FileHolds::Unreadable] {
+    for held in [Held::Login, Held::NoLogin, Held::Unreadable] {
         let mut machine = Machine::reading(Ok(warned(Vec::new(), Vec::new())));
-        let model = with_a_file_holding(&mut machine, holds);
+        let model = with_a_file_holding(&mut machine, held);
 
         let shown = model.shown();
         let notice = shown
@@ -87,13 +87,13 @@ fn the_notice_of_a_login_left_in_a_file_offers_to_put_it_away() {
             .iter()
             .find(|notice| notice.id.starts_with("warning/fallback_login/"))
             .expect("the notice");
-        if holds == FileHolds::Unreadable {
+        if held == Held::Unreadable {
             assert!(notice.actions.is_empty(), "{:?}", notice.actions);
             continue;
         }
-        assert_eq!(notice.actions.len(), 1, "{holds:?}: {:?}", notice.actions);
+        assert_eq!(notice.actions.len(), 1, "{held:?}: {:?}", notice.actions);
         assert_eq!(notice.actions[0].title, "Put Away…");
-        assert_eq!(notice.actions[0].intent, put_away_sheet());
+        assert_eq!(notice.actions[0].intent, stow_sheet());
         assert!(notice.actions[0].enabled);
         assert_eq!(notice.actions[0].confirm, None, "the sheet asks");
     }
@@ -107,7 +107,7 @@ fn the_sheet_says_whose_the_login_is_once_it_is_known() {
     let mut model = with_a_file_left(&mut machine);
     machine.leftover = Ok(Some(left(Foreseen::Kept(parked_now("work")))));
 
-    model.send(put_away_sheet());
+    model.send(stow_sheet());
 
     assert_eq!(model.count(a_look_left), 1);
     let looking = model.shown().stow_text.expect("the sheet's words");
@@ -153,7 +153,7 @@ fn putting_away_sends_what_the_sheet_showed_and_says_what_it_did() {
     let mut machine = Machine::reading(Ok(warned(Vec::new(), Vec::new())));
     let mut model = with_a_file_left(&mut machine);
     machine.leftover = Ok(Some(left(Foreseen::Kept(parked_now("work")))));
-    model.send(put_away_sheet());
+    model.send(stow_sheet());
     model.run(&mut machine);
     machine.answer = Ok(warned(vec![claude("work", true, 10.0)], Vec::new()));
     machine.stowing = Ok(Stowed {
@@ -211,7 +211,7 @@ fn a_login_of_an_account_not_enrolled_is_not_offered_to_put_away() {
         email: "stranger@example.com".into(),
         organization_uuid: "org-stranger".into(),
     }))));
-    model.send(put_away_sheet());
+    model.send(stow_sheet());
     model.run(&mut machine);
 
     let text = model.shown().stow_text.expect("the sheet's words");
@@ -235,7 +235,7 @@ fn what_stops_it_is_said_in_the_sheet() {
         "Pitboard could not ask Anthropic whose the login is.",
         Vec::new(),
     ));
-    model.send(put_away_sheet());
+    model.send(stow_sheet());
     model.run(&mut machine);
 
     let shown = model.shown();
@@ -245,7 +245,7 @@ fn what_stops_it_is_said_in_the_sheet() {
 
     machine.leftover = Ok(Some(left(Foreseen::Kept(parked_now("work")))));
     model.send(Intent::CloseSheet);
-    model.send(put_away_sheet());
+    model.send(stow_sheet());
     model.run(&mut machine);
     assert_eq!(model.shown().sheet_failure, None, "a look anew");
     machine.stowing = Err(refusal(
@@ -272,7 +272,7 @@ fn a_refused_put_away_looks_again() {
     let mut machine = Machine::reading(Ok(warned(Vec::new(), Vec::new())));
     let mut model = with_a_file_left(&mut machine);
     machine.leftover = Ok(Some(left(Foreseen::Kept(parked_now("work")))));
-    model.send(put_away_sheet());
+    model.send(stow_sheet());
     model.run(&mut machine);
     machine.stowing = Err(refusal(
         "left_login_changed",
@@ -323,7 +323,7 @@ fn putting_away_that_came_to_nothing_is_said_in_its_sheet() {
     let mut machine = Machine::reading(Ok(warned(Vec::new(), Vec::new())));
     let mut model = with_a_file_left(&mut machine);
     machine.leftover = Ok(Some(left(Foreseen::Kept(parked_now("work")))));
-    model.send(put_away_sheet());
+    model.send(stow_sheet());
     model.run(&mut machine);
 
     model.send(Intent::Stow);

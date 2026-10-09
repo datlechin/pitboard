@@ -662,7 +662,7 @@ pub enum Error {
     /// gone, which is never as far as deleting the file. Its code, cause and exit status are
     /// `error`'s, so a program branches on what stopped it.
     #[error("{} Pitboard {partway}.", sentence(error))]
-    PutAwayStopped {
+    StowStopped {
         partway: Partway,
         /// What parking the login warned about, where it was parked first. Taken out by the
         /// service and reported beside the error.
@@ -785,7 +785,7 @@ impl Error {
             StoredLoginChanged { .. } => "stored_login_changed",
             LeftLoginNotEnrolled { .. } => "left_login_not_enrolled",
             LeftLoginUnidentified { .. } => "left_login_unidentified",
-            PutAwayStopped { error, .. } => error.code(),
+            StowStopped { error, .. } => error.code(),
             SignInNotIsolated { .. } => "sign_in_not_isolated",
             RenewalFailed { .. } => "renewal_failed",
             SignInInProgress => "sign_in_in_progress",
@@ -808,7 +808,7 @@ impl Error {
             }
             RenewalFailed { cause, .. } => *cause,
             SessionExpired { .. } => Some(Cause::TokenExpired),
-            PutAwayStopped { error, .. } => error.cause(),
+            StowStopped { error, .. } => error.cause(),
             _ => None,
         }
     }
@@ -817,7 +817,7 @@ impl Error {
     /// a failure that happened after something worth warning about was done carries any.
     pub(crate) fn take_warnings(&mut self) -> Vec<crate::service::Warning> {
         match self {
-            Error::SignInNotInstalled { warnings, .. } | Error::PutAwayStopped { warnings, .. } => {
+            Error::SignInNotInstalled { warnings, .. } | Error::StowStopped { warnings, .. } => {
                 std::mem::take(warnings)
             }
             _ => Vec::new(),
@@ -845,7 +845,7 @@ impl Error {
             | RecoveryRecordCorrupt { .. } => 3,
             Usage(_) => 2,
             Store(e) => e.exit_code(),
-            PutAwayStopped { error, .. } => error.exit_code(),
+            StowStopped { error, .. } => error.exit_code(),
             _ => 1,
         }
     }
@@ -993,7 +993,7 @@ mod tests {
     /// status, and says after its own words how far putting it away had gone.
     #[test]
     fn what_stopped_putting_a_file_away_keeps_its_code_and_says_how_far_it_went() {
-        let stopped = Error::PutAwayStopped {
+        let stopped = Error::StowStopped {
             partway: Partway::Parked {
                 label: "work".into(),
             },
@@ -1014,7 +1014,7 @@ mod tests {
             "{stopped}"
         );
 
-        let unidentified = Error::PutAwayStopped {
+        let unidentified = Error::StowStopped {
             partway: Partway::Nothing,
             warnings: Vec::new(),
             error: Box::new(Error::LeftLoginUnidentified {

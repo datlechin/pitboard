@@ -240,7 +240,7 @@ fn a_failed_read_shows_its_own_warnings_rather_than_the_last_ones() {
 fn replaced(who: &str, now: &str) -> Warning {
     Warning {
         account: Some(format!("claude:{who}")),
-        file_holds: None,
+        held: None,
         ..warning(
             "login_replaced",
             &format!(

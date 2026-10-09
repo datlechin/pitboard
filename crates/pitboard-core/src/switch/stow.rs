@@ -181,7 +181,7 @@ pub(crate) fn find(ctx: &Context, state: &State) -> Result<Option<Left>> {
 
 /// Puts away the file behind Claude Code's store, while it holds what `seen` was taken of:
 /// keeps the login it holds where it is not kept already or dead, then deletes the file.
-/// Whatever stops it is said with how far it had gone ([`Error::PutAwayStopped`]).
+/// Whatever stops it is said with how far it had gone ([`Error::StowStopped`]).
 ///
 /// Under Pitboard's lock throughout. Whose the login is, where that can be asked as it is,
 /// is asked first, holding up nobody. From the file's last reading until it is gone, under
@@ -198,7 +198,7 @@ pub fn stow(settled: Settled, seen: &str) -> Result<(Stowed, Vec<Warning>)> {
         ctx,
         permit,
     } = settled;
-    let mut putting = Putting {
+    let mut stowing = Stowing {
         ctx: &ctx,
         permit,
         path: live::credential_file(&ctx),
@@ -206,10 +206,10 @@ pub fn stow(settled: Settled, seen: &str) -> Result<(Stowed, Vec<Warning>)> {
         warnings: Vec::new(),
         lock_lost: false,
     };
-    let done = putting.run(&mut state, seen);
-    let Putting {
+    let done = stowing.run(&mut state, seen);
+    let Stowing {
         partway, warnings, ..
-    } = putting;
+    } = stowing;
     match done {
         Ok(stowed) => {
             purge(&ctx, permit, &mut state);
@@ -217,7 +217,7 @@ pub fn stow(settled: Settled, seen: &str) -> Result<(Stowed, Vec<Warning>)> {
         }
         // Not purged: a park that could not be recorded in place of another leaves the other
         // released here and still named in the file.
-        Err(error) => Err(Error::PutAwayStopped {
+        Err(error) => Err(Error::StowStopped {
             partway,
             warnings,
             error: Box::new(error),
@@ -226,7 +226,7 @@ pub fn stow(settled: Settled, seen: &str) -> Result<(Stowed, Vec<Warning>)> {
 }
 
 /// One run of [`stow`]: how far it has gone, and what it warned of, as it goes.
-struct Putting<'a> {
+struct Stowing<'a> {
     ctx: &'a Context,
     permit: Permit,
     path: PathBuf,
@@ -236,7 +236,7 @@ struct Putting<'a> {
     lock_lost: bool,
 }
 
-impl Putting<'_> {
+impl Stowing<'_> {
     fn run(&mut self, state: &mut State, seen: &str) -> Result<Stowed> {
         let (ctx, permit) = (self.ctx, self.permit);
         let live = live_store(ctx, TOOL)?;
@@ -708,25 +708,25 @@ mod tests {
     }
 
     /// Putting away what is in the file now, confirmed as the look found it.
-    fn put_away(m: &Machine) -> Result<(Stowed, Vec<Warning>)> {
+    fn stow_now(m: &Machine) -> Result<(Stowed, Vec<Warning>)> {
         let seen = found(m).seen;
-        put_away_seen(m, &seen)
+        stow_seen(m, &seen)
     }
 
-    fn put_away_seen(m: &Machine, seen: &str) -> Result<(Stowed, Vec<Warning>)> {
+    fn stow_seen(m: &Machine, seen: &str) -> Result<(Stowed, Vec<Warning>)> {
         let settled = settle(&m.ctx, Permit::for_a_test(), Some(TOOL))?.0;
         stow(settled, seen)
     }
 
-    /// [`put_away`], with `elsewhere` writing at `point`, as another program writing at that
+    /// [`stow_now`], with `elsewhere` writing at `point`, as another program writing at that
     /// moment would.
-    fn put_away_while(
+    fn stow_while(
         m: &Machine,
         point: &'static str,
         elsewhere: impl FnOnce() + 'static,
     ) -> Result<(Stowed, Vec<Warning>)> {
         let seen = found(m).seen;
-        crate::fault::meanwhile(point, elsewhere, || put_away_seen(m, &seen))
+        crate::fault::meanwhile(point, elsewhere, || stow_seen(m, &seen))
     }
 
     /// Plants `contents` in the file at the moment it is called, as Claude Code writes it.
@@ -778,7 +778,7 @@ mod tests {
         let m = machine("stow-stored");
         leave(&m, &document("here-refresh"));
 
-        let (stowed, _) = put_away(&m).expect("put away");
+        let (stowed, _) = stow_now(&m).expect("put away");
 
         assert_eq!(
             stowed.kept,
@@ -804,7 +804,7 @@ mod tests {
         leave(&m, &json!({"claudeAiOauth": oauth("there-refresh", 30)}));
         let vault = m.mem.vault().services();
 
-        let (stowed, _) = put_away(&m).expect("put away");
+        let (stowed, _) = stow_now(&m).expect("put away");
 
         assert_eq!(
             stowed.kept,
@@ -836,7 +836,7 @@ mod tests {
         };
         assert_eq!(found(&m).login, Foreseen::Kept(there.clone()));
 
-        let (stowed, _) = put_away(&m).expect("put away");
+        let (stowed, _) = stow_now(&m).expect("put away");
 
         assert_eq!(stowed.kept, there);
         assert_eq!(in_the_file(&m), None);
@@ -863,7 +863,7 @@ mod tests {
         m.api.owned_by("access-here-again", owner("here"));
         leave(&m, &document("here-again"));
 
-        let (stowed, _) = put_away(&m).expect("put away");
+        let (stowed, _) = stow_now(&m).expect("put away");
 
         assert_eq!(
             stowed.kept,
@@ -890,7 +890,7 @@ mod tests {
             .owned_by("access-elsewhere-refresh", owner("elsewhere"));
         leave(&m, &document("elsewhere-refresh"));
 
-        let (stowed, _) = put_away(&m).expect("put away");
+        let (stowed, _) = stow_now(&m).expect("put away");
 
         assert_eq!(
             stowed.kept,
@@ -937,7 +937,7 @@ mod tests {
         m.api.owned_by("access-there-again", owner("there"));
         leave(&m, &document("there-again"));
 
-        let (stowed, _) = put_away(&m).expect("put away");
+        let (stowed, _) = stow_now(&m).expect("put away");
 
         assert_eq!(
             stowed.kept,
@@ -964,7 +964,7 @@ mod tests {
         m.api.owned_by("access-there-again", owner("there"));
         leave(&m, &document("there-again"));
 
-        let (stowed, _) = put_away(&m).expect("put away");
+        let (stowed, _) = stow_now(&m).expect("put away");
 
         assert_eq!(
             stowed.kept,
@@ -997,7 +997,7 @@ mod tests {
         let vault = m.mem.vault().services();
         assert_eq!(found(&m).login, Foreseen::Kept(kept.clone()));
 
-        let (stowed, _) = put_away(&m).expect("put away");
+        let (stowed, _) = stow_now(&m).expect("put away");
 
         assert_eq!(stowed.kept, kept);
         assert_eq!(m.mem.vault().services(), vault);
@@ -1023,7 +1023,7 @@ mod tests {
         leave(&m, &lapsed("there-again"));
         let vault = m.mem.vault().services();
 
-        let (stowed, _) = put_away(&m).expect("put away");
+        let (stowed, _) = stow_now(&m).expect("put away");
 
         assert_eq!(stowed.kept, kept);
         assert_eq!(m.mem.vault().services(), vault);
@@ -1049,7 +1049,7 @@ mod tests {
             .owned_by("access-elsewhere-refresh", owner("elsewhere"));
         m.api.owned_by("access-elsewhere-again", owner("elsewhere"));
         leave(&m, &document("elsewhere-refresh"));
-        let (stowed, _) = put_away(&m).expect("put away");
+        let (stowed, _) = stow_now(&m).expect("put away");
         assert_eq!(
             stowed.kept,
             Kept::ParkedNow {
@@ -1059,7 +1059,7 @@ mod tests {
         assert!(state::load(&m.ctx).expect("state").from_file.is_empty());
 
         leave(&m, &renewed_later("elsewhere-again"));
-        let (stowed, _) = put_away(&m).expect("put away");
+        let (stowed, _) = stow_now(&m).expect("put away");
 
         assert_eq!(
             stowed.kept,
@@ -1089,7 +1089,7 @@ mod tests {
             .owned_by("access-elsewhere-refresh", owner("elsewhere"));
         leave(&m, &document("elsewhere-refresh"));
         let seen = found(&m).seen;
-        let died = crate::fault::killing("stow.park_stored", || put_away_seen(&m, &seen));
+        let died = crate::fault::killing("stow.park_stored", || stow_seen(&m, &seen));
         assert_eq!(died.unwrap_err(), "stow.park_stored");
         assert_eq!(parked_fingerprint(&m, "elsewhere"), None);
 
@@ -1098,7 +1098,7 @@ mod tests {
         m.api
             .owned_by("access-elsewhere-renewed", owner("elsewhere"));
         leave(&m, &renewed_later("elsewhere-renewed"));
-        let (stowed, _) = put_away(&m).expect("put away again");
+        let (stowed, _) = stow_now(&m).expect("put away again");
 
         assert_eq!(
             stowed.kept,
@@ -1136,7 +1136,7 @@ mod tests {
             left.refusal().map(|refused| refused.code()),
             Some("left_login_not_enrolled")
         );
-        let refused = put_away(&m).expect_err("refused");
+        let refused = stow_now(&m).expect_err("refused");
 
         assert_eq!(refused.code(), "left_login_not_enrolled");
         let said = refused.to_string();
@@ -1183,7 +1183,7 @@ mod tests {
                 Foreseen::Kept(Kept::NoLogin),
                 "{contents:?}"
             );
-            let (stowed, _) = put_away(&m).expect("put away");
+            let (stowed, _) = stow_now(&m).expect("put away");
 
             assert_eq!(stowed.kept, Kept::NoLogin, "{contents:?}");
             assert_eq!(stowed.dropped, dropped, "{contents:?}");
@@ -1207,7 +1207,7 @@ mod tests {
         assert_eq!(found(&m).login, Foreseen::Untold);
         assert!(m.api.asked().is_empty(), "an expired token is not sent");
 
-        let (stowed, _) = put_away(&m).expect("put away");
+        let (stowed, _) = stow_now(&m).expect("put away");
 
         assert_eq!(stowed.kept, Kept::Refused);
         assert_eq!(in_the_file(&m), None);
@@ -1228,7 +1228,7 @@ mod tests {
         m.api.owned_by("access-left-renewed", owner("stranger"));
         leave(&m, &lapsed("left-refresh"));
 
-        let refused = put_away(&m).expect_err("not enrolled");
+        let refused = stow_now(&m).expect_err("not enrolled");
 
         assert_eq!(refused.code(), "left_login_not_enrolled");
         assert!(
@@ -1245,7 +1245,7 @@ mod tests {
         assert_eq!(held["mcpOAuth"], document("x")["mcpOAuth"]);
 
         enrolled(&m, "stranger");
-        let (stowed, _) = put_away(&m).expect("put away once enrolled");
+        let (stowed, _) = stow_now(&m).expect("put away once enrolled");
         assert_eq!(
             stowed.kept,
             Kept::ParkedNow {
@@ -1278,7 +1278,7 @@ mod tests {
         assert_eq!(looked.code(), "left_login_unidentified");
         assert_eq!(looked.cause(), Some(crate::error::Cause::Unreachable));
         let seen = store::fingerprint(&left_file(&m).peek(&m.service).expect("there"));
-        let refused = put_away_seen(&m, &seen).expect_err("nobody to ask");
+        let refused = stow_seen(&m, &seen).expect_err("nobody to ask");
         assert_eq!(refused.code(), "left_login_unidentified");
         assert_eq!(in_the_file(&m), Some(fingerprint("unknown-refresh")));
         assert_eq!(state_file(&m), before);
@@ -1287,7 +1287,7 @@ mod tests {
         m.api.renew_trouble("lapsed-refresh", Trouble::Offline);
         leave(&m, &lapsed("lapsed-refresh"));
         let before = state_file(&m);
-        let refused = put_away(&m).expect_err("nobody to renew it");
+        let refused = stow_now(&m).expect_err("nobody to renew it");
         assert_eq!(refused.code(), "left_login_unidentified");
         assert_eq!(in_the_file(&m), Some(fingerprint("lapsed-refresh")));
         assert_eq!(state_file(&m), before);
@@ -1311,7 +1311,7 @@ mod tests {
             "credential_store_locked"
         );
         assert_eq!(
-            put_away_seen(&m, &seen).expect_err("locked").code(),
+            stow_seen(&m, &seen).expect_err("locked").code(),
             "credential_store_locked"
         );
         assert_eq!(in_the_file(&m), Some(fingerprint("there-again")));
@@ -1344,14 +1344,14 @@ mod tests {
         let seen = found(&m).seen;
         leave(&m, &document("here-again"));
 
-        let refused = put_away_seen(&m, &seen).expect_err("it changed");
+        let refused = stow_seen(&m, &seen).expect_err("it changed");
 
         assert_eq!(refused.code(), "left_login_changed");
         assert_eq!(in_the_file(&m), Some(fingerprint("here-again")));
 
         left_file(&m).delete_everything();
         assert_eq!(
-            put_away_seen(&m, &seen).expect_err("it went").code(),
+            stow_seen(&m, &seen).expect_err("it went").code(),
             "left_login_changed"
         );
     }
@@ -1382,7 +1382,7 @@ mod tests {
             leave(&m, &document(left));
             let vault = m.mem.vault().services();
 
-            let refused = put_away_while(&m, point, rewrites_the_file(&m, &document("new")))
+            let refused = stow_while(&m, point, rewrites_the_file(&m, &document("new")))
                 .expect_err("it changed");
 
             assert_eq!(refused.code(), "left_login_changed", "{point}");
@@ -1416,7 +1416,7 @@ mod tests {
                 .owned_by("access-elsewhere-refresh", owner("elsewhere"));
             leave(&m, &document(left));
 
-            let refused = put_away_while(
+            let refused = stow_while(
                 &m,
                 "stow.identified",
                 signs_in(&m, &document("elsewhere-refresh")),
@@ -1448,7 +1448,7 @@ mod tests {
         m.api.token_trouble("access-left-renewed", Trouble::Offline);
         leave(&m, &lapsed("left-refresh"));
 
-        let refused = put_away(&m).expect_err("nobody to ask");
+        let refused = stow_now(&m).expect_err("nobody to ask");
 
         assert_eq!(refused.code(), "left_login_unidentified");
         assert_eq!(refused.cause(), Some(Cause::Unreachable));
@@ -1467,7 +1467,7 @@ mod tests {
             .owned_by("access-elsewhere-refresh", owner("elsewhere"));
         leave(&m, &document("elsewhere-refresh"));
 
-        let refused = put_away_while(
+        let refused = stow_while(
             &m,
             "stow.kept",
             rewrites_the_file(&m, &json!({"mcpOAuth": {}})),
@@ -1493,7 +1493,7 @@ mod tests {
             .owned_by("access-elsewhere-refresh", owner("elsewhere"));
         leave(&m, &document("elsewhere-refresh"));
 
-        let refused = put_away_while(&m, "stow.kept", locks_the_keychain(&m))
+        let refused = stow_while(&m, "stow.kept", locks_the_keychain(&m))
             .expect_err("the keychain is locked");
 
         assert_eq!(refused.code(), "credential_store_locked");
@@ -1551,7 +1551,7 @@ mod tests {
         let m = lapsed_login_left("stow-write-lock-before");
         let writing = lock_dir(&write_target(&m));
 
-        let refused = put_away_while(
+        let refused = stow_while(
             &m,
             "stow.identified",
             takes_the_write_lock(&m, std::time::Duration::ZERO),
@@ -1567,7 +1567,7 @@ mod tests {
         assert_eq!(in_the_file(&m), Some(fingerprint("left-refresh")));
 
         std::fs::remove_dir(&writing).expect("the session lets go");
-        let (stowed, _) = put_away(&m).expect("put away");
+        let (stowed, _) = stow_now(&m).expect("put away");
         assert_eq!(
             stowed.kept,
             Kept::ParkedNow {
@@ -1591,7 +1591,7 @@ mod tests {
     fn a_write_lock_held_once_the_refresh_token_is_spent_is_waited_for() {
         let m = lapsed_login_left("stow-write-lock-after");
 
-        let (stowed, _) = put_away_while(
+        let (stowed, _) = stow_while(
             &m,
             "stow.exchanged",
             takes_the_write_lock(&m, std::time::Duration::from_secs(7)),
@@ -1623,7 +1623,7 @@ mod tests {
         let m = lapsed_login_left("stow-write-lock-stuck");
         let stuck = lock_dir(&write_target(&m));
 
-        let refused = put_away_while(&m, "stow.exchanged", move || {
+        let refused = stow_while(&m, "stow.exchanged", move || {
             let parent = stuck.parent().expect("the storage directory");
             std::fs::create_dir_all(parent).expect("the storage directory is made");
             let long_ago = std::time::SystemTime::now() - std::time::Duration::from_secs(3600);
@@ -1664,7 +1664,7 @@ mod tests {
         let mut saved = lapsed("left-refresh");
         saved["mcpOAuth"] = json!({"another-server": {"token": "saved meanwhile"}});
 
-        let refused = put_away_while(&m, "stow.exchanged", rewrites_the_file(&m, &saved))
+        let refused = stow_while(&m, "stow.exchanged", rewrites_the_file(&m, &saved))
             .expect_err("not enrolled");
 
         assert_eq!(refused.code(), "left_login_not_enrolled");
@@ -1693,7 +1693,7 @@ mod tests {
     fn a_keychain_that_locks_while_the_login_is_renewed_does_not_lose_it() {
         let m = lapsed_login_left("stow-locks-while-renewing");
 
-        let refused = put_away_while(&m, "stow.exchanged", locks_the_keychain(&m))
+        let refused = stow_while(&m, "stow.exchanged", locks_the_keychain(&m))
             .expect_err("the keychain is locked");
 
         assert_eq!(refused.code(), "credential_store_locked");
@@ -1706,7 +1706,7 @@ mod tests {
         assert_eq!(in_the_file(&m), Some(fingerprint("left-renewed")));
 
         m.mem.live().heal(&m.service);
-        let (stowed, _) = put_away(&m).expect("put away");
+        let (stowed, _) = stow_now(&m).expect("put away");
         assert_eq!(
             stowed.kept,
             Kept::AlreadyParked {
@@ -1729,7 +1729,7 @@ mod tests {
                              could not write the renewed login back there, so that login no \
                              longer works.";
         let m = lapsed_login_left("stow-signed-in-while-renewing");
-        let refused = put_away_while(
+        let refused = stow_while(
             &m,
             "stow.exchanged",
             rewrites_the_file(&m, &document("signed-in")),
@@ -1742,7 +1742,7 @@ mod tests {
 
         let m = lapsed_login_left("stow-unwritable-while-renewing");
         let (file, service) = (left_file(&m), m.service.clone());
-        let refused = put_away_while(&m, "stow.exchanged", move || {
+        let refused = stow_while(&m, "stow.exchanged", move || {
             file.fault(&service, Fault::FailWrite("disk full".into()));
         })
         .expect_err("the file cannot be written");
@@ -1820,7 +1820,7 @@ mod tests {
             leave(&m, &lapsed("left-refresh"));
             let seen = found(&m).seen;
 
-            let died = crate::fault::killing(point, || put_away_seen(&m, &seen));
+            let died = crate::fault::killing(point, || stow_seen(&m, &seen));
             assert_eq!(died.unwrap_err(), point);
 
             let renewed = Some(fingerprint("left-renewed"));
@@ -1831,7 +1831,7 @@ mod tests {
                     || parked_fingerprint(&m, "elsewhere") == renewed,
                 "{point}: the login is nowhere"
             );
-            let (stowed, _) = put_away(&m).expect("put away again");
+            let (stowed, _) = stow_now(&m).expect("put away again");
             assert!(
                 matches!(
                     stowed.kept,
@@ -1911,11 +1911,11 @@ mod tests {
             leave(&m, &document("elsewhere-refresh"));
             let seen = found(&m).seen;
             if stop == "killed" {
-                let died = crate::fault::killing("stow.kept", || put_away_seen(&m, &seen));
+                let died = crate::fault::killing("stow.kept", || stow_seen(&m, &seen));
                 assert_eq!(died.unwrap_err(), "stow.kept");
             } else {
                 let refused = crate::fault::meanwhile("stow.kept", locks_the_keychain(&m), || {
-                    put_away_seen(&m, &seen)
+                    stow_seen(&m, &seen)
                 })
                 .expect_err("the keychain is locked");
                 assert_eq!(refused.code(), "credential_store_locked");
@@ -1937,7 +1937,7 @@ mod tests {
             m.api
                 .owned_by("access-elsewhere-renewed", owner("elsewhere"));
             leave(&m, &renewed_later("elsewhere-renewed"));
-            let (stowed, _) = put_away(&m).expect("put away again");
+            let (stowed, _) = stow_now(&m).expect("put away again");
 
             assert_eq!(
                 stowed.kept,
@@ -1989,7 +1989,7 @@ mod tests {
             leave(&m, &left);
             let session = Session::new();
 
-            let done = put_away_while(&m, point, renews_meanwhile(&m, left_file(&m), &session));
+            let done = stow_while(&m, point, renews_meanwhile(&m, left_file(&m), &session));
             saves(&m, &left_file(&m), &session);
 
             assert!(
@@ -2024,7 +2024,7 @@ mod tests {
         leave(&m, &document("left-refresh"));
         let session = Session::new();
 
-        let refused = put_away_while(
+        let refused = stow_while(
             &m,
             "stow.identified",
             renews_meanwhile(&m, left_file(&m), &session),
@@ -2056,7 +2056,7 @@ mod tests {
         leave(&m, &document("stranger-refresh"));
 
         let left = found(&m);
-        let refused = put_away_seen(&m, &left.seen).expect_err("not enrolled");
+        let refused = stow_seen(&m, &left.seen).expect_err("not enrolled");
 
         assert_eq!(left.login, Foreseen::NotEnrolled(owner("stranger")));
         assert_eq!(refused.code(), "left_login_not_enrolled");
@@ -2089,7 +2089,7 @@ mod tests {
         );
 
         assert_eq!(found(&m).login, Foreseen::Kept(Kept::Refused));
-        let (stowed, _) = put_away(&m).expect("put away");
+        let (stowed, _) = stow_now(&m).expect("put away");
 
         assert_eq!(stowed.kept, Kept::Refused);
         assert_eq!(in_the_file(&m), None);
