@@ -1289,13 +1289,15 @@ Windows build was run:
 - The same run read the macOS and Linux builds of both versions, and every fact read there
   still holds. Claude Code 2.1.110 and Codex 0.99.0 still go red.
 
-On 8 and 9 October 2026 Claude Code 2.1.294 was read again: its macOS build on the 8th, and
-its `linux-x64`, `win32-x64` and `win32-arm64` builds on the 9th, as bytes on a Mac, and
-none was run. All four are built from commit 8f033c6. For each fact read from them, the code
-it names was compared with the macOS build's token by token, minified names apart, and is
-the same in all four: `usage_cache_stamp_is_the_configs`,
-`status_reads_the_config_usage_the_token`, `config_identity_is_the_last_writers` and
-`fallback_file_pins_session_login`. The last is read on macOS alone: on Linux the file is
+On 8 and 9 October 2026 Claude Code 2.1.294 was read again: its macOS build on the 8th and
+the 9th, and its `linux-x64`, `win32-x64` and `win32-arm64` builds on the 9th, as bytes on a
+Mac, and none was run. All four are built from commit 8f033c6. For each fact read from them,
+the code it names was compared with the macOS build's token by token, minified names apart,
+and is the same in all four: `usage_cache_stamp_is_the_configs`,
+`status_reads_the_config_usage_the_token`, `config_identity_is_the_last_writers`,
+`status_line_input_names_no_account` and `fallback_file_pins_session_login`, read in the
+macOS build on the 8th, and `refresh_lock`, read in all four on the 9th. The fallback file's
+fact is read on macOS alone: on Linux the file is
 Claude Code's only store, and on Windows it is too unless Credential Manager is turned on,
 which W22 reads. The checker finds every fact each build was read for.
 
