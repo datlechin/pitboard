@@ -227,6 +227,7 @@ pub enum Auto {
 
 /// Why Pitboard does not switch away from a limit at the share.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Skip {
     /// No other account has room below the share in every limit it has. `unread` are those
     /// it could switch to that Anthropic gave no reading of, as each is typed.

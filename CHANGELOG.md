@@ -152,19 +152,19 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   place of `State::active`, and `State::active_for`, `set_active`, `slot_for`, `set_slot`
   and `used` are gone. `autoswitch::Skip`'s `SwitchInterrupted` and `CustomOauth` are
   `Blind::SwitchInterrupted` and `Blind::CustomOauth`, `Auto::Idle` is `Auto::Watching`,
-  `Auto::NoRoom` is `Auto::Skipped` with `Skip::NoRoom`, and `words::not_switching` takes
-  the share. `usage::Source::ClaudeCodeCache`, `usage::from_config_cache`,
-  `usage::Snapshot::account_uuid`, `status::gather` and `error::Error::SwitchOvertaken` are
-  gone. `state::changed_at` and `service::Pitboard::changed_at` are in epoch milliseconds.
-  `provider::Adoption` is no longer `Copy` and has the variant `AtRenewal`,
-  `service::Warning::FallbackLogin` has the field `held`, a `provider::Held`, and
-  `doctor::FallbackLogin::fingerprint` is `Ok(None)` where the file holds no login and an
-  error where it cannot be read. `switch::Outcome::AlreadyActive` has the field
-  `config_updated`, `statusline::StatusLine` the field `sure`, and `api::Owner` is
-  `Serialize` and `Deserialize`. New are `autoswitch::Blind` and `autoswitch::Look`, the
-  variants `autoswitch::Auto::NotWatching`, `Auto::Watching` and `Auto::Waiting`,
-  `autoswitch::Skip`'s `NoRoom`, `AlreadyLeft`, `GaveUp` and `Settling`,
-  `autoswitch::DECIDE_EVERY_SECONDS` and `autoswitch::retry_after`,
+  `Auto::NoRoom` is `Auto::Skipped` with `Skip::NoRoom`, `words::not_switching` takes the
+  share, and `autoswitch::Skip` is `#[non_exhaustive]`. `usage::Source::ClaudeCodeCache`,
+  `usage::from_config_cache`, `usage::Snapshot::account_uuid`, `status::gather` and
+  `error::Error::SwitchOvertaken` are gone. `state::changed_at` and
+  `service::Pitboard::changed_at` are in epoch milliseconds. `provider::Adoption` is no
+  longer `Copy` and has the variant `AtRenewal`, `service::Warning::FallbackLogin` has the
+  field `held`, a `provider::Held`, and `doctor::FallbackLogin::fingerprint` is `Ok(None)`
+  where the file holds no login and an error where it cannot be read.
+  `switch::Outcome::AlreadyActive` has the field `config_updated`, `statusline::StatusLine`
+  the field `sure`, and `api::Owner` is `Serialize` and `Deserialize`. New are
+  `autoswitch::Blind` and `autoswitch::Look`, the variants `autoswitch::Auto::NotWatching`,
+  `Auto::Watching` and `Auto::Waiting`, `autoswitch::Skip`'s `NoRoom`, `AlreadyLeft`,
+  `GaveUp` and `Settling`, `autoswitch::DECIDE_EVERY_SECONDS` and `autoswitch::retry_after`,
   `service::Pitboard::auto_look`, `update_config`, `left_login` and `stow`,
   `State::account_in_use`, `identified`, `other_slots` and `from_file`,
   `state::Account::replaced_at` and `owner`, the module `in_use`,

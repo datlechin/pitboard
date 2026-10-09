@@ -354,7 +354,7 @@ fn event(value: Auto, threshold: Threshold) -> (Value, String) {
                         moment(*until)
                     ),
                 ),
-                Skip::AlreadyLeft | Skip::GaveUp | Skip::Overridden(_) => (
+                _ => (
                     json!({
                         "event": "skipped",
                         "threshold": percent,

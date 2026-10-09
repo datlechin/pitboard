@@ -419,9 +419,7 @@ fn auto_switched(auto: Auto, warnings: Vec<Warning>, threshold: Threshold) -> Au
             why: words::not_switching(&why, threshold),
             until: match why {
                 Skip::Settling { until } => Some(until),
-                Skip::NoRoom { .. } | Skip::AlreadyLeft | Skip::GaveUp | Skip::Overridden(_) => {
-                    None
-                }
+                _ => None,
             },
             from,
         },
