@@ -4,8 +4,9 @@
 //!
 //! A foreign in-process write replaces the item's partition list with the caller's code
 //! hash, evicting `apple-tool:`. Nothing errors; every later `/usr/bin/security` read of
-//! that item just costs 1-3 seconds instead of 0.02. Claude Code re-reads the credential
-//! store behind a 30-second cache, so that would be a permanent stall every half minute.
+//! that item costs 1-3 seconds instead of 0.02, or waits on a keychain password dialog in a
+//! desktop session. Claude Code re-reads the credential store behind a 30-second cache, so
+//! that would be a permanent stall every half minute.
 //!
 //! Read latency is measured rather than the ACL dumped, because latency is the damage.
 //! Runs only against `pitboard-citest-*` items, never anything Claude Code owns.
@@ -19,6 +20,8 @@ use std::time::{Duration, Instant};
 const SECURITY: &str = "/usr/bin/security";
 /// An unpoisoned read is ~20ms; a poisoned one is measured in seconds.
 const POISONED: Duration = Duration::from_millis(200);
+// Poisoning slows every read and a busy machine only some, so an item costs its fastest read.
+const READS: usize = 5;
 
 fn service() -> String {
     format!("pitboard-citest-{}", std::process::id())
@@ -74,6 +77,13 @@ fn timed_read(service: &str) -> (String, Duration) {
     )
 }
 
+fn fastest_read(service: &str) -> (String, Duration) {
+    (0..READS)
+        .map(|_| timed_read(service))
+        .min_by_key(|(_, took)| *took)
+        .expect("at least one read")
+}
+
 fn remove(service: &str) {
     let _ = Command::new(SECURITY)
         .args(["delete-generic-password", "-a", &account(), "-s", service])
@@ -87,12 +97,12 @@ fn writing_preserves_attributes_and_does_not_slow_later_reads() {
     seed(&svc, "{\"seed\":true}");
 
     let before_attrs = attributes(&svc);
-    let (_, baseline) = timed_read(&svc);
+    let (_, baseline) = fastest_read(&svc);
 
     let payload = r#"{"claudeAiOauth":{"accessToken":"a","refreshToken":"b","expiresAt":1}}"#;
     let wrote = pitboard_core::testing::vault_write(&common::ctx(), &svc, payload);
 
-    let (back, after) = timed_read(&svc);
+    let (back, after) = fastest_read(&svc);
     let after_attrs = attributes(&svc);
     remove(&svc);
 
@@ -104,7 +114,7 @@ fn writing_preserves_attributes_and_does_not_slow_later_reads() {
     );
     assert!(
         after < POISONED,
-        "read cost {after:?} after our write (was {baseline:?}); \
+        "fastest of {READS} reads took {after:?} after our write (was {baseline:?}); \
          the partition list looks poisoned, which would tax Claude Code on every re-read"
     );
 }
@@ -118,18 +128,18 @@ fn a_credential_past_the_stdin_limit_is_written_without_taxing_later_reads() {
     let svc = format!("{}-oversize", service());
     remove(&svc);
     seed(&svc, "original");
-    let (_, baseline) = timed_read(&svc);
+    let (_, baseline) = fastest_read(&svc);
 
     let big = "x".repeat(2100);
     pitboard_core::testing::vault_write(&common::ctx(), &svc, &big)
         .expect("the argument line is the only way to write one this size");
 
-    let (back, after) = timed_read(&svc);
+    let (back, after) = fastest_read(&svc);
     remove(&svc);
     assert_eq!(back, big, "the value must round-trip byte for byte");
     assert!(
         after < POISONED,
-        "read cost {after:?} after the write (was {baseline:?}); \
+        "fastest of {READS} reads took {after:?} after the write (was {baseline:?}); \
          a write must never make later reads expensive"
     );
 }
