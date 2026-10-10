@@ -16,6 +16,9 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   run as a look, deleted a login file behind the keychain. At a terminal each still asks.
   `stow` with nothing to put away or a login of an account not enrolled, and `forget` of a
   label that names no account, answer as before, and so does each as root or under sudo.
+- The account index is schema 7. It lists a renewal of Claude Code's login that Pitboard has
+  not saved where Claude Code keeps it yet. An earlier Pitboard cannot read it once this one
+  has, and says to update, so update the command line and the app together.
 - Where Pitboard renews Claude Code's login to identify it and Anthropic no longer accepts
   it, or it has no refresh token, `session_expired` says to run `claude` and sign in, with
   the cause `login_refused`. Everywhere else it still says to run `claude` once, with
@@ -38,8 +41,15 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   Anthropic's answer in Pitboard's store, `pitboard-park-renewing-<time>`, until the answer
   is saved where Claude Code keeps it. Killed in between, or with the file's write failing,
   `stow` left a spent refresh token in the file and lost the renewed login. The next
-  change, or the next read that must renew the login, saves the copy. Until then nothing
-  is sent for that login, and `pitboard uninstall` keeps `~/.pitboard`.
+  change, or the next read that must renew the login, saves the copy. Until then no change
+  renews, parks, replaces or puts away that login, each saying why the copy cannot be saved
+  yet, and `pitboard uninstall` keeps `~/.pitboard`. Where `pitboard stow` renewed the login
+  stored and could not save it yet, its error ends by saying it keeps the renewed login. The
+  copy is named in Pitboard's index before the refresh token is sent, so a keychain locked
+  by then stops the renewal with nothing sent. On macOS, where the keychain cannot ask for
+  its password, as over SSH, one that locks while Anthropic answers takes neither the copy
+  nor the renewed login. A change then says the login's refresh token is spent and to run
+  `claude` and sign in, and a read marks the account in use `login_refused`.
 
 ## [0.10.0] - 2026-10-10
 

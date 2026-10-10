@@ -8,7 +8,7 @@
 use super::{Administered, Elevation, Floor, Host, Process, Scheduler};
 use crate::context::Context;
 use crate::service::Permit;
-use crate::store::memory::MemoryStore;
+use crate::store::memory::{Fault, MemoryStore};
 use crate::store::{Backend, Cost, Error, RawStore};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -141,6 +141,19 @@ impl MemoryHost {
                 .entry(path)
                 .or_insert_with(|| MemoryStore::of(Backend::File)),
         )
+    }
+
+    /// Locks the keychain from now on, as a screen lock does on macOS, where Claude Code's
+    /// login and Pitboard's vault are items in the one login keychain.
+    pub fn lock_keychain(&self) {
+        self.keychain.fault_all(Fault::Locked);
+        self.vault.fault_all(Fault::Locked);
+    }
+
+    /// Unlocks what [`MemoryHost::lock_keychain`] locked.
+    pub fn unlock_keychain(&self) {
+        self.keychain.heal_all();
+        self.vault.heal_all();
     }
 
     /// From now on the vault belongs to one home alone, the way Pitboard's vault of files

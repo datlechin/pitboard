@@ -148,13 +148,12 @@ impl Unrenewed {
 }
 
 /// Whose `document`, the login `store` holds, is, where [`told`] says that needs it renewed.
-/// A renewal a run before left unsaved is saved first, and where it cannot be yet, that
-/// stops it with nothing sent. Then, under Claude Code's refresh lock, the login is read
-/// again: one changed meanwhile, as a session's renewal leaves it, is told as it is, with
-/// nothing sent. Otherwise its refresh token is sent and the answer saved where the login is
-/// kept, and whose it is asked with the renewed access token. What the store holds then,
-/// whose it is, and whether a lock of Claude Code's stopped being Pitboard's meanwhile.
-/// Under Pitboard's lock, which the caller holds.
+/// Under Claude Code's refresh lock, the login is read again: one changed meanwhile, as a
+/// session's renewal leaves it, is told as it is, with nothing sent. Otherwise its refresh
+/// token is sent and the answer saved where the login is kept, and whose it is asked with the
+/// renewed access token. What the store holds then, whose it is, and whether a lock of
+/// Claude Code's stopped being Pitboard's meanwhile. Under Pitboard's lock, which the caller
+/// holds, with no renewal left waiting for the slot ([`refresh::finished`]).
 fn renewed(
     ctx: &Context,
     permit: Permit,
@@ -166,7 +165,6 @@ fn renewed(
     if which == ProviderId::Claude && crate::settings::custom_oauth(ctx) {
         return Err(Unrenewed::Failed(Error::CustomOauthEndpoint));
     }
-    refresh::finish(ctx, permit, state).map_err(Unrenewed::Failed)?;
     fault::point("identify.lapsed");
     // A tool that takes no refresh lock is left to renew its own login.
     let refreshing = Refreshing::take(ctx, permit, which)
@@ -240,6 +238,12 @@ fn renewed_under_the_lock(
             Ok(Renewed::Refused) => return Err(Unrenewed::Refused),
             Err(Stop::Changed) => last = now,
             Err(Stop::Unrenewed(error)) => return Err(Unrenewed::Asked(error)),
+            Err(Stop::Failed(error)) if progress.lost() => {
+                return Err(failed(Error::RenewalLost {
+                    tool: which,
+                    error: Box::new(error),
+                }));
+            }
             Err(Stop::Failed(error)) => return Err(failed(error)),
         }
     }
@@ -267,12 +271,16 @@ pub(crate) fn told_by_a_read(
         return Err(untold());
     }
     let mut state = state::load(ctx).map_err(|_| untold())?;
+    refresh::finished(ctx, permit, &mut state, which).map_err(|_| untold())?;
     let store = super::live_store(ctx, which).map_err(|_| untold())?;
     match renewed(ctx, permit, &mut state, which, &store, document) {
         Ok((renewed, found, _)) => Ok((Some(renewed), found)),
-        Err(Unrenewed::Refused) => Err(ProviderError::InvalidGrant {
-            service: which.service(),
-        }),
+        // A renewal lost spent the refresh token stored, which Anthropic refuses from then on.
+        Err(Unrenewed::Refused | Unrenewed::Failed(Error::RenewalLost { .. })) => {
+            Err(ProviderError::InvalidGrant {
+                service: which.service(),
+            })
+        }
         Err(Unrenewed::Asked(error)) => Err(error),
         Err(Unrenewed::Failed(_)) => Err(untold()),
     }
@@ -310,13 +318,15 @@ impl Login {
 /// [`super::nothing_signed_in`] says it: nothing is known of whose the login is. A login
 /// whose access token has lapsed is renewed first, where telling needs the tool's service,
 /// and what the store holds is then the renewed login. For a change, which holds Pitboard's
-/// lock.
+/// lock and acts on that login once it is told, so a renewal left waiting for the slot is
+/// saved first, and where it cannot be yet, why stops it ([`refresh::finished`]).
 pub(crate) fn look(
     ctx: &Context,
     permit: Permit,
     state: &mut State,
     which: ProviderId,
 ) -> Result<(Live, InUse)> {
+    refresh::finished(ctx, permit, state, which)?;
     let store = super::live_store(ctx, which)?;
     let named = in_use::named(ctx, which);
     match super::read_stored(which, &store)? {
@@ -392,6 +402,7 @@ pub(crate) fn untold(error: &Error) -> String {
             format!("its config names {email}, and Pitboard cannot find that login")
         }
         Error::Store(e) => e.to_string(),
+        Error::RenewalLost { error, .. } => untold(error),
         other => other.code().replace('_', " "),
     }
 }
@@ -527,8 +538,9 @@ mod tests {
     use super::super::Settled;
     use super::super::harness::{
         Machine, NOW, Session, audit_lines, codex_id, codex_login, codex_machine, config_names,
-        document, hold, lapsed, lock_dir, machine, owner, recover, renews, renews_meanwhile, saves,
-        signed_in_outside, state_file, takes_the_write_lock, window, write_target,
+        document, hold, lapsed, lock_dir, machine, owner, record_in_use, recover, renews,
+        renews_meanwhile, saves, signed_in_outside, state_file, takes_the_write_lock, window,
+        write_target,
     };
     use super::*;
     use crate::api::scripted::{Asked, Trouble};
@@ -724,6 +736,13 @@ mod tests {
         }
     }
 
+    /// Locks the login keychain at the moment it is called, which on macOS holds Claude Code's
+    /// login and Pitboard's vault both.
+    fn locks_the_keychain(m: &Machine) -> impl FnOnce() + Send + 'static {
+        let mem = Arc::clone(&m.mem);
+        move || mem.lock_keychain()
+    }
+
     fn owner_told(told: Result<Live>) -> Owner {
         match told.expect("told") {
             Live::Login(login) => login.owner,
@@ -823,7 +842,8 @@ mod tests {
     }
 
     /// A login Anthropic refuses for good can only be signed in to again, which is said, and
-    /// nothing is written: not the store, not the vault, not Pitboard's record.
+    /// nothing is written to the store or the vault. Pitboard's record ends as it was: the
+    /// copy's name written down before the refresh token was sent is let go of.
     #[test]
     #[cfg_attr(
         windows,
@@ -845,7 +865,7 @@ mod tests {
                 .ends_with("Run `claude`, sign in, then try again."),
             "{refused}"
         );
-        assert_eq!(state_file(&m), before);
+        assert_eq!(state_file(&m).0, before.0);
         assert_eq!(m.live(), stored);
         assert_eq!(m.mem.vault().services(), vault);
     }
@@ -1077,6 +1097,141 @@ mod tests {
         hold(&m, "both slots saved");
     }
 
+    /// A renewal left in the vault for the keychain's login stops a switch from parking that
+    /// login, whose refresh token it spent, though Pitboard knows whose that login is by its
+    /// fingerprint and renews nothing. Once the renewal is saved, the login parked for the
+    /// account switched from is the renewed one.
+    #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
+    )]
+    fn a_switch_parks_nothing_while_a_renewal_of_the_login_stored_waits() {
+        let m = lapsed_stored("identify-switch-waits");
+        killed_once_answered(&m);
+        let [copy] = copies_of(&m, "here-again")
+            .try_into()
+            .expect("one copy left");
+        let mut state = state::load(&m.ctx).expect("state");
+        record_in_use(
+            &m.ctx,
+            &mut state,
+            ProviderId::Claude,
+            &lapsed("here-renewed"),
+        );
+        state::save(&m.ctx, Permit::for_a_test(), &state).expect("saved");
+        m.mem
+            .vault()
+            .fault(&copy, Fault::Unreadable("damaged".into()));
+        let parked = |m: &Machine| {
+            state::load(&m.ctx)
+                .expect("state")
+                .get(&m.key("here"))
+                .and_then(|account| account.parked.clone())
+                .map(|parked| parked.refresh_fingerprint)
+        };
+        let pitboard = Pitboard::new(m.ctx.clone());
+
+        let refused = pitboard
+            .switch_to("there")
+            .expect_err("a renewal of the login stored waits")
+            .error;
+
+        assert_eq!(refused.code(), "credential_store_unreadable");
+        assert_eq!(parked(&m), None);
+        assert_eq!(stored_refresh(&m).as_deref(), Some("here-renewed"));
+        m.mem.vault().heal(&copy);
+        pitboard.switch_to("there").expect("switched");
+        assert_eq!(parked(&m), Some(crate::store::fingerprint("here-again")));
+        assert_eq!(m.mem.vault().peek(&copy), None);
+        assert_eq!(renewals(&m), [Asked::Renew("here-renewed".into())]);
+        hold(&m, "after a switch from a renewal saved late");
+    }
+
+    /// On macOS the vault is the keychain Claude Code's login is in. Locked once that login
+    /// is read again under Claude Code's write lock, it stops the renewal before the refresh
+    /// token is sent, since the copy's name is written down first and the vault has to answer
+    /// for that: nothing is sent and nothing written.
+    #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
+    )]
+    fn a_keychain_locked_before_the_refresh_token_is_sent_stops_the_renewal() {
+        let m = lapsed_stored("identify-locked-before-sending");
+        let before = state_file(&m);
+
+        let refused =
+            crate::fault::meanwhile("refresh.checked", locks_the_keychain(&m), || told_now(&m))
+                .err()
+                .expect("the keychain is locked");
+
+        assert_eq!(refused.code(), "credential_store_locked");
+        assert_eq!(renewals(&m), []);
+        assert_eq!(state_file(&m), before);
+        m.mem.unlock_keychain();
+        assert_eq!(owner_told(told_now(&m)), owner("here"));
+        assert_eq!(stored_refresh(&m).as_deref(), Some("here-again"));
+    }
+
+    /// Locked while Anthropic answers, the keychain takes neither the copy of the renewed
+    /// login nor the renewed login itself, so the renewal is lost and the refresh token stored
+    /// is spent. What stops says so, and to sign in, and nothing names a copy that was never
+    /// made.
+    #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
+    )]
+    fn a_keychain_locked_while_anthropic_answers_says_the_renewal_is_lost() {
+        const LOST: &str = "Pitboard renewed Claude Code's login and could not save the renewed \
+                            login, so the refresh token stored is spent. Run `claude`, sign in, \
+                            then try again.";
+        let m = lapsed_stored("identify-locked-while-answering");
+        m.api.while_renewing("here-renewed", locks_the_keychain(&m));
+
+        let refused = told_now(&m).err().expect("the keychain is locked");
+
+        assert_eq!(refused.code(), "credential_store_locked");
+        assert!(refused.to_string().ends_with(LOST), "{refused}");
+        assert_eq!(state::load(&m.ctx).expect("state").renewing, []);
+        assert_eq!(copies_of(&m, "here-again"), Vec::<String>::new());
+    }
+
+    /// The keychain locks once the copy of the renewed login is written into the vault and
+    /// before it is read back, so the copy's write cannot tell, and the renewed login's save
+    /// fails. The copy is there all the same, the only renewed login: its name is kept, and
+    /// the next change saves it, renewing nothing again.
+    #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
+    )]
+    fn a_copy_written_and_not_read_back_is_kept_for_the_next_change() {
+        let m = lapsed_stored("identify-copy-not-read-back");
+        m.mem.vault().fault_all(Fault::LocksAfterWrite);
+        let (keychain, service) = m.live_store();
+        let locks = {
+            let (keychain, service) = (Arc::clone(&keychain), service.clone());
+            move || keychain.fault(&service, Fault::Locked)
+        };
+
+        let refused = crate::fault::meanwhile("refresh.exchanged", locks, || told_now(&m))
+            .err()
+            .expect("the keychain is locked");
+
+        assert_eq!(refused.code(), "credential_store_locked");
+        assert_eq!(copies_of(&m, "here-again").len(), 1);
+        m.mem.vault().heal_all();
+        keychain.heal(&service);
+        m.api.renew_trouble("here-renewed", Trouble::InvalidGrant);
+        assert_eq!(owner_told(told_now(&m)), owner("here"));
+        assert_eq!(stored_refresh(&m).as_deref(), Some("here-again"));
+        assert_eq!(renewals(&m), [Asked::Renew("here-renewed".into())]);
+        assert_eq!(copies_of(&m, "here-again"), Vec::<String>::new());
+        hold(&m, "after a copy saved late");
+    }
+
     /// A renewed login saved without Claude Code's write lock, which was never let go of
     /// once Anthropic had answered, is said as a switch says a lock it lost.
     #[test]
@@ -1198,6 +1353,39 @@ mod tests {
             Some("Claude Code's login is no longer accepted; run `claude` and sign in again")
         );
         assert_eq!(m.live(), stored);
+    }
+
+    /// A read that renews the login stored and can neither save the renewed login nor keep a
+    /// copy of it has spent the refresh token stored, which Anthropic then refuses: the
+    /// account in use is marked so, in words that say to sign in again.
+    #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
+    )]
+    fn a_read_that_loses_the_renewal_says_sign_in_again() {
+        let m = lapsed_stored("identify-read-lost");
+        // A copy would go on the argument line, so none is made.
+        m.mem.vault().takes_on_stdin(16);
+        let (keychain, service) = m.live_store();
+        m.api.while_renewing("here-renewed", move || {
+            keychain.fault(&service, Fault::Locked);
+        });
+
+        let read = Pitboard::new(m.ctx.clone()).status(false).expect("a read");
+
+        let here = read
+            .value
+            .rows
+            .iter()
+            .find(|row| row.signed_in)
+            .expect("the account last named");
+        assert_eq!(here.stale, Some(crate::status::Stale::LoginRefused));
+        assert_eq!(
+            here.explanation(),
+            Some("Claude Code's login is no longer accepted; run `claude` and sign in again")
+        );
+        assert_eq!(renewals(&m), [Asked::Renew("here-renewed".into())]);
     }
 
     /// Codex's login says whose it is by itself, so it is never renewed to tell, however

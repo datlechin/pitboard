@@ -394,7 +394,7 @@ pub(crate) fn codex_machine(name: &str) -> Machine {
 /// record names: what enrolling `here` while signed in records. When `here` came to be in use
 /// stays unrecorded, so no test starts inside the minutes the automatic switch leaves an
 /// account to settle.
-fn record_in_use(ctx: &Context, state: &mut State, which: ProviderId, login: &Value) {
+pub(crate) fn record_in_use(ctx: &Context, state: &mut State, which: ProviderId, login: &Value) {
     let here = state
         .get(&Key::new(which, "here"))
         .expect("`here` is enrolled");

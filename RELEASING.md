@@ -49,6 +49,11 @@ anything public in `pitboard-core` is a new minor version, as Cargo reads one: 0
   `custom_oauth_endpoint` as reasons of `not_watching`, where they were reasons of
   `skipped`. The account index is schema 6, which 0.9.0 refuses, so the release's notes
   say to update the command line and the app together.
+- The first release after 0.10.0 is 0.11.0. In `pitboard-core`, `state::State` has the new
+  field `renewing`, `error::Error::SessionExpired` has the new field `refused`, and
+  `error::Partway` has new variants, which break an exhaustive `match` on it. The account
+  index is schema 7, which 0.10.0 refuses, so the release's notes say to update the command
+  line and the app together.
 
 1. In CHANGELOG.md, add `## [<version>] - YYYY-MM-DD` directly under `## [Unreleased]`, so
    the entries there fall under the version. The guard looks for a line that starts

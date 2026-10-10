@@ -145,7 +145,8 @@ pub fn settle(
     let exclusive = exclusive(ctx, permit)?;
     let mut state = state::load(ctx)?;
     let recovered = reconcile(ctx, permit, &mut state)?;
-    // A copy that cannot be saved yet stops only what would renew its slot's login.
+    // A copy that cannot be saved yet stops what acts on its slot's login, where that asks
+    // again (`refresh::finished`), and nothing else.
     let _ = refresh::finish(ctx, permit, &mut state);
     // After the journal has had its say, so a switch's own park is already accounted for.
     pending::sweep(ctx, permit, &mut state)?;

@@ -21,7 +21,7 @@ At a terminal, `stow` says what the file holds and asks first, as [Questions bef
 
 `stow` identifies the login in the file by its refresh token where Pitboard knows that token. Otherwise it asks Anthropic, with the login's own access token.
 
-It never sends an expired access token. It renews such a login first and writes it back to the file before anything else. That write keeps the file's other keys. If `stow` is killed before the write, or the write fails, the next change writes the renewed login to the file, and `stow` then says the file changed.
+It never sends an expired access token. It renews such a login first and writes it back to the file before anything else. That write keeps the file's other keys. If `stow` is killed before the write, or the write fails, the next change writes the renewed login to the file, and `stow` then says the file changed. Until then, `stow` changes nothing and says why.
 
 Where the outcome turns on whose login Claude Code has stored, `stow` identifies that login too. If its access token has expired, the question before `stow` uses the account Pitboard last recorded, and `stow` itself renews the login as [a switch does](/concepts/switching#how-pitboard-knows-whose-login-it-is).
 
@@ -64,7 +64,10 @@ None of them deletes the file. Once `stow` begins putting the file away, an erro
 - `Pitboard deleted nothing, having renewed the login in the file and written it back there.`
 - ``Pitboard deleted nothing, having parked the login in the file for `work`.``
 - `Pitboard deleted nothing. It renewed the login the file held and keeps the renewed login until the next change writes it back there.`
-- `Pitboard deleted nothing. It renewed the login the file held and could not write the renewed login back there, so that login no longer works.` A sign-in replaced the file's login meanwhile.
+- `Pitboard deleted nothing. It renewed the login the file held and could not write the renewed login back there, so that login no longer works.` A sign-in replaced the file's login meanwhile, or neither the file nor the keychain could take the renewed login.
+- `Pitboard deleted nothing. It renewed the login Claude Code has stored and keeps the renewed login until the next change saves it there.`
+
+Where `stow` renews the login Claude Code has stored and can keep the answer nowhere, the error ends with ``Run `claude`, sign in, then try again.`` instead.
 
 With nothing behind the keychain, `stow` changes nothing. It prints `Nothing is left behind the store Claude Code keeps its login in, so there is nothing to put away.` On Linux it always prints that: the file is where Claude Code keeps its login.
 
