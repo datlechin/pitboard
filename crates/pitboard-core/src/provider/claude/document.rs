@@ -127,6 +127,32 @@ pub(crate) fn renewed(document: &Value, fresh: &api::Renewed, now_millis: i64) -
     next
 }
 
+/// The plan a slice's login was issued on, as Claude Code records it beside the tokens:
+/// `subscriptionType` named, and the multiple `rateLimitTier` ends with, where it ends with
+/// one. `max` with `default_claude_max_20x` is "Max 20x"; `pro` with a tier that names no
+/// multiple is "Pro". Renewal leaves both as they were ([`renewed`]), so a parked login still
+/// says what it said at sign-in.
+pub(crate) fn plan(slice: &Value) -> Option<String> {
+    let oauth = slice.get("claudeAiOauth")?;
+    let kind = oauth.get("subscriptionType")?.as_str()?.trim();
+    let mut chars = kind.chars();
+    let first = chars.next()?;
+    let named = first.to_uppercase().chain(chars).collect::<String>();
+    let multiple = oauth
+        .get("rateLimitTier")
+        .and_then(Value::as_str)
+        .and_then(|tier| tier.rsplit('_').next())
+        .filter(|last| {
+            last.len() > 1
+                && last.ends_with('x')
+                && last[..last.len() - 1].bytes().all(|b| b.is_ascii_digit())
+        });
+    Some(match multiple {
+        Some(multiple) => format!("{named} {multiple}"),
+        None => named,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -222,6 +248,34 @@ mod tests {
         for key in ACCOUNT_SCOPED {
             assert!(after.get(key).is_none(), "{key} was left behind");
         }
+    }
+
+    #[test]
+    fn the_plan_is_named_with_the_multiple_its_tier_ends_with() {
+        let slice = |kind: Value, tier: Value| json!({"claudeAiOauth": {"accessToken": "a", "subscriptionType": kind, "rateLimitTier": tier}});
+        assert_eq!(
+            plan(&slice(json!("max"), json!("default_claude_max_20x"))).as_deref(),
+            Some("Max 20x")
+        );
+        assert_eq!(
+            plan(&slice(json!("team"), json!("default_claude_max_5x"))).as_deref(),
+            Some("Team 5x")
+        );
+        assert_eq!(
+            plan(&slice(json!("pro"), json!("default_claude_ai"))).as_deref(),
+            Some("Pro"),
+            "a tier that names no multiple adds nothing"
+        );
+        assert_eq!(
+            plan(&slice(json!("pro"), Value::Null)).as_deref(),
+            Some("Pro")
+        );
+        assert_eq!(
+            plan(&slice(Value::Null, json!("default_claude_max_20x"))),
+            None
+        );
+        assert_eq!(plan(&slice(json!(""), Value::Null)), None);
+        assert_eq!(plan(&json!({"claudeAiOauth": {"accessToken": "a"}})), None);
     }
 
     #[test]

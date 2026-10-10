@@ -31,7 +31,7 @@ func account(
         switchable: switchable ?? (!signedIn && label != nil), parked: nil,
         usage: Usage(
             source: .live, observedAt: 0, windows: [], listsEveryLimit: provider == "claude"),
-        stale: nil, staleExplanation: nil)
+        stale: nil, staleExplanation: nil, plan: nil)
 }
 
 func status(_ accounts: [Account], warnings: [Warning] = []) -> Status {

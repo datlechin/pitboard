@@ -83,7 +83,7 @@ private func status(_ labels: String..., now: Int64 = 0, measured: Int64? = nil)
                 usage: measured.map {
                     Usage(source: .live, observedAt: $0, windows: [], listsEveryLimit: true)
                 },
-                stale: nil, staleExplanation: nil)
+                stale: nil, staleExplanation: nil, plan: nil)
         },
         warnings: [])
 }

@@ -89,7 +89,7 @@ public sealed class ModelTests
                 Source.Live, At,
                 [new Limit("session", 18_000, null, 42.0, At + 3_600, null, true)],
                 ListsEveryLimit: true),
-            Stale: null, StaleExplanation: null);
+            Stale: null, StaleExplanation: null, Plan: null);
         return new Snapshot(
             Revision: revision, Now: At, Reading: false, UpdatedAt: At,
             Status: new Status(At, [work], []), Warnings: [], ReadFailure: null, Stuck: false,
@@ -352,7 +352,7 @@ public sealed class ModelTests
                     Id: "claude:work", Provider: "claude", Label: "work", Qualified: "claude/work",
                     Unplaced: false, Email: "work@example.com",
                     AccountId: "4f3c2a10-8b7e-4d2a-9c1e-5a6b7c8d9e0f", SignedIn: true, Switchable: false,
-                    Parked: null, Usage: null, Stale: null, StaleExplanation: null),
+                    Parked: null, Usage: null, Stale: null, StaleExplanation: null, Plan: null),
             ])[0];
         var link = PitboardFfiMethods.SiteLink("https://claude.ai/chat/x");
         var windows = NoWindows() with
@@ -604,11 +604,11 @@ public sealed class ModelTests
                 new Account(
                     Id: "codex:spare", Provider: "codex", Label: "spare", Qualified: "codex/spare",
                     Unplaced: false, Email: "spare@example.com", AccountId: "spare", SignedIn: false,
-                    Switchable: true, Parked: null, Usage: null, Stale: null, StaleExplanation: null),
+                    Switchable: true, Parked: null, Usage: null, Stale: null, StaleExplanation: null, Plan: null),
             ])[0];
         var spare = new AccountItem(
             Id: "codex:spare", Provider: "codex", Qualified: "codex/spare", Title: "spare",
-            Email: "spare@example.com", SpokenName: "spare (Codex)", Spoken: "spare (Codex)", InUse: false,
+            Email: "spare@example.com", Plan: null, SpokenName: "spare (Codex)", Spoken: "spare (Codex)", InUse: false,
             NeedsSignIn: false, Unplaced: false, Switching: false, Action: use,
             Summary: "5-hour 72%", Problem: null, StaleNote: null, Pace: null,
             ParkedNote: "Parked login good for 3 more days", Help: null, Limits: [limit],

@@ -912,6 +912,7 @@ mod tests {
                 source: Source::Remembered,
             }),
             stale: None,
+            plan: None,
         }
     }
 

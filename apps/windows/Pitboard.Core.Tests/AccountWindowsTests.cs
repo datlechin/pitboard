@@ -16,7 +16,7 @@ public sealed class AccountWindowsTests
             Id: $"{provider}:{uuid}", Provider: provider, Label: label,
             Qualified: $"{provider}/{label}", Unplaced: false, Email: $"{label}@example.com",
             AccountId: uuid, SignedIn: false, Switchable: true, Parked: null, Usage: null,
-            Stale: null, StaleExplanation: null);
+            Stale: null, StaleExplanation: null, Plan: null);
 
     /// <summary>
     /// The store is the one the macOS app keeps each window's data under, so it names the

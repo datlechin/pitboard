@@ -355,6 +355,16 @@ impl Provider for Codex {
         }
     }
 
+    /// `chatgpt_plan_type` out of the ID token, as enrolling records it: "Plus", "Pro",
+    /// "Prolite". Tells nobody anything the login does not already say.
+    fn plan(&self, slice: &Value) -> Option<String> {
+        let claims = jwt::claims(slice["tokens"]["id_token"].as_str()?)?;
+        let kind = jwt::claim(&claims, &[OPENAI, "chatgpt_plan_type"])?.trim();
+        let mut chars = kind.chars();
+        let first = chars.next()?;
+        Some(first.to_uppercase().chain(chars).collect())
+    }
+
     /// One account per file, so an account's share is the whole of it.
     ///
     /// Nothing in a Codex login belongs to the machine rather than the account: the tokens,
@@ -474,6 +484,12 @@ mod tests {
             .expect("a login names its own account");
         assert_eq!(found.account_id, "acc-1");
         assert_eq!(found.email, "a@b.c");
+    }
+
+    #[test]
+    fn the_plan_is_read_out_of_the_id_token() {
+        assert_eq!(Codex.plan(&login()).as_deref(), Some("Pro"));
+        assert_eq!(Codex.plan(&serde_json::json!({"tokens": {}})), None);
     }
 
     /// One account per file, so nothing is filtered and nothing Pitboard does not recognise

@@ -1,5 +1,6 @@
 ---
 source: crates/pitboard/tests/contract.rs
+assertion_line: 347
 expression: "serde_json :: json! ({ \"exit\" : code, \"envelope\" : value })"
 ---
 {
@@ -57,7 +58,8 @@ expression: "serde_json :: json! ({ \"exit\" : code, \"envelope\" : value })"
           },
           "stale": null,
           "provider": "claude",
-          "qualified": "claude/alpha"
+          "qualified": "claude/alpha",
+          "plan": "Max"
         },
         {
           "label": "beta",
@@ -100,7 +102,8 @@ expression: "serde_json :: json! ({ \"exit\" : code, \"envelope\" : value })"
           },
           "stale": null,
           "provider": "claude",
-          "qualified": "claude/beta"
+          "qualified": "claude/beta",
+          "plan": "Max"
         },
         {
           "label": "work",
@@ -139,7 +142,8 @@ expression: "serde_json :: json! ({ \"exit\" : code, \"envelope\" : value })"
           },
           "stale": null,
           "provider": "codex",
-          "qualified": "codex/work"
+          "qualified": "codex/work",
+          "plan": "Pro"
         }
       ]
     },

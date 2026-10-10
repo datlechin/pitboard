@@ -6,6 +6,15 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Added
+
+- Each account shows the plan its login says it is on, such as `Max 20x`, `Team 5x` or
+  `Plus`: as a tag beside its name in the window, after its name in the menu, in a column
+  after its address in `pitboard`, and as `plan` in `pitboard --json`. It is read off the
+  login a read already holds, Claude Code's `subscriptionType` and `rateLimitTier` and
+  Codex's `chatgpt_plan_type`, and sends nothing more anywhere. Offline, and for an account
+  whose parked login was not read, a Claude Code account shows none.
+
 ## [0.11.0] - 2026-10-10
 
 ### Changed

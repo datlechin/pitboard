@@ -20,9 +20,14 @@ struct AccountRow: View {
                     .frame(width: symbolWidth)
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: Design.lineSpacing) {
-                    Text(item.title)
-                        .fontWeight(.medium)
-                        .lineLimit(1)
+                    HStack(spacing: Design.iconSpacing) {
+                        Text(item.title)
+                            .fontWeight(.medium)
+                            .lineLimit(1)
+                        if let plan = item.plan {
+                            PlanTag(plan: plan)
+                        }
+                    }
                     if !item.email.isEmpty, item.email != item.title {
                         Text(item.email)
                             .font(.callout)
@@ -81,5 +86,21 @@ struct AccountRow: View {
             Button(action.title) { perform(action.intent) }
                 .accessibilityLabel(action.spoken)
         }
+    }
+}
+
+/// The plan an account's login says it is on, as a tag beside its name: "Team 5x", "Plus".
+private struct PlanTag: View {
+    let plan: String
+
+    var body: some View {
+        Text(plan)
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 1)
+            .background(.quaternary, in: Capsule())
+            .fixedSize()
     }
 }
