@@ -13,7 +13,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.10.0"
+version = "0.11.0"
 edition = "2024"
 rust-version = "1.91"
 license = "Apache-2.0"
@@ -21,7 +21,7 @@ repository = "https://github.com/datlechin/pitboard"
 homepage = "https://usepitboard.com"
 
 [workspace.dependencies]
-pitboard-core = { path = "crates/pitboard-core", version = "=0.10.0" }
+pitboard-core = { path = "crates/pitboard-core", version = "=0.11.0" }
 pitboard-sites = { path = "crates/pitboard-sites" }
 anstream = "1"
 anstyle = "1"
