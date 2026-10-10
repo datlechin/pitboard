@@ -191,6 +191,16 @@ fn an_account_is_called_by_its_name_or_its_address_or_what_is_wrong_with_it() {
     );
 }
 
+/// The plan a login says is the tag beside an account's name, and an account whose login
+/// says none has no tag.
+#[test]
+fn an_account_carries_the_plan_its_login_says() {
+    let mut team = account(Some("work")).signed_in().build();
+    team.plan = Some("Team 5x".into());
+    assert_eq!(described(team).plan.as_deref(), Some("Team 5x"));
+    assert_eq!(described(account(Some("spare")).build()).plan, None);
+}
+
 /// The window's row draws every limit and says whose address it is and whether it is in
 /// use, from the row alone.
 ///

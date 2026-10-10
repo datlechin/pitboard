@@ -280,6 +280,8 @@ pub struct Account {
     pub stale: Option<String>,
     /// What to tell a person about `stale`, when it is worth a word.
     pub stale_explanation: Option<String>,
+    /// What its login says it is on, "Max 20x" or "Plus", where a read says.
+    pub plan: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, uniffi::Record)]

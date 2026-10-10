@@ -199,6 +199,7 @@ impl AccountMade {
             }),
             stale: None,
             stale_explanation: self.explanation,
+            plan: None,
             label: self.label,
             provider: self.provider,
         }
@@ -222,6 +223,7 @@ pub(crate) fn unplaced(provider: &str, signed_in: bool) -> Account {
         usage: None,
         stale: Some("login_unreadable".into()),
         stale_explanation: Some("Codex's login could not be read; run `pitboard doctor`".into()),
+        plan: None,
     }
 }
 

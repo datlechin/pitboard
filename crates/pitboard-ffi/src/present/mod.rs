@@ -104,6 +104,8 @@ pub struct AccountItem {
     pub title: String,
     /// Its email address; empty for a login Pitboard cannot read.
     pub email: String,
+    /// The plan its login says it is on, as a tag beside its name: "Team 5x", "Plus".
+    pub plan: Option<String>,
     /// Its name where nothing around it says which tool it is for, as VoiceOver reads a row
     /// apart from its heading: "work", or "work (Codex)" beside another tool's accounts.
     pub spoken_name: String,

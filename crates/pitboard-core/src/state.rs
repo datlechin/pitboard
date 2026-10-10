@@ -218,6 +218,21 @@ impl Account {
             }
     }
 
+    /// The plan this account's record keeps, as a tag: only Codex's, which enrolling reads
+    /// out of the login's ID token. What a read of its login says is newer, and wins.
+    pub fn recorded_plan(&self) -> Option<String> {
+        match &self.detail {
+            Detail::Codex {
+                plan: Some(plan), ..
+            } => {
+                let mut chars = plan.trim().chars();
+                let first = chars.next()?;
+                Some(first.to_uppercase().chain(chars).collect())
+            }
+            _ => None,
+        }
+    }
+
     /// Claude Code's extras, or `None` when this account belongs to another tool.
     pub fn claude(&self) -> Option<ClaudeDetail<'_>> {
         match &self.detail {

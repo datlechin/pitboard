@@ -224,6 +224,7 @@ pub(crate) fn item(seen: &Seen, account: &Account) -> AccountItem {
         summary: summary(seen, account, switching, needs_sign_in),
         title,
         email: account.email.clone(),
+        plan: account.plan.clone(),
         spoken: spoken.join(", "),
         in_use,
         needs_sign_in,

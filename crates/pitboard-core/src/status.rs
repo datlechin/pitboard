@@ -196,6 +196,11 @@ pub struct Row {
     pub parked: Option<Park>,
     pub usage: Option<Snapshot>,
     pub stale: Option<Stale>,
+    /// The subscription its login says it is on, as a tag beside its name: "Max 20x",
+    /// "Team 5x", "Plus" ([`crate::provider::Provider::plan`]). Read off the login a read
+    /// already holds, so `None` where none was read, as offline, unless the account's record
+    /// keeps one.
+    pub plan: Option<String>,
 }
 
 impl Row {
@@ -297,6 +302,8 @@ struct LiveLogin {
     /// is not one account's login. A tool in this state whose record names none of its
     /// accounts still gets a row, so that nobody reads its silence as nobody signed in.
     out_of_reach: bool,
+    /// What the login says its plan is, where it was read and says.
+    plan: Option<String>,
 }
 
 impl LiveLogin {
@@ -312,6 +319,8 @@ struct Facts {
     /// What asking about each account's parked login came to, by the account's id. An
     /// account with none here was not asked about.
     parked: BTreeMap<String, Result<Snapshot, Stale>>,
+    /// What each parked login read says its plan is, by the account's id.
+    plans: BTreeMap<String, String>,
 }
 
 impl Facts {
@@ -389,6 +398,7 @@ pub fn gather_offline(ctx: &Context, state: &State) -> Report {
             .collect(),
         asked: false,
         parked: BTreeMap::new(),
+        plans: BTreeMap::new(),
     };
     let remembered = readings::load(ctx);
     Report {
@@ -551,6 +561,7 @@ fn ask_live(
                 known: recorded(),
                 usage: Some(Err(Stale::LoginUnreadable)),
                 out_of_reach: true,
+                plan: None,
             });
         }
     };
@@ -585,6 +596,7 @@ fn ask_live(
                 known: claimed,
                 usage: Some(Err(Stale::LoginUnusable)),
                 out_of_reach: true,
+                plan: None,
             });
         }
     }
@@ -597,18 +609,24 @@ fn ask_live(
                 known: recorded(),
                 usage: Some(Err(Stale::of(&error, true))),
                 out_of_reach: false,
+                plan: None,
             });
         }
     };
     let id = state.id_of(which, &found.owner);
     let document = renewed.as_ref().unwrap_or(document);
     let (usage, learned) = ask_usage(ctx, which, &id, document, true, remembered.get(&id), fresh);
+    let plan = tool
+        .slice(document)
+        .ok()
+        .and_then(|slice| tool.plan(&slice));
     Answered {
         login: LiveLogin {
             signed_in: Some(Ok(found.owner.clone())),
             known: None,
             usage: Some(usage),
             out_of_reach: false,
+            plan,
         },
         learned,
         found: Some(found.recorded(read.named.clone())),
@@ -636,6 +654,7 @@ fn settle(
                     known: last_known(state, which),
                     usage: Some(Err(Stale::Interrupted)),
                     out_of_reach: false,
+                    plan: None,
                 })
             });
             (which, answer)
@@ -647,6 +666,7 @@ fn settle(
 pub(crate) struct Answers {
     live: BTreeMap<ProviderId, LiveLogin>,
     parked: BTreeMap<String, Result<Snapshot, Stale>>,
+    plans: BTreeMap<String, String>,
     learned: Vec<(String, budget::Outcome)>,
     /// Whose login each tool has stored, where the read could tell, for
     /// [`identify::record_read`] to record.
@@ -677,6 +697,16 @@ pub(crate) fn ask(ctx: &Context, permit: Permit, state: &State, fresh: bool) -> 
         .accounts
         .iter()
         .map(|a| parked_document(ctx, &a.key(), a.parked.as_ref(), now))
+        .collect();
+    // Off the parks already read, so knowing a plan costs nothing more than the read.
+    let plans: BTreeMap<String, String> = state
+        .accounts
+        .iter()
+        .zip(&parked_documents)
+        .filter_map(|(account, document)| {
+            let plan = crate::provider::of(account.provider()).plan(document.as_ref().ok()?)?;
+            Some((account.id.clone(), plan))
+        })
         .collect();
     let remembered = readings::load(ctx);
 
@@ -742,6 +772,7 @@ pub(crate) fn ask(ctx: &Context, permit: Permit, state: &State, fresh: bool) -> 
     Answers {
         live,
         parked,
+        plans,
         learned,
         found,
     }
@@ -768,6 +799,7 @@ pub(crate) fn report(
         live: answers.live,
         asked: true,
         parked: answers.parked,
+        plans: answers.plans,
     };
     let remembered = readings::load(ctx);
     let rows = assemble(state, &facts, |uuid| remembered.get(uuid).cloned(), now);
@@ -870,6 +902,11 @@ fn assemble(
                 let parked = facts.parked.get(id).cloned();
                 reading(id, &parked.unwrap_or(Err(Stale::NotAsked)))
             };
+            let plan = if signed_in {
+                facts.live_for(which).and_then(|live| live.plan.clone())
+            } else {
+                facts.plans.get(id).cloned()
+            };
             Row {
                 provider: which,
                 label: Some(account.label.clone()),
@@ -881,6 +918,7 @@ fn assemble(
                 parked: account.parked.clone(),
                 usage,
                 stale,
+                plan: plan.or_else(|| account.recorded_plan()),
             }
         })
         .collect();
@@ -911,6 +949,7 @@ fn assemble(
                 parked: None,
                 usage,
                 stale,
+                plan: live.plan.clone(),
             });
             continue;
         }
@@ -932,6 +971,7 @@ fn assemble(
                 parked: None,
                 usage: None,
                 stale: live.usage().err(),
+                plan: None,
             });
         }
     }
@@ -1038,6 +1078,7 @@ mod tests {
         Facts {
             live: std::iter::once((ProviderId::Claude, live)).collect(),
             asked: true,
+            plans: BTreeMap::new(),
             parked: asked_about(parked),
         }
     }
@@ -1066,10 +1107,12 @@ mod tests {
                     known: Some(owner("alpha-uuid")),
                     usage: Some(Err(Stale::Unreachable)),
                     out_of_reach: false,
+                    plan: None,
                 },
             ))
             .collect(),
             asked: true,
+            plans: BTreeMap::new(),
             parked: asked_about(&[("beta-uuid", Err(Stale::Unreachable))]),
         };
         let rows = assemble(&state, &facts, nothing_remembered, NOW);
@@ -1249,6 +1292,61 @@ mod tests {
             .unwrap();
         assert_eq!(personal.usage.as_ref().unwrap().windows[0].percent, 12.0);
         assert!(personal.switchable(NOW));
+    }
+
+    /// Each row carries the plan its own login says: the account in use what the live login
+    /// read says, a parked one what its park says, and one whose park was not read nothing.
+    #[test]
+    fn each_row_carries_the_plan_its_own_login_says() {
+        let s = state(&["work", "personal", "spare"]);
+        let mut f = only_claude(
+            LiveLogin {
+                signed_in: Some(Ok(owner("work-uuid"))),
+                usage: Some(Ok(reading(30.0, Source::Live))),
+                plan: Some("Team 5x".into()),
+                ..LiveLogin::default()
+            },
+            &[],
+        );
+        f.plans.insert("personal-uuid".into(), "Max 20x".into());
+        let rows = assemble(&s, &f, nothing_remembered, NOW);
+        let plan = |label: &str| {
+            rows.iter()
+                .find(|r| r.label.as_deref() == Some(label))
+                .and_then(|r| r.plan.clone())
+        };
+        assert_eq!(plan("work").as_deref(), Some("Team 5x"));
+        assert_eq!(plan("personal").as_deref(), Some("Max 20x"));
+        assert_eq!(plan("spare"), None, "nothing read says what it is on");
+    }
+
+    /// The plan of the login in use is read off the login the read already holds, and asks
+    /// nobody anything more than whose it is and what it has left.
+    #[test]
+    #[cfg_attr(windows, ignore = "W15: files made private to the person on Windows")]
+    fn the_login_in_use_says_its_own_plan() {
+        let home = scratch("plan");
+        let (ctx, _mem, api) = machine(&home.0, Some("work-uuid"));
+        api.owned_by("access-w", owner("work-uuid"))
+            .using("access-w", reading(10.0, Source::Live));
+
+        let answered = ask_live(
+            &ctx,
+            Permit::for_a_test(),
+            &state(&["work"]),
+            ProviderId::Claude,
+            &stored(json!({"claudeAiOauth": {
+                "accessToken": "access-w",
+                "subscriptionType": "team",
+                "rateLimitTier": "default_claude_max_5x",
+            }})),
+            &HashMap::new(),
+            true,
+        );
+
+        assert!(matches!(answered.login.signed_in, Some(Ok(_))));
+        assert_eq!(answered.login.plan.as_deref(), Some("Team 5x"));
+        assert_eq!(api.calls(), 2, "{:?}", api.asked());
     }
 
     /// The login signed in has a session of its own tool's to renew, and a parked one does
@@ -1440,6 +1538,7 @@ mod tests {
         let f = Facts {
             live: BTreeMap::new(),
             asked: true,
+            plans: BTreeMap::new(),
             parked: asked_about(&[("work-acc", Err(Stale::Unreachable))]),
         };
         let rows = assemble(&s, &f, nothing_remembered, NOW);
@@ -1490,6 +1589,7 @@ mod tests {
             .into_iter()
             .collect(),
             asked: true,
+            plans: BTreeMap::new(),
             parked: BTreeMap::new(),
         };
         let rows = assemble(&s, &f, nothing_remembered, NOW);
@@ -1536,6 +1636,7 @@ mod tests {
         let f = Facts {
             live: std::iter::once((ProviderId::Codex, live("work-acc", Ok(answer)))).collect(),
             asked: true,
+            plans: BTreeMap::new(),
             parked: BTreeMap::new(),
         };
         let rows = assemble(&s, &f, |_| Some(known.clone()), NOW);
@@ -1572,6 +1673,7 @@ mod tests {
             .into_iter()
             .collect(),
             asked: true,
+            plans: BTreeMap::new(),
             parked: BTreeMap::new(),
         };
         let order: Vec<(ProviderId, String, bool)> = assemble(&s, &f, nothing_remembered, NOW)
@@ -1627,6 +1729,7 @@ mod tests {
                 .map(|(which, answered)| (which, answered.login))
                 .collect(),
             asked: true,
+            plans: BTreeMap::new(),
             parked: BTreeMap::new(),
         };
         let rows = assemble(&s, &f, nothing_remembered, NOW);
@@ -1768,6 +1871,7 @@ mod tests {
             signed_in: Some(Err("the keychain is locked".into())),
             usage: Some(Err(Stale::LoginUnreadable)),
             out_of_reach: true,
+            plan: None,
             ..LiveLogin::default()
         };
         let facts = || Facts {
@@ -1781,6 +1885,7 @@ mod tests {
             .into_iter()
             .collect(),
             asked: true,
+            plans: BTreeMap::new(),
             parked: BTreeMap::new(),
         };
 
@@ -2233,6 +2338,7 @@ mod tests {
             parked: None,
             usage: None,
             stale: Some(Stale::LoginUnreadable),
+            plan: None,
         };
         assert!(row.unplaced());
         row.stale = Some(Stale::LoginUnusable);

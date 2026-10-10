@@ -158,6 +158,7 @@ Each object in `accounts`:
 | `stale` | string or null | Why the reading is not live, as [Stale codes](/reference/json-output#stale-codes) lists. |
 | `provider` | string | `claude` or `codex`. |
 | `qualified` | string or null | The label with its tool, such as `claude/work`. `null` for a login nobody enrolled. |
+| `plan` | string or null | The plan the account's login says it is on, such as `Max 20x`, `Team 5x` or `Plus`. `null` where no login read says, as offline for a Claude Code account. |
 
 `source` is `live` when Pitboard asked the service this time. It is `remembered` for the last reading Pitboard recorded, from the command line, the app or a Claude Code status line.
 

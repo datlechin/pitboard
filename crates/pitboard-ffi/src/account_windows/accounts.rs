@@ -191,6 +191,7 @@ pub(crate) mod tests {
             usage: None,
             stale: None,
             stale_explanation: None,
+            plan: None,
         }
     }
 

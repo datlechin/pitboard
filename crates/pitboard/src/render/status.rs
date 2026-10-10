@@ -118,6 +118,13 @@ pub fn human(report: &Report) -> String {
         .map(|r| ui::columns(&email(r)))
         .max()
         .unwrap_or(0);
+    // Only where some login says its plan, so a read that learned none reads as it always did.
+    let plan_width = report
+        .rows
+        .iter()
+        .filter_map(|r| r.plan.as_deref().map(ui::columns))
+        .max()
+        .unwrap_or(0);
     // Said only when there is more than one tool to tell apart, so a machine with one reads
     // exactly as it always did.
     let tools = {
@@ -163,8 +170,15 @@ pub fn human(report: &Report) -> String {
             heading = Some(row.provider);
             block.push_str(&format!("{}\n", paint(BOLD, tool_name(row.provider))));
         }
+        let plan = match plan_width {
+            0 => String::new(),
+            width => format!(
+                "{}  ",
+                paint(DIM, pad(row.plan.as_deref().unwrap_or_default(), width))
+            ),
+        };
         block.push_str(&format!(
-            "{marker} {label}{}  {}\n",
+            "{marker} {label}{}  {plan}{}\n",
             paint(DIM, pad(&email(row), email_width)),
             standing(row, now)
         ));
@@ -338,6 +352,9 @@ pub fn json(report: &Report) -> Value {
             // reads moves.
             "provider": r.provider.code(),
             "qualified": r.key().map(|k| k.qualified()),
+            // What its login says it is on, "Max 20x" or "Plus"; null where no login read
+            // says.
+            "plan": r.plan,
         })).collect::<Vec<_>>(),
     })
 }
@@ -391,6 +408,7 @@ mod tests {
             parked: (!signed_in).then(|| parked(NOW + 20 * 86_400)),
             usage: Some(reading(30.0, Source::Live)),
             stale: None,
+            plan: None,
         }
     }
 
@@ -594,6 +612,39 @@ mod tests {
             column("a@example.com"),
             column("much-longer-label@example.com"),
             "{text}"
+        );
+    }
+
+    /// The plan a login says goes after the address, in a column of its own, so what each
+    /// account stands at still lines up; a read that learned no plan has no such column.
+    #[test]
+    fn the_plan_goes_after_the_address_in_a_column_of_its_own() {
+        let mut work = row(Some("work"), true);
+        work.plan = Some("Team 5x".into());
+        let spare = row(Some("spare"), false);
+        let rendered = report(vec![work, spare]);
+        let text = plain(&human(&rendered));
+        let line = |email: &str| text.lines().find(|l| l.contains(email)).unwrap();
+        let at = |email: &str, what: &str| line(email).find(what).unwrap();
+        assert!(
+            at("work@example.com", "Team 5x") > at("work@example.com", "work@example.com"),
+            "{text}"
+        );
+        assert_eq!(
+            at("work@example.com", "signed in"),
+            at("spare@example.com", "ready"),
+            "{text}"
+        );
+        assert_eq!(json(&rendered)["accounts"][0]["plan"], "Team 5x");
+        assert!(json(&rendered)["accounts"][1]["plan"].is_null());
+
+        let none = plain(&human(&report(vec![row(Some("work"), true)])));
+        assert!(
+            none.lines()
+                .next()
+                .unwrap()
+                .contains("work@example.com  signed in"),
+            "{none}"
         );
     }
 
