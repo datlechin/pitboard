@@ -1341,8 +1341,11 @@ mod tests {
         use pitboard_core::host::Elevation;
         use pitboard_core::testing::MemoryHost;
         let mem = MemoryHost::new();
+        let home = std::env::temp_dir().join("pitboard-cli-confirm");
+        // Windows has no default Pitboard home yet, and the gate refuses the empty one.
         let pitboard = Pitboard::new(
-            Context::new(std::env::temp_dir().join("pitboard-cli-confirm"))
+            Context::new(home.clone())
+                .with_pitboard_home(home.join(".pitboard"))
                 .with_memory_stores(std::sync::Arc::clone(&mem)),
         );
         for (yes, json, terminal, confirm) in [
