@@ -49,7 +49,7 @@ Pitboard has no server of its own and makes only these requests:
 | --- | --- | --- |
 | `api.anthropic.com/api/oauth/profile` | An access token | Identifying a Claude Code login |
 | `api.anthropic.com/api/oauth/usage` | An access token | A Claude Code account's usage |
-| `platform.claude.com/v1/oauth/token` | A refresh token and the client id it was issued to | Renewing a Claude Code parked login, or one `pitboard stow` puts away |
+| `platform.claude.com/v1/oauth/token` | A refresh token and the client id it was issued to | Renewing a Claude Code parked login, one `pitboard stow` puts away, or the login in use where Pitboard must identify it |
 | `chatgpt.com/backend-api/wham/usage` | An access token and the ChatGPT account id | A Codex account's usage, and checking a login before a switch to it |
 | `auth.openai.com/oauth/token` | A refresh token and Codex's client id | Renewing a Codex parked login |
 | claude.ai, chatgpt.com, their sign-in pages and what their pages load | What the site keeps in that window | An account window, through WebKit |
@@ -57,7 +57,7 @@ Pitboard has no server of its own and makes only these requests:
 
 The command line never checks for updates.
 
-Only [`pitboard stow`](/reference/recovery-commands#stow) renews a login a tool may be using: one it puts away with an expired access token. It holds [Claude Code's renewal locks](/reference/files#claude-code-files) meanwhile.
+Pitboard renews a login a tool may be using in two cases. [`pitboard stow`](/reference/recovery-commands#stow) renews one it puts away with an expired access token. A change or a read renews Claude Code's login in use where it must [identify it](/concepts/switching#how-pitboard-knows-whose-login-it-is) and its access token has expired. Both hold [Claude Code's renewal locks](/reference/files#claude-code-files) meanwhile.
 
 Pitboard's own requests verify TLS against your system's trust store and time out after 5 seconds.
 

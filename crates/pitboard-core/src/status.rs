@@ -15,6 +15,7 @@ use crate::error::Cause;
 use crate::in_use::{self, InUse};
 use crate::provider::claude::paths as claude;
 use crate::provider::{ProviderError, ProviderId};
+use crate::service::Permit;
 use crate::state::{Key, Park, State};
 use crate::switch::identify;
 use crate::usage::{Snapshot, Source};
@@ -224,10 +225,15 @@ impl Row {
             .map(|label| Key::new(self.provider, label.clone()))
     }
 
-    /// What to tell a person about [`Row::stale`], in the words of this row's own tool.
+    /// What to tell a person about [`Row::stale`], in the words of this row's own tool. A
+    /// login in use that is refused is not a parked one, and its tool signs in again.
     pub fn explanation(&self) -> Option<&'static str> {
-        self.stale
-            .and_then(|stale| stale.explanation_for(self.provider))
+        match (self.stale, self.provider) {
+            (Some(Stale::LoginRefused), ProviderId::Claude) if self.signed_in => {
+                Some("Claude Code's login is no longer accepted; run `claude` and sign in again")
+            }
+            (stale, provider) => stale.and_then(|stale| stale.explanation_for(provider)),
+        }
     }
 
     /// A tool's live login that Pitboard could not pin on any account: one it could not
@@ -513,8 +519,9 @@ fn ask_usage(
 /// nothing. It used to be read as exactly that.
 ///
 /// Whose a login is comes from the record where it is the login the record was made for,
-/// and from the tool's service otherwise ([`identify::whose`]). Where nobody could say this
-/// time, because the login could not be read or its service could not be asked, whose
+/// and from the tool's service otherwise, renewed first where its access token has lapsed
+/// ([`identify::told_by_a_read`]), and then asked about as renewed. Where nobody could say
+/// this time, because the login could not be read or its service could not be asked, whose
 /// Pitboard last recorded it to be stands in, so the account in use is not told to sign in
 /// again; what it has left is not asked, since asked under an account standing in, the
 /// numbers of a login a sign-in replaced would be filed under the account it replaced.
@@ -522,6 +529,7 @@ fn ask_usage(
 /// either ([`identify::nobody`]).
 fn ask_live(
     ctx: &Context,
+    permit: Permit,
     state: &State,
     which: ProviderId,
     read: &LiveRead,
@@ -580,8 +588,8 @@ fn ask_live(
             });
         }
     }
-    let found = match identify::whose(ctx, state, which, document) {
-        Ok(found) => found,
+    let (renewed, found) = match identify::told_by_a_read(ctx, permit, state, which, document) {
+        Ok(told) => told,
         Err(error) => {
             let error = to_api(error);
             return Answered::learning_nothing(LiveLogin {
@@ -593,6 +601,7 @@ fn ask_live(
         }
     };
     let id = state.id_of(which, &found.owner);
+    let document = renewed.as_ref().unwrap_or(document);
     let (usage, learned) = ask_usage(ctx, which, &id, document, true, remembered.get(&id), fresh);
     Answered {
         login: LiveLogin {
@@ -646,8 +655,9 @@ pub(crate) struct Answers {
 
 /// Ask every tool's service about its live login, and about every parked login, all at once,
 /// so a read costs one round trip and not one per account. Nothing is recorded: what the
-/// answers teach is recorded by [`report`], and whose each login is by the caller.
-pub(crate) fn ask(ctx: &Context, state: &State, fresh: bool) -> Answers {
+/// answers teach is recorded by [`report`], and whose each login is by the caller. A live
+/// login renewed to tell whose it is is saved where its tool keeps it.
+pub(crate) fn ask(ctx: &Context, permit: Permit, state: &State, fresh: bool) -> Answers {
     let now = ctx.now();
     // Each tool's live login, whole, or why it could not be read. Not a token out of it:
     // what a usage call needs is not the same everywhere, and pulling one field out here
@@ -679,8 +689,9 @@ pub(crate) fn ask(ctx: &Context, state: &State, fresh: bool) -> Answers {
                 .map(|(which, read)| {
                     let remembered = &remembered;
                     let which = *which;
-                    let handle =
-                        scope.spawn(move || ask_live(ctx, state, which, read, remembered, fresh));
+                    let handle = scope.spawn(move || {
+                        ask_live(ctx, permit, state, which, read, remembered, fresh)
+                    });
                     (which, handle)
                 })
                 .collect();
@@ -1081,7 +1092,12 @@ mod tests {
     /// A read that asks, as `pitboard status` makes one, short of recording whose each
     /// tool's login is.
     fn gather(ctx: &Context, state: &State) -> Report {
-        report(ctx, Permit::for_a_test(), state, ask(ctx, state, true))
+        report(
+            ctx,
+            Permit::for_a_test(),
+            state,
+            ask(ctx, Permit::for_a_test(), state, true),
+        )
     }
 
     /// A tool's store holding `login`, read with nothing in the tool's own record.
@@ -1633,6 +1649,7 @@ mod tests {
         let logged_out = json!({"mcpOAuth": {"some-server": {"token": "unrelated"}}});
         let answered = ask_live(
             &ctx,
+            Permit::for_a_test(),
             &State::default(),
             ProviderId::Claude,
             &stored(logged_out),
@@ -1809,6 +1826,7 @@ mod tests {
 
         let answered = ask_live(
             &ctx,
+            Permit::for_a_test(),
             &State::default(),
             ProviderId::Claude,
             &stored(json!({"claudeAiOauth": {"accessToken": "access-x"}})),
@@ -2121,6 +2139,7 @@ mod tests {
         let ask = |document: Value| {
             ask_live(
                 &ctx,
+                Permit::for_a_test(),
                 &beta_in_use,
                 ProviderId::Claude,
                 &stored(document),

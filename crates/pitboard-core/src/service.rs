@@ -629,7 +629,9 @@ impl Pitboard {
     }
 
     /// Who is signed in and what every account has left. Parked logins whose access has
-    /// lapsed are renewed first, so every account is asked live.
+    /// lapsed are renewed first, so every account is asked live, and so is a tool's stored
+    /// login where only its service can tell whose it is
+    /// ([`switch::identify::told_by_a_read`]).
     ///
     /// `fresh` asks Anthropic about every account whatever was asked recently. Ordinarily
     /// false: a number is only asked for again once the tightest limit it describes could
@@ -680,7 +682,7 @@ impl Pitboard {
         // did not answer held the read for its timeout twice.
         let (stuck, answers) = std::thread::scope(|scope| {
             let stuck = scope.spawn(|| switch::stuck(&self.ctx, &state, switch::Asking::Service));
-            let answers = status::ask(&self.ctx, &state, fresh);
+            let answers = status::ask(&self.ctx, permit, &state, fresh);
             (stuck.join().ok().flatten(), answers)
         });
         switch::identify::record_read(&self.ctx, permit, &answers.found);
@@ -1782,11 +1784,10 @@ mod tests {
             said(&read),
             [("recovery_undetermined", refused.error.to_string())]
         );
-        assert!(
-            refused.error.to_string().contains("has expired"),
-            "{}",
-            refused.error
-        );
+        // Nothing tried to renew the login here, so nothing says it cannot be renewed.
+        let said = refused.error.to_string();
+        assert!(said.contains("session has expired"), "{said}");
+        assert!(!said.contains("sign in"), "{said}");
     }
 
     /// A switch the next change finishes by itself is not one anybody has to do anything

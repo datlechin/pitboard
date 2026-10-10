@@ -306,6 +306,18 @@ pub fn behind<'a>(live: &'a Live, service: &str) -> Result<Option<&'a dyn RawSto
     behind_in(&live.refs(), service)
 }
 
+/// The backend in `live` holding `service`, the one a read takes it from.
+pub(crate) fn holder<'a>(live: &'a Live, service: &str) -> Result<Option<&'a dyn RawStore>, Error> {
+    resolve_in(&live.refs(), service)
+}
+
+/// The backend in `live` of the kind [`Backend::name`] calls `kind`.
+pub(crate) fn of_kind<'a>(live: &'a Live, kind: &str) -> Option<&'a dyn RawStore> {
+    live.refs()
+        .into_iter()
+        .find(|backend| backend.kind().name() == kind)
+}
+
 pub fn read_raw(live: &Live, service: &str) -> Result<Option<String>, Error> {
     with_live(live, |chain| match resolve_in(chain, service)? {
         Some(backend) => backend.read(service),

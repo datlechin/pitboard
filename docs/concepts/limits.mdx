@@ -11,8 +11,9 @@ Pitboard is for one person with several accounts of their own in Claude Code or 
 - It switches only Claude Code by itself. [What a switch costs you](#what-a-switch-costs-you) says why.
 - Pitboard never sees a tool's requests, so it never proxies or pools them.
 - It decides an automatic switch from usage it has already read, never from a refused or rate-limited request. [Keep the numbers fresh](/guides/automatic-switching#keep-the-numbers-fresh) says how old that usage can be.
-- Pitboard never renews the login in use. The tool renews it, and a renewal spends the refresh token a running session may still hold.
-- [`pitboard stow`](/reference/recovery-commands#stow) is the one exception. It can renew an expired login in a login file behind the keychain, under Claude Code's refresh lock.
+- Pitboard renews Claude Code's login in use only where it must identify it and its access token has expired. [How Pitboard knows whose login it is](/concepts/switching#how-pitboard-knows-whose-login-it-is) says how.
+- [`pitboard stow`](/reference/recovery-commands#stow) can renew an expired login in a login file behind the keychain.
+- Both renew as Claude Code does, under the lock a session takes to renew, so no session spends the same refresh token. Pitboard never renews Codex's login in use.
 - Pitboard never copies a parked login to another machine. Once one machine renews it, the other machine's copy is spent.
 - Each machine signs in to each account itself. [The Pitboard directory came from another computer](/troubleshooting/recovery#the-pitboard-directory-came-from-another-computer) covers a copied `~/.pitboard`.
 

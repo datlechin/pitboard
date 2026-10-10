@@ -98,7 +98,14 @@ pages load, as a browser would.
     `stow.rs`), and the journal that finishes an interrupted switch. `identify.rs`
     says whose login each tool has stored: the record's owner where the login's refresh
     token has the fingerprint the record was made for, which asks nobody, and the tool's
-    service otherwise (`whose`). A store with no login is recorded as holding none only
+    service otherwise (`whose`). A login whose access token has expired is never asked
+    about with it, and one the service refuses is not asked about again (`told`): a change
+    renews it first, and so does a read, where it takes `state.lock` without waiting and no
+    switch waits to be finished (`told_by_a_read`); usage alone renews nothing, and a Codex
+    login names its account by itself. `refresh.rs` is the one renewal of a login of Claude
+    Code's where Claude Code keeps it, which that and `pitboard stow` both use, with
+    `Refreshing`, Claude Code's refresh lock held, and `finish`, which saves a renewal a
+    stopped run left in the vault. A store with no login is recorded as holding none only
     where the tool's own record names nobody either; where it names somebody, the login is
     somewhere Pitboard does not look, and nothing is recorded. A change records what it
     finds under the lock it holds (`now`, or `look` then `record` where enrolling the
@@ -111,7 +118,9 @@ pages load, as a browser would.
     `test-support`, a context may hold a `SignInScript`, which plays a tool's own sign-in in
     place of its program, for a test or a fixture that may start none; everything around
     it is the core's own.
-  - `state.rs`: `state.json`, the index of accounts and where each one's login is parked.
+  - `state.rs`: `state.json`, the index of accounts and where each one's login is parked,
+    and `renewing`, the renewals of a tool's own login whose answer is not saved yet, at
+    most one per slot.
   - `in_use.rs`: whose login each tool has stored, as its service last said, with the
     fingerprint of that login and the account the tool's own record named then. It is
     `state.json`'s `in_use`, written through `State::identified` by a switch, first for the
@@ -984,7 +993,9 @@ pages load, as a browser would.
   the login installed: a session renewing meanwhile waits for it, so the copy parked for the
   account switched from is never one a session spent, with its renewal lost at a save that
   found another login stored. A renewal already under way holds that lock, and a switch
-  waits for it as it waits for the write lock, then stops with `switch_in_progress`.
+  waits for it as it waits for the write lock, then stops with `switch_in_progress`. Locks
+  are always taken in one order: `state.lock`, then Claude Code's refresh lock and its
+  legacy one, then its write lock.
 - Codex takes no lock on `auth.json`, so a switch reads the file again before replacing
   it. Every switch reads the live login back rather than trusting its own write.
 - Pitboard never answers a failed keychain write by writing Claude Code's plaintext file.
@@ -1033,28 +1044,26 @@ pages load, as a browser would.
   newer. Where the file goes because of the login stored, the very login stored or a second
   sign-in, that login is read again as the file goes, and one a sign-in replaced meanwhile
   keeps the file (`stored_login_changed`). A login whose access token has expired is renewed
-  as a park is and written back into the file before anything else, so the token the
-  exchange rotates is on disk at once. What could refuse that write is asked before the
-  refresh token is sent: Claude Code's write lock is taken once and the file read again
-  under it, so a writer in the way stops it with nothing changed. Once Anthropic has
-  answered, that lock is asked for again for 30 seconds, twice its staleness, and the login
-  is then saved without it, as Claude Code writes on once its own lock is lost. The answer
-  is saved as Claude Code saves a renewal (`refresh_lock`): read from the file itself, not
-  through the keychain in front of it, and written over the login the file holds by then
-  where that still has the refresh token sent, with the file's other keys as they are by
-  then. A login of an account nobody enrolled is refused, named by its email and
-  organisation, without asking whose the login stored is, and nothing is deleted; the
-  command line refuses it from the look, asking and trying nothing. Its other keys, such as
+  as Pitboard renews the login stored to identify it (`switch::refresh`), read from the file
+  itself, not through the keychain in front of it, and written back there before anything
+  else. Where whose login is stored decides the outcome and that login has lapsed, the look
+  takes it from the record, renewing nothing, and `stow` renews it as a change does. A
+  login of an account nobody enrolled is refused, named by its email and organisation,
+  without asking whose the login stored is, and nothing is deleted; the command line
+  refuses it from the look, asking and trying nothing. Its other keys, such as
   `mcpOAuth`, are not Pitboard's to move: they go with the file, by name. Every error it
   stops with says how far it went (`Error::StowStopped`, with the code, cause and exit
   status of what stopped it): nothing changed, the login renewed and written back, renewed
-  and not written back, which leaves it spent, or parked, which stays. A run that stops
-  anywhere leaves the login in the file, in a park, or in both, but for the moment between
-  Anthropic answering a renewal and the answer reaching the file, which every renewal has: a
-  run killed then, a sign-in or a `/logout` that replaced the file's login meanwhile, or a
-  file that can no longer be read or written. A session that signed in with the file, as one
-  over SSH does, is signed out once it is gone. The activity log records it as `stow`. On
-  Linux the file is the store, nothing is behind it, and there is nothing to put away.
+  and kept for the next change to write back, renewed and lost, which leaves it spent, or
+  parked, which stays. A run that stops anywhere leaves the login in the file, in a park, or
+  in both, or, between Anthropic answering a renewal and the answer reaching the file, in
+  the vault copy the next change writes there. A renewed login is lost only where a sign-in
+  or a `/logout` replaced the file's login meanwhile. A copy the file's login waits on is
+  saved before that login is renewed again, and where it cannot be yet, `stow` stops with
+  nothing sent. A session that signed in
+  with the file, as one over SSH does, is signed out once it is gone. The activity log
+  records it as `stow`. On Linux the file is the store, nothing is behind it, and there is
+  nothing to put away.
 - A Codex login is moved, never copied (`ParkSemantics::MoveOnly`). The parked login is
   read back before the incoming login is written. Codex's own sign-in and sign-out revoke
   the stored refresh token, so two usable copies of one login must never be at rest.
@@ -1075,8 +1084,31 @@ pages load, as a browser would.
   account. A read never writes it: a process starting on another login writes its own
   account back. A read records nothing for a tool whose config names another account than
   when the read began, so it never files what it saw over what a change wrote since.
-- Pitboard never renews the login in use. That is the tool's own job, and a second renewer
-  would break it.
+- The login in use is its tool's to renew. Pitboard renews Claude Code's only where it must
+  tell whose it is and its access token has lapsed, which a session signed in with a file
+  behind the keychain leaves it: every session pinned to the file, nobody renews the
+  keychain's. It renews it as Claude Code does (`switch::refresh`, the register's
+  `refresh_lock`), so a session renews after it, never beside it: under Claude Code's refresh
+  lock, holding `state.lock` first, it reads the login again and tells one renewed meanwhile
+  as it is, sending nothing; otherwise Claude Code's write lock is taken once and the login
+  read again before the refresh token is sent, so a writer in the way stops it with nothing
+  sent. Once Anthropic has answered, a copy of the answer waits in the vault, written down
+  in `state.json`'s `renewing` first, the write lock is asked for again for 30 seconds,
+  twice its staleness, and the answer is then saved without it, as Claude Code writes on
+  once its own lock is lost. It is saved as Claude Code saves a renewal: read from the store
+  that keeps it, and written over the login there only while that still has the refresh
+  token sent, other keys as they are by then. The copy goes once it is saved or the store
+  holds another login by then. A run killed in between, or a save that fails, leaves it,
+  one per slot, and the next change, or the next read that must renew, saves it first
+  (`refresh::finish`). Where it cannot be saved yet, nothing is sent for that slot and the
+  change stops with why, since the store still holds the spent refresh token; `uninstall`
+  keeps the home while a copy waits. So nothing rotates a refresh token it could not then
+  write down. A save made without the write lock is said as `lock_compromised`. A login
+  Anthropic refuses for good, or one with no refresh token, is `session_expired` with the
+  cause `login_refused`, with nothing written; a 401 where nothing renewed stays
+  `session_expired` with `token_expired`, telling the person to run the tool once. Usage
+  alone never renews it, nor a look that takes no lock, such as the automatic switch's or
+  `stow::find`, and Codex's never.
 - Nothing outside `pitboard-core` writes Pitboard's index. Every change goes through
   `switch`, which records what it is about to do first and finishes an interrupted change
   before starting another.

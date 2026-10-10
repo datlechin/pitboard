@@ -88,13 +88,13 @@ Everything that runs Codex keeps the old login until it starts again, and can wr
 Pitboard replaces the login in use only once it has identified it. When it cannot, it parks the new login, and the tool keeps the one it has. That happens when:
 
 - The login in use cannot be read or found.
-- A Claude Code login changed since Pitboard last identified it, and Anthropic refuses it or does not answer.
+- A Claude Code login changed since Pitboard last identified it, and Anthropic no longer accepts it or does not answer.
 
 [How Pitboard knows whose login it is](/concepts/switching#how-pitboard-knows-whose-login-it-is) says when Pitboard asks Anthropic. If `work` is the account Pitboard last recorded in use, it also warns:
 
 ```text
 Renewed work (me@company.com): its parked login is a fresh one.
-warning: Claude Code goes on with the login it has: Pitboard could not tell whose it is (Anthropic refused its access token), so it parked the new login for `work` rather than write over that one. If that login no longer works, run `claude` and sign in to `work` there.
+warning: Claude Code goes on with the login it has: Pitboard could not tell whose it is (its login has expired and cannot be renewed), so it parked the new login for `work` rather than write over that one. If that login no longer works, run `claude` and sign in to `work` there.
 ```
 
 In the app, the notice is titled **The new login was parked, not put in use**.
