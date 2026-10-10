@@ -229,10 +229,22 @@ fn forget_and_rename() {
     let env = two_accounts("contract-forget");
     let (value, code) = json(&env, &["rename", "beta", "work"]);
     contract!("rename", value, code);
-    let (value, code) = json(&env, &["forget", "work"]);
+    let (value, code) = json(&env, &["forget", "work", "--yes"]);
     contract!("forget", value, code);
-    let (value, code) = json(&env, &["forget", "alpha"]);
+    let (value, code) = json(&env, &["forget", "alpha", "--yes"]);
     contract!("forget_signed_in", value, code);
+}
+
+/// With nobody to ask and no `--yes`, a command that deletes something refuses before it
+/// changes anything.
+#[test]
+#[cfg_attr(windows, ignore = "W22: switching Claude Code on Windows")]
+fn unconfirmed() {
+    let env = two_accounts("contract-unconfirmed");
+    let (value, code) = json(&env, &["forget", "beta"]);
+    contract!("forget_unconfirmed", value, code);
+    let (value, code) = json(&env, &["uninstall"]);
+    contract!("uninstall_unconfirmed", value, code);
 }
 
 #[test]
@@ -492,6 +504,9 @@ fn stow() {
     let left = env.root.join(".credentials.json");
     common::os::write_private(&left, &common::credential("refresh-a").to_string());
     let (value, code) = json(&env, &["stow"]);
+    assert!(left.exists(), "the file is kept");
+    contract!("stow_unconfirmed", value, code);
+    let (value, code) = json(&env, &["stow", "--yes"]);
     assert!(!left.exists(), "the file is gone");
     contract!("stow", value, code);
 }

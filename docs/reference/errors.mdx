@@ -168,6 +168,7 @@ An error that stops `pitboard stow` keeps its own code, cause and exit status. T
 | --- | --- | --- | --- |
 | `checks_failed` | 3 | `pitboard doctor` found at least one broken check. `data.checks` lists every check. | Follow the advice under each broken check. |
 | `output_is_not_a_report` | 2 | `pitboard completions` or `pitboard manpage` was given `--json`. Each prints a generated file, which has no JSON form. | Run the command without `--json`. |
+| `confirmation_needed` | 2 | `pitboard forget`, `pitboard stow` or `pitboard uninstall` could not ask before deleting, as in a script or with `--json`, and was not given `--yes`. Nothing changed. | Run it in a terminal, or add `--yes`. See [Questions before deleting](/reference/commands#questions-before-deleting). |
 
 ## Cause codes
 

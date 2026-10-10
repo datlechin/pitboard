@@ -6,6 +6,17 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Changed
+
+- `pitboard forget`, `pitboard stow` and `pitboard uninstall` delete nothing without
+  `--yes` where they cannot ask: through a pipe, from a script or a tool, or with `--json`,
+  which no longer stands for `--yes`. Each refuses with the error `confirmation_needed`,
+  exit status 2, before it changes anything. Breaking for a script that runs any of them:
+  pass `--yes`. Until this, each went ahead without asking, and `pitboard stow < /dev/null`,
+  run as a look, deleted a login file behind the keychain. At a terminal each still asks.
+  `stow` with nothing to put away or a login of an account not enrolled, and `forget` of a
+  label that names no account, answer as before, and so does each as root or under sudo.
+
 ## [0.10.0] - 2026-10-10
 
 ### Added

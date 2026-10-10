@@ -186,7 +186,7 @@ Usage: pitboard forget [OPTIONS] <LABEL>
 | Argument or option | Description |
 | --- | --- |
 | `<LABEL>` | The label to drop |
-| `-y, --yes` | Do not ask first |
+| `-y, --yes` | Do not ask first; needed without a terminal or with `--json` |
 
 `forget` drops the account from Pitboard's list and deletes its parked login and its last usage reading. Pitboard does not revoke the login it deletes: see [What Pitboard does not protect against](/security#what-pitboard-does-not-protect-against).
 
@@ -196,6 +196,7 @@ The app deletes the account's window data, sign-in included, at its next read of
 | --- | --- |
 | `cannot_forget_active_account` | The account is in use. |
 | `identity_unverifiable` | Pitboard cannot identify the login in use, and the account is the one last in use or has no parked login. |
+| `confirmation_needed` | It cannot ask, as in a script or with `--json`, and `--yes` is not given. Exit status 2. |
 
 At a terminal, without `--yes` or `--json`, `forget` asks on standard error:
 
@@ -203,7 +204,7 @@ At a terminal, without `--yes` or `--json`, `forget` asks on standard error:
 Forget old and delete its parked login? Adding it again needs a browser sign-in. [y/N]
 ```
 
-[Questions before deleting](/reference/commands#questions-before-deleting) says when it asks and what each answer does.
+Anywhere else it needs `--yes`, and refuses with `confirmation_needed` without it. A label that names no account fails with its own error instead. The account in use needs `--yes` too, and then fails with `cannot_forget_active_account`. [Questions before deleting](/reference/commands#questions-before-deleting) says when it asks and what each answer does.
 
 ```sh
 pitboard forget old --yes

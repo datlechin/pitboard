@@ -705,6 +705,13 @@ pub enum Error {
     #[error("{0}")]
     Usage(String),
 
+    /// A command that deletes something was run with nobody to ask, without `--yes`.
+    #[error(
+        "`pitboard {command}` asks before it deletes anything, and can ask only in a terminal \
+         without `--json`. Nothing was changed. Run it in a terminal, or add `--yes`."
+    )]
+    ConfirmationNeeded { command: &'static str },
+
     #[error(transparent)]
     Store(#[from] crate::store::Error),
 
@@ -793,6 +800,7 @@ impl Error {
             SystemTooOld { .. } => "system_too_old",
             WindowsNotReleased => "windows_not_released",
             Usage(_) => "usage",
+            ConfirmationNeeded { .. } => "confirmation_needed",
             Store(e) => e.code(),
             Lock(e) => e.code(),
         }
@@ -824,9 +832,10 @@ impl Error {
         }
     }
 
-    /// 1 when a request could not be met; 2 when the command line was wrong; 3 when a login
-    /// or Claude Code's files are in a state Pitboard cannot safely act on: an unexpected
-    /// format, or a login that could not be put back.
+    /// 1 when a request could not be met; 2 when the command line was wrong, or lacks the
+    /// `--yes` a command that deletes needs with nobody to ask; 3 when a login or Claude
+    /// Code's files are in a state Pitboard cannot safely act on: an unexpected format, or a
+    /// login that could not be put back.
     pub fn exit_code(&self) -> u8 {
         use Error::*;
         match self {
@@ -843,7 +852,7 @@ impl Error {
             | CredentialTooLarge { .. }
             | CustomOauthEndpoint
             | RecoveryRecordCorrupt { .. } => 3,
-            Usage(_) => 2,
+            Usage(_) | ConfirmationNeeded { .. } => 2,
             Store(e) => e.exit_code(),
             StowStopped { error, .. } => error.exit_code(),
             _ => 1,
@@ -981,6 +990,8 @@ mod tests {
             Error::WindowsNotReleased,
             Error::LeftLoginChanged { path: "f".into() },
             Error::StoredLoginChanged { path: "f".into() },
+            Error::Usage("u".into()),
+            Error::ConfirmationNeeded { command: "stow" },
         ];
         let mut codes: Vec<&str> = samples.iter().map(Error::code).collect();
         codes.sort_unstable();
@@ -1094,6 +1105,7 @@ mod tests {
                 detail: "the keychain is locked".into(),
             }
             .to_string(),
+            Error::ConfirmationNeeded { command: "forget" }.to_string(),
         ];
         for message in actionable {
             assert!(

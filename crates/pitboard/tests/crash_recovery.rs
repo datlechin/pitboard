@@ -202,7 +202,7 @@ fn forgetting_waits_for_an_interrupted_switch_to_be_settled() {
     let (b, p) = (env.uuid('b'), env.uuid('p'));
     env.sign_in(&b, "b@example.com", &p, "refresh-b");
 
-    let (out, err, code) = env.run(&["forget", "beta", "--json"]);
+    let (out, err, code) = env.run(&["forget", "beta", "--yes", "--json"]);
     let envelope: serde_json::Value = serde_json::from_str(&out).expect(&err);
 
     assert_eq!(code, 1, "{out}");
