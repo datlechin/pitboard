@@ -55,7 +55,7 @@ pub(crate) fn automatically(
     if let Some(why) = ledger.unidentified(known_at, now) {
         return Ok((Auto::NotWatching { why }, Vec::new()));
     }
-    let (live, found) = match identify::look(ctx, &state, which) {
+    let (live, found) = match identify::look(ctx, permit, &mut state, which) {
         Ok(looked) => looked,
         Err(error) if unreadable_here(&error) => return Err(stopped(unchosen, error)),
         Err(error) => {
@@ -86,9 +86,11 @@ pub(crate) fn automatically(
             Vec::new(),
         ));
     };
+    // Said where nothing is switched; a switch says it with its own.
+    let lost: Vec<Warning> = outgoing.lock_warning(which).into_iter().collect();
     let judged = match autoswitch::watched(&state, Some(&outgoing.owner)) {
         Ok(account) => autoswitch::judge(ctx, &state, account, &ledger, threshold, now),
-        Err(why) => return Ok((Auto::NotWatching { why }, Vec::new())),
+        Err(why) => return Ok((Auto::NotWatching { why }, lost)),
     };
     let plan = match judged {
         Judged::Switch(plan) => plan,
@@ -105,9 +107,9 @@ pub(crate) fn automatically(
                     hold.why.code(),
                 );
             }
-            return Ok((hold.skipped(&state), Vec::new()));
+            return Ok((hold.skipped(&state), lost));
         }
-        Judged::Stands(stands) => return Ok((stands, Vec::new())),
+        Judged::Stands(stands) => return Ok((stands, lost)),
     };
     let to = state.typed(&plan.to);
     let to_id = state
@@ -1294,6 +1296,42 @@ mod tests {
         let looked = auto(&m).expect("a switch").value;
         assert!(matches!(looked, Auto::Switched { .. }), "{looked:?}");
         assert_eq!(live_refresh(&m).as_deref(), Some("there-refresh"));
+    }
+
+    /// The owner's machine on 10 October 2026: Claude Code's stored login changed since
+    /// Anthropic last named it, and its access token lapsed, since every session was signed in
+    /// with a file behind the keychain. It said `not_identified` at every look. The decision
+    /// renews it as Claude Code would, tells whose it is and decides, and the login parked
+    /// for the account switched from is the renewed one.
+    #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
+    )]
+    fn a_lapsed_stored_login_is_renewed_to_tell_whose_it_is_and_the_switch_decided() {
+        let (m, _) = nearly_out("auto-lapsed", 96.0);
+        m.sign_in(&super::super::harness::lapsed("here-renewed"));
+        super::super::harness::renews(&m, "here-renewed", "here-again");
+        m.api.owned_by("access-here-again", owner("here"));
+
+        let done = auto(&m).expect("a switch");
+
+        let Auto::Switched { from, to, .. } = done.value else {
+            panic!("a switch, not {:?}", done.value);
+        };
+        assert_eq!((from.as_str(), to.as_str()), ("here", "there"));
+        assert!(stays(&m).is_empty(), "{:?}", stays(&m));
+        assert_eq!(live_refresh(&m).as_deref(), Some("there-refresh"));
+        let state = state::load(&m.ctx).expect("state");
+        let parked = state
+            .get(&m.key("here"))
+            .and_then(|account| account.parked.clone())
+            .expect("the login switched from is parked");
+        assert_eq!(
+            parked.refresh_fingerprint,
+            crate::store::fingerprint("here-again")
+        );
+        hold(&m, "after a switch from a renewed login");
     }
 
     /// A read that records whose a changed login is ends the failures in a row before it, as

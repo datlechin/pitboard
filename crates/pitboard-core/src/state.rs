@@ -33,6 +33,21 @@ pub struct Park {
     pub refresh_expires_at: Option<i64>,
 }
 
+/// A login of a tool's own that Pitboard renewed and has not saved where the tool keeps it
+/// yet, with the vault item holding a copy of the renewed login meanwhile.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+pub struct Renewing {
+    pub tool: ProviderId,
+    /// The tool's credential slot it is kept in.
+    pub slot: String,
+    /// Which of the tool's stores keeps it, as [`crate::store::Backend::name`] names it.
+    pub store: String,
+    /// The fingerprint of the refresh token the renewal sent.
+    pub sent: String,
+    /// The vault item holding the renewed login.
+    pub service: String,
+}
+
 impl Park {
     pub fn restorable_at(&self, now: i64) -> bool {
         self.refresh_expires_at.is_none_or(|at| at > now)
@@ -256,6 +271,10 @@ pub struct State {
     /// holds by then. Emptied once the file has gone.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub from_file: Vec<String>,
+    /// Renewals of a tool's own login whose answer is not saved where the tool keeps it yet,
+    /// each written down before the copy of the answer is. At most one per slot.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub renewing: Vec<Renewing>,
 }
 
 impl Default for State {
@@ -270,6 +289,7 @@ impl Default for State {
             discarded: Vec::new(),
             foreign: Vec::new(),
             from_file: Vec::new(),
+            renewing: Vec::new(),
         }
     }
 }
@@ -397,14 +417,18 @@ impl State {
         )
     }
 
-    /// Whether anything in the state refers to this vault item: an account holding it, or
-    /// the list of ones waiting to be deleted.
+    /// Whether anything in the state refers to this vault item: an account holding it, the
+    /// list of ones waiting to be deleted, or a renewal not saved yet.
     pub fn names(&self, service: &str) -> bool {
         self.accounts
             .iter()
             .filter_map(|a| a.parked.as_ref())
             .any(|p| p.service == service)
             || self.discarded.iter().any(|s| s == service)
+            || self
+                .renewing
+                .iter()
+                .any(|renewing| renewing.service == service)
     }
 
     /// The account under this key.

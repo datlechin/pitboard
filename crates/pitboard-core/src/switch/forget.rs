@@ -23,8 +23,12 @@ pub fn forget(settled: Settled, key: &Key) -> Result<(String, Vec<Warning>)> {
         permit,
     } = settled;
     let account = enrolled(&state, key)?;
+    let mut lost = None;
     let in_use = match identify::now(&ctx, permit, &mut state, key.provider) {
-        Ok(Live::Login(login)) => account.owned_by(&login.owner),
+        Ok(Live::Login(login)) => {
+            lost = login.lock_warning(key.provider);
+            account.owned_by(&login.owner)
+        }
         Ok(Live::Nothing) => false,
         Err(unknown) => {
             let recorded = state
@@ -47,9 +51,8 @@ pub fn forget(settled: Settled, key: &Key) -> Result<(String, Vec<Warning>)> {
     let pending = purge(&ctx, permit, &mut state);
     Ok((
         account.email,
-        (pending > 0)
-            .then_some(Warning::ParksPendingRemoval(pending))
-            .into_iter()
+        lost.into_iter()
+            .chain((pending > 0).then_some(Warning::ParksPendingRemoval(pending)))
             .collect(),
     ))
 }

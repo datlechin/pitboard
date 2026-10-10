@@ -24,7 +24,7 @@ A parked login whose refresh token has expired is never due. Its account needs a
 
 `renew` asks Anthropic or OpenAI to renew each due parked login, with every request sent at once.
 
-Pitboard never renews a login a tool is using. A parked login that copies one is dropped instead, since renewing it would spend the refresh token the tool holds. That account needs no sign-in.
+`renew` never renews a login a tool is using. A parked login that copies one is dropped instead, since renewing it would spend the refresh token the tool holds. That account needs no sign-in.
 
 | Service answer | What happens | Logged outcome |
 | --- | --- | --- |
@@ -197,7 +197,7 @@ Turned off the daily renewal schedule.
 | Output | When |
 | --- | --- |
 | `` Left 1 parked login(s) that `pitboard repair` found and this Pitboard did not write, because they may be another Pitboard's. `` | macOS only. |
-| `` 1 could not be deleted, so ~/.pitboard was kept; run `pitboard uninstall` again. `` | A parked login could not be deleted. It takes the place of the last line. |
+| `` 1 could not be deleted yet, so ~/.pitboard was kept; run `pitboard uninstall` again. `` | A parked login could not be deleted, or a renewal of Claude Code's login could not be saved yet. It takes the place of the last line. |
 
 [Remove Pitboard](/install/remove) has the whole removal.
 

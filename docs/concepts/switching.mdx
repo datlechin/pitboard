@@ -23,6 +23,16 @@ For Claude Code, it asks Anthropic, because the config can name another account.
 
 Pitboard records each answer with the login's fingerprint, and asks again only once that changes, as after a renewal or a sign-in. A switch and `pitboard forget` also ask once it has changed. Reads that send no request, such as `pitboard status --offline`, use the record.
 
+Pitboard never asks Anthropic whose a login is with an expired access token. When it must ask and the login's access token has expired, it renews Claude Code's login first. Claude Code renews it only while a session uses it, and a [login file behind the keychain](#open-sessions) can keep every session off it.
+
+Pitboard renews it as Claude Code does, as read in 2.1.294. It takes the lock a session takes to renew, and reads the login again under it. A login a session renewed meanwhile is asked about as it is. Otherwise Pitboard sends the refresh token, and saves the answer only where the stored login still holds that token.
+
+Until the answer is saved, a copy waits in Pitboard's store. If Pitboard stops first or the save fails, the next change saves it, or the next read that must identify the login. Pitboard sends nothing for that login while the copy waits.
+
+A read renews the login only while no other Pitboard command runs. Asking for usage never renews it, and a Codex login is never renewed this way.
+
+If Anthropic no longer accepts the login, Pitboard changes nothing. A change stops with [`session_expired`](/reference/errors#switching), and a read marks the account in use `login_refused`.
+
 When the config has named another account since Anthropic last answered, something may have signed in. Reads that send no request then warn with `in_use_unconfirmed`. `pitboard status` settles it, and the app starts such a read once by itself.
 
 Pitboard also records each parked login's fingerprint, and refuses one that no longer matches.
@@ -30,7 +40,7 @@ Pitboard also records each parked login's fingerprint, and refuses one that no l
 ## What a switch does
 
 1. Takes Pitboard's own lock, `state.lock`, so one change runs at a time. Finishes or undoes any [interrupted switch](#interrupted-switches).
-2. Identifies the login in use.
+2. Identifies the login in use, renewing it first where its access token has expired.
 3. Checks the incoming parked login with Anthropic or OpenAI, and renews it if it has lapsed. Every switch needs the network.
 4. For Claude Code, takes the lock a session takes to renew its login, then Claude Code's write lock. No session can then renew the login being parked. Codex takes no lock.
 5. Records the switch in `journal.json`, with fingerprints of both logins.

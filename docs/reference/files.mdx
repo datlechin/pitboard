@@ -14,7 +14,7 @@ Pitboard creates each directory at mode 0700 and each file at 0600. A directory 
 
 | File | Holds | Written or taken by |
 | --- | --- | --- |
-| `state.json` | The enrolled accounts with their email addresses and ids, their parked logins' names and expiry, and whose login each tool has stored | Every change and renewal, and a read that finds a tool's stored login changed |
+| `state.json` | The enrolled accounts with their email addresses and ids, their parked logins' names and expiry, whose login each tool has stored, and a renewal of Claude Code's login not saved yet | Every change and renewal, and a read that finds a tool's stored login changed |
 | `state.lock` | The lock that lets one change run at a time | As `state.json`, and every automatic switch |
 | `journal.json` | The record of a switch until it is done. One left behind marks an [interrupted switch](/concepts/switching#interrupted-switches). | A switch |
 | `pending` | Names of parked logins about to be written, one per line, which the next change resolves. Absent when empty. | Anything that parks a login |
@@ -49,6 +49,8 @@ On macOS, each parked login is an item in your default keychain, named `pitboard
 
 On Linux, each is a file in `~/.pitboard/vault/`, named `pitboard-park-<account id>-<time>.json`.
 
+When Pitboard renews Claude Code's login, a copy of the renewed login waits beside them as `pitboard-park-renewing-<time>` until it is saved where Claude Code keeps it.
+
 | Part | What it is |
 | --- | --- |
 | `<account id>` | The id Pitboard gives the account at enrolment, which never changes. Claude Code: the Anthropic account UUID and organisation UUID joined by `_`, or the account UUID alone for an older account. Codex: built from the account's ChatGPT ids. |
@@ -63,10 +65,10 @@ Each place was read in Claude Code builds 2.1.278 to 2.1.294.
 | Path | What Pitboard does with it |
 | --- | --- |
 | `~/.claude.json` | Read for the account it names: see [How Pitboard knows whose login it is](/concepts/switching#how-pitboard-knows-whose-login-it-is). A Claude Code switch copies it to `backups/`, then writes the incoming account into it. A `.config.json` in Claude Code's config directory wins over it. |
-| Keychain item `Claude Code-credentials` | macOS: the login in use. A switch reads and replaces it. With `CLAUDE_CONFIG_DIR` or `CLAUDE_SECURESTORAGE_CONFIG_DIR` set, the name ends in `-` and the first 8 hex characters of the SHA-256 of that path as written. |
-| `~/.claude/.credentials.json` | Linux: the login in use. macOS: a [login file behind the keychain](/concepts/switching#open-sessions), read after the keychain item. Pitboard writes it only where the keychain holds no login. Otherwise only [`pitboard stow`](/reference/recovery-commands#stow) changes or deletes it. |
-| `~/.claude/.storage-write.lock` | The lock Claude Code takes around each write of its login. Pitboard takes it whenever it writes the login in use: a switch, a sign-in to the account in use, and `pitboard stow`. |
-| `~/.claude/.oauth_refresh.lock` and `~/.claude.lock` | The locks Claude Code takes, in that order, before it renews its login. Pitboard holds both through every Claude Code switch and `pitboard stow`. |
+| Keychain item `Claude Code-credentials` | macOS: the login in use. A switch reads and replaces it. Pitboard writes a renewal of it where it must [identify it](/concepts/switching#how-pitboard-knows-whose-login-it-is). With `CLAUDE_CONFIG_DIR` or `CLAUDE_SECURESTORAGE_CONFIG_DIR` set, the name ends in `-` and the first 8 hex characters of the SHA-256 of that path as written. |
+| `~/.claude/.credentials.json` | Linux: the login in use. macOS: a [login file behind the keychain](/concepts/switching#open-sessions), read after the keychain item. Pitboard writes it only where the keychain holds no login. Otherwise only [`pitboard stow`](/reference/recovery-commands#stow) changes or deletes it, and the next change writes a renewal that a stopped `stow` left unsaved. |
+| `~/.claude/.storage-write.lock` | The lock Claude Code takes around each write of its login. Pitboard takes it whenever it writes the login in use: a switch, a sign-in to the account in use, a renewal of it, and `pitboard stow`. |
+| `~/.claude/.oauth_refresh.lock` and `~/.claude.lock` | The locks Claude Code takes, in that order, before it renews its login. Pitboard holds both through every Claude Code switch, `pitboard stow`, and each renewal of Claude Code's login. |
 | `~/.claude/daemon.lock` | Read by `pitboard doctor` for the daemon Claude Code last started and its version. |
 | `~/.claude/settings.json` | Read for `apiKeyHelper` and for an `env` block that sets a [variable Pitboard checks](/reference/files#variables-that-override-the-login) or `CLAUDE_CODE_CUSTOM_OAUTH_URL`. There, `""`, `"0"` and `"false"` count as unset. A project's settings are not read. |
 | `managed-settings.json` and `managed-settings.d/*.json` | Read as `settings.json` is, in `/Library/Application Support/ClaudeCode` on macOS or `/etc/claude-code` on Linux. |

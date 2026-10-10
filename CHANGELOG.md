@@ -16,6 +16,30 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   run as a look, deleted a login file behind the keychain. At a terminal each still asks.
   `stow` with nothing to put away or a login of an account not enrolled, and `forget` of a
   label that names no account, answer as before, and so does each as root or under sudo.
+- Where Pitboard renews Claude Code's login to identify it and Anthropic no longer accepts
+  it, or it has no refresh token, `session_expired` says to run `claude` and sign in, with
+  the cause `login_refused`. Everywhere else it still says to run `claude` once, with
+  `token_expired`. A read that finds the login in use refused for good marks that account
+  `login_refused`, with ``Claude Code's login is no longer accepted; run `claude` and sign
+  in again``.
+
+### Fixed
+
+- Pitboard renews Claude Code's stored login where it must tell whose that login is and
+  its access token has expired, as Claude Code renews it, under its refresh lock. Claude
+  Code renews it only while a session uses it, so with every session signed in with
+  `~/.claude/.credentials.json` behind the keychain, nothing did: a switch and `pitboard
+  stow` stopped at `session_expired`, and the automatic switch said `not_identified` at
+  every look. A login a session renewed meanwhile is used, with nothing sent. A read renews
+  it only while no other Pitboard command runs, asking for usage never renews it, and
+  `pitboard stow`'s question takes it from the account Pitboard last recorded. Codex's
+  login is never renewed this way.
+- A renewal of Claude Code's login, by `pitboard stow` or to identify it, keeps a copy of
+  Anthropic's answer in Pitboard's store, `pitboard-park-renewing-<time>`, until the answer
+  is saved where Claude Code keeps it. Killed in between, or with the file's write failing,
+  `stow` left a spent refresh token in the file and lost the renewed login. The next
+  change, or the next read that must renew the login, saves the copy. Until then nothing
+  is sent for that login, and `pitboard uninstall` keeps `~/.pitboard`.
 
 ## [0.10.0] - 2026-10-10
 
