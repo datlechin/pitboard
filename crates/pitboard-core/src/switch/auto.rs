@@ -179,10 +179,13 @@ pub(crate) fn automatically(
 /// A store this process could not read, such as a keychain locked in a session over SSH: its
 /// front end paces it, as a refusal before the ledger.
 fn unreadable_here(error: &Error) -> bool {
-    matches!(
-        error,
-        Error::Store(crate::store::Error::Locked | crate::store::Error::Unreadable(_))
-    )
+    match error {
+        Error::RenewalLost { error, .. } => unreadable_here(error),
+        error => matches!(
+            error,
+            Error::Store(crate::store::Error::Locked | crate::store::Error::Unreadable(_))
+        ),
+    }
 }
 
 /// A refusal that is about this moment: Anthropic out of reach or overloaded, Claude Code

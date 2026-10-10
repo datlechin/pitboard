@@ -105,19 +105,20 @@ pages load, as a browser would.
     login names its account by itself. `refresh.rs` is the one renewal of a login of Claude
     Code's where Claude Code keeps it, which that and `pitboard stow` both use, with
     `Refreshing`, Claude Code's refresh lock held, and `finish`, which saves a renewal a
-    stopped run left in the vault. A store with no login is recorded as holding none only
-    where the tool's own record names nobody either; where it names somebody, the login is
-    somewhere Pitboard does not look, and nothing is recorded. A change records what it
-    finds under the lock it holds (`now`, or `look` then `record` where enrolling the
-    account found names it first, or `look` then `keep` where the automatic switch has its
-    own to do when it cannot be told); a read records it afterwards (`record_read`), only
-    where it changed, only where it takes the lock without waiting, never while a switch
-    waits to be finished, and only where the tool's own record names what it named and the
-    store holds the login it asked about, both read again under the lock. Each writes an
-    `in-use` line in the activity log for what changed outside Pitboard. With
-    `test-support`, a context may hold a `SignInScript`, which plays a tool's own sign-in in
-    place of its program, for a test or a fixture that may start none; everything around
-    it is the core's own.
+    stopped run left in the vault, and `finished`, the same for one tool, which stops what
+    acts on its login while a copy cannot be saved. A store with no login is recorded as
+    holding none only where the tool's own record names nobody either; where it names
+    somebody, the login is somewhere Pitboard does not look, and nothing is recorded. A
+    change records what it finds under the lock it holds (`now`, or `look` then `record`
+    where enrolling the account found names it first, or `look` then `keep` where the
+    automatic switch has its own to do when it cannot be told); a read records it afterwards
+    (`record_read`), only where it changed, only where it takes the lock without waiting,
+    never while a switch waits to be finished, and only where the tool's own record names
+    what it named and the store holds the login it asked about, both read again under the
+    lock. Each writes an `in-use` line in the activity log for what changed outside
+    Pitboard. With `test-support`, a context may hold a `SignInScript`, which plays a tool's
+    own sign-in in place of its program, for a test or a fixture that may start none;
+    everything around it is the core's own.
   - `state.rs`: `state.json`, the index of accounts and where each one's login is parked,
     and `renewing`, the renewals of a tool's own login whose answer is not saved yet, at
     most one per slot.
@@ -1059,17 +1060,20 @@ pages load, as a browser would.
   refuses it from the look, asking and trying nothing. Its other keys, such as
   `mcpOAuth`, are not Pitboard's to move: they go with the file, by name. Every error it
   stops with says how far it went (`Error::StowStopped`, with the code, cause and exit
-  status of what stopped it): nothing changed, the login renewed and written back, renewed
+  status of what stopped it): nothing changed, the login stored renewed to tell whose it is
+  and kept for the next change to save, the file's login renewed and written back, renewed
   and kept for the next change to write back, renewed and lost, which leaves it spent, or
-  parked, which stays. A run that stops anywhere leaves the login in the file, in a park, or
-  in both, or, between Anthropic answering a renewal and the answer reaching the file, in
-  the vault copy the next change writes there. A renewed login is lost only where a sign-in
-  or a `/logout` replaced the file's login meanwhile. A copy the file's login waits on is
-  saved before that login is renewed again, and where it cannot be yet, `stow` stops with
-  nothing sent. A session that signed in
-  with the file, as one over SSH does, is signed out once it is gone. The activity log
-  records it as `stow`. On Linux the file is the store, nothing is behind it, and there is
-  nothing to put away.
+  parked, which stays. Where telling whose login is stored loses that login's renewal, the
+  error is the renewal's own (`Error::RenewalLost`): nothing of the file's has moved by
+  then. A run that stops anywhere leaves the login in the file, in a park, or in both, or,
+  between Anthropic answering a renewal and the answer reaching the file, in the vault copy
+  the next change writes there. A renewed login is lost where a sign-in or a `/logout`
+  replaced the file's login meanwhile, and where neither the vault nor the file takes it, as
+  the renewal of the login stored says below. A copy waiting for Claude Code's slot is saved
+  before `stow` reads the file, and where it cannot be yet, `stow` stops with nothing
+  changed. A session that signed in with the file, as one over SSH does, is signed out once
+  it is gone. The activity log records it as `stow`. On Linux the file is the store, nothing
+  is behind it, and there is nothing to put away.
 - A Codex login is moved, never copied (`ParkSemantics::MoveOnly`). The parked login is
   read back before the incoming login is written. Codex's own sign-in and sign-out revoke
   the stored refresh token, so two usable copies of one login must never be at rest.
@@ -1098,23 +1102,33 @@ pages load, as a browser would.
   lock, holding `state.lock` first, it reads the login again and tells one renewed meanwhile
   as it is, sending nothing; otherwise Claude Code's write lock is taken once and the login
   read again before the refresh token is sent, so a writer in the way stops it with nothing
-  sent. Once Anthropic has answered, a copy of the answer waits in the vault, written down
-  in `state.json`'s `renewing` first, the write lock is asked for again for 30 seconds,
-  twice its staleness, and the answer is then saved without it, as Claude Code writes on
-  once its own lock is lost. It is saved as Claude Code saves a renewal: read from the store
-  that keeps it, and written over the login there only while that still has the refresh
-  token sent, other keys as they are by then. The copy goes once it is saved or the store
-  holds another login by then. A run killed in between, or a save that fails, leaves it,
-  one per slot, and the next change, or the next read that must renew, saves it first
-  (`refresh::finish`). Where it cannot be saved yet, nothing is sent for that slot and the
-  change stops with why, since the store still holds the spent refresh token; `uninstall`
-  keeps the home while a copy waits. So nothing rotates a refresh token it could not then
-  write down. A save made without the write lock is said as `lock_compromised`. A login
-  Anthropic refuses for good, or one with no refresh token, is `session_expired` with the
-  cause `login_refused`, with nothing written; a 401 where nothing renewed stays
-  `session_expired` with `token_expired`, telling the person to run the tool once. Usage
-  alone never renews it, nor a look that takes no lock, such as the automatic switch's or
-  `stow::find`, and Codex's never.
+  sent. The name of a copy of the answer is then written down in `state.json`'s `renewing`,
+  which the vault has to answer for, so a vault that cannot be read stops it with nothing
+  sent. Once Anthropic has answered, the copy is written into the vault under that name, the
+  write lock is asked for again for 30 seconds, twice its staleness, and the answer is then
+  saved without it, as Claude Code writes on once its own lock is lost. It is saved as Claude
+  Code saves a renewal: read from the store that keeps it, and written over the login there
+  only while that still has the refresh token sent, other keys as they are by then. The copy
+  goes once it is saved or the store holds another login by then, and a name with no copy
+  written under it goes too. A run killed in between, or a save that fails, leaves it, one per
+  slot, and settling saves it (`refresh::finish`). While it cannot be saved, the store still
+  holds the spent refresh token, so no change renews, parks, replaces, puts away or deletes
+  that slot's login: `refresh::finished`, which `identify::look`, `stow` and a read that must
+  renew call before anything else, stops each with why, and a Codex change goes on.
+  `uninstall` keeps the home while a copy waits. A copy whose write fails landed nothing, as
+  a save counts it, and is let go of; one written and not read back may hold the answer, and
+  is kept. One window is left, as in Claude Code's own renewal: on macOS the vault is the
+  keychain Claude Code's login is in. Where macOS cannot ask for its password, as over SSH,
+  a keychain that locks during the exchange, one round trip, takes neither the copy nor the
+  answer. The renewal is then lost. A change says the refresh token stored is spent and to
+  sign in (`Error::RenewalLost`, with the code of what stopped the save), and a read marks
+  the account in use `login_refused`, as Anthropic refuses that token from then on. A save
+  made without the write lock is said as `lock_compromised`. A login Anthropic refuses for
+  good, or one with no refresh token, is `session_expired` with the cause `login_refused`,
+  with nothing written; a 401 where nothing renewed stays `session_expired` with
+  `token_expired`, telling the person to run the tool once. Usage alone never renews it, nor
+  a look that takes no lock, such as the automatic switch's or `stow::find`, and Codex's
+  never.
 - Nothing outside `pitboard-core` writes Pitboard's index. Every change goes through
   `switch`, which records what it is about to do first and finishes an interrupted change
   before starting another.
@@ -1269,6 +1283,12 @@ no login and `known_at` 0: nothing established which login the store held. A lab
 account names nobody. Schema 6 is a bump rather than a field beside `active`, so an older
 app or `pitboard watch` running beside a newer one refuses the file and says to update, and
 does not go on deciding who is in use from Claude Code's config.
+
+Schema 7 adds `renewing`, the renewals of a tool's own login not saved where the tool keeps
+it yet, which a schema 6 file reads as none. The field alone would not do: 0.10.0 reads a
+file with it and drops it at its next save, leaving the copy of the renewed login named by
+nothing, so the next renewal of that login, by this version or by 0.10.0's `stow`, sends the
+spent refresh token again. So it is a bump, and 0.10.0 refuses the file and says to update.
 
 A file naming a tool this build does not know is reported as written by a newer Pitboard,
 not as corrupt. The advice for a corrupt file is to delete it, and following that here would

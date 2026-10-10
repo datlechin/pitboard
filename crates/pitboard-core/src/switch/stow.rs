@@ -180,10 +180,14 @@ pub(crate) fn find(ctx: &Context, state: &State) -> Result<Option<Left>> {
 
 /// Puts away the file behind Claude Code's store, while it holds what `seen` was taken of:
 /// keeps the login it holds where it is not kept already or dead, then deletes the file.
-/// Whatever stops it is said with how far it had gone ([`Error::StowStopped`]).
+/// Whatever stops it is said with how far it had gone ([`Error::StowStopped`]). A renewal of
+/// the login stored that is lost is said by itself ([`Error::RenewalLost`]): it is lost
+/// before anything of the file's moves.
 ///
-/// Under Pitboard's lock throughout. Whose the login is, where that can be asked as it is,
-/// is asked first, holding up nobody. From the file's last reading until it is gone, under
+/// Under Pitboard's lock throughout. A renewal of Claude Code's login left waiting is saved
+/// first, and where it cannot be yet, why stops it with nothing changed
+/// ([`refresh::finished`]). Whose the login is, where that can be asked as it is, is asked
+/// next, holding up nobody. From the file's last reading until it is gone, under
 /// Claude Code's refresh lock too, which a session takes before it sends a refresh token, so
 /// none spends the file's meanwhile. Claude Code's write lock is taken after it, as Claude
 /// Code takes them, around the renewed login's write and the file's deletion only, and once
@@ -214,6 +218,9 @@ pub fn stow(settled: Settled, seen: &str) -> Result<(Stowed, Vec<Warning>)> {
             purge(&ctx, permit, &mut state);
             Ok((stowed, warnings))
         }
+        // Telling whose login is stored lost its renewal, before anything of the file's, and
+        // the error says what became of that login.
+        Err(lost @ Error::RenewalLost { .. }) => Err(lost),
         // Not purged: a park that could not be recorded in place of another leaves the other
         // released here and still named in the file.
         Err(error) => Err(Error::StowStopped {
@@ -238,6 +245,7 @@ struct Stowing<'a> {
 impl Stowing<'_> {
     fn run(&mut self, state: &mut State, seen: &str) -> Result<Stowed> {
         let (ctx, permit) = (self.ctx, self.permit);
+        refresh::finished(ctx, permit, state, TOOL)?;
         let live = live_store(ctx, TOOL)?;
         let (_, mut raw) = read_left(&live)?
             .filter(|(_, raw)| store::fingerprint(raw) == seen)
@@ -255,7 +263,7 @@ impl Stowing<'_> {
         // login stored that the file's was told by.
         let (stored, stored_owner) = match judged {
             Whose::Kept(_) => (stored, None),
-            Whose::Owner(_) | Whose::Untold => match identify::now(ctx, permit, state, TOOL)? {
+            Whose::Owner(_) | Whose::Untold => match self.told(state)? {
                 identify::Live::Login(login) => {
                     self.lock_lost |= login.lock_lost;
                     (Some(login.document), Some(login.owner))
@@ -264,9 +272,6 @@ impl Stowing<'_> {
             },
         };
         fault::point("stow.identified");
-        if matches!(judged, Whose::Untold) {
-            refresh::finish(ctx, permit, state)?;
-        }
 
         let refreshing = Refreshing::take(ctx, permit, TOOL)?;
         if unchanged(&live, &raw)?.is_none() {
@@ -309,6 +314,18 @@ impl Stowing<'_> {
             kept,
             dropped: held.dropped,
         })
+    }
+
+    /// Whose login Claude Code has stored, told as a change tells it ([`identify::now`]).
+    /// Telling may renew that login, and a renewal whose answer could not be saved there
+    /// waits in the vault, which is how far this run went. Nothing waited for that slot
+    /// before, as [`refresh::finished`] saw first.
+    fn told(&mut self, state: &mut State) -> Result<identify::Live> {
+        let told = identify::now(self.ctx, self.permit, state, TOOL);
+        if told.is_err() && state.renewing.iter().any(|left| left.tool == TOOL) {
+            self.partway = Partway::StoredRenewedKept;
+        }
+        told
     }
 
     /// Renews the login in `held` and writes the renewed login back into the file before
@@ -1230,7 +1247,9 @@ mod tests {
     }
 
     /// With Anthropic out of reach nobody can say whose the login is, so nothing changes:
-    /// neither when it is asked about, nor when it needs renewing first.
+    /// neither when it is asked about, nor when it needs renewing first. There the copy's
+    /// name, written down before the refresh token is sent, is let go of, and Pitboard's
+    /// record ends as it was.
     #[test]
     #[cfg_attr(
         windows,
@@ -1260,7 +1279,7 @@ mod tests {
         let refused = stow_now(&m).expect_err("nobody to renew it");
         assert_eq!(refused.code(), "left_login_unidentified");
         assert_eq!(in_the_file(&m), Some(fingerprint("lapsed-refresh")));
-        assert_eq!(state_file(&m), before);
+        assert_eq!(state_file(&m).0, before.0);
     }
 
     /// A keychain that cannot be read, or a file that cannot, says why, and nothing changes.
@@ -1922,6 +1941,58 @@ mod tests {
         assert_eq!(in_the_file(&m), Some(fingerprint("left-renewed")));
     }
 
+    /// A login in the file whose access token Anthropic refused before its expiry is renewed,
+    /// and a write into the file that fails leaves the renewed login waiting in the vault,
+    /// with the spent refresh token in the file. Putting the file away stops while it waits,
+    /// though Anthropic names the file's login by its access token by then, so the spent
+    /// login is never parked and the renewed one never let go of.
+    #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
+    )]
+    fn a_file_whose_renewal_waits_is_not_put_away_once_its_login_is_named() {
+        let m = machine("stow-renewal-waits-named");
+        enrolled(&m, "elsewhere");
+        renews(&m, "left-refresh", "left-renewed");
+        m.api.owned_by("access-left-renewed", owner("elsewhere"));
+        m.api
+            .token_trouble("access-left-refresh", Trouble::Unauthorized);
+        leave(&m, &document("left-refresh"));
+        let (file, service) = (left_file(&m), m.service.clone());
+        file.fault(&service, Fault::FailWrite("disk full".into()));
+        let refused = stow_now(&m).expect_err("the file cannot be written");
+        assert_eq!(refused.code(), "credential_write_failed");
+        m.api.renew_trouble("left-refresh", Trouble::InvalidGrant);
+        m.api.owned_by("access-left-refresh", owner("elsewhere"));
+
+        let refused = stow_now(&m).expect_err("a renewal of the file's login waits");
+
+        assert_eq!(refused.code(), "credential_write_failed");
+        assert!(
+            refused.to_string().ends_with("Pitboard changed nothing."),
+            "{refused}"
+        );
+        assert_eq!(in_the_file(&m), Some(fingerprint("left-refresh")));
+        assert_eq!(parked_fingerprint(&m, "elsewhere"), None);
+        file.heal(&service);
+        let refused = stow_now(&m).expect_err("the next change wrote the file");
+        assert_eq!(refused.code(), "left_login_changed");
+        let (stowed, _) = stow_now(&m).expect("put away");
+        assert_eq!(
+            stowed.kept,
+            Kept::ParkedNow {
+                label: "elsewhere".into()
+            }
+        );
+        assert_eq!(
+            parked_fingerprint(&m, "elsewhere"),
+            Some(fingerprint("left-renewed"))
+        );
+        let sent = Asked::Renew("left-refresh".into());
+        assert_eq!(m.api.asked().iter().filter(|a| **a == sent).count(), 1);
+    }
+
     /// The front ends' way in: the activity log records it as `stow`, with the account the
     /// login was found to be and what became of it, and a refusal with its code. A read after
     /// it no longer finds the file.
@@ -2191,6 +2262,62 @@ mod tests {
             parked_fingerprint(&m, "there"),
             Some(fingerprint("there-refresh"))
         );
+    }
+
+    /// Whose login Claude Code has stored is told by renewing it, and the keychain locks once
+    /// Anthropic has answered, so the refresh token stored is spent and the renewed login is
+    /// not saved there. What stops `stow` never says it changed nothing. The renewed login
+    /// waits in the vault, as the message says, and the next run saves it and puts the file
+    /// away. Where the vault could not keep it either, it is lost, and the message says to
+    /// sign in.
+    #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
+    )]
+    fn a_renewal_of_the_login_stored_that_stops_stow_is_said() {
+        for lost in [false, true] {
+            let m = machine(&format!("stow-stored-renewal-lost-{lost}"));
+            enrolled(&m, "elsewhere");
+            m.sign_in(&lapsed("here-renewed"));
+            renews(&m, "here-renewed", "here-again");
+            m.api.owned_by("access-here-again", owner("here"));
+            m.api.owned_by("access-left-refresh", owner("elsewhere"));
+            leave(&m, &document("left-refresh"));
+            if lost {
+                // A copy would go on the argument line, so none is made.
+                m.mem.vault().takes_on_stdin(16);
+            }
+
+            let refused = stow_while(&m, "refresh.exchanged", locks_the_keychain(&m))
+                .expect_err("the keychain is locked");
+
+            assert_eq!(refused.code(), "credential_store_locked", "lost: {lost}");
+            let ending = if lost {
+                "Run `claude`, sign in, then try again."
+            } else {
+                "Pitboard deleted nothing. It renewed the login Claude Code has stored and keeps \
+                 the renewed login until the next change saves it there."
+            };
+            assert!(refused.to_string().ends_with(ending), "{refused}");
+            assert_eq!(in_the_file(&m), Some(fingerprint("left-refresh")));
+            if lost {
+                continue;
+            }
+            let (keychain, service) = m.live_store();
+            keychain.heal(&service);
+            m.api.renew_trouble("here-renewed", Trouble::InvalidGrant);
+            let (stowed, _) = stow_now(&m).expect("put away");
+            assert_eq!(
+                stowed.kept,
+                Kept::ParkedNow {
+                    label: "elsewhere".into()
+                }
+            );
+            assert_eq!(in_the_file(&m), None);
+            let sent = Asked::Renew("here-renewed".into());
+            assert_eq!(m.api.asked().iter().filter(|a| **a == sent).count(), 1);
+        }
     }
 
     /// A login with no refresh token whose access token has expired can never be used again:

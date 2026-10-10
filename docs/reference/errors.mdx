@@ -139,6 +139,8 @@ An error that stops `pitboard stow` keeps its own code, cause and exit status. T
 | `switch_in_progress` | 1 | Another process held Claude Code's write lock or refresh lock for the whole wait, about 7.5 seconds. | Try again in a few seconds. A lock left by a killed Claude Code session clears within a minute. |
 | `lock_unavailable` | 1 | Pitboard could not take one of those locks for another reason. | Fix the reason the message gives, then try again. |
 
+An error that says the refresh token stored is spent keeps the code of what stopped Pitboard saving Claude Code's renewed login. Running the command again does not mend it: run `claude`, sign in, then try again.
+
 ## Renewal schedule
 
 | Code | Exit | Meaning | What to do |

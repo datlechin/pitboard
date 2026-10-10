@@ -26,6 +26,10 @@ impl std::fmt::Display for Enrolled {
 pub enum Partway {
     /// Nothing was changed.
     Nothing,
+    /// The login Claude Code has stored was renewed to tell whose it is, which spent its
+    /// refresh token, and the renewed one waits in Pitboard's vault for the next change to
+    /// save it there.
+    StoredRenewedKept,
     /// The login the file held was renewed, which spent its refresh token, and the renewed
     /// one could not be written back there, nor kept.
     RenewedUnwritten,
@@ -43,6 +47,11 @@ impl std::fmt::Display for Partway {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Partway::Nothing => write!(f, "changed nothing"),
+            Partway::StoredRenewedKept => write!(
+                f,
+                "deleted nothing. It renewed the login Claude Code has stored and keeps the \
+                 renewed login until the next change saves it there"
+            ),
             Partway::RenewedUnwritten => write!(
                 f,
                 "deleted nothing. It renewed the login the file held and could not write the \
@@ -676,6 +685,18 @@ pub enum Error {
         error: Box<Error>,
     },
 
+    /// What stopped Pitboard saving a login of a tool's own it had just renewed, where no copy
+    /// of the renewed login could be kept either, so the refresh token the tool's store holds
+    /// is spent. Its code, cause and exit status are `error`'s.
+    #[error(
+        "{} Pitboard renewed {}'s login and could not save the renewed login, so the refresh \
+         token stored is spent. Run `{}`, sign in, then try again.",
+        sentence(error),
+        tool.name(),
+        tool.login_command()
+    )]
+    RenewalLost { tool: ProviderId, error: Box<Error> },
+
     /// Signing in to a second account works by pointing the tool's own login at a scratch
     /// directory. Where that does not isolate it from the live login, running one would
     /// write over the account somebody is using, so Pitboard will not.
@@ -798,7 +819,7 @@ impl Error {
             StoredLoginChanged { .. } => "stored_login_changed",
             LeftLoginNotEnrolled { .. } => "left_login_not_enrolled",
             LeftLoginUnidentified { .. } => "left_login_unidentified",
-            StowStopped { error, .. } => error.code(),
+            StowStopped { error, .. } | RenewalLost { error, .. } => error.code(),
             SignInNotIsolated { .. } => "sign_in_not_isolated",
             RenewalFailed { .. } => "renewal_failed",
             SignInInProgress => "sign_in_in_progress",
@@ -823,7 +844,7 @@ impl Error {
             RenewalFailed { cause, .. } => *cause,
             SessionExpired { refused: true, .. } => Some(Cause::LoginRefused),
             SessionExpired { .. } => Some(Cause::TokenExpired),
-            StowStopped { error, .. } => error.cause(),
+            StowStopped { error, .. } | RenewalLost { error, .. } => error.cause(),
             _ => None,
         }
     }
@@ -861,7 +882,7 @@ impl Error {
             | RecoveryRecordCorrupt { .. } => 3,
             Usage(_) | ConfirmationNeeded { .. } => 2,
             Store(e) => e.exit_code(),
-            StowStopped { error, .. } => error.exit_code(),
+            StowStopped { error, .. } | RenewalLost { error, .. } => error.exit_code(),
             _ => 1,
         }
     }

@@ -17,7 +17,7 @@ use serde_json::Value;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
-const SCHEMA: u32 = 6;
+const SCHEMA: u32 = 7;
 
 /// A login held for an account while another is signed in. There is at most one per
 /// account: once installed it is Claude Code's again, and Claude Code rotates it from then
@@ -272,7 +272,7 @@ pub struct State {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub from_file: Vec<String>,
     /// Renewals of a tool's own login whose answer is not saved where the tool keeps it yet,
-    /// each written down before the copy of the answer is. At most one per slot.
+    /// each written down before the refresh token is sent. At most one per slot.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub renewing: Vec<Renewing>,
 }
@@ -755,7 +755,10 @@ fn migrate(document: &mut serde_json::Value, path: &std::path::Path) -> Result<(
             if found <= 4 {
                 four_to_five(document);
             }
-            five_to_six(document);
+            if found <= 5 {
+                five_to_six(document);
+            }
+            six_to_seven(document);
             Ok(())
         }
         // Nothing released wrote 1 or 2: the schema reached 3 before the first release.
@@ -851,6 +854,14 @@ fn five_to_six(document: &mut serde_json::Value) {
         fields.remove("active");
         fields.insert("in_use".into(), Value::Object(in_use));
     }
+    document["schema"] = serde_json::json!(6);
+}
+
+/// Schema 7 adds `renewing`, which a schema 6 file reads as empty. It is a bump so that an
+/// earlier Pitboard refuses the file: one would drop `renewing` at its next save, leaving the
+/// copy of the renewed login named by nothing, so the next renewal of that login, by this
+/// version or by 0.10.0's `stow`, would send the spent refresh token again.
+fn six_to_seven(document: &mut serde_json::Value) {
     document["schema"] = serde_json::json!(SCHEMA);
 }
 
@@ -1033,9 +1044,9 @@ mod tests {
             "slot": "Claude Code-credentials",
             "discarded": []
         });
-        migrate(&mut once, std::path::Path::new("/tmp/state.json")).expect("3 to 6");
+        migrate(&mut once, std::path::Path::new("/tmp/state.json")).expect("3 to 7");
         let mut twice = once.clone();
-        migrate(&mut twice, std::path::Path::new("/tmp/state.json")).expect("6 is current");
+        migrate(&mut twice, std::path::Path::new("/tmp/state.json")).expect("7 is current");
         assert_eq!(once, twice, "a second migration must change nothing");
         assert!(once.get("active").is_none());
         assert_eq!(
@@ -1058,7 +1069,7 @@ mod tests {
         let mut document = serde_json::json!({
             "schema": 3, "machine": machine_id(), "accounts": [], "discarded": []
         });
-        migrate(&mut document, std::path::Path::new("/tmp/state.json")).expect("3 to 6");
+        migrate(&mut document, std::path::Path::new("/tmp/state.json")).expect("3 to 7");
         let state: State = serde_json::from_value(document).expect("parses");
         assert!(state.in_use.is_empty() && state.slot.is_empty());
     }
@@ -1129,9 +1140,47 @@ mod tests {
         let written: Value =
             serde_json::from_str(&std::fs::read_to_string(home.join("state.json")).unwrap())
                 .unwrap();
-        assert_eq!(written["schema"], 6);
+        assert_eq!(written["schema"], SCHEMA);
         assert!(written.get("active").is_none(), "{written}");
         assert_eq!(written["in_use"]["claude"]["known_at"], 0);
+        let _ = std::fs::remove_dir_all(&home);
+    }
+
+    /// A file as 0.10.0 writes it is read as it is, and written back at schema 7 with nothing
+    /// else changed, which 0.10.0 refuses.
+    #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W16: Pitboard writing, replacing and removing files on Windows"
+    )]
+    fn a_schema_6_file_is_written_back_at_schema_7_and_otherwise_as_it_was() {
+        let home = std::env::temp_dir().join(format!(
+            "pitboard-schema-6-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let _ = std::fs::remove_dir_all(&home);
+        std::fs::create_dir_all(&home).unwrap();
+        let ctx = Context::new(home.clone()).with_pitboard_home(home.clone());
+        let mut state = State::default();
+        state.accounts.push(account("work", Some(park("parked"))));
+        let found = InUse::of(&state.accounts[0], "f", 100);
+        state.identified(ProviderId::Claude, found, 100);
+        state.discarded.push("gone".into());
+        save(&ctx, Permit::for_a_test(), &state).expect("saved");
+        let path = home.join("state.json");
+        let read = |path: &PathBuf| -> Value {
+            serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap()
+        };
+        let mut written = read(&path);
+        written["schema"] = 6.into();
+        std::fs::write(&path, written.to_string()).unwrap();
+
+        let state = load(&ctx).expect("a schema 6 file is read");
+        save(&ctx, Permit::for_a_test(), &state).expect("saved");
+
+        written["schema"] = 7.into();
+        assert_eq!(read(&path), written);
         let _ = std::fs::remove_dir_all(&home);
     }
 
@@ -1346,9 +1395,10 @@ mod tests {
     /// The other direction cannot work, and the message has to say which half to upgrade.
     #[test]
     fn a_file_from_a_newer_pitboard_is_refused() {
-        let mut current = serde_json::json!({"schema": 6, "machine": machine_id(), "accounts": []});
+        let mut current =
+            serde_json::json!({"schema": SCHEMA, "machine": machine_id(), "accounts": []});
         migrate(&mut current, std::path::Path::new("/tmp/state.json")).expect("this one's own");
-        let mut document = serde_json::json!({"schema": 7});
+        let mut document = serde_json::json!({"schema": SCHEMA + 1});
         let err = migrate(&mut document, std::path::Path::new("/tmp/state.json")).unwrap_err();
         assert_eq!(err.code(), "state_from_newer_version");
         let said = err.to_string();

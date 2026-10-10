@@ -27,7 +27,9 @@ Pitboard never asks Anthropic whose a login is with an expired access token. Whe
 
 Pitboard renews it as Claude Code does, as read in 2.1.294. It takes the lock a session takes to renew, and reads the login again under it. A login a session renewed meanwhile is asked about as it is. Otherwise Pitboard sends the refresh token, and saves the answer only where the stored login still holds that token.
 
-Until the answer is saved, a copy waits in Pitboard's store. If Pitboard stops first or the save fails, the next change saves it, or the next read that must identify the login. Pitboard sends nothing for that login while the copy waits.
+Until the answer is saved, a copy waits in Pitboard's store. If Pitboard stops first or the save fails, the next change saves it, or the next read that must identify the login. While the copy waits, no change renews, parks, replaces or puts away that login. Each stops and says why the copy cannot be saved yet.
+
+On macOS, Pitboard's store is the keychain that holds Claude Code's login. If the keychain is locked before Pitboard sends the refresh token, Pitboard sends nothing. Where macOS cannot ask for your password, as over SSH, a keychain that locks while Anthropic answers takes neither the copy nor the answer. The login stored then stops working. A change says so, and to run `claude` and sign in, and a read marks the account in use `login_refused`.
 
 A read renews the login only while no other Pitboard command runs. Asking for usage never renews it, and a Codex login is never renewed this way.
 

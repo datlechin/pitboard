@@ -6,10 +6,14 @@
 //! that is and its access token has lapsed.
 //!
 //! The exchange spends the refresh token it sends. So what could refuse the save is asked
-//! before the token is sent, and from Anthropic's answer until it is saved, a copy of the
-//! renewed login waits in Pitboard's vault, written down first in `state.json`'s `renewing`.
-//! A run that stops in between, or whose save fails, leaves the copy for the next to save
-//! ([`finish`]), and nothing is sent for a slot while a copy waits for it.
+//! before the token is sent, the vault among it: the copy's name is written down in
+//! `state.json`'s `renewing` first. From Anthropic's answer until it is saved, a copy of the
+//! renewed login waits in the vault under that name. A run that stops in between, or whose
+//! save fails, leaves the copy for the next to save ([`finish`]), and while a copy waits for
+//! a slot, nothing acts on that slot's login ([`finished`]). On macOS the vault is the
+//! keychain Claude Code's login is in. Where it cannot ask to be unlocked, as over SSH, a
+//! keychain that locks while Anthropic answers takes neither the copy nor the answer, and
+//! the renewal is lost. Claude Code's own renewal has that window too: one round trip.
 
 use super::{shape, to_body, write_lock};
 use crate::context::Context;
@@ -84,8 +88,17 @@ pub(super) struct Progress {
     /// A lock of Claude Code's stopped being Pitboard's while it held it, or the answer was
     /// saved without the write lock.
     pub(super) lock_lost: bool,
-    /// The answer could not be saved, and waits in the vault for [`finish`].
+    /// The answer could not be saved, and its copy's name stays written down for [`finish`],
+    /// which saves the copy the vault holds under it.
     pub(super) kept: bool,
+}
+
+impl Progress {
+    /// Anthropic answered, and the answer was neither saved nor written into the vault, so
+    /// the refresh token stored is spent.
+    pub(super) fn lost(&self) -> bool {
+        self.spent && !self.saved && !self.kept
+    }
 }
 
 pub(super) enum Renewed {
@@ -118,14 +131,15 @@ impl From<store::Error> for Stop {
 }
 
 /// Renews `login`, the login `place` holds as `seen` byte for byte, with Claude Code's
-/// refresh lock held by the caller, and saves the answer there. A store that could not take
-/// the answer, and Claude Code's write lock, are asked before the refresh token is sent:
-/// the lock is taken once and `place` read again under it, so a writer in the way stops it
-/// with nothing sent. Once Anthropic has answered, the answer is copied
-/// into the vault, the write lock asked for again for 30 seconds and the answer then saved
-/// without it, as Claude Code writes on once its own lock is lost. The copy is let go of
-/// once the answer is saved or `place` holds another login, and kept for [`finish`] where
-/// the save failed. `progress` says how far it went, whatever it returns.
+/// refresh lock held by the caller, and saves the answer there. What could stop the answer
+/// being kept is asked before the refresh token is sent: a store that could not take it,
+/// Claude Code's write lock, taken once with `place` read again under it, and the vault,
+/// where the copy's name is written down ([`reserve`]). Once Anthropic has answered, the
+/// answer is copied into the vault under that name, the write lock asked for again for 30
+/// seconds and the answer then saved without it, as Claude Code writes on once its own lock
+/// is lost. The copy is let go of once the answer is saved or `place` holds another login,
+/// and kept for [`finish`] where the save failed. A copy whose write failed is let go of
+/// too, as nothing landed. `progress` says how far it went, whatever it returns.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn renew(
     ctx: &Context,
@@ -156,18 +170,34 @@ pub(super) fn renew(
         return Err(Stop::Changed);
     }
     drop(writing);
+    fault::point("refresh.checked");
+    let sent = tool.fingerprint(login);
+    let copy = reserve(ctx, permit, state, which, place, &sent, login)?;
     let fresh = match tool.renew(
         ctx,
         permit,
         &provider::Credential::new(which, login.clone()),
     ) {
         Ok(fresh) => fresh.raw,
-        Err(ProviderError::InvalidGrant { .. }) => return Ok(Renewed::Refused),
-        Err(error) => return Err(Stop::Unrenewed(error)),
+        Err(error) => {
+            if let Some(copy) = &copy {
+                let_go(ctx, permit, state, copy);
+            }
+            return match error {
+                ProviderError::InvalidGrant { .. } => Ok(Renewed::Refused),
+                error => Err(Stop::Unrenewed(error)),
+            };
+        }
     };
     progress.spent = true;
-    let sent = tool.fingerprint(login);
-    let copy = copy(ctx, permit, state, which, place, &sent, &fresh);
+    // A write that fails lands nothing, as `save` counts it. One that cannot read back what
+    // it wrote may have landed, and the copy may hold the only renewed login.
+    let copied = copy.as_ref().is_some_and(|copy| {
+        !matches!(
+            store::vault_write(ctx, permit, copy, &to_body(fresh.clone())),
+            Err(store::Error::Write(_))
+        )
+    });
     fault::point("refresh.exchanged");
     let writing = write_lock_to_save(ctx, permit, which, progress);
     let saved = save(permit, which, place, &sent, &fresh);
@@ -177,26 +207,46 @@ pub(super) fn renew(
         progress.saved = true;
         fault::point("refresh.saved");
     }
-    match (&saved, copy) {
-        (Ok(_) | Err(Stop::Changed), Some(copy)) => let_go(ctx, permit, state, &copy),
-        (Err(_), Some(_)) => progress.kept = true,
-        (_, None) => {}
+    progress.kept = copied && matches!(saved, Err(Stop::Failed(_)));
+    if let Some(copy) = copy.filter(|_| !progress.kept) {
+        let_go(ctx, permit, state, &copy);
     }
     saved.map(Renewed::Saved)
 }
 
 /// Saves each renewed login a run that stopped left in the vault for the slot its tool keeps
 /// its login in now, where the store there still holds the login renewed, and lets go of the
-/// copy, as it does where that store holds the renewed login already or another one. Under
-/// Pitboard's lock, as every change and a read that renews start, and before either takes a
-/// lock of Claude Code's. A copy left for another slot waits for a run that reads that slot.
-/// One whose save cannot be told, as with a store that cannot be read or a lock held, is
-/// kept for the next run, and why is the error: the store still holds the refresh token its
-/// renewal spent, so nothing may be sent for that slot meanwhile.
+/// copy, as it does where that store holds the renewed login already or another one, or
+/// where no copy was ever written. Under Pitboard's lock, as every change and a read that
+/// renews start, and before either takes a lock of Claude Code's. A copy left for another
+/// slot waits for a run that reads that slot. One whose save cannot be told, as with a store
+/// that cannot be read or a lock held, is kept for the next run, and why is the error.
 pub(super) fn finish(ctx: &Context, permit: Permit, state: &mut State) -> crate::error::Result<()> {
+    finish_where(ctx, permit, state, |_| true)
+}
+
+/// [`finish`] for `which`'s tool, before a change or a read acts on the login it keeps now:
+/// renews, parks, replaces, puts away or deletes it. A copy that cannot be saved yet waits
+/// for a store that still holds the refresh token its renewal spent, so why stops it, and
+/// nothing acts on that slot's login meanwhile. A copy left for another slot stops nothing.
+pub(super) fn finished(
+    ctx: &Context,
+    permit: Permit,
+    state: &mut State,
+    which: ProviderId,
+) -> crate::error::Result<()> {
+    finish_where(ctx, permit, state, |left| left.tool == which)
+}
+
+fn finish_where(
+    ctx: &Context,
+    permit: Permit,
+    state: &mut State,
+    whose: impl Fn(&Renewing) -> bool,
+) -> crate::error::Result<()> {
     let mut finished = Ok(());
-    for left in state.renewing.clone() {
-        finished = finished.and(save_left(ctx, permit, state, &left));
+    for left in state.renewing.clone().iter().filter(|left| whose(left)) {
+        finished = finished.and(save_left(ctx, permit, state, left));
     }
     finished
 }
@@ -294,22 +344,24 @@ fn save(
     Ok(renewed)
 }
 
-/// Copies `fresh` into the vault until it is saved, written down in `state` before the copy
-/// is. The copy's name, or `None` where none was made: one that would go on the argument
-/// line is not made, and the save is then the only copy, as Claude Code's own renewal has.
-fn copy(
+/// Writes down in `state` the vault item a copy of the renewed login is to wait in, before
+/// the refresh token is sent, so the vault has answered before anything is spent: one that
+/// cannot be read, or a state that cannot be saved, stops the renewal with nothing sent. The
+/// item's name, or `None` where no copy is to be made: one that would go on the argument
+/// line is not, and the save is then the only copy, as Claude Code's own renewal has.
+fn reserve(
     ctx: &Context,
     permit: Permit,
     state: &mut State,
     which: ProviderId,
     place: Place<'_>,
     sent: &str,
-    fresh: &Value,
-) -> Option<String> {
-    let body = to_body(fresh.clone());
-    let service = park::free_name(ctx, COPY).ok()?;
-    if store::vault_cost(ctx, &service, &body).is_some_and(store::Cost::over) {
-        return None;
+    login: &Value,
+) -> Result<Option<String>, Stop> {
+    let service = park::free_name(ctx, COPY)?;
+    // A renewed login is this one with new tokens of the same length.
+    if store::vault_cost(ctx, &service, &to_body(login.clone())).is_some_and(store::Cost::over) {
+        return Ok(None);
     }
     state.renewing.push(Renewing {
         tool: which,
@@ -318,17 +370,15 @@ fn copy(
         sent: sent.to_owned(),
         service: service.clone(),
     });
-    let copied = state::save(ctx, permit, state)
-        .and_then(|()| Ok(store::vault_write(ctx, permit, &service, &body)?));
-    if copied.is_err() {
+    if let Err(error) = state::save(ctx, permit, state) {
         state.renewing.retain(|left| left.service != service);
-        let _ = state::save(ctx, permit, state);
-        return None;
+        return Err(error.into());
     }
-    Some(service)
+    Ok(Some(service))
 }
 
-/// Lets go of the copy [`copy`] made, once the renewed login is saved or has nowhere to go.
+/// Lets go of the copy [`reserve`] named, once the renewed login is saved, has nowhere to go
+/// or was never copied.
 fn let_go(ctx: &Context, permit: Permit, state: &mut State, service: &str) {
     state.renewing.retain(|left| left.service != service);
     state.discard(service);

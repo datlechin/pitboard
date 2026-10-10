@@ -78,6 +78,16 @@ struct Script {
     renewals: HashMap<String, Answer<Renewed>>,
     codex_renewals: HashMap<String, Answer<Fresh>>,
     asked: Vec<Asked>,
+    /// What happens elsewhere while a renewal of a refresh token is answered, once.
+    answering: HashMap<String, Meanwhile>,
+}
+
+struct Meanwhile(Box<dyn FnOnce() + Send>);
+
+impl std::fmt::Debug for Meanwhile {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Meanwhile")
+    }
 }
 
 /// Anthropic, scripted. Unknown tokens are unauthorized, which is what an unknown token is.
@@ -153,6 +163,19 @@ impl ScriptedApi {
         self
     }
 
+    /// Runs `meanwhile` while the next renewal of this refresh token is answered: once it has
+    /// been sent, before the answer is back.
+    pub fn while_renewing(
+        &self,
+        refresh_token: &str,
+        meanwhile: impl FnOnce() + Send + 'static,
+    ) -> &ScriptedApi {
+        self.script()
+            .answering
+            .insert(refresh_token.into(), Meanwhile(Box::new(meanwhile)));
+        self
+    }
+
     /// Everything that was asked, in order.
     pub fn asked(&self) -> Vec<Asked> {
         self.script().asked.clone()
@@ -199,9 +222,14 @@ impl Api for ScriptedApi {
         _scopes: &[String],
         _client_id: Option<&str>,
     ) -> Result<Renewed, ApiError> {
-        self.answer(Asked::Renew(refresh_token.into()), |s| {
+        let answer = self.answer(Asked::Renew(refresh_token.into()), |s| {
             s.renewals.get(refresh_token)
-        })
+        });
+        let meanwhile = self.script().answering.remove(refresh_token);
+        if let Some(Meanwhile(meanwhile)) = meanwhile {
+            meanwhile();
+        }
+        answer
     }
 }
 
