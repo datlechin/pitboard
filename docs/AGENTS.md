@@ -28,15 +28,43 @@ rendered page too.
   `Learn`, `This page`, `A guide to` or `Welcome`.
 - The title is the page's only H1. Headings start at `##`, in sentence case, with no end
   punctuation, no questions and no links. No heading holds only other headings.
+- No apostrophe in a heading: Mintlify makes it `%E2%80%99` in the anchor, and links to it
+  break.
 - Each page is one type: quickstart, how-to, explanation or reference. Most pages stay
   under 600 words; paragraphs are one to three sentences.
-- The first sentence says what the page does or what is true. Stop when the content
-  stops; at most one closing line that links to the next page.
+- The first sentence says what the page does or what is true, and never restates the
+  description, which Mintlify shows under the title. Stop when the content stops; at most
+  one closing line that links to the next page.
 - Add a new page to `navigation` in `docs.json`, path without extension.
 - Link root-relative without extension: `[Switch accounts](/guides/switch)`. Link text
   names the destination. Never `here` or a bare URL.
 - Images go in `images/`, referenced as `/images/name.png`, inside `<Frame>`, always with
   alt text that says what the image shows.
+
+## Page types
+
+- How-to: steps, the output to expect, one clause of why, what to do when it fails. No
+  mechanism, no exhaustive lists, no retry arithmetic: link the page that has them.
+- Explanation: why and how, in prose. No steps, no lists of UI strings.
+- Reference: every value, string, field and code, in tables. A sentence that repeats a
+  row goes.
+- Each fact has one home. Other pages link it with at most one clause of context.
+- Release history lives in CHANGELOG.md. Only `install/upgrade-from-0-3-0` and a section
+  that applies to a past release name an older version.
+- A claim about Claude Code or Codex names the build it was read in ("read in 2.1.294")
+  on the page that owns the fact. Other pages link that page.
+
+## Exceptions
+
+State the rule alone. Put its exception in one of three places:
+
+1. Its own sentence, condition first: "On macOS, while a login file sits behind the
+   keychain, open sessions follow only at their next renewal."
+2. Its own bullet or table row.
+3. The page that owns it, linked once.
+
+Never hang an exception on the rule with `unless`, `except where` or a trailing `which`.
+Two exceptions to one rule make a table.
 
 ## MDX
 
@@ -56,6 +84,8 @@ rendered page too.
   apology and no promise. Say what is not known instead of guessing.
 - One idea per sentence, under 25 words.
 - Describe; do not sell or reassure.
+- Never restate a heading, an output block or what the screen already shows.
+- Shorter wins whenever nothing a reader needs is lost.
 - British spelling and no contractions in prose: enrol, licence, notarised, behaviour,
   organisation. Commands, fields and UI labels keep their own spelling.
 - Pitboard is the product's name and always has a capital P. `pitboard`, in code
@@ -97,7 +127,11 @@ Use the first word, never the others.
 | sign in (verb), sign-in (noun) | log in, login (verb), authenticate |
 | enrol (prose), `enroll` (command) | register |
 | forget | delete or remove an account |
-| renew (a parked login) | refresh, rotate |
+| renew (a parked login, or a tool its own login) | refresh, rotate |
+| identify (whose a login is) | tell whose, look up, resolve |
+| a login file behind the keychain (`~/.claude/.credentials.json` beside a keychain login) | fallback file, plaintext login |
+| share (the automatic switch's threshold) | threshold, trigger, cutoff |
+| period (a limit's five-hour or weekly span) | window (a window is an account window or the Pitboard window) |
 | usage, limit, five-hour limit, weekly limit, resets | quota, cap, 5h limit, session limit, refills |
 | keychain | Keychain, keyring |
 | the app, the menu bar app; the command line | Pitboard.app, the GUI; the CLI, the binary |
@@ -130,3 +164,14 @@ Use the first word, never the others.
 - `<ResponseField>` and `<Expandable>` only for the JSON envelope. Not `ParamField`.
 - Not used: Tip, Info, Check, Danger, Callout, CodeGroup, Badge, Tooltip, Tree, Mermaid,
   snippets, Icon.
+
+## Before and after
+
+| Before | After |
+| --- | --- |
+| Open Claude Code sessions pick up the switch within about 33 seconds, unless a login file sits behind the keychain. | Open Claude Code sessions follow a switch within about 33 seconds, with no restart. The exception lives in Open sessions. |
+| Windows is not supported: Claude Code keeps its login differently there, and Pitboard has not been written for it. | There is no Windows release. A Windows build answers only `--version`, `--help`, `completions` and `manpage`. |
+| A file with no login in it, such as `{}`, does the same. So does a file Pitboard cannot read. | Any file there pins open sessions: a login, `{}` or a file Pitboard cannot read. |
+| It switches whatever the app's setting says. | `pitboard watch` switches whether the app's setting is on or off, at its own share: `--at`, 95 by default. |
+| Run `pitboard renew` to renew it, or the command shown to sign in to it again. (one table cell) | One row per case, one instruction per row. |
+| These are rules, not gaps. | Delete it. |
