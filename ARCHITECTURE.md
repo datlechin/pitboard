@@ -576,6 +576,12 @@ pages load, as a browser would.
   an answer its callers already have, never one that would let Pitboard act: each tool's
   live chain on Windows is one store whose every call cannot be read (`store::Unbuilt`),
   never Claude Code's file alone, and the Windows face answers as `host/windows` says.
+- With nobody to ask, the command line deletes nothing it was not told to. `forget`,
+  `stow` and `uninstall` ask at a terminal, for a person. Through a pipe, from a script or
+  with `--json`, each refuses with `confirmation_needed`, exit 2, before it changes
+  anything, unless given `--yes` (`Confirm` in `pitboard/src/main.rs`). On 10 October 2026
+  `pitboard stow < /dev/null`, run as a look, deleted the login file behind the keychain.
+  The app asks in its own dialogs and does not go through `Confirm`.
 - A Windows build of a release before Pitboard for Windows is released does nothing
   (`release.rs`). The gate every change passes asks first, so no file is written, no store
   of logins changed and no token renewed even by a caller that forgot to ask; every read

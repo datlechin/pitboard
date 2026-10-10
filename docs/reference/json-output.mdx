@@ -82,6 +82,7 @@ These failures have a shape of their own:
 | --- | --- | --- | --- | --- |
 | Pitboard cannot parse the command line | `null` | `null` | `usage` | 2 |
 | The command refuses a label, as `pitboard enroll codx/work` does | The command | `null` | `usage` | 2 |
+| `forget`, `stow` or `uninstall` where it cannot ask, without `--yes`, as [Questions before deleting](/reference/commands#questions-before-deleting) describes | The command | `null` | `confirmation_needed` | 2 |
 | `doctor` finds a check that fails | `doctor` | The whole report | `checks_failed` | 3 |
 | `completions` or `manpage`, which have no JSON form | `generate` | `{}` | `output_is_not_a_report` | 2 |
 

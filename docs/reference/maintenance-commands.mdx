@@ -158,7 +158,7 @@ Usage: pitboard uninstall [OPTIONS]
 
 | Option | Description |
 | --- | --- |
-| `-y, --yes` | Do not ask first. |
+| `-y, --yes` | Do not ask first; needed without a terminal or with `--json`. |
 
 `pitboard uninstall` works in this order:
 
@@ -179,6 +179,8 @@ In a terminal, it asks first, as [Questions before deleting](/reference/commands
 ```text
 Delete every parked login this Pitboard wrote, the daily renewal schedule and ~/.pitboard? The account you are signed in to stays signed in; the others need a browser sign-in again. [y/N]
 ```
+
+Anywhere else, such as in a script or with `--json`, it needs `--yes`. Without it, `uninstall` refuses with `confirmation_needed`, exit status 2, and changes nothing.
 
 With two parked logins and daily renewal on:
 

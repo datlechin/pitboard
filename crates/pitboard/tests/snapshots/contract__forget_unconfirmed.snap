@@ -1,0 +1,19 @@
+---
+source: crates/pitboard/tests/contract.rs
+expression: "serde_json :: json! ({ \"exit\" : code, \"envelope\" : value })"
+---
+{
+  "exit": 2,
+  "envelope": {
+    "v": 1,
+    "command": "forget",
+    "ok": false,
+    "data": null,
+    "warnings": [],
+    "error": {
+      "code": "confirmation_needed",
+      "message": "`pitboard forget` asks before it deletes anything, and can ask only in a terminal without `--json`. Nothing was changed. Run it in a terminal, or add `--yes`.",
+      "cause": null
+    }
+  }
+}

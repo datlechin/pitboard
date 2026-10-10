@@ -844,7 +844,7 @@ fn status_under_sudo_answers_from_what_was_measured() {
 #[cfg_attr(windows, ignore = "W22: switching Claude Code on Windows")]
 fn forgetting_the_signed_in_account_is_refused() {
     let env = two_accounts("forget");
-    let (_, err, code) = env.run(&["forget", "alpha"]);
+    let (_, err, code) = env.run(&["forget", "alpha", "--yes"]);
     assert_eq!(code, 1);
     assert!(err.contains("signed in"), "{err}");
 }
@@ -856,7 +856,7 @@ fn forgetting_an_account_deletes_its_parked_login() {
     let parked = env.parked_service("beta").unwrap();
     assert!(env.is_parked(&parked));
 
-    let (_, err, code) = env.run(&["forget", "beta"]);
+    let (_, err, code) = env.run(&["forget", "beta", "--yes"]);
 
     assert_eq!(code, 0, "{err}");
     assert!(accounts(&env).iter().all(|a| a["label"] != "beta"));
@@ -1081,6 +1081,126 @@ fn uninstalling_takes_the_parked_logins_with_it() {
     );
     // The account that was signed in is still signed in: uninstalling is not a logout.
     assert_eq!(env.live()["claudeAiOauth"]["refreshToken"], "refresh-a");
+}
+
+/// With nobody to ask, `forget`, `stow` and `uninstall` change nothing without `--yes`, and
+/// `--json` is no `--yes`. On 10 October 2026 `pitboard stow < /dev/null`, run as a look,
+/// deleted a login file behind the keychain without asking. With `--yes` each acts as before.
+#[test]
+#[cfg_attr(windows, ignore = "W22: switching Claude Code on Windows")]
+fn deleting_with_nobody_to_ask_needs_yes() {
+    let env = two_accounts("unconfirmed");
+    let parked = env.parked_service("beta").expect("beta is parked");
+    let left = env.root.join(".credentials.json");
+    let mut commands = vec![
+        ("forget", vec!["forget", "beta"]),
+        // In use, so refused for that, but only once `--yes` lets it run.
+        ("forget", vec!["forget", "alpha"]),
+        ("uninstall", vec!["uninstall"]),
+    ];
+    // Only macOS keeps a login file behind a store; elsewhere `stow` has nothing to delete.
+    if cfg!(target_os = "macos") {
+        common::os::write_private(&left, &common::credential("refresh-a").to_string());
+        commands.push(("stow", vec!["stow"]));
+    }
+    let before = tree(&env.root);
+
+    for (command, args) in &commands {
+        let (out, err, code) = env.run(args);
+        assert_eq!(code, 2, "pitboard {command}: {out}{err}");
+        assert_eq!(out, "", "pitboard {command}");
+        assert!(
+            err.starts_with(&format!("error: `pitboard {command}` asks before")),
+            "pitboard {command}: {err}"
+        );
+        assert!(err.contains("add `--yes`"), "pitboard {command}: {err}");
+
+        let (out, err, code) = env.run(&[args.as_slice(), &["--json"]].concat());
+        assert_eq!(code, 2, "pitboard {command} --json: {out}{err}");
+        let refused = envelope(&out);
+        assert_eq!(refused["command"], *command);
+        assert_eq!(refused["ok"], false);
+        assert!(refused["data"].is_null(), "{refused}");
+        assert_eq!(refused["error"]["code"], "confirmation_needed", "{refused}");
+    }
+    assert!(tree(&env.root) == before, "nothing is written");
+    assert!(env.is_parked(&parked), "beta's parked login is kept");
+
+    if cfg!(target_os = "macos") {
+        let (_, err, code) = env.run(&["stow", "--yes"]);
+        assert_eq!(code, 0, "{err}");
+        assert!(!left.exists(), "the file is gone");
+    }
+    let (_, err, code) = env.run(&["forget", "beta", "--yes"]);
+    assert_eq!(code, 0, "{err}");
+    assert!(!env.is_parked(&parked), "beta's parked login is gone");
+    let (_, err, code) = env.run(&["uninstall", "--yes"]);
+    assert_eq!(code, 0, "{err}");
+    assert!(
+        !env.root.join("pitboard").exists(),
+        "Pitboard's own directory is gone"
+    );
+}
+
+/// Where a command would change nothing anyway, it says why as it did, with or without
+/// `--yes`: a label that names no account, and nothing left behind the store.
+#[test]
+#[cfg_attr(windows, ignore = "W22: switching Claude Code on Windows")]
+fn nothing_to_delete_is_said_as_before_without_yes() {
+    let env = two_accounts("nothing-to-confirm");
+
+    for (label, said) in [
+        ("nobody", "account_unknown"),
+        ("codx/work", "provider_unknown"),
+    ] {
+        let (out, err, code) = env.run(&["forget", label, "--json"]);
+        assert_eq!(code, 1, "{out}{err}");
+        assert_eq!(envelope(&out)["error"]["code"], said);
+    }
+    let (out, err, code) = env.run(&["stow"]);
+    assert_eq!(code, 0, "{err}");
+    assert!(out.starts_with("Nothing is left behind"), "{out}");
+    assert!(accounts(&env).iter().any(|a| a["label"] == "beta"));
+}
+
+/// Under sudo each command is refused for that, as it was, and is not asked about first.
+/// `stow` with nothing to put away says so, as it did.
+// `SUDO_UID` is Unix's sign of sudo; Windows' `sudo` elevates the token (`windows_refuses`).
+#[cfg(unix)]
+#[test]
+fn deleting_under_sudo_is_refused_for_that_without_yes() {
+    let env = two_accounts("unconfirmed-sudo");
+    let out = env
+        .command(&["stow", "--json"])
+        .env("SUDO_UID", "501")
+        .output()
+        .expect("run Pitboard");
+    let nothing = envelope(&String::from_utf8_lossy(&out.stdout));
+    assert_eq!(out.status.code(), Some(0), "{nothing}");
+    assert_eq!(nothing["data"]["stowed"], false, "{nothing}");
+
+    let left = env.root.join(".credentials.json");
+    let mut commands = vec![
+        ("forget", vec!["forget", "beta"]),
+        ("uninstall", vec!["uninstall"]),
+    ];
+    if cfg!(target_os = "macos") {
+        common::os::write_private(&left, &common::credential("refresh-a").to_string());
+        commands.push(("stow", vec!["stow"]));
+    }
+    let before = tree(&env.root);
+
+    for (command, args) in &commands {
+        let out = env
+            .command(&[args.as_slice(), &["--json"]].concat())
+            .env("SUDO_UID", "501")
+            .output()
+            .expect("run Pitboard");
+        let refused = envelope(&String::from_utf8_lossy(&out.stdout));
+        assert_eq!(out.status.code(), Some(1), "pitboard {command}: {refused}");
+        assert_eq!(refused["error"]["code"], "elevated", "{refused}");
+    }
+    assert!(tree(&env.root) == before, "nothing is written");
 }
 
 /// macOS reads at most 4097 bytes of command from `security`'s stdin, and MCP server tokens

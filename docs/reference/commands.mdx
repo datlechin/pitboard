@@ -99,15 +99,19 @@ Pitboard colours output to a terminal, and none to a file or a pipe. JSON output
 
 ## Questions before deleting
 
-`pitboard forget`, `pitboard stow` and `pitboard uninstall` ask before they delete anything. They ask only when standard input and standard error are both terminals, and neither `--yes`, `-y` nor `--json` is given.
-
-`pitboard stow` asks only once it finds a login it can put away.
+`pitboard forget`, `pitboard stow` and `pitboard uninstall` ask before they delete anything. They ask when standard input and standard error are both terminals and `--json` is not given. `--yes` or `-y` skips the question.
 
 Only `y`, `Y` and `yes` go ahead. Any other answer, an empty one included, changes nothing, prints nothing more and exits 0.
 
-<Warning>
-  With standard input or standard error redirected, as in a script or `2>/dev/null`, the command deletes without asking. A parked login that `forget` or `uninstall` deletes comes back only with a browser sign-in.
-</Warning>
+With standard input or standard error redirected, as in a script or `2>/dev/null`, or with `--json`, each needs `--yes`. Without it, the command changes nothing and exits 2 with [`confirmation_needed`](/reference/errors#command-output).
+
+With nobody to ask, these answer as they do with `--yes`:
+
+- `pitboard stow` with nothing behind the keychain, as always on Linux, or with a login of an account not enrolled.
+- `pitboard forget` with a label that names no account. It fails with that label's error, such as `account_unknown`.
+- `pitboard forget` and `pitboard uninstall` as root or under `sudo`, and `pitboard stow` there once it finds a file to put away. Each fails with `elevated`.
+
+With nobody to ask, a refusal found only once the command runs shows only with `--yes`. Without it, the answer is `confirmation_needed`. Forgetting the account in use is one, with `cannot_forget_active_account`. `identity_unverifiable` and `custom_oauth_endpoint` are others.
 
 ## Exit codes
 
@@ -129,6 +133,7 @@ Exit status 2 covers:
 - `pitboard schedule` with no subcommand, which prints its help on standard error.
 - A chosen label that breaks a rule in [Labels](#labels).
 - `--json` on `help`, `completions` or `manpage`.
+- `forget`, `stow` or `uninstall` without `--yes` where it cannot ask, as [Questions before deleting](#questions-before-deleting) describes.
 
 `status`, `renew` and `statusline` report some failures in their output and still exit 0. Each command's entry says which.
 

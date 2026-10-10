@@ -11,9 +11,9 @@ On macOS, `pitboard stow` puts away `~/.claude/.credentials.json` where it sits 
 
 | Option | Description |
 | --- | --- |
-| `-y, --yes` | Do not ask first |
+| `-y, --yes` | Do not ask first; needed without a terminal or with `--json` |
 
-At a terminal, `stow` says what the file holds and asks first, as [Questions before deleting](/reference/commands#questions-before-deleting) describes.
+At a terminal, `stow` says what the file holds and asks first, as [Questions before deleting](/reference/commands#questions-before-deleting) describes. Anywhere else, such as in a script or with `--json`, it needs `--yes`. Without it, `stow` refuses with `confirmation_needed` and deletes nothing.
 
 <Warning>
   Deleting the file signs out a Claude Code session that signed in with it, as one over SSH does while the keychain is locked.
@@ -50,6 +50,7 @@ These errors stop it:
 | Error | When |
 | --- | --- |
 | `left_login_not_enrolled` | The login is of an account not enrolled here. The message names it and says how to enrol it |
+| `confirmation_needed` | `stow` cannot ask, and `--yes` is not given. Exit status 2 |
 | `left_login_changed` | The file changed or went after `stow` read it |
 | `stored_login_changed` | The file was going because of the login Claude Code has stored, and a sign-in replaced that login meanwhile |
 | `left_login_unidentified` | Pitboard could not identify or renew the login with Anthropic. A [cause code](/reference/errors#cause-codes) says why |

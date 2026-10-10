@@ -71,13 +71,13 @@ enum Command {
     Forget {
         /// The label to drop
         label: String,
-        /// Do not ask first
+        /// Do not ask first; needed without a terminal or with `--json`
         #[arg(short = 'y', long)]
         yes: bool,
     },
     /// Put away the login Claude Code left in a file behind the keychain, then delete the file
     Stow {
-        /// Do not ask first
+        /// Do not ask first; needed without a terminal or with `--json`
         #[arg(short = 'y', long)]
         yes: bool,
     },
@@ -112,7 +112,7 @@ enum Command {
     /// Delete every parked login this Pitboard wrote, the daily renewal schedule and
     /// Pitboard's own files
     Uninstall {
-        /// Do not ask first
+        /// Do not ask first; needed without a terminal or with `--json`
         #[arg(short = 'y', long)]
         yes: bool,
     },
@@ -606,8 +606,8 @@ fn forget(pitboard: &Pitboard, label: &str) -> Report {
 /// store and what putting it away would do with it, then, once `confirm` says yes, putting it
 /// away while the file still holds what was found. A login of an account nobody enrolled is
 /// refused as the look found it, saying whose it is, and nothing is asked or changed. `None`
-/// where the answer was no.
-fn stow(pitboard: &Pitboard, confirm: impl FnOnce(&str) -> bool) -> Option<Report> {
+/// where the answer was no; where nobody could be asked, `confirm`'s refusal.
+fn stow(pitboard: &Pitboard, confirm: impl FnOnce(&str) -> Result<bool, Error>) -> Option<Report> {
     let left = match pitboard.left_login() {
         Err(error) => return Some(Report::failed(Some("stow"), error)),
         Ok(None) => {
@@ -622,8 +622,10 @@ fn stow(pitboard: &Pitboard, confirm: impl FnOnce(&str) -> bool) -> Option<Repor
     if let Some(refused) = left.refusal() {
         return Some(Report::failed(Some("stow"), refused));
     }
-    if !confirm(&left_question(&left)) {
-        return None;
+    match confirm(&left_question(&left)) {
+        Ok(true) => {}
+        Ok(false) => return None,
+        Err(refused) => return Some(Report::failed(Some("stow"), refused)),
     }
     Some(changed("stow", pitboard.stow(&left.seen), |stowed| {
         (
@@ -980,14 +982,41 @@ fn rename(pitboard: &Pitboard, from: &str, to: &str) -> Report {
     })
 }
 
-/// Whether a command that deletes something asks first: only where there is someone to ask.
-/// `--yes`, `--json`, a pipe and a script go straight through, and so does a run that may
-/// change nothing, as root or under sudo, whose answer would only be refused.
-fn asks(pitboard: &Pitboard, yes: bool, json: bool) -> bool {
-    !yes && !json
-        && pitboard.permit().is_ok()
-        && std::io::stdin().is_terminal()
-        && std::io::stderr().is_terminal()
+/// What a command that deletes something does before it acts.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Confirm {
+    /// `--yes`, or a run that may change nothing, as root or under sudo, whose answer would
+    /// only be refused.
+    Go,
+    /// Standard input and standard error are a terminal, and the output is for a person.
+    Ask,
+    /// Nobody to ask: a pipe, a script, a tool, or `--json`, which is no `--yes`.
+    Refuse,
+}
+
+impl Confirm {
+    fn of(pitboard: &Pitboard, yes: bool, json: bool, terminal: bool) -> Confirm {
+        if yes || pitboard.permit().is_err() {
+            Confirm::Go
+        } else if terminal && !json {
+            Confirm::Ask
+        } else {
+            Confirm::Refuse
+        }
+    }
+
+    /// Whether `command` goes ahead: `false` where the person said no.
+    fn ask(self, command: &'static str, question: &str) -> Result<bool, Error> {
+        match self {
+            Confirm::Go => Ok(true),
+            Confirm::Ask => Ok(agreed(question)),
+            Confirm::Refuse => Err(Error::ConfirmationNeeded { command }),
+        }
+    }
+}
+
+fn terminal() -> bool {
+    std::io::stdin().is_terminal() && std::io::stderr().is_terminal()
 }
 
 /// Asks `question` on standard error: yes only for `y`, `Y` or `yes`.
@@ -1069,22 +1098,28 @@ fn main() -> ExitCode {
         }
         Command::Use { label } => use_account(&pitboard, &label),
         Command::Forget { label, yes } => {
+            let confirm = match Confirm::of(&pitboard, yes, cli.json, terminal()) {
+                // A label that names no account gets its own error. The core resolves the label
+                // again, unlocked, so this relies on nobody enrolling it in between.
+                Confirm::Refuse if pitboard.account(&label).is_none() => Confirm::Go,
+                confirm => confirm,
+            };
             // The way back is a browser sign-in for that account, which is the cost
             // Pitboard exists to spare people.
-            if asks(&pitboard, yes, cli.json)
-                && !agreed(&format!(
-                    "Forget {label} and delete its parked login? Adding it again needs a \
-                     browser sign-in. [y/N] "
-                ))
-            {
-                return ExitCode::SUCCESS;
+            let question = format!(
+                "Forget {label} and delete its parked login? Adding it again needs a browser \
+                 sign-in. [y/N] "
+            );
+            match confirm.ask("forget", &question) {
+                Ok(true) => forget(&pitboard, &label),
+                Ok(false) => return ExitCode::SUCCESS,
+                Err(refused) => Report::failed(Some("forget"), refused),
             }
-            forget(&pitboard, &label)
         }
         Command::Stow { yes } => {
             // A session signing in with the file is signed out once it is gone.
-            let ask = asks(&pitboard, yes, cli.json);
-            match stow(&pitboard, |question| !ask || agreed(question)) {
+            let confirm = Confirm::of(&pitboard, yes, cli.json, terminal());
+            match stow(&pitboard, |question| confirm.ask("stow", question)) {
                 Some(report) => report,
                 None => return ExitCode::SUCCESS,
             }
@@ -1096,16 +1131,14 @@ fn main() -> ExitCode {
         Command::Schedule { ref what } => schedule(&pitboard, what),
         Command::Log { lines } => log(&pitboard, lines),
         Command::Uninstall { yes } => {
-            if asks(&pitboard, yes, cli.json)
-                && !agreed(
-                    "Delete every parked login this Pitboard wrote, the daily renewal schedule \
-                     and ~/.pitboard? The account you are signed in to stays signed in; the \
-                     others need a browser sign-in again. [y/N] ",
-                )
-            {
-                return ExitCode::SUCCESS;
+            let question = "Delete every parked login this Pitboard wrote, the daily renewal \
+                            schedule and ~/.pitboard? The account you are signed in to stays \
+                            signed in; the others need a browser sign-in again. [y/N] ";
+            match Confirm::of(&pitboard, yes, cli.json, terminal()).ask("uninstall", question) {
+                Ok(true) => uninstall(&pitboard),
+                Ok(false) => return ExitCode::SUCCESS,
+                Err(refused) => Report::failed(Some("uninstall"), refused),
             }
-            uninstall(&pitboard)
         }
         Command::Rename { from, to } => rename(&pitboard, &from, &to),
         // These write a file for a shell or for man, not a report, so there is no envelope
@@ -1299,6 +1332,46 @@ mod tests {
                 .command,
             Some(Command::Stow { yes: true })
         ));
+    }
+
+    /// A command that deletes something asks at a terminal, for a person. With nobody to ask,
+    /// `--json` included, it needs `--yes`. As root or under sudo it goes on to that refusal.
+    #[test]
+    fn a_command_that_deletes_asks_at_a_terminal_and_otherwise_needs_yes() {
+        use pitboard_core::host::Elevation;
+        use pitboard_core::testing::MemoryHost;
+        let mem = MemoryHost::new();
+        let pitboard = Pitboard::new(
+            Context::new(std::env::temp_dir().join("pitboard-cli-confirm"))
+                .with_memory_stores(std::sync::Arc::clone(&mem)),
+        );
+        for (yes, json, terminal, confirm) in [
+            (false, false, true, Confirm::Ask),
+            (false, true, true, Confirm::Refuse),
+            (false, false, false, Confirm::Refuse),
+            (false, true, false, Confirm::Refuse),
+            (true, false, true, Confirm::Go),
+            (true, true, false, Confirm::Go),
+        ] {
+            assert_eq!(
+                Confirm::of(&pitboard, yes, json, terminal),
+                confirm,
+                "yes {yes}, json {json}, terminal {terminal}"
+            );
+        }
+        let refused = Confirm::Refuse.ask("stow", "?").expect_err("refused");
+        assert_eq!(
+            (refused.code(), refused.exit_code()),
+            ("confirmation_needed", 2)
+        );
+        assert_eq!(
+            refused.to_string(),
+            "`pitboard stow` asks before it deletes anything, and can ask only in a terminal \
+             without `--json`. Nothing was changed. Run it in a terminal, or add `--yes`."
+        );
+
+        mem.runs_with(Elevation::Elevated { why: "under sudo" });
+        assert_eq!(Confirm::of(&pitboard, false, true, false), Confirm::Go);
     }
 
     #[test]
