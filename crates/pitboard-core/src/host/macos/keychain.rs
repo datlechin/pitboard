@@ -3,8 +3,9 @@
 //!
 //! Measured on throwaway items: a foreign in-process read adds the caller to that list, and
 //! a foreign in-process write replaces the item's partition list, after which every read by
-//! `/usr/bin/security` takes 1-3 seconds instead of 0.02, a cost Claude Code then pays on
-//! every credential re-read. A write through `security -U` changes only the item's mtime.
+//! `/usr/bin/security` takes 1-3 seconds instead of 0.02, or waits on a keychain password
+//! dialog in a desktop session, a cost Claude Code then pays on every credential re-read.
+//! A write through `security -U` changes only the item's mtime.
 
 use crate::context::Context;
 use crate::host::SECURITY;
