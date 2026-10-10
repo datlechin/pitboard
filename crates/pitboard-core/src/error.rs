@@ -27,8 +27,11 @@ pub enum Partway {
     /// Nothing was changed.
     Nothing,
     /// The login the file held was renewed, which spent its refresh token, and the renewed
-    /// one could not be written back there.
+    /// one could not be written back there, nor kept.
     RenewedUnwritten,
+    /// The login the file held was renewed, which spent its refresh token, and the renewed
+    /// one waits in Pitboard's vault for the next change to write it back there.
+    RenewedKept,
     /// The login in the file was renewed, and the renewed one written back there.
     Renewed,
     /// The login in the file was parked for `label`.
@@ -44,6 +47,11 @@ impl std::fmt::Display for Partway {
                 f,
                 "deleted nothing. It renewed the login the file held and could not write the \
                  renewed login back there, so that login no longer works"
+            ),
+            Partway::RenewedKept => write!(
+                f,
+                "deleted nothing. It renewed the login the file held and keeps the renewed login \
+                 until the next change writes it back there"
             ),
             Partway::Renewed => write!(
                 f,
@@ -432,13 +440,11 @@ pub enum Error {
     )]
     ConfigWriteFailed { path: PathBuf, detail: String },
 
-    #[error(
-        "{}'s session has expired, so Pitboard cannot confirm which account is signed in. \
-         Run `{}` once so it refreshes, then try again.",
-        tool.name(),
-        tool.program()
-    )]
-    SessionExpired { tool: ProviderId },
+    /// The service refused the login's access token as expired. `refused` where Pitboard
+    /// tried to renew the login and its service refuses its refresh token for good, or it
+    /// has none, so only signing in again mends it.
+    #[error("{}", session_expired(*tool, *refused))]
+    SessionExpired { tool: ProviderId, refused: bool },
 
     #[error(
         "Pitboard could not confirm with {} which account is signed in ({detail}), and will \
@@ -807,6 +813,7 @@ impl Error {
                 Some(*cause)
             }
             RenewalFailed { cause, .. } => *cause,
+            SessionExpired { refused: true, .. } => Some(Cause::LoginRefused),
             SessionExpired { .. } => Some(Cause::TokenExpired),
             StowStopped { error, .. } => error.cause(),
             _ => None,
@@ -876,6 +883,24 @@ fn not_absolute(variable: &str, path: &std::path::Path) -> String {
         "{variable} is {holds}, so the folder it names would depend on where each program \
          runs. Set it to a full path, or unset it; Pitboard reads and changes nothing until \
          then."
+    )
+}
+
+/// [`Error::SessionExpired`]'s words.
+fn session_expired(tool: ProviderId, refused: bool) -> String {
+    if refused {
+        return format!(
+            "{}'s login in use has expired and cannot be renewed, so Pitboard cannot confirm \
+             which account is signed in. Run `{}`, sign in, then try again.",
+            tool.name(),
+            tool.login_command()
+        );
+    }
+    format!(
+        "{}'s session has expired, so Pitboard cannot confirm which account is signed in. \
+         Run `{}` once so it refreshes, then try again.",
+        tool.name(),
+        tool.program()
     )
 }
 

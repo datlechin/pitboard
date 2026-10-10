@@ -21,6 +21,7 @@ mod forget;
 pub(crate) mod harness;
 pub(crate) mod identify;
 mod journal;
+mod refresh;
 #[cfg(test)]
 mod refusals;
 mod rename;
@@ -55,6 +56,7 @@ use crate::service::{Permit, Warning};
 use crate::state::{Account, Key, Park, State};
 use crate::{api, fault, holder, home, lock, park, pending, state, store};
 use journal::{Journal, clear_journal, reconcile, write_journal};
+use refresh::Refreshing;
 use serde_json::Value;
 use std::path::PathBuf;
 
@@ -143,6 +145,8 @@ pub fn settle(
     let exclusive = exclusive(ctx, permit)?;
     let mut state = state::load(ctx)?;
     let recovered = reconcile(ctx, permit, &mut state)?;
+    // A copy that cannot be saved yet stops only what would renew its slot's login.
+    let _ = refresh::finish(ctx, permit, &mut state);
     // After the journal has had its say, so a switch's own park is already accounted for.
     pending::sweep(ctx, permit, &mut state)?;
     drop_live_twins(ctx, permit, &mut state)?;
@@ -296,7 +300,10 @@ pub(super) fn identify_document(
 /// Why nobody could say whose a login of `which` is, as a change refuses over it.
 fn unidentified(which: ProviderId, error: provider::ProviderError) -> Error {
     match error {
-        provider::ProviderError::Unauthorized => Error::SessionExpired { tool: which },
+        provider::ProviderError::Unauthorized => Error::SessionExpired {
+            tool: which,
+            refused: false,
+        },
         other @ (provider::ProviderError::ShapeUnexpected { .. }
         | provider::ProviderError::Unsupported { .. }) => shape(which, other),
         other => Error::IdentityUnverifiable {
@@ -367,7 +374,9 @@ pub fn switch(settled: Settled, key: &Key) -> Result<(Outcome, Vec<Warning>)> {
         return Err(Error::LiveCredentialAbsent { tool: key.provider });
     };
     if target.owned_by(&outgoing.owner) {
-        return already_active(&ctx, permit, &mut state, key, &target);
+        let lost = outgoing.lock_warning(key.provider);
+        return already_active(&ctx, permit, &mut state, key, &target)
+            .map(|(outcome, warnings)| (outcome, lost.into_iter().chain(warnings).collect()));
     }
     let (switched, warnings) = switch_from(state, &ctx, permit, key, outgoing)?;
     Ok((switched.into(), warnings))
@@ -386,7 +395,9 @@ pub fn update_config(settled: Settled, key: &Key) -> Result<(Outcome, Vec<Warnin
     let target = enrolled(&state, key)?;
     match identify::now(&ctx, permit, &mut state, key.provider)? {
         identify::Live::Login(stored) if target.owned_by(&stored.owner) => {
+            let lost = stored.lock_warning(key.provider);
             already_active(&ctx, permit, &mut state, key, &target)
+                .map(|(outcome, warnings)| (outcome, lost.into_iter().chain(warnings).collect()))
         }
         _ => Err(Error::AccountNotInUse {
             tool: key.provider,
@@ -453,6 +464,7 @@ fn switch_from(
         store: live,
         document: first,
         owner: outgoing,
+        lock_lost: renewal_lock_lost,
     } = outgoing;
     let (outgoing_key, outgoing_id) = state
         .account_of(key.provider, &outgoing)
@@ -654,7 +666,7 @@ fn switch_from(
     state::save(ctx, permit, &state)?;
     fault::point("switch.recorded");
     drop(guard);
-    let lock_lost = lock_lost | Refreshing::let_go(refreshing);
+    let lock_lost = lock_lost | Refreshing::let_go(refreshing) | renewal_lock_lost;
 
     let outgoing_identity = provider::Identity {
         account_id: outgoing.account_uuid.clone(),
@@ -785,44 +797,6 @@ fn write_lock(ctx: &Context, permit: Permit, which: ProviderId) -> Result<Option
         .write_lock(ctx)
         .map(|dir| lock::acquire(permit, &dir, lock::WRITE))
         .transpose()?)
-}
-
-/// The locks `which`'s tool takes before it renews its login, held: its own, then the one
-/// beside it, taken as a renewal takes them (Claude Code's are the register's `refresh_lock`),
-/// so no session renews the login stored meanwhile. The second is gone without where it
-/// cannot be made, as the tool goes without it, and let go of first, as the tool lets go of
-/// it.
-pub(super) struct Refreshing {
-    legacy: Option<lock::Guard>,
-    own: lock::Guard,
-}
-
-impl Refreshing {
-    /// `None` for a tool that takes no such lock. Taken before the tool's write lock, as the
-    /// tool takes them.
-    pub(super) fn take(
-        ctx: &Context,
-        permit: Permit,
-        which: ProviderId,
-    ) -> Result<Option<Refreshing>> {
-        let Some((own, legacy)) = provider::of(which).refresh_lock(ctx) else {
-            return Ok(None);
-        };
-        let own = lock::acquire(permit, &own, lock::REFRESH)?;
-        let legacy = match lock::acquire(permit, &legacy, lock::REFRESH) {
-            Ok(legacy) => Some(legacy),
-            Err(lock::LockError::Io(_)) => None,
-            Err(busy) => return Err(busy.into()),
-        };
-        Ok(Some(Refreshing { legacy, own }))
-    }
-
-    /// Lets go of it, saying whether it stopped being Pitboard's meanwhile.
-    pub(super) fn let_go(held: Option<Refreshing>) -> bool {
-        held.is_some_and(|held| {
-            held.own.compromised() || held.legacy.as_ref().is_some_and(lock::Guard::compromised)
-        })
-    }
 }
 
 /// Readies `incoming` to go in place of the login read earlier as `first`, which was

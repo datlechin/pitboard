@@ -421,7 +421,7 @@ pub fn enroll(
             key.provider.name()
         ))),
         Some(login) => from_sign_in(&ctx, key, &mut state, &login),
-        None => record_current(&ctx, permit, key, &mut state).map(|e| (e, Vec::new())),
+        None => record_current(&ctx, permit, key, &mut state),
     }
 }
 
@@ -448,22 +448,28 @@ fn claim(state: &State, key: &Key, owner: &Owner) -> Result<()> {
     Ok(())
 }
 
-fn record_current(ctx: &Context, permit: Permit, key: &Key, state: &mut State) -> Result<Enrolled> {
+fn record_current(
+    ctx: &Context,
+    permit: Permit,
+    key: &Key,
+    state: &mut State,
+) -> Result<(Enrolled, Vec<Warning>)> {
     let which = key.provider;
     let label = key.label.as_str();
     // Through the store itself rather than the provider's reading of it, so a locked
     // keychain says so in the store's own words instead of reading as a strange login. A
     // document with no account in it is nobody signed in: Claude Code's after a `/logout`
     // still holds the machine's MCP tokens.
-    let (stored, found) = identify::look(ctx, state, which)?;
-    let identify::Live::Login(identify::Login {
+    let (stored, found) = identify::look(ctx, permit, state, which)?;
+    let identify::Live::Login(stored) = stored else {
+        return Err(Error::LiveCredentialAbsent { tool: which });
+    };
+    let lost = stored.lock_warning(which);
+    let identify::Login {
         document: live,
         owner,
         ..
-    }) = stored
-    else {
-        return Err(Error::LiveCredentialAbsent { tool: which });
-    };
+    } = stored;
     claim(state, key, &owner)?;
     let existing = state.get(key);
     let parked = existing.and_then(|a| a.parked.clone());
@@ -482,7 +488,10 @@ fn record_current(ctx: &Context, permit: Permit, key: &Key, state: &mut State) -
     let (_, noticed) = identify::record(state, which, found, ctx.now());
     state::save(ctx, permit, state)?;
     identify::write_down(ctx, permit, &noticed);
-    Ok(Enrolled::Current { email: owner.email })
+    Ok((
+        Enrolled::Current { email: owner.email },
+        lost.into_iter().collect(),
+    ))
 }
 
 /// Enrol the account a sign-in produced: put in use when it is the account signed in now,
@@ -499,11 +508,15 @@ fn from_sign_in(
 ) -> Result<(Enrolled, Vec<Warning>)> {
     let owner = identify_document(ctx, login.provider, &login.document)?;
     claim(state, key, &owner)?;
-    match signed_in_now(ctx, login.permit, state, key.provider, &owner) {
+    let (now, lost) = signed_in_now(ctx, login.permit, state, key.provider, &owner);
+    let said = |(enrolled, warnings): (Enrolled, Vec<Warning>)| {
+        (enrolled, lost.into_iter().chain(warnings).collect())
+    };
+    match now {
         SignedInNow::Theirs(live, first) => {
-            install_signed_in(ctx, key, state, login, &owner, &live, &first)
+            install_signed_in(ctx, key, state, login, &owner, &live, &first).map(said)
         }
-        SignedInNow::NotTheirs => park_signed_in(ctx, key, state, login, &owner),
+        SignedInNow::NotTheirs => park_signed_in(ctx, key, state, login, &owner).map(said),
         SignedInNow::Untold(why) => {
             // Somebody signing in to the account Pitboard last saw in use most likely wants
             // its broken login replaced, and parking is not that, so it is said.
@@ -518,7 +531,7 @@ fn from_sign_in(
                     why: identify::untold(&why),
                 });
             }
-            Ok((enrolled, warnings))
+            Ok(said((enrolled, warnings)))
         }
     }
 }
@@ -537,21 +550,32 @@ enum SignedInNow {
     Untold(Error),
 }
 
+/// [`SignedInNow`], with what telling it says of a lock lost while renewing the login stored.
 fn signed_in_now(
     ctx: &Context,
     permit: Permit,
     state: &mut State,
     which: ProviderId,
     owner: &Owner,
-) -> SignedInNow {
+) -> (SignedInNow, Option<Warning>) {
     match identify::now(ctx, permit, state, which) {
-        Ok(identify::Live::Login(identify::Login {
-            store,
-            document,
-            owner: found,
-        })) if found.same_login(owner) => SignedInNow::Theirs(store, document),
-        Ok(_) => SignedInNow::NotTheirs,
-        Err(e) => SignedInNow::Untold(e),
+        Ok(identify::Live::Login(login)) => {
+            let lost = login.lock_warning(which);
+            let identify::Login {
+                store,
+                document,
+                owner: found,
+                ..
+            } = login;
+            let now = if found.same_login(owner) {
+                SignedInNow::Theirs(store, document)
+            } else {
+                SignedInNow::NotTheirs
+            };
+            (now, lost)
+        }
+        Ok(identify::Live::Nothing) => (SignedInNow::NotTheirs, None),
+        Err(e) => (SignedInNow::Untold(e), None),
     }
 }
 
@@ -1244,7 +1268,7 @@ mod tests {
             let login = signed_in(&m, "here", "here-refresh-2");
             let owner = identify_document(&m.ctx, m.which, &login.document).expect("whose");
             let mut state = state::load(&m.ctx).expect("state");
-            let SignedInNow::Theirs(live, first) =
+            let (SignedInNow::Theirs(live, first), _) =
                 signed_in_now(&m.ctx, Permit::for_a_test(), &mut state, m.which, &owner)
             else {
                 panic!("{tool}: `here` is signed in");

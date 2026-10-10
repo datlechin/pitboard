@@ -945,7 +945,7 @@ fn uninstall(pitboard: &Pitboard) -> Report {
         }
         if removed.pending > 0 {
             human.push_str(&format!(
-                "{} could not be deleted, so ~/.pitboard was kept; run `pitboard \
+                "{} could not be deleted yet, so ~/.pitboard was kept; run `pitboard \
                  uninstall` again.\n",
                 removed.pending
             ));

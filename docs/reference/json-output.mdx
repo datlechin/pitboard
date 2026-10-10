@@ -115,7 +115,7 @@ In the order of `pitboard --help`:
 | `schedule status` | `installed`. When `true`, also `path` and `every_seconds` (`86400`). Where Pitboard has no scheduler to write, also `supported` (`false`). |
 | `schedule uninstall` | `installed` (`false`) and `removed`, `false` when nothing was scheduled. |
 | `log` | `entries`, oldest first, each with `at`, `caller` (`cli`, `app` or `unknown`), `verb`, `subject` and `outcome`, as [`log`](/reference/maintenance-commands#log) explains. |
-| `uninstall` | The counts `parks_removed`, `parks_pending` (could not be deleted) and `parks_left` (left because another Pitboard may own them), and the booleans `home_removed` and `schedule_removed`. |
+| `uninstall` | The counts `parks_removed`, `parks_pending` (could not be deleted, or a renewal of Claude Code's login not saved yet) and `parks_left` (left because another Pitboard may own them), and the booleans `home_removed` and `schedule_removed`. |
 | `rename` | `from`, `to` and `email`. |
 | `doctor` | `environment`, the paths and login stores Pitboard found and the version of OpenAI's Codex CLI. `checks`, each with `code`, `name`, `level` (`ok`, `warn` or `fail`), `detail` and `advice`, as [`doctor`](/reference/maintenance-commands#doctor) lists. |
 | `statusline` | `line`, the status line without colour, as [`statusline`](/reference/integration-commands#statusline) describes. |
@@ -274,7 +274,7 @@ A switch prints this on one line:
 | `unreachable` | The service could not be reached. |
 | `server_error` | The service answered with an error. |
 | `answer_not_understood` | The service's answer was not in a shape Pitboard reads. |
-| `login_refused` | The service no longer accepts the parked login. |
+| `login_refused` | The service no longer accepts the parked login. On the account in use, Anthropic no longer accepts the login in use, which Pitboard tried to renew to identify it. |
 | `asked_recently` | Pitboard asked too recently for the limit to have moved one percentage point, so it did not ask again. |
 | `interrupted` | The request stopped before it had an answer. |
 | `not_asked` | Pitboard read the account without asking the service, as `pitboard status --offline` does. |

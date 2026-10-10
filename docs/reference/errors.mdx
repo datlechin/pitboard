@@ -51,7 +51,7 @@ The command line prints the message after `error:` or `warning:` on standard err
 | `switch_corrupted` | 3 | Pitboard could not write the incoming login or put the outgoing one back. The outgoing login is still parked. | Sign in to any enrolled account with `claude` or `codex login`, then run `pitboard use` with the account you switched from. |
 | `signed_in_account_changed` | 1 | The account in use changed during the switch. Nothing moved. | Try again. |
 | `identity_unverifiable` | 1 | Pitboard could not confirm with Anthropic or OpenAI whose login it was about to move, so it moved nothing. | Check the connection and try again. See [Pitboard cannot confirm which account is signed in](/troubleshooting#pitboard-cannot-confirm-which-account-is-signed-in). |
-| `session_expired` | 1 | The tool's login in use has expired, so Pitboard cannot identify it. | Run `claude` or `codex` once so it renews its login, then try again. |
+| `session_expired` | 1 | The tool's login in use has expired, so Pitboard cannot identify it. If the message says `cannot be renewed`, Pitboard tried to renew it, and Anthropic no longer accepts it or it has no refresh token. | Run `claude` or `codex` once so it renews its login, then try again. If the message says `cannot be renewed`, run `claude` and sign in. |
 
 ## Signing in
 
@@ -177,7 +177,7 @@ An error that stops `pitboard stow` keeps its own code, cause and exit status. T
 | --- | --- |
 | `identity_unverifiable` | Always |
 | `left_login_unidentified` | Always |
-| `session_expired` | Always `token_expired` |
+| `session_expired` | `token_expired`, or `login_refused` where the message says `cannot be renewed` |
 | `renewal_failed` | When known |
 | An error that stops `pitboard stow` | That error's own |
 

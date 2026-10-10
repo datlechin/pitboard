@@ -90,6 +90,7 @@ As read in Claude Code 2.1.294, an open session keeps its login while the keycha
 | --- | --- |
 | `Pitboard does not use SOCKS proxies yet, and ALL_PROXY names one` | Set the variable it names to an HTTP proxy, or unset it. [Proxies](/reference/files#proxies) lists the variables. |
 | `session has expired` | Run the program it names once, such as `claude`, then try again. |
+| `login in use has expired and cannot be renewed` | Sign in with the program it names, such as `claude`, then try again. |
 | `could not confirm`, with any other reason | Check the connection, then try again. |
 
 ## Codex keeps the old account
@@ -112,6 +113,7 @@ Old numbers carry their age and often a reason, as in `measured 14:02, 3m ago ·
 | `Anthropic is rate limiting usage checks` | Wait. `--fresh` waits too. |
 | `Anthropic's answer was not understood` | [Report a problem](#report-a-problem). |
 | `Claude Code's session has expired` | Run `claude` once. |
+| `Claude Code's login is no longer accepted` | Run `claude` and sign in again. |
 | `nothing is signed in` | Run `claude` and sign in, or `codex login` for Codex. |
 | `Claude Code's login` | Run `pitboard doctor`. |
 | `its parked login cannot be read` | Run `pitboard doctor`. |

@@ -354,12 +354,16 @@ pub const ASSUMPTIONS: &[Assumption] = &[
         verified_against: "2.1.294",
         depends: "lock::REFRESH, a switch, which holds it from before it reads the outgoing login \
                   a last time until it has recorded the login installed, so no session spends the \
-                  refresh token of the copy it parks, and `pitboard stow`, which holds it from its \
+                  refresh token of the copy it parks, `pitboard stow`, which holds it from its \
                   last reading of a login left in `.credentials.json` until the file is gone, so \
                   no session spends the refresh token of the login it parks, drops or renews \
-                  meanwhile, and saves the login it renewed as this save does, where the file \
-                  still holds the token it sent. Neither writes an owner record, so no session \
-                  takes the lock over",
+                  meanwhile, and switch::refresh, which renews a login itself as this renewal \
+                  does, the stored login where a change or a read must tell whose it is and its \
+                  access token has lapsed, and the file's for `pitboard stow`: it reads the login \
+                  again under the lock, tells one a session renewed meanwhile as it is, and saves \
+                  the one it renewed as this save does, where the store still holds the token it \
+                  sent, so a session that renews later reads the renewed login and sends its \
+                  refresh token. None writes an owner record, so no session takes the lock over",
         probe: &[
             "\".oauth_refresh.lock\"),realpath:!1,stale:60000,update:5000",
             "tengu_oauth_refresh_legacy_lock_contended",

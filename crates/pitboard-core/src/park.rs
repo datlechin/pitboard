@@ -33,14 +33,21 @@ pub fn parts_of(service: &str) -> Option<(String, i64)> {
 /// Claim a free name before writing to it, so the caller can record it first and recovery
 /// can find a park left by a run that died. Reusing a name would destroy the park there.
 pub fn reserve(ctx: &Context, permit: Permit, id: &str) -> Result<String> {
+    let service = free_name(ctx, id)?;
+    // Written down before anything is written into it, so a run killed between the two
+    // leaves a name the next command can resolve rather than a login nothing on the machine
+    // can see.
+    crate::pending::reserve(ctx, permit, &service)?;
+    Ok(service)
+}
+
+/// A name for `id` that nothing in the vault holds yet, for a caller that writes it down
+/// itself before it writes into it.
+pub(crate) fn free_name(ctx: &Context, id: &str) -> Result<String> {
     let start = ctx.now_millis();
     for offset in 0..1_000 {
         let candidate = service_name(id, start + offset);
         if store::vault_read(ctx, &candidate)?.is_none() {
-            // Written down before anything is written into it, so a run killed between the
-            // two leaves a name the next command can resolve rather than a login nothing
-            // on the machine can see.
-            crate::pending::reserve(ctx, permit, &candidate)?;
             return Ok(candidate);
         }
     }

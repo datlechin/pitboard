@@ -29,7 +29,8 @@
 //! token, and takes the write lock only to save the answer, where the login stored still
 //! holds the token it sent. Only the refresh lock keeps a refresh from spending a token
 //! Pitboard is about to count on. So a switch holds it while it parks the outgoing login,
-//! and `pitboard stow` while it keeps the login left in a file.
+//! `pitboard stow` while it keeps the login left in a file, and Pitboard while it renews a
+//! login of Claude Code's itself, as a refresh does.
 //!
 //! The writers are a session and [`crate::daemon`], the supervisor that outlives sessions
 //! and refreshes on a timer of its own. Both come through here.

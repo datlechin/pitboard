@@ -127,6 +127,13 @@ pub(crate) fn document(refresh: &str) -> Value {
     })
 }
 
+/// [`document`] with its access token expired a minute ago.
+pub(crate) fn lapsed(refresh: &str) -> Value {
+    let mut login = document(refresh);
+    login["claudeAiOauth"]["expiresAt"] = json!((NOW - 60) * 1000);
+    login
+}
+
 pub(crate) fn owner(uuid: &str) -> Owner {
     Owner {
         account_uuid: uuid.into(),
@@ -482,12 +489,30 @@ pub(crate) fn write_target(m: &Machine) -> PathBuf {
         .expect("Claude Code takes one")
 }
 
+/// Takes Claude Code's write lock at the moment it is called, as a session writing its
+/// credentials does, last touched `ago` before.
+pub(crate) fn takes_the_write_lock(
+    m: &Machine,
+    ago: std::time::Duration,
+) -> impl FnOnce() + 'static {
+    let writing = lock_dir(&write_target(m));
+    move || {
+        let parent = writing.parent().expect("the storage directory");
+        std::fs::create_dir_all(parent).expect("the storage directory is made");
+        std::fs::create_dir(&writing).expect("the write lock is free");
+        let touched = std::time::SystemTime::now() - ago;
+        crate::host::fs::touch_dir(Permit::for_a_test(), &writing, touched)
+            .expect("the write lock is touched");
+    }
+}
+
 /// A session renewing the login `store` holds at the moment it is called, as Claude Code
 /// 2.1.294 does (the register's `refresh_lock`): the keychain's, or the file's for a session
 /// that signed in with the file. It takes the refresh lock, as a directory, without waiting
 /// here: held, it waits, which is all that happens. Taken, it sends the refresh token stored,
-/// which spends it, then saves the renewed login under the write lock where it can take it,
-/// and otherwise once [`saves`] says it is let go of.
+/// which spends it, then saves the renewed login, with an access token good for an hour,
+/// under the write lock where it can take it, and otherwise once [`saves`] says it is let go
+/// of.
 pub(crate) fn renews_meanwhile(
     m: &Machine,
     store: Arc<crate::store::memory::MemoryStore>,
@@ -516,6 +541,8 @@ pub(crate) fn renews_meanwhile(
             .to_string();
         api.renew_trouble(&sent, crate::api::scripted::Trouble::InvalidGrant);
         login["claudeAiOauth"]["refreshToken"] = json!(format!("{sent}-by-a-session"));
+        login["claudeAiOauth"]["accessToken"] = json!(format!("access-{sent}-by-a-session"));
+        login["claudeAiOauth"]["expiresAt"] = json!((NOW + 3600) * 1000);
         *session.saving.borrow_mut() = Some((sent, login));
         if std::fs::create_dir(&writing).is_ok() {
             save(&store, &service, &session);

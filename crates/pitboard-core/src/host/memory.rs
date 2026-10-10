@@ -15,15 +15,15 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
-/// The vault as one context opens it. A real keychain takes `PITBOARD_NO_ARGV` from the
-/// context it is opened with, so above its ceiling it writes on the argument line or
-/// refuses; this one does the same.
-struct Vault {
+/// The vault or the keychain as one context opens it. A real keychain takes
+/// `PITBOARD_NO_ARGV` from the context it is opened with, so above its ceiling it writes on
+/// the argument line or refuses; this one does the same.
+struct Opened {
     store: Arc<MemoryStore>,
     argument_line: bool,
 }
 
-impl RawStore for Vault {
+impl RawStore for Opened {
     fn kind(&self) -> Backend {
         RawStore::kind(&self.store)
     }
@@ -235,8 +235,11 @@ impl MemoryHost {
 }
 
 impl Host for MemoryHost {
-    fn foreign_secrets(&self, _ctx: &Context, _account: &str) -> Option<Box<dyn RawStore>> {
-        Some(Box::new(Arc::clone(&self.keychain)))
+    fn foreign_secrets(&self, ctx: &Context, _account: &str) -> Option<Box<dyn RawStore>> {
+        Some(Box::new(Opened {
+            store: Arc::clone(&self.keychain),
+            argument_line: ctx.argv_fallback(),
+        }))
     }
 
     fn file(&self, path: PathBuf) -> Box<dyn RawStore> {
@@ -244,7 +247,7 @@ impl Host for MemoryHost {
     }
 
     fn vault(&self, ctx: &Context) -> Box<dyn RawStore> {
-        Box::new(Vault {
+        Box::new(Opened {
             store: Arc::clone(&self.vault),
             argument_line: ctx.argv_fallback(),
         })

@@ -13,7 +13,8 @@ use crate::{home, schedule, state};
 pub struct Removed {
     /// Parked logins deleted from the keychain or the vault.
     pub parks: usize,
-    /// Parked logins that could not be deleted, which is why the home was kept.
+    /// Parked logins that could not be deleted, and renewed logins not saved where their tool
+    /// keeps them yet, which is why the home was kept.
     pub pending: usize,
     /// Parked logins left where they are because this Pitboard did not write them:
     /// `repair` gave them back from a store every Pitboard on the machine shares, so each
@@ -37,7 +38,9 @@ pub struct Removed {
 /// The directory is removed last and only when every parked login is gone, because
 /// state.json is the only index of those keychain items. Deleting it first would leave live
 /// refresh tokens on the machine with no way left to name them. A login `repair` gave back
-/// is not this Pitboard's to delete, so it is left, and does not keep the directory.
+/// is not this Pitboard's to delete, so it is left, and does not keep the directory. A
+/// renewed login settling could not save yet is the only copy of that login, so it is
+/// neither deleted nor left unnamed: it keeps the directory too.
 pub fn uninstall(settled: Settled) -> Result<Removed> {
     let Settled {
         _exclusive,
@@ -57,7 +60,8 @@ pub fn uninstall(settled: Settled) -> Result<Removed> {
     }
     state.forget_in_use();
     state::save(&ctx, permit, &state)?;
-    let pending = purge(&ctx, permit, &mut state);
+    let undeleted = purge(&ctx, permit, &mut state);
+    let pending = undeleted + state.renewing.len();
     // The sweep in settle has already resolved every outstanding name, so what is left
     // refers to nothing. The home goes next, and an index of names with no home is noise.
     if pending == 0 {
@@ -65,7 +69,7 @@ pub fn uninstall(settled: Settled) -> Result<Removed> {
     }
     let home_removed = pending == 0 && remove_home(&ctx, permit);
     Ok(Removed {
-        parks: parks.saturating_sub(pending),
+        parks: parks.saturating_sub(undeleted),
         pending,
         left,
         home_removed,
@@ -169,6 +173,65 @@ mod tests {
         .expect("uninstalled");
         assert!(!removed.schedule_removed);
         assert!(removed.home_removed);
+    }
+
+    /// A renewed login waiting in the vault to be saved where Claude Code keeps it is the
+    /// only copy of that login, and state.json the only index naming it. Uninstalling while
+    /// it cannot be saved keeps both, and uninstalling again once it can removes the home.
+    #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "W23: Claude Code's Credential Manager store, which a machine in memory plays"
+    )]
+    fn uninstalling_keeps_a_renewed_login_not_saved_yet() {
+        use super::super::harness::{lapsed, owner, renews};
+        use crate::store::memory::Fault;
+        let m = machine("uninstall-renewing");
+        m.sign_in(&lapsed("here-renewed"));
+        renews(&m, "here-renewed", "here-again");
+        m.api.owned_by("access-here-again", owner("here"));
+        let pitboard = crate::service::Pitboard::new(m.ctx.clone());
+        let died = crate::fault::killing("refresh.exchanged", || pitboard.switch_to("there"));
+        assert_eq!(died.err().as_deref(), Some("refresh.exchanged"));
+        let copies = |m: &super::super::harness::Machine| -> Vec<String> {
+            m.mem
+                .vault()
+                .services()
+                .into_iter()
+                .filter(|service| service.contains("-renewing-"))
+                .collect()
+        };
+        let [copy] = copies(&m).try_into().expect("one copy");
+        m.fault_live(Fault::Locked);
+
+        let removed = uninstall(
+            settle(&m.ctx, Permit::for_a_test(), None)
+                .expect("nothing to recover")
+                .0,
+        )
+        .expect("uninstalled");
+
+        assert!(!removed.home_removed);
+        assert_eq!(removed.pending, 1);
+        assert!(m.mem.vault().peek(&copy).is_some());
+        assert!(state::load(&m.ctx).expect("state").names(&copy));
+
+        m.mem.live().heal_all();
+        let removed = uninstall(
+            settle(&m.ctx, Permit::for_a_test(), None)
+                .expect("nothing to recover")
+                .0,
+        )
+        .expect("uninstalled");
+        assert!(removed.home_removed);
+        assert_eq!(copies(&m), Vec::<String>::new());
+        assert_eq!(
+            m.live()
+                .and_then(|stored| stored["claudeAiOauth"]["refreshToken"]
+                    .as_str()
+                    .map(str::to_owned)),
+            Some("here-again".into())
+        );
     }
 
     /// launchd and systemd renew the default home, so uninstalling any other one leaves
