@@ -251,10 +251,11 @@ pluginkit -r <build>/Pitboard.app/Contents/PlugIns/PitboardShare.appex
 
 ## Windows
 
-A Windows build of a 0.x release answers only `--version`, `--help`, `completions` and
-`manpage`, and changes nothing. The gate is `pitboard_core::release`. To work on Pitboard on
-Windows, open a build to it with `--cfg pitboard_unreleased_windows` in `RUSTFLAGS`, and with
-nothing else. `release.rs` says why that is a `cfg` and not a Cargo feature.
+From 1.0.0-beta.1, a build of `main` runs on Windows. A Windows build of a 0.x release answers
+only `--version`, `--help`, `completions` and `manpage`, and changes nothing. The gate is
+`pitboard_core::release`. To work on a `release/0.N` branch on Windows, open a build to it with
+`--cfg pitboard_unreleased_windows` in `RUSTFLAGS`, and with nothing else. `release.rs` says why
+that is a `cfg` and not a Cargo feature.
 
 Working there takes:
 
@@ -273,7 +274,7 @@ Read the [Windows rules in AGENTS.md](AGENTS.md#on-windows) first. Then, as a Wi
 that holds no real login, in PowerShell from a terminal that is not elevated:
 
 ```powershell
-$env:RUSTFLAGS = "-D warnings -C target-feature=+crt-static --cfg pitboard_unreleased_windows"
+$env:RUSTFLAGS = "-D warnings -C target-feature=+crt-static"
 cargo clippy --workspace --all-targets --locked
 cargo clippy -p pitboard-ffi --all-targets --locked --features fixture
 cargo nextest run --locked
@@ -300,10 +301,11 @@ CI's `windows` job runs these commands on `windows-2025` and `windows-11-arm`, t
 a fresh standard user through `.github/scripts/test-as-standard-user.ps1`, with an exFAT
 volume it mounts for the run. The job fails when a run leaves a login item, a scheduled task, a login
 folder, the app's data folder, a link scheme, a notification registration, a start at
-sign-in, a `PATH` entry or a package behind. It also builds `pitboard.exe` as a 0.x release is
-built and checks that it refuses and changes nothing. It runs the opened build with no
-argument as a fresh standard user, as winget's validation runs a program. One test reads the
-app execution aliases in the job user's own profile, since a fresh standard user's has none.
+sign-in, a `PATH` entry or a package behind. It also builds `pitboard.exe` as a release is
+built, with no cfg, and checks that a 0.x build refuses and changes nothing, and that a 1.x
+build answers with no argument as a fresh standard user, as winget's validation runs a program.
+It runs the opened build that way too. One test reads the app execution aliases in the job
+user's own profile, since a fresh standard user's has none.
 
 CI's `windows-release` job builds the release's zips with `.github/actions/windows-release`,
 as `release.yml` does from 1.0.0. `.github/scripts/check-windows-build.ps1` checks each
@@ -381,10 +383,10 @@ dotnet test --solution Pitboard.slnx -p:PitboardNativeLibrary="$PWD/../../target
 On Linux the libraries the tests load are `libpitboard_ffi.so` and `libpitboard_share_ffi.so`,
 and on Windows `pitboard_ffi.dll` and `pitboard_share_ffi.dll`. There the generator reads
 `pitboard_ffi.dll` or `pitboard_ffi.lib`, which give the same file; `pitboard_ffi.dll.lib`
-gives none. A Windows library built with `--cfg pitboard_unreleased_windows` takes
-`-p:PitboardNativeLibraryOpened=true` as well, or the test of what a 0.x release refuses
-fails. C# makes each field of a record a member of it, so a field may not share its record's
-name.
+gives none. On a `release/0.N` branch, a Windows library built with
+`--cfg pitboard_unreleased_windows` takes `-p:PitboardNativeLibraryOpened=true` as well, or the
+test of what a 0.x release refuses fails. C# makes each field of a record a member of it, so a
+field may not share its record's name.
 
 On Windows, run the tests as [Windows](#windows) says: as a Windows account that holds no real
 login, with the homes [AGENTS.md](AGENTS.md#on-windows) names at fresh folders. A C# test that
@@ -405,7 +407,7 @@ The tests that start a fixture's model are skipped against a library built witho
 `cargo build --locked -p pitboard-ffi --features fixture` before `dotnet test`. The bindings
 need not be generated again.
 
-CI's `csharp-windows` job builds `pitboard_ffi.dll` twice, as a 0.x release is built and opened
+CI's `csharp-windows` job builds `pitboard_ffi.dll` twice, as a release is built and opened
 with its fixtures, checks that the bindings generated from each are the Linux job's byte for
 byte, and runs the C# tests against each the same way.
 
@@ -413,7 +415,7 @@ byte, and runs the C# tests against each the same way.
 
 CI's `windows-app` job builds and checks the app on `windows-2025` and `windows-11-arm`. It
 builds the app in Debug over `pitboard_ffi.dll` opened with its fixtures, and publishes it in
-Release over the library a 0.x release builds. It sets `PITBOARD_REQUIRE_VERSIONINFO=1`, so a
+Release over the library a release builds. It sets `PITBOARD_REQUIRE_VERSIONINFO=1`, so a
 `pitboard_ffi.dll` or `pitboard_share_ffi.dll` built without its version resource fails the
 build. The Release build takes its update key from `WINDOWS_UPDATE_PUBLIC_KEY`, and CI gives
 it 32 bytes no private key was made for. Beside it, the job publishes `PitboardShare.exe`, the
@@ -448,7 +450,7 @@ which the session machine runs to measure the app's notifications, and checks th
 an account without `pitboard-probe`'s throwaway marker.
 
 The job also builds two MSIs of `apps/windows/Pitboard.Installer` with WiX v7, from the
-Release build and the `pitboard.exe` a 0.x release builds: one with `PitboardShare.exe` and its
+Release build and the `pitboard.exe` a release builds: one with `PitboardShare.exe` and its
 package, as a signed release carries them, and one without, as a release with no signer ships.
 WiX runs ICE validation as it builds, with ICE03 off, and
 `.github/scripts/validate-windows-msi.ps1` runs ICE03 after it and refuses any row but WinUI's
@@ -456,9 +458,9 @@ own files. That script first holds the WiX SDK to nuget.org's hash, so raising
 `WixToolset.Sdk` in `global.json` needs its hash there too. CI never installs an MSI:
 `extract-msi.ps1` extracts each with `msiexec /a`, `check-windows-app.ps1` checks the files
 the signed one holds, `check-windows-msi.ps1` each one's version, layout, command line in `bin`
-and share target, the UI test of the release gate starts the signed one's `Pitboard.exe`, and
-`Pitboard.Installer.Tests` reads each one's tables and asks its `pitboard_ffi.dll` whether it
-opens. `test-windows-app.ps1` tests `check-windows-msi.ps1` and `validate-windows-msi.ps1` too,
+and share target, at 0.x the UI test of the release gate starts the signed one's
+`Pitboard.exe`, and `Pitboard.Installer.Tests` reads each one's tables and asks its
+`pitboard_ffi.dll` whether it opens. `test-windows-app.ps1` tests `check-windows-msi.ps1` and `validate-windows-msi.ps1` too,
 and runs the release's `verify-windows-signatures.ps1` on the signed one's MSI, on copies of
 it with a row changed and on the package the job signed. The MSI takes its version from
 `windows-versions.sh`, which `test-release.py` tests.
@@ -474,11 +476,11 @@ gh run download <run id> -n windows-app-pictures
 ### Run the Windows debug build
 
 Read [the rules for the app in AGENTS.md](AGENTS.md#on-windows) first. Build the bindings as
-[The C# bindings](#the-c-bindings) says, from a library built with
-`--cfg pitboard_unreleased_windows` and `--features fixture`, then build the app in Debug and
-start its executable in a fixture, with scratch homes set after building. Build it into its
-own folder, without `-o`, and do not publish it: a Debug publish leaves out the XAML files the
-app reads beside it, and `-o` names them wrong in its PRI file. From Windows PowerShell or
+[The C# bindings](#the-c-bindings) says, from a library built with `--features fixture`, and
+with `--cfg pitboard_unreleased_windows` too on a `release/0.N` branch. Then build the app in
+Debug and start its executable in a fixture, with scratch homes set after building. Build it
+into its own folder, without `-o`, and do not publish it: a Debug publish leaves out the XAML
+files the app reads beside it, and `-o` names them wrong in its PRI file. From Windows PowerShell or
 PowerShell 7:
 
 ```powershell

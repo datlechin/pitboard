@@ -7,6 +7,15 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.0.0-beta.1] - 2026-10-17
+
+### Added
+
+- The command line runs on Windows 11 24H2 and later, on x64 and ARM64, and switches Claude Code
+  and Codex accounts there.
+- The Windows app switches Claude Code and Codex accounts from the notification area, and installs
+  per user from an MSI for x64 or ARM64.
+
 ## [0.15.0] - 2026-10-17
 
 ### Added
@@ -895,7 +904,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Pitboard keeps an audit log of every change it makes.
 - The account index is schema 3, with one parked login per account and its expiry.
 
-[Unreleased]: https://github.com/datlechin/pitboard/compare/v0.15.0...HEAD
+[Unreleased]: https://github.com/datlechin/pitboard/compare/v1.0.0-beta.1...HEAD
+[1.0.0-beta.1]: https://github.com/datlechin/pitboard/compare/v0.15.0...v1.0.0-beta.1
 [0.15.0]: https://github.com/datlechin/pitboard/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/datlechin/pitboard/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/datlechin/pitboard/compare/v0.12.0...v0.13.0

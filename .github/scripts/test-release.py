@@ -470,7 +470,7 @@ class Binstall(unittest.TestCase):
                 self.assertEqual(
                     self.expand(meta["bin-dir"], target, version), f"{name}/pitboard.exe"
                 )
-                self.assertEqual(meta["disabled-strategies"], {"quick-install", "compile"})
+                self.assertEqual(meta["disabled-strategies"], {"quick-install"})
 
     def test_every_other_target_installs_its_tarball(self):
         version = "1.0.0"

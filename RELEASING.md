@@ -94,6 +94,22 @@ protected like `main` and cut from the last 0.x tag. A release runs the `release
 commit it tags, so that tag must hold the release kinds above: release a 0.x with them
 before 1.0.0-beta.1.
 
+## Before 1.0.0-beta.1
+
+Tag the first release with Windows files only once each of these holds:
+
+- No Rust or C# test waits on a later Windows pull request: none is ignored or excluded on
+  Windows with a `W<id>` reason.
+- The session on [the session machine](AGENTS.md#the-session-machine) is done, on the bundle
+  built from `Release 1.0.0-beta.1`, and `ARCHITECTURE.md` records what it measured, with the
+  build and the date.
+- The last 0.x release is published with the release kinds above, and `release/0.N` is cut
+  from its tag.
+- `windows-release` passed on the pull request that holds `Release 1.0.0-beta.1`.
+- `WINDOWS_UPDATE_PUBLIC_KEY` and the `windows-update` environment's
+  `WINDOWS_UPDATE_PRIVATE_KEY` are set, as [the Windows update key](#the-windows-update-key)
+  says, and `WINDOWS_SIGNER` is unset.
+
 ## What a release publishes
 
 Each release has a tarball of the command line for each target of the `build` job, the app

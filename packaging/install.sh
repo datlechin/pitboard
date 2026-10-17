@@ -38,7 +38,10 @@ find_target() {
   case $system in
     Darwin) vendor_os=apple-darwin ;;
     Linux) vendor_os=unknown-linux-musl ;;
-    MINGW* | MSYS* | CYGWIN*) fail "Pitboard for Windows is not released yet." ;;
+    MINGW* | MSYS* | CYGWIN*)
+      fail "This script installs Pitboard on macOS and Linux." \
+        "For Windows, see https://docs.usepitboard.com/install."
+      ;;
     *) fail "Pitboard has no build for $system." ;;
   esac
   case $machine in

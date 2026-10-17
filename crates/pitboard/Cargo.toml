@@ -8,7 +8,7 @@ license.workspace = true
 repository.workspace = true
 homepage.workspace = true
 readme = "../../README.md"
-keywords = ["claude-code", "codex", "cli", "macos", "linux"]
+keywords = ["claude-code", "codex", "windows", "macos", "linux"]
 categories = ["command-line-utilities"]
 
 # cargo-binstall fetches the release the workflow already builds instead of compiling the
@@ -21,16 +21,13 @@ bin-dir = "{ name }-v{ version }-{ target }/{ bin }{ binary-ext }"
 # install, and reports every install to a stats server.
 disabled-strategies = ["quick-install"]
 
-# A 0.x release has no Windows zip, so binstall stops rather than compile a build that refuses.
 [package.metadata.binstall.overrides.x86_64-pc-windows-msvc]
 pkg-url = "{ repo }/releases/download/v{ version }/{ name }-v{ version }-{ target }.zip"
 pkg-fmt = "zip"
-disabled-strategies = ["quick-install", "compile"]
 
 [package.metadata.binstall.overrides.aarch64-pc-windows-msvc]
 pkg-url = "{ repo }/releases/download/v{ version }/{ name }-v{ version }-{ target }.zip"
 pkg-fmt = "zip"
-disabled-strategies = ["quick-install", "compile"]
 
 [dependencies]
 pitboard-core.workspace = true

@@ -46,7 +46,10 @@ ROOT_REFUSAL = (
     "Pitboard changes nothing when it runs as root or with sudo, so this installs nothing. "
     "Run it as yourself."
 )
-WINDOWS = "Pitboard for Windows is not released yet."
+WINDOWS = (
+    "This script installs Pitboard on macOS and Linux. For Windows, see "
+    "https://docs.usepitboard.com/install."
+)
 NO_ARGUMENTS = (
     "The installer takes no arguments. Set PITBOARD_INSTALL_DIR to choose where it installs."
 )
