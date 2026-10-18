@@ -473,6 +473,31 @@ fn read_live(
     read_stored(tool, live)?.ok_or_else(|| nothing_signed_in(ctx, tool))
 }
 
+// The bytes stored now, where they are what `going` says: the refused login, which still
+// nobody can tell whose it is, so a sign-in since is never taken for it, or no account's login.
+fn going_out(
+    ctx: &Context,
+    state: &State,
+    tool: &'static dyn Provider,
+    live: &provider::LiveStore,
+    going: Going,
+) -> Result<Option<String>> {
+    match going {
+        Going::Refused => {
+            let (raw, refused) = read_live(ctx, tool, live)?;
+            match identify::told(ctx, state, tool, &refused) {
+                Ok(None) => Ok(Some(raw)),
+                Ok(Some(_)) => Err(Error::SignedInAccountChanged),
+                Err(error) => Err(unidentified(tool.id(), error)),
+            }
+        }
+        Going::Nothing => match read_stored(tool, live)? {
+            Some(_) => Err(Error::SignedInAccountChanged),
+            None => Ok(store::read_raw(&live.chain, &live.service)?),
+        },
+    }
+}
+
 /// [`read_live`], with `None` where nothing is signed in: nothing stored, or a document with
 /// no account's login in it, as Claude Code's `/logout` leaves.
 fn read_stored(
@@ -526,11 +551,9 @@ fn switch_as(settled: Settled, key: &Key, refused: OnRefusal) -> Result<(Outcome
     // switch moves out of when it records the one it moves to, whatever it named before.
     let outgoing = match identify::now(&ctx, permit, &mut state, tool) {
         Ok(identify::Live::Login(outgoing)) => outgoing,
+        // `look` refuses where the tool's own record names somebody, whose login is elsewhere.
         Ok(identify::Live::Nothing) => {
-            return Err(Error::LiveCredentialAbsent {
-                tool: key.provider,
-                label: None,
-            });
+            return put_in(state, &ctx, permit, tool, key, &target, Going::Nothing);
         }
         Err(error) => {
             let Some(detail) = refused_for_good(&error) else {
@@ -543,7 +566,9 @@ fn switch_as(settled: Settled, key: &Key, refused: OnRefusal) -> Result<(Outcome
                     label: state.typed(key),
                     detail,
                 }),
-                OnRefusal::Replace => replace_refused(state, &ctx, permit, tool, key, &target),
+                OnRefusal::Replace => {
+                    put_in(state, &ctx, permit, tool, key, &target, Going::Refused)
+                }
             };
         }
     };
@@ -606,41 +631,51 @@ fn restorable(ctx: &Context, state: &State, key: &Key, target: &Account) -> Resu
     Ok(held)
 }
 
-/// Puts `key`'s login in place of the one its tool has stored, whose refresh token its service
-/// refuses for good, parking nothing: that login no longer works. The login stored is read
-/// again under the tool's lock, and one that changed meanwhile, as a sign-in leaves it, is not
-/// written over. Journaled as a switch is, with no login going out.
-fn replace_refused(
+// What a login goes in place of where nothing is parked going out.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Going {
+    // A login whose refresh token its service refuses for good, which no longer works.
+    Refused,
+    // No account's login, with the tool's own record naming nobody: a tool never signed in.
+    Nothing,
+}
+
+// What is stored is read again under the tool's lock, and a login that turned up or changed
+// meanwhile, as a sign-in leaves it, is not written over.
+fn put_in(
     mut state: State,
     ctx: &Context,
     permit: Permit,
     tool: &'static dyn Provider,
     key: &Key,
     target: &Account,
+    going: Going,
 ) -> Result<(Outcome, Vec<Warning>)> {
     let which = key.provider;
     let to = state.typed(key);
-    let from = format!("{}'s refused login", which.name());
+    let from = match going {
+        Going::Refused => format!("{}'s refused login", which.name()),
+        Going::Nothing => format!("{} signed in to nobody", which.name()),
+    };
     let held = restorable(ctx, &state, key, target)?;
     let live = live_store(ctx, tool)?;
-    // Told again from the bytes that would be written over, so a login a sign-in left since
-    // the first telling is never taken for the refused one.
-    let (refused_raw, refused) = read_live(ctx, tool, &live)?;
-    match identify::told(ctx, &state, tool, &refused) {
-        Ok(None) => {}
-        Ok(Some(_)) => return Err(Error::SignedInAccountChanged),
-        Err(error) => return Err(unidentified(which, error)),
-    }
+    let gone = going_out(ctx, &state, tool, &live, going)?;
     let incoming = park::load(ctx, tool, key, &held)?;
     let (held, incoming) =
         prove_incoming(ctx, permit, &mut state, tool, key, target, held, incoming)?;
 
     let refreshing = Refreshing::take(ctx, permit, tool)?;
     let guard = write_lock(ctx, permit, tool)?;
-    let (before_raw, before) = read_live(ctx, tool, &live)?;
-    if before_raw != refused_raw {
+    if store::read_raw(&live.chain, &live.service)? != gone {
         return Err(Error::SignedInAccountChanged);
     }
+    let before = match &gone {
+        Some(raw) => serde_json::from_str(raw)
+            .map_err(|e| Error::Store(store::Error::Malformed(e.to_string())))?,
+        None => Value::Object(serde_json::Map::new()),
+    };
+    // Empty where nothing was stored, which a rollback deletes.
+    let before_raw = gone.unwrap_or_default();
     let next = to_body(
         &tool
             .splice(&before, &incoming)
@@ -669,14 +704,24 @@ fn replace_refused(
     fault::point("replace.journal_written");
     // The park going in is kept until the slot is seen to hold it, so a write that did not
     // land loses nothing; only a slot nobody can read keeps the record, for the next change.
-    let failed = |detail: String| Error::ReplaceFailed {
-        tool: which,
-        label: to.clone(),
-        detail,
+    let failed = |detail: String| match going {
+        Going::Refused => Error::ReplaceFailed {
+            tool: which,
+            label: to.clone(),
+            detail,
+        },
+        Going::Nothing => Error::InstallFailed {
+            tool: which,
+            label: to.clone(),
+            detail,
+        },
     };
     if let Err(e) = install_with(
         which,
-        |body| store::write_raw(&live.chain, permit, &live.service, body),
+        |body| match body {
+            "" => store::delete_raw(&live.chain, permit, &live.service),
+            body => store::write_raw(&live.chain, permit, &live.service, body),
+        },
         || store::read_raw(&live.chain, &live.service),
         &next,
         &before_raw,
@@ -742,13 +787,14 @@ fn replace_refused(
     );
     let parks_pending = purge(ctx, permit, &mut state);
     clear_journal(ctx, permit);
-    let still_running = match still_holding(ctx, which) {
-        StillHolding::Nothing => None,
-        StillHolding::These(holding) => Some(Warning::SessionsStillRunning {
+    // A session that started with no login keeps none, which no warning about a login says.
+    let still_running = match (going, still_holding(ctx, which)) {
+        (Going::Nothing, _) | (_, StillHolding::Nothing) => None,
+        (Going::Refused, StillHolding::These(holding)) => Some(Warning::SessionsStillRunning {
             from: from.clone(),
             holding,
         }),
-        StillHolding::Unknown => Some(Warning::SessionsUnknown {
+        (Going::Refused, StillHolding::Unknown) => Some(Warning::SessionsUnknown {
             tool: which,
             from: from.clone(),
         }),

@@ -106,7 +106,7 @@ In the order of `pitboard --help`:
 | `enroll` | `label` as typed, `provider` (`claude`, `codex` or `desktop`), `email`, and `enrolled`: `current`, `signed_in`, `renewed` or `in_use`, as [`enroll`](/reference/account-commands#enroll) explains. |
 | `use`, already in use | `to`, `changed` (`false`) and `config_updated`, `true` where Claude Code's config named another account and `use` wrote this one into it. |
 | `use`, after a switch | `from`, `to`, `provider`, `changed` (`true`), `parked_at` (when the login of `from` was parked), `adoption_ceiling_seconds` and `adoption`. |
-| `use`, into a Claude that was signed out | The same, with `from` and `parked_at` set to `null`. |
+| `use`, where nothing was signed in | The same, with `from` and `parked_at` set to `null`. |
 | `forget` | `label` and `email`. |
 | `stow` | `stowed`, `false` when no login file sits behind the keychain. When `true`, also `path`, the file deleted, and `login`, what became of its login: a code from [`stow`](/reference/recovery-commands#stow). Then `account`, the label of the login's account or `null`, and `dropped`, the file's other keys. |
 | `abandon` | `abandoned`, `true` when it gave up a Claude Code or Codex switch, with `from`, `to` and `logins_kept`, a count. `moves_given_up`, one object per Claude Desktop move it gave up, as [Moves given up](/reference/json-output#moves-given-up) lists, or an empty array. |

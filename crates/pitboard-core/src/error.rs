@@ -521,6 +521,17 @@ pub enum Error {
         detail: String,
     },
 
+    #[error(
+        "could not put `{label}`'s login where {} reads it ({detail}). `{label}`'s login is \
+         still parked, and nothing was lost.",
+        tool.name()
+    )]
+    InstallFailed {
+        tool: ProviderId,
+        label: String,
+        detail: String,
+    },
+
     #[error("{}", account_on_hold(*tool, login, link.as_deref()))]
     AccountOnHold {
         tool: ProviderId,
@@ -1007,6 +1018,7 @@ impl Error {
             SignedInAccountChanged => "signed_in_account_changed",
             LiveLoginRefused { .. } => "live_login_refused",
             ReplaceFailed { .. } => "replace_failed",
+            InstallFailed { .. } => "install_failed",
             AccountOnHold { .. } => "account_on_hold",
             RecoveryUndetermined { .. } | RecoveryUnfinished { .. } | RecoveryStopped { .. } => {
                 "recovery_undetermined"

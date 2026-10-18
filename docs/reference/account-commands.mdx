@@ -210,7 +210,7 @@ Usage: pitboard use [OPTIONS] <LABEL>
 | `<LABEL>` | The account's label, such as `work`, `codex/work` or `desktop/work` |
 | `-y, --yes` | Where the service refuses the login in use for good, put this account's login in its place without asking; needed without a terminal or with `--json` |
 
-`use` parks the login the label's tool has stored and puts the account's parked login in its place.
+`use` parks the login the label's tool has stored and puts the account's parked login in its place. Where nothing is signed in to Claude Code or Codex, as before its first sign-in, it puts the account's login where the tool reads it and parks nothing.
 
 A Claude Code login whose refresh token Anthropic refuses for good no longer works, and cannot be parked. `use` says why, and asks before it puts the account's login in its place, which loses nothing. `use` never asks about a login Anthropic will not name, an account on hold, or when Anthropic cannot be reached.
 
@@ -223,7 +223,7 @@ Before anything moves, `use` refuses with:
 
 | Code | Tool | When |
 | --- | --- | --- |
-| `live_credential_absent` | Claude Code, Codex | The tool is not signed in. |
+| `live_credential_elsewhere` | Claude Code | Claude Code's config names an account in use, and Pitboard cannot find its login. |
 | `live_account_not_enrolled` | Any | The tool is signed in to an account you have not enrolled. |
 | `nothing_parked` | Any | The account has no parked login. |
 | `parked_login_expired` | Claude Code, Codex | The parked login's refresh token has expired. |
@@ -247,7 +247,7 @@ After a switch, `use` prints `Switched to work; personal is parked.` and a secon
 | Codex | ``Restart any running `codex` for this to take effect. It will not pick the switch up on its own.`` |
 | Claude Desktop | `Claude opens signed in to it.` |
 
-A Claude Desktop switch while Claude is signed out parks nothing. Its first line is `Switched Claude Desktop to desktop/work.`
+A switch where nothing is signed in parks nothing. Its first line names the tool, such as `Switched Claude Code to work.` or `Switched Claude Desktop to desktop/work.`
 
 [Open sessions](/concepts/open-sessions) explains both Claude Code lines.
 

@@ -208,6 +208,10 @@ impl Provider for Claude {
         outgoing: &Owner,
     ) -> Result<(), crate::error::Error> {
         let path = claude::config_file(ctx);
+        // Claude Code that never ran makes it on its first run, naming the login it starts with.
+        if !path.exists() {
+            return Ok(());
+        }
         configfile::backup(ctx, permit, &path)?;
         configfile::update(ctx, permit, &path, |config| {
             configfile::splice_identity(

@@ -58,6 +58,7 @@ These come from a Claude Code or Codex switch. A Claude Desktop switch has its o
 | `live_login_refused` | 1 | Anthropic refuses the refresh token of Claude Code's login in use for good, so that login no longer works and Pitboard cannot park it. | Run `pitboard use <label> --yes` to put the account's login in its place, or sign in to Claude Code again. In the app, choose **Replace** when Pitboard asks. |
 | `account_on_hold` | 1 | Anthropic has put the account on hold. Pitboard keeps its login. | Follow Anthropic's instructions for the account, at the link the message gives, then try again. |
 | `replace_failed` | 1 | Pitboard could not put the account's login in place of the refused one. The account's login is still parked. | Run the switch again. If it keeps failing, run `pitboard doctor`. |
+| `install_failed` | 1 | Nothing was signed in, and Pitboard could not put the account's login where the tool reads it. The account's login is still parked. | Fix the reason the message gives, then run the switch again. |
 | `session_expired` | 1 | The tool's login in use has expired, so Pitboard cannot identify it. If the message says `cannot be renewed`, Pitboard tried to renew it, and Anthropic no longer accepts it or it has no refresh token. | Run `claude` or `codex` once so it renews its login, then try again. If the message says `cannot be renewed`, run `claude` and sign in. |
 
 ## Signing in

@@ -414,6 +414,14 @@ pub(crate) fn write_raw(
     })
 }
 
+// Takes the live credential out of the backend that holds it, where one does.
+pub(crate) fn delete_raw(live: &Live, permit: Permit, service: &str) -> Result<(), Error> {
+    with_live(live, |chain| match resolve_in(chain, service)? {
+        Some(backend) => backend.delete(permit, service),
+        None => Ok(()),
+    })
+}
+
 #[cfg_attr(not(feature = "test-support"), allow(unreachable_pub))]
 pub fn vault_read(ctx: &Context, service: &str) -> Result<Option<String>, Error> {
     vault(ctx).read(service)
