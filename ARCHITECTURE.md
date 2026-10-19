@@ -2610,6 +2610,9 @@ Accounts and tokens:
 - FlaUI.UIA3 5.0.0, run as that user, finds that user's WinUI elements by AutomationId and
   selects a NavigationView item through its SelectionItem pattern (CF2,
   `LifecycleTests.AWinUIElementIsFoundAndInvokedByItsAutomationId`, run 38804714545).
+- A launch redirected to the running copy carries the second copy's arguments: a second Debug
+  copy started with a link handed it to the one running, which opened its picker for it
+  (`AccountPickerTests`, CI run 39254279757).
 - The self-contained Debug app, started by that user, has its window up 1194 ms after the
   start on windows-11-arm (CF5, run 38804714545). Both images hold the Windows App Runtime
   2.5.1.0 package for some user, so that the app needs none is not measured here.
@@ -2622,6 +2625,10 @@ Accounts and tokens:
 - `RtlGetVersion` gives 10.0.26100 and 10.0.26200, the builds the registry's `CurrentBuild`
   gives. The registry's `ProductName` says `Windows 10 Enterprise` on windows-11-arm, so
   Pitboard never reads which Windows this is from it.
+- `VerQueryValueW` reads a program's version resource: `cmd.exe`'s product version is 10.0
+  with a build no later than the running Windows, and `pitboard.exe`'s names Pitboard and its
+  version (`cmd_exe_carries_the_build_of_the_windows_it_ships_in` and
+  `pitboard_exe_carries_its_version_resource`, CI run 39254279757).
 
 Homes and variables:
 
@@ -2889,8 +2896,10 @@ The images:
   trusted Dev Drive with Defender's filter attached.
 - The Server service runs, and `New-SmbShare` serves a folder to `\\localhost`.
 - windows-2025 runs OpenSSH Server, whose `AllowGroups` turned the standard user away until
-  it joined OpenSSH Users (run 38691271016). windows-11-arm has none, and
-  `Add-WindowsCapability` did not install it within 10 minutes (run 38685119129).
+  it joined OpenSSH Users (run 38691271016). windows-11-arm ships none, and
+  `Add-WindowsCapability` did not install it within 10 minutes (run 38685119129). There RF-M
+  installs Win32-OpenSSH 10.0p2 from Microsoft's release, its SHA-256 pinned, starts it and
+  removes it after (runs 38821312770, 38922866517 and 38928930271).
 - Neither image holds Codex's `%ProgramData%\OpenAI\Codex`, Claude Code's
   `C:\Program Files\ClaudeCode` or its policy keys.
 
@@ -2943,13 +2952,16 @@ The MSI, `Pitboard.exe` and the notification area:
   Shift+F10 reach the icon and its menu, which opens at the icon in the taskbar's mode.
 - Registering for notifications worked with no Singleton package: it wrote
   `HKCU\Software\Classes\AppUserModelId\Pitboard.Pitboard` with `DisplayName`, `IconUri` and
-  `CustomActivator`. A login replaced outside Pitboard is said in the window alone.
+  `CustomActivator`. A login replaced outside Pitboard was said in the window, and no
+  notification came for it, though the model asks the app to post one.
 - `msiexec /i` of a second MSI, one higher in the fourth field, upgraded 1.0.0.1 to 1.0.0.2
   with no UAC prompt in 7 s. The default schedule removed the old product first, so
   `bin\pitboard.exe` was missing for about 2 s: 9 of 416 runs of the status line every 250 ms
   found no `pitboard`. The MSI now removes it after the new one's files are in place.
 - `msiexec /fa` with Pitboard open had Restart Manager close it, not forced, and start it
-  again within 4 s; the icon kept its place.
+  again within 4 s; the icon kept its place. Of Pitboard's windows, only the hidden one, never
+  shown, ends Pitboard on `WM_ENDSESSION` with `ENDSESSION_CLOSEAPP` or on `WM_CLOSE`, so one
+  of them reached it. Which one was not recorded.
 - With start at sign-in on, a sign-in started Pitboard with no window, its icon there 7 s
   after. Settings > Apps > Startup listed it; turning it off there wrote 01 as the first byte
   of `StartupApproved\Run`'s `Pitboard` and kept the `Run` value.
@@ -2990,8 +3002,8 @@ Daily renewal:
 ### Documented, not measured
 
 Windows facts Pitboard stands on that Microsoft documents and nothing has measured yet, read
-on 15 and 16 October 2026. W27 took out on 18 October 2026 the rows
-[The session machine](#the-session-machine) measured.
+on 15 and 16 October 2026. W27 took out the rows [The session machine](#the-session-machine)
+measured on 18 October 2026, and those CI measured by 20 October 2026.
 
 | Fact | Source | Why not measured |
 |---|---|---|
@@ -2999,7 +3011,6 @@ on 15 and 16 October 2026. W27 took out on 18 October 2026 the rows
 | `CfGetSyncRootInfoByPath` finds a sync root such as OneDrive's | [CfGetSyncRootInfoByPath](https://learn.microsoft.com/en-us/windows/win32/api/cfapi/nf-cfapi-cfgetsyncrootinfobypath) | No sync provider runs on the runners. |
 | `FILE_ID_INFO` names a file uniquely on its volume | [FILE_ID_INFO](https://learn.microsoft.com/en-us/windows/win32/api/winbase/ns-winbase-file_id_info) | No row reads it. |
 | An explicit ACE for the user decides what a UAC-filtered token can do with a file | [How DACLs control access](https://learn.microsoft.com/en-us/windows/win32/secauthz/how-dacls-control-access-to-an-object) | The limited token opened only a file it made. |
-| `VerQueryValueW` reads a program's version resource | [VerQueryValueW](https://learn.microsoft.com/en-us/windows/win32/api/winver/nf-winver-verqueryvaluew) | No row reads one. |
 | A running program sees a variable changed in the registry only after `WM_SETTINGCHANGE` | [Environment variables](https://learn.microsoft.com/en-us/windows/win32/procthread/environment-variables) | Only a task started after `setx` was measured. |
 | WTS lists another session's processes to Administrators only | [WTSEnumerateProcessesExW](https://learn.microsoft.com/en-us/windows/win32/api/wtsapi32/nf-wtsapi32-wtsenumerateprocessesexw) | No row looked at another user's process in another session. A standard user's listing held session 0's processes. |
 | `GetProcessTimes` gives a process's creation time | [GetProcessTimes](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-getprocesstimes) | Only the tests read it, of their own process. |
@@ -3020,12 +3031,11 @@ on 15 and 16 October 2026. W27 took out on 18 October 2026 the rows
 | Moderators label a portable archive `Portable-Archive`, a blocking issue | [Validation failure guide](https://github.com/microsoft/winget-pkgs/blob/master/doc/ValidationFailureGuide.md) | No manifest has been submitted. |
 | winget puts a portable package's install folder on `PATH`, not a link in Links, for a standard user without Developer Mode | [winget-pkgs FAQ](https://github.com/microsoft/winget-pkgs/blob/master/doc/FAQ.md) | Both images have Developer Mode on, and the job's user is an administrator. A standard user's install is the session's. |
 | Since winget 1.29, an MSI wins over a portable installer whatever the manifest's order | [winget-cli 1.29.380](https://github.com/microsoft/winget-cli/releases/tag/v1.29.380) | windows-2025's winget is 1.11.510, and no runner installs from winget's sources. |
-| A broadcast, such as `WM_ENDSESSION`, reaches a top-level window that is never shown, and no message-only window | [Message-only windows](https://learn.microsoft.com/en-us/windows/win32/winmsg/window-features#message-only-windows) | A runner's session never ends while a job runs, and no test starts a Restart Manager session; the session's step A7 upgrades a running Pitboard. |
-| Restart Manager sends `WM_CLOSE` to a program that agreed to end and has not exited | [Guidelines for Applications](https://learn.microsoft.com/en-us/windows/win32/rstmgr/guidelines-for-applications) | CF9's stand-in that agreed ended on `WM_ENDSESSION` (run 38895887782); the session's step A7 upgrades a running copy. |
+| A broadcast, such as `WM_ENDSESSION`, reaches a top-level window that is never shown, and no message-only window | [Message-only windows](https://learn.microsoft.com/en-us/windows/win32/winmsg/window-features#message-only-windows) | The session's `msiexec /fa` ended Pitboard through its hidden window by `WM_ENDSESSION` or `WM_CLOSE`, and did not record which ([The session machine](#the-session-machine)). No sign-out was measured, nor a message-only window. |
+| Restart Manager sends `WM_CLOSE` to a program that agreed to end and has not exited | [Guidelines for Applications](https://learn.microsoft.com/en-us/windows/win32/rstmgr/guidelines-for-applications) | CF9's stand-in that agreed ended on `WM_ENDSESSION` (run 38895887782), and the session's `msiexec /fa` ended Pitboard without force; neither recorded a `WM_CLOSE`. |
 | `GetApplicationUserModelId` gives a packaged process's AUMID, and `APPMODEL_ERROR_NO_APPLICATION` for one without an app | [GetApplicationUserModelId](https://learn.microsoft.com/en-us/windows/win32/api/appmodel/nf-appmodel-getapplicationusermodelid) | No runner starts a packaged process; the session's step A4 reads ChatGPT's through `Pitboard.Probe app-control running`. |
 | `IApplicationActivationManager::ActivateApplication` opens a Store app by its AUMID from an unpackaged process | [IApplicationActivationManager](https://learn.microsoft.com/en-us/windows/win32/api/shobjidl_core/nn-shobjidl_core-iapplicationactivationmanager) | No runner holds a Store app the test user may open; the session's step A4 opens ChatGPT through `Pitboard.Probe app-control reopen`. |
 | Windows may refuse to bring a window forward once another app took the foreground | [SetForegroundWindow](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-setforegroundwindow) | Only a person's session opens ChatGPT behind Pitboard: the session's step A4 records which window ends in front. |
-| A launch redirected to the running copy carries the second copy's arguments | [App instancing](https://learn.microsoft.com/en-us/windows/apps/windows-app-sdk/applifecycle/applifecycle-instancing) | No `windows-app` run has passed `AccountPickerTests` yet: in run 38825074643 the running copy crashed on a theme brush as the link reached it. |
 | A notification icon's menu closes on a click elsewhere only when its window was made the foreground window first | [TrackPopupMenu](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-trackpopupmenu) | Only a person clicks elsewhere: the session's step A2. |
 | A GUID icon is tied to the path of the exe that added it, unless both are signed by one company | [NOTIFYICONDATAW](https://learn.microsoft.com/en-us/windows/win32/api/shellapi/ns-shellapi-notifyicondataw) | No Release build runs from two paths on a runner; the 1.0 session's P4 upgrades one. |
 | A self-contained unpackaged app runs without the Windows App Runtime's packages | [Deploy self-contained apps](https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/self-contained-deploy/deploy-self-contained-apps) | Both images hold the 2.5.1.0 package (run 38804714545); the session's step A5 records `Get-AppxPackage *WindowsAppRuntime*` on a clean PC. |
@@ -3358,10 +3368,10 @@ treated, and only the macOS build shows it. The run reads both builds since.
   pending session step 7), and a session whose start-up look at `Bun.secrets` fails, or
   gives no answer within 10 seconds, reads only the file for its life. Where the file is the
   store, a session reads it again once its modification time changes
-  (`windows_file_adoption`, read, pending session step 6). A network logon has no credential
-  set: every call fails 1312, the look at the live target before the chain is built
-  included, which Pitboard reads as out of reach (`credential_store_locked`), never as no
-  login.
+  (`windows_file_adoption`, read, and measured on the session machine). A network logon has
+  no credential set: every call fails 1312, the look at the live target before the chain is
+  built included, which Pitboard reads as out of reach (`credential_store_locked`), never as
+  no login.
 - Measured on both runner images on 16 October 2026 (runs 38856939312 and 38858363708): a
   fresh standard user's Credential Manager takes about 237 pieces of 2400 characters, then
   `CredWriteW` fails with `ERROR_NOT_ENOUGH_MEMORY`, and pieces a failed run left count
@@ -4585,11 +4595,13 @@ Microsoft's documentation.
 - Run and RunOnce registry keys (updated 21 February 2026): a value under the person's `Run`
   key is a command line of at most 260 characters that Windows starts at each of their
   sign-ins, with no promise how soon, and a program started from the key should not write
-  to it while it runs. So `RunValue` writes `"<path>\Pitboard.exe"`, quoted for a path with a
-  space, refuses a longer one, and writes only when somebody turns the switch, never as
-  Pitboard starts. It never reads what Settings > Apps > Startup keeps, which has no
-  documented layout; Microsoft's support article on startup apps sends people there to turn
-  one off, and the switch's caption says so. `RunValueTests` hold it.
+  to it while it runs. So `RunValue` writes `"<path>\Pitboard.exe" --sign-in`, its path
+  quoted, refuses a longer one, and writes only when somebody turns the switch, never as
+  Pitboard starts. What Settings > Apps > Startup keeps, `StartupApproved\Run`, has no
+  documented layout: turning Pitboard off there wrote 01 as its value's first byte and kept
+  the `Run` value on the session machine. So `RunValue` reads an odd first byte as off, and
+  the switch then shows off and refuses to turn on, its note sending the person to Settings,
+  as Microsoft's support article on startup apps does. `RunValueTests` hold it.
 - Read in microsoft-ui-xaml at `winui3/release/2.5.1`: a ToggleSwitch raises `Toggled`
   whenever `IsOn` changes (`ToggleSwitch_Partial.cpp`), a NumberBox raises `ValueChanged` on
   any change of `Value`, NaN for cleared text (`NumberBox.cpp`), and a TimePicker raises
