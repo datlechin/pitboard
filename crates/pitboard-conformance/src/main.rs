@@ -571,14 +571,15 @@ mod tests {
         assert_eq!(moved, ["no_keyring_off_macos"]);
     }
 
-    // A warm-up on Windows rests on both (`windows_token_env`); macOS and Linux hand a descriptor.
+    // A warm-up on Windows rests on each (`windows_token_env`); macOS and Linux hand a descriptor.
     #[test]
-    fn a_windows_build_that_drops_the_token_variable_or_the_scrub_has_moved() {
+    fn a_windows_build_that_moves_the_token_variable_the_scrub_or_the_git_lookup_has_moved() {
         let windows = every_probe(ProviderId::Claude, Platform::Windows);
         for gone in [
             r#"{source:"CLAUDE_CODE_OAUTH_TOKEN",hasToken:!0}"#,
             ".CLAUDE_CODE_OAUTH_TOKEN,refreshToken:null,expiresAt:null",
             "process.env.CLAUDE_CODE_SUBPROCESS_ENV_SCRUB",
+            "windowsHide:!0,env:process.env}).trim().split(",
         ] {
             assert!(windows.contains(gone), "{gone}");
             let build = windows.replace(gone, "");

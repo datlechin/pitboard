@@ -45,7 +45,7 @@ Pitboard has no server of its own and sends no request for a Claude Desktop acco
 
 GitHub redirects each release download to `release-assets.githubusercontent.com`, as measured on 12 October 2026. The command line never checks for updates.
 
-A [warm-up](/guides/warm-up#what-a-warm-up-sends) is Claude Code's own request, made with the account's access token and never a refresh token. On Windows, the token goes in the run's environment. Another process running as you can read it there while the run lasts, at most 2 minutes.
+A [warm-up](/guides/warm-up#what-a-warm-up-sends) is Claude Code's own request, made with the account's access token and never a refresh token. On Windows, the token goes in the run's environment, and some programs Claude Code starts get it too. Another process running as you can read it there while the run lasts, at most 2 minutes.
 
 Pitboard's own requests verify TLS against your system's trust store and time out after 5 seconds. A [proxy](/reference/environment-variables#proxies) sees each request's host, not what it carries. A company proxy whose root certificate your system trusts can decrypt each request, tokens included.
 

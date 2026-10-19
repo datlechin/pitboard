@@ -278,7 +278,9 @@ window loads its site, and whatever the site's pages load, as a browser would.
     process group stopped past that, and whatever it left in the group stopped after it. On
     Windows, which reads no descriptor (`windows_token_handover`), the token goes in
     `CLAUDE_CODE_OAUTH_TOKEN` with `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1` (`windows_token_env`),
-    `USERPROFILE`, `TEMP` and `TMP` are the private home's, and the run starts suspended in a
+    `CLAUDE_CODE_GIT_BASH_PATH` names the Git Bash `claude::paths::git_bash` finds, so Claude
+    Code's own finder asks no `where.exe` with the token in its environment, `USERPROFILE`,
+    `TEMP` and `TMP` are the private home's, and the run starts suspended in a
     job that kills on close and lets nothing break away, ended whole by `TerminateJobObject`
     once the run ends or passes its ceiling.
     `WarmScript` plays a run in a test or a fixture. `provider/claude/warm.rs` builds Claude
