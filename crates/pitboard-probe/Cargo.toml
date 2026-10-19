@@ -8,9 +8,10 @@ license.workspace = true
 repository.workspace = true
 publish = false
 
-# The plain program, and three that differ from it only in the manifest built into them
-# (build.rs): two spellings of the console's allocation policy, for block E4, and the sparse
-# package's identity, for block K1. Each is the same command line.
+# The plain program, and four that differ from it only in the manifest built into them
+# (build.rs): two spellings of the console's allocation policy, for block E4, the sparse
+# package's identity, for block K1, and pitboard.exe's own, for T8's long paths. Each is the
+# same command line.
 [[bin]]
 name = "pitboard-probe"
 path = "src/main.rs"
@@ -26,6 +27,10 @@ path = "src/bin/detached_asmv1.rs"
 [[bin]]
 name = "pitboard-probe-sparse"
 path = "src/bin/sparse.rs"
+
+[[bin]]
+name = "pitboard-probe-longpath"
+path = "src/bin/longpath.rs"
 
 [dependencies]
 clap.workspace = true

@@ -8,7 +8,9 @@
 //!   only the documented form is honoured;
 //! - `pitboard-probe-sparse`: the `<msix>` element that ties the program to the sparse probe
 //!   package of block K1, so running it from the package's external location gives it that
-//!   package's identity.
+//!   package's identity;
+//! - `pitboard-probe-longpath`: `pitboard.exe`'s own manifest, so T8's long path row reads
+//!   what its `longPathAware` does.
 //!
 //! Nothing is embedded on any other target, and the probe builds everywhere. The console
 //! block reads each program's manifest back, so a build that embedded nothing says so.
@@ -53,6 +55,11 @@ fn main() {
         "pitboard-probe-sparse",
         &manifests.join("sparse-identity.manifest"),
     );
+    let pitboard =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../pitboard/build/pitboard.exe.manifest");
+    embed("pitboard-probe-longpath", &pitboard);
+    // It carries asInvoker, as for pitboard.exe, so the linker adds no trustInfo beside it.
+    println!("cargo:rustc-link-arg-bin=pitboard-probe-longpath=/MANIFESTUAC:NO");
 }
 
 /// Embed `manifest` into the binary named `bin` through the MSVC linker, which merges it

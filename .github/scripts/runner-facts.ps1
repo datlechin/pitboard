@@ -8,7 +8,8 @@
 # a link scheme registered for a throwaway user, and for the channel rows Scoop in a scratch
 # root, winget's local manifests and the package they install, a build on the user PATH and in
 # ~\.cargo\bin, a loopback server and Defender's attack surface reduction rules. RF-T7's VHD
-# holds a dummy at \home\claude.
+# holds a dummy at \home\claude, and RF-T8 writes one value to the job user's HKCU\Environment
+# and broadcasts the change, and makes files in the fresh administrator's scratch folder.
 #
 # Everything goes into one JSON report at -Out, saved after each row, so a run cut short still
 # leaves what it gathered. A fact that cannot be gathered is recorded as an error and does not
@@ -306,6 +307,7 @@ function Get-Vhds($Results) {
                     $entry.volume = Invoke-Probe "volume-$fs" @('volume', '--scratch', $volumeScratch)
                     $entry.flush_dir = Invoke-Probe "flush-$fs" @('flush-dir', '--scratch', $volumeScratch)
                     $entry.remove_home_while_locked = Invoke-Probe "lfx-$fs" @('lockfileex', '--mode', 'remove-home', '--seconds', '5', '--scratch', $volumeScratch)
+                    $entry.file_id = Invoke-Probe "fid-$fs" @('file-id', '--scratch', $volumeScratch)
                 } else {
                     $entry.diskpart_tail = ($made -split "`r?`n" | Where-Object { $_.Trim() } | Select-Object -Last 4) -join ' | '
                 }
@@ -640,6 +642,7 @@ function Measure-ReFs($User, $Result, [string] $Bun) {
         $Result.job = [ordered]@{
             volume = Invoke-Probe 'refs-volume' @('volume', '--scratch', (Join-Path $root 'job'))
             flush_dir = Invoke-Probe 'refs-flush' @('flush-dir', '--scratch', (Join-Path $root 'job'))
+            file_id = Invoke-Probe 'refs-fid' @('file-id', '--scratch', (Join-Path $root 'job'))
         }
         Save-Report
         $userFolder = Join-Path $root 'user'
@@ -677,12 +680,14 @@ function Measure-SmbShare($User, $Result) {
             '"mapped $LASTEXITCODE"',
             '& $Probe --out (Join-Path $Out ''pitboard-probe-c3s-volume.json'') volume --scratch P:\pitboard-probe *> $null',
             '& $Probe --out (Join-Path $Out ''pitboard-probe-c3s-flush.json'') flush-dir --scratch P:\pitboard-probe *> $null',
+            '& $Probe --out (Join-Path $Out ''pitboard-probe-c3s-fid.json'') file-id --scratch P:\pitboard-probe *> $null',
             'net use P: /delete /y *> $null',
             '"unmapped $LASTEXITCODE"'
         ) | Set-Content -Path $mapper -Encoding ascii
         $Result.user_run = Invoke-AsUser $User 'c3s' @('-NoProfile', '-NonInteractive', '-File', $mapper, '-Probe', $Probe, '-Out', $User.RunDir) -FilePath $pwsh -Text
         $Result.volume = Read-Json (Join-Path $User.RunDir 'pitboard-probe-c3s-volume.json')
         $Result.flush_dir = Read-Json (Join-Path $User.RunDir 'pitboard-probe-c3s-flush.json')
+        $Result.file_id = Read-Json (Join-Path $User.RunDir 'pitboard-probe-c3s-fid.json')
     } finally {
         Remove-SmbShare -Name $share -Force -ErrorAction SilentlyContinue
         Remove-Item -Recurse -Force -Path $dir -ErrorAction SilentlyContinue
@@ -1064,6 +1069,20 @@ function Measure-FreshUser($User, $Result, [string] $Bun, [string] $X64) {
         $null = $jobRun.WaitForExit(90000)
         $r
     }
+    # RF-T8: FILE_ID_INFO, reserved names, long paths with and without pitboard.exe's manifest,
+    # and GetProcessTimes, on NTFS as this user.
+    Invoke-Row $Result 'rf_t8_file_id' { Invoke-AsUser $User 't8-fid' @('file-id', '--scratch', $s) }
+    Invoke-Row $Result 'rf_t8_reserved_names' { Invoke-AsUser $User 't8-names' @('reserved-names', '--scratch', $s) }
+    Invoke-Row $Result 'rf_t8_long_path' {
+        $manifested = Join-Path (Split-Path -Parent $Probe) 'pitboard-probe-longpath.exe'
+        [ordered]@{
+            plain = Invoke-AsUser $User 't8-long-plain' @('long-path', '--scratch', $s)
+            pitboard_manifest = if (Test-Path -LiteralPath $manifested) {
+                Invoke-AsUser $User 't8-long-manifest' @('long-path', '--scratch', $s) -FilePath $manifested
+            } else { 'not built' }
+        }
+    }
+    Invoke-Row $Result 'rf_t8_process_times' { Invoke-AsUser $User 't8-times' @('process-times', '--children', '50') }
     if ($Bun) {
         Invoke-Row $Result 'rf_g3' {
             $secrets = Join-Path $toolHelpers 'bun-secrets.mjs'
@@ -1382,6 +1401,38 @@ function Measure-NonAsciiUser($Result, [string] $Bun, $Fresh) {
     }
 }
 
+# RF-T8: files the elevated job user makes in $User's scratch folder, owned by Administrators,
+# each with a protected DACL, opened from $User's UAC-filtered token, in which Administrators
+# is a deny-only SID, and described as that token reads them.
+function Measure-FilteredToken($User) {
+    $s = $User.Scratch
+    $files = [ordered]@{
+        user_and_administrators = @("*$($User.Sid):F", "*${administratorsSid}:F", '*S-1-5-18:F')
+        administrators_alone = @("*${administratorsSid}:F", '*S-1-5-18:F')
+        user_read_alone = @("*$($User.Sid):R", "*${administratorsSid}:F", '*S-1-5-18:F')
+    }
+    $r = [ordered]@{}
+    try {
+        foreach ($kind in $files.Keys) {
+            $path = Join-Path $s ('pitboard-probe-ace-' + ($kind -replace '_', '-'))
+            Set-Content -LiteralPath $path -Value 'x'
+            icacls $path /setowner "*$administratorsSid" *> $null
+            $owned = $LASTEXITCODE
+            icacls $path /inheritance:r /grant:r @($files[$kind]) *> $null
+            $r[$kind] = [ordered]@{
+                setowner_exit = $owned
+                grant_exit = $LASTEXITCODE
+                described = Invoke-AsUser $User "t8-ace-$kind-describe" @('acl', '--scratch', $s, '--describe', $path)
+                opened = Invoke-AsUser $User "t8-ace-$kind" @('acl', '--scratch', $s, '--open', $path)
+            }
+        }
+    } finally {
+        Get-ChildItem -LiteralPath $s -Filter 'pitboard-probe-ace-*' -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
+        $r.removed = -not (Get-ChildItem -LiteralPath $s -Filter 'pitboard-probe-ace-*' -ErrorAction SilentlyContinue)
+    }
+    $r
+}
+
 # RF-A1's other half: a fresh member of Administrators, started as the standard user is.
 function Measure-FreshAdmin($Result) {
     $user = $null
@@ -1393,12 +1444,90 @@ function Measure-FreshAdmin($Result) {
             $Result.acl = Invoke-AsUser $user 'a1-acl' @('acl', '--scratch', $s)
             $Result.acl_create = Invoke-AsUser $user 'a1-create' @('acl', '--scratch', $s, '--create', '--keep')
             $Result.acl_remove = Invoke-AsUser $user 'a1-remove' @('acl', '--scratch', $s, '--remove', (Join-Path $s 'pitboard-probe-protected'))
+            Save-Report
+            $Result.rf_t8_filtered_token = Invoke-Fact { Measure-FilteredToken $user }
         }
     } catch {
         $Result.error = $_.Exception.Message
     } finally {
         if ($user) { Remove-ThrowawayUser $user $Result }
         Save-Report
+    }
+}
+
+# RF-T8's program started by the job user's Explorer: `explorer.exe <file>` hands the file to
+# the Explorer already running, which opens a .cmd with its own environment. The .cmd says
+# whether it got this script's environment instead, and the variable as it found it.
+function Start-FromExplorer([string] $Dir, [string] $Label, [string] $Name) {
+    $cmd = Join-Path $Dir "pitboard-probe-sc-$Label.cmd"
+    $out = Join-Path $Dir "pitboard-probe-sc-$Label.txt"
+    @(
+        '@echo off',
+        '(',
+        'if defined PITBOARD_PROBE_SC_PARENT (echo parent=this script) else (echo parent=explorer)',
+        "if defined $Name (echo value=%$Name%) else (echo value=unset)",
+        ") > `"$out.tmp`"",
+        "move /y `"$out.tmp`" `"$out`" > nul"
+    ) | Set-Content -LiteralPath $cmd -Encoding ascii
+    Start-Process -FilePath (Join-Path $env:SystemRoot 'explorer.exe') -ArgumentList "`"$cmd`""
+    $r = [ordered]@{ ran = Wait-File $out 30 }
+    if ($r.ran) {
+        foreach ($line in Get-Content -LiteralPath $out) {
+            $pair = $line.Trim() -split '=', 2
+            if ($pair.Count -eq 2) { $r[$pair[0]] = $pair[1] }
+        }
+    }
+    $r
+}
+
+# RF-T8: a value written to the job user's HKCU\Environment with no broadcast, then the
+# broadcast setx sends, as a probe running meanwhile sees each and as a program Explorer starts
+# sees each. The value is put back as it was and broadcast again, so Explorer drops it too.
+function Measure-SettingChange($Result) {
+    $name = 'PITBOARD_PROBE_SETTINGCHANGE'
+    $dir = Join-Path $scratch 'sc'
+    New-Item -ItemType Directory -Force -Path $dir | Out-Null
+    $read = {
+        $k = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Environment')
+        $state = if ($k -and $k.GetValueNames() -contains $name) {
+            [ordered]@{ value = $k.GetValue($name, $null, 'DoNotExpandEnvironmentNames'); kind = [string] $k.GetValueKind($name) }
+        } else { $null }
+        if ($k) { $k.Close() }
+        $state
+    }
+    $before = & $read
+    $Result.present_before = $null -ne $before
+    $watchOut = Join-Path $dir 'pitboard-probe-sc-watch.json'
+    $watch = $null
+    $env:PITBOARD_PROBE_SC_PARENT = 'this script'
+    try {
+        $watch = Start-Process -FilePath $Probe -ArgumentList (Format-Arguments @('--out', $watchOut, 'setting-change', '--name', $name, '--seconds', '60', '--scratch', $dir)) `
+            -NoNewWindow -PassThru -RedirectStandardOutput (Join-Path $scratch 'sc-watch-out.txt') -RedirectStandardError (Join-Path $scratch 'sc-watch-err.txt')
+        $null = $watch.Handle
+        $Result.watch_ready = Wait-File (Join-Path $dir 'pitboard-probe-sc-ready') 30
+        $k = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Environment', $true)
+        $k.SetValue($name, 'set-by-the-row', [Microsoft.Win32.RegistryValueKind]::String)
+        $k.Close()
+        Start-Sleep -Seconds 5
+        $Result.explorer_before_the_broadcast = Start-FromExplorer $dir 'before' $name
+        $Result.broadcast = Invoke-Probe 'sc-broadcast' @('setting-change', '--action', 'broadcast', '--name', $name)
+        Start-Sleep -Seconds 3
+        $Result.explorer_after_the_broadcast = Start-FromExplorer $dir 'after' $name
+        $waited = Wait-Bounded $watch 120
+        $Result.watch = [ordered]@{ timed_out = $waited.TimedOut; exit = $waited.Exit; report = (Read-Json $watchOut) }
+    } finally {
+        Remove-Item -Path Env:PITBOARD_PROBE_SC_PARENT -ErrorAction SilentlyContinue
+        if ($watch -and -not $watch.HasExited) { taskkill /PID $watch.Id /T /F *> $null }
+        $k = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Environment', $true)
+        if ($null -eq $before) {
+            $k.DeleteValue($name, $false)
+        } else {
+            $k.SetValue($name, $before.value, [Microsoft.Win32.RegistryValueKind] $before.kind)
+        }
+        $k.Close()
+        $Result.broadcast_after_restoring = Invoke-Probe 'sc-broadcast-restored' @('setting-change', '--action', 'broadcast', '--name', $name)
+        $Result.restored_exactly = ((& $read) | ConvertTo-Json -Compress) -eq ($before | ConvertTo-Json -Compress)
+        Remove-Item -Recurse -Force -LiteralPath $dir -ErrorAction SilentlyContinue
     }
 }
 
@@ -1456,6 +1585,11 @@ function Measure-JobUser($Result) {
             seal = Invoke-Probe 'd2j-seal' @('dpapi', '--scratch', $s, '--action', 'seal', '--file', 'pitboard-probe-d2j.bin')
             task = Measure-Task $null $s 'd2j' 'probe' "--out $out dpapi --scratch $s --action unseal --file pitboard-probe-d2j.bin" -WaitSeconds 30 -Expect $out
         }
+    }
+    Invoke-Row $Result 'rf_t8_setting_change' {
+        $r = [ordered]@{}
+        try { Measure-SettingChange $r } catch { $r.error = $_.Exception.Message }
+        $r
     }
     Invoke-Row $Result 'rf_f2' {
         $r = [ordered]@{}
@@ -1925,6 +2059,36 @@ function Measure-Channels($Result) {
     }
 }
 
+# RF-T8: two probe tasks of the job user's with the renewal's daily trigger, its start 5
+# minutes before they are registered, one with StartWhenAvailable. Read near the end of the
+# run, since Task Scheduler starts a missed start after a delay, 10 minutes by default.
+function Register-MissedStart($Result, [string] $In) {
+    $script:missedStartRegistered = Get-Date
+    foreach ($kind in 'on', 'off') {
+        $out = Join-Path $In "pitboard-probe-swa-$kind.json"
+        $register = @('task', '--scratch', $In, '--label', "swa-$kind", '--action', 'register', '--args', "--out $out logon",
+            '--daily-since-minutes', '5', '--allow-battery')
+        if ($kind -eq 'on') { $register += '--start-when-available' }
+        $Result[$kind] = [ordered]@{ register = Invoke-Probe "swa-$kind-register" $register }
+    }
+}
+
+function Read-MissedStart($Result, [string] $In) {
+    $on = Join-Path $In 'pitboard-probe-swa-on.json'
+    $deadline = $script:missedStartRegistered.AddMinutes(14)
+    while (-not (Test-Path -LiteralPath $on) -and (Get-Date) -lt $deadline) { Start-Sleep -Seconds 5 }
+    $Result.read_after_minutes = [math]::Round(((Get-Date) - $script:missedStartRegistered).TotalMinutes, 1)
+    foreach ($kind in 'on', 'off') {
+        $out = Join-Path $In "pitboard-probe-swa-$kind.json"
+        $Result[$kind].read = Invoke-Probe "swa-$kind-read" @('task', '--label', "swa-$kind", '--action', 'read')
+        $Result[$kind].ran = Test-Path -LiteralPath $out
+        if ($Result[$kind].ran) {
+            $Result[$kind].ran_after_seconds = [int] ((Get-Item -LiteralPath $out).LastWriteTime - $script:missedStartRegistered).TotalSeconds
+        }
+        $Result[$kind].delete = Invoke-Probe "swa-$kind-delete" @('task', '--scratch', $In, '--label', "swa-$kind", '--action', 'delete')
+    }
+}
+
 # RF-T7: Claude Code's remote token path names no drive. A dummy at \home\claude\.claude\remote
 # on an NTFS VHD of its own, read by Bun as Claude Code reads it, from a folder on that volume
 # and from one on C:, then the VHD detached and removed.
@@ -2002,6 +2166,9 @@ Set-Content -Path $marker -Value 'ci runner, disposable'
 try {
     $report.job_user = Invoke-Probe 'runner-facts' @('runner-facts', '--scratch', $scratch)
     $report.policies = Invoke-Fact { Get-Policies }
+    $report.start_when_available = [ordered]@{}
+    $missedStart = Join-Path $scratch 'swa'
+    try { Register-MissedStart $report.start_when_available $missedStart } catch { $report.start_when_available.error = $_.Exception.Message }
     Save-Report
     $report.vhd = [System.Collections.Generic.List[object]]::new()
     try { Get-Vhds $report.vhd } catch { $report.vhd_error = $_.Exception.Message }
@@ -2066,6 +2233,11 @@ try {
 
     $report.channels = [ordered]@{}
     try { Measure-Channels $report.channels } catch { $report.channels.error = $_.Exception.Message }
+
+    if ($script:missedStartRegistered) {
+        try { Read-MissedStart $report.start_when_available $missedStart } catch { $report.start_when_available.read_error = $_.Exception.Message }
+        Save-Report
+    }
 } finally {
     try { Remove-Leftovers $pitboardFolderBefore } catch { $report.leftovers_error = $_.Exception.Message }
     $report.tools_removed = -not (Test-Path -Path $tools)

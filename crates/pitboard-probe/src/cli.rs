@@ -218,6 +218,10 @@ pub enum Command {
         /// A one-time trigger this many minutes from now.
         #[arg(long)]
         at_minutes: Option<u32>,
+        /// T8: a daily trigger whose start boundary passed this many minutes ago, as the
+        /// renewal's daily trigger is once a start was missed.
+        #[arg(long, conflicts_with = "at_minutes")]
+        daily_since_minutes: Option<u32>,
         #[arg(long)]
         start_when_available: bool,
         /// Let it start and keep running on battery.
@@ -405,6 +409,51 @@ pub enum Command {
     /// E5: the path this program reports for itself (std's current_exe and
     /// GetModuleFileNameW), as started through a link, a junction, a shim or a copy.
     ExePath,
+    /// T8: FILE_ID_INFO of a folder, a file, a hard link and a junction to them, another
+    /// folder and file, and the file once renamed, in a folder the block makes under
+    /// --scratch.
+    FileId {
+        #[arg(long)]
+        scratch: PathBuf,
+    },
+    /// T8: what GetFullPathNameW makes of reserved device names and of trailing dots and
+    /// spaces, and the name a file made with each of the others is stored by, in a folder
+    /// the block makes under --scratch.
+    ReservedNames {
+        #[arg(long)]
+        scratch: PathBuf,
+    },
+    /// T8: a folder and a file past 260 characters made and read without `\\?\`, in a
+    /// folder the block makes under --scratch, and whether long paths are on for this
+    /// process.
+    LongPath {
+        #[arg(long)]
+        scratch: PathBuf,
+    },
+    /// T8: the creation time GetProcessTimes gives for children of this probe, against the
+    /// clock around each start, each child's own reading, and after it exits.
+    ProcessTimes {
+        #[arg(long, default_value_t = 20)]
+        children: u32,
+    },
+    #[command(hide = true)]
+    ProcessTimesChild,
+    /// T8: watch for WM_SETTINGCHANGE in a never-shown top-level window and a message-only
+    /// one, reading a variable from this process's environment and from HKCU\Environment
+    /// meanwhile; or broadcast one for "Environment".
+    SettingChange {
+        #[arg(long, value_enum, default_value_t = SettingAction::Watch)]
+        action: SettingAction,
+        /// The variable to read: a PITBOARD_PROBE_* name.
+        #[arg(long)]
+        name: String,
+        #[arg(long, default_value_t = 60)]
+        seconds: u64,
+        /// For watch: a scratch folder, where it writes pitboard-probe-sc-ready once its
+        /// windows are up.
+        #[arg(long)]
+        scratch: Option<PathBuf>,
+    },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
@@ -572,6 +621,12 @@ pub enum Route {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
+pub enum SettingAction {
+    Watch,
+    Broadcast,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
 pub enum Newline {
     Lf,
     Crlf,
@@ -716,6 +771,12 @@ pub fn block_name(command: &Command) -> &'static str {
         Command::Symlink { .. } => "symlink",
         Command::RunnerFacts { .. } => "runner-facts",
         Command::ExePath => "exe-path",
+        Command::FileId { .. } => "file-id",
+        Command::ReservedNames { .. } => "reserved-names",
+        Command::LongPath { .. } => "long-path",
+        Command::ProcessTimes { .. } => "process-times",
+        Command::ProcessTimesChild => "process-times-child",
+        Command::SettingChange { .. } => "setting-change",
     }
 }
 
@@ -815,6 +876,95 @@ mod tests {
             assert_eq!(handed_link(&args(refused)), None, "{refused:?}");
         }
         assert!(Cli::try_parse_from(["pitboard-probe", "sparse", "--action", "handoff"]).is_ok());
+    }
+
+    #[test]
+    fn the_t8_blocks_take_what_their_rows_give() {
+        for (args, block) in [
+            (&["file-id", "--scratch", r"C:\s"][..], "file-id"),
+            (
+                &["reserved-names", "--scratch", r"C:\s"][..],
+                "reserved-names",
+            ),
+            (&["long-path", "--scratch", r"C:\s"][..], "long-path"),
+            (&["process-times"][..], "process-times"),
+            (&["process-times-child"][..], "process-times-child"),
+        ] {
+            let cli =
+                Cli::try_parse_from(std::iter::once("pitboard-probe").chain(args.iter().copied()))
+                    .unwrap();
+            assert_eq!(block_name(&cli.command), block);
+        }
+        assert!(Cli::try_parse_from(["pitboard-probe", "file-id"]).is_err());
+        let cli = Cli::try_parse_from(["pitboard-probe", "process-times"]).unwrap();
+        assert!(matches!(
+            cli.command,
+            Command::ProcessTimes { children: 20 }
+        ));
+        let cli = Cli::try_parse_from([
+            "pitboard-probe",
+            "setting-change",
+            "--name",
+            "PITBOARD_PROBE_SETTINGCHANGE",
+            "--seconds",
+            "90",
+            "--scratch",
+            r"C:\s",
+        ])
+        .unwrap();
+        assert!(matches!(
+            cli.command,
+            Command::SettingChange {
+                action: SettingAction::Watch,
+                seconds: 90,
+                scratch: Some(_),
+                ..
+            }
+        ));
+        let cli = Cli::try_parse_from([
+            "pitboard-probe",
+            "setting-change",
+            "--action",
+            "broadcast",
+            "--name",
+            "PITBOARD_PROBE_SETTINGCHANGE",
+        ])
+        .unwrap();
+        assert_eq!(block_name(&cli.command), "setting-change");
+        assert!(Cli::try_parse_from(["pitboard-probe", "setting-change"]).is_err());
+    }
+
+    #[test]
+    fn a_task_takes_a_daily_trigger_that_already_passed() {
+        let cli = Cli::try_parse_from([
+            "pitboard-probe",
+            "task",
+            "--action",
+            "register",
+            "--daily-since-minutes",
+            "5",
+            "--start-when-available",
+        ])
+        .unwrap();
+        assert!(matches!(
+            cli.command,
+            Command::Task {
+                daily_since_minutes: Some(5),
+                start_when_available: true,
+                ..
+            }
+        ));
+        assert!(
+            Cli::try_parse_from([
+                "pitboard-probe",
+                "task",
+                "--at-minutes",
+                "1",
+                "--daily-since-minutes",
+                "5",
+            ])
+            .is_err()
+        );
     }
 
     #[test]

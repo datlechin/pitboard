@@ -21,9 +21,9 @@ use windows::Win32::System::Com::{
     CLSCTX_INPROC_SERVER, COINIT_MULTITHREADED, CoCreateInstance, CoInitializeEx,
 };
 use windows::Win32::System::TaskScheduler::{
-    IExecAction, ITaskFolder, ITaskService, TASK_ACTION_EXEC, TASK_CREATE_OR_UPDATE,
-    TASK_ENUM_HIDDEN, TASK_LOGON_INTERACTIVE_TOKEN, TASK_RUNLEVEL_LUA, TASK_TRIGGER_TIME,
-    TaskScheduler,
+    IDailyTrigger, IExecAction, ITaskFolder, ITaskService, TASK_ACTION_EXEC, TASK_CREATE_OR_UPDATE,
+    TASK_ENUM_HIDDEN, TASK_LOGON_INTERACTIVE_TOKEN, TASK_RUNLEVEL_LUA, TASK_TRIGGER_DAILY,
+    TASK_TRIGGER_TIME, TaskScheduler,
 };
 use windows::Win32::System::Variant::VARIANT;
 use windows::core::{BSTR, Interface};
@@ -37,6 +37,7 @@ pub(super) struct Request<'a> {
     pub exec: TaskExec,
     pub args: Option<&'a str>,
     pub at_minutes: Option<u32>,
+    pub daily_since_minutes: Option<u32>,
     pub start_when_available: bool,
     pub allow_battery: bool,
 }
@@ -110,12 +111,13 @@ fn connect() -> Result<ITaskService, String> {
 }
 
 /// The time `minutes` from now as the UTC ISO 8601 a trigger's start boundary takes.
-fn utc_in(minutes: u32) -> String {
-    let secs = std::time::SystemTime::now()
+fn utc_in(minutes: i64) -> String {
+    let secs = (std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs())
-        .unwrap_or(0)
-        + u64::from(minutes) * 60;
+        .unwrap_or(0) as i64
+        + minutes * 60)
+        .max(0) as u64;
     let days = (secs / 86_400) as i64;
     let rem = secs % 86_400;
     // Howard Hinnant's civil-from-days.
@@ -281,10 +283,25 @@ fn register(
                 .map_err(err)?
                 .Create(TASK_TRIGGER_TIME)
                 .map_err(err)?;
-            let at = utc_in(minutes);
+            let at = utc_in(i64::from(minutes));
             trigger
                 .SetStartBoundary(&BSTR::from(at.as_str()))
                 .map_err(err)?;
+            boundary = Some(at);
+        }
+        // As the renewal's trigger, a day at a time, but begun before now.
+        if let Some(minutes) = req.daily_since_minutes {
+            let trigger = def
+                .Triggers()
+                .map_err(err)?
+                .Create(TASK_TRIGGER_DAILY)
+                .map_err(err)?;
+            let at = utc_in(-i64::from(minutes));
+            trigger
+                .SetStartBoundary(&BSTR::from(at.as_str()))
+                .map_err(err)?;
+            let daily: IDailyTrigger = trigger.cast().map_err(err)?;
+            daily.SetDaysInterval(1).map_err(err)?;
             boundary = Some(at);
         }
 
@@ -318,6 +335,7 @@ fn register(
             "registered": true,
             "state": registered.State().map(|s| s.0).ok(),
             "start_boundary_utc": boundary,
+            "daily": req.daily_since_minutes.is_some(),
             "start_when_available": req.start_when_available,
             "allow_battery": req.allow_battery,
             "exec": exe.file_name().map(|n| n.to_string_lossy().into_owned()),
@@ -483,6 +501,7 @@ pub(super) fn run_once(
         exec,
         args: Some(args),
         at_minutes: None,
+        daily_since_minutes: None,
         start_when_available: false,
         allow_battery: true,
     };
