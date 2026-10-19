@@ -3580,14 +3580,17 @@ fn judge_desktop_park(facts: &DesktopFacts, fact: &ParkFact, now: i64) -> Check 
 
 // Said, never a gate: Pitboard checks the folder before each move, not the build.
 fn judge_desktop_build(facts: &DesktopFacts) -> Check {
-    use crate::provider::desktop::assumptions::{READ_FROM_THE_ARCHIVE, VERIFIED_AGAINST};
+    use crate::provider::desktop::assumptions::{
+        READ_FROM_THE_ARCHIVE, READ_FROM_THE_FRAMEWORK, VERIFIED_AGAINST,
+    };
     match &facts.build {
         Some(build) => ok(
             "desktop_build",
             "Claude",
             format!(
-                "Claude {build}; Pitboard's facts were read from {VERIFIED_AGAINST} and \
-                 {READ_FROM_THE_ARCHIVE}, and it checks the folder before each move, not the build"
+                "Claude {build}; Pitboard's facts were read from {VERIFIED_AGAINST}, \
+                 {READ_FROM_THE_ARCHIVE} and {READ_FROM_THE_FRAMEWORK}, and it checks the \
+                 folder before each move, not the build"
             ),
         ),
         None => ok("desktop_build", "Claude", "not found in /Applications"),
@@ -4076,8 +4079,8 @@ mod tests {
         );
         assert_eq!(
             said(&checks, "desktop_build")[0].1,
-            "Claude 2.31226.1; Pitboard's facts were read from 2.19675.0 and 2.7032.0, and it \
-             checks the folder before each move, not the build"
+            "Claude 2.31226.1; Pitboard's facts were read from 2.19675.0, 2.7032.0 and \
+             2.42304.0, and it checks the folder before each move, not the build"
         );
         assert!(checks.iter().all(|c| !c.code.contains("dormant")));
 

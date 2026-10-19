@@ -3542,12 +3542,13 @@ real `auth.json` that build wrote. The register is `provider/codex/assumptions.r
 
 ### Claude Desktop
 
-Read from two builds of Claude for macOS, and on no other system. The contributor measured
+Read from three builds of Claude for macOS, and on no other system. The contributor measured
 2.19675.0 with two claude.ai accounts: an inspection on 3 October 2026, experiments E1 to
 E18 on 4 October and a reading of `main.log` on 5 October. This repository read the
-`app.asar` and `Info.plist` of 2.7032.0 on 11 and 13 October, and never ran it. The register
-is `provider/desktop/assumptions.rs`, and each entry says who read it, when and how. Each
-fact here gives its build.
+`app.asar` and `Info.plist` of 2.7032.0 on 11 and 13 October, and the `Electron Framework` of
+2.42304.0 on 19 October, and never ran either. The register is
+`provider/desktop/assumptions.rs`, and each entry says who read it, when and how. Each fact
+here gives its build.
 
 - Claude's bundle identifier is `com.anthropic.claudefordesktop`. Its main program is
   `Contents/MacOS/Claude`, and its helpers and `chrome_crashpad_handler` run from inside the
@@ -3565,8 +3566,13 @@ fact here gives its build.
 - The token caches are keyed by `lastKnownAccountUuid` and hold the account's OAuth tokens
   (E2 and E9, 2.19675.0; read again in 2.7032.0).
 - The data folder's first level holds the names `desktop::layout` lists: those a listing
-  under 2.7032.0 held (11 October 2026), the items E2 moved, and three names 2.7032.0's code
-  makes for installed extensions. Every other name its code makes is unread.
+  under 2.7032.0 held (11 October 2026), the items E2 moved, three names 2.7032.0's code
+  makes for installed extensions, and the GPU caches below. Every other name its code makes
+  is unread.
+- From Electron 44.4.4, Claude keeps Chromium's GPU caches `ShaderCache`, `GrShaderCache`,
+  `GraphiteDawnCache` and `GPUPersistentCache` in the data folder, beside `GPUCache`. They
+  hold compiled shaders, so they stay (Electron's pull request 54161; 2.42304.0's framework,
+  Electron 44.7.2, 19 October 2026).
 - Chromium writes a file through a temporary beside it, which in Claude is named
   `.Q6L2SF6YDW.com.anthropic.claudefordesktop.<file>.` and six letters or digits (Electron
   44.4.3's and Chromium 152.0.7977.130's source, the versions 2.7032.0 runs; no listing has

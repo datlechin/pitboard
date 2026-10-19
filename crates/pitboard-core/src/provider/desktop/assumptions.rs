@@ -5,6 +5,7 @@ use crate::assumptions::{Assumption, PerSystem};
 
 pub(crate) const VERIFIED_AGAINST: &str = "2.19675.0";
 pub(crate) const READ_FROM_THE_ARCHIVE: &str = "2.7032.0";
+pub(crate) const READ_FROM_THE_FRAMEWORK: &str = "2.42304.0";
 
 const NOT_HERE: &str =
     "Pitboard switches Claude Desktop accounts on macOS only, and nothing of it was read here";
@@ -108,9 +109,10 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
         name: "desktop_first_level_entries",
         fact: "The data folder's first level holds the names `desktop::layout` lists, each the \
                account's, staying or passing: those a listing under 2.7032.0 held, the items \
-               E2 moved, and `Claude Extensions`, `Claude Extensions Settings` and \
+               E2 moved, `Claude Extensions`, `Claude Extensions Settings` and \
                `extensions-installations.json`, which 2.7032.0's code makes for installed \
-               extensions. Every other name its code makes is unread.",
+               extensions, and the GPU caches of `desktop_gpu_caches`. Every other name its \
+               code makes is unread.",
         read_from: "A listing of a data folder under 2.7032.0, names only, 11 October 2026; the \
                     contributor's experiment E2, 4 October 2026; the three extension names read \
                     in `app.asar`, 11 October 2026, `P` @965893",
@@ -121,6 +123,24 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
             "Claude Extensions Settings",
             "extensions-installations.json",
         ],
+        absent: &[],
+    },
+    Assumption {
+        name: "desktop_gpu_caches",
+        fact: "From Electron 44.4.4, Claude keeps Chromium's GPU caches `ShaderCache`, \
+               `GrShaderCache`, `GraphiteDawnCache` and `GPUPersistentCache` in its data \
+               folder, beside `GPUCache`. They hold compiled shaders, nothing of an account.",
+        read_from: "Electron's pull request 54161, released in 44.4.4, which gives \
+                    `ElectronBrowserClient` the four folders under `sessionData`; Chromium's \
+                    `GpuProcessHost` and `PersistentCacheSandboxedFileFactory` for what \
+                    `GPUPersistentCache` holds; the four names side by side in 2.42304.0's \
+                    `Electron Framework`, Electron 44.7.2 on Chromium 152.0.7977.149, 19 \
+                    October 2026, and neither `GraphiteDawnCache` nor `GPUPersistentCache` in \
+                    2.7032.0's, Electron 44.4.3; a person's report of a data folder holding \
+                    `GPUPersistentCache`, 19 October 2026",
+        verified_against: READ_FROM_THE_FRAMEWORK,
+        depends: "`Desktop::classify` gives each `Stays`",
+        probe: &[],
         absent: &[],
     },
     Assumption {
@@ -397,6 +417,7 @@ pub(crate) const PER_SYSTEM: &[PerSystem] = &[
     on_a_mac("desktop_account_items", VERIFIED_AGAINST),
     on_a_mac("desktop_account_keys", VERIFIED_AGAINST),
     on_a_mac("desktop_first_level_entries", READ_FROM_THE_ARCHIVE),
+    on_a_mac("desktop_gpu_caches", READ_FROM_THE_FRAMEWORK),
     on_a_mac("desktop_kept_by_account", READ_FROM_THE_ARCHIVE),
     on_a_mac("desktop_chromium_temporary", READ_FROM_THE_ARCHIVE),
     on_a_mac("desktop_cookie_jar", VERIFIED_AGAINST),

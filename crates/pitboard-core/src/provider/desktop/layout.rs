@@ -1,7 +1,8 @@
 use crate::provider::folder::Class;
 use std::ffi::OsStr;
 
-// Read from a listing of a data folder under 2.7032.0 and the items E2 moved under 2.19675.0.
+// Read from a listing of a data folder under 2.7032.0, the items E2 moved under 2.19675.0 and
+// the GPU caches 2.42304.0's Electron names.
 const ACCOUNT: &[&str] = &[
     "Cookies",
     "Cookies-journal",
@@ -40,6 +41,10 @@ const STAYS: &[&str] = &[
     "GPUCache",
     "DawnGraphiteCache",
     "DawnWebGPUCache",
+    "ShaderCache",
+    "GrShaderCache",
+    "GraphiteDawnCache",
+    "GPUPersistentCache",
     "blob_storage",
     "Shared Dictionary",
     "DIPS",
@@ -136,6 +141,10 @@ mod tests {
             "GPUCache",
             "DawnGraphiteCache",
             "DawnWebGPUCache",
+            "ShaderCache",
+            "GrShaderCache",
+            "GraphiteDawnCache",
+            "GPUPersistentCache",
             "blob_storage",
             "Shared Dictionary",
             "DIPS",
@@ -154,7 +163,7 @@ mod tests {
             assert_eq!(classify(OsStr::new(name)), Class::Stays, "{name}");
         }
         assert_eq!((account.len(), ACCOUNT.len()), (7, 7));
-        assert_eq!((stays.len(), STAYS.len()), (37, 37));
+        assert_eq!((stays.len(), STAYS.len()), (41, 41));
         for name in [
             ".config.json.4242.1.pitboard",
             ".config.json.4242.pitboard",

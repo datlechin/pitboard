@@ -7,6 +7,12 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- Pitboard adds and switches Claude Desktop accounts again once Claude keeps its GPU shader
+  caches, such as `GPUPersistentCache`, in its data folder, as builds on Electron 44.4.4 and
+  later do.
+
 ### Security
 
 - A switch parks Claude Code's `cloudSessionsOauth` and `trustedDeviceEnrolledAfterRefusalAtMs`
