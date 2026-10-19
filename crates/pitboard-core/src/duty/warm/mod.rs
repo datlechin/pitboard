@@ -229,8 +229,9 @@ pub enum Halt {
     SwitchInterrupted,
     /// Claude Code keeps its login under another name, which Pitboard does not act on.
     CustomOauth,
-    /// Claude Code's managed settings make every run of it sign in another way, set by these,
-    /// so a warm-up would send a request on that rather than on an account's login.
+    /// Claude Code's managed settings or its remote API key file make a warm-up's run sign in
+    /// another way, set by these, so it would send a request on that rather than on an
+    /// account's login.
     Overridden(Vec<String>),
     /// Claude Code is not installed where Pitboard looks.
     ProgramMissing,
@@ -268,8 +269,9 @@ pub(crate) fn halted(ctx: &Context) -> Option<Halt> {
 }
 
 /// What would make a warm-up's run sign in with something other than the access token it is
-/// handed: the managed settings every run of Claude Code here reads, or anything in its own
-/// config directory. Not this process's environment, which the run is never given.
+/// handed: the managed settings every run of Claude Code here reads, anything in its own
+/// config directory, or an API key in Claude Code's remote token file. Not this process's
+/// environment, which the run is never given.
 pub(crate) fn overridden(ctx: &Context) -> Vec<String> {
     let config = run::home(ctx, ProviderId::Claude).join("config");
     crate::settings::overrides_of_a_run_in(ctx, &config)

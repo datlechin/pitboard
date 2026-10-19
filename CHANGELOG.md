@@ -33,7 +33,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   opening that window again before the download ends brings back the one you closed.
 - Pitboard says, as it does for `ANTHROPIC_API_KEY`, when a token in
   `/home/claude/.claude/remote/.oauth_token` or `.api_key` beside it signs Claude Code sessions
-  in instead of the stored login, looking at the root of each fixed drive on Windows.
+  in instead of the stored login, looking at the root of each fixed drive on Windows, and warms
+  up no account while `.api_key` holds a key.
 
 ### Removed
 

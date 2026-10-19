@@ -1759,19 +1759,23 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
                unless it runs as `mcp serve --transport http`. The token is \
                `CCR_OAUTH_TOKEN_FILE`, after `ANTHROPIC_AUTH_TOKEN` and \
                `CLAUDE_CODE_OAUTH_TOKEN` and before `apiKeyHelper` and the stored login; the \
-               key is taken as `ANTHROPIC_API_KEY`, before `apiKeyHelper`. On Windows the path \
-               names no drive, so it leads to a folder at the root of a drive, which every \
-               account on the PC shares: Bun 1.4.3 takes the drive of the working folder",
+               key is taken as `ANTHROPIC_API_KEY`, before `apiKeyHelper`, and a key of that \
+               source turns off a sign-in by OAuth token, one in `CLAUDE_CODE_OAUTH_TOKEN` or \
+               on a descriptor included. On Windows the path names no drive, so it leads to a \
+               folder at the root of a drive, which every account on the PC shares: Bun 1.4.3 \
+               takes the drive of the working folder",
         read_from: "the well-known file reader and its two callers, the token's place in the \
-                    sources a session names and the key's in the API key's, and the \
-                    `mcp serve` check, in the darwin-arm64, linux-x64, win32-x64 and \
-                    win32-arm64 builds of 2.1.303, read as bytes on 2026-10-20; and RF-T7, \
-                    whose Bun 1.4.3 read a dummy there from a folder on that drive and got \
-                    ENOENT from one on C: (windows-facts runs 39310064516 and 39320680285)",
+                    sources a session names and the key's in the API key's, the check that \
+                    turns a claude.ai sign-in off for an API key, and the `mcp serve` check, \
+                    in the darwin-arm64, linux-x64, win32-x64 and win32-arm64 builds of \
+                    2.1.303, read as bytes on 2026-10-20; and RF-T7, whose Bun 1.4.3 read a \
+                    dummy there from a folder on that drive and got ENOENT from one on C: \
+                    (windows-facts runs 39310064516 and 39320680285)",
         verified_against: "2.1.303",
         depends: "settings::overrides, so doctor's auth_source check and a switch's warning \
                   name either file where it holds something: at `/` off Windows, and at the \
-                  root of each fixed drive on Windows",
+                  root of each fixed drive on Windows; and duty::warm::overridden, through \
+                  overrides_of_a_run_in, so a warm-up holds back while `.api_key` holds one",
         probe: &[
             "\"/home/claude/.claude/remote\"",
             "/.oauth_token",

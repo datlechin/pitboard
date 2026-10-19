@@ -218,7 +218,7 @@ An interrupted Claude Desktop move shows `move_waiting` on each read, as [Warnin
 | `warm_up_unreachable` | 1 | Anthropic could not be reached, or was overloaded. | Pitboard tries again after 1 minute, doubling up to 15 minutes. |
 | `warm_up_timed_out` | 1 | Claude Code did not finish within 2 minutes, and Pitboard stopped it. | As for `warm_up_unreachable`. |
 | `warm_up_failed` | 1 | Claude Code failed for another reason, which the message gives in its words. | Check that `claude` runs in a terminal. |
-| `warm_up_auth_overridden` | 1 | Claude Code's managed settings make it sign in another way, so a request would not be on the account's login. | Ask whoever manages this computer. |
+| `warm_up_auth_overridden` | 1 | Claude Code's managed settings, or an API key in its remote token file, make it sign in another way, so a request would not be on the account's login. | Remove the key the message names, or ask whoever manages this computer. |
 | `warm_up_in_progress` | 1 | Another Pitboard is warming up an account. | Try again in a minute. |
 | `warm_setting_unreadable` | 1 | Pitboard could not read `warm.json`. | Make it readable to you again. |
 | `warm_setting_corrupt` | 1 | `warm.json` is not in a shape Pitboard reads. | Delete it, then turn warm-up on again for each account. |

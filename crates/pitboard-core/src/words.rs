@@ -195,7 +195,7 @@ pub fn not_warming(why: &crate::duty::warm::Halt) -> String {
         Halt::SwitchInterrupted => INTERRUPTED.into(),
         Halt::CustomOauth => CUSTOM_OAUTH.into(),
         Halt::Overridden(names) => format!(
-            "Claude Code's managed settings make it sign in another way, set by {}",
+            "Claude Code would sign a warm-up in another way, set by {}",
             names.join(", ")
         ),
         Halt::ProgramMissing => "Claude Code is not installed where Pitboard looks".into(),

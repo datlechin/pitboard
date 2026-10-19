@@ -284,7 +284,7 @@ For `warm_up_halted`, `reason` is one of these:
 | --- | --- |
 | `switch_interrupted` | A switch did not finish. |
 | `custom_oauth_endpoint` | `CLAUDE_CODE_CUSTOM_OAUTH_URL` is set, so Pitboard does not act on Claude Code. |
-| `warm_up_auth_overridden` | Claude Code's managed settings sign it in another way. |
+| `warm_up_auth_overridden` | Claude Code's managed settings, or an API key in its remote token file, sign it in another way. |
 | `claude_not_found` | Claude Code is not installed where Pitboard looks. |
 
 [When it holds back](/guides/warm-up#when-it-holds-back) says when each ends.

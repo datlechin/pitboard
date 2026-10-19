@@ -282,16 +282,14 @@ pub(crate) fn custom_oauth(ctx: &Context) -> bool {
         })
 }
 
-// Read where no descriptor is named for it, and taken before `apiKeyHelper` and the stored
+// Each read where no descriptor is named for it, and taken before `apiKeyHelper` and the stored
 // login (`remote_token_files`).
-const REMOTE_TOKENS: [(&str, &str); 2] = [
-    (".oauth_token", "the OAuth token"),
-    (".api_key", "the API key"),
-];
+const OAUTH_TOKEN: (&str, &str) = (".oauth_token", "the OAuth token");
+const API_KEY: (&str, &str) = (".api_key", "the API key");
 
 // On Windows the path names no drive, so it is at the root of whichever drive a session runs
 // from.
-fn remote_tokens(ctx: &Context) -> Vec<Override> {
+fn remote_tokens(ctx: &Context, files: &[(&str, &str)]) -> Vec<Override> {
     let folders: Vec<String> = match ctx.os {
         Os::Windows => ctx
             .host()
@@ -303,7 +301,11 @@ fn remote_tokens(ctx: &Context) -> Vec<Override> {
     };
     folders
         .iter()
-        .flat_map(|folder| REMOTE_TOKENS.map(|(file, what)| (format!("{folder}{file}"), what)))
+        .flat_map(|folder| {
+            files
+                .iter()
+                .map(move |(file, what)| (format!("{folder}{file}"), *what))
+        })
         .filter(|(path, _)| {
             matches!(
                 ctx.host().administered_file(std::path::Path::new(path)),
@@ -323,7 +325,7 @@ pub(crate) fn overrides(ctx: &Context) -> Vec<Override> {
         .chain(own(&claude::config_dir(ctx).join("settings.json")))
         .flat_map(|layer| overrides_in(&layer))
         .collect();
-    found.extend(remote_tokens(ctx));
+    found.extend(remote_tokens(ctx, &[OAUTH_TOKEN, API_KEY]));
     // What this process was started with, which a command line sees and an app does not.
     found.extend(ctx.overriding_auth().iter().map(|key| Override {
         layer: "the environment".into(),
@@ -380,13 +382,16 @@ pub(crate) fn status_line_command(ctx: &Context) -> Option<String> {
         })
 }
 
-// A warm-up's run gets none of this process's environment.
+// A warm-up's run gets none of this process's environment, and its own token comes before
+// `.oauth_token`.
 pub(crate) fn overrides_of_a_run_in(ctx: &Context, config: &std::path::Path) -> Vec<Override> {
-    managed(ctx)
+    let mut found: Vec<Override> = managed(ctx)
         .into_iter()
         .chain(own(&config.join("settings.json")))
         .flat_map(|layer| overrides_in(&layer))
-        .collect()
+        .collect();
+    found.extend(remote_tokens(ctx, &[API_KEY]));
+    found
 }
 
 #[cfg(test)]
