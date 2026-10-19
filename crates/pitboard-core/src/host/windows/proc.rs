@@ -660,6 +660,24 @@ mod tests {
         assert_eq!(told, Told::Refused);
     }
 
+    // Freed for a while, a pid fails OpenProcess with 6 (RF-T8, windows-facts run 39320680285).
+    #[test]
+    fn a_process_gone_a_while_is_gone() {
+        let pid = {
+            let mut child = std::process::Command::new(std::env::current_exe().expect("this test"))
+                .arg("--list")
+                .stdout(std::process::Stdio::null())
+                .spawn()
+                .expect("it starts");
+            let pid = child.id();
+            child.wait().expect("it ends");
+            pid
+        };
+        std::thread::sleep(std::time::Duration::from_millis(200));
+        assert!(!may_be_running(pid));
+        assert_eq!(started(pid), None);
+    }
+
     #[test]
     fn a_process_that_exited_and_one_that_never_was_are_gone() {
         let exited = {
