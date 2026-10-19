@@ -2804,6 +2804,17 @@ Handing a descriptor:
   falls back to the direct read only on EACCES or EPERM, as Claude Code 2.1.300's does,
   gets nothing from a pipe or a socket (run 38821312770).
 
+Claude Code's remote token path, `/home/claude/.claude/remote/.oauth_token`, which it reads
+where no descriptor is named (`remote_token_files`), names no drive. Bun 1.4.3 resolves it
+against the drive of its working folder (RF-T7, runs 39310064516 and 39320680285):
+
+- Run from a folder on a VHD holding a dummy at `\home\claude\.claude\remote\.oauth_token`,
+  it read the dummy whole, a regular file of 39 bytes.
+- Run from a folder on `C:`, which has no `C:\home\claude`, it got ENOENT.
+
+So a session reads the file at the root of the drive its working folder is on, and doctor's
+`auth_source` check looks at the root of each fixed drive.
+
 Credential Manager:
 
 - A generic item's blob holds 2560 bytes, `CRED_MAX_CREDENTIAL_BLOB_SIZE`, and `CredWriteW`

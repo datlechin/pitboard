@@ -1615,8 +1615,9 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
                `mcp serve --transport http`, and a token from it comes before `apiKeyHelper` and \
                the stored login, as `CCR_OAUTH_TOKEN_FILE`. That file is no route on Windows: a \
                path with no drive names a folder at a drive's root, which every account on the \
-               PC shares, so a token there would sign in every Claude Code run on that drive. \
-               How Bun resolves the path there is not measured. Bun 1.4.3 calls a pipe or a \
+               PC shares, so a token there would sign in every Claude Code run on that drive: \
+               Bun 1.4.3 takes the drive of the working folder (RF-T7, runs 39310064516 and \
+               39320680285), as remote_token_files says. Bun 1.4.3 calls a pipe or a \
                socket handed as descriptor 3 through `STARTUPINFOW.lpReserved2` a FIFO, and \
                opening `/proc/self/fd/3` fails with ENOENT: RF-WW1, runs 38797729796 and \
                38821312770",
@@ -1760,11 +1761,13 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
                `CLAUDE_CODE_OAUTH_TOKEN` and before `apiKeyHelper` and the stored login; the \
                key is taken as `ANTHROPIC_API_KEY`, before `apiKeyHelper`. On Windows the path \
                names no drive, so it leads to a folder at the root of a drive, which every \
-               account on the PC shares. Which drive Bun takes is not measured",
+               account on the PC shares: Bun 1.4.3 takes the drive of the working folder",
         read_from: "the well-known file reader and its two callers, the token's place in the \
                     sources a session names and the key's in the API key's, and the \
                     `mcp serve` check, in the darwin-arm64, linux-x64, win32-x64 and \
-                    win32-arm64 builds of 2.1.303, read as bytes on 2026-10-20",
+                    win32-arm64 builds of 2.1.303, read as bytes on 2026-10-20; and RF-T7, \
+                    whose Bun 1.4.3 read a dummy there from a folder on that drive and got \
+                    ENOENT from one on C: (windows-facts runs 39310064516 and 39320680285)",
         verified_against: "2.1.303",
         depends: "settings::overrides, so doctor's auth_source check and a switch's warning \
                   name either file where it holds something: at `/` off Windows, and at the \
