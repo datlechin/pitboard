@@ -1834,6 +1834,7 @@ mod tests {
 
     #[test]
     fn an_app_is_opened_again_only_where_its_folder_is_whole() {
+        // windows: Claude Desktop is macOS only
         if !ProviderId::Desktop.supported_on(pitboard_core::host::OS) {
             return;
         }
@@ -1851,6 +1852,7 @@ mod tests {
 
     #[test]
     fn a_sign_in_with_nothing_parked_opens_claude_in_front() {
+        // windows: Claude Desktop is macOS only
         if !ProviderId::Desktop.supported_on(pitboard_core::host::OS) {
             return;
         }
@@ -1879,6 +1881,7 @@ mod tests {
 
     #[test]
     fn a_sign_in_while_a_move_waits_opens_nothing() {
+        // windows: Claude Desktop is macOS only
         if !ProviderId::Desktop.supported_on(pitboard_core::host::OS) {
             return;
         }

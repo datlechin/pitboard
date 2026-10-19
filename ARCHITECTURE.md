@@ -1069,6 +1069,8 @@ window loads its site, and whatever the site's pages load, as a browser would.
   `os::claude_desktop_runs_here()`, which is false on Linux and Windows. A test of the app
   model's or a fixture's Claude Desktop asks `ProviderId::Desktop.supported_on(host::OS)`,
   since the app lists the tool only where that is true.
+- A test a `cfg` compiles out on Windows, or that returns early there, says why in a
+  `// windows: <reason>` line right above that `cfg` or that `if`, since neither takes a reason.
 - No test addresses a name a real login may be kept under. `guard_not_live` refuses by
   pattern, never by a hash computed for a real home, the families
   `pitboard_core::provider::names` tells apart, which the measurement probe's leak check

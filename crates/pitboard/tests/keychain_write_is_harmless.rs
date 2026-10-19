@@ -1,3 +1,4 @@
+// windows: the login keychain is macOS's own; credman_write_is_harmless.rs is Windows'
 #![cfg(target_os = "macos")]
 
 //! Proves the production writer leaves a keychain item exactly as it found it.

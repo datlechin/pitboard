@@ -825,6 +825,7 @@ mod tests {
         assert_eq!(block_name(&cli.command), "exe-path");
     }
 
+    // windows: the probe refuses off Windows
     #[cfg(not(windows))]
     #[test]
     fn off_windows_every_command_refuses() {

@@ -2040,6 +2040,7 @@ mod tests {
     }
 
     #[test]
+    // windows: macOS and Linux print this help; Windows' has the tests below
     #[cfg(not(windows))]
     fn the_help_reads_as_it_did_off_windows() {
         insta::assert_snapshot!("help", every_help());

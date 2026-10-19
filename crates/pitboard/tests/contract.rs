@@ -440,6 +440,7 @@ fn doctor() {
 // The test's own Claude: a SQLite jar, and the stand-in under its own `Claude.app` while it runs.
 #[test]
 fn desktop() {
+    // windows: Claude Desktop is macOS only
     if !os::claude_desktop_runs_here() {
         return;
     }
@@ -491,6 +492,7 @@ fn desktop() {
 
 #[test]
 fn desktop_awaiting() {
+    // windows: Claude Desktop is macOS only
     if !os::claude_desktop_runs_here() {
         return;
     }

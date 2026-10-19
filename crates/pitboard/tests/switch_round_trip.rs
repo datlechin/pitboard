@@ -683,7 +683,7 @@ fn a_scheduled_renewal_renews_the_default_home_whatever_pitboard_home_says() {
 /// where the person's own runs might not replace it again. It is refused now, with the code
 /// a program branches on, having asked nobody and written nothing, the audit log included.
 /// Without sudo, the same run renews.
-// `SUDO_UID` is Unix's sign of sudo; Windows' `sudo` elevates the token (`windows_refuses`).
+// windows: `SUDO_UID` is Unix's sign of sudo; Windows' `sudo` elevates (`windows_refuses`)
 #[cfg(unix)]
 #[test]
 fn renew_under_sudo_is_refused_and_changes_nothing() {
@@ -727,7 +727,7 @@ fn renew_under_sudo_is_refused_and_changes_nothing() {
 /// Under sudo, `enroll --sign-in` is refused before it says it is opening the tool's
 /// sign-in, as `forget` and `uninstall` ask no question first: no sign-in opens, so none is
 /// announced, and nothing is written.
-// `SUDO_UID` is Unix's sign of sudo; Windows' `sudo` elevates the token (`windows_refuses`).
+// windows: `SUDO_UID` is Unix's sign of sudo; Windows' `sudo` elevates (`windows_refuses`)
 #[cfg(unix)]
 #[test]
 fn enrolling_by_sign_in_under_sudo_announces_no_sign_in() {
@@ -848,6 +848,7 @@ fn every_command_refuses_a_home_that_is_not_a_full_path() {
 /// stand-in on `PATH` that writes down that it was asked, which it was. Linux only: launchd
 /// is asked by its full path, so no stand-in can take its place there, and running this
 /// against a build that asked it would replace the person's real schedule.
+// windows: `systemctl` is Linux's own; no_build_for_tests_asks_task_scheduler is Windows'
 #[cfg(target_os = "linux")]
 #[test]
 fn no_build_for_tests_asks_the_systems_service_manager() {
@@ -931,7 +932,7 @@ fn no_build_for_tests_asks_task_scheduler() {
 
 /// Under sudo, `pitboard status` answers what `--offline` answers and says why, asking
 /// Anthropic nothing and writing nothing.
-// `SUDO_UID` is Unix's sign of sudo; Windows' `sudo` elevates the token (`windows_refuses`).
+// windows: `SUDO_UID` is Unix's sign of sudo; Windows' `sudo` elevates (`windows_refuses`)
 #[cfg(unix)]
 #[test]
 fn status_under_sudo_answers_from_what_was_measured() {
@@ -1300,7 +1301,7 @@ fn nothing_to_delete_is_said_as_before_without_yes() {
 
 /// Under sudo each command is refused for that, as it was, and is not asked about first.
 /// `stow` with nothing to put away says so, as it did.
-// `SUDO_UID` is Unix's sign of sudo; Windows' `sudo` elevates the token (`windows_refuses`).
+// windows: `SUDO_UID` is Unix's sign of sudo; Windows' `sudo` elevates (`windows_refuses`)
 #[cfg(unix)]
 #[test]
 fn deleting_under_sudo_is_refused_for_that_without_yes() {
@@ -1342,6 +1343,7 @@ fn deleting_under_sudo_is_refused_for_that_without_yes() {
 /// make a login larger than that. There is no third way to write one: the only other route
 /// `security` offers is the argument line, which is what Claude Code uses for the same
 /// login. So the switch goes through, and says that is what it did.
+// windows: a keychain's ceiling is what `security` reads from stdin
 #[cfg(target_os = "macos")]
 #[test]
 fn a_login_too_large_for_stdin_is_written_on_the_argument_line() {
@@ -1367,6 +1369,7 @@ fn a_login_too_large_for_stdin_is_written_on_the_argument_line() {
 
 /// For anyone who would rather have the refusal: it says the size, the limit, and that the
 /// refusal is theirs.
+// windows: a keychain's ceiling is what `security` reads from stdin
 #[cfg(target_os = "macos")]
 #[test]
 fn the_argument_line_can_be_refused() {

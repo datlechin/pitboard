@@ -90,6 +90,7 @@ fn kept(env: &Env) -> Kept {
 
 #[test]
 fn enrol_switch_both_ways_and_forget() {
+    // windows: Claude Desktop is macOS only
     if !os::claude_desktop_runs_here() {
         return;
     }
@@ -229,6 +230,7 @@ fn enrol_switch_both_ways_and_forget() {
 
 #[test]
 fn every_change_is_refused_while_the_stand_in_claude_runs() {
+    // windows: Claude Desktop is macOS only
     if !os::claude_desktop_runs_here() {
         return;
     }
@@ -266,6 +268,7 @@ fn every_change_is_refused_while_the_stand_in_claude_runs() {
 
 #[test]
 fn a_sign_in_parks_the_account_in_use_and_enrols_whoever_claude_quits_with() {
+    // windows: Claude Desktop is macOS only
     if !os::claude_desktop_runs_here() {
         return;
     }
@@ -319,6 +322,7 @@ fn a_sign_in_parks_the_account_in_use_and_enrols_whoever_claude_quits_with() {
 
 #[test]
 fn control_c_leaves_the_add_halfway_and_use_puts_it_back() {
+    // windows: Claude Desktop is macOS only
     if !os::claude_desktop_runs_here() {
         return;
     }
@@ -375,6 +379,7 @@ fn control_c_leaves_the_add_halfway_and_use_puts_it_back() {
 
 #[test]
 fn signing_in_again_as_another_account_is_refused_and_named() {
+    // windows: Claude Desktop is macOS only
     if !os::claude_desktop_runs_here() {
         return;
     }
@@ -413,6 +418,7 @@ fn signing_in_again_as_another_account_is_refused_and_named() {
 
 #[test]
 fn messages_print_no_empty_brackets_for_a_claude_desktop_account() {
+    // windows: Claude Desktop is macOS only
     if !os::claude_desktop_runs_here() {
         return;
     }
@@ -442,6 +448,7 @@ fn messages_print_no_empty_brackets_for_a_claude_desktop_account() {
 
 #[test]
 fn nothing_here_reads_the_real_data_folder() {
+    // windows: Claude Desktop is macOS only
     if !os::claude_desktop_runs_here() {
         return;
     }
@@ -499,6 +506,7 @@ fn signed_in_again(name: &str) -> Env {
 
 #[test]
 fn uninstall_says_how_many_folders_set_aside_it_deleted() {
+    // windows: Claude Desktop is macOS only
     if !os::claude_desktop_runs_here() {
         return;
     }
@@ -541,6 +549,7 @@ fn from_another_mac(name: &str) -> Env {
 
 #[test]
 fn adopt_sets_aside_a_login_parked_on_another_mac_and_says_how_to_sign_in_again() {
+    // windows: Claude Desktop is macOS only
     if !os::claude_desktop_runs_here() {
         return;
     }
@@ -582,6 +591,7 @@ fn index_lost(name: &str) -> Env {
 
 #[test]
 fn repair_sets_aside_a_folder_no_account_takes_and_says_where() {
+    // windows: Claude Desktop is macOS only
     if !os::claude_desktop_runs_here() {
         return;
     }

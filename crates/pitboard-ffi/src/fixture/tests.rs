@@ -1207,6 +1207,7 @@ fn the_chatgpt_fixture_is_quit_for_a_codex_switch_and_opened_again() {
 
 #[test]
 fn claude_is_quit_for_a_switch_and_opened_again_behind() {
+    // windows: Claude Desktop is macOS only
     if !ProviderId::Desktop.supported_on(OS) {
         return;
     }
@@ -1253,6 +1254,7 @@ fn claude_is_quit_for_a_switch_and_opened_again_behind() {
 #[test]
 fn an_add_in_claude_desktop_parks_waits_and_enrols_with_claude_in_front() {
     use pitboard_core::switch::WaitStep;
+    // windows: Claude Desktop is macOS only
     if !ProviderId::Desktop.supported_on(OS) {
         return;
     }
@@ -1349,6 +1351,7 @@ fn an_add_in_claude_desktop_parks_waits_and_enrols_with_claude_in_front() {
 
 #[test]
 fn an_add_left_halfway_is_put_back_by_use() {
+    // windows: Claude Desktop is macOS only
     if !ProviderId::Desktop.supported_on(OS) {
         return;
     }
@@ -1416,6 +1419,7 @@ fn an_add_left_halfway_is_put_back_by_use() {
 #[test]
 fn a_claude_pitboard_quits_before_anybody_signs_in_writes_nothing_after() {
     use crate::model::AppControl;
+    // windows: Claude Desktop is macOS only
     if !ProviderId::Desktop.supported_on(OS) {
         return;
     }
@@ -1451,6 +1455,7 @@ fn actions_of(snapshot: &Snapshot, id: &str) -> Vec<String> {
 
 #[test]
 fn a_stopped_move_is_given_up_from_the_app() {
+    // windows: Claude Desktop is macOS only
     if !ProviderId::Desktop.supported_on(OS) {
         return;
     }
@@ -1518,6 +1523,7 @@ fn a_stopped_move_is_given_up_from_the_app() {
 
 #[test]
 fn a_move_the_give_up_settles_is_said_as_finished() {
+    // windows: Claude Desktop is macOS only
     if !ProviderId::Desktop.supported_on(OS) {
         return;
     }
