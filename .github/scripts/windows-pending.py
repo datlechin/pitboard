@@ -22,7 +22,6 @@ ACCEPTED = {
     # CI runs the UI tests as the elevated job user and again as a standard user.
     "runs as an elevated user only": None,
     "runs as a standard user only": None,
-    "a warm-up runs on macOS and Linux": 17,
     "pins the stores a change touches as macOS and Linux have them": 1,
 }
 
