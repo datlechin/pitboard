@@ -590,21 +590,10 @@ jobs:
         run: |
           $read = './.github/scripts/read-assembly.ps1'
           "now=$(& $read -Assembly (Join-Path $env:IMAGE 'Pitboard.dll') -Metadata WindowsUpdatePublicKey)" >> $env:GITHUB_OUTPUT
-          $releases = gh api --paginate "repos/$env:GITHUB_REPOSITORY/releases?per_page=100" --jq '.[] | select(.draft == false) | [.tag_name, .assets[].name] | join(" ")'
-          if ($LASTEXITCODE -ne 0) { throw "gh api exited $LASTEXITCODE" }
-          $previous = $null
-          foreach ($release in $releases) {
-            $tag, $assets = $release -split ' '
-            if ($tag -ne $env:GITHUB_REF_NAME -and $assets -contains "Pitboard-$tag-windows-$env:INSTALLER.msi") {
-              $previous = $tag
-              break
-            }
-          }
+          $dir = Join-Path $env:RUNNER_TEMP 'previous'
+          $previous = & ./.github/scripts/previous-msis.ps1 -Installer $env:INSTALLER -Destination $dir -Except $env:GITHUB_REF_NAME
           if (-not $previous) { exit 0 }
           $name = "Pitboard-$previous-windows-$env:INSTALLER.msi"
-          $dir = Join-Path $env:RUNNER_TEMP 'previous'
-          gh release download $previous --repo $env:GITHUB_REPOSITORY --pattern "Pitboard-$previous-windows-*.msi" --dir $dir
-          if ($LASTEXITCODE -ne 0) { throw "gh release download exited $LASTEXITCODE" }
           $folder = & ./.github/scripts/extract-msi.ps1 -Msi (Join-Path $dir $name) -Destination (Join-Path $env:RUNNER_TEMP 'previous-image')
           "previous=$previous" >> $env:GITHUB_OUTPUT
           "previous-folder=$dir" >> $env:GITHUB_OUTPUT

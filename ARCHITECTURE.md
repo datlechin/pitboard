@@ -922,7 +922,7 @@ window loads its site, and whatever the site's pages load, as a browser would.
     `test-certificate.ps1` makes the throwaway certificate it and the runner facts sign with,
     `extract-msi.ps1` extracts an MSI's administrative image and `check-windows-msi.ps1` checks
     one, `check-msi-components.ps1` holds its components' GUIDs and key paths to the last
-    release's MSIs, `validate-windows-msi.ps1` runs ICE03 on an MSI with the WiX that built it,
+    release's MSIs, which `previous-msis.ps1` downloads, `validate-windows-msi.ps1` runs ICE03 on an MSI with the WiX that built it,
     `read-assembly.ps1` reads a value from a .NET assembly's metadata, and
     `test-windows-app.ps1` tests the checks and the signature check on the MSI and the package.
   - `dependabot.yml` asks for weekly updates of Cargo dependencies, GitHub Actions and the

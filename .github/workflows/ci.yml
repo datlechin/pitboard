@@ -766,23 +766,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           INSTALLER: ${{ matrix.installer }}
         run: |
-          $releases = gh api --paginate "repos/$env:GITHUB_REPOSITORY/releases?per_page=100" --jq '.[] | select(.draft == false) | [.tag_name, .assets[].name] | join(" ")'
-          if ($LASTEXITCODE -ne 0) { throw "gh api exited $LASTEXITCODE" }
-          $previous = $null
-          foreach ($release in $releases) {
-            $tag, $assets = $release -split ' '
-            if ($assets -contains "Pitboard-$tag-windows-$env:INSTALLER.msi") {
-              $previous = $tag
-              break
-            }
-          }
+          $dir = Join-Path $env:RUNNER_TEMP 'previous-msi'
+          $previous = & ./.github/scripts/previous-msis.ps1 -Installer $env:INSTALLER -Destination $dir
           if (-not $previous) {
             Write-Output 'No release has shipped an MSI for this machine.'
             exit 0
           }
-          $dir = Join-Path $env:RUNNER_TEMP 'previous-msi'
-          gh release download $previous --repo $env:GITHUB_REPOSITORY --pattern "Pitboard-$previous-windows-*.msi" --dir $dir
-          if ($LASTEXITCODE -ne 0) { throw "gh release download exited $LASTEXITCODE" }
           $last = @(Get-ChildItem -LiteralPath $dir -File -Filter '*.msi' | ForEach-Object FullName)
           foreach ($msi in 'msi', 'msi-unsigned') {
             ./.github/scripts/check-msi-components.ps1 -Msi "target/windows-app/$msi/Pitboard.msi" -Previous $last
