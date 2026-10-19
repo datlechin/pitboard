@@ -2061,6 +2061,28 @@ its Windows reading came on 16 October from both Windows builds of 2.1.301, wher
 sits behind Credential Manager wherever that store is on
 (`credman_unreachable_writes_file`). The checker finds every fact each build was read for.
 
+On 20 October 2026 the Windows readings were read again as bytes on a Mac, from Claude Code
+2.1.303's `win32-x64` and `win32-arm64` builds, built from commit 07df2ae as its macOS and
+Linux builds are, and from Codex 0.163.0's, with its source at `rust-v0.163.0`. The checker
+passes on all four:
+
+- For each Claude Code fact read on Windows from 2.1.289 to 2.1.302, the code around its
+  literals was compared with the build it was read from, minified names apart. Three facts
+  moved. From 2.1.300 a sign-in also prunes `trustedDeviceEnrolledAfterRefusalAtMs` and
+  `cloudSessionsOauth` (`account_scoped_keys`, read again in all four builds of 2.1.303), so
+  `ACCOUNT_SCOPED` moves both. From 2.1.301 a diskless launch reads no `HKCU` policy
+  (`windows_managed_settings`). From 2.1.302 a session started with `--session-tunnel` takes
+  the `env` of its line of JSON (`windows_backend_choice`). The refresh lock takes a
+  synchronous `fs` from 2.1.301, at the same path and timing. The facts read from one build on
+  every system, 2.1.294's and 2.1.296's, keep that reading.
+- 2.1.302 and 2.1.303 embed Bun 1.4.4 (0049fd75e), which has no public release. 2.1.289 to
+  2.1.296 embed 1.4.3 at eecfd55de, and 2.1.300 and 2.1.301 at 9ecafc196, neither a public
+  commit. So each fact's Bun half stays a reading of `bun-v1.4.3`'s source, and the runner
+  rows run Bun 1.4.3 from its release zip. The session machine ran 2.1.302, on Bun 1.4.4.
+- Codex's sources for the facts read at 0.160.0 changed only in comments, telemetry and an
+  enterprise sign-out step by 0.163.0, and those for the facts read at 0.162.1 not at all.
+  0.163.0's builds still have no resource directory.
+
 On 12 October 2026 the checker was run by hand on the `app.asar` of an installed Claude
 Desktop 2.7032.0, without running Claude. The register's 19 facts that name literals hold
 there, and its other six are about behaviour. On 13 October it was run again with two more
@@ -2482,8 +2504,9 @@ in `windows-facts.yml` run 38693947329 on 15 October 2026, unless a line names a
 Every run met the same images: windows-2025 (Windows Server 2025 Datacenter, 24H2, build
 26100, UBR 33438) and windows-11-arm (build 26200, UBR 9457, 25H2). The script runs the
 probe as the job's user and as three throwaway users it makes: a standard user, a standard
-user whose name is not ASCII, and a member of Administrators. Its Bun is 1.4.3, the one
-Claude Code 2.1.300 embeds, with proper-lockfile 4.1.2. A fact holds on both images unless it
+user whose name is not ASCII, and a member of Administrators. Its Bun is 1.4.3 from Bun's
+release, the version Claude Code 2.1.300 and 2.1.301 embed, with proper-lockfile 4.1.2; 2.1.302
+and 2.1.303 embed 1.4.4, which has no public release. A fact holds on both images unless it
 names one. The tokens these list, and the session machine's, are the only ones the Windows face
 has been seen to read.
 

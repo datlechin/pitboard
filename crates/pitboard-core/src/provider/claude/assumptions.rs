@@ -16,10 +16,10 @@ use crate::assumptions::{Assumption, OnSystem, PerSystem};
 /// The build every entry below was read from on macOS and Linux, unless it says otherwise.
 pub(crate) const VERIFIED_AGAINST: &str = "2.1.284";
 
-/// The build the facts read on Windows were read from: `@anthropic-ai/claude-code-win32-x64`
-/// and `-win32-arm64` 2.1.289, both built from commit 736d26e, as that version's macOS and
-/// Linux builds are. Read as bytes on a Mac on 2026-10-06, and never run.
-pub(crate) const WINDOWS_VERIFIED_AGAINST: &str = "2.1.289";
+// Both Windows builds of 2.1.303 (commit 07df2ae), compared as bytes on 2026-10-20 with the build
+// each reading named before. They embed Bun 1.4.4, whose source is not public, so a fact's Bun
+// half stays its entry's reading of bun-v1.4.3.
+pub(crate) const WINDOWS_VERIFIED_AGAINST: &str = "2.1.303";
 
 /// The Linux build has no keychain backend, so a keychain fact read from it reports the
 /// keychain gone, as it did on every build from 2.1.278 on.
@@ -67,14 +67,13 @@ const fn of_the_service(name: &'static str) -> PerSystem {
     }
 }
 
-/// A fact about what Anthropic answers and how Claude Code reads it, read on 16 October 2026
-/// from 2.1.301's macOS, Linux and both Windows builds as bytes, whose code here is the same.
+// What Anthropic answers and how Claude Code reads it, in 2.1.301's builds and Windows' 2.1.303.
 const fn answers(name: &'static str) -> PerSystem {
     PerSystem {
         name,
         macos: Read("2.1.301"),
         linux: Read("2.1.301"),
-        windows: Read("2.1.301"),
+        windows: Read(WINDOWS_VERIFIED_AGAINST),
     }
 }
 
@@ -122,14 +121,14 @@ pub(crate) const PER_SYSTEM: &[PerSystem] = &[
         linux: NO_KEYCHAIN_ON_LINUX,
         windows: NO_KEYCHAIN_ON_WINDOWS,
     },
-    // Read again in both Windows builds of 2.1.300. Under Bun 1.4.3, proper-lockfile 4.1.2 and
-    // Pitboard's lock see each other's lock with this timing on both runner images (RF-C5,
-    // run 38693947329).
+    // Read again in both Windows builds of 2.1.300 and 2.1.303. Under Bun 1.4.3, proper-lockfile
+    // 4.1.2 and Pitboard's lock see each other's lock with this timing on both runner images
+    // (RF-C5, run 38693947329).
     PerSystem {
         name: "write_lock",
         macos: Read(VERIFIED_AGAINST),
         linux: Read(VERIFIED_AGAINST),
-        windows: Read("2.1.300"),
+        windows: Read(WINDOWS_VERIFIED_AGAINST),
     },
     everywhere("logout_skips_the_lock", VERIFIED_AGAINST),
     PerSystem {
@@ -152,13 +151,13 @@ pub(crate) const PER_SYSTEM: &[PerSystem] = &[
         name: "config_file_location",
         macos: Read("2.1.301"),
         linux: Read("2.1.301"),
-        windows: Read("2.1.301"),
+        windows: Read(WINDOWS_VERIFIED_AGAINST),
     },
     PerSystem {
         name: "settings_byte_order_mark",
         macos: Read("2.1.302"),
         linux: Read("2.1.302"),
-        windows: Read("2.1.302"),
+        windows: Read(WINDOWS_VERIFIED_AGAINST),
     },
     everywhere("oauth_client", VERIFIED_AGAINST),
     PerSystem {
@@ -181,19 +180,19 @@ pub(crate) const PER_SYSTEM: &[PerSystem] = &[
              fact rules out, so read from the Windows build it reports a keyring arrived",
         ),
     },
-    // Read again in both Windows builds of 2.1.300, where a line is read with readline and
-    // trimmed, so one typed back with `\r\n` is one with `\n`.
+    // Read again in both Windows builds of 2.1.300 and 2.1.303, where a line is read with
+    // readline and trimmed, so one typed back with `\r\n` is one with `\n`.
     PerSystem {
         name: "sign_in_output",
         macos: Read("2.1.289"),
         linux: Read("2.1.289"),
-        windows: Read("2.1.300"),
+        windows: Read(WINDOWS_VERIFIED_AGAINST),
     },
     PerSystem {
         name: "sign_in_takes_another_code",
         macos: Read("2.1.289"),
         linux: Read("2.1.289"),
-        windows: Read("2.1.300"),
+        windows: Read(WINDOWS_VERIFIED_AGAINST),
     },
     PerSystem {
         name: "install_places",
@@ -234,13 +233,13 @@ pub(crate) const PER_SYSTEM: &[PerSystem] = &[
         linux: NO_KEYCHAIN_ON_LINUX,
         windows: NO_KEYCHAIN_ON_WINDOWS,
     },
-    // Read again in both Windows builds of 2.1.301, where the file sits behind Credential
-    // Manager wherever that store is on.
+    // Read again in both Windows builds of 2.1.301 and 2.1.303, where the file sits behind
+    // Credential Manager wherever that store is on.
     PerSystem {
         name: "fallback_file_pins_session_login",
         macos: Read("2.1.294"),
         linux: NO_KEYCHAIN_ON_LINUX,
-        windows: Read("2.1.301"),
+        windows: Read(WINDOWS_VERIFIED_AGAINST),
     },
     PerSystem {
         name: "login_is_one_organisation",
@@ -278,13 +277,13 @@ pub(crate) const PER_SYSTEM: &[PerSystem] = &[
         linux: Read("2.1.294"),
         windows: Read("2.1.294"),
     },
-    // Read again in both Windows builds of 2.1.300, and measured with this timing as the write
-    // lock was (RF-C5r, run 38693947329).
+    // Read again in both Windows builds of 2.1.300 and 2.1.303, and measured with this timing as
+    // the write lock was (RF-C5r, run 38693947329). From 2.1.301 it takes a synchronous `fs`.
     PerSystem {
         name: "refresh_lock",
         macos: Read("2.1.294"),
         linux: Read("2.1.294"),
-        windows: Read("2.1.300"),
+        windows: Read(WINDOWS_VERIFIED_AGAINST),
     },
     PerSystem {
         name: "login_carries_its_plan",
@@ -296,43 +295,43 @@ pub(crate) const PER_SYSTEM: &[PerSystem] = &[
         name: "windows_home_folder",
         macos: NotRead("macOS keeps the home in `HOME`, which config_file_location reads"),
         linux: NotRead("Linux keeps the home in `HOME`, which config_file_location reads"),
-        windows: Read("2.1.300"),
+        windows: Read(WINDOWS_VERIFIED_AGAINST),
     },
     PerSystem {
         name: "windows_open_sharing",
         macos: NotRead("a rename lands over a file open on macOS whatever opened it"),
         linux: NotRead("a rename lands over a file open on Linux whatever opened it"),
-        windows: Read("2.1.300"),
+        windows: Read(WINDOWS_VERIFIED_AGAINST),
     },
     PerSystem {
         name: "windows_install_layout",
         macos: NotRead("where macOS's installers put `claude` is install_places'"),
         linux: NotRead("where Linux's installers put `claude` is install_places'"),
-        windows: Read("2.1.300"),
+        windows: Read(WINDOWS_VERIFIED_AGAINST),
     },
     PerSystem {
         name: "windows_version_resource",
         macos: NotRead("a macOS program carries no version resource"),
         linux: NotRead("a Linux program carries no version resource"),
-        windows: Read("2.1.300"),
+        windows: Read(WINDOWS_VERIFIED_AGAINST),
     },
     PerSystem {
         name: "windows_managed_settings",
         macos: NotRead("macOS has no registry, and its managed folder is settings.rs's"),
         linux: NotRead("Linux has no registry, and its managed folder is settings.rs's"),
-        windows: Read("2.1.300"),
+        windows: Read(WINDOWS_VERIFIED_AGAINST),
     },
     PerSystem {
         name: "windows_daemon_identity",
         macos: NotRead("off Windows the daemon records `procStart`, which Pitboard does not read"),
         linux: NotRead("off Windows the daemon records `procStart`, which Pitboard does not read"),
-        windows: Read("2.1.300"),
+        windows: Read(WINDOWS_VERIFIED_AGAINST),
     },
     PerSystem {
         name: "windows_backend_choice",
         macos: NotRead("macOS's chain is live_chain_order's"),
         linux: NotRead("Linux's store is the file alone, which no_keyring_off_macos reads"),
-        windows: Read("2.1.301"),
+        windows: Read(WINDOWS_VERIFIED_AGAINST),
     },
     PerSystem {
         name: "windows_plaintext_strict_read",
@@ -342,13 +341,13 @@ pub(crate) const PER_SYSTEM: &[PerSystem] = &[
         linux: NotRead(
             "off Windows no reader keeps another out of a file, and a refused read is no login",
         ),
-        windows: Read("2.1.301"),
+        windows: Read(WINDOWS_VERIFIED_AGAINST),
     },
     PerSystem {
         name: "windows_plaintext_write",
         macos: NotRead("how macOS's file is written is plaintext_credential_mode's"),
         linux: NotRead("how Linux's file is written is plaintext_credential_mode's"),
-        windows: Read("2.1.301"),
+        windows: Read(WINDOWS_VERIFIED_AGAINST),
     },
     PerSystem {
         name: "windows_file_adoption",
@@ -356,55 +355,55 @@ pub(crate) const PER_SYSTEM: &[PerSystem] = &[
             "on macOS the file sits behind the keychain, fallback_file_pins_session_login's",
         ),
         linux: NotRead("how soon a session takes a new login off Windows is credential_cache's"),
-        windows: Read("2.1.302"),
+        windows: Read(WINDOWS_VERIFIED_AGAINST),
     },
     PerSystem {
         name: "credman_account_name",
         macos: NotRead("macOS's account is keychain_account_name's"),
         linux: NotRead("Linux keeps the login in a file, which has no user name"),
-        windows: Read("2.1.301"),
+        windows: Read(WINDOWS_VERIFIED_AGAINST),
     },
     PerSystem {
         name: "credman_target",
         macos: NotRead("macOS's item is credential_service_name's"),
         linux: NotRead("Linux keeps the login in a file"),
-        windows: Read("2.1.301"),
+        windows: Read(WINDOWS_VERIFIED_AGAINST),
     },
     PerSystem {
         name: "credman_chunking",
         macos: NotRead("a keychain item takes a login of any size, keychain_write_route's"),
         linux: NotRead("Linux keeps the login in a file"),
-        windows: Read("2.1.301"),
+        windows: Read(WINDOWS_VERIFIED_AGAINST),
     },
     PerSystem {
         name: "credman_probe",
         macos: NotRead("macOS's chain is live_chain_order's"),
         linux: NotRead("Linux keeps the login in a file"),
-        windows: Read("2.1.301"),
+        windows: Read(WINDOWS_VERIFIED_AGAINST),
     },
     PerSystem {
         name: "credman_migration",
         macos: NotRead("macOS's chain is live_chain_order's"),
         linux: NotRead("Linux keeps the login in a file"),
-        windows: Read("2.1.301"),
+        windows: Read(WINDOWS_VERIFIED_AGAINST),
     },
     PerSystem {
         name: "credman_move_lost_a_piece",
         macos: NotRead("Linux and macOS keep no login in Credential Manager"),
         linux: NotRead("Linux and macOS keep no login in Credential Manager"),
-        windows: Read("2.1.302"),
+        windows: Read(WINDOWS_VERIFIED_AGAINST),
     },
     PerSystem {
         name: "credman_unreachable_writes_file",
         macos: NotRead("macOS's counterpart is locked_sign_in_writes_fallback"),
         linux: NotRead("Linux keeps the login in a file"),
-        windows: Read("2.1.301"),
+        windows: Read(WINDOWS_VERIFIED_AGAINST),
     },
     PerSystem {
         name: "credman_attributes",
         macos: NotRead("macOS's item is written by `security`, keychain_write_route's"),
         linux: NotRead("Linux keeps the login in a file"),
-        windows: Read("2.1.301"),
+        windows: Read(WINDOWS_VERIFIED_AGAINST),
     },
     PerSystem {
         name: "windows_credman_cache",
@@ -427,13 +426,13 @@ pub(crate) const PER_SYSTEM: &[PerSystem] = &[
         linux: NotRead(
             "off Windows a cancel stops the tool alone, so how it opens a browser decides nothing",
         ),
-        windows: Read("2.1.300"),
+        windows: Read(WINDOWS_VERIFIED_AGAINST),
     },
     PerSystem {
         name: "windows_token_handover",
         macos: NotRead("macOS and Linux hand a descriptor as headless_token_descriptor says"),
         linux: NotRead("macOS and Linux hand a descriptor as headless_token_descriptor says"),
-        windows: Read("2.1.301"),
+        windows: Read(WINDOWS_VERIFIED_AGAINST),
     },
     PerSystem {
         name: "windows_token_env",
@@ -449,19 +448,19 @@ pub(crate) const PER_SYSTEM: &[PerSystem] = &[
         linux: NotRead(
             "off Windows a status line runs in the person's shell, which finds pitboard",
         ),
-        windows: Read("2.1.301"),
+        windows: Read(WINDOWS_VERIFIED_AGAINST),
     },
     PerSystem {
         name: "windows_statusline_powershell",
         macos: NotRead("only Windows runs a status line in PowerShell"),
         linux: NotRead("only Windows runs a status line in PowerShell"),
-        windows: Read("2.1.302"),
+        windows: Read(WINDOWS_VERIFIED_AGAINST),
     },
     PerSystem {
         name: "proxy_from_variables",
         macos: Read("2.1.301"),
         linux: Read("2.1.301"),
-        windows: Read("2.1.301"),
+        windows: Read(WINDOWS_VERIFIED_AGAINST),
     },
     PerSystem {
         name: "headless_token_descriptor",
@@ -1253,11 +1252,13 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
                `managedSourcesBehavior` or `wslInheritsWindowsSettings` is not a policy and \
                keeps `HKCU` out of nothing (its `pt`). A failed `HKLM` `reg.exe query` it treats \
                as absent (its `vYn` nulls the machine output on a non-zero exit) and still reads \
-               `HKCU`, while an unreadable managed file keeps `HKCU` out",
+               `HKCU`, while an unreadable managed file keeps `HKCU` out. From 2.1.301 a \
+               diskless launch reads no `HKCU` value",
         read_from: "the managed folder, the policy keys, their reading through \
                     `%SystemRoot%\\System32\\reg.exe query <key> /v Settings` and the managed \
                     sources' order in the win32-x64 and win32-arm64 builds of 2.1.300, read as \
-                    bytes on 2026-10-15",
+                    bytes on 2026-10-15; the `HKCU` read's diskless check, in the win32-x64 \
+                    builds of 2.1.301 to 2.1.303, read as bytes on 2026-10-20",
         verified_against: "2.1.300",
         depends: "settings::overrides, custom_oauth and overrides_of_a_run_in, through \
                   host::Host::policy and administered_folder, where holds_policy and managed \
@@ -1306,18 +1307,23 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
                settings, assigned in that order at start-up, each value coerced to a string. A \
                project's or local settings' `env` passes only a safe list then, which leaves the \
                variable out, but is assigned whole once the folder is trusted, or in print \
-               mode, so a project can turn the store on for its own sessions from then on",
+               mode, so a project can turn the store on for its own sessions from then on. From \
+               2.1.302 a session started with `--session-tunnel` also takes the `env` of the \
+               line of JSON it reads at start-up, ahead of the config file's",
         read_from: "`getSecureStorage`, the backend gate beside it with its memo and its read \
                     of the cached feature, the backend list, and \
                     applySafeConfigEnvironmentVariables, applyConfigEnvironmentVariables, the \
                     project-scope filter and the safe list, in the win32-x64 and win32-arm64 \
-                    builds of 2.1.301, read as bytes on 2026-10-16",
+                    builds of 2.1.301, read as bytes on 2026-10-16; the session tunnel's line and \
+                    `takenFromToolServerLaunchEnv`, in both Windows builds of 2.1.303, read as \
+                    bytes on 2026-10-20",
         verified_against: "2.1.301",
-        depends: "claude::credman::turned_on, which reads every signal but a project's and a \
-                  `--settings` file's, managed settings only from the sources a session takes \
-                  (settings::env_settings), and live::chain on Windows, which is the file only \
-                  where none is on and Credential Manager holds nothing at the live target, so \
-                  a session a project turned the store on for is caught once it wrote there",
+        depends: "claude::credman::turned_on, which reads every signal but a project's, a \
+                  `--settings` file's and a session tunnel's, managed settings only from the \
+                  sources a session takes (settings::env_settings), and live::chain on Windows, \
+                  which is the file only where none is on and Credential Manager holds nothing \
+                  at the live target, so a session a project turned the store on for is caught \
+                  once it wrote there",
         probe: &[
             "tengu_windows_credman",
             "CLAUDE_CODE_FORCE_WINDOWS_CREDMAN",

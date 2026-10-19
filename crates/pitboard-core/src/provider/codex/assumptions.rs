@@ -13,10 +13,9 @@ use crate::assumptions::{Assumption, PerSystem};
 /// The build every entry below was read from on macOS and Linux, unless it names its own.
 pub(crate) const VERIFIED_AGAINST: &str = "0.154.0";
 
-/// The build the facts read on Windows were read from: `@openai/codex@0.160.0-win32-x64` and
-/// `0.160.0-win32-arm64`, read as bytes on a Mac, the x64 one on 2026-10-04 and the arm64
-/// one on 2026-10-06, and never run, with the source at tag `rust-v0.160.0`.
-pub(crate) const WINDOWS_VERIFIED_AGAINST: &str = "0.160.0";
+// Both Windows builds of 0.163.0, read as bytes on 2026-10-20 with the source at `rust-v0.163.0`
+// against the `rust-v0.160.0` and `rust-v0.162.1` sources each reading named before.
+pub(crate) const WINDOWS_VERIFIED_AGAINST: &str = "0.163.0";
 
 /// A fact read on macOS and Linux from the build its entry names, and on Windows from
 /// [`WINDOWS_VERIFIED_AGAINST`]: the code each is about has no part that differs on
@@ -71,7 +70,7 @@ pub(crate) const PER_SYSTEM: &[PerSystem] = &[
         name: "codex_windows_login_location",
         macos: NotRead("where macOS's login is, is codex_login_location's"),
         linux: NotRead("where Linux's login is, is codex_login_location's"),
-        windows: Read("0.163.0"),
+        windows: Read(WINDOWS_VERIFIED_AGAINST),
     },
     everywhere("codex_login_shape", VERIFIED_AGAINST),
     everywhere("codex_identity_is_local", VERIFIED_AGAINST),
@@ -99,7 +98,7 @@ pub(crate) const PER_SYSTEM: &[PerSystem] = &[
         name: "codex_windows_app_server",
         macos: NotRead("where the app server runs from on macOS is codex_app_server_daemon's"),
         linux: NotRead("where the app server runs from on Linux is codex_app_server_daemon's"),
-        windows: Read("0.162.1"),
+        windows: Read(WINDOWS_VERIFIED_AGAINST),
     },
     PerSystem {
         name: "codex_windows_app_identity",
@@ -107,7 +106,7 @@ pub(crate) const PER_SYSTEM: &[PerSystem] = &[
             "ChatGPT for macOS is a bundle, which codex_runs_inside_the_chatgpt_app reads",
         ),
         linux: NotRead("OpenAI makes no desktop app for Linux"),
-        windows: Read("0.163.0"),
+        windows: Read(WINDOWS_VERIFIED_AGAINST),
     },
     PerSystem {
         name: "codex_home_isolates_a_sign_in",
@@ -122,7 +121,7 @@ pub(crate) const PER_SYSTEM: &[PerSystem] = &[
         name: "codex_windows_home",
         macos: NotRead("macOS's codex finds its default home in `HOME`"),
         linux: NotRead("Linux's codex finds its default home in `HOME`"),
-        windows: Read("0.162.1"),
+        windows: Read(WINDOWS_VERIFIED_AGAINST),
     },
     PerSystem {
         name: "codex_keychain_stores_are_its_own",
@@ -136,7 +135,7 @@ pub(crate) const PER_SYSTEM: &[PerSystem] = &[
         name: "codex_windows_stores",
         macos: NotRead("macOS's are codex_keychain_stores_are_its_own's"),
         linux: NotRead("Linux's are codex_keychain_stores_are_its_own's"),
-        windows: Read("0.163.0"),
+        windows: Read(WINDOWS_VERIFIED_AGAINST),
     },
     everywhere("codex_identity_is_the_person", VERIFIED_AGAINST),
     everywhere("codex_refusal_is_invalid_grant", VERIFIED_AGAINST),
@@ -153,13 +152,13 @@ pub(crate) const PER_SYSTEM: &[PerSystem] = &[
         name: "codex_windows_install_places",
         macos: NotRead("where macOS's installers put `codex` is codex_install_places'"),
         linux: NotRead("where Linux's installers put `codex` is codex_install_places'"),
-        windows: Read("0.162.1"),
+        windows: Read(WINDOWS_VERIFIED_AGAINST),
     },
     PerSystem {
         name: "codex_windows_version",
         macos: NotRead("a macOS install names its version in its path or its package.json"),
         linux: NotRead("a Linux install names its version in its path or its package.json"),
-        windows: Read("0.162.1"),
+        windows: Read(WINDOWS_VERIFIED_AGAINST),
     },
     // Its static half read from 0.162.1's source: it binds 127.0.0.1:1455, sends `GET /cancel`
     // to a login server already there and falls back to 1457, opens the browser with the `http`
@@ -186,7 +185,7 @@ pub(crate) const PER_SYSTEM: &[PerSystem] = &[
         name: "codex_windows_store_layers",
         macos: NotRead("macOS's layers are codex_store_layers'"),
         linux: NotRead("Linux's layers are codex_store_layers'"),
-        windows: Read("0.163.0"),
+        windows: Read(WINDOWS_VERIFIED_AGAINST),
     },
     PerSystem {
         name: "codex_managed_preferences",
@@ -208,7 +207,7 @@ pub(crate) const PER_SYSTEM: &[PerSystem] = &[
              Settings names the same way",
         ),
         linux: NotRead("Linux has no system proxy setting Codex reads"),
-        windows: Read("0.163.0"),
+        windows: Read(WINDOWS_VERIFIED_AGAINST),
     },
     PerSystem {
         name: "codex_wsl",
