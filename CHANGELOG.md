@@ -49,6 +49,11 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Uninstalling the Windows app turns off daily renewal where its task runs the app's own
   `pitboard.exe`, and leaves a task that runs another copy, such as Scoop's.
 
+### Security
+
+- A switch parks Claude Code's `cloudSessionsOauth` and `trustedDeviceEnrolledAfterRefusalAtMs`
+  with the outgoing account's login, and no longer leaves them for the incoming account.
+
 ## [1.0.0-beta.3] - 2026-10-19
 
 ### Changed

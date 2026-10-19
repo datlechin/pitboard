@@ -10,16 +10,14 @@ use super::api;
 use crate::store;
 use serde_json::{Value, json};
 
-/// Keys that belong to the account rather than to the machine. Claude Code deletes all of
-/// them along with the login on logout, so leaving one behind would hand the incoming
-/// account the outgoing account's device token or its second OAuth block. Measured in
-/// 2.1.278: `delete i.claudeAiOauth, delete i.organizationUuid, delete i.trustedDeviceToken,
-/// delete i.enterpriseGateway, delete i.designOauth`.
-pub(crate) const ACCOUNT_SCOPED: [&str; 4] = [
+// Claude Code's sign-in prunes these with `claudeAiOauth` (account_scoped_keys).
+pub(crate) const ACCOUNT_SCOPED: [&str; 6] = [
     "organizationUuid",
     "trustedDeviceToken",
+    "trustedDeviceEnrolledAfterRefusalAtMs",
     "enterpriseGateway",
     "designOauth",
+    "cloudSessionsOauth",
 ];
 
 /// The account's whole slice of a credential document: `claudeAiOauth` and whatever else of
