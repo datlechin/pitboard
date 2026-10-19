@@ -707,6 +707,29 @@ mod managed_tests {
         }
     }
 
+    // A warm-up's own token comes before `.oauth_token`, and `.api_key` before both.
+    #[test]
+    fn a_warm_ups_run_takes_the_api_key_in_claude_codes_remote_file() {
+        for (os, folder) in [
+            (Os::MacOs, "/home/claude/.claude/remote/"),
+            (Os::Linux, "/home/claude/.claude/remote/"),
+            (Os::Windows, r"C:\home\claude\.claude\remote\"),
+        ] {
+            let memory = MemoryHost::new();
+            memory.administers(format!("{folder}.oauth_token"), "a token");
+            let (ctx, scratch) = on(os, &memory);
+            let run = scratch.path().join("warm").join("config");
+            assert_eq!(overrides_of_a_run_in(&ctx, &run), Vec::new(), "{os:?}");
+
+            memory.administers(format!("{folder}.api_key"), "sk-ant-x");
+            assert_eq!(
+                said(&overrides_of_a_run_in(&ctx, &run)),
+                [(format!("{folder}.api_key"), "the API key".to_string())],
+                "{os:?}"
+            );
+        }
+    }
+
     #[test]
     fn on_windows_a_remote_token_file_is_at_a_drives_root() {
         let memory = MemoryHost::new();
