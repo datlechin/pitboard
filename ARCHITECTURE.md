@@ -1553,8 +1553,9 @@ window loads its site, and whatever the site's pages load, as a browser would.
   `Pitboard.exe` only as a Pitboard link, which `Pitboard.exe` checks as it checks any. That
   the `Pitboard.exe` it starts through `CreateProcess` carries none of its identity is
   measured only for a sparse-identity process started by path (CF8), not for one the share
-  sheet activates, until P2 reads `GetCurrentPackageFamilyName` in a `Pitboard.exe` a real
-  share started ([Documented, not measured](#documented-not-measured)).
+  sheet activates, until the 1.0 session's P1, which shares from Edge, Chrome and Firefox,
+  reads `GetCurrentPackageFamilyName` in the `Pitboard.exe` each share started
+  ([Documented, not measured](#documented-not-measured)).
 - On macOS, only `/usr/bin/security` reads or writes Claude Code's keychain item and
   Pitboard's parked items. No keychain item is touched through the Security framework. The
   reason is under [macOS](#macos) in Measured facts.
@@ -2823,10 +2824,10 @@ Processes and jobs:
   as the child's own reading as text, and the same once it has exited while a handle is open,
   its exit time later. Each of 50 children had its own (RF-T8, runs 39310064516 and
   39320680285).
-- Once no handle to an exited child is left, opening its pid at once gives the same exited
-  process in 30 and 11 of 50 tries on windows-2025 and windows-11-arm, and fails 6 in the
-  rest. 100 ms later it fails 6 in 99 of 100 (RF-T8, run 39320680285). A pid never given out
-  fails 87, as the core's Windows tests read, and `proc::open` takes both for gone.
+- Once the probe holds no handle to an exited child, opening its pid at once gives the same
+  exited process in 30 and 11 of 50 tries on windows-2025 and windows-11-arm, and fails 6 in
+  the rest. 100 ms later it fails 6 in 99 of 100 (RF-T8, run 39320680285). A pid never given
+  out fails 87, as the core's Windows tests read, and `proc::open` takes both for gone.
 - `GetModuleFileNameW` and `current_exe` give the path a program was started by, through a
   file symbolic link, a junction or a hard link. Canonicalizing resolves the link and the
   junction, not the hard link.
@@ -3125,7 +3126,7 @@ measured on 18 October 2026, and those CI and the runner facts measured by 20 Oc
 | A deferred custom action without `msidbCustomActionTypeNoImpersonate` runs as the person running the install or removal, so a per-user removal's `Pitboard.exe --unregister` passes the core's gate and reaches that person's renewal task | [Custom action in-script execution options](https://learn.microsoft.com/en-us/windows/win32/msi/custom-action-in-script-execution-options) | The session of 18 October 2026 saw `--unregister` delete the person's `Run` value, and read no token. No runner installs an MSI; the next session removes Pitboard and reads whether the task went. |
 | `msiexec /a` extracts an MSI only on a machine whose platform its `Template` names, as an install would, so `windows-msi`, `windows-feed-key` and `windows-install` each read the MSI for their own machine | [Template Summary property](https://learn.microsoft.com/en-us/windows/win32/msi/template-summary) | Each runner extracts only its own MSI: no row tries the other's. |
 | `RemovePackageAsync` shuts down every process of the package as it removes it, so `PitboardShare.exe` could not remove its own package | [PackageManager.RemovePackageAsync](https://learn.microsoft.com/en-us/uwp/api/windows.management.deployment.packagemanager.removepackageasync) | CF8 removed PitboardShare's with no process of the package running (run 38928930271). P1 uninstalls Pitboard and finds the package gone. |
-| A process that `PitboardShare.exe` starts through `CreateProcess` carries none of its package identity, since a process with no desktop app policy set starts its children outside the package | [UpdateProcThreadAttribute](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-updateprocthreadattribute) | The probe's identity process, started by path, gave its `CreateProcessW` children none, and one handed a link as its only argument got it whole (runs 38928930271, 39291962999 and 39301311398, CF8 under [Windows](#windows)). No runner activates a share target, whose activation may set a policy that keeps children in the package: P2 reads `GetCurrentPackageFamilyName` in a `Pitboard.exe` a real share started, and P1, with no copy running, whether it keeps running once `PitboardShare.exe` has returned. |
+| A process that `PitboardShare.exe` starts through `CreateProcess` carries none of its package identity, since a process with no desktop app policy set starts its children outside the package | [UpdateProcThreadAttribute](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-updateprocthreadattribute) | The probe's identity process, started by path, gave its `CreateProcessW` children none, and one handed a link as its only argument got it whole (runs 38928930271, 39291962999 and 39301311398, CF8 under [Windows](#windows)). No runner activates a share target, whose activation may set a policy that keeps children in the package: the 1.0 session's P1 reads `GetCurrentPackageFamilyName` in a `Pitboard.exe` a real share started and, with no copy running, whether it keeps running once `PitboardShare.exe` has returned. |
 
 ### One sign-in at a time
 

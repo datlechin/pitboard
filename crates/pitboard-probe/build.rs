@@ -1,4 +1,4 @@
-//! Embed a manifest into three of the probe's programs, on the MSVC toolchain only:
+//! Embed a manifest into four of the probe's programs, on the MSVC toolchain only:
 //!
 //! - `pitboard-probe-detached`: `consoleAllocationPolicy=detached` in the spelling
 //!   Microsoft's application manifest reference documents (`asmv3:windowsSettings` in the
@@ -16,7 +16,7 @@
 //! block reads each program's manifest back, so a build that embedded nothing says so.
 //!
 //! It also records which compiler built the probe, since block F3 measures that compiler's
-//! standard library.
+//! standard library, and on MSVC gives every program an 8 MB main stack.
 
 // A build script reads its configuration from the environment Cargo sets; the workspace
 // rule about reading the environment through the context is for Pitboard's engine, not here.
