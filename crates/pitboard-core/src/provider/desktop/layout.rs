@@ -458,6 +458,33 @@ mod tests {
         }
         assert_eq!((account.len(), ACCOUNT.len()), (20, 19));
         assert_eq!((stays.len(), STAYS.len()), (123, 118));
+        let stores = [
+            "config.json",
+            "git-worktrees.json",
+            "buddy-state.json",
+            "buddy-tokens.json",
+            "ssh-launch-preconnect.json",
+            "ssh-remote-server-state.json",
+            "ssh-remembered-passwords.json",
+            "ccd-environment-config.json",
+            "ccd-session-presets.json",
+            "cowork-enabled-cli-ops.json",
+            "cowork-plugin-env.json",
+            "cowork-plugin-oauth.json",
+            "custom3p-builtin-mcp.json",
+            "custom3p-mcp-schemas.json",
+        ];
+        for store in stores {
+            let journal = format!("{store}.journal");
+            assert_eq!(
+                classify(OsStr::new(&journal)),
+                classify(OsStr::new(store)),
+                "{journal}"
+            );
+            let written = format!("{store}.tmp-1000000123a1b2c3");
+            assert_eq!(classify(OsStr::new(&written)), Class::Passing, "{written}");
+        }
+        assert_eq!(stores.len(), STORES.len());
         for name in [
             ".config.json.4242.1.pitboard",
             ".config.json.4242.pitboard",

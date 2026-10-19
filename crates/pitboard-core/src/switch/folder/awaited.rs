@@ -46,7 +46,7 @@ impl Wait {
     }
 }
 
-// The three keys a signed-out app kept, as after a Log out, set aside before the wait: a
+// The keys a signed-out app kept, as after a Log out, set aside before the wait: a
 // sign-in quit within seconds then leaves a session with no name, never one under the old.
 // The aside is indexed in `state` for the caller to save.
 fn set_keys_aside(

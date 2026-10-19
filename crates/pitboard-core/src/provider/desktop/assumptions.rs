@@ -98,7 +98,8 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
         read_from: "The contributor's experiments E2 and E9, 4 October 2026; read again in \
                     `app.asar`, 11 October 2026, `M` @650532, @2938290, @2956446",
         verified_against: VERIFIED_AGAINST,
-        depends: "`Desktop::keys`, `naming_key`: the splice moves exactly these three",
+        depends: "`Desktop::keys`, `naming_key`: the splice moves these three, and \
+                  `custom3pMcpOAuth` of `desktop_cleared_for_another_account`",
         probe: &[
             "lastKnownAccountUuid",
             "oauth:tokenCacheV2",
@@ -153,12 +154,15 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
                sets `launchChromeImportPrompt` in `claude_desktop_config.json` back to \
                pending. Where a policy sets up its Microsoft 365 connector, it also drops \
                the grants in `config.json`'s `custom3pMcpOAuth` and the sign-ins in \
-               `builtin-mcp-auth` and `custom3p-builtin-mcp.json`. None of these names its \
+               `builtin-mcp-auth` and `custom3p-builtin-mcp.json`, and signs out of the \
+               system's Microsoft broker, which no switch moves. None of these names its \
                account. Its other resets on that change clear memory, or what names its \
-               account or session.",
+               account or session. A first sign-in with no `lastKnownAccountUuid` runs the \
+               preview resets too, and empties `preview-last-frames`.",
         read_from: "This repository's static read of 2.42304.0's `app.asar`, 19 October 2026: \
                     the account remembered at `N` @2937198, the resets @2938000 to @2942600, \
-                    the preview browsers @4857844, the connectors @2877456 and their files in \
+                    a first sign-in @2939820, the preview browsers @4857844, the broker \
+                    @1454853, the connectors @2877456 and their files in \
                     a claude.ai sign-in @903626 to @904139, the preferences file @1684323",
         verified_against: READ_FROM_THE_NEWER_BUNDLE,
         depends: "`Desktop::items` and `Desktop::keys` carry each with the login, since a \
@@ -215,7 +219,8 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
                `vm_bundles`, `bridge-state.json`, `previous-profile-additions.json`, \
                `sibling-import.json`, `usage-metrics`, `space-memory-copy`, \
                `mcp-user-tool-toggles.json`, `ant-device-key-generation.json` and \
-               `remote-control-state.json`.",
+               `remote-control-state.json`. `ccd-environment-config.json`'s `envVars` serve \
+               every account, and Claude never clears them for another.",
         read_from: "This repository's static read of 2.42304.0's `app.asar`, 19 October 2026: \
                     `N` @3743629, @6005826, @4554610, @3739638, @5446651, @2268288, \
                     @2276083, @6115854, @6113648, @2276378, @2276218, @2271799, @4295224, \

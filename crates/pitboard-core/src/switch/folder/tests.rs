@@ -276,6 +276,27 @@ fn a_missing_jar_beside_an_item_or_a_key_is_never_signed_out() {
     );
     assert_eq!(code(use_(&m, "work")), "login_folder_unknown");
     assert_eq!(snapshot(&m), before);
+
+    // An item 2.42304.0 clears for another account, and no jar.
+    let m = desktop_machine("no-jar-preview");
+    without_items(&m);
+    for key in [
+        "oauth:tokenCache",
+        "oauth:tokenCacheV2",
+        "lastKnownAccountUuid",
+    ] {
+        set(&m, key, None);
+    }
+    std::fs::create_dir(data(&m).join("Partitions")).expect("a preview browser");
+    let before = snapshot(&m);
+    let refused = enrol(&m, "work").expect_err("refused");
+    assert!(
+        refused
+            .to_string()
+            .contains("has no cookie store and still holds `Partitions`"),
+        "{refused}"
+    );
+    assert_eq!(snapshot(&m), before);
 }
 
 #[test]
@@ -284,7 +305,7 @@ fn a_missing_jar_beside_an_item_or_a_key_is_never_signed_out() {
     ignore = "Claude Desktop is macOS only: Windows refuses its folder calls"
 )]
 fn no_data_folder_and_an_empty_one_hold_nobody() {
-    // Row 5: no jar, none of the items, none of the three keys.
+    // Row 5: no jar, none of the items, none of the keys.
     let m = two_accounts("row-5");
     without_items(&m);
     for key in [
@@ -1341,6 +1362,7 @@ fn a_switch_carries_what_claude_clears_for_another_account() {
         "session-popouts.json",
     ];
 
+    // `home`'s park holds none of them, as one an earlier Pitboard made.
     let (_, warnings) = used(&m, "home");
     assert!(warnings.is_empty(), "{warnings:?}");
     for item in carried {
@@ -1364,6 +1386,34 @@ fn a_switch_carries_what_claude_clears_for_another_account() {
     );
     hold(&m, "and back");
     rested(&m, "and back");
+}
+
+// A leave stopped after the keys went, then Claude run signed out beside grants it kept.
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Claude Desktop is macOS only: Windows refuses its folder calls"
+)]
+fn a_leave_finished_beside_connector_grants_verifies_and_commits() {
+    let m = desktop_pair("grants-settled");
+    killed(&m, "leave.item_out", "home");
+    let claude = m.claude();
+    claude.opens();
+    claude.quits();
+    set(&m, "custom3pMcpOAuth", Some(json!({"grant": "kept"})));
+
+    let gave = gave_up(&m).expect("settled");
+    assert!(gave.moves.is_empty(), "nothing given up: {gave:?}");
+    assert!(
+        matches!(
+            gave.warnings.as_slice(),
+            [Warning::MoveSettled(moved)]
+                if moved.half == state::Half::Leave && moved.ended == super::Ended::Finished
+        ),
+        "{:?}",
+        gave.warnings
+    );
+    assert_eq!(in_use(&m), None);
 }
 
 // A Log out leaves the connector grants, which hold no login of Claude's.
@@ -1418,8 +1468,12 @@ fn a_use_into_a_signed_out_claude_says_who_left_in_the_activity_log() {
 )]
 fn the_keys_leave_before_the_jar_and_arrive_after_it() {
     let m = desktop_pair("order");
+    set(&m, "custom3pMcpOAuth", Some(json!({"grant": "work's"})));
+    used(&m, "home");
+    set(&m, "custom3pMcpOAuth", Some(json!({"grant": "home's"})));
+    used(&m, "work");
     let seen = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
-    // How many of the three keys the settings hold.
+    // How many of the account's keys the settings hold.
     let look = |at: &'static str| {
         let (seen, root) = (std::rc::Rc::clone(&seen), data(&m));
         move || {
@@ -1431,6 +1485,7 @@ fn the_keys_leave_before_the_jar_and_arrive_after_it() {
                 "oauth:tokenCache",
                 "oauth:tokenCacheV2",
                 "lastKnownAccountUuid",
+                "custom3pMcpOAuth",
             ]
             .into_iter()
             .filter(|key| settings.contains_key(*key))
@@ -1455,7 +1510,7 @@ fn the_keys_leave_before_the_jar_and_arrive_after_it() {
             ("leave.keys_out", 0, true),
             ("leave.jar_out", 0, false),
             ("arrive.jar_in", 0, true),
-            ("arrive.keys_in", 3, true),
+            ("arrive.keys_in", 4, true),
         ]
     );
 }

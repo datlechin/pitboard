@@ -3567,8 +3567,9 @@ here gives its build.
   (E2 and E9, 2.19675.0; read again in 2.7032.0).
 - The data folder's first level holds the names `desktop::layout` lists: those a listing
   under 2.7032.0 held (11 October 2026), the items E2 moved, three names 2.7032.0's code
-  makes for installed extensions, and the GPU caches below. Every other name its code makes
-  is unread.
+  makes for installed extensions, and the names 2.42304.0 makes, as the entries below say. A
+  name 2.42304.0 makes only on Windows, only in `Claude-3p` or only under a home starting
+  `//` is unread.
 - From Electron 44.4.4, Claude keeps Chromium's GPU caches `ShaderCache`, `GrShaderCache`,
   `GraphiteDawnCache` and `GPUPersistentCache` in the data folder, beside `GPUCache`. They
   hold compiled shaders, so they stay (Electron's pull request 54161; 2.42304.0's framework,
@@ -3577,9 +3578,11 @@ here gives its build.
   `chrome-import-sites.json`, and, under a Microsoft 365 policy, the connector's
   `custom3pMcpOAuth`, `builtin-mcp-auth` and `custom3p-builtin-mcp.json`. A switch puts the
   arriving account's `lastKnownAccountUuid` in, so Claude never sees the change, and these
-  move with the login instead. `launchChromeImportPrompt` in `claude_desktop_config.json`
-  stays, so an account that arrives is not asked again to import Chrome's sites (2.42304.0,
-  19 October 2026).
+  move with the login instead. `launchChromeImportPrompt` and the lists of preview browsers
+  in `claude_desktop_config.json` stay, so an account that arrives is not asked again to
+  import Chrome's sites, and the system's Microsoft broker keeps its sign-in. A first
+  sign-in after Pitboard parks the only account runs Claude's preview resets, which empty
+  `preview-last-frames` (2.42304.0, 19 October 2026).
 - `Service Worker`, `Platform Notifications`, `CdmStorage.db` and
   `declarative_performance_observer.db` are Chromium's stores for each site, and
   `session-popouts.json` and an earlier build's `local-sessions.json` name no account, so
