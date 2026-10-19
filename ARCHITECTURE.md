@@ -1201,7 +1201,10 @@ window loads its site, and whatever the site's pages load, as a browser would.
   `MemoryHost`, which writes the files in the test's home and asks no service manager, and
   on Windows keeps the task's definition there as `Tasks\Pitboard\<name>`, and the real
   hosts refuse to ask launchd, systemd or Task Scheduler from any build for tests: a unit
-  test, the command line the integration tests run, or an app built with the fixtures.
+  test, the command line the integration tests run, or an app built with the fixtures. The
+  exception is the Release build the release gate's UI test starts at 1.x as a runner's fresh
+  standard user. Its start, its Settings and its `--unregister` read that account's
+  `\Pitboard\Renew <SID>`, where there is none, and change nothing in Task Scheduler.
 - `pitboard-ffi` exports records, enums, three error types, free functions, one object,
   `PitboardModel`, and four traits an app implements, `ModelListener`, `AppControl`,
   `Notifications` and `LocalTime`. Nothing it exports is async. The core it runs on is
@@ -1520,9 +1523,10 @@ window loads its site, and whatever the site's pages load, as a browser would.
   that is not a full path. It asks before it judges a link or takes the single-instance key,
   and a refused launch shows the core's sentence and exits with nothing written
   (`ReleaseGateTests`, over the MSI's Release build). Only `--unregister` and
-  `--unregister-share`, which the MSI runs, are read first, and they ask neither the core nor
-  a running copy. `Unregistering` then asks the core only to take away the renewal task,
-  which the gate every change passes refuses as it refuses any change.
+  `--unregister-share`, which the MSI runs, are read first. Neither asks a running copy, and
+  `--unregister-share` asks nothing of the core. `--unregister` asks the core only to take
+  away the renewal task (`unschedule_app`), which the gate every change passes refuses as it
+  refuses any change.
 - The Windows app's own data folder is never in Pitboard's directory. It is `Pitboard App`,
   or `Pitboard App Debug` for a Debug build, beside `Pitboard` in the known folder Local
   AppData, which `Shell.LocalAppData` asks `SHGetKnownFolderPath` for. So neither
