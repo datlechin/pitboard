@@ -84,19 +84,20 @@ window loads its site, and whatever the site's pages load, as a browser would.
     `app_id`), the scheduler, whether this process runs as the person (`elevation`), whether
     the system is one Pitboard changes things on by its version (`floor`, `host::Floor`),
     and what an administrator set for a program outside every home (`administered_file`,
-    `administered_folder`, `managed_preference`, which `macos/preferences.rs` reads, and
-    `policy`, a value under the Windows registry's `HKLM` or `HKCU`), the environment a
-    Windows program started now is given (`user_environment`, `machine_environment`) and
-    Windows' `ProgramData` (`program_data`), reached through `Context` and faked by
-    `host/memory.rs`, which plays every answer. In a build for tests the real hosts read
-    nothing an administrator set (`host/administered.rs`) and no app installed on the
-    machine. `fs`, `proc` and `user` are plain functions for what the system does whoever
-    asks: private files and directories, every other change to the disk, whether a process
-    is alive, a program run with a ceiling (`proc::run_within`), the login name, whether
-    this process runs as root, and the `PATH` the person's login shell builds, which
-    `unix/shell.rs` asks for. `fs` creates each private file itself and hands it back open
-    (`create_private`, `open_private_append` and `open_private_lock`), so how a file is made
-    private is the face's alone. A login kept as files moves through four more:
+    `administered_file_up_to`, `administered_folder`, `managed_preference`, which
+    `macos/preferences.rs` reads, and `policy`, a value under the Windows registry's `HKLM`
+    or `HKCU`), the environment a Windows program started now is given (`user_environment`,
+    `machine_environment`), Windows' `ProgramData` (`program_data`) and its fixed drives
+    (`fixed_drives`), reached through `Context` and faked by `host/memory.rs`, which plays
+    every answer. In a build for tests the real hosts read nothing an administrator set
+    (`host/administered.rs`) and no app installed on the machine. `fs`, `proc` and `user`
+    are plain functions for what the system does whoever asks: private files and
+    directories, every other change to the disk, whether a process is alive, a program run
+    with a ceiling (`proc::run_within`), the login name, whether this process runs as root,
+    and the `PATH` the person's login shell builds, which `unix/shell.rs` asks for. `fs`
+    creates each private file itself and hands it back open (`create_private`,
+    `open_private_append` and `open_private_lock`), so how a file is made private is the
+    face's alone. A login kept as files moves through four more:
     `fs::private_dir` says whether a folder is this user's own and closed to others,
     `fs::lock_dir` takes a folder's advisory lock without waiting, `fs::same_volume` says
     whether two paths can be renamed between, and `fs::move_new` is the kernel's rename that
@@ -2856,7 +2857,9 @@ against the drive of its working folder (RF-T7, runs 39310064516 and 39320680285
 - Run from a folder on `C:`, which has no `C:\home\claude`, it got ENOENT.
 
 So a session reads the file at the root of the drive its working folder is on, and doctor's
-`auth_source` check looks at the root of each fixed drive.
+`auth_source` check and a warm-up's halt over `.api_key` look at the root of each fixed
+drive. Each reads at most 64 KiB of a regular file, as Claude Code does, since any account on
+the PC may put one there.
 
 Credential Manager:
 
