@@ -634,7 +634,7 @@ mod tests {
             &sorted,
         );
         assert!(text.starts_with(
-            "claude.exe\na windows build; Pitboard's facts about claude were read from 2.1.289\n\n"
+            "claude.exe\na windows build; Pitboard's facts about claude were read from 2.1.303\n\n"
         ));
         assert!(
             text.contains("  pending  windows_credman_cache  (its windows reading waits on W27)\n")
@@ -681,7 +681,7 @@ mod tests {
             Platform::Windows,
             &sorted,
         );
-        assert_eq!(report["verified_against"], "0.160.0");
+        assert_eq!(report["verified_against"], "0.163.0");
         assert!(
             report["pending_here"]
                 .as_array()
