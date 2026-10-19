@@ -1406,22 +1406,23 @@ function Measure-NonAsciiUser($Result, [string] $Bun, $Fresh) {
 # is a deny-only SID, and described as that token reads them.
 function Measure-FilteredToken($User) {
     $s = $User.Scratch
+    # In run 39310064516, icacls /inheritance:r /grant:r left the user's ACE on the file meant
+    # for administrators alone, so each descriptor is set whole.
     $files = [ordered]@{
-        user_and_administrators = @("*$($User.Sid):F", "*${administratorsSid}:F", '*S-1-5-18:F')
-        administrators_alone = @("*${administratorsSid}:F", '*S-1-5-18:F')
-        user_read_alone = @("*$($User.Sid):R", "*${administratorsSid}:F", '*S-1-5-18:F')
+        user_and_administrators = "O:BAD:P(A;;FA;;;SY)(A;;FA;;;BA)(A;;FA;;;$($User.Sid))"
+        administrators_alone = 'O:BAD:P(A;;FA;;;SY)(A;;FA;;;BA)'
+        user_read_alone = "O:BAD:P(A;;FA;;;SY)(A;;FA;;;BA)(A;;FR;;;$($User.Sid))"
     }
     $r = [ordered]@{}
     try {
         foreach ($kind in $files.Keys) {
             $path = Join-Path $s ('pitboard-probe-ace-' + ($kind -replace '_', '-'))
             Set-Content -LiteralPath $path -Value 'x'
-            icacls $path /setowner "*$administratorsSid" *> $null
-            $owned = $LASTEXITCODE
-            icacls $path /inheritance:r /grant:r @($files[$kind]) *> $null
+            $security = [System.Security.AccessControl.FileSecurity]::new()
+            $security.SetSecurityDescriptorSddlForm($files[$kind])
+            $set = Invoke-Fact { Set-Acl -LiteralPath $path -AclObject $security; 'set' }
             $r[$kind] = [ordered]@{
-                setowner_exit = $owned
-                grant_exit = $LASTEXITCODE
+                descriptor_set = $set
                 described = Invoke-AsUser $User "t8-ace-$kind-describe" @('acl', '--scratch', $s, '--describe', $path)
                 opened = Invoke-AsUser $User "t8-ace-$kind" @('acl', '--scratch', $s, '--open', $path)
             }
@@ -2059,31 +2060,50 @@ function Measure-Channels($Result) {
     }
 }
 
-# RF-T8: two probe tasks of the job user's with the renewal's daily trigger, its start 5
-# minutes before they are registered, one with StartWhenAvailable. Read near the end of the
-# run, since Task Scheduler starts a missed start after a delay, 10 minutes by default.
+# RF-T8: probe tasks of the job user's with the renewal's daily trigger, each pair one with
+# StartWhenAvailable and one without: on and off begin 5 minutes before they are registered;
+# held-on and held-off begin 3 minutes after, registered disabled and enabled once that start
+# has passed. Read near the end of the run, since Task Scheduler starts a missed start after
+# a delay, 10 minutes by default.
+$missedStarts = 'on', 'off', 'held-on', 'held-off'
+
 function Register-MissedStart($Result, [string] $In) {
     $script:missedStartRegistered = Get-Date
-    foreach ($kind in 'on', 'off') {
+    foreach ($kind in $missedStarts) {
         $out = Join-Path $In "pitboard-probe-swa-$kind.json"
-        $register = @('task', '--scratch', $In, '--label', "swa-$kind", '--action', 'register', '--args', "--out $out logon",
-            '--daily-since-minutes', '5', '--allow-battery')
-        if ($kind -eq 'on') { $register += '--start-when-available' }
+        $register = @('task', '--scratch', $In, '--label', "swa-$kind", '--action', 'register', '--args', "--out $out logon", '--allow-battery')
+        if ($kind -like 'held-*') { $register += '--daily-in-minutes', '3', '--disabled' } else { $register += '--daily-since-minutes', '5' }
+        if ($kind -like '*on') { $register += '--start-when-available' }
         $Result[$kind] = [ordered]@{ register = Invoke-Probe "swa-$kind-register" $register }
     }
 }
 
+function Enable-MissedStart($Result, [string] $In) {
+    $wait = ($script:missedStartRegistered.AddMinutes(4) - (Get-Date)).TotalSeconds
+    if ($wait -gt 0) { Start-Sleep -Seconds ([int] [math]::Ceiling($wait)) }
+    $script:missedStartEnabled = Get-Date
+    $Result.enabled_after_minutes = [math]::Round(($script:missedStartEnabled - $script:missedStartRegistered).TotalMinutes, 1)
+    foreach ($kind in 'held-on', 'held-off') {
+        $Result[$kind].enable = Invoke-Probe "swa-$kind-enable" @('task', '--scratch', $In, '--label', "swa-$kind", '--action', 'enable')
+    }
+}
+
 function Read-MissedStart($Result, [string] $In) {
-    $on = Join-Path $In 'pitboard-probe-swa-on.json'
-    $deadline = $script:missedStartRegistered.AddMinutes(14)
-    while (-not (Test-Path -LiteralPath $on) -and (Get-Date) -lt $deadline) { Start-Sleep -Seconds 5 }
+    $since = if ($script:missedStartEnabled) { $script:missedStartEnabled } else { $script:missedStartRegistered }
+    $deadline = $since.AddMinutes(14)
+    $awaited = @('on', 'held-on' | ForEach-Object { Join-Path $In "pitboard-probe-swa-$_.json" })
+    while (($awaited | Where-Object { -not (Test-Path -LiteralPath $_) }) -and (Get-Date) -lt $deadline) { Start-Sleep -Seconds 5 }
     $Result.read_after_minutes = [math]::Round(((Get-Date) - $script:missedStartRegistered).TotalMinutes, 1)
-    foreach ($kind in 'on', 'off') {
+    foreach ($kind in $missedStarts) {
         $out = Join-Path $In "pitboard-probe-swa-$kind.json"
         $Result[$kind].read = Invoke-Probe "swa-$kind-read" @('task', '--label', "swa-$kind", '--action', 'read')
         $Result[$kind].ran = Test-Path -LiteralPath $out
         if ($Result[$kind].ran) {
-            $Result[$kind].ran_after_seconds = [int] ((Get-Item -LiteralPath $out).LastWriteTime - $script:missedStartRegistered).TotalSeconds
+            $wrote = (Get-Item -LiteralPath $out).LastWriteTime
+            $Result[$kind].ran_after_seconds = [int] ($wrote - $script:missedStartRegistered).TotalSeconds
+            if ($kind -like 'held-*' -and $script:missedStartEnabled) {
+                $Result[$kind].ran_after_enabling_seconds = [int] ($wrote - $script:missedStartEnabled).TotalSeconds
+            }
         }
         $Result[$kind].delete = Invoke-Probe "swa-$kind-delete" @('task', '--scratch', $In, '--label', "swa-$kind", '--action', 'delete')
     }
@@ -2181,6 +2201,10 @@ try {
     $report.remote_token_file = [ordered]@{}
     if ($bun) {
         try { Measure-RemoteTokenFile $report.remote_token_file $bun } catch { $report.remote_token_file.error = $_.Exception.Message }
+        Save-Report
+    }
+    if ($script:missedStartRegistered) {
+        try { Enable-MissedStart $report.start_when_available $missedStart } catch { $report.start_when_available.enable_error = $_.Exception.Message }
         Save-Report
     }
 

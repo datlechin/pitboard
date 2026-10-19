@@ -7,14 +7,14 @@ use super::{io_code, logon_now};
 use crate::cli::Outcome;
 use crate::report::Report;
 use serde_json::{Value, json};
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::process::{Command, Stdio};
 
-use windows_sys::Win32::Foundation::{FILETIME, HANDLE};
+use windows_sys::Win32::Foundation::{FILETIME, HANDLE, WAIT_OBJECT_0};
 use windows_sys::Win32::System::SystemInformation::GetSystemTimePreciseAsFileTime;
 use windows_sys::Win32::System::Threading::{
     GetCurrentProcess, GetProcessTimes, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION,
-    PROCESS_SYNCHRONIZE,
+    PROCESS_SYNCHRONIZE, WaitForSingleObject,
 };
 
 fn now() -> u64 {
@@ -53,6 +53,24 @@ fn by_pid(pid: u32) -> Result<(u64, u64), u32> {
     times(opened(pid, PROCESS_QUERY_LIMITED_INFORMATION)?.raw())
 }
 
+// What opening the pid of an exited child gives once no handle of this probe's is open: as
+// `pitboard_core::host::windows::proc::may_be_running` opens it.
+fn once_closed(pid: u32, created: u64) -> String {
+    match opened(pid, PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_SYNCHRONIZE) {
+        Err(code) => format!("error {code}"),
+        Ok(process) => {
+            let same = times(process.raw()).is_ok_and(|(at, _)| at == created);
+            // SAFETY: an open handle with SYNCHRONIZE, waited on for no time at all.
+            let exited = unsafe { WaitForSingleObject(process.raw(), 0) } == WAIT_OBJECT_0;
+            format!(
+                "opened, {} process, {}",
+                if same { "the same" } else { "another" },
+                if exited { "exited" } else { "running" }
+            )
+        }
+    }
+}
+
 pub(super) fn child() -> Outcome {
     // SAFETY: the pseudo handle of this process.
     match times(unsafe { GetCurrentProcess() }) {
@@ -76,7 +94,8 @@ pub(super) fn process_times(children: u32) -> Report {
     let mut same_as_the_child = 0u32;
     let mut same_after_exit = 0u32;
     let mut exit_after_creation = 0u32;
-    let mut once_closed = BTreeSet::new();
+    let mut at_once: BTreeMap<String, u32> = BTreeMap::new();
+    let mut after_100_ms: BTreeMap<String, u32> = BTreeMap::new();
     let mut created_all = BTreeSet::new();
     for _ in 0..children.min(200) {
         let before = now();
@@ -102,7 +121,15 @@ pub(super) fn process_times(children: u32) -> Report {
             .map(|out| String::from_utf8_lossy(&out.stdout).trim().to_string());
         let exited = by_pid(pid);
         drop(held);
-        let closed = by_pid(pid);
+        let closed = running
+            .as_ref()
+            .ok()
+            .map(|(created, _)| once_closed(pid, *created));
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        let later = running
+            .as_ref()
+            .ok()
+            .map(|(created, _)| once_closed(pid, *created));
         let (created, after_exit) = match (running, exited) {
             (Ok(r), Ok(e)) => (r.0, e),
             (r, e) => {
@@ -131,10 +158,11 @@ pub(super) fn process_times(children: u32) -> Report {
         if after_exit.1 > created {
             exit_after_creation += 1;
         }
-        once_closed.insert(match closed {
-            Ok(_) => "opened".to_string(),
-            Err(code) => code.to_string(),
-        });
+        for (seen, counts) in [(closed, &mut at_once), (later, &mut after_100_ms)] {
+            if let Some(seen) = seen {
+                *counts.entry(seen).or_default() += 1;
+            }
+        }
     }
     let micros = |ticks: &[u64]| ticks.iter().max().map(|t| t / 10);
     Report::ok(
@@ -153,7 +181,8 @@ pub(super) fn process_times(children: u32) -> Report {
             "child_reads_the_same_text": same_as_the_child,
             "same_once_exited_while_a_handle_is_held": same_after_exit,
             "exit_time_after_creation": exit_after_creation,
-            "once_every_handle_is_closed": once_closed,
+            "once_every_handle_is_closed": at_once,
+            "and_100_ms_later": after_100_ms,
         }),
     )
 }

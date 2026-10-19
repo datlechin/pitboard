@@ -119,6 +119,8 @@ pub fn run(command: &Command, out: Option<&Path>) -> Outcome {
             args,
             at_minutes,
             daily_since_minutes,
+            daily_in_minutes,
+            disabled,
             start_when_available,
             allow_battery,
         } => task::task(&task::Request {
@@ -131,6 +133,8 @@ pub fn run(command: &Command, out: Option<&Path>) -> Outcome {
             args: args.as_deref(),
             at_minutes: *at_minutes,
             daily_since_minutes: *daily_since_minutes,
+            daily_in_minutes: *daily_in_minutes,
+            disabled: *disabled,
             start_when_available: *start_when_available,
             allow_battery: *allow_battery,
         }),

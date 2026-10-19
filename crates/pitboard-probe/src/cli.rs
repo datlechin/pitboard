@@ -220,8 +220,14 @@ pub enum Command {
         at_minutes: Option<u32>,
         /// T8: a daily trigger whose start boundary passed this many minutes ago, as the
         /// renewal's daily trigger is once a start was missed.
-        #[arg(long, conflicts_with = "at_minutes")]
+        #[arg(long, conflicts_with_all = ["at_minutes", "daily_in_minutes"])]
         daily_since_minutes: Option<u32>,
+        /// T8: a daily trigger whose start boundary is this many minutes from now.
+        #[arg(long, conflicts_with = "at_minutes")]
+        daily_in_minutes: Option<u32>,
+        /// Register it disabled, for `enable` to turn on once its start has passed.
+        #[arg(long)]
+        disabled: bool,
         #[arg(long)]
         start_when_available: bool,
         /// Let it start and keep running on battery.
@@ -524,6 +530,7 @@ pub enum TaskAction {
     Read,
     List,
     Delete,
+    Enable,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
@@ -965,6 +972,32 @@ mod tests {
             ])
             .is_err()
         );
+        let cli = Cli::try_parse_from([
+            "pitboard-probe",
+            "task",
+            "--action",
+            "register",
+            "--daily-in-minutes",
+            "3",
+            "--disabled",
+        ])
+        .unwrap();
+        assert!(matches!(
+            cli.command,
+            Command::Task {
+                daily_in_minutes: Some(3),
+                disabled: true,
+                ..
+            }
+        ));
+        let cli = Cli::try_parse_from(["pitboard-probe", "task", "--action", "enable"]).unwrap();
+        assert!(matches!(
+            cli.command,
+            Command::Task {
+                action: TaskAction::Enable,
+                ..
+            }
+        ));
     }
 
     #[test]
