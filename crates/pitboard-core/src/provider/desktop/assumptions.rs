@@ -86,7 +86,7 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
         read_from: "The contributor's experiment E2, 4 October 2026: two accounts, one switch \
                     each way, name, conversations, Code tab, Cowork and connectors checked by eye",
         verified_against: VERIFIED_AGAINST,
-        depends: "`Desktop::items`: a leave and an arrive move exactly these",
+        depends: "`Desktop::items` starts with these, the jar first",
         probe: &[],
         absent: &[],
     },
@@ -143,6 +143,62 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
         verified_against: READ_FROM_THE_NEWER_BUNDLE,
         depends: "`Desktop::classify` gives each `Stays`",
         probe: &[],
+        absent: &[],
+    },
+    Assumption {
+        name: "desktop_cleared_for_another_account",
+        fact: "When the account that signs in is not `lastKnownAccountUuid`, Claude empties \
+               its preview browsers, `launch-preview-static`, `launch-preview-cowork-shared` \
+               and one per workspace under `Partitions`, and `chrome-import-sites.json`, and \
+               sets `launchChromeImportPrompt` in `claude_desktop_config.json` back to \
+               pending. Where a policy sets up its Microsoft 365 connector, it also drops \
+               the grants in `config.json`'s `custom3pMcpOAuth` and the sign-ins in \
+               `builtin-mcp-auth` and `custom3p-builtin-mcp.json`. None of these names its \
+               account. Its other resets on that change clear memory, or what names its \
+               account or session.",
+        read_from: "This repository's static read of 2.42304.0's `app.asar`, 19 October 2026: \
+                    the account remembered at `N` @2937198, the resets @2938000 to @2942600, \
+                    the preview browsers @4857844, the connectors @2877456 and their files in \
+                    a claude.ai sign-in @903626 to @904139, the preferences file @1684323",
+        verified_against: READ_FROM_THE_NEWER_BUNDLE,
+        depends: "`Desktop::items` and `Desktop::keys` carry each with the login, since a \
+                  switch puts the arriving account's `lastKnownAccountUuid` in and Claude \
+                  sees no change; `launchChromeImportPrompt` stays with the preferences",
+        probe: &[
+            "resetAllPreviewIsolationSurfaces",
+            "disconnectConnectorsForNewPerson",
+            "custom3pMcpOAuth",
+            "chrome-import-sites.json",
+        ],
+        absent: &[],
+    },
+    Assumption {
+        name: "desktop_site_stores",
+        fact: "Chromium keeps `Service Worker`, `Platform Notifications`, `CdmStorage.db` and \
+               `declarative_performance_observer.db`, the last two with a `-journal`, for \
+               each site in the data folder. claude.ai's are the signed-in account's.",
+        read_from: "Chromium 152.0.7977.149's `content/browser/storage_partition_impl.cc` and \
+                    `content/browser/declarative_performance_observer/\
+                    declarative_performance_observer_store.cc`, the version 2.42304.0's \
+                    framework names, 19 October 2026; `N` @6788047 grants claude.ai \
+                    notifications from a service worker. That claude.ai registers a service \
+                    worker or shows a notification was not read",
+        verified_against: READ_FROM_THE_NEWER_BUNDLE,
+        depends: "`Desktop::items` carries each with the login",
+        probe: &[],
+        absent: &[],
+    },
+    Assumption {
+        name: "desktop_account_files",
+        fact: "`session-popouts.json` holds the open session windows' ids and titles with no \
+               account in it, and Claude opens them again at launch. `local-sessions.json`, \
+               which only earlier builds write, is taken in by the next account to sign in.",
+        read_from: "This repository's static read of 2.42304.0's `app.asar`, 19 October 2026: \
+                    `N` @2989501 and @2990962; `migrateLegacySessions` at `CFJssAFf` @1526454 \
+                    and `CB6cNSrW` @474151",
+        verified_against: READ_FROM_THE_NEWER_BUNDLE,
+        depends: "`Desktop::items` carries both with the login",
+        probe: &["session-popouts.json", "migrateLegacySessions"],
         absent: &[],
     },
     Assumption {
@@ -543,6 +599,12 @@ pub(crate) const PER_SYSTEM: &[PerSystem] = &[
     on_a_mac("desktop_account_keys", VERIFIED_AGAINST),
     on_a_mac("desktop_first_level_entries", READ_FROM_THE_ARCHIVE),
     on_a_mac("desktop_gpu_caches", READ_FROM_THE_NEWER_BUNDLE),
+    on_a_mac(
+        "desktop_cleared_for_another_account",
+        READ_FROM_THE_NEWER_BUNDLE,
+    ),
+    on_a_mac("desktop_site_stores", READ_FROM_THE_NEWER_BUNDLE),
+    on_a_mac("desktop_account_files", READ_FROM_THE_NEWER_BUNDLE),
     on_a_mac("desktop_kept_apart", READ_FROM_THE_NEWER_BUNDLE),
     on_a_mac("desktop_machine_entries", READ_FROM_THE_NEWER_BUNDLE),
     on_a_mac("desktop_chromium_entries", READ_FROM_THE_NEWER_BUNDLE),

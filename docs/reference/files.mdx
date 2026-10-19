@@ -87,7 +87,7 @@ Each folder holds:
 | Path in the folder | What it is |
 | --- | --- |
 | `manifest.json` | The tool, the account, the account Claude's settings named, the session cookie's fingerprint and expiry, when it was parked, a hash of this Mac's identifier, the items, a SHA-256 digest of each key, and the items a give-up left in the data folder. Written before the first rename. |
-| `keys.json` | The three keys of `config.json`, as Claude wrote them. |
+| `keys.json` | The account's keys of `config.json`, as Claude wrote them. |
 | `items/` | The login's items, under their names in Claude's data folder. |
 
 ## Claude Code files
@@ -140,14 +140,18 @@ Pitboard does not read three places Codex also reads:
 
 Claude's data folder is `~/Library/Application Support/Claude`. As read in Claude 2.7032.0, that `~` is your account's own home, whatever `HOME` says. Where `HOME` names another folder, Pitboard leaves Claude Desktop alone.
 
-As measured in Claude 2.19675.0, eight items and three keys of `config.json` hold an account. Moving them moves it whole, both ways. Pitboard moves them only while Claude is closed: the items by renaming, the keys by rewriting `config.json`. Any item may be missing.
+As measured in Claude 2.19675.0, eight items and three keys of `config.json` hold an account. Moving them moves it whole, both ways. As read in 2.42304.0, Claude clears more of the data folder when another account signs in, and Pitboard moves that with the account too. Pitboard moves them only while Claude is closed: the items by renaming, the keys by rewriting `config.json`. Any item may be missing.
 
 | Path in the data folder | What Pitboard does with it |
 | --- | --- |
 | `Cookies` | Moves it with the account. A change reads the name, expiry and stored value of claude.ai's session cookies, and keeps an 8-byte fingerprint of the value. Pitboard decrypts nothing. |
 | `Cookies-journal`, `Local Storage`, `Session Storage`, `WebStorage`, `File System` | Moves them with the account. |
 | `IndexedDB/https_claude.ai_0.indexeddb.leveldb`, `IndexedDB/https_claude.ai_0.indexeddb.blob` | Moves them with the account. |
-| `config.json` | Claude's settings. A read takes the account they name, `lastKnownAccountUuid`, and whether both token caches are emptied. A change moves the keys `oauth:tokenCache`, `oauth:tokenCacheV2` and `lastKnownAccountUuid` with the account, and writes the other keys back as they were. |
+| `Service Worker`, `Platform Notifications`, `CdmStorage.db`, `declarative_performance_observer.db`, and the last two's `-journal` | Moves them with the account. Chromium keeps them for each site. |
+| `Partitions`, `chrome-import-sites.json` | Moves them with the account: Claude's preview browsers, and the sites imported from Chrome into them. |
+| `builtin-mcp-auth`, `custom3p-builtin-mcp.json`, `custom3p-builtin-mcp.json.journal` | Moves them with the account: the Microsoft 365 connector's sign-ins, where a policy sets it up. |
+| `session-popouts.json`, `local-sessions.json` | Moves them with the account: the session windows Claude opens again, and the sessions an earlier build left for the next sign-in. |
+| `config.json` | Claude's settings. A read takes the account they name, `lastKnownAccountUuid`, and whether both token caches are emptied. A change moves the keys `oauth:tokenCache`, `oauth:tokenCacheV2`, `lastKnownAccountUuid` and `custom3pMcpOAuth` with the account, and writes the other keys back as they were. |
 | `config.json.journal` | A write of `config.json` that Claude has not finished. As read in 2.7032.0, Pitboard reads it as the settings where the hashes on its first line say it is valid. It ignores it where they say it is stale. Pitboard never deletes it. |
 | Every name at the folder's first level | Read by each change before it moves anything, and by `pitboard doctor`. A name Pitboard has not read stops a move: see [The data folder holds an entry Pitboard has not read](/troubleshooting/claude-desktop#the-data-folder-holds-an-entry-pitboard-has-not-read). |
 

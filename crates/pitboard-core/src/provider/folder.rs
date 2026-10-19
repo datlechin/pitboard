@@ -198,6 +198,8 @@ pub(crate) trait Folder: Send + Sync + std::fmt::Debug {
     // the account's items, in the order a login leaves by; the first holds the session
     fn items(&self) -> &'static [&'static str];
     fn keys(&self) -> &'static [&'static str];
+    // the keys among `keys` that a Log out empties
+    fn caches(&self) -> &'static [&'static str];
     fn naming_key(&self) -> &'static str;
     fn classify(&self, name: &OsStr) -> Class;
     fn settings(&self, root: &Path) -> Result<AppSettings, Unread>;

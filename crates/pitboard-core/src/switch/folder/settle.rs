@@ -254,7 +254,6 @@ fn facts(
     let unknown = |what, _| undetermined(format!("{}'s data folder {what}", app.app_name()));
     let places = places(ctx, app, root, moving, &unseen, &unknown)?;
     let held = read.account_keys(app);
-    let caches = app.keys().iter().filter(|key| **key != app.naming_key());
     let uuid = state
         .by_id(app.id(), &moving.id)
         .map(|a| a.account_uuid.clone());
@@ -262,8 +261,9 @@ fn facts(
         KeysAre::None
     } else if held.digests() == moving.keys {
         KeysAre::Mine
-    } else if caches
-        .clone()
+    } else if app
+        .caches()
+        .iter()
         .all(|key| held.get(key).is_none_or(|value| app.emptied(key, value)))
     {
         KeysAre::SignedOut

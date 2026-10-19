@@ -11,6 +11,18 @@ const ACCOUNT: &[&str] = &[
     "IndexedDB",
     "WebStorage",
     "File System",
+    "Service Worker",
+    "Platform Notifications",
+    "CdmStorage.db",
+    "CdmStorage.db-journal",
+    "declarative_performance_observer.db",
+    "declarative_performance_observer.db-journal",
+    "Partitions",
+    "chrome-import-sites.json",
+    "builtin-mcp-auth",
+    "custom3p-builtin-mcp.json",
+    "session-popouts.json",
+    "local-sessions.json",
 ];
 
 const STAYS: &[&str] = &[
@@ -26,7 +38,6 @@ const STAYS: &[&str] = &[
     "vm-support-probe.json",
     "extensions-blocklist.json",
     "ca-bundle.pem",
-    "declarative_performance_observer.db",
     "ant-did",
     "claude_desktop_config.json",
     "claude-code",
@@ -300,6 +311,19 @@ mod tests {
             "IndexedDB",
             "WebStorage",
             "File System",
+            "Service Worker",
+            "Platform Notifications",
+            "CdmStorage.db",
+            "CdmStorage.db-journal",
+            "declarative_performance_observer.db",
+            "declarative_performance_observer.db-journal",
+            "Partitions",
+            "chrome-import-sites.json",
+            "builtin-mcp-auth",
+            "custom3p-builtin-mcp.json",
+            "custom3p-builtin-mcp.json.journal",
+            "session-popouts.json",
+            "local-sessions.json",
         ];
         let stays = [
             "config.json",
@@ -315,7 +339,6 @@ mod tests {
             "vm-support-probe.json",
             "extensions-blocklist.json",
             "ca-bundle.pem",
-            "declarative_performance_observer.db",
             "ant-did",
             "claude_desktop_config.json",
             "claude-code",
@@ -433,8 +456,8 @@ mod tests {
         for name in stays {
             assert_eq!(classify(OsStr::new(name)), Class::Stays, "{name}");
         }
-        assert_eq!((account.len(), ACCOUNT.len()), (7, 7));
-        assert_eq!((stays.len(), STAYS.len()), (124, 119));
+        assert_eq!((account.len(), ACCOUNT.len()), (20, 19));
+        assert_eq!((stays.len(), STAYS.len()), (123, 118));
         for name in [
             ".config.json.4242.1.pitboard",
             ".config.json.4242.pitboard",
@@ -446,7 +469,9 @@ mod tests {
             "cowork-plugin-oauth.json.tmp-1000000123a1b2c3",
             "bridge-state.json.tmp",
             "update-attempt.tmp",
+            "session-popouts.json.tmp",
             ".ccd-ids.json.4242.k3x9z.tmp",
+            ".session-popouts.json.4242.a.tmp",
             ".Q6L2SF6YDW.com.anthropic.claudefordesktop.Preferences.a1B2c3",
             ".Q6L2SF6YDW.com.anthropic.claudefordesktop.Local State.Zz09Ab",
             ".Q6L2SF6YDW.com.anthropic.claudefordesktop.Custom Dictionary.txt.Zz09Ab",
@@ -464,16 +489,6 @@ mod tests {
             assert_eq!(classify(OsStr::new(name)), Class::Passing, "{name}");
         }
         for name in [
-            "Service Worker",
-            "Platform Notifications",
-            "CdmStorage.db",
-            "Partitions",
-            "chrome-import-sites.json",
-            "builtin-mcp-auth",
-            "custom3p-builtin-mcp.json",
-            "custom3p-builtin-mcp.json.journal",
-            "session-popouts.json",
-            "local-sessions.json",
             "Network",
             "Cookies-wal",
             "Cookies-shm",
@@ -513,6 +528,26 @@ mod tests {
             "something-new",
         ] {
             assert_eq!(classify(OsStr::new(name)), Class::Unread, "{name}");
+        }
+    }
+
+    #[test]
+    fn every_account_name_is_an_item_the_move_carries() {
+        let firsts: Vec<&str> = super::super::ITEMS
+            .iter()
+            .map(|item| item.split('/').next().expect("a name"))
+            .collect();
+        for first in &firsts {
+            assert_eq!(classify(OsStr::new(first)), Class::Account, "{first}");
+        }
+        for name in ACCOUNT {
+            assert!(firsts.contains(name), "{name}");
+        }
+        for store in STORES {
+            if class(store) == Class::Account {
+                let journal = format!("{store}.journal");
+                assert!(firsts.contains(&journal.as_str()), "{journal}");
+            }
         }
     }
 }

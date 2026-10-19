@@ -1225,14 +1225,15 @@ fn park_of(m: &Machine, label: &str) -> Option<Park> {
 }
 
 fn named_in_settings(m: &Machine) -> Option<String> {
-    let settings: Map<String, Value> = serde_json::from_str(
+    setting(m, "lastKnownAccountUuid").and_then(|name| name.as_str().map(str::to_string))
+}
+
+fn setting(m: &Machine, key: &str) -> Option<Value> {
+    let mut settings: Map<String, Value> = serde_json::from_str(
         &std::fs::read_to_string(data(m).join("config.json")).expect("settings"),
     )
     .expect("JSON");
-    settings
-        .get("lastKnownAccountUuid")
-        .and_then(Value::as_str)
-        .map(str::to_string)
+    settings.shift_remove(key)
 }
 
 #[test]
@@ -1307,6 +1308,80 @@ fn a_switch_parks_the_account_in_use_and_puts_the_other_in() {
     );
     hold(&m, "and back");
     rested(&m, "and back");
+}
+
+// What 2.42304.0 clears when another account signs in: a switch hides that change from it,
+// so it carries them instead.
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Claude Desktop is macOS only: Windows refuses its folder calls"
+)]
+fn a_switch_carries_what_claude_clears_for_another_account() {
+    let m = desktop_pair("carried");
+    let preview = data(&m).join("Partitions/launch-preview-static/Cookies");
+    std::fs::create_dir_all(preview.parent().expect("a partition")).expect("a partition");
+    std::fs::write(&preview, "work's preview").expect("a preview jar");
+    std::fs::create_dir(data(&m).join("builtin-mcp-auth")).expect("a connector cache");
+    for file in [
+        "custom3p-builtin-mcp.json",
+        "custom3p-builtin-mcp.json.journal",
+        "chrome-import-sites.json",
+        "session-popouts.json",
+    ] {
+        std::fs::write(data(&m).join(file), "{}").expect("a file of work's");
+    }
+    set(&m, "custom3pMcpOAuth", Some(json!({"grant": "work's"})));
+    let carried = [
+        "Partitions",
+        "builtin-mcp-auth",
+        "custom3p-builtin-mcp.json",
+        "custom3p-builtin-mcp.json.journal",
+        "chrome-import-sites.json",
+        "session-popouts.json",
+    ];
+
+    let (_, warnings) = used(&m, "home");
+    assert!(warnings.is_empty(), "{warnings:?}");
+    for item in carried {
+        assert!(!data(&m).join(item).exists(), "`{item}` left with `work`");
+    }
+    assert_eq!(setting(&m, "custom3pMcpOAuth"), None);
+    hold(&m, "a switch");
+    rested(&m, "a switch");
+
+    used(&m, "work");
+    for item in carried {
+        assert!(data(&m).join(item).exists(), "`{item}` back with `work`");
+    }
+    assert_eq!(
+        std::fs::read_to_string(&preview).expect("back"),
+        "work's preview"
+    );
+    assert_eq!(
+        setting(&m, "custom3pMcpOAuth"),
+        Some(json!({"grant": "work's"}))
+    );
+    hold(&m, "and back");
+    rested(&m, "and back");
+}
+
+// A Log out leaves the connector grants, which hold no login of Claude's.
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Claude Desktop is macOS only: Windows refuses its folder calls"
+)]
+fn a_log_out_beside_connector_grants_is_signed_out() {
+    let m = desktop_machine("grants-kept");
+    jar(&m, None);
+    for key in ["oauth:tokenCache", "oauth:tokenCacheV2"] {
+        set(&m, key, Some(serde_json::from_str(EMPTIED).expect("JSON")));
+    }
+    set(&m, "custom3pMcpOAuth", Some(json!({"grant": "kept"})));
+    let before = snapshot(&m);
+    assert_eq!(code(enrol(&m, "work")), "live_credential_absent");
+    assert_eq!(snapshot(&m), before);
 }
 
 // A switch Pitboard makes writes no `in-use` line. One into a Claude signed out since writes

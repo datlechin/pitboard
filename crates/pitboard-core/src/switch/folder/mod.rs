@@ -216,9 +216,8 @@ fn looks_signed_out(state: &State, app: &dyn Folder, settings: &AppSettings) -> 
     }
     let keys = settings.account_keys(app);
     let emptied = app
-        .keys()
+        .caches()
         .iter()
-        .filter(|key| **key != app.naming_key())
         .all(|key| keys.get(key).is_some_and(|value| app.emptied(key, value)));
     if !emptied {
         return None;

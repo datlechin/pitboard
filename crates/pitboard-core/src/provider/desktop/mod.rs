@@ -37,10 +37,29 @@ const ITEMS: &[&str] = &[
     "IndexedDB/https_claude.ai_0.indexeddb.blob",
     "WebStorage",
     "File System",
+    "Service Worker",
+    "Platform Notifications",
+    "CdmStorage.db",
+    "CdmStorage.db-journal",
+    "declarative_performance_observer.db",
+    "declarative_performance_observer.db-journal",
+    "Partitions",
+    "chrome-import-sites.json",
+    "builtin-mcp-auth",
+    "custom3p-builtin-mcp.json",
+    "custom3p-builtin-mcp.json.journal",
+    "session-popouts.json",
+    "local-sessions.json",
 ];
 
 const NAMING_KEY: &str = "lastKnownAccountUuid";
-const KEYS: &[&str] = &["oauth:tokenCache", "oauth:tokenCacheV2", NAMING_KEY];
+const CACHES: &[&str] = &["oauth:tokenCache", "oauth:tokenCacheV2"];
+const KEYS: &[&str] = &[
+    "oauth:tokenCache",
+    "oauth:tokenCacheV2",
+    NAMING_KEY,
+    "custom3pMcpOAuth",
+];
 
 #[derive(Debug)]
 pub(crate) struct Desktop;
@@ -64,6 +83,10 @@ impl Folder for Desktop {
 
     fn keys(&self) -> &'static [&'static str] {
         KEYS
+    }
+
+    fn caches(&self) -> &'static [&'static str] {
+        CACHES
     }
 
     fn naming_key(&self) -> &'static str {

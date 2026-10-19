@@ -7,6 +7,12 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- A Claude Desktop switch moves Claude's preview browsers, the Microsoft 365 connector's
+  sign-ins and the session windows with the account, since Claude clears them only when it
+  sees another account sign in.
+
 ### Fixed
 
 - Pitboard adds and switches Claude Desktop accounts again with Claude 2.42304.0, whose data

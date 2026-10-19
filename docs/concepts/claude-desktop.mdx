@@ -4,7 +4,7 @@ sidebarTitle: "Claude Desktop switching"
 description: "Pitboard knows a Claude Desktop login by its session cookie, and moves Claude's files only while Claude is closed."
 ---
 
-A Claude Desktop login is claude.ai's session cookie in `Cookies`, the site's storage beside it, and three keys of `config.json`. [Claude Desktop files](/reference/files#claude-desktop-files) lists them.
+A Claude Desktop login is claude.ai's session cookie in `Cookies`, the site's storage beside it, the files Claude keeps for that account alone, and keys of `config.json`. [Claude Desktop files](/reference/files#claude-desktop-files) lists them.
 
 ## What Pitboard does not do for Claude Desktop
 
@@ -29,7 +29,7 @@ Not known: how often Claude replaces its own login. Not known either: whether qu
 
 ## What a Claude Desktop switch does
 
-Pitboard renames `Cookies` and the site's storage into a folder of its own and back, and never copies a file. A rename cannot leave a file half written, so each is whole in one of two places: Claude's data folder, or one folder under `~/.pitboard/parks`. `state.json` names both places before the first rename. Pitboard moves the three keys by rewriting `config.json`, and keeps them in that folder while the account is parked.
+Pitboard renames these files into a folder of its own and back, and never copies a file. A rename cannot leave a file half written, so each is whole in one of two places: Claude's data folder, or one folder under `~/.pitboard/parks`. `state.json` names both places before the first rename. Pitboard moves the keys by rewriting `config.json`, and keeps them in that folder while the account is parked.
 
 As measured in Claude 2.19675.0, Claude writes its cookie store, its settings and the site's storage as it quits. Pitboard moves them only while Claude is closed. It reads the list of processes before it starts, again before it records the move, and after its last write. Any program inside Claude, or inside the data folder, counts as Claude open. [Claude Desktop files](/reference/files#claude-desktop-files) says how Pitboard tells Claude, and gives the exceptions.
 

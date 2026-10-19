@@ -11,7 +11,7 @@ Pitboard switches Claude Code, Codex and, on macOS, Claude Desktop between a per
 accounts on one machine. It also shows how much of each Claude Code and Codex account's
 limits is left. A switch parks the login in use and puts another account's parked login in
 its place. For Claude Code and Codex a login is a document in a store. For Claude Desktop it
-is items of Claude's data folder and three keys of its `config.json`, moved while Claude is
+is items of Claude's data folder and keys of its `config.json`, moved while Claude is
 closed. A person asks for each switch, unless they asked Pitboard to switch Claude Code by
 itself before the account in use runs out: the app with its setting on, or `pitboard watch`
 running in a terminal.
@@ -1824,9 +1824,9 @@ window loads its site, and whatever the site's pages load, as a browser would.
   cookie's name. It keeps only the `sessionKey`'s expiry and an 8-byte fingerprint of its
   stored value. It decrypts none of it, reads no keychain item for Claude Desktop and asks
   claude.ai nothing. It opens `Cookies` and changes the folder only while Claude is closed.
-  It moves the eight items the register names by rename, and the three settings keys by
-  rewriting `config.json`, holding an advisory lock on the folder meanwhile. It deletes
-  nothing of Claude's, `config.json.journal` included.
+  It moves the items `Desktop::items` names by rename, and the settings keys by rewriting
+  `config.json`, holding an advisory lock on the folder meanwhile. It deletes nothing of
+  Claude's, `config.json.journal` included.
 - Pitboard and a running Claude meet at the process list and at the app's `AppControl`.
   The core tells that Claude runs by the identifier in the `Info.plist` of the bundle each
   program runs from, and neither starts nor quits it. The app quits Claude only when the
@@ -3573,8 +3573,19 @@ here gives its build.
   `GraphiteDawnCache` and `GPUPersistentCache` in the data folder, beside `GPUCache`. They
   hold compiled shaders, so they stay (Electron's pull request 54161; 2.42304.0's framework,
   Electron 44.7.2, 19 October 2026).
-- Of the other names 2.42304.0's code makes in the data folder, those that name their
-  account, organisation or session, or hold nothing of an account, stay. Its writers'
+- When another account signs in, Claude empties its preview browsers under `Partitions` and
+  `chrome-import-sites.json`, and, under a Microsoft 365 policy, the connector's
+  `custom3pMcpOAuth`, `builtin-mcp-auth` and `custom3p-builtin-mcp.json`. A switch puts the
+  arriving account's `lastKnownAccountUuid` in, so Claude never sees the change, and these
+  move with the login instead. `launchChromeImportPrompt` in `claude_desktop_config.json`
+  stays, so an account that arrives is not asked again to import Chrome's sites (2.42304.0,
+  19 October 2026).
+- `Service Worker`, `Platform Notifications`, `CdmStorage.db` and
+  `declarative_performance_observer.db` are Chromium's stores for each site, and
+  `session-popouts.json` and an earlier build's `local-sessions.json` name no account, so
+  they move with the login too (2.42304.0 and Chromium 152.0.7977.149's source).
+- Every other name 2.42304.0's code makes in the data folder names its account,
+  organisation or session, or holds nothing of an account, so it stays. Its writers'
   temporaries pass, each beside a name the layout classifies (2.42304.0).
 - Chromium writes a file through a temporary beside it, which in Claude is named
   `.Q6L2SF6YDW.com.anthropic.claudefordesktop.<file>.` and six letters or digits (Electron
@@ -3632,8 +3643,8 @@ These were not measured. Each row says what Pitboard does where it cannot know.
 | Whether a sign-in over a stale `lastKnownAccountUuid`, followed by a quit within seconds, leaves the new session under the old name | A session it has not seen is taken as named in one case and is never deleted. Beside a token cache holding the emptied value it is a sign-in not finished, for every reader |
 | How often Claude replaces a session in place after a login is put back (seen once) | It parks the session under the fingerprint found and says so. Nothing is deleted |
 | The first-level entries of a build people run. 2.42304.0's were read from its code, not listed | A name `desktop::layout` does not classify stops the start of a move and names itself |
-| Whose `ant-device-registry.json`, `vm-support-probe.json`, `extensions-blocklist.json`, `ca-bundle.pem` and `declarative_performance_observer.db` are | They stay, as they did in E2 |
-| Whose `Partitions`, `Service Worker`, `session-popouts.json`, `chrome-import-sites.json` and `builtin-mcp-auth` are | Each stops the start of a move |
+| Whose `ant-device-registry.json`, `vm-support-probe.json`, `extensions-blocklist.json` and `ca-bundle.pem` are | They stay, as they did in E2 |
+| Whether each account keeps its own previews, connector sign-ins and session windows across a switch, and Claude makes a missing `Partitions` or `Service Worker` again (read in 2.42304.0, not run) | They move like the site's storage. An item in neither place is gone on without, and said |
 | Whether 2.19675.0 and the builds people run write `config.json.journal` in 2.7032.0's format | A journal valid by its own hashes is the settings. A stale one is ignored. A header that does not parse refuses every change |
 | Whether a stale journal Pitboard left in place can become valid again | Only where a later write makes `config.json` the file it was written over, and then its body is that run's settings |
 | The names of Chromium's and Claude's temporary files, which no listing has held | The patterns read in 2.42304.0 pass, each beside a name the layout classifies, and Chromium's only beside a file that stays. Any other name stops the start of a move |
@@ -3664,7 +3675,7 @@ These were not measured. Each row says what Pitboard does where it cannot know.
 | Whether Claude takes an advisory lock on its own data folder | Pitboard's lock is taken only once Claude is seen closed, and a lock held by anything refuses |
 | What **Log out** does to other sessions of the same claude.ai account | No sentence claims it |
 
-A person makes each hand measurement, M1 to M10, on a macOS user account made for it, which
+A person makes each hand measurement, M1 to M11, on a macOS user account made for it, which
 holds no real login, with two throwaway claude.ai accounts. None is automated: no test or
 script starts, quits or writes Claude. Each result goes into the register with its build
 and date, or stays in the table of what was not measured, with what was seen.
@@ -3681,6 +3692,7 @@ and date, or stays in the table of what was not measured, with what was seen.
 | M8 | An update, and a reinstall, between a park and its put-back: whether the account opens signed in | Before a release |
 | M9 | Whether Claude makes a missing `Local Storage` again, and whether a login without its three keys opens signed in and writes them | Before a release |
 | M10 | Claude's own switcher, where the account shows it: the session rows and `lastKnownAccountUuid` after an add and after a switch | Before a release |
+| M11 | A switch each way with a preview signed in to a site and, under a Microsoft 365 policy, the connector signed in: whether each account finds its own, and whether Claude makes a missing `Partitions` and `Service Worker` again | Before a release |
 
 ### ureq's proxies
 
