@@ -462,6 +462,7 @@ pub(crate) const PER_SYSTEM: &[PerSystem] = &[
         linux: Read("2.1.301"),
         windows: Read(WINDOWS_VERIFIED_AGAINST),
     },
+    everywhere("remote_token_files", "2.1.303"),
     PerSystem {
         name: "headless_token_descriptor",
         macos: Read("2.1.296"),
@@ -1749,6 +1750,35 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
         absent: &["Internet Settings", "WinHttpOpen"],
     },
     Assumption {
+        name: "remote_token_files",
+        fact: "where `CLAUDE_CODE_OAUTH_TOKEN_FILE_DESCRIPTOR` is unset, Claude Code reads an \
+               OAuth token from `/home/claude/.claude/remote/.oauth_token`, and where \
+               `CLAUDE_CODE_API_KEY_FILE_DESCRIPTOR` is unset, an API key from `.api_key` \
+               beside it: a regular file alone, trimmed, one that holds nothing passed over, \
+               unless it runs as `mcp serve --transport http`. The token is \
+               `CCR_OAUTH_TOKEN_FILE`, after `ANTHROPIC_AUTH_TOKEN` and \
+               `CLAUDE_CODE_OAUTH_TOKEN` and before `apiKeyHelper` and the stored login; the \
+               key is taken as `ANTHROPIC_API_KEY`, before `apiKeyHelper`. On Windows the path \
+               names no drive, so it leads to a folder at the root of a drive, which every \
+               account on the PC shares. Which drive Bun takes is not measured",
+        read_from: "the well-known file reader and its two callers, the token's place in the \
+                    sources a session names and the key's in the API key's, and the \
+                    `mcp serve` check, in the darwin-arm64, linux-x64, win32-x64 and \
+                    win32-arm64 builds of 2.1.303, read as bytes on 2026-10-20",
+        verified_against: "2.1.303",
+        depends: "settings::overrides, so doctor's auth_source check and a switch's warning \
+                  name either file where it holds something: at `/` off Windows, and at the \
+                  root of each fixed drive on Windows",
+        probe: &[
+            "\"/home/claude/.claude/remote\"",
+            "/.oauth_token",
+            "/.api_key",
+            "CCR_OAUTH_TOKEN_FILE",
+            "miss:\"empty\"",
+        ],
+        absent: &[],
+    },
+    Assumption {
         name: "headless_token_descriptor",
         fact: "where `CLAUDE_CODE_OAUTH_TOKEN_FILE_DESCRIPTOR` names a descriptor, Claude Code \
                reads an OAuth access token from it, an inherited pipe until a newline or its \
@@ -2000,6 +2030,7 @@ mod tests {
                 "windows_statusline_shell",
                 "windows_statusline_powershell",
                 "proxy_from_variables",
+                "remote_token_files",
                 "headless_print_mode",
                 "headless_result",
                 "request_starts_the_five_hour_period",

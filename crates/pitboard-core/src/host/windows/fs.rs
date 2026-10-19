@@ -618,6 +618,25 @@ pub(crate) fn in_a_sync_root(path: &Path) -> bool {
     answer >= 0
 }
 
+// The machine's, so a build for tests reads them too: what lies at their roots is
+// `administered_file`'s to read.
+pub(crate) fn fixed_drives() -> Vec<char> {
+    use windows_sys::Win32::Storage::FileSystem::{GetDriveTypeW, GetLogicalDrives};
+    use windows_sys::Win32::System::WindowsProgramming::DRIVE_FIXED;
+    // SAFETY: no arguments.
+    let present = unsafe { GetLogicalDrives() };
+    ('A'..='Z')
+        .zip(0..26)
+        .filter(|(_, bit)| present & (1 << bit) != 0)
+        .map(|(letter, _)| letter)
+        .filter(|letter| {
+            let root = wide(Path::new(&format!(r"{letter}:\")));
+            // SAFETY: a NUL-terminated name.
+            unsafe { GetDriveTypeW(root.as_ptr()) == DRIVE_FIXED }
+        })
+        .collect()
+}
+
 // The volume and the file's id on it (MC-fileid), a folder's included, through a junction.
 #[cfg(any(test, feature = "test-support"))]
 pub(crate) fn file_id(path: &Path) -> Option<(u64, u128)> {

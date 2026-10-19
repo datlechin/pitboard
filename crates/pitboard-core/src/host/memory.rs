@@ -151,6 +151,7 @@ pub struct MemoryHost {
     windows_settings: Mutex<WindowsSettings>,
     kernel_is_wsl: AtomicBool,
     windows_drives: Mutex<Vec<PathBuf>>,
+    fixed_drives: Mutex<Vec<char>>,
 }
 
 impl Default for MemoryHost {
@@ -224,6 +225,7 @@ impl MemoryHost {
             windows_settings: Mutex::new(WindowsSettings::default()),
             kernel_is_wsl: AtomicBool::new(false),
             windows_drives: Mutex::new(Vec::new()),
+            fixed_drives: Mutex::new(vec!['C']),
         }
     }
 
@@ -467,6 +469,12 @@ impl MemoryHost {
         locked(&self.windows_drives).push(at.to_path_buf());
     }
 
+    // Windows' fixed drives, C: alone unless a test says otherwise.
+    #[cfg(test)]
+    pub(crate) fn has_fixed_drives(&self, letters: &[char]) {
+        *locked(&self.fixed_drives) = letters.to_vec();
+    }
+
     /// Say an administrator's configuration profile forces `key` of `domain` to `value`, a
     /// managed preference, on whatever system the tests run on.
     pub fn forces(&self, domain: &str, key: &str, value: &str) {
@@ -694,6 +702,10 @@ impl Host for MemoryHost {
 
     fn kernel_is_wsl(&self) -> bool {
         self.kernel_is_wsl.load(Ordering::SeqCst)
+    }
+
+    fn fixed_drives(&self) -> Vec<char> {
+        locked(&self.fixed_drives).clone()
     }
 
     fn on_a_windows_drive(&self, path: &Path) -> bool {

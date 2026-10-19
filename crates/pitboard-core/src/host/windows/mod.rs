@@ -214,6 +214,10 @@ impl Host for Windows {
         user::program_data()
     }
 
+    fn fixed_drives(&self) -> Vec<char> {
+        fs::fixed_drives()
+    }
+
     // The account's own items: no test's business, as what an administrator set is not.
     fn credential_names(&self, prefix: &str) -> Result<Vec<String>, String> {
         if !super::administered::READ_BY_REAL_HOSTS {

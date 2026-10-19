@@ -31,6 +31,9 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - On Windows, an account's window shows its page's title before the account's label.
 - On Windows, a download goes on after you close its account's window, as on macOS, and
   opening that window again before the download ends brings back the one you closed.
+- Pitboard says, as it does for `ANTHROPIC_API_KEY`, when a token in
+  `/home/claude/.claude/remote/.oauth_token` or `.api_key` beside it signs Claude Code sessions
+  in instead of the stored login, looking at the root of each fixed drive on Windows.
 
 ### Removed
 

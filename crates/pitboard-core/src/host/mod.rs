@@ -826,6 +826,12 @@ pub(crate) trait Host: Send + Sync + std::fmt::Debug {
         None
     }
 
+    // The letters of Windows' fixed drives, at whose root a path with no drive leads; none
+    // elsewhere.
+    fn fixed_drives(&self) -> Vec<char> {
+        Vec::new()
+    }
+
     // The names of Credential Manager's items that begin `prefix`, never what they hold; none
     // elsewhere, and none in a build for tests on the real hosts.
     fn credential_names(&self, _prefix: &str) -> std::result::Result<Vec<String>, String> {

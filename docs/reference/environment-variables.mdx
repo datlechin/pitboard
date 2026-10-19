@@ -57,7 +57,7 @@ As read in Claude Code 2.1.278, each of these makes Claude Code ignore the login
 
 `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `CLAUDE_CODE_OAUTH_TOKEN`, `CLAUDE_CODE_USE_BEDROCK`, `CLAUDE_CODE_USE_VERTEX`, `CLAUDE_CODE_USE_FOUNDRY`, `CLAUDE_CODE_USE_GATEWAY`, `CLAUDE_CODE_USE_ANTHROPIC_AWS`, `CLAUDE_CODE_USE_ANTHROPIC_GOOGLE_CLOUD`.
 
-Pitboard reads them from its environment and from Claude Code's settings, along with `apiKeyHelper`. While any is set, changes to Claude Code accounts go ahead but warn with `auth_overridden`, as does `pitboard doctor`. The automatic switch holds back.
+Pitboard reads them from its environment and from Claude Code's settings, along with `apiKeyHelper` and [Claude Code's remote token files](/reference/files#claude-code-files). While any is set, changes to Claude Code accounts go ahead but warn with `auth_overridden`, as does `pitboard doctor`. The automatic switch holds back.
 
 ## Proxies
 
