@@ -3545,8 +3545,8 @@ real `auth.json` that build wrote. The register is `provider/codex/assumptions.r
 Read from three builds of Claude for macOS, and on no other system. The contributor measured
 2.19675.0 with two claude.ai accounts: an inspection on 3 October 2026, experiments E1 to
 E18 on 4 October and a reading of `main.log` on 5 October. This repository read the
-`app.asar` and `Info.plist` of 2.7032.0 on 11 and 13 October, and the `Electron Framework` of
-2.42304.0 on 19 October, and never ran either. The register is
+`app.asar` and `Info.plist` of 2.7032.0 on 11 and 13 October, and the `app.asar` and
+`Electron Framework` of 2.42304.0 on 19 October, and never ran either. The register is
 `provider/desktop/assumptions.rs`, and each entry says who read it, when and how. Each fact
 here gives its build.
 
@@ -3573,6 +3573,9 @@ here gives its build.
   `GraphiteDawnCache` and `GPUPersistentCache` in the data folder, beside `GPUCache`. They
   hold compiled shaders, so they stay (Electron's pull request 54161; 2.42304.0's framework,
   Electron 44.7.2, 19 October 2026).
+- Of the other names 2.42304.0's code makes in the data folder, those that name their
+  account, organisation or session, or hold nothing of an account, stay. Its writers'
+  temporaries pass, each beside a name the layout classifies (2.42304.0).
 - Chromium writes a file through a temporary beside it, which in Claude is named
   `.Q6L2SF6YDW.com.anthropic.claudefordesktop.<file>.` and six letters or digits (Electron
   44.4.3's and Chromium 152.0.7977.130's source, the versions 2.7032.0 runs; no listing has
@@ -3628,12 +3631,12 @@ These were not measured. Each row says what Pitboard does where it cannot know.
 | --- | --- |
 | Whether a sign-in over a stale `lastKnownAccountUuid`, followed by a quit within seconds, leaves the new session under the old name | A session it has not seen is taken as named in one case and is never deleted. Beside a token cache holding the emptied value it is a sign-in not finished, for every reader |
 | How often Claude replaces a session in place after a login is put back (seen once) | It parks the session under the fingerprint found and says so. Nothing is deleted |
-| The first-level entries of a build people run. Two of the 41 names the listing counted are not named in its report | A name `desktop::layout` does not classify stops the start of a move and names itself |
-| Whose `ant-device-registry.json`, `git-worktrees.json`, `vm-support-probe.json`, `extensions-blocklist.json`, `ca-bundle.pem` and `declarative_performance_observer.db` are | They stay, as they did in E2 |
-| Whose `Partitions`, `Service Worker`, `session-popouts.json`, `cowork-plugin-oauth.json`, `cowork-plugin-env.json`, `ccd-environment-config.json`, `ccd-session-presets.json`, `buddy-tokens.json`, `developer_settings.json` and `configLibrary` are | Each stops the start of a move |
+| The first-level entries of a build people run. 2.42304.0's were read from its code, not listed | A name `desktop::layout` does not classify stops the start of a move and names itself |
+| Whose `ant-device-registry.json`, `vm-support-probe.json`, `extensions-blocklist.json`, `ca-bundle.pem` and `declarative_performance_observer.db` are | They stay, as they did in E2 |
+| Whose `Partitions`, `Service Worker`, `session-popouts.json`, `chrome-import-sites.json` and `builtin-mcp-auth` are | Each stops the start of a move |
 | Whether 2.19675.0 and the builds people run write `config.json.journal` in 2.7032.0's format | A journal valid by its own hashes is the settings. A stale one is ignored. A header that does not parse refuses every change |
 | Whether a stale journal Pitboard left in place can become valid again | Only where a later write makes `config.json` the file it was written over, and then its body is that run's settings |
-| The names of Chromium's and the settings store's temporary files, which no listing has held | Three patterns pass, Chromium's only beside a file that stays. Any other name stops the start of a move |
+| The names of Chromium's and Claude's temporary files, which no listing has held | The patterns read in 2.42304.0 pass, each beside a name the layout classifies, and Chromium's only beside a file that stays. Any other name stops the start of a move |
 | Whether the builds people run keep the five cookie names, `meta.version` 24 and `v10` | Signed out needs none of the five names and emptied caches. Another shape refuses |
 | Whether Claude ever keeps a `sessionKey` for both `.claude.ai` and `claude.ai` | Refused, whatever the values: one session on both hosts is not told from two |
 | Whether the emptied token cache is 28 characters on the builds people run | A cache of another length is not emptied, so the folder is never read as signed out |

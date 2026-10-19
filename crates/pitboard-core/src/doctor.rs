@@ -3581,7 +3581,7 @@ fn judge_desktop_park(facts: &DesktopFacts, fact: &ParkFact, now: i64) -> Check 
 // Said, never a gate: Pitboard checks the folder before each move, not the build.
 fn judge_desktop_build(facts: &DesktopFacts) -> Check {
     use crate::provider::desktop::assumptions::{
-        READ_FROM_THE_ARCHIVE, READ_FROM_THE_FRAMEWORK, VERIFIED_AGAINST,
+        READ_FROM_THE_ARCHIVE, READ_FROM_THE_NEWER_BUNDLE, VERIFIED_AGAINST,
     };
     match &facts.build {
         Some(build) => ok(
@@ -3589,7 +3589,7 @@ fn judge_desktop_build(facts: &DesktopFacts) -> Check {
             "Claude",
             format!(
                 "Claude {build}; Pitboard's facts were read from {VERIFIED_AGAINST}, \
-                 {READ_FROM_THE_ARCHIVE} and {READ_FROM_THE_FRAMEWORK}, and it checks the \
+                 {READ_FROM_THE_ARCHIVE} and {READ_FROM_THE_NEWER_BUNDLE}, and it checks the \
                  folder before each move, not the build"
             ),
         ),

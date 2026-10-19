@@ -9,9 +9,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
-- Pitboard adds and switches Claude Desktop accounts again once Claude keeps its GPU shader
-  caches, such as `GPUPersistentCache`, in its data folder, as builds on Electron 44.4.4 and
-  later do.
+- Pitboard adds and switches Claude Desktop accounts again with Claude 2.42304.0, whose data
+  folder holds names earlier builds did not make, such as `GPUPersistentCache`.
 
 ### Security
 
