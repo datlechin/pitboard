@@ -42,6 +42,10 @@ fn main() {
         return;
     }
 
+    // clap's parser of every subcommand outgrows the 1 MB main stack in a debug build: each
+    // probe exited 0xC00000FD in windows-facts run 39316394518.
+    println!("cargo:rustc-link-arg-bins=/STACK:8388608");
+
     let manifests = Path::new(env!("CARGO_MANIFEST_DIR")).join("manifests");
     embed(
         "pitboard-probe-detached",
