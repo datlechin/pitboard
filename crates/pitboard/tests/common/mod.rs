@@ -220,6 +220,7 @@ impl Env {
                         at: started.clone(),
                         variables: vec![
                             "CLAUDE_CONFIG_DIR".into(),
+                            "CLAUDE_CODE_OAUTH_TOKEN".into(),
                             "CLAUDE_CODE_OAUTH_TOKEN_FILE_DESCRIPTOR".into(),
                             "CLAUDE_CODE_SUBPROCESS_ENV_SCRUB".into(),
                             "ANTHROPIC_API_KEY".into(),

@@ -107,7 +107,6 @@ pub(crate) fn verdict(ran: &Ran) -> Result<(), Failure> {
 )]
 mod tests {
     use super::*;
-    use crate::host::Os;
     use std::collections::BTreeMap;
     use std::path::PathBuf;
 
