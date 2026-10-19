@@ -2675,6 +2675,11 @@ Homes and variables:
   `.CPL` after it, and pass it on to theirs.
 - A value `setx` writes into the job user's `HKCU\Environment` reaches a task started after
   it.
+- A value written straight into the job user's `HKCU\Environment` never reaches the
+  environment of a program already running, even once `WM_SETTINGCHANGE` for `Environment` is
+  broadcast as `setx` broadcasts it. That reaches the program's top-level window that is never
+  shown, and not its message-only window. The Explorer already running starts a program with
+  the new value before any broadcast (RF-T8, runs 39310064516 and 39320680285).
 - A profile folder whose name is not ASCII, such as one holding `Đ` and `ạ` (10 UTF-16
   units, 13 UTF-8 bytes, NFC), has an ASCII 8.3 alias holding `~`, and so has the `Temp`
   inside it.
@@ -2693,6 +2698,12 @@ Who may read a login:
 - A file made with a protected DACL granting the user, SYSTEM and Administrators is owned by
   the user who made it, standard or limited administrator, and the elevated job user can
   read, write and delete it.
+- A fresh administrator's limited token, in which Administrators is for deny only, gets from
+  a file the elevated job user made, owned by Administrators with a protected DACL, what an
+  ACE for that user grants and nothing an Administrators ACE does: read, write and delete
+  with one for full control, read alone with one for reading, and nothing without one,
+  `CreateFileW` failing 5. Delete works with read alone, since the folder it is in grants that
+  user full control (RF-T8, run 39320680285).
 
 Replacing a file:
 
@@ -2714,6 +2725,28 @@ Replacing a file:
   `MoveFileExW` fails 5 most of the time. In 180 s it replaced the file 154 times on
   windows-2025, 30 rounds running out of 50 retries, and 2439 times on windows-11-arm, in up
   to 33 attempts. No reader saw a torn or empty file.
+
+Names, ids and long paths (RF-T8, runs 39310064516 and 39320680285):
+
+- `FILE_ID_INFO` gives a folder, a file, a hard link to the file and a junction to the folder
+  one volume serial number, and ids by which the hard link is its file, the junction is its
+  folder and the junction's own reparse point is another. A file keeps its id across a
+  rename, and another folder or file has another. The ids take at most 51 bits on NTFS and 55
+  on the SMB share, and 75 on ReFS, past 64. On the share a hard link is made and a junction
+  is not.
+- exFAT and FAT32 give no `FILE_ID_INFO`: `GetFileInformationByHandleEx` fails 87. Neither
+  takes a hard link or a junction, so there `host::lies_in` compares by path alone.
+- `GetFullPathNameW` of a name in a folder makes a device of `NUL` alone, `\\.\NUL`. `CON`,
+  `con.txt`, `NUL.json`, `AUX.json`, `PRN.json`, `COM1`, `COM0.json`, `LPT1.json`, `COM¹.json`,
+  `LPT².json`, `CONIN$`, `CONOUT$` and `CLOCK$.json` are names a file is made and kept by, as
+  written. A trailing dot or space goes: `work.`, `work..`, `work ` and `work. .` make
+  `work`, and `work.json.` makes `work.json`. The vault refuses each as a park's name, more
+  than Windows asks on Pitboard's floor.
+- Both images set `LongPathsEnabled` to 1. There a program whose manifest holds
+  `pitboard.exe`'s `longPathAware` makes, opens and finds a file and a folder at 328
+  characters through `CreateFileW`, `CreateDirectoryW` and `GetFileAttributesW`, with no
+  `\\?\`, and `RtlAreLongPathsEnabled` says so. Without the manifest each call fails 3.
+  std's own calls reach the folder either way, adding `\\?\` past `MAX_PATH`.
 
 Flushing and times:
 
@@ -2785,6 +2818,15 @@ Processes and jobs:
   all 200 times. In a job with it, all 200 leaves started with the flag left that job and
   stayed in the outer job the process was already in, however the chain was assigned (run
   38704825885).
+- `GetProcessTimes` of a child opened by its pid for limited queries gives a creation time
+  between the readings of `GetSystemTimePreciseAsFileTime` either side of its start, the same
+  as the child's own reading as text, and the same once it has exited while a handle is open,
+  its exit time later. Each of 50 children had its own (RF-T8, runs 39310064516 and
+  39320680285).
+- Once no handle to an exited child is left, opening its pid at once gives the same exited
+  process in 30 and 11 of 50 tries on windows-2025 and windows-11-arm, and fails 6 in the
+  rest. 100 ms later it fails 6 in 99 of 100 (RF-T8, run 39320680285). A pid never given out
+  fails 87, as the core's Windows tests read, and `proc::open` takes both for gone.
 - `GetModuleFileNameW` and `current_exe` give the path a program was started by, through a
   file symbolic link, a junction or a hard link. Canonicalizing resolves the link and the
   junction, not the hard link.
@@ -3041,20 +3083,15 @@ Daily renewal:
 
 Windows facts Pitboard stands on that Microsoft documents and nothing has measured yet, read
 on 15 and 16 October 2026. W27 took out the rows [The session machine](#the-session-machine)
-measured on 18 October 2026, and those CI measured by 20 October 2026.
+measured on 18 October 2026, and those CI and the runner facts measured by 20 October 2026.
 
 | Fact | Source | Why not measured |
 |---|---|---|
 | `GetProfileType` reports `PT_ROAMING` for a roaming profile | [GetProfileType](https://learn.microsoft.com/en-us/windows/win32/api/userenv/nf-userenv-getprofiletype) | The runners have local profiles only. |
 | `CfGetSyncRootInfoByPath` finds a sync root such as OneDrive's | [CfGetSyncRootInfoByPath](https://learn.microsoft.com/en-us/windows/win32/api/cfapi/nf-cfapi-cfgetsyncrootinfobypath) | No sync provider runs on the runners. |
-| `FILE_ID_INFO` names a file uniquely on its volume | [FILE_ID_INFO](https://learn.microsoft.com/en-us/windows/win32/api/winbase/ns-winbase-file_id_info) | No row reads it. |
-| An explicit ACE for the user decides what a UAC-filtered token can do with a file | [How DACLs control access](https://learn.microsoft.com/en-us/windows/win32/secauthz/how-dacls-control-access-to-an-object) | The limited token opened only a file it made. |
-| A running program sees a variable changed in the registry only after `WM_SETTINGCHANGE` | [Environment variables](https://learn.microsoft.com/en-us/windows/win32/procthread/environment-variables) | Only a task started after `setx` was measured. |
 | WTS lists another session's processes to Administrators only | [WTSEnumerateProcessesExW](https://learn.microsoft.com/en-us/windows/win32/api/wtsapi32/nf-wtsapi32-wtsenumerateprocessesexw) | No row looked at another user's process in another session. A standard user's listing held session 0's processes. |
-| `GetProcessTimes` gives a process's creation time | [GetProcessTimes](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-getprocesstimes) | Only the tests read it, of their own process. |
-| Reserved device names, and trailing dots and spaces, in a file name | [Naming files](https://learn.microsoft.com/en-us/windows/win32/fileio/naming-a-file) | No row makes such a name. |
-| `longPathAware` in a manifest lifts the 260-character limit | [Application manifests](https://learn.microsoft.com/en-us/windows/win32/sbscs/application-manifests) | No row uses a long path. |
-| `StartWhenAvailable` runs a start that was missed | [StartWhenAvailable](https://learn.microsoft.com/en-us/windows/win32/taskschd/tasksettings-startwhenavailable) | A runner never sleeps through a trigger. |
+| `longPathAware` in a manifest lifts nothing where `LongPathsEnabled` is 0 or absent, as on a PC no policy or installer changed | [Maximum path length limitation](https://learn.microsoft.com/en-us/windows/win32/fileio/maximum-file-path-limitation) | Both images set it to 1, where the manifest lifts the limit (RF-T8, runs 39310064516 and 39320680285), and AGENTS.md does not let runner-facts.ps1 change it. |
+| `StartWhenAvailable` runs, about 10 minutes later, a start missed while the PC slept or was off | [StartWhenAvailable](https://learn.microsoft.com/en-us/windows/win32/taskschd/tasksettings-startwhenavailable) | A runner never sleeps through a trigger. Task Scheduler took no missed start of the renewal's daily trigger begun before the task was registered, or passed while it was disabled: none of four tasks, two with the setting, ran within 21 to 29 minutes, each `0x00041303` with no missed run counted (RF-T8, runs 39310064516 and 39320680285). |
 | WSL 2's processes run in a utility VM | [Comparing WSL versions](https://learn.microsoft.com/en-us/windows/wsl/compare-versions) | No runner has WSL. |
 | Each subkey of `HKCU\Software\Microsoft\Windows\CurrentVersion\Lxss` is a distribution WSL holds for the account, named by its `DistributionName` | [How to manage WSL disk space](https://learn.microsoft.com/en-us/windows/wsl/disk-space) | No runner has WSL. |
 | `EnableLUA` 0 turns Admin Approval Mode off, so every program an administrator starts runs elevated; 1 is the default | [User Account Control settings and configuration](https://learn.microsoft.com/en-us/windows/security/application-security/application-control/user-account-control/settings-and-configuration) | Both images have UAC on (RF-A1). |
@@ -3069,7 +3106,7 @@ measured on 18 October 2026, and those CI measured by 20 October 2026.
 | Moderators label a portable archive `Portable-Archive`, a blocking issue | [Validation failure guide](https://github.com/microsoft/winget-pkgs/blob/master/doc/ValidationFailureGuide.md) | No manifest has been submitted. |
 | winget puts a portable package's install folder on `PATH`, not a link in Links, for a standard user without Developer Mode | [winget-pkgs FAQ](https://github.com/microsoft/winget-pkgs/blob/master/doc/FAQ.md) | Both images have Developer Mode on, and the job's user is an administrator. A standard user's install is the session's. |
 | Since winget 1.29, an MSI wins over a portable installer whatever the manifest's order | [winget-cli 1.29.380](https://github.com/microsoft/winget-cli/releases/tag/v1.29.380) | windows-2025's winget is 1.11.510, and no runner installs from winget's sources. |
-| A broadcast, such as `WM_ENDSESSION`, reaches a top-level window that is never shown, and no message-only window | [Message-only windows](https://learn.microsoft.com/en-us/windows/win32/winmsg/window-features#message-only-windows) | The session's `msiexec /fa` ended Pitboard through its hidden window by `WM_ENDSESSION` or `WM_CLOSE`, and did not record which ([The session machine](#the-session-machine)). No sign-out was measured, nor a message-only window. |
+| A sign-out's `WM_ENDSESSION` reaches a top-level window that is never shown, and no message-only window | [Message-only windows](https://learn.microsoft.com/en-us/windows/win32/winmsg/window-features#message-only-windows) | RF-T8's `WM_SETTINGCHANGE` broadcast reached a never-shown top-level window and not a message-only one (runs 39310064516 and 39320680285). The session's `msiexec /fa` ended Pitboard through its hidden window by `WM_ENDSESSION` or `WM_CLOSE`, and did not record which ([The session machine](#the-session-machine)). No runner signs out. |
 | Restart Manager sends `WM_CLOSE` to a program that agreed to end and has not exited | [Guidelines for Applications](https://learn.microsoft.com/en-us/windows/win32/rstmgr/guidelines-for-applications) | CF9's stand-in that agreed ended on `WM_ENDSESSION` (run 38895887782), and the session's `msiexec /fa` ended Pitboard without force; neither recorded a `WM_CLOSE`. |
 | `GetApplicationUserModelId` gives a packaged process's AUMID, and `APPMODEL_ERROR_NO_APPLICATION` for one without an app | [GetApplicationUserModelId](https://learn.microsoft.com/en-us/windows/win32/api/appmodel/nf-appmodel-getapplicationusermodelid) | No runner starts a packaged process; the session's step A4 reads ChatGPT's through `Pitboard.Probe app-control running`. |
 | `IApplicationActivationManager::ActivateApplication` opens a Store app by its AUMID from an unpackaged process | [IApplicationActivationManager](https://learn.microsoft.com/en-us/windows/win32/api/shobjidl_core/nn-shobjidl_core-iapplicationactivationmanager) | No runner holds a Store app the test user may open; the session's step A4 opens ChatGPT through `Pitboard.Probe app-control reopen`. |
