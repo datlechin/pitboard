@@ -650,6 +650,43 @@ mod managed_tests {
     }
 
     #[test]
+    fn a_token_in_claude_codes_remote_files_comes_before_the_stored_login() {
+        for os in [Os::MacOs, Os::Linux] {
+            let memory = MemoryHost::new();
+            memory.administers("/home/claude/.claude/remote/.oauth_token", "a token\n");
+            memory.administers("/home/claude/.claude/remote/.api_key", " \n");
+            let (ctx, _scratch) = on(os, &memory);
+            assert_eq!(
+                said(&overrides(&ctx)),
+                [(
+                    "/home/claude/.claude/remote/.oauth_token".to_string(),
+                    "the OAuth token".to_string()
+                )],
+                "{os:?}"
+            );
+            assert_eq!(
+                overrides(&ctx)[0].to_string(),
+                "the OAuth token in /home/claude/.claude/remote/.oauth_token"
+            );
+        }
+    }
+
+    #[test]
+    fn on_windows_a_remote_token_file_is_at_a_drives_root() {
+        let memory = MemoryHost::new();
+        memory.administers(r"C:\home\claude\.claude\remote\.api_key", "sk-ant-x");
+        memory.administers("/home/claude/.claude/remote/.oauth_token", "a token");
+        let (ctx, _scratch) = on(Os::Windows, &memory);
+        assert_eq!(
+            said(&overrides(&ctx)),
+            [(
+                r"C:\home\claude\.claude\remote\.api_key".to_string(),
+                "the API key".to_string()
+            )]
+        );
+    }
+
+    #[test]
     fn a_managed_file_keeps_the_persons_policy_out() {
         let memory = MemoryHost::new();
         memory.sets_policy(
