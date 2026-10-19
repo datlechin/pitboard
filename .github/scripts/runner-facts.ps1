@@ -7,7 +7,8 @@
 # certificate in LocalMachine\TrustedPeople with the probe's sparse package, PitboardShare's and
 # a link scheme registered for a throwaway user, and for the channel rows Scoop in a scratch
 # root, winget's local manifests and the package they install, a build on the user PATH and in
-# ~\.cargo\bin, a loopback server and Defender's attack surface reduction rules.
+# ~\.cargo\bin, a loopback server and Defender's attack surface reduction rules. RF-T7's VHD
+# holds a dummy at \home\claude.
 #
 # Everything goes into one JSON report at -Out, saved after each row, so a run cut short still
 # leaves what it gathered. A fact that cannot be gathered is recorded as an error and does not
@@ -1924,6 +1925,58 @@ function Measure-Channels($Result) {
     }
 }
 
+# RF-T7: Claude Code's remote token path names no drive. A dummy at \home\claude\.claude\remote
+# on an NTFS VHD of its own, read by Bun as Claude Code reads it, from a folder on that volume
+# and from one on C:, then the VHD detached and removed.
+function Measure-RemoteTokenFile($Result, [string] $Bun) {
+    $dir = 'C:\pitboard-probe-t7'
+    $onC = Join-Path $dir 'cwd'
+    New-Item -ItemType Directory -Force -Path $onC | Out-Null
+    $file = Join-Path $dir 'pitboard-probe-t7.vhdx'
+    $letter = Get-FreeLetter
+    $dummy = 'pitboard-probe: a dummy, never a token'
+    $Result.c_has_home_claude = Test-Path -LiteralPath 'C:\home\claude'
+    $create = Join-Path $dir 'create.txt'
+    @(
+        "create vdisk file=`"$file`" maximum=64 type=expandable",
+        "select vdisk file=`"$file`"",
+        'attach vdisk',
+        'create partition primary',
+        'format fs=ntfs quick label=PBT7',
+        "assign letter=$letter"
+    ) | Set-Content -Path $create -Encoding ascii
+    try {
+        $made = diskpart /s $create | Out-String
+        $Result.diskpart_exit = $LASTEXITCODE
+        $Result.mounted = Test-Path -Path "$($letter):\"
+        if (-not $Result.mounted) {
+            $Result.diskpart_tail = ($made -split "`r?`n" | Where-Object { $_.Trim() } | Select-Object -Last 4) -join ' | '
+            return
+        }
+        $remote = "$($letter):\home\claude\.claude\remote"
+        New-Item -ItemType Directory -Force -Path $remote | Out-Null
+        [IO.File]::WriteAllText((Join-Path $remote '.oauth_token'), "$dummy`n")
+        $onVolume = "$($letter):\pitboard-probe-t7"
+        New-Item -ItemType Directory -Force -Path $onVolume | Out-Null
+        $helper = Join-Path $toolHelpers 'remote-token.mjs'
+        foreach ($from in @(@('from_the_volume', $onVolume), @('from_c', $onC))) {
+            $o = Join-Path $scratch "t7-$($from[0])-out.txt"
+            $process = Start-Process -FilePath $Bun -ArgumentList (Format-Arguments @($helper, $dummy)) -WorkingDirectory $from[1] -NoNewWindow -PassThru `
+                -RedirectStandardOutput $o -RedirectStandardError (Join-Path $scratch "t7-$($from[0])-err.txt")
+            $null = $process.Handle
+            $waited = Wait-Bounded $process 60
+            $Result[$from[0]] = [ordered]@{ timed_out = $waited.TimedOut; exit = $waited.Exit; report = (Read-Json $o) }
+        }
+    } finally {
+        $detach = Join-Path $dir 'detach.txt'
+        @("select vdisk file=`"$file`"", 'detach vdisk') | Set-Content -Path $detach -Encoding ascii
+        diskpart /s $detach *> $null
+        $Result.detach_exit = $LASTEXITCODE
+        Remove-Item -Recurse -Force -Path $dir -ErrorAction SilentlyContinue
+        $Result.removed = -not (Test-Path -Path $dir)
+    }
+}
+
 # Anything a row left behind: the probe's tasks, a \Pitboard\ folder the run made, the tools.
 function Remove-Leftovers([bool] $PitboardFolderBefore) {
     Get-ScheduledTask -ErrorAction SilentlyContinue | Where-Object { $_.TaskName -like 'pitboard-probe-*' } |
@@ -1958,6 +2011,11 @@ try {
     $bun = $null
     try { $bun = Install-ProbeTools $report.tools $BunVersion $BunZip $BunSha256 } catch { $report.tools.error = $_.Exception.Message }
     Save-Report
+    $report.remote_token_file = [ordered]@{}
+    if ($bun) {
+        try { Measure-RemoteTokenFile $report.remote_token_file $bun } catch { $report.remote_token_file.error = $_.Exception.Message }
+        Save-Report
+    }
 
     $report.fresh_standard_user = [ordered]@{}
     $report.non_ascii_user = [ordered]@{}

@@ -32,3 +32,7 @@ pins, and `proper-lockfile` from `bun.lock` with `bun install --frozen-lockfile
   prints which branch it took, what fstat saw and whether it got the bytes. `pitboard-probe
   fd-handover` hands it a dummy on descriptor 3 through the C runtime's inheritance table, as a
   pipe or a socket (RF-WW1); it reads nothing of its own.
+- `remote-token.mjs <dummy>`: resolves Claude Code's remote token path,
+  `/home/claude/.claude/remote/.oauth_token`, from the working folder and reads it as Claude
+  Code 2.1.303 does, then prints the drives involved and whether it read the dummy the row
+  wrote there (RF-T7).
