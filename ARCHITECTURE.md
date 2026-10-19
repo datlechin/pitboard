@@ -925,6 +925,8 @@ window loads its site, and whatever the site's pages load, as a browser would.
     release's MSIs, `validate-windows-msi.ps1` runs ICE03 on an MSI with the WiX that built it,
     `read-assembly.ps1` reads a value from a .NET assembly's metadata, and
     `test-windows-app.ps1` tests the checks and the signature check on the MSI and the package.
+    `windows-pending.py` fails on a test Windows leaves out without a reason it accepts, and
+    `test-windows-pending.py` tests it.
   - `dependabot.yml` asks for weekly updates of Cargo dependencies, GitHub Actions and the
     .NET SDK in `apps/windows/global.json`.
   - `zizmor.yml` configures the audit CI runs on the workflows.
@@ -1056,8 +1058,6 @@ window loads its site, and whatever the site's pages load, as a browser would.
   warm-up hands Claude Code its token (`os::warm_up_token`).
 - The whole suite runs on macOS, Linux and Windows. A test put off on a system says why in
   its `ignore` reason, which libtest lists:
-  - A test that cannot pass on Windows until a later pull request of the Windows work says
-    which: `#[cfg_attr(windows, ignore = "W<id>: …")]`.
   - A test of something one system does not have or do names it, such as
     `ignore = "on Linux the file is Claude Code's only store, never behind a keychain"` on
     Linux and `ignore = "a firmlink to the Data volume is macOS's own"` off macOS.
@@ -1071,6 +1071,9 @@ window loads its site, and whatever the site's pages load, as a browser would.
   since the app lists the tool only where that is true.
 - A test a `cfg` compiles out on Windows, or that returns early there, says why in a
   `// windows: <reason>` line right above that `cfg` or that `if`, since neither takes a reason.
+- `.github/scripts/windows-pending.py` lists the reasons a Rust or C# test may give for being
+  left out on Windows, and CI fails on any other. A reason for a gap being closed has a ceiling
+  there, so no new test gives it.
 - No test addresses a name a real login may be kept under. `guard_not_live` refuses by
   pattern, never by a hash computed for a real home, the families
   `pitboard_core::provider::names` tells apart, which the measurement probe's leak check

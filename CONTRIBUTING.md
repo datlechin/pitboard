@@ -61,6 +61,7 @@ cargo nextest run --locked
 cargo nextest run --locked -p pitboard-ffi --features fixture
 cargo deny --all-features check
 cargo semver-checks --package pitboard-core
+python3 .github/scripts/windows-pending.py
 ```
 
 The `fixture` feature compiles the worlds the apps' debug builds launch into, so it gets a
@@ -289,10 +290,15 @@ newest Windows SDK compiles the resource, or `llvm-rc` on `PATH` from a Mac or L
 either the build warns and goes on. With `PITBOARD_REQUIRE_VERSIONINFO=1`, which CI and the
 release set, it fails.
 
-The whole suite runs on Windows. A Rust test that cannot pass there until a later Windows
-pull request says so with `#[cfg_attr(windows, ignore = "W<id>: <what it waits on>")]`, the id
-`W14` to `W27` with `W23` split into `W23a` and `W23b`, or `W-warm`, and in no other way: no
-filter and no `--skip`.
+The whole suite runs on Windows, with no filter and no `--skip`. A Rust test Windows leaves
+out gives a reason `.github/scripts/windows-pending.py` accepts: in its `ignore` reason, or,
+where a `cfg` compiles it out or it returns early, in a `// windows: <reason>` line right above
+that `cfg` or that `if`. CI's `windows-pending` job fails on any other. After changing the
+script:
+
+```sh
+python3 .github/scripts/test-windows-pending.py
+```
 
 From a Mac or Linux, `cargo check --target x86_64-pc-windows-msvc` checks only
 `pitboard-sites` and `pitboard-share-ffi`, since ring compiles C against MSVC's headers.
@@ -389,17 +395,17 @@ test of what a 0.x release refuses fails. C# makes each field of a record a memb
 field may not share its record's name.
 
 On Windows, run the tests as [Windows](#windows) says: as a Windows account that holds no real
-login, with the homes [AGENTS.md](AGENTS.md#on-windows) names at fresh folders. A C# test that
-cannot pass there until a later Windows pull request says so in its Rust counterpart's words:
+login, with the homes [AGENTS.md](AGENTS.md#on-windows) names at fresh folders. A C# test
+Windows leaves out gives a reason `windows-pending.py` accepts, as a Rust test does:
 
 ```csharp
-[OSCondition(ConditionMode.Exclude, OperatingSystems.Windows, IgnoreMessage = "W<id>: <what it waits on>")]
+[OSCondition(ConditionMode.Exclude, OperatingSystems.Windows, IgnoreMessage = "<reason>")]
 ```
 
 In the projects that build only on Windows, `Pitboard.Windows.Tests` and `Pitboard.UITests`:
 
 ```csharp
-[Ignore("W<id>: <what it waits on>")]
+[Ignore("<reason>")]
 ```
 
 The tests that start a fixture's model are skipped against a library built without the

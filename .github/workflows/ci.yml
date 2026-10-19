@@ -110,6 +110,18 @@ jobs:
         run: python3 .github/scripts/test-install.py
       - run: python3 .github/scripts/test-release.py
 
+  # Every test Windows leaves out, by an ignore, a cfg or an early return, gives a reason
+  # .github/scripts/windows-pending.py accepts.
+  windows-pending:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: python3 .github/scripts/test-windows-pending.py
+      - run: python3 .github/scripts/windows-pending.py
+
   # Windows, where the core compiles and refuses whatever is not built yet. Each image is
   # named, never windows-latest, so a new image is a change made on purpose.
   windows:
@@ -179,7 +191,7 @@ jobs:
           -Probe target/debug/pitboard-probe.exe
       - run: cargo clippy --workspace --all-targets --locked
       - run: cargo clippy -p pitboard-ffi --all-targets --locked --features fixture
-      # No filter and no --skip: a test that waits for a later pull request says so in its attribute.
+      # No filter and no --skip: the windows-pending job checks each test left out says why.
       # -ExFat mounts the volume a test replaces a file on through MoveFileExW.
       - name: The workspace's tests, as a standard user
         shell: pwsh
@@ -1019,6 +1031,7 @@ jobs:
       - clippy
       - test
       - install-script
+      - windows-pending
       - windows
       - windows-release
       - windows-msrv
