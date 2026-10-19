@@ -1620,7 +1620,7 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
     Assumption {
         name: "windows_token_env",
         fact: "on Windows Claude Code signs in with the access token `CLAUDE_CODE_OAUTH_TOKEN` \
-               holds wherever it is set: after `ANTHROPIC_AUTH_TOKEN` and before a \
+               holds wherever it is set: right after `ANTHROPIC_AUTH_TOKEN` and before a \
                descriptor or its well-known file, `apiKeyHelper`, a profile and the stored login. \
                It takes it as an access token alone, with no refresh token and no expiry, so \
                nothing renews it, scoped `user:inference` unless `CLAUDE_CODE_OAUTH_SCOPES` names \
@@ -1635,7 +1635,8 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
                code.claude.com's page of environment variables documents both variables. Read, \
                not measured: session reading M9 measures a warm-up made so, and that it writes \
                nothing to its private home or that home's Credential Manager slot",
-        read_from: "the token source order and the login made of the variable, the API \
+        read_from: "the two token source checks, each of which takes the variable right after \
+                    `ANTHROPIC_AUTH_TOKEN`, the login getter, which takes it first, the API \
                     key's source in print mode, the variables the scrub takes out of a child's \
                     environment and what turns it on, and the `where.exe` lookup the Git Bash \
                     finder falls back to, started with `env:process.env`, in the win32-x64 and \
@@ -1646,9 +1647,8 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
                   that signs it in, and names in `CLAUDE_CODE_GIT_BASH_PATH` the Git Bash \
                   Pitboard finds, so no `where.exe` is asked for `git` where it finds one",
         probe: &[
-            r#"{source:"ANTHROPIC_AUTH_TOKEN",hasToken:!0}"#,
-            r#"{source:"CLAUDE_CODE_OAUTH_TOKEN",hasToken:!0}"#,
-            ".CLAUDE_CODE_OAUTH_TOKEN,refreshToken:null,expiresAt:null",
+            r#"return{source:"ANTHROPIC_AUTH_TOKEN",hasToken:!0};if(a.CLAUDE_CODE_OAUTH_TOKEN)return{source:"CLAUDE_CODE_OAUTH_TOKEN",hasToken:!0}"#,
+            "(){if(a.CLAUDE_CODE_OAUTH_TOKEN)return{accessToken:a.CLAUDE_CODE_OAUTH_TOKEN,refreshToken:null,expiresAt:null",
             r#""ANTHROPIC_API_KEY","CLAUDE_CODE_OAUTH_TOKEN","CLAUDE_CODE_ARTIFACTS_API_TOKEN""#,
             "process.env.CLAUDE_CODE_SUBPROCESS_ENV_SCRUB",
             "windowsHide:!0,env:process.env}).trim().split(",
