@@ -712,6 +712,21 @@ mod managed_tests {
         }
     }
 
+    #[test]
+    fn a_remote_token_file_over_claude_codes_limit_holds_no_token() {
+        let key = "/home/claude/.claude/remote/.api_key";
+        let memory = MemoryHost::new();
+        memory.administers(key, &"k".repeat(65_536));
+        let (ctx, _scratch) = on(Os::Linux, &memory);
+        assert_eq!(
+            said(&overrides(&ctx)),
+            [(key.to_string(), "the API key".to_string())]
+        );
+
+        memory.administers(key, &"k".repeat(65_537));
+        assert_eq!(overrides(&ctx), Vec::new());
+    }
+
     // A warm-up's own token comes before `.oauth_token`, and `.api_key` before both.
     #[test]
     fn a_warm_ups_run_takes_the_api_key_in_claude_codes_remote_file() {
