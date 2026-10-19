@@ -51,6 +51,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Windows is out, and dims **Check now** until then, instead of ending each check in an error.
 - Uninstalling the Windows app turns off daily renewal where its task runs the app's own
   `pitboard.exe`, and leaves a task that runs another copy, such as Scoop's.
+- On Windows, Pitboard removes the temporary files a killed run left behind, each of which can
+  hold a whole login, as it does on macOS and Linux.
 
 ### Security
 
