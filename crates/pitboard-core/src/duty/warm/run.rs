@@ -123,6 +123,19 @@ pub struct Started {
     pub token: Option<String>,
 }
 
+#[cfg(any(test, feature = "test-support"))]
+impl Started {
+    // On descriptor 3, or on Windows in `CLAUDE_CODE_OAUTH_TOKEN` (`windows_token_env`).
+    pub fn access_token(&self) -> Option<&str> {
+        self.token.as_deref().or_else(|| {
+            self.env
+                .iter()
+                .find(|(name, _)| name == "CLAUDE_CODE_OAUTH_TOKEN")
+                .map(|(_, token)| token.as_str())
+        })
+    }
+}
+
 /// Runs `headless` for at most [`CEILING`], or plays it where a test or a fixture said to.
 pub(crate) fn run(ctx: &Context, permit: Permit, headless: Headless) -> std::io::Result<Ran> {
     #[cfg(any(test, feature = "test-support"))]

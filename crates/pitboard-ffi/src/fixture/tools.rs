@@ -74,15 +74,7 @@ impl std::fmt::Debug for Warmer {
 
 impl WarmScript for Warmer {
     fn run(&self, started: &Started) -> Ran {
-        // Windows hands it in a variable (`windows_token_env`).
-        let handed = started.token.as_deref().or_else(|| {
-            started
-                .env
-                .iter()
-                .find(|(name, _)| name == "CLAUDE_CODE_OAUTH_TOKEN")
-                .map(|(_, token)| token.as_str())
-        });
-        if let Some(access) = handed {
+        if let Some(access) = started.access_token() {
             self.machine.started_period(access);
         }
         Ran {

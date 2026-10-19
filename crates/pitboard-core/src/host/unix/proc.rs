@@ -3,20 +3,16 @@
 use crate::host::Ran;
 use crate::service::Permit;
 use std::ffi::CString;
-use std::io::{self, Read, Write};
+use std::io::{self, Write};
 use std::os::fd::AsRawFd;
 use std::os::unix::ffi::OsStrExt;
 use std::os::unix::process::CommandExt;
 use std::path::Path;
 use std::process::{Child, Command, Stdio};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 /// How long a run past its ceiling is given to end once asked, before it is made to.
 const GRACE: Duration = Duration::from_secs(2);
-
-/// How long what a run printed is waited for once it ended. Anything still holding its output
-/// open then is not of its process group, and is not waited on.
-const DRAINED: Duration = Duration::from_secs(5);
 
 /// Runs `command` in a process group of its own for at most `ceiling`, with `handed` to read on
 /// descriptor 3 and nothing on standard input. Past the ceiling, the group is asked to end and
@@ -63,40 +59,16 @@ pub(crate) fn run_within(
     }
     let mut child = command.spawn()?;
     drop(reader);
-    let stdout = child.stdout.take();
-    let (said, printed) = std::sync::mpsc::channel();
-    std::thread::spawn(move || {
-        let mut text = String::new();
-        if let Some(stdout) = stdout {
-            let _ = stdout.take(1 << 20).read_to_string(&mut text);
-        }
-        let _ = said.send(text);
-    });
-    let began = Instant::now();
-    let mut timed_out = false;
-    let status = loop {
-        if let Some(status) = child.try_wait()? {
-            break Some(status);
-        }
-        if began.elapsed() >= ceiling {
-            timed_out = true;
-            signal(&child, libc::SIGTERM);
-            break ended_within(&mut child, GRACE);
-        }
-        std::thread::sleep(Duration::from_millis(100));
-    };
+    let printed = crate::host::drained(child.stdout.take());
+    let mut status = crate::host::ended_within(&mut child, ceiling)?;
+    let timed_out = status.is_none();
+    if timed_out {
+        signal(&child, libc::SIGTERM);
+        status = crate::host::ended_within(&mut child, GRACE).ok().flatten();
+    }
     signal(&child, libc::SIGKILL);
-    let status = match status {
-        Some(status) => Some(status),
-        None => child.wait().ok(),
-    };
-    Ok(Ran {
-        exit: status
-            .and_then(|status| status.code())
-            .filter(|_| !timed_out),
-        stdout: printed.recv_timeout(DRAINED).unwrap_or_default(),
-        timed_out,
-    })
+    let status = status.or_else(|| child.wait().ok());
+    Ok(Ran::of(status, timed_out, &printed))
 }
 
 // A sign-in's tool, which a cancel kills and reaps.
@@ -119,18 +91,6 @@ impl Tool {
         let _ = self.0.kill();
         let _ = self.0.wait();
     }
-}
-
-/// How `child` ended, where it did within `grace`.
-fn ended_within(child: &mut Child, grace: Duration) -> Option<std::process::ExitStatus> {
-    let began = Instant::now();
-    while began.elapsed() < grace {
-        if let Some(status) = child.try_wait().ok().flatten() {
-            return Some(status);
-        }
-        std::thread::sleep(Duration::from_millis(100));
-    }
-    None
 }
 
 /// Sends `sig` to the process group `child` leads.

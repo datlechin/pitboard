@@ -720,6 +720,58 @@ pub struct Ran {
     pub timed_out: bool,
 }
 
+// How long what a run printed is waited for once it ended.
+const DRAINED: std::time::Duration = std::time::Duration::from_secs(5);
+
+impl Ran {
+    pub(crate) fn of(
+        status: Option<std::process::ExitStatus>,
+        timed_out: bool,
+        printed: &std::sync::mpsc::Receiver<String>,
+    ) -> Ran {
+        Ran {
+            exit: status
+                .and_then(|status| status.code())
+                .filter(|_| !timed_out),
+            stdout: printed.recv_timeout(DRAINED).unwrap_or_default(),
+            timed_out,
+        }
+    }
+}
+
+// Up to 1 MiB of what a run prints, read on a thread of its own.
+pub(crate) fn drained(
+    stdout: Option<std::process::ChildStdout>,
+) -> std::sync::mpsc::Receiver<String> {
+    use std::io::Read;
+    let (said, printed) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let mut text = String::new();
+        if let Some(stdout) = stdout {
+            let _ = stdout.take(1 << 20).read_to_string(&mut text);
+        }
+        let _ = said.send(text);
+    });
+    printed
+}
+
+// How `child` ended, where it did within `within`.
+pub(crate) fn ended_within(
+    child: &mut std::process::Child,
+    within: std::time::Duration,
+) -> std::io::Result<Option<std::process::ExitStatus>> {
+    let began = std::time::Instant::now();
+    loop {
+        if let Some(status) = child.try_wait()? {
+            return Ok(Some(status));
+        }
+        if began.elapsed() >= within {
+            return Ok(None);
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+}
+
 /// The machine Pitboard is standing on, as one value rather than a set of `cfg` branches
 /// spread through the crate. A host answers where another program's secrets may be, where
 /// Pitboard's own parked logins go, what this user is running and how daily renewal is

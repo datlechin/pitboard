@@ -2,7 +2,7 @@
 
 use super::proc::image;
 use crate::host::Ran;
-use std::io::{self, Read};
+use std::io;
 use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
 use std::os::windows::process::CommandExt;
 use std::process::{Child, Command, ExitStatus, Stdio};
@@ -36,9 +36,6 @@ const CHAIN: [&str; 5] = [
 
 // How long one of them is given to end once it was told to.
 const ENDING_MS: u32 = 5_000;
-
-// How long what a run printed is waited for once all of it ended.
-const DRAINED: Duration = Duration::from_secs(5);
 
 pub(crate) struct Tool {
     child: Child,
@@ -76,8 +73,7 @@ fn spawn_into(mut command: Command, job: &Job) -> io::Result<Child> {
     Ok(child)
 }
 
-// A warm-up's run. Nothing it starts breaks away, and all of it ends once it ended, past the
-// ceiling, or with Pitboard.
+// All of it ends past the ceiling or with Pitboard.
 pub(crate) fn run_within(
     _: crate::service::Permit,
     mut command: Command,
@@ -97,39 +93,15 @@ pub(crate) fn run_within(
         .creation_flags(flags(false));
     let job = job(JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE)?;
     let mut child = spawn_into(command, &job)?;
-    let stdout = child.stdout.take();
-    let (said, printed) = std::sync::mpsc::channel();
-    std::thread::spawn(move || {
-        let mut text = String::new();
-        if let Some(stdout) = stdout {
-            let _ = stdout.take(1 << 20).read_to_string(&mut text);
-        }
-        let _ = said.send(text);
-    });
-    let began = Instant::now();
-    let status = loop {
-        if let Some(status) = child.try_wait()? {
-            break Some(status);
-        }
-        if began.elapsed() >= ceiling {
-            break None;
-        }
-        std::thread::sleep(Duration::from_millis(100));
-    };
+    let printed = crate::host::drained(child.stdout.take());
+    let status = crate::host::ended_within(&mut child, ceiling)?;
     end_all(&job);
     let timed_out = status.is_none();
     let status = status.or_else(|| child.wait().ok());
-    Ok(Ran {
-        exit: status
-            .and_then(|status| status.code())
-            .filter(|_| !timed_out),
-        stdout: printed.recv_timeout(DRAINED).unwrap_or_default(),
-        timed_out,
-    })
+    Ok(Ran::of(status, timed_out, &printed))
 }
 
-// Every process of the job, waited for so the run's files can go. One leaves the job's list
-// before it closes its handles and ends, so each is waited on by a handle taken while listed.
+// A process leaves the job's list before it ends, so each is waited on by a handle taken then.
 fn end_all(job: &Job) {
     let asked = Instant::now();
     loop {
