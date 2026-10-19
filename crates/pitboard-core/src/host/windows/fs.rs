@@ -929,6 +929,23 @@ mod tests {
         dir
     }
 
+    #[test]
+    fn the_fixed_drives_hold_the_one_this_test_keeps_its_temporaries_on() {
+        use std::path::{Component, Prefix};
+        let drives = fixed_drives();
+        println!("fixed drives: {drives:?}");
+        let temp = std::env::temp_dir();
+        let Some(Component::Prefix(prefix)) = temp.components().next() else {
+            panic!("{} names no drive", temp.display());
+        };
+        let (Prefix::Disk(letter) | Prefix::VerbatimDisk(letter)) = prefix.kind() else {
+            panic!("{} names no drive letter", temp.display());
+        };
+        assert!(drives.contains(&char::from(letter).to_ascii_uppercase()));
+        assert!(drives.iter().all(char::is_ascii_uppercase));
+        assert!(drives.is_sorted_by(|a, b| a < b), "each once");
+    }
+
     fn private_to_you(path: &Path, folder: bool) {
         let you = crate::host::user::sid().expect("this account's SID");
         let read = Security::of(path).expect("its security");
