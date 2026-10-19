@@ -286,6 +286,8 @@ pub(crate) fn custom_oauth(ctx: &Context) -> bool {
 // login (`remote_token_files`).
 const OAUTH_TOKEN: (&str, &str) = (".oauth_token", "the OAuth token");
 const API_KEY: (&str, &str) = (".api_key", "the API key");
+// Claude Code's, past which it takes neither.
+const REMOTE_TOKEN_LIMIT: u64 = 65_536;
 
 // On Windows the path names no drive, so it is at the root of whichever drive a session runs
 // from.
@@ -308,7 +310,8 @@ fn remote_tokens(ctx: &Context, files: &[(&str, &str)]) -> Vec<Override> {
         })
         .filter(|(path, _)| {
             matches!(
-                ctx.host().administered_file(std::path::Path::new(path)),
+                ctx.host()
+                    .administered_file_up_to(std::path::Path::new(path), REMOTE_TOKEN_LIMIT),
                 Administered::Set(text) if !text.trim().is_empty()
             )
         })

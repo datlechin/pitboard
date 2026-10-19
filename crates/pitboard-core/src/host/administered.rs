@@ -54,13 +54,52 @@ pub(crate) fn listed(dir: &Path) -> Vec<std::path::PathBuf> {
 
 /// The file at `path`, as text. Absent is unset; there and unreadable, or not text, says why.
 pub(crate) fn read_text(path: &Path) -> Administered {
-    match std::fs::read(path) {
-        Ok(bytes) => match String::from_utf8(bytes) {
-            Ok(text) => Administered::Set(text),
-            Err(_) => Administered::Unreadable("is not UTF-8 text".into()),
-        },
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Administered::Unset,
-        Err(e) => Administered::Unreadable(format!("cannot be read: {e}")),
+    std::fs::read(path).map_or_else(|e| unread(&e), as_text)
+}
+
+// As Claude Code reads its remote token files, which any account may put at a Windows drive's
+// root: a regular file alone, of at most `limit` bytes.
+pub(crate) fn read_up_to(path: &Path, limit: u64) -> Administered {
+    use std::io::Read;
+    // Asked before it is opened too, since opening a FIFO waits for a writer.
+    match std::fs::metadata(path) {
+        Ok(meta) if meta.is_file() => {}
+        Ok(_) => return not_a_file(),
+        Err(e) => return unread(&e),
+    }
+    let file = match std::fs::File::open(path) {
+        Ok(file) if file.metadata().is_ok_and(|meta| meta.is_file()) => file,
+        Ok(_) => return not_a_file(),
+        Err(e) => return unread(&e),
+    };
+    let mut bytes = Vec::new();
+    match file.take(limit + 1).read_to_end(&mut bytes) {
+        Ok(_) if bytes.len() as u64 > limit => larger_than(limit),
+        Ok(_) => as_text(bytes),
+        Err(e) => unread(&e),
+    }
+}
+
+pub(crate) fn larger_than(limit: u64) -> Administered {
+    Administered::Unreadable(format!("is larger than {limit} bytes"))
+}
+
+fn not_a_file() -> Administered {
+    Administered::Unreadable("is not a file".into())
+}
+
+fn as_text(bytes: Vec<u8>) -> Administered {
+    match String::from_utf8(bytes) {
+        Ok(text) => Administered::Set(text),
+        Err(_) => Administered::Unreadable("is not UTF-8 text".into()),
+    }
+}
+
+fn unread(e: &std::io::Error) -> Administered {
+    if e.kind() == std::io::ErrorKind::NotFound {
+        Administered::Unset
+    } else {
+        Administered::Unreadable(format!("cannot be read: {e}"))
     }
 }
 
@@ -105,6 +144,19 @@ mod tests {
             matches!(&folder, Administered::Unreadable(why) if why.starts_with("cannot be read")),
             "a folder where the file should be cannot be read as one: {folder:?}"
         );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_bounded_read_takes_a_file_up_to_its_limit_alone() {
+        let dir = scratch("bounded");
+        let file = dir.join(".api_key");
+        assert_eq!(read_up_to(&file, 8), Administered::Unset);
+        std::fs::write(&file, "12345678").expect("written");
+        assert_eq!(read_up_to(&file, 8), Administered::Set("12345678".into()));
+        std::fs::write(&file, "123456789").expect("written");
+        assert_eq!(read_up_to(&file, 8), larger_than(8));
+        assert_eq!(read_up_to(&dir, 8), not_a_file());
         let _ = std::fs::remove_dir_all(&dir);
     }
 

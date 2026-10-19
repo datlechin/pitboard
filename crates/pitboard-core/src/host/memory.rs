@@ -641,6 +641,15 @@ impl Host for MemoryHost {
             .unwrap_or(Administered::Unset)
     }
 
+    fn administered_file_up_to(&self, path: &Path, limit: u64) -> Administered {
+        match self.administered_file(path) {
+            Administered::Set(text) if text.len() as u64 > limit => {
+                super::administered::larger_than(limit)
+            }
+            held => held,
+        }
+    }
+
     /// What a test said a profile forces, on whatever system the tests run on.
     fn managed_preference(&self, domain: &str, key: &str) -> Administered {
         self.forced

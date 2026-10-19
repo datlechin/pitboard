@@ -1755,33 +1755,35 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
         fact: "where `CLAUDE_CODE_OAUTH_TOKEN_FILE_DESCRIPTOR` is unset, Claude Code reads an \
                OAuth token from `/home/claude/.claude/remote/.oauth_token`, and where \
                `CLAUDE_CODE_API_KEY_FILE_DESCRIPTOR` is unset, an API key from `.api_key` \
-               beside it: a regular file alone, trimmed, one that holds nothing passed over, \
-               unless it runs as `mcp serve --transport http`. The token is \
-               `CCR_OAUTH_TOKEN_FILE`, after `ANTHROPIC_AUTH_TOKEN` and \
+               beside it: a regular file alone, of at most 65,536 bytes, trimmed, one that \
+               holds nothing passed over, unless it runs as `mcp serve --transport http`. The \
+               token is `CCR_OAUTH_TOKEN_FILE`, after `ANTHROPIC_AUTH_TOKEN` and \
                `CLAUDE_CODE_OAUTH_TOKEN` and before `apiKeyHelper` and the stored login; the \
                key is taken as `ANTHROPIC_API_KEY`, before `apiKeyHelper`, and a key of that \
                source turns off a sign-in by OAuth token, one in `CLAUDE_CODE_OAUTH_TOKEN` or \
                on a descriptor included. On Windows the path names no drive, so it leads to a \
                folder at the root of a drive, which every account on the PC shares: Bun 1.4.3 \
                takes the drive of the working folder",
-        read_from: "the well-known file reader and its two callers, the token's place in the \
-                    sources a session names and the key's in the API key's, the check that \
-                    turns a claude.ai sign-in off for an API key, and the `mcp serve` check, \
-                    in the darwin-arm64, linux-x64, win32-x64 and win32-arm64 builds of \
-                    2.1.303, read as bytes on 2026-10-20; and RF-T7, whose Bun 1.4.3 read a \
-                    dummy there from a folder on that drive and got ENOENT from one on C: \
-                    (windows-facts runs 39310064516 and 39320680285)",
+        read_from: "the well-known file reader, its byte limit and its two callers, the token's \
+                    place in the sources a session names and the key's in the API key's, the \
+                    check that turns a claude.ai sign-in off for an API key, and the `mcp \
+                    serve` check, in the darwin-arm64, linux-x64, win32-x64 and win32-arm64 \
+                    builds of 2.1.303, read as bytes on 2026-10-20; and RF-T7, whose Bun 1.4.3 \
+                    read a dummy there from a folder on that drive and got ENOENT from one on \
+                    C: (windows-facts runs 39310064516 and 39320680285)",
         verified_against: "2.1.303",
         depends: "settings::overrides, so doctor's auth_source check and a switch's warning \
                   name either file where it holds something: at `/` off Windows, and at the \
-                  root of each fixed drive on Windows; and duty::warm::overridden, through \
-                  overrides_of_a_run_in, so a warm-up holds back while `.api_key` holds one",
+                  root of each fixed drive on Windows, read as Claude Code reads them; and \
+                  duty::warm::overridden, through overrides_of_a_run_in, so a warm-up holds \
+                  back while `.api_key` holds one",
         probe: &[
             "\"/home/claude/.claude/remote\"",
             "/.oauth_token",
             "/.api_key",
             "CCR_OAUTH_TOKEN_FILE",
             "miss:\"empty\"",
+            "readBoundedSync: content exceeds byte limit",
         ],
         absent: &[],
     },
