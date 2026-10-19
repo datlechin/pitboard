@@ -273,9 +273,10 @@ window loads its site, and whatever the site's pages load, as a browser would.
     until the next day. Only the unscoped `session` limit is started: the weekly
     limit is a fixed cycle. `run.rs` runs the tool's own headless mode in `warm/<tool>/`, made
     afresh for each run and removed after it, with an environment built from nothing but
-    `PATH`, the person's name and the proxy, through `host::proc::run_within`: the access
-    token on descriptor 3 through a pipe `dup2`ed in `pre_exec`, for at most 120 seconds, its
-    process group stopped past that, and whatever it left in the group stopped after it. On
+    `PATH`, the person's name, the proxy and, on Windows, `SystemRoot`, through
+    `host::proc::run_within`: the access token on descriptor 3 through a pipe `dup2`ed in
+    `pre_exec`, for at most 120 seconds, its process group stopped past that, and whatever it
+    left in the group stopped after it. On
     Windows, which reads no descriptor (`windows_token_handover`), the token goes in
     `CLAUDE_CODE_OAUTH_TOKEN` with `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1` (`windows_token_env`),
     `CLAUDE_CODE_GIT_BASH_PATH` names the Git Bash `claude::paths::git_bash` finds, so Claude
