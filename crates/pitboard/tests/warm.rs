@@ -21,10 +21,14 @@ fn warming_up_now_runs_claude_code_with_the_access_token_alone() {
     let (_, err, code) = env.run(&["status"]);
     assert_eq!(code, 0, "status: {err}");
     env.claude_usage(Some(5 * 3600));
+    let bash = env.root.join("Git").join("bin").join("bash.exe");
+    std::fs::create_dir_all(bash.parent().unwrap()).unwrap();
+    std::fs::write(&bash, "never run").unwrap();
 
     let (out, err, code) = env.run_with(
         &["warm", "now", "beta", "--json"],
         &[
+            ("CLAUDE_CODE_GIT_BASH_PATH", bash.to_str().unwrap()),
             ("ANTHROPIC_API_KEY", "sk-not-this"),
             ("ANTHROPIC_AUTH_TOKEN", "token-not-this"),
             ("CLAUDE_BG_AUTH_SNAPSHOT_PATH", "snapshot-not-this"),
@@ -93,6 +97,10 @@ fn warming_up_now_runs_claude_code_with_the_access_token_alone() {
                 variables["CLAUDE_CODE_OAUTH_TOKEN"],
                 serde_json::Value::Null
             );
+            assert_eq!(
+                variables["CLAUDE_CODE_GIT_BASH_PATH"],
+                serde_json::Value::Null
+            );
         }
         Handed::InVariable => {
             assert_eq!(
@@ -102,6 +110,10 @@ fn warming_up_now_runs_claude_code_with_the_access_token_alone() {
             assert_eq!(variables["CLAUDE_CODE_SUBPROCESS_ENV_SCRUB"], "1");
             assert_eq!(handed["descriptor"], serde_json::Value::Null);
             assert_eq!(variables["CLAUDE_CODE_OAUTH_TOKEN"], "access-refresh-b");
+            assert_eq!(
+                variables["CLAUDE_CODE_GIT_BASH_PATH"],
+                bash.to_str().unwrap()
+            );
             for given in ["USERPROFILE", "SystemRoot"] {
                 assert!(names.contains(&given), "{given}: {names:?}");
             }

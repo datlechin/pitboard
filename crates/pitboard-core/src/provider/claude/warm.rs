@@ -118,6 +118,9 @@ mod tests {
         std::fs::write(&program, "never run").expect("a program");
         crate::host::fs::testing::make_runnable(&program).expect("runnable");
         let home = dir.path().join("warm").join("claude");
+        let bash = dir.path().join("Git").join("bin").join("bash.exe");
+        std::fs::create_dir_all(bash.parent().expect("a folder")).expect("Git");
+        std::fs::write(&bash, "never run").expect("a Git Bash");
         let login = serde_json::json!({
             "claudeAiOauth": {"accessToken": "access-work", "refreshToken": "refresh-work"}
         });
@@ -127,6 +130,7 @@ mod tests {
                 .with_user("dana".into());
             ctx.os = os;
             ctx.system_root = Some(PathBuf::from(r"C:\Windows"));
+            ctx.git_bash = Some(bash.clone());
             let run = headless(&ctx, Permit::for_a_test(), &home, &login).expect("a run");
             let env: BTreeMap<String, String> = run
                 .command
@@ -174,6 +178,7 @@ mod tests {
                         names,
                         [
                             "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC",
+                            "CLAUDE_CODE_GIT_BASH_PATH",
                             "CLAUDE_CODE_OAUTH_TOKEN",
                             "CLAUDE_CODE_SUBPROCESS_ENV_SCRUB",
                             "CLAUDE_CONFIG_DIR",
@@ -193,6 +198,11 @@ mod tests {
                     );
                     assert_eq!(env["CLAUDE_CODE_OAUTH_TOKEN"], "access-work");
                     assert_eq!(env["CLAUDE_CODE_SUBPROCESS_ENV_SCRUB"], "1");
+                    assert_eq!(
+                        env["CLAUDE_CODE_GIT_BASH_PATH"],
+                        bash.to_string_lossy(),
+                        "so Claude Code asks no where.exe, which would get the token"
+                    );
                     assert_eq!(env["USERPROFILE"], path("home"));
                     assert_eq!((&env["TEMP"], &env["TMP"]), (&path("tmp"), &path("tmp")));
                     assert_eq!(env["SystemRoot"], r"C:\Windows");

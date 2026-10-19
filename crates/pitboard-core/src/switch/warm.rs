@@ -764,6 +764,7 @@ mod tests {
                     "TMP",
                     "SystemRoot",
                     "CLAUDE_CODE_SUBPROCESS_ENV_SCRUB",
+                    "CLAUDE_CODE_GIT_BASH_PATH",
                 ][..]
             } else {
                 &["USER"][..]
