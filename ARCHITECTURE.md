@@ -2818,12 +2818,16 @@ Credential Manager:
   standard user, after each Windows test run, it does the same and finds nothing (run
   37762408901).
 
-A network logon, by key through sshd as the standard user on windows-2025:
+A network logon, by key through sshd as the standard user: windows-2025's own OpenSSH 9.5p2,
+and on windows-11-arm the Win32-OpenSSH 10.0p2 RF-M installs (runs 38821312770, 38922866517,
+38928930271, 39291962999, 39310064516 and 39320680285):
 
 - It is logon type 3, in session 0.
-- `CredWriteW`, `CredReadW`, `CredDeleteW` and `CredEnumerateW` fail 1312, and
-  `CryptProtectData` fails 5.
+- `CredWriteW`, `CredReadW`, `CredDeleteW` and `CredEnumerateW` fail 1312.
 - WTS and Toolhelp name the same user's `codex.exe` in session 2.
+- On windows-2025 `CryptProtectData` fails 5. On windows-11-arm it seals and unseals, and
+  refuses the wrong entropy. Whether sshd's build or the image makes that difference is not
+  measured: RF-M installs OpenSSH only where the image ships none, as AGENTS.md allows.
 
 Scoop, winget and the user `PATH`, as the job's user, with the gated build in the zips
 `package-windows.ps1` makes for 0.14.0 and 0.14.1, served on loopback (run 38725515950):

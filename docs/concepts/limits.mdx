@@ -44,5 +44,5 @@ A claude.ai [account window](/concepts/account-windows) signs in on claude.ai's 
 - Codex keeping its login anywhere but its file store, `auth.json`: in a keychain, in Credential Manager, in its encrypted `secrets` store or in memory. [Before you enrol a Codex account](/guides/codex#before-you-enrol-a-codex-account) shows how to check.
 - Claude Desktop on Windows and Linux.
 - A third-party deployment of Claude, which keeps its data in `Claude-3p`, and Claude's own account switcher, as read in Claude 2.7032.0. Pitboard moves no login while Claude's cookie store holds two sessions of one name.
-- Changes from a sign-in over SSH with a key on Windows, which reaches neither Credential Manager nor the key that seals Pitboard's parked logins. [When the store cannot be reached](/concepts/identity#when-the-store-cannot-be-reached) says what Pitboard does.
+- Changes from a sign-in over SSH with a key on Windows, which reaches no Credential Manager and may not reach the key that seals Pitboard's parked logins. [When the store cannot be reached](/concepts/identity#when-the-store-cannot-be-reached) says what Pitboard does.
 - Google sign-in in an account's window, and passkeys there on macOS. [Sign in](/guides/account-windows#sign-in) gives the ways that work.
