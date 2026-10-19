@@ -666,21 +666,36 @@ mod tests {
     }
 
     // Freed for a while, a pid fails OpenProcess with 6 (RF-T8, windows-facts run 39320680285).
+    // Windows may keep the exited process a while longer, or give its pid to another.
     #[test]
     fn a_process_gone_a_while_is_gone() {
-        let pid = {
+        let (pid, created) = {
             let mut child = std::process::Command::new(std::env::current_exe().expect("this test"))
                 .arg("--list")
                 .stdout(std::process::Stdio::null())
                 .spawn()
                 .expect("it starts");
-            let pid = child.id();
+            let created = started(child.id()).expect("its creation time");
             child.wait().expect("it ends");
-            pid
+            (child.id(), created)
         };
-        std::thread::sleep(std::time::Duration::from_millis(200));
-        assert!(!may_be_running(pid));
-        assert_eq!(started(pid), None);
+        let reused = || started(pid).is_some_and(|other| other != created);
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        while std::time::Instant::now() < deadline {
+            match open(pid, PROCESS_QUERY_LIMITED_INFORMATION) {
+                Open::Gone => {
+                    assert!(!may_be_running(pid) || reused());
+                    return;
+                }
+                Open::Refused => panic!("OpenProcess refused pid {pid}, this test's own child's"),
+                Open::Handle(_) if reused() => {
+                    println!("pid {pid} went to another process before it read as gone");
+                    return;
+                }
+                Open::Handle(_) => std::thread::sleep(std::time::Duration::from_millis(50)),
+            }
+        }
+        println!("pid {pid} still opened as its exited child after 5 s");
     }
 
     #[test]
