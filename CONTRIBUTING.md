@@ -300,10 +300,21 @@ script:
 python3 .github/scripts/test-windows-pending.py
 ```
 
-From a Mac or Linux, `cargo check --target x86_64-pc-windows-msvc` checks only
-`pitboard-sites` and `pitboard-share-ffi`, since ring compiles C against MSVC's headers.
+To lint for Windows from a Mac, with `cargo-xwin` and Homebrew's `llvm@22`:
 
-CI's `windows` job runs these commands on `windows-2025` and `windows-11-arm`, the tests as
+```sh
+export PATH="$(brew --prefix llvm@22)/bin:$PATH"
+export RUSTFLAGS="-D warnings -C target-feature=+crt-static --cfg pitboard_unreleased_windows"
+cargo-xwin clippy --locked --workspace --all-targets --target x86_64-pc-windows-msvc
+cargo-xwin clippy --locked --workspace --all-targets --target aarch64-pc-windows-msvc \
+  --cross-compiler clang
+```
+
+Run each once more with `-p pitboard-ffi --all-targets --features fixture` in place of
+`--workspace --all-targets`, as CI does, and the workspace once without the `--cfg`, as a
+release is built.
+
+CI's `windows` job runs the PowerShell commands on `windows-2025` and `windows-11-arm`, the tests as
 a fresh standard user through `.github/scripts/test-as-standard-user.ps1`, with an exFAT
 volume it mounts for the run. The job fails when a run leaves a login item, a scheduled task, a login
 folder, the app's data folder, a link scheme, a notification registration, a start at
