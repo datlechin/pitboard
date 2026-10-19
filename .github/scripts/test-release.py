@@ -26,6 +26,8 @@ WINDOWS_UPDATE_SIGN = REPO / ".github" / "scripts" / "windows-update-sign.sh"
 SESSION_GATE = REPO / ".github" / "scripts" / "session-gate.sh"
 WINDOWS_APP = REPO / "apps" / "windows" / "Pitboard.App" / "Pitboard.App.csproj"
 PACKAGE_WINDOWS = REPO / ".github" / "scripts" / "package-windows.ps1"
+SCRIPTS = REPO / ".github" / "scripts"
+WORKFLOWS = REPO / ".github" / "workflows"
 WINDOWS_TARGETS = ("x86_64-pc-windows-msvc", "aarch64-pc-windows-msvc")
 TARBALL_TARGETS = (
     "aarch64-apple-darwin",
@@ -1065,6 +1067,89 @@ class WindowsUpdateSign(unittest.TestCase):
         done = run(WINDOWS_UPDATE_SIGN, "v1.0.0", "true", self.public, self.work)
         self.assertEqual(done.returncode, 2)
         self.assertIn("usage:", done.stderr)
+
+
+class ScriptCalls(unittest.TestCase):
+    # Most of release.yml runs only on a tag, so a parameter made mandatory and a caller left behind
+    # would fail first in a published release.
+    CALL = re.compile(
+        r"(?:^|&\s*|-File\s+)(?:\"[^\"]*/|\.\./\.\./|\./)?\.github/scripts/([\w-]+)\.ps1\"?"
+        r"|&\s*\(Join-Path\s+\$\w+\s+'([\w-]+)\.ps1'\)"
+    )
+    RUN = re.compile(r"^(\s*)(?:-\s+)?run:\s*(.*)$")
+
+    def mandatory(self):
+        found = {}
+        for script in SCRIPTS.glob("*.ps1"):
+            text = script.read_text()
+            names = re.findall(r"^\s*\[Parameter\(Mandatory\)\].*\$(\w+),?\s*$", text, re.M)
+            if names:
+                found[script.stem] = names
+        return found
+
+    def commands(self, lines, folded):
+        commands, current = [], ""
+        for line in lines:
+            stripped = line.strip()
+            if not stripped:
+                if current:
+                    commands.append(current)
+                current = ""
+                continue
+            if stripped.startswith("#"):
+                continue
+            current = f"{current} {stripped}" if current else stripped
+            if not folded and not stripped.endswith(("`", " \\")):
+                commands.append(current)
+                current = ""
+        if current:
+            commands.append(current)
+        return commands
+
+    def blocks(self):
+        for workflow in sorted(WORKFLOWS.glob("*.yml")):
+            lines = workflow.read_text().splitlines()
+            for at, line in enumerate(lines):
+                found = self.RUN.match(line)
+                if not found:
+                    continue
+                indent, value = len(found.group(1)), found.group(2).strip()
+                if value not in ("|", "|-", ">", ">-"):
+                    yield workflow.name, at + 1, [value], False
+                    continue
+                block = []
+                for inner in lines[at + 1 :]:
+                    if inner.strip() and len(inner) - len(inner.lstrip()) <= indent:
+                        break
+                    block.append(inner)
+                yield workflow.name, at + 1, block, value.startswith(">")
+        for script in sorted(SCRIPTS.glob("*.ps1")):
+            yield script.name, 1, script.read_text().splitlines(), False
+
+    def test_every_call_of_a_script_names_each_of_its_mandatory_parameters(self):
+        mandatory = self.mandatory()
+        self.assertIn("Completions", mandatory["check-windows-msi"])
+        calls, missing = 0, []
+        for name, at, block, folded in self.blocks():
+            text = "\n".join(block)
+            for command in self.commands(block, folded):
+                for call in self.CALL.finditer(command):
+                    script = call.group(1) or call.group(2)
+                    if script not in mandatory:
+                        continue
+                    calls += 1
+                    rest = command[call.end() :]
+                    given = {g.lower() for g in re.findall(r"-(\w+)", rest)}
+                    for splat in re.findall(r"(?<![\w$])@(\w+)", rest):
+                        table = re.search(rf"\${splat}\s*=\s*@{{([^}}]*)}}", text)
+                        if table:
+                            given |= {k.lower() for k in re.findall(r"(\w+)\s*=", table.group(1))}
+                        given |= {k.lower() for k in re.findall(rf"\${splat}\.(\w+)\s*=", text)}
+                    lacking = [p for p in mandatory[script] if p.lower() not in given]
+                    if lacking:
+                        missing.append(f"{name}:{at} {script}.ps1 without -{', -'.join(lacking)}")
+        self.assertGreater(calls, 20)
+        self.assertEqual(missing, [])
 
 
 if __name__ == "__main__":

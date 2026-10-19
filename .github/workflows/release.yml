@@ -1788,8 +1788,9 @@ jobs:
           SIGNED: ${{ needs.guard.outputs.signed }}
         run: |
           $folder = & ./.github/scripts/extract-msi.ps1 -Msi $env:MSI -Destination (Join-Path $env:RUNNER_TEMP 'msi-image')
-          $zipped = Join-Path $env:RUNNER_TEMP "unpacked\pitboard-$env:GITHUB_REF_NAME-$env:TRIPLE\pitboard.exe"
-          ./.github/scripts/check-windows-msi.ps1 -Msi $env:MSI -Folder $folder -MsiVersion $env:MSI_VERSION -CommandLine $zipped `
+          $unpacked = Join-Path $env:RUNNER_TEMP "unpacked\pitboard-$env:GITHUB_REF_NAME-$env:TRIPLE"
+          ./.github/scripts/check-windows-msi.ps1 -Msi $env:MSI -Folder $folder -MsiVersion $env:MSI_VERSION `
+            -CommandLine (Join-Path $unpacked 'pitboard.exe') -Completions (Join-Path $unpacked 'completions\pitboard.ps1') `
             -Share:($env:SIGNED -eq 'true')
       - if: needs.guard.outputs.crates == 'true'
         name: cargo binstall, from crates.io

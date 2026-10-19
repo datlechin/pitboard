@@ -122,8 +122,8 @@ on `PATH`. `TEST_INSTALL_SHELLS` names the ones that must be found, as CI sets i
 For a change to the release's scripts, `release-kind.sh`, `core-unchanged.sh`,
 `check-winget-hashes.py`, `windows-appcast.py`, `windows-versions.sh`,
 `windows-update-key.sh`, `windows-update-sign.sh` and `session-gate.sh` in `.github/scripts`,
-`apps/macos/scripts/build-number.sh`, or the cargo-binstall metadata in
-`crates/pitboard/Cargo.toml`:
+`apps/macos/scripts/build-number.sh`, the cargo-binstall metadata in
+`crates/pitboard/Cargo.toml`, or a workflow's call of a PowerShell script in `.github/scripts`:
 
 ```sh
 shellcheck -s sh .github/scripts/release-kind.sh .github/scripts/core-unchanged.sh \
