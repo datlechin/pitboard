@@ -389,26 +389,29 @@ pub(super) fn identity_of_document(
 ) -> Result<provider::Identity> {
     let credential = provider::Credential::new(tool.id(), document.clone());
     tool.identity(ctx, &credential)
-        .map_err(|e| unidentified(tool.id(), e))
+        .map_err(|e| unidentified(ctx, tool.id(), e))
 }
 
 /// Why nobody could say whose a login of `which` is, as a change refuses over it.
-fn unidentified(which: ProviderId, error: provider::ProviderError) -> Error {
-    unidentified_as(which, crate::error::Unidentified::SignedIn, error)
+fn unidentified(ctx: &Context, which: ProviderId, error: provider::ProviderError) -> Error {
+    unidentified_as(ctx, which, crate::error::Unidentified::SignedIn, error)
 }
 
 /// [`unidentified`], for `login`: the one signed in, or the one a sign-in made.
 pub(super) fn unidentified_as(
+    ctx: &Context,
     which: ProviderId,
     login: crate::error::Unidentified,
     error: provider::ProviderError,
 ) -> Error {
     use crate::error::Unidentified;
+    let spelling = crate::words::spelled(ctx, which);
     match error {
         provider::ProviderError::Unauthorized if login == Unidentified::SignedIn => {
             Error::SessionExpired {
                 tool: which,
                 refused: false,
+                spelling,
             }
         }
         other @ (provider::ProviderError::ShapeUnexpected { .. }
@@ -428,12 +431,14 @@ pub(super) fn unidentified_as(
             },
             cause: crate::error::Cause::of_provider(&error),
             detail: error.to_string(),
+            spelling,
         },
         other => Error::IdentityUnverifiable {
             tool: which,
             login,
             cause: crate::error::Cause::of_provider(&other),
             detail: other.to_string(),
+            spelling,
         },
     }
 }
@@ -449,6 +454,7 @@ pub(super) fn nothing_signed_in(ctx: &Context, tool: &'static dyn Provider) -> E
         None => Error::LiveCredentialAbsent {
             tool: tool.id(),
             label: None,
+            spelling: crate::words::spelled(ctx, tool.id()),
         },
     }
 }
@@ -488,7 +494,7 @@ fn going_out(
             match identify::told(ctx, state, tool, &refused) {
                 Ok(None) => Ok(Some(raw)),
                 Ok(Some(_)) => Err(Error::SignedInAccountChanged),
-                Err(error) => Err(unidentified(tool.id(), error)),
+                Err(error) => Err(unidentified(ctx, tool.id(), error)),
             }
         }
         Going::Nothing => match read_stored(tool, live)? {
@@ -717,6 +723,7 @@ fn put_in(
         },
     };
     if let Err(e) = install_with(
+        ctx,
         which,
         |body| match body {
             "" => store::delete_raw(&live.chain, permit, &live.service),
@@ -1008,6 +1015,7 @@ fn switch_from(
     }
 
     if let Err(e) = install_with(
+        ctx,
         key.provider,
         |body| store::write_raw(&live.chain, permit, &live.service, body),
         || store::read_raw(&live.chain, &live.service),
@@ -1050,6 +1058,7 @@ fn switch_from(
                 tool: key.provider,
                 from,
                 to,
+                spelling: crate::words::spelled(ctx, key.provider),
             });
         }
         Err(unreadable) => {
@@ -1314,6 +1323,7 @@ pub(crate) fn still_holding(ctx: &Context, which: ProviderId) -> StillHolding {
                 folder::Open::Yes(listed) => StillHolding::These(vec![holder::Holding {
                     holder: *app.holder(),
                     pids: listed.iter().map(|one| one.pid).collect(),
+                    program: which.program(),
                 }]),
                 folder::Open::Unknown(_) => StillHolding::Unknown,
             };
@@ -1322,7 +1332,7 @@ pub(crate) fn still_holding(ctx: &Context, which: ProviderId) -> StillHolding {
     let provider::Adoption::RestartRequired { program, holders } = tool.adoption(None) else {
         return StillHolding::Nothing;
     };
-    match holder::find(ctx, program, holders) {
+    match holder::find(ctx, which, program, holders) {
         None => StillHolding::Unknown,
         Some(holding) if holding.is_empty() => StillHolding::Nothing,
         Some(holding) => StillHolding::These(holding),
@@ -1390,6 +1400,7 @@ fn prove_incoming(
                     },
                     cause: crate::error::Cause::of_provider(&e),
                     detail: e.to_string(),
+                    spelling: crate::words::spelled(ctx, key.provider),
                 });
             }
         }
@@ -1407,6 +1418,7 @@ fn prove_incoming(
                 "it needs renewing and {} did not answer",
                 key.provider.service()
             ),
+            spelling: crate::words::spelled(ctx, key.provider),
         });
     };
     let document = park::load(ctx, tool, key, &fresh)?;
@@ -1456,7 +1468,9 @@ fn to_body(document: &Value) -> String {
 /// "the slot changed", a rollback was attempted, that failed as well, and the person was
 /// told Pitboard could not put their login back and they should sign in again. Nothing had
 /// been written and their login had never moved.
+#[allow(clippy::too_many_arguments)]
 fn install_with(
+    ctx: &Context,
     tool: ProviderId,
     write: impl Fn(&str) -> std::result::Result<(), store::Error>,
     read: impl Fn() -> std::result::Result<Option<String>, store::Error>,
@@ -1498,6 +1512,7 @@ fn install_with(
             from: from.to_string(),
             to: to.to_string(),
             detail: format!("{failure}; {rollback}"),
+            spelling: crate::words::spelled(ctx, tool),
         }),
     }
 }
@@ -1513,11 +1528,82 @@ mod tests {
         let path = PathBuf::from("/nowhere/codex");
         let missing = || provider::ProviderError::CodexHomeMissing { path: path.clone() };
         let codex = ProviderId::Codex;
-        for refused in [shape(codex, missing()), unidentified(codex, missing())] {
+        let ctx = Context::for_unit_test();
+        for refused in [
+            shape(codex, missing()),
+            unidentified(&ctx, codex, missing()),
+        ] {
             assert_eq!(refused.code(), "codex_home_missing");
             assert_eq!(refused.exit_code(), 1);
             let said = refused.to_string();
             assert!(said.starts_with("CODEX_HOME is /nowhere/codex, which is no folder"));
+        }
+    }
+
+    // Windows PowerShell 5.1 refuses npm's `claude.ps1` and runs the `.cmd` (2026-10-18).
+    #[test]
+    #[allow(
+        clippy::disallowed_methods,
+        reason = "a test lays out an npm prefix as `npm install -g` leaves one"
+    )]
+    fn nothing_signed_in_names_the_cmd_pitboard_found_on_windows() {
+        use crate::host::Os;
+        let scratch = tempfile::tempdir().expect("a scratch home");
+        let npm = scratch.path().join("npm");
+        let native = scratch.path().join("bin");
+        let programs = [
+            (&npm, "claude"),
+            (&npm, "claude.cmd"),
+            (&npm, "claude.ps1"),
+            (&npm, "codex"),
+            (&npm, "codex.cmd"),
+            (&npm, "codex.ps1"),
+            (&native, "claude.exe"),
+            (&native, "codex.exe"),
+        ];
+        for (folder, name) in programs {
+            std::fs::create_dir_all(folder).expect("a folder");
+            std::fs::write(folder.join(name), "").expect("a program");
+            crate::host::fs::testing::make_runnable(&folder.join(name)).expect("runnable");
+        }
+        let home = scratch.path().join("home");
+        for (os, folder, claude, codex) in [
+            (Os::MacOs, &npm, "claude", "codex"),
+            (Os::Linux, &npm, "claude", "codex"),
+            (Os::Windows, &npm, "claude.cmd", "codex.cmd"),
+            (Os::Windows, &native, "claude", "codex"),
+        ] {
+            let env = crate::context::Environment::on(
+                os,
+                [
+                    ("HOME", home.as_os_str()),
+                    ("USERPROFILE", home.as_os_str()),
+                    ("PITBOARD_HOME", home.join("pitboard").as_os_str()),
+                    ("CLAUDE_CONFIG_DIR", home.join("claude").as_os_str()),
+                    ("CODEX_HOME", home.join("codex").as_os_str()),
+                    ("PATH", folder.as_os_str()),
+                ],
+            );
+            let ctx = Context::for_command_line(&env);
+            let said = |tool| nothing_signed_in(&ctx, tool).to_string();
+            assert_eq!(
+                said(provider::claude_code()),
+                format!(
+                    "nothing is signed in to Claude Code right now. Run `{claude}`, sign in, then \
+                     try again."
+                ),
+                "{os:?} {}",
+                folder.display()
+            );
+            assert_eq!(
+                said(provider::codex()),
+                format!(
+                    "nothing is signed in to Codex right now. Run `{codex} login`, sign in, then \
+                     try again."
+                ),
+                "{os:?} {}",
+                folder.display()
+            );
         }
     }
 
@@ -1645,6 +1731,7 @@ mod tests {
     fn a_successful_write_needs_no_rollback() {
         let written = RefCell::new(Vec::new());
         let result = install_with(
+            &Context::for_unit_test(),
             ProviderId::Claude,
             |b| {
                 written.borrow_mut().push(b.to_string());
@@ -1663,6 +1750,7 @@ mod tests {
     #[test]
     fn a_failed_write_that_changed_nothing_is_not_reported_as_a_lost_login() {
         let result = install_with(
+            &Context::for_unit_test(),
             ProviderId::Claude,
             |_| Err(failing("keychain locked")),
             || Ok(Some("old".into())),
@@ -1681,6 +1769,7 @@ mod tests {
     fn a_half_write_is_rolled_back() {
         let slot = RefCell::new("old".to_string());
         let result = install_with(
+            &Context::for_unit_test(),
             ProviderId::Claude,
             |b| {
                 if b == "new" {
@@ -1714,6 +1803,7 @@ mod tests {
     fn a_store_that_cannot_be_read_back_is_not_a_lost_login() {
         let writes = RefCell::new(0);
         let result = install_with(
+            &Context::for_unit_test(),
             ProviderId::Claude,
             |_| {
                 *writes.borrow_mut() += 1;
@@ -1742,6 +1832,7 @@ mod tests {
     fn a_write_left_unfinished_is_rolled_back_by_writing_the_login_that_was_there() {
         let slot = RefCell::new(Err("left unfinished".to_string()));
         let result = install_with(
+            &Context::for_unit_test(),
             ProviderId::Claude,
             |b| {
                 if b == "new" {
@@ -1771,6 +1862,7 @@ mod tests {
     #[test]
     fn only_a_failed_rollback_after_a_change_is_reported_as_corruption() {
         let result = install_with(
+            &Context::for_unit_test(),
             ProviderId::Claude,
             |_| Err(failing("disk full")),
             || Ok(Some("garbled".into())),
@@ -1794,7 +1886,8 @@ mod tests {
             tool: ProviderId::Claude,
             from,
             to,
-            detail
+            detail,
+            spelling: crate::words::Spelling::Bare,
         }));
     }
 }

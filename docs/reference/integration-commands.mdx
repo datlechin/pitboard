@@ -142,16 +142,16 @@ pitboard completions zsh > ~/.zfunc/_pitboard
 
 Then add the same two lines to `~/.zshrc`, with `~/.zfunc` as the folder.
 
-PowerShell loads the script from your profile. In each PowerShell you use, add the app's script to the file `$PROFILE` names:
+PowerShell loads the script from your profile. In Windows PowerShell 5.1, add it only once [its execution policy](https://learn.microsoft.com/powershell/module/microsoft.powershell.core/about/about_execution_policies) is `RemoteSigned`: under `Restricted`, its default on Windows 11, it runs no profile.
+
+In each PowerShell you use, add the app's script to the file `$PROFILE` names:
 
 ```powershell
 if (-not (Test-Path $PROFILE)) { New-Item -ItemType File -Path $PROFILE -Force }
 Add-Content -Path $PROFILE -Value '. "$env:LOCALAPPDATA\Programs\Pitboard\completions\pitboard.ps1"'
 ```
 
-From a zip, name the `completions\pitboard.ps1` in the folder you unpacked it to.
-
-Windows PowerShell 5.1 runs no profile while its execution policy is `Restricted`, its default on Windows 11.
+From a zip, name the `completions\pitboard.ps1` in the folder you unpacked it to, and run `Unblock-File` on that file first. PowerShell 7's default execution policy, `RemoteSigned`, refuses a script marked as downloaded from the internet, and File Explorer marks each file it extracts from a downloaded zip.
 
 ## `manpage`
 

@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
 using Microsoft.Windows.AppNotifications;
@@ -153,6 +154,20 @@ public sealed class WindowsNotificationsTests
     }
 
     [TestMethod]
+    public void ANotificationWindowsRefusesIsRefusedByItsTypeAndHresultAlone()
+    {
+        var gone = Marshal.GetExceptionForHR(unchecked((int)0x80070490));
+        var system = new StandInNotifications { RefusesToShow = gone };
+        var notifications = new WindowsNotifications(Build.Release, () => system, Icon);
+        notifications.Start(_ => Assert.Fail("a click"));
+
+        var refused = Assert.ThrowsExactly<PlatformException.Failed>(() => notifications.Post(RunOut));
+
+        Assert.AreEqual("COMException 0x80070490", refused.reason);
+        Assert.AreEqual($"show {WindowsNotifications.Tag(RunOut.Id)}", system.Asked[^1]);
+    }
+
+    [TestMethod]
     public void AFailedRegistrationIsSaidAndPostsNothing()
     {
         var system = new StandInNotifications { Refuses = new UnauthorizedAccessException("Access is denied.") };
@@ -291,6 +306,8 @@ public sealed class WindowsNotificationsTests
 
         public Exception? Refuses { get; init; }
 
+        public Exception? RefusesToShow { get; init; }
+
         public IDictionary<string, string>? Launched { get; init; }
 
         public AppNotificationSetting Turned { get; set; } = AppNotificationSetting.Enabled;
@@ -332,6 +349,11 @@ public sealed class WindowsNotificationsTests
         public void Show(AppNotification notification)
         {
             Asked.Add($"show {notification.Tag}");
+            if (RefusesToShow is { } refused)
+            {
+                throw refused;
+            }
+
             Shown.Add(notification);
         }
 

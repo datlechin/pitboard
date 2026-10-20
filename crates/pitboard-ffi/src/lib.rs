@@ -549,7 +549,7 @@ mod tests {
 
     // The core's own tests take a task away on a scheduler in memory; this one reaches none.
     #[test]
-    fn a_removal_with_no_command_line_beside_the_app_takes_nothing_away() {
+    fn a_path_that_is_no_app_takes_no_renewal_task_away() {
         let scratch = std::env::temp_dir().join(format!(
             "pitboard-unschedule-{}-{:?}",
             std::process::id(),

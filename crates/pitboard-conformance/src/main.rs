@@ -571,14 +571,32 @@ mod tests {
         assert_eq!(moved, ["no_keyring_off_macos"]);
     }
 
-    // A warm-up on Windows rests on both (`windows_token_env`); macOS and Linux hand a descriptor.
+    // A warm-up on Windows rests on each (`windows_token_env`); macOS and Linux hand a descriptor.
     #[test]
-    fn a_windows_build_that_drops_the_token_variable_or_the_scrub_has_moved() {
+    fn a_windows_build_that_drops_or_reorders_what_a_warm_up_rests_on_has_moved() {
         let windows = every_probe(ProviderId::Claude, Platform::Windows);
+        // The well-known file read ahead of the variable, in the source check and the login.
+        for (read, reordered) in [
+            (
+                r#";if(a.CLAUDE_CODE_OAUTH_TOKEN)return{source:"CLAUDE_CODE_OAUTH_TOKEN""#,
+                r#";if(JT())return{source:"CCR_OAUTH_TOKEN_FILE",hasToken:!0};if(a.CLAUDE_CODE_OAUTH_TOKEN)return{source:"CLAUDE_CODE_OAUTH_TOKEN""#,
+            ),
+            (
+                "(){if(a.CLAUDE_CODE_OAUTH_TOKEN)",
+                "(){let e=JT();if(e)return n(e);if(a.CLAUDE_CODE_OAUTH_TOKEN)",
+            ),
+        ] {
+            assert!(windows.contains(read), "{read}");
+            let build = windows.replace(read, reordered);
+            let sorted = Sorted::of(ProviderId::Claude, Platform::Windows, &build);
+            let moved: Vec<&str> = sorted.moved().iter().map(|a| a.name).collect();
+            assert_eq!(moved, ["windows_token_env"], "{reordered}");
+        }
         for gone in [
-            r#"{source:"CLAUDE_CODE_OAUTH_TOKEN",hasToken:!0}"#,
-            ".CLAUDE_CODE_OAUTH_TOKEN,refreshToken:null,expiresAt:null",
+            r#"return{source:"ANTHROPIC_AUTH_TOKEN",hasToken:!0};if(a.CLAUDE_CODE_OAUTH_TOKEN)return{source:"CLAUDE_CODE_OAUTH_TOKEN",hasToken:!0}"#,
+            "(){if(a.CLAUDE_CODE_OAUTH_TOKEN)return{accessToken:a.CLAUDE_CODE_OAUTH_TOKEN,refreshToken:null,expiresAt:null",
             "process.env.CLAUDE_CODE_SUBPROCESS_ENV_SCRUB",
+            "windowsHide:!0,env:process.env}).trim().split(",
         ] {
             assert!(windows.contains(gone), "{gone}");
             let build = windows.replace(gone, "");

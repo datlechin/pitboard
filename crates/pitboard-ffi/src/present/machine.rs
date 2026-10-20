@@ -11,7 +11,7 @@
 use super::{Seen, words};
 use crate::model::machine::ScheduleFailure;
 use crate::model::state::AutoStanding;
-use crate::{AutoSwitched, FoundCommandLine, Level, Schedule};
+use crate::{AutoSwitched, Check, FoundCommandLine, Level, Schedule};
 use pitboard_core::duty::autoswitch::Threshold;
 
 /// What the app shows of this machine rather than its accounts. Not called `Machine`, the
@@ -142,10 +142,9 @@ pub struct RenewalShown {
 /// Doctor's checks, as the window shows them.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct ChecksShown {
-    /// Every check, in the order doctor makes them.
+    // every check, in the order doctor makes them, then a notification the app's system refused
     pub lines: Vec<CheckLine>,
-    /// Over them, the last line of `pitboard doctor`, so the two never disagree, once there
-    /// are checks to head.
+    // over them, in the words of the last line of `pitboard doctor`, once there are checks to head
     pub summary: Option<String>,
     // the worst of the checks, which the line over them shows in its colour and symbol
     pub level: Level,
@@ -488,9 +487,22 @@ fn checks(seen: &Seen) -> ChecksShown {
     let machine = &seen.state.machine;
     let checking = machine.checking > 0;
     let any = !machine.checks.is_empty();
+    // Doctor cannot know what the app's system refused, so the app says it after doctor's checks.
+    let refused = machine
+        .post_refused
+        .as_ref()
+        .filter(|_| any)
+        .map(|refused| Check {
+            code: "notification_not_posted".into(),
+            name: "Notifications".into(),
+            level: Level::Warn,
+            detail: words::not_posted(&refused.title, &seen.clock(refused.at), &refused.reason),
+            advice: String::new(),
+        });
+    let checks: Vec<Check> = machine.checks.iter().cloned().chain(refused).collect();
     ChecksShown {
         lines: (0..)
-            .zip(&machine.checks)
+            .zip(&checks)
             .map(|(id, check)| CheckLine {
                 id,
                 code: check.code.clone(),
@@ -502,8 +514,8 @@ fn checks(seen: &Seen) -> ChecksShown {
                     .then(|| words::check_text(&check.advice)),
             })
             .collect(),
-        summary: any.then(|| crate::doctor_summary(&machine.checks)),
-        level: crate::doctor_level(&machine.checks),
+        summary: any.then(|| crate::doctor_summary(&checks)),
+        level: crate::doctor_level(&checks),
         checking,
         checked: machine
             .checked_at

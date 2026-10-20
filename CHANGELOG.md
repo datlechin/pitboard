@@ -23,6 +23,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   and F5 or Ctrl+R for **Back**, **Forward** and **Reload**, as its page does.
 - The Windows app installs the PowerShell completions, as `completions\pitboard.ps1` in its
   folder.
+- On Windows, **This PC** names the last notification Windows refused to show, with when and
+  the error it gave, until the next one is posted.
 
 ### Changed
 
@@ -59,6 +61,14 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - A switch parks Claude Code's `cloudSessionsOauth` and `trustedDeviceEnrolledAfterRefusalAtMs`
   with the outgoing account's login, and no longer leaves them for the incoming account.
+- On Windows, Pitboard says to run `claude.cmd` or `codex.cmd` where npm installed the tool,
+  since Windows PowerShell refuses a bare `claude` or `codex` there by default.
+- On Windows, `pitboard doctor` names the Claude Code and Codex builds Pitboard's facts for
+  Windows were read from, not the macOS ones.
+- On Windows, Pitboard says to restart Codex's background app server from a terminal that is
+  not elevated, since Codex refuses to start it from an elevated one.
+- On Windows, `pitboard doctor` says a switch changes the login of a Codex in WSL that uses
+  the Windows Codex home, where it said every tool in WSL keeps a login of its own.
 
 ## [1.0.0-beta.3] - 2026-10-19
 

@@ -9,8 +9,7 @@
   </Window.SystemBackdrop>
   <!-- Microsoft's NavigationApp template: Mica reaches the title bar only once the content extends into it. -->
   <Grid x:Name="Root" KeyboardAcceleratorPlacementMode="Hidden">
-    <!-- Microsoft's keyboard guidance: F6 and Shift+F6 go to the next and previous pane, and Ctrl+W closes. F1 opens the
-         help the icon's menu opens. Placed nowhere, or the grid shows "F6" as a tooltip wherever the pointer rests. -->
+    <!-- Placed nowhere, or the grid shows "F6" as a tooltip wherever the pointer rests. -->
     <Grid.KeyboardAccelerators>
       <KeyboardAccelerator Key="F6" Invoked="OnNextRegion" />
       <KeyboardAccelerator Key="F6" Modifiers="Shift" Invoked="OnNextRegion" />

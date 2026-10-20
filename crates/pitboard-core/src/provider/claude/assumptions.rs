@@ -1640,31 +1640,38 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
     Assumption {
         name: "windows_token_env",
         fact: "on Windows Claude Code signs in with the access token `CLAUDE_CODE_OAUTH_TOKEN` \
-               holds wherever it is set: after `ANTHROPIC_AUTH_TOKEN` and before a descriptor or \
-               its well-known file, `apiKeyHelper`, a profile and the stored login. It takes it \
-               as an access token alone, with no refresh token and no expiry, so nothing renews \
-               it, scoped `user:inference` unless `CLAUDE_CODE_OAUTH_SCOPES` names others. Print \
-               mode sends its requests with `ANTHROPIC_API_KEY` instead wherever that is set. \
-               `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB` set to 1 takes `ANTHROPIC_API_KEY`, \
-               `ANTHROPIC_AUTH_TOKEN`, `CLAUDE_CODE_OAUTH_TOKEN` and the other credentials it \
-               names out of the environment of every program Claude Code starts. code.claude.com's \
-               page of environment variables documents both. Read, not measured: session \
-               reading M9 measures a warm-up made so, and that it writes nothing to its private \
-               home or that home's Credential Manager slot",
-        read_from: "the token source order and the login made of the variable, the API key's \
-                    source in print mode, and the variables the scrub takes out of a child's \
-                    environment and what turns it on, in the win32-x64 and win32-arm64 builds of \
-                    2.1.303, read as bytes on 2026-10-19",
+               holds wherever it is set: right after `ANTHROPIC_AUTH_TOKEN` and before a \
+               descriptor or its well-known file, `apiKeyHelper`, a profile and the stored login. \
+               It takes it as an access token alone, with no refresh token and no expiry, so \
+               nothing renews it, scoped `user:inference` unless `CLAUDE_CODE_OAUTH_SCOPES` names \
+               others. Print mode sends its requests with `ANTHROPIC_API_KEY` instead wherever \
+               that is set. `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB` set to 1 takes \
+               `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `CLAUDE_CODE_OAUTH_TOKEN` and the \
+               other credentials it names out of the environment Claude Code builds for a \
+               program it starts. A program started with its own environment whole keeps them: \
+               `where.exe`, which windows_statusline_shell's Git Bash finder asks for `git` at \
+               every start where neither `CLAUDE_CODE_GIT_BASH_PATH` nor a Program Files path \
+               names a bash, `git worktree list`, and a `proxyAuthHelper`. \
+               code.claude.com's page of environment variables documents both variables. Read, \
+               not measured: session reading M9 measures a warm-up made so, and that it writes \
+               nothing to its private home or that home's Credential Manager slot",
+        read_from: "the two token source checks, each of which takes the variable right after \
+                    `ANTHROPIC_AUTH_TOKEN`, the login getter, which takes it first, the API \
+                    key's source in print mode, the variables the scrub takes out of a child's \
+                    environment and what turns it on, and the `where.exe` lookup the Git Bash \
+                    finder falls back to, started with `env:process.env`, in the win32-x64 and \
+                    win32-arm64 builds of 2.1.303, read as bytes on 2026-10-19 and 2026-10-20",
         verified_against: "2.1.303",
         depends: "Claude Code's warm-up command on Windows, which hands a run the access token \
                   alone in `CLAUDE_CODE_OAUTH_TOKEN`, with the scrub on and no other variable \
-                  that signs it in",
+                  that signs it in, and names in `CLAUDE_CODE_GIT_BASH_PATH` the Git Bash \
+                  Pitboard finds, so no `where.exe` is asked for `git` where it finds one",
         probe: &[
-            r#"{source:"ANTHROPIC_AUTH_TOKEN",hasToken:!0}"#,
-            r#"{source:"CLAUDE_CODE_OAUTH_TOKEN",hasToken:!0}"#,
-            ".CLAUDE_CODE_OAUTH_TOKEN,refreshToken:null,expiresAt:null",
+            r#"return{source:"ANTHROPIC_AUTH_TOKEN",hasToken:!0};if(a.CLAUDE_CODE_OAUTH_TOKEN)return{source:"CLAUDE_CODE_OAUTH_TOKEN",hasToken:!0}"#,
+            "(){if(a.CLAUDE_CODE_OAUTH_TOKEN)return{accessToken:a.CLAUDE_CODE_OAUTH_TOKEN,refreshToken:null,expiresAt:null",
             r#""ANTHROPIC_API_KEY","CLAUDE_CODE_OAUTH_TOKEN","CLAUDE_CODE_ARTIFACTS_API_TOKEN""#,
             "process.env.CLAUDE_CODE_SUBPROCESS_ENV_SCRUB",
+            "windowsHide:!0,env:process.env}).trim().split(",
         ],
         absent: &[],
     },

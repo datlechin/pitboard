@@ -544,6 +544,7 @@ fn read(ctx: &Context, state: &State) -> Result<Option<Waiting>> {
 /// What finishes or undoes the switch, or, where the facts do not settle what it did, the
 /// refusal of the change that found them so.
 fn decide(
+    ctx: &Context,
     state: &State,
     tool: &'static dyn Provider,
     journal: &Journal,
@@ -561,6 +562,7 @@ fn decide(
         detail: owner
             .err()
             .unwrap_or_else(|| "its parked login could not be read".into()),
+        spelling: crate::words::spelled(ctx, journal.provider),
     })
 }
 
@@ -586,7 +588,7 @@ pub(super) fn reconcile(
         seen,
     } = waiting;
     let owner = ask(ctx, state, tool, owner);
-    let repair = decide(state, tool, &journal, parked, owner)?;
+    let repair = decide(ctx, state, tool, &journal, parked, owner)?;
     let finished = repair.landed;
     apply(state, &journal, repair, seen, ctx.now());
     state::save(ctx, permit, state)?;
@@ -635,7 +637,7 @@ pub(super) fn refusal(ctx: &Context, state: &State, asking: Asking) -> Option<Er
         return None;
     }
     let owner = ask(ctx, state, tool, owner);
-    decide(state, tool, &journal, parked, owner).err()
+    decide(ctx, state, tool, &journal, parked, owner).err()
 }
 
 #[cfg(test)]

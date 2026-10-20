@@ -20,7 +20,7 @@ use std::time::Duration;
 /// How long a run is given before it is stopped. The measured runs took 7 to 15 seconds.
 const CEILING: Duration = Duration::from_secs(120);
 
-/// A run about to start: the command, and the access token it reads on descriptor 3.
+// A run about to start: the command, and the access token on descriptor 3, where one is handed.
 pub(crate) struct Headless {
     pub(crate) command: Command,
     pub(crate) token: Option<String>,
@@ -28,8 +28,7 @@ pub(crate) struct Headless {
 
 pub(crate) use crate::host::Ran;
 
-/// The private home a tool's warm-up runs in, under Pitboard's directory: `home` for `HOME`,
-/// `tmp` for `TMPDIR`, `work` to run from, and whatever the tool keeps of its own beside them.
+// Under Pitboard's directory; `prepare` makes its `home`, `tmp`, `work` and `config` folders.
 pub(crate) fn home(ctx: &Context, tool: ProviderId) -> PathBuf {
     crate::home::dir(ctx).join("warm").join(tool.code())
 }
@@ -62,7 +61,7 @@ pub(crate) fn clear(permit: Permit, home: &Path) {
     let _ = crate::home::remove_all(permit, home);
 }
 
-// Nothing of this process's environment but `PATH`, the person's name and the proxy.
+// Of this process's environment, only `PATH`, the person's name, the proxy and `SystemRoot`.
 pub(crate) fn command(
     ctx: &Context,
     permit: Permit,
@@ -121,6 +120,19 @@ pub struct Started {
     pub env: Vec<(String, String)>,
     pub dir: Option<PathBuf>,
     pub token: Option<String>,
+}
+
+#[cfg(any(test, feature = "test-support"))]
+impl Started {
+    // On descriptor 3, or on Windows in `CLAUDE_CODE_OAUTH_TOKEN` (`windows_token_env`).
+    pub fn access_token(&self) -> Option<&str> {
+        self.token.as_deref().or_else(|| {
+            self.env
+                .iter()
+                .find(|(name, _)| name == "CLAUDE_CODE_OAUTH_TOKEN")
+                .map(|(_, token)| token.as_str())
+        })
+    }
 }
 
 /// Runs `headless` for at most [`CEILING`], or plays it where a test or a fixture said to.

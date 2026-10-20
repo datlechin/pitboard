@@ -139,13 +139,17 @@ impl Provider for Codex {
                 "this machine's Codex keeps its login in memory only ({}), so there is \
                  nothing at rest to park or switch. {}",
                 store.setting(),
-                store.to_use_the_file()
+                store.to_use_the_file(
+                    crate::words::spelled(ctx, ProviderId::Codex).of(ProviderId::Codex)
+                )
             )),
             paths::Backend::Keyring | paths::Backend::Either | paths::Backend::Secrets => {
                 unsupported(format!(
                     "{}. {}",
                     kept_elsewhere(ctx, &store),
-                    store.to_use_the_file()
+                    store.to_use_the_file(
+                        crate::words::spelled(ctx, ProviderId::Codex).of(ProviderId::Codex)
+                    )
                 ))
             }
             paths::Backend::Unknown => unsupported(format!(

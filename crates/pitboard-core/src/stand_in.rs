@@ -488,7 +488,12 @@ impl Run<'_> {
             Step::WritesItsPid(at) => write_whole(at, &format!("{}\n", std::process::id()))?,
             Step::Records { at, variables } => self.records(at, variables, args)?,
             Step::ReadsDescriptor { at } => {
-                let descriptor = std::fs::read_to_string("/dev/fd/3").ok();
+                // Windows has no `/dev/fd`: the path would name a file on the current drive.
+                let descriptor = if cfg!(unix) {
+                    std::fs::read_to_string("/dev/fd/3").ok()
+                } else {
+                    None
+                };
                 let mut input = String::new();
                 let input = self.input.read_to_string(&mut input).ok().map(|_| input);
                 write_whole(

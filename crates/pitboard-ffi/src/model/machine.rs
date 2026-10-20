@@ -44,6 +44,15 @@ pub(crate) struct MachineState {
     pub(crate) log: Vec<Change>,
     /// The `pitboard` a terminal would run, once looked for.
     pub(crate) command_line: Option<FoundCommandLine>,
+    // the last notification the app's system refused, until one is posted
+    pub(crate) post_refused: Option<PostRefused>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct PostRefused {
+    pub(crate) title: String,
+    pub(crate) reason: String,
+    pub(crate) at: i64,
 }
 
 /// Why a change to the schedule could not be made.
@@ -128,6 +137,10 @@ impl MachineState {
             self.checks = checks;
             self.checked_at = Some(at);
         }
+    }
+
+    pub(crate) fn posted(&mut self, title: String, refused: Option<String>, at: i64) {
+        self.post_refused = refused.map(|reason| PostRefused { title, reason, at });
     }
 
     /// The core's log came in, oldest first as it keeps it: shown newest first.

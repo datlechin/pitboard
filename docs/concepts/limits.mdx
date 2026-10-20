@@ -37,7 +37,7 @@ A claude.ai [account window](/concepts/account-windows) signs in on claude.ai's 
 
 - Gemini CLI. Since 18 June 2026, Google no longer offers Gemini CLI's **Login with Google** to individual, Google AI Pro and Google AI Ultra accounts. Google says so in [Gemini Code Assist consumer accounts](https://developers.google.com/gemini-code-assist/docs/deprecations/code-assist-individuals).
 - Windows older than Windows 11 24H2, build 26100. Pitboard reads there and refuses every change with `system_too_old`. Windows Server 2025 meets the floor.
-- Claude Code and Codex inside WSL, from Pitboard on Windows. Pitboard's Linux build, run inside WSL, switches them, as [Install inside WSL](/install#install-inside-wsl) says.
+- Claude Code and Codex inside WSL, from Pitboard on Windows. Pitboard's Linux build, run inside WSL, switches them, as [Install inside WSL](/install#install-inside-wsl) says. A Codex there that uses the Windows Codex home shares its login with Codex on Windows.
 - Claude Code with `CLAUDE_CODE_CUSTOM_OAUTH_URL` set. Its login then sits under a name Pitboard does not read. [Custom OAuth endpoint](/reference/environment-variables#custom-oauth-endpoint) lists what Pitboard refuses.
 - Claude Code set to use `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `CLAUDE_CODE_OAUTH_TOKEN`, `apiKeyHelper` or a third-party provider. Its sessions ignore the login Pitboard switches. [Variables that override the login](/reference/environment-variables#variables-that-override-the-login) lists them all.
 - Codex signed in with an API key rather than ChatGPT.

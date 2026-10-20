@@ -23,8 +23,7 @@ public sealed class AccountWindows
         _janitor = new StoreJanitor(new ProfileFolders(web, hidden));
     }
 
-    // Opening one again brings the open one forward, or back where it went out of sight. A held store opens none: its
-    // menu item says why.
+    // A held store opens none: its menu item says why.
     public void Open(WindowAccount account)
     {
         if (_open.TryGetValue(account.Store, out var shown))
@@ -55,8 +54,7 @@ public sealed class AccountWindows
         window.Activate();
     }
 
-    // Asked over the window of an account whose download is under way, brought back where the person closed it, or over
-    // another account window. With none, nothing is: every download went with the browser process.
+    // With no window open, every download went with the browser process.
     public async Task<bool> MayQuit()
     {
         if (_downloads.QuitQuestion is not { } question)
@@ -109,7 +107,6 @@ public sealed class AccountWindows
 
     internal AccountWindow? Window(string store) => _open.GetValueOrDefault(store);
 
-    // One out of sight comes back, and the model hears it opened again.
     private void InFront(AccountWindow window)
     {
         if (window.Away)

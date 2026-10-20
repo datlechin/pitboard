@@ -105,4 +105,3 @@ internal static class WindowChrome
         }
     }
 }
-

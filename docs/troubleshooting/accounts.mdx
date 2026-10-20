@@ -48,6 +48,8 @@ Run `claude auth logout`, which deletes what is left, then sign in to Claude Cod
 
 Windows PowerShell's default execution policy, `Restricted`, refuses the `claude.ps1` that npm installs, and `claude` fails with `PSSecurityException`. Run `claude.cmd` in its place, as in `claude.cmd auth logout`. Measured with Windows PowerShell 5.1 and Claude Code 2.1.302 on 18 October 2026.
 
+A Codex installed with npm is the same: run `codex.cmd`. Where Pitboard finds the `claude.cmd` or `codex.cmd` that npm installs, its messages name that.
+
 ## Usage shows old numbers
 
 Old numbers carry their age and often a reason, as in `measured 14:02, 3m ago · Anthropic could not be reached`. [Stale codes](/reference/errors#stale-codes) says what to do about each reason.

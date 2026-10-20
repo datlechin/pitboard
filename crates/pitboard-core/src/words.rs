@@ -606,26 +606,83 @@ pub(crate) fn login(tool: crate::provider::ProviderId, email: &str, shares_email
     format!("{email} in another {group}")
 }
 
+// Windows PowerShell 5.1's default policy refuses the `claude.ps1` npm leaves beside `claude.cmd`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Spelling {
+    Bare,
+    Cmd,
+}
+
+impl Spelling {
+    pub fn of(self, tool: crate::provider::ProviderId) -> &'static str {
+        use crate::provider::ProviderId;
+        match (self, tool) {
+            (Spelling::Cmd, ProviderId::Claude) => "claude.cmd",
+            (Spelling::Cmd, ProviderId::Codex) => "codex.cmd",
+            (Spelling::Bare | Spelling::Cmd, tool) => tool.program(),
+        }
+    }
+}
+
+pub(crate) fn spelled(
+    ctx: &crate::context::Context,
+    tool: crate::provider::ProviderId,
+) -> Spelling {
+    match ctx.os {
+        Os::MacOs | Os::Linux => Spelling::Bare,
+        Os::Windows => spelling(
+            ctx.os,
+            tool,
+            crate::provider::program_of(ctx, tool).as_deref(),
+        ),
+    }
+}
+
+pub(crate) fn spelling(
+    os: Os,
+    tool: crate::provider::ProviderId,
+    found: Option<&std::path::Path>,
+) -> Spelling {
+    use crate::provider::ProviderId;
+    let found_as = |file: &str| {
+        found
+            .and_then(std::path::Path::file_name)
+            .and_then(std::ffi::OsStr::to_str)
+            .is_some_and(|name| name.eq_ignore_ascii_case(file))
+    };
+    match (os, tool) {
+        (Os::Windows, ProviderId::Claude | ProviderId::Codex)
+            if found_as(Spelling::Cmd.of(tool)) =>
+        {
+            Spelling::Cmd
+        }
+        _ => Spelling::Bare,
+    }
+}
+
 // What signs a tool in, to start a sentence (`starts`) or to go on with one.
-pub(crate) fn sign_in_yourself(tool: crate::provider::ProviderId, starts: bool) -> String {
+pub(crate) fn sign_in_yourself(
+    tool: crate::provider::ProviderId,
+    program: &str,
+    starts: bool,
+) -> String {
     use crate::provider::ProviderId;
     let said = match tool {
-        ProviderId::Claude => "Run `claude`",
-        ProviderId::Codex => "Run `codex login`",
-        ProviderId::Desktop => "Open Claude",
+        ProviderId::Claude => format!("Run `{program}`"),
+        ProviderId::Codex => format!("Run `{program} login`"),
+        ProviderId::Desktop => "Open Claude".into(),
     };
-    starting(said, starts)
+    starting(&said, starts)
 }
 
 // What runs a tool once, as its sessions do.
-pub(crate) fn run_it(tool: crate::provider::ProviderId, starts: bool) -> String {
+pub(crate) fn run_it(tool: crate::provider::ProviderId, program: &str, starts: bool) -> String {
     use crate::provider::ProviderId;
     let said = match tool {
-        ProviderId::Claude => "Run `claude`",
-        ProviderId::Codex => "Run `codex`",
-        ProviderId::Desktop => "Open Claude",
+        ProviderId::Claude | ProviderId::Codex => format!("Run `{program}`"),
+        ProviderId::Desktop => "Open Claude".into(),
     };
-    starting(said, starts)
+    starting(&said, starts)
 }
 
 // What reads a tool's login from where it was, where this run reads another place.
@@ -650,13 +707,17 @@ fn starting(said: &str, starts: bool) -> String {
         .unwrap_or_default()
 }
 
-pub(crate) fn nothing_signed_in(tool: crate::provider::ProviderId, label: Option<&str>) -> String {
+pub(crate) fn nothing_signed_in(
+    tool: crate::provider::ProviderId,
+    program: &str,
+    label: Option<&str>,
+) -> String {
     use crate::provider::ProviderId;
     match tool {
         ProviderId::Claude | ProviderId::Codex => format!(
             "nothing is signed in to {} right now. {}, sign in, then try again.",
             tool.name(),
-            sign_in_yourself(tool, true)
+            sign_in_yourself(tool, program, true)
         ),
         ProviderId::Desktop => format!(
             "Claude is not signed in. Run `pitboard enroll {} --sign-in`, then sign in inside \
@@ -1342,10 +1403,95 @@ mod tests {
             login(ProviderId::Desktop, "", false),
             "another Claude Desktop account"
         );
-        assert_eq!(sign_in_yourself(ProviderId::Desktop, false), "open Claude");
+        assert_eq!(
+            sign_in_yourself(ProviderId::Desktop, "Claude", false),
+            "open Claude"
+        );
         assert_eq!(
             pointing_where_it_did(ProviderId::Desktop),
             "Run Pitboard as the account whose Claude that is"
+        );
+    }
+
+    // npm leaves `claude.cmd` and `claude.ps1`, the native installer and WinGet `claude.exe`.
+    #[test]
+    fn a_hint_names_the_cmd_only_where_pitboard_found_one_on_windows() {
+        use crate::provider::ProviderId;
+        let npm = "C:/Users/x/AppData/Roaming/npm";
+        for (os, tool, found, spelled) in [
+            (
+                Os::Windows,
+                ProviderId::Claude,
+                format!("{npm}/claude.cmd"),
+                "claude.cmd",
+            ),
+            (
+                Os::Windows,
+                ProviderId::Claude,
+                format!("{npm}/CLAUDE.CMD"),
+                "claude.cmd",
+            ),
+            (
+                Os::Windows,
+                ProviderId::Codex,
+                format!("{npm}/codex.cmd"),
+                "codex.cmd",
+            ),
+            (
+                Os::Windows,
+                ProviderId::Claude,
+                "C:/Users/x/.local/bin/claude.exe".into(),
+                "claude",
+            ),
+            (
+                Os::Windows,
+                ProviderId::Codex,
+                "C:/Users/x/AppData/Local/Microsoft/WinGet/Links/codex.exe".into(),
+                "codex",
+            ),
+            // Named in PITBOARD_CLAUDE, which a hint never named.
+            (
+                Os::Windows,
+                ProviderId::Claude,
+                "C:/tools/cc.cmd".into(),
+                "claude",
+            ),
+            (
+                Os::MacOs,
+                ProviderId::Claude,
+                "/scratch/npm/claude.cmd".into(),
+                "claude",
+            ),
+            (
+                Os::Linux,
+                ProviderId::Codex,
+                "/scratch/npm/codex.cmd".into(),
+                "codex",
+            ),
+        ] {
+            let found = std::path::PathBuf::from(found);
+            assert_eq!(
+                spelling(os, tool, Some(&found)).of(tool),
+                spelled,
+                "{os:?} {found:?}"
+            );
+        }
+        for tool in ProviderId::ALL.iter().copied() {
+            assert_eq!(spelling(Os::Windows, tool, None), Spelling::Bare, "{tool}");
+            assert_eq!(Spelling::Bare.of(tool), tool.program(), "{tool}");
+        }
+        assert_eq!(Spelling::Cmd.of(ProviderId::Desktop), "Claude");
+        assert_eq!(
+            sign_in_yourself(ProviderId::Claude, "claude.cmd", true),
+            "Run `claude.cmd`"
+        );
+        assert_eq!(
+            sign_in_yourself(ProviderId::Codex, "codex.cmd", false),
+            "run `codex.cmd login`"
+        );
+        assert_eq!(
+            run_it(ProviderId::Codex, "codex.cmd", true),
+            "Run `codex.cmd`"
         );
     }
 
@@ -1940,6 +2086,7 @@ mod tests {
                 from: label(),
                 to: label(),
                 detail: "a settings file that is not valid JSON".into(),
+                spelling: Spelling::Bare,
             }),
             "Pitboard did not settle the interrupted move of `desktop/work`'s login, because it \
              cannot tell where it stopped (a settings file that is not valid JSON). Open Claude \

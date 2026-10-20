@@ -1,3 +1,5 @@
+using System.Net;
+using FlaUI.Core.AutomationElements;
 using FlaUI.Core.Definitions;
 using FlaUI.Core.Tools;
 using Microsoft.Win32;
@@ -11,6 +13,10 @@ public sealed class ReleaseGateTests
     private const string Run = @"Software\Microsoft\Windows\CurrentVersion\Run";
 
     private const string Notifier = @"Software\Classes\AppUserModelId\Pitboard.Pitboard";
+
+    private const string Feed = "https://github.com/datlechin/pitboard/releases/latest/download/appcast-windows.xml";
+
+    private const string NoFeed = "No full release of Pitboard for Windows is out yet, so there is no update to check for.";
 
     private static readonly TimeSpan Shortly = TimeSpan.FromSeconds(30);
 
@@ -33,9 +39,7 @@ public sealed class ReleaseGateTests
         Assert.AreEqual("", string.Join(", ", launched.Written()));
     }
 
-    // What the MSI's full uninstall finds: the notifications registered and start at sign-in on, which --unregister
-    // takes back, and the data folder, which RemoveFolderEx takes after it. AGENTS.md allows it only on the fresh
-    // account test-as-standard-user.ps1 makes, so anything there before the start is somebody else's and stays.
+    // What the MSI's full uninstall finds, which AGENTS.md allows only on the fresh account test-as-standard-user.ps1 makes.
     [TestMethod]
     public void TheReleasedBuildTakesBackWhatItRegisteredOnUnregister()
     {
@@ -49,31 +53,87 @@ public sealed class ReleaseGateTests
         Assert.IsFalse(Directory.Exists(dataFolder), $"this account is not a fresh one: {dataFolder} is there");
 
         using var launched = Launched.Start(Builds.Release);
-        launched.Window("Pitboard");
-        launched.Select("SettingsItem");
-        var toggle = launched.Find(found => found.ByAutomationId("settings.startAtSignIn"), "settings.startAtSignIn");
-        toggle.Patterns.Toggle.Pattern.Toggle();
-        Assert.IsTrue(
-            Retry.WhileFalse(
-                () => toggle.Patterns.Toggle.Pattern.ToggleState.Value == ToggleState.On, Shortly, TimeSpan.FromMilliseconds(250),
-                ignoreException: true).Result,
-            $"start at sign-in stayed off: {launched.Shown()}");
-        var activator = Activator() ?? throw new AssertFailedException($"Pitboard registered no notifications: {launched.Shown()}");
-        CollectionAssert.AreEquivalent(
-            new[] { $@"{Run}\Pitboard", Notifier, Class(activator) }, Registered(activator).ToArray());
-
-        HiddenWindows.AskToEnd(launched.Process);
-        Assert.IsTrue(launched.Process.WaitForExit(Shortly), $"Pitboard went on running: {launched.State()}");
-        Assert.AreEqual(0, launched.Process.ExitCode, launched.State());
-        using var unregistered = launched.Again("--unregister");
-        Assert.IsTrue(unregistered.Process.WaitForExit(Shortly), $"--unregister went on running: {unregistered.State()}");
-        Assert.AreEqual(0, unregistered.Process.ExitCode, unregistered.State());
-
-        Assert.AreEqual("", string.Join(", ", Registered(activator)));
-        if (Directory.Exists(dataFolder))
+        var unregistered = false;
+        try
         {
-            Directory.Delete(dataFolder, recursive: true);
+            var window = launched.Window("Pitboard");
+            launched.Select("SettingsItem");
+            var toggle = launched.Find(found => found.ByAutomationId("settings.startAtSignIn"), "settings.startAtSignIn");
+            toggle.Patterns.Toggle.Pattern.Toggle();
+            Assert.IsTrue(
+                Retry.WhileFalse(
+                    () => toggle.Patterns.Toggle.Pattern.ToggleState.Value == ToggleState.On, Shortly, TimeSpan.FromMilliseconds(250),
+                    ignoreException: true).Result,
+                $"start at sign-in stayed off: {launched.Shown()}");
+            var activator = Activator() ?? throw new AssertFailedException($"Pitboard registered no notifications: {launched.Shown()}");
+            CollectionAssert.AreEquivalent(
+                new[] { $@"{Run}\Pitboard", Notifier, Class(activator) }, Registered(activator).ToArray());
+            FollowsTheFeed(launched, window);
+
+            HiddenWindows.AskToEnd(launched.Process);
+            Assert.IsTrue(launched.Process.WaitForExit(Shortly), $"Pitboard went on running: {launched.State()}");
+            Assert.AreEqual(0, launched.Process.ExitCode, launched.State());
+            using var unregistering = launched.Again("--unregister");
+            unregistered = unregistering.Process.WaitForExit(Shortly);
+            Assert.IsTrue(unregistered, $"--unregister went on running: {unregistering.State()}");
+            Assert.AreEqual(0, unregistering.Process.ExitCode, unregistering.State());
+            Assert.AreEqual("", string.Join(", ", Registered(activator)));
         }
+        finally
+        {
+            if (!unregistered)
+            {
+                TakeBack(launched);
+            }
+
+            Launched.Remove(dataFolder);
+        }
+    }
+
+    // As a beta's Settings show what GitHub answers for the feed: none until a full release carries one.
+    private static void FollowsTheFeed(Launched launched, AutomationElement window)
+    {
+        if (!Builds.ProductBeta() || FeedAnswer() is not { } answer || answer is not (HttpStatusCode.OK or HttpStatusCode.NotFound))
+        {
+            return;
+        }
+
+        var checkNow = launched.Find(found => found.ByAutomationId("settings.checkNow"), "settings.checkNow");
+        var offered = answer is HttpStatusCode.OK;
+        Assert.IsTrue(
+            Retry.WhileFalse(() => checkNow.IsEnabled == offered, Shortly, TimeSpan.FromMilliseconds(250), ignoreException: true).Result,
+            $"GitHub answered the feed {answer}, and Check now is {(checkNow.IsEnabled ? "enabled" : "dimmed")}: {launched.Shown()}");
+        if (!offered)
+        {
+            Launched.Shows(window, NoFeed, within: Shortly);
+        }
+    }
+
+    private static HttpStatusCode? FeedAnswer()
+    {
+        using var http = new HttpClient { Timeout = Shortly };
+        try
+        {
+            using var answer = http.GetAsync(Feed, HttpCompletionOption.ResponseHeadersRead).GetAwaiter().GetResult();
+            return answer.StatusCode;
+        }
+        catch (Exception unread) when (unread is HttpRequestException or TaskCanceledException)
+        {
+            return null;
+        }
+    }
+
+    // A failure above leaves only itself: the copy ends and what it registered goes.
+    private static void TakeBack(Launched launched)
+    {
+        if (!launched.Process.HasExited)
+        {
+            launched.Process.Kill(entireProcessTree: true);
+            launched.Process.WaitForExit();
+        }
+
+        using var unregistering = launched.Again("--unregister");
+        unregistering.Process.WaitForExit(Shortly);
     }
 
     // The class Register names for a click, which Register alone writes.

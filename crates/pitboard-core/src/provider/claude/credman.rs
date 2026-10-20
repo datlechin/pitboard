@@ -181,6 +181,10 @@ impl Items for Of<'_> {
     fn delete(&self, permit: Permit, name: &str) -> Result<(), Error> {
         self.item(name)?.delete(permit, self.service)
     }
+
+    fn spelling(&self) -> crate::words::Spelling {
+        crate::words::spelled(self.ctx, crate::provider::ProviderId::Claude)
+    }
 }
 
 impl RawStore for Store {
@@ -848,7 +852,7 @@ mod tests {
             .expect("a bad one");
         assert!(matches!(
             store.read(&scratch.service),
-            Err(Error::Broken(_))
+            Err(Error::Broken { .. })
         ));
     }
 

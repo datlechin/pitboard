@@ -161,7 +161,7 @@ pub(crate) fn find(ctx: &Context, state: &State) -> Result<Option<Left>> {
                 let told = stored
                     .map(|document| identify::told(ctx, state, tool, &document))
                     .transpose()
-                    .map_err(|e| super::unidentified(TOOL, e))?;
+                    .map_err(|e| super::unidentified(ctx, TOOL, e))?;
                 let stored = match told {
                     None => None,
                     Some(Some(found)) => Some(found.owner),

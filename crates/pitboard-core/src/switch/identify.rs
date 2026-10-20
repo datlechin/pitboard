@@ -162,13 +162,14 @@ enum Unrenewed {
 
 impl Unrenewed {
     /// As a change refuses over it.
-    fn said(self, which: ProviderId) -> Error {
+    fn said(self, ctx: &Context, which: ProviderId) -> Error {
         match self {
             Unrenewed::Refused => Error::SessionExpired {
                 tool: which,
                 refused: true,
+                spelling: crate::words::spelled(ctx, which),
             },
-            Unrenewed::Asked(error) => super::unidentified(which, error),
+            Unrenewed::Asked(error) => super::unidentified(ctx, which, error),
             Unrenewed::Failed(error) => error,
         }
     }
@@ -269,6 +270,7 @@ fn renewed_under_the_lock(
                 return Err(failed(Error::RenewalLost {
                     tool: which,
                     error: Box::new(error),
+                    spelling: crate::words::spelled(ctx, which),
                 }));
             }
             Err(Stop::Failed(error)) => return Err(failed(error)),
@@ -368,8 +370,8 @@ pub(crate) fn look(
             let (document, found, lock_lost) = match told(ctx, state, tool, &document) {
                 Ok(Some(found)) => (document, found, false),
                 Ok(None) => renewed(ctx, permit, state, tool, &store, &document)
-                    .map_err(|untold| untold.said(which))?,
-                Err(error) => return Err(super::unidentified(which, error)),
+                    .map_err(|untold| untold.said(ctx, which))?,
+                Err(error) => return Err(super::unidentified(ctx, which, error)),
             };
             let owner = found.owner.clone();
             let live = Live::Login(Login {
@@ -407,7 +409,7 @@ pub(crate) fn fresh(
     }
     let (document, renewed, lock_lost) =
         renewed(ctx, permit, state, tool, &login.store, &login.document)
-            .map_err(|untold| untold.said(tool.id()))?;
+            .map_err(|untold| untold.said(ctx, tool.id()))?;
     let owner = renewed.owner.clone();
     let recorded = renewed.recorded(found.named);
     let live = Live::Login(Login {

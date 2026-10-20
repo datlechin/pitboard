@@ -510,9 +510,11 @@ pub(crate) enum Answer {
     /// What was kept was written, or could not be, which nothing here can mend: told again,
     /// a run-out is told once more after a relaunch, and nothing worse.
     Saved,
-    /// A notification was posted, or could not be, which is the app's system's to say: the
-    /// window says the same either way.
-    Posted,
+    // the notification titled `title` was posted, or the app's system refused it, and why
+    Posted {
+        title: String,
+        refused: Option<String>,
+    },
     /// A schedule an older app wrote was repaired, or nothing needed it, or it could not be,
     /// with what the command line inside this copy is.
     Repaired {
@@ -1816,14 +1818,14 @@ impl State {
     }
 
     // Its warnings go beside the accounts: what it found is about the machine.
-    fn sign_in_refused(&mut self, signing: &SigningIn, refused: Refused) {
+    fn sign_in_refused(&mut self, signing: &SigningIn, refused: Refused, jobs: &mut Vec<Job>) {
         if signing.in_its_app
             && let Some(code) = &refused.code
         {
             self.refused_by
                 .insert(signing.provider.clone(), code.clone());
         }
-        self.keep(&refused.warnings);
+        self.keep(&refused.warnings, jobs);
         if self.sheet.is_some() {
             let failure = self.number(refused);
             self.sheet_failure = Some(failure);
@@ -2547,8 +2549,8 @@ impl State {
             Answer::Opened { front: false, .. }
             | Answer::Pasted
             | Answer::Stopped
-            | Answer::Saved
-            | Answer::Posted => {}
+            | Answer::Saved => {}
+            Answer::Posted { title, refused } => self.machine.posted(title, refused, now.epoch()),
             Answer::Kept {
                 told,
                 preferences,
@@ -2918,7 +2920,7 @@ impl State {
                 self.ask_installed(jobs);
             }
             if self.sheet.is_some() {
-                self.keep(&refused.warnings);
+                self.keep(&refused.warnings, jobs);
                 return;
             }
             if let Some(missing) =
@@ -2927,7 +2929,7 @@ impl State {
                 refused.message = format!("{} {}", missing.title, missing.detail);
             }
         }
-        self.sign_in_refused(signing, refused);
+        self.sign_in_refused(signing, refused, jobs);
     }
 
     /// What a finished sign-in says beyond the row it adds, and what it warned about that is
@@ -3049,6 +3051,7 @@ impl State {
                 // What went wrong this time, in place of what was wrong last time. A failure
                 // carries its own warnings, and leaving the previous read's in place showed a
                 // fresh network error above warnings that may have been fixed since.
+                self.tell_replaced_found(&warnings, jobs);
                 self.warnings = warnings;
                 if self.status.is_none() {
                     // Still reading until what is known is in.
@@ -3067,22 +3070,31 @@ impl State {
     /// see it: again only once a read no longer says it and a later one does. Its words name
     /// whose login is stored now, which every switch changes, so it is known by its account.
     fn tell_replaced(&mut self, warnings: &[Warning], jobs: &mut Vec<Job>) {
-        let replaced: Vec<(&str, &Warning)> = warnings
+        self.replaced_told = self.post_replaced(warnings, jobs);
+    }
+
+    // A failed read or a refused change says what it found, and nothing of what it leaves out.
+    fn tell_replaced_found(&mut self, warnings: &[Warning], jobs: &mut Vec<Job>) {
+        let found = self.post_replaced(warnings, jobs);
+        self.replaced_told.extend(found);
+    }
+
+    fn post_replaced(&self, warnings: &[Warning], jobs: &mut Vec<Job>) -> BTreeSet<String> {
+        let mut replaced = BTreeSet::new();
+        for warning in warnings
             .iter()
             .filter(|warning| warning.code == "login_replaced")
-            .filter_map(|warning| Some((warning.account.as_deref()?, warning)))
-            .collect();
-        for (account, warning) in &replaced {
-            if !self.replaced_told.contains(*account) {
+        {
+            let Some(account) = warning.account.as_deref() else {
+                continue;
+            };
+            if replaced.insert(account.to_owned()) && !self.replaced_told.contains(account) {
                 jobs.push(Job::Post {
                     notice: crate::present::standing_notice(warning),
                 });
             }
         }
-        self.replaced_told = replaced
-            .into_iter()
-            .map(|(account, _)| account.to_owned())
-            .collect();
+        replaced
     }
 
     /// Whether `read`, which asked nobody, says Claude Code's config has named another
@@ -3365,7 +3377,7 @@ impl State {
             After::SignIn { name, from, .. } => {
                 self.saved(from.as_ref());
                 if let Some(signing) = self.signing_in.take_if(|signing| signing.quitting) {
-                    self.sign_in_refused(&signing, failed(could_not_sign_in(&name), other));
+                    self.sign_in_refused(&signing, failed(could_not_sign_in(&name), other), jobs);
                 }
             }
             After::Enrol { name, from, .. } => {
@@ -3445,7 +3457,7 @@ impl State {
                 warnings,
             })) if code == "live_login_refused" => {
                 self.switching = None;
-                self.keep(&warnings);
+                self.keep(&warnings, jobs);
                 self.replacing = Some(Replacing {
                     qualified: qualified.to_owned(),
                     message,
@@ -3462,7 +3474,7 @@ impl State {
                 };
                 self.refused(tool, &refused);
                 // Nothing moved, so what the last switch said stands too.
-                self.keep(&refused.warnings);
+                self.keep(&refused.warnings, jobs);
                 self.present(refused);
             }
         }
@@ -3969,7 +3981,8 @@ impl State {
 
     /// A failure's warnings said beside the ones already shown, first, with nothing the last
     /// read found dropped to make room for them, as AppModel.swift's `keep` said them.
-    fn keep(&mut self, warned: &[Warning]) {
+    fn keep(&mut self, warned: &[Warning], jobs: &mut Vec<Job>) {
+        self.tell_replaced_found(warned, jobs);
         let mut warnings = warned.to_vec();
         warnings.extend(
             self.warnings

@@ -1117,7 +1117,6 @@ fn a_tool_the_core_cannot_find_is_said_missing_in_its_sheet() {
 // app, so no Codex CLI. The tip's Add Account says the CLI is missing before Sign In, and a
 // name typed with its tool says why it cannot be one.
 #[test]
-#[cfg(unix)]
 fn adding_codex_without_its_cli_says_so_before_sign_in() {
     let world = World::new("chatgpt-app-only");
     world.enrolled("work", "here", 10.0);

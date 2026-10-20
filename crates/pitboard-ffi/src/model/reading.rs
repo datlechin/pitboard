@@ -4,6 +4,7 @@
 //! read, which comes with the model's wording, the rest of it is kept here.
 
 use super::state::{Answer, Job};
+use super::switching::switch;
 use super::testing::{
     Hand, Machine, account, any_read, claude, claude_code, codex, codex_account, fresh_read,
     installed_ask, offline_read, percent, refusal, status, warned, warning,
@@ -339,6 +340,74 @@ fn a_login_replaced_outside_is_posted_once_whatever_is_stored_since() {
             both[1].message.as_str()
         )]
     );
+}
+
+fn bodies(machine: &Machine) -> Vec<&str> {
+    machine
+        .posted
+        .iter()
+        .map(|notice| notice.body.as_str())
+        .collect()
+}
+
+// The core names a replaced login only beside a read that answers; this guards a failed one.
+#[test]
+fn a_login_replaced_a_failed_read_says_is_posted_once_while_it_stands() {
+    let replaced = replaced("work", "home");
+    let accounts = || vec![claude("home", true, 5.0), claude("work", false, 0.0)];
+    let unreachable = |warnings| {
+        Err(refusal(
+            "identity_unverifiable",
+            "Anthropic could not be reached",
+            warnings,
+        ))
+    };
+    let mut model = Hand::new();
+    let mut machine = Machine::reading(unreachable(vec![replaced.clone()]));
+    machine.offline = Ok(warned(accounts(), vec![replaced.clone()]));
+
+    model.refresh(&mut machine);
+    assert_eq!(model.shown().warnings, std::slice::from_ref(&replaced));
+    assert_eq!(bodies(&machine), [replaced.message.as_str()]);
+
+    machine.answer = Ok(warned(accounts(), vec![replaced.clone()]));
+    model.send(Intent::Refresh { asked: true });
+    model.run(&mut machine);
+    assert_eq!(machine.posted.len(), 1, "once while it stands");
+
+    machine.answer = unreachable(Vec::new());
+    model.send(Intent::Refresh { asked: true });
+    model.run(&mut machine);
+    machine.answer = Ok(warned(accounts(), vec![replaced]));
+    model.send(Intent::Refresh { asked: true });
+    model.run(&mut machine);
+    assert_eq!(
+        machine.posted.len(),
+        1,
+        "a read that failed says nothing of whether it was put right"
+    );
+}
+
+// No refusal the core makes names a replaced login today; one that did is posted.
+#[test]
+fn a_login_replaced_a_refused_switch_says_is_posted() {
+    let replaced = replaced("work", "home");
+    let mut model = Hand::new();
+    let mut machine = Machine::reading(Ok(status(vec![
+        claude("home", true, 5.0),
+        claude("work", false, 0.0),
+    ])));
+    model.refresh(&mut machine);
+    machine.switched = Err(refusal(
+        "nothing_parked",
+        "nothing parked",
+        vec![replaced.clone()],
+    ));
+
+    switch(&mut model, &mut machine, "claude/work");
+
+    assert_eq!(model.shown().warnings, std::slice::from_ref(&replaced));
+    assert_eq!(bodies(&machine), [replaced.message.as_str()]);
 }
 
 /// What a read that asks nobody says while Claude Code's config names `named`, which it did

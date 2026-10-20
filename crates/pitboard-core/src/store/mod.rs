@@ -126,10 +126,14 @@ pub enum Error {
     // Pieces in Credential Manager that no read can join, as Claude Code 2.1.302 left one
     // login when it moved it there (`credman_move_lost_a_piece`).
     #[error(
-        "the credential store could not be read: {0}, which Claude Code cannot read either. \
-         `claude auth logout` deletes it; sign in to Claude Code again after that"
+        "the credential store could not be read: {why}, which Claude Code cannot read either. \
+         `{} auth logout` deletes it; sign in to Claude Code again after that",
+        spelling.of(crate::provider::ProviderId::Claude)
     )]
-    Broken(String),
+    Broken {
+        why: String,
+        spelling: crate::words::Spelling,
+    },
     /// A write of a login kept in several items stopped partway, and what they hold cannot be
     /// read until a whole login is written over them. Never "no credential" either.
     #[error("the credential store could not be read: {0}")]
@@ -150,7 +154,7 @@ pub enum Error {
 impl Error {
     pub fn code(&self) -> &'static str {
         match self {
-            Error::Unreadable(_) | Error::Unfinished(_) | Error::Broken(_) => {
+            Error::Unreadable(_) | Error::Unfinished(_) | Error::Broken { .. } => {
                 "credential_store_unreadable"
             }
             Error::Locked => "credential_store_locked",

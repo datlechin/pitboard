@@ -1497,8 +1497,7 @@ fn an_open_window_offers_to_clear_its_ended_downloads() {
     assert!(!clears(&model), "cleared");
 }
 
-// The Windows app's list of a window's downloads is WebView2's own, which has no Clear of
-// Pitboard's to send.
+// WebView2's own download list has no Clear for the Windows app to send.
 #[test]
 fn a_window_on_windows_offers_no_clear_of_its_downloads() {
     let mut machine = machine();

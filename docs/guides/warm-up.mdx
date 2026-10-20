@@ -63,7 +63,7 @@ It ignores the hours. It starts nothing while the account's five-hour period is 
 
 Pitboard starts it from a folder of its own in the Pitboard directory, with `PATH`, your user name and any proxy variables from its own environment and nothing else. It hands Claude Code the account's access token on a pipe, never a refresh token, so the run cannot renew or spend a login. As read in 2.1.296, Claude Code keeps that token in no store.
 
-On Windows, Pitboard also passes on `SystemRoot`. As read in 2.1.303 on Windows, Claude Code reads no token from a pipe. It takes one in `CLAUDE_CODE_OAUTH_TOKEN` instead, as a login with no refresh token. Pitboard hands the access token in that variable, and `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB` keeps it from the programs Claude Code starts. No warm-up on Windows has been measured against Anthropic, so whether Claude Code keeps the token in a store there is not known.
+On Windows, Pitboard also passes on `SystemRoot`, and names the Git Bash it finds in `CLAUDE_CODE_GIT_BASH_PATH`. As read in 2.1.301 on Windows, Claude Code reads no token from a pipe. As read in 2.1.303, it takes one in `CLAUDE_CODE_OAUTH_TOKEN` instead, as a login with no refresh token. Pitboard hands the access token in that variable, and `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB` keeps it from most programs Claude Code starts. Some get Claude Code's whole environment, token included: `where.exe` as it looks for Git where Pitboard found no Git Bash to name, some `git` commands, and a `proxyAuthHelper` set in managed settings. No warm-up on Windows has been measured against Anthropic, so whether Claude Code keeps the token in a store there is not known.
 
 [What leaves your machine](/security#what-leaves-your-machine) lists Pitboard's own requests.
 

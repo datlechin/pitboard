@@ -2,6 +2,7 @@ use super::harness::{Machine, codex_access, codex_machine, login_of, machine, re
 use super::*;
 use crate::api::scripted::Asked;
 use crate::fault;
+use crate::host::{OS, Os};
 use crate::service::Permit;
 use crate::store::memory::Touch;
 use std::cell::RefCell;
@@ -17,6 +18,8 @@ const CODEX_FILE: &str = "file .codex/auth.json";
 const AUTH_JSON: &str = "auth.json";
 const CODEX_HERE: &str = "pitboard-park-here_user-here-1760000000000";
 const CODEX_THERE: &str = "pitboard-park-there_user-there-1760000000000";
+// `store::cost`'s look, which a chain Credential Manager took over skips (`credman_migration`).
+const PRICED: &str = "contains, to price";
 
 struct Pinned {
     touched: &'static [(&'static str, &'static str, &'static str)],
@@ -40,11 +43,7 @@ fn pin(m: Machine, what: &str, change: fn(&Machine), pinned: Pinned) {
     let touched: Vec<Touch> = pinned
         .touched
         .iter()
-        .map(|&(store, call, service)| Touch {
-            store: store.into(),
-            call,
-            service: service.into(),
-        })
+        .flat_map(|&(store, call, service)| on_this_system(store, call, service))
         .collect();
     assert_eq!(seen.touched, touched, "{tool} {what}: the stores, in order");
     assert_eq!(seen.asked, pinned.asked, "{tool} {what}: the service");
@@ -80,14 +79,44 @@ fn watch(m: &Machine, change: fn(&Machine)) -> Seen {
     }
 }
 
+// Credential Manager reads `#m` before a look or read, and `#p` and `#m` before a write.
+fn on_this_system(store: &str, call: &'static str, service: &str) -> Vec<Touch> {
+    let touch = |call, service: String| Touch {
+        store: store.into(),
+        call,
+        service,
+    };
+    let piece = |name: &str| touch("read", format!("{service}{name}"));
+    match (OS, store, call) {
+        (Os::Windows, "live", PRICED) => Vec::new(),
+        (_, _, PRICED) => vec![touch("contains", service.into())],
+        (Os::Windows, "live", "contains" | "read") => {
+            vec![piece("#m"), touch("read", service.into())]
+        }
+        (Os::Windows, "live", "write") => {
+            vec![piece("#p"), piece("#m"), touch("write", service.into())]
+        }
+        _ => vec![touch(call, service.into())],
+    }
+}
+
+// As a pin writes a path, with `/` between its parts on every system.
+fn slashed(path: &Path) -> String {
+    path.components()
+        .map(|part| part.as_os_str().to_string_lossy())
+        .collect::<Vec<_>>()
+        .join("/")
+}
+
 fn under(root: &Path, touch: &Touch) -> Touch {
     let store = match touch.store.strip_prefix("file ") {
         Some(path) => format!(
             "file {}",
-            Path::new(path)
-                .strip_prefix(root)
-                .expect("a file under the machine's root")
-                .display()
+            slashed(
+                Path::new(path)
+                    .strip_prefix(root)
+                    .expect("a file under the machine's root")
+            )
         ),
         None => touch.store.clone(),
     };
@@ -103,11 +132,7 @@ fn listing(root: &Path) -> BTreeSet<String> {
     while let Some(dir) = left.pop() {
         for entry in std::fs::read_dir(&dir).expect("a directory") {
             let path = entry.expect("an entry").path();
-            let name = path
-                .strip_prefix(root)
-                .expect("under the root")
-                .display()
-                .to_string();
+            let name = slashed(path.strip_prefix(root).expect("under the root"));
             if std::fs::symlink_metadata(&path)
                 .expect("still there")
                 .is_dir()
@@ -153,11 +178,6 @@ fn signed_in_as_third(m: Machine) -> Machine {
 }
 
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "pins the stores a change touches as macOS and Linux have them: Windows spells a \
-              path with backslashes, and reads Credential Manager's manifest before each item"
-)]
 fn a_document_switch_touches_its_stores_in_the_order_it_always_did() {
     pin(
         machine("pinned-switch"),
@@ -172,7 +192,7 @@ fn a_document_switch_touches_its_stores_in_the_order_it_always_did() {
                 ("vault", "read", CLAUDE_THERE),
                 ("live", "contains", LIVE),
                 ("live", "read", LIVE),
-                ("live", "contains", LIVE),
+                ("live", PRICED, LIVE),
                 ("vault", "read", CLAUDE_HERE),
                 ("vault", "write", CLAUDE_HERE),
                 ("live", "contains", LIVE),
@@ -256,7 +276,7 @@ fn a_document_switch_touches_its_stores_in_the_order_it_always_did() {
                 ("vault", "read", CLAUDE_THERE),
                 ("live", "contains", LIVE),
                 ("live", "read", LIVE),
-                ("live", "contains", LIVE),
+                ("live", PRICED, LIVE),
                 ("vault", "read", CLAUDE_HERE),
                 ("vault", "write", CLAUDE_HERE),
                 ("live", "contains", LIVE),
@@ -293,7 +313,7 @@ fn a_document_switch_touches_its_stores_in_the_order_it_always_did() {
                 ("vault", "read", CODEX_THERE),
                 (CODEX_FILE, "contains", AUTH_JSON),
                 (CODEX_FILE, "read", AUTH_JSON),
-                (CODEX_FILE, "contains", AUTH_JSON),
+                (CODEX_FILE, PRICED, AUTH_JSON),
                 ("vault", "read", CODEX_HERE),
                 ("vault", "write", CODEX_HERE),
                 ("vault", "read", CODEX_HERE),
@@ -359,7 +379,7 @@ fn a_document_switch_touches_its_stores_in_the_order_it_always_did() {
                 ("vault", "read", CODEX_THERE),
                 (CODEX_FILE, "contains", AUTH_JSON),
                 (CODEX_FILE, "read", AUTH_JSON),
-                (CODEX_FILE, "contains", AUTH_JSON),
+                (CODEX_FILE, PRICED, AUTH_JSON),
                 ("vault", "read", CODEX_HERE),
                 ("vault", "write", CODEX_HERE),
                 (CODEX_FILE, "contains", AUTH_JSON),

@@ -154,6 +154,7 @@ pub(crate) fn update(
             if source.kind() == std::io::ErrorKind::NotFound {
                 Error::ClaudeConfigMissing {
                     path: path.to_path_buf(),
+                    spelling: crate::words::spelled(ctx, crate::provider::ProviderId::Claude),
                 }
             } else {
                 Error::ClaudeConfigUnreadable {

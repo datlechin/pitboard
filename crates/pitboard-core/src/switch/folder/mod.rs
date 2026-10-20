@@ -264,6 +264,7 @@ fn enroll_as(
                 return Err(Error::LiveCredentialAbsent {
                     tool,
                     label: Some(state.typed(key)),
+                    spelling: crate::words::spelled(&ctx, tool),
                 });
             }
             Verdict::Account {

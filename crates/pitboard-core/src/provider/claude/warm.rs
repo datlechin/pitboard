@@ -11,13 +11,7 @@ use crate::service::Permit;
 use serde_json::Value;
 use std::path::Path;
 
-/// Print mode on the smallest model, with no tools, no MCP servers, no slash commands and no
-/// session kept, answering in JSON (the register's `headless_print_mode`). The access token
-/// goes on descriptor 3, which `CLAUDE_CODE_OAUTH_TOKEN_FILE_DESCRIPTOR` names, and is used with
-/// no refresh token and no expiry and stored nowhere (`headless_token_descriptor`). Never on
-/// standard input: print mode adds what it reads there to the prompt. `CLAUDE_CONFIG_DIR` is
-/// the private home's, so its config, its keychain slot and what it fetches are its own. It
-/// sends a request on the account's plan, so it is made only with the [`Permit`].
+// Print mode (`headless_print_mode`); never the token on standard input, which joins the prompt.
 pub(crate) fn headless(
     ctx: &Context,
     permit: Permit,
@@ -48,19 +42,25 @@ pub(crate) fn headless(
             "--output-format",
             "json",
         ])
+        // Its config, what it fetches and its keychain or Credential Manager slot are its own.
         .env("CLAUDE_CONFIG_DIR", home.join("config"))
         .env("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", "1")
         .env("DISABLE_AUTOUPDATER", "1");
     let token = match ctx.os {
+        // Used with no refresh token and stored nowhere (`headless_token_descriptor`).
         Os::MacOs | Os::Linux => {
             command.env("CLAUDE_CODE_OAUTH_TOKEN_FILE_DESCRIPTOR", "3");
             Some(token.to_owned())
         }
-        // It reads no descriptor there (`windows_token_handover`), and this ahead of any login.
+        // No descriptor is read there (`windows_token_handover`); this comes ahead of any login.
         Os::Windows => {
             command
                 .env("CLAUDE_CODE_OAUTH_TOKEN", token)
                 .env("CLAUDE_CODE_SUBPROCESS_ENV_SCRUB", "1");
+            // Told of none, it asks where.exe for git with the token in hand (`windows_token_env`).
+            if let Some(bash) = super::paths::git_bash(ctx).found {
+                command.env("CLAUDE_CODE_GIT_BASH_PATH", bash);
+            }
             None
         }
     };
@@ -107,7 +107,6 @@ pub(crate) fn verdict(ran: &Ran) -> Result<(), Failure> {
 )]
 mod tests {
     use super::*;
-    use crate::host::Os;
     use std::collections::BTreeMap;
     use std::path::PathBuf;
 
@@ -119,6 +118,9 @@ mod tests {
         std::fs::write(&program, "never run").expect("a program");
         crate::host::fs::testing::make_runnable(&program).expect("runnable");
         let home = dir.path().join("warm").join("claude");
+        let bash = dir.path().join("Git").join("bin").join("bash.exe");
+        std::fs::create_dir_all(bash.parent().expect("a folder")).expect("Git");
+        std::fs::write(&bash, "never run").expect("a Git Bash");
         let login = serde_json::json!({
             "claudeAiOauth": {"accessToken": "access-work", "refreshToken": "refresh-work"}
         });
@@ -128,6 +130,7 @@ mod tests {
                 .with_user("dana".into());
             ctx.os = os;
             ctx.system_root = Some(PathBuf::from(r"C:\Windows"));
+            ctx.git_bash = Some(bash.clone());
             let run = headless(&ctx, Permit::for_a_test(), &home, &login).expect("a run");
             let env: BTreeMap<String, String> = run
                 .command
@@ -175,6 +178,7 @@ mod tests {
                         names,
                         [
                             "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC",
+                            "CLAUDE_CODE_GIT_BASH_PATH",
                             "CLAUDE_CODE_OAUTH_TOKEN",
                             "CLAUDE_CODE_SUBPROCESS_ENV_SCRUB",
                             "CLAUDE_CONFIG_DIR",
@@ -194,6 +198,11 @@ mod tests {
                     );
                     assert_eq!(env["CLAUDE_CODE_OAUTH_TOKEN"], "access-work");
                     assert_eq!(env["CLAUDE_CODE_SUBPROCESS_ENV_SCRUB"], "1");
+                    assert_eq!(
+                        env["CLAUDE_CODE_GIT_BASH_PATH"],
+                        bash.to_string_lossy(),
+                        "so Claude Code asks no where.exe, which would get the token"
+                    );
                     assert_eq!(env["USERPROFILE"], path("home"));
                     assert_eq!((&env["TEMP"], &env["TMP"]), (&path("tmp"), &path("tmp")));
                     assert_eq!(env["SystemRoot"], r"C:\Windows");

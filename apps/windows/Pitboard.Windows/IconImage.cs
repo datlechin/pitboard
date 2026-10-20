@@ -1,3 +1,5 @@
+using System.Runtime.InteropServices;
+
 namespace Pitboard.Windows;
 
 // The icon's image at the size the notification area draws it at, which Explorer would stretch from another.
@@ -22,14 +24,26 @@ public sealed class IconImage
     // The image before is destroyed only once the new one is shown in its place.
     public void Follow(Action<nint> show)
     {
-        var size = _size();
-        if (size == _loaded)
+        int size;
+        nint loaded;
+        try
+        {
+            size = _size();
+            if (size == _loaded)
+            {
+                return;
+            }
+
+            loaded = _load(size);
+        }
+        // ThrowOnFailure raises GetDpiForMonitor's E_INVALIDARG as ArgumentException, most other HRESULTs as COMException.
+        catch (Exception failed) when (failed is COMException or ArgumentException)
         {
             return;
         }
 
         var before = Handle;
-        Handle = _load(size);
+        Handle = loaded;
         _loaded = size;
         show(Handle);
         _destroy(before);

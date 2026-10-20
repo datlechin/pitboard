@@ -298,6 +298,7 @@ pub(super) fn settle(
         from: label.clone(),
         to: label.clone(),
         detail,
+        spelling: crate::words::spelled(ctx, tool),
     };
     // A row's own step failed: it may have moved or written before it did.
     let stopped = |detail: String| Error::RecoveryStopped {

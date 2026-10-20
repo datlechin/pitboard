@@ -240,8 +240,10 @@ public sealed class MainWindowTests
             UnitTestApp.Window!.Activate();
             window.Activate();
 
+            // A card collapsed at load lays out its description only once shown.
             await Views.Until(
-                () => !toggle.IsOn && !toggle.IsEnabled && notifications.Visibility == Visibility.Visible,
+                () => !toggle.IsOn && !toggle.IsEnabled && notifications.Visibility == Visibility.Visible
+                    && Views.Descendants(page).OfType<HyperlinkButton>().Any(link => AutomationProperties.GetAutomationId(link) == "settings.notificationSettings"),
                 "the settings still show what Windows held before the window came back");
             Assert.AreEqual(Visibility.Visible, Views.Element<HyperlinkButton>(page, "settings.startupSettings").Visibility);
             Assert.AreEqual(Visibility.Visible, Views.Element<HyperlinkButton>(page, "settings.notificationSettings").Visibility);

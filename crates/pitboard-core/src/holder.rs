@@ -13,6 +13,7 @@
 
 use crate::context::Context;
 use crate::host::{OS, Process};
+use crate::provider::ProviderId;
 use std::path::Path;
 
 /// One kind of process that holds a tool's login.
@@ -66,8 +67,11 @@ pub enum Remedy {
         /// The app as a person knows it: "ChatGPT".
         name: &'static str,
     },
-    /// Run this command.
-    Run(&'static str),
+    // Run the program with `arguments`, from a terminal that is not elevated where it says so.
+    Run {
+        arguments: &'static str,
+        not_elevated: bool,
+    },
     /// Do this, somewhere Pitboard cannot reach.
     Do(&'static str),
 }
@@ -106,6 +110,8 @@ pub struct Holding {
     pub holder: Holder,
     /// Their process ids, in the order the process list gave them.
     pub pids: Vec<u32>,
+    // How a terminal here is told to run the program, as `words::spelled` spells it.
+    pub program: &'static str,
 }
 
 impl Location {
@@ -134,12 +140,17 @@ impl Location {
 }
 
 // Each to the first holder whose location holds it. A kind with nothing running is left out.
-pub(crate) fn classify(processes: &[Process], holders: &[Holder]) -> Vec<Holding> {
+pub(crate) fn classify(
+    processes: &[Process],
+    holders: &[Holder],
+    program: &'static str,
+) -> Vec<Holding> {
     let mut holding: Vec<Holding> = holders
         .iter()
         .map(|&holder| Holding {
             holder,
             pids: Vec::new(),
+            program,
         })
         .collect();
     for process in processes {
@@ -156,10 +167,20 @@ pub(crate) fn classify(processes: &[Process], holders: &[Holder]) -> Vec<Holding
 
 /// What is running `program` on this machine, by kind. `None` where the process list could
 /// not be read, which is not the same as nothing running.
-pub(crate) fn find(ctx: &Context, program: &str, holders: &[Holder]) -> Option<Vec<Holding>> {
-    ctx.host()
-        .processes(program)
-        .map(|processes| classify(&processes, holders))
+pub(crate) fn find(
+    ctx: &Context,
+    tool: ProviderId,
+    program: &str,
+    holders: &[Holder],
+) -> Option<Vec<Holding>> {
+    let processes = ctx.host().processes(program)?;
+    // Spelled only for something running, since on Windows that searches `PATH`.
+    let spelled = if processes.is_empty() {
+        tool.program()
+    } else {
+        crate::words::spelled(ctx, tool).of(tool)
+    };
+    Some(classify(&processes, holders, spelled))
 }
 
 impl Holding {
@@ -198,7 +219,17 @@ impl Holding {
                 format!("quit {what} and start {them} again")
             }
             Remedy::ReopenApp { app, name } => app.reopen(name),
-            Remedy::Run(command) => format!("run `{command}`"),
+            Remedy::Run {
+                arguments,
+                not_elevated,
+            } => {
+                let run = format!("run `{} {arguments}`", self.program);
+                if not_elevated {
+                    format!("from a terminal that is not elevated, {run}")
+                } else {
+                    run
+                }
+            }
             Remedy::Do(instruction) => instruction.to_string(),
         }
     }
@@ -321,6 +352,7 @@ mod tests {
                 at(4, "/usr/local/bin/tool"),
             ],
             HOLDERS,
+            "tool",
         );
         assert_eq!(
             kinds(&holding),
@@ -334,7 +366,7 @@ mod tests {
 
     #[test]
     fn only_the_directories_a_program_is_in_say_where_it_runs() {
-        let holding = classify(&[at(1, "/usr/bin/App.app")], HOLDERS);
+        let holding = classify(&[at(1, "/usr/bin/App.app")], HOLDERS, "tool");
         assert_eq!(kinds(&holding), [("session", vec![1])]);
         assert!(!Location::WithinPrefixed("vendor.tool-").holds(&at(1, "vendor.tool-9")));
     }
@@ -347,6 +379,7 @@ mod tests {
                 at(2, "/e/Vendor.Tool-1/bin/tool"),
             ],
             HOLDERS,
+            "tool",
         );
         match OS {
             crate::host::Os::MacOs | crate::host::Os::Linux => {
@@ -373,7 +406,7 @@ mod tests {
             mac.reopen("App"),
             "quit App with Command-Q and open it again"
         );
-        let app = classify(&[at(1, "/Applications/App.app/x/tool")], HOLDERS);
+        let app = classify(&[at(1, "/Applications/App.app/x/tool")], HOLDERS, "tool");
         assert_eq!(
             app.first().map(|h| h.holder.remedy),
             Some(Remedy::ReopenApp {
@@ -409,6 +442,7 @@ mod tests {
                 ),
             ],
             &[STORE, SESSION],
+            "tool",
         );
         assert_eq!(kinds(&holding), [("app", vec![1]), ("session", vec![2, 3])]);
         assert_eq!(
@@ -423,9 +457,9 @@ mod tests {
 
     #[test]
     fn nothing_running_is_nothing_held() {
-        assert!(classify(&[], HOLDERS).is_empty());
+        assert!(classify(&[], HOLDERS, "tool").is_empty());
         assert!(
-            classify(&[at(1, "tool")], &[APP]).is_empty(),
+            classify(&[at(1, "tool")], &[APP], "tool").is_empty(),
             "and a process no kind claims is left out"
         );
     }
@@ -438,6 +472,7 @@ mod tests {
                 at(8, "/Applications/App.app/y/tool"),
             ],
             HOLDERS,
+            "tool",
         );
         assert_eq!(described(&holding), "the App");
         assert!(!plural(&holding));
@@ -448,7 +483,7 @@ mod tests {
     /// about, and the purpose leads.
     #[test]
     fn what_to_do_is_said_once_for_each_kind() {
-        let sessions = classify(&[at(1, "tool"), at(2, "tool")], HOLDERS);
+        let sessions = classify(&[at(1, "tool"), at(2, "tool")], HOLDERS, "tool");
         assert_eq!(described(&sessions), "2 `tool` sessions");
         assert!(plural(&sessions));
         assert_eq!(
@@ -456,7 +491,7 @@ mod tests {
             "Quit them and start again to use the new account."
         );
 
-        let one = classify(&[at(1, "tool")], HOLDERS);
+        let one = classify(&[at(1, "tool")], HOLDERS, "tool");
         assert_eq!(described(&one), "1 `tool` session");
         assert_eq!(
             remedies(&one, "to go on"),
@@ -470,6 +505,7 @@ mod tests {
                 at(3, "/e/vendor.tool-1/bin/tool"),
             ],
             HOLDERS,
+            "tool",
         );
         assert_eq!(
             described(&all),
@@ -483,19 +519,30 @@ mod tests {
     }
 
     #[test]
-    fn a_command_is_said_as_one() {
-        let holding = classify(
-            &[at(1, "/x/daemon/tool")],
-            &[Holder {
+    fn a_command_is_said_as_one_with_the_program_as_spelled() {
+        let said = |not_elevated, program| {
+            let daemon = Holder {
                 kind: "daemon",
                 noun: Noun::One("the daemon"),
                 location: Location::Within("daemon"),
-                remedy: Remedy::Run("tool daemon restart"),
-            }],
+                remedy: Remedy::Run {
+                    arguments: "daemon restart",
+                    not_elevated,
+                },
+            };
+            remedies(
+                &classify(&[at(1, "/x/daemon/tool")], &[daemon], program),
+                "to take a switch",
+            )
+        };
+        assert_eq!(
+            said(false, "tool"),
+            "Run `tool daemon restart` to take a switch."
         );
         assert_eq!(
-            remedies(&holding, "to take a switch"),
-            "Run `tool daemon restart` to take a switch."
+            said(true, "tool.cmd"),
+            "From a terminal that is not elevated, run `tool.cmd daemon restart` to take a \
+             switch."
         );
     }
 

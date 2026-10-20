@@ -274,12 +274,15 @@ window loads its site, and whatever the site's pages load, as a browser would.
     until the next day. Only the unscoped `session` limit is started: the weekly
     limit is a fixed cycle. `run.rs` runs the tool's own headless mode in `warm/<tool>/`, made
     afresh for each run and removed after it, with an environment built from nothing but
-    `PATH`, the person's name and the proxy, through `host::proc::run_within`: the access
-    token on descriptor 3 through a pipe `dup2`ed in `pre_exec`, for at most 120 seconds, its
-    process group stopped past that, and whatever it left in the group stopped after it. On
+    `PATH`, the person's name, the proxy and, on Windows, `SystemRoot`, through
+    `host::proc::run_within`: the access token on descriptor 3 through a pipe `dup2`ed in
+    `pre_exec`, for at most 120 seconds, its process group stopped past that, and whatever it
+    left in the group stopped after it. On
     Windows, which reads no descriptor (`windows_token_handover`), the token goes in
     `CLAUDE_CODE_OAUTH_TOKEN` with `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1` (`windows_token_env`),
-    `USERPROFILE`, `TEMP` and `TMP` are the private home's, and the run starts suspended in a
+    `CLAUDE_CODE_GIT_BASH_PATH` names the Git Bash `claude::paths::git_bash` finds, so Claude
+    Code's own finder asks no `where.exe` with the token in its environment, `USERPROFILE`,
+    `TEMP` and `TMP` are the private home's, and the run starts suspended in a
     job that kills on close and lets nothing break away, ended whole by `TerminateJobObject`
     once the run ends or passes its ceiling.
     `WarmScript` plays a run in a test or a fixture. `provider/claude/warm.rs` builds Claude
@@ -441,7 +444,12 @@ window loads its site, and whatever the site's pages load, as a browser would.
     in a column and in a sentence has a function for each form. The command line calls these
     functions directly, and so does `pitboard-ffi`'s `present/` as it makes the snapshot,
     which carries what an app shows of them. The bindings export none of them. Clock times
-    are not in it.
+    are not in it. A sentence that says to run a tool names its program as `spelled` gives
+    it: on Windows, the `claude.cmd` or `codex.cmd` npm installs where Pitboard found that,
+    since Windows PowerShell 5.1 under its default policy refuses the `claude.ps1` beside
+    it, and the bare name everywhere else. An error, a warning, a status row, the report and
+    each kind of process found running a tool (`holder::Holding`) carry that name, since their
+    words are made with no context.
 - `crates/pitboard`: the command line. Arguments, rendering for people, the man page, and
   the `--json` contract, pinned by the snapshots in `crates/pitboard/tests/snapshots`.
   `build.rs` gives a Windows build its manifest, which the linker embeds, and its version
@@ -598,7 +606,7 @@ window loads its site, and whatever the site's pages load, as a browser would.
   - `fixture/` holds the fixtures, the worlds a debug build of either app and its UI tests
     launch into by name, as the macOS app's debug build and UI tests do. Only the `fixture`
     feature compiles them, and it enables `pitboard-core`'s `test-support`. `worlds.rs`
-    makes each of the fourteen on the real core: a home in the fixture's own folder in the
+    makes each of the fifteen on the real core: a home in the fixture's own folder in the
     temporary directory, `MemoryHost` and `ScriptedApi`, and every account put there by the
     core as a person would have, signed in, enrolled, parked and switched on a clock set to
     when it happened. `claudeDesktop` and `claudeDesktopOpen` hold Claude Desktop only where
@@ -691,7 +699,8 @@ window loads its site, and whatever the site's pages load, as a browser would.
     `IconImage` loads it at for the primary display's scale, and `IconMenu`
     lists what the icon's menu offers, in the macOS menu's order. `WindowsNotifications`
     posts the model's notifications through `IAppNotifications`, which
-    `SystemAppNotifications` sends to `AppNotificationManager` and tests replace; only a
+    `SystemAppNotifications` sends to `AppNotificationManager` and tests replace, and refuses
+    one Windows did not show by the exception's type and HRESULT alone; only a
     Release build registers, and a click comes back as the intent the Switch button or the
     notification itself asks for. Its `Read` is why Windows shows none of them, from the
     manager's `Setting` at each settings visit, as a `NotificationsBlocked`. `WindowsApps` is the model's `AppControl`: through
@@ -923,7 +932,7 @@ window loads its site, and whatever the site's pages load, as a browser would.
     `test-certificate.ps1` makes the throwaway certificate it and the runner facts sign with,
     `extract-msi.ps1` extracts an MSI's administrative image and `check-windows-msi.ps1` checks
     one, `check-msi-components.ps1` holds its components' GUIDs and key paths to the last
-    release's MSIs, `validate-windows-msi.ps1` runs ICE03 on an MSI with the WiX that built it,
+    release's MSIs, which `previous-msis.ps1` downloads, `validate-windows-msi.ps1` runs ICE03 on an MSI with the WiX that built it,
     `read-assembly.ps1` reads a value from a .NET assembly's metadata, and
     `test-windows-app.ps1` tests the checks and the signature check on the MSI and the package.
     `windows-pending.py` fails on a test Windows leaves out without a reason it accepts, and
@@ -1207,7 +1216,10 @@ window loads its site, and whatever the site's pages load, as a browser would.
   `MemoryHost`, which writes the files in the test's home and asks no service manager, and
   on Windows keeps the task's definition there as `Tasks\Pitboard\<name>`, and the real
   hosts refuse to ask launchd, systemd or Task Scheduler from any build for tests: a unit
-  test, the command line the integration tests run, or an app built with the fixtures.
+  test, the command line the integration tests run, or an app built with the fixtures. The
+  exception is the Release build the release gate's UI test starts at 1.x as a runner's fresh
+  standard user. Its start, its Settings and its `--unregister` read that account's
+  `\Pitboard\Renew <SID>`, where there is none, and change nothing in Task Scheduler.
 - `pitboard-ffi` exports records, enums, three error types, free functions, one object,
   `PitboardModel`, and four traits an app implements, `ModelListener`, `AppControl`,
   `Notifications` and `LocalTime`. Nothing it exports is async. The core it runs on is
@@ -1354,9 +1366,16 @@ window loads its site, and whatever the site's pages load, as a browser would.
 - A login replaced outside Pitboard, which every read says until it is put right
   (`login_replaced`), is posted once for each account while the reads that ask say it, and
   again only once one has stopped saying it and a later one says it, or after the app is
-  opened again. What was posted is kept by the account the warning is about (`Warning`'s
-  `account`), since its words name whose login is stored now, which every switch changes,
-  and not across launches.
+  opened again. The core says it only beside a read that answers. A failed read or a refused
+  change whose warnings named one would post it the same way, which nothing sends today.
+  Neither counts as a read that stopped saying one, since neither says whether a login it
+  leaves out was put right. What was posted is kept by the account the warning is about
+  (`Warning`'s `account`), since its words name whose login is stored now, which every
+  switch changes, and not across launches.
+- A notification the app's system refused is kept with its title, the system's reason and
+  when, until the next one is posted, and not across launches. Doctor cannot know of it, so
+  This Mac and This PC list it after doctor's checks (`notification_not_posted`), and the
+  line over them counts it. `MacNotifications` refuses none.
 - A read that asks nobody, after another front end changed the index or a session recorded
   numbers, that says Claude Code's config has named another account since Anthropic last
   named the login stored (`in_use_unconfirmed`) starts one read that asks, which settles
@@ -1526,9 +1545,10 @@ window loads its site, and whatever the site's pages load, as a browser would.
   that is not a full path. It asks before it judges a link or takes the single-instance key,
   and a refused launch shows the core's sentence and exits with nothing written
   (`ReleaseGateTests`, over the MSI's Release build). Only `--unregister` and
-  `--unregister-share`, which the MSI runs, are read first, and they ask neither the core nor
-  a running copy. `Unregistering` then asks the core only to take away the renewal task,
-  which the gate every change passes refuses as it refuses any change.
+  `--unregister-share`, which the MSI runs, are read first. Neither asks a running copy, and
+  `--unregister-share` asks nothing of the core. `--unregister` asks the core only to take
+  away the renewal task (`unschedule_app`), which the gate every change passes refuses as it
+  refuses any change.
 - The Windows app's own data folder is never in Pitboard's directory. It is `Pitboard App`,
   or `Pitboard App Debug` for a Debug build, beside `Pitboard` in the known folder Local
   AppData, which `Shell.LocalAppData` asks `SHGetKnownFolderPath` for. So neither
@@ -3126,7 +3146,7 @@ measured on 18 October 2026, and those CI and the runner facts measured by 20 Oc
 | `VerifyVersionInfoW` compares with the running Windows only in a program whose manifest names Windows 10, and with Windows 8 in one without a manifest, so WinSparkle reads a feed's `minimumSystemVersion` against the real build only there | [VerifyVersionInfoW](https://learn.microsoft.com/windows/win32/api/winbase/nf-winbase-verifyversioninfow) | No runner checks for an update; the 1.0 session's P3 is the first. |
 | An Environment row `=-PATH` with `[~];<value>` appends to the user `PATH` and takes only its part off on uninstall; a new process sees it, a running one does not | [Environment table](https://learn.microsoft.com/en-us/windows/win32/msi/environment-table), [Environment variables](https://learn.microsoft.com/en-us/windows/win32/procthread/environment-variables) | The session of 18 October 2026 measured all but a terminal open before the install, which it could not read. |
 | An exe custom action after `InstallFinalize`, asynchronous with no wait, starts `Pitboard.exe --updated` as the person once a `/passive` update ends | [Custom action return processing options](https://learn.microsoft.com/en-us/windows/win32/msi/custom-action-return-processing-options) | No runner updates Pitboard; the 1.0 session's P3 does. |
-| A deferred custom action without `msidbCustomActionTypeNoImpersonate` runs as the person running the install or removal, so a per-user removal's `Pitboard.exe --unregister` passes the core's gate and reaches that person's renewal task | [Custom action in-script execution options](https://learn.microsoft.com/en-us/windows/win32/msi/custom-action-in-script-execution-options) | The session of 18 October 2026 saw `--unregister` delete the person's `Run` value, and read no token. No runner installs an MSI; the next session removes Pitboard and reads whether the task went. |
+| A deferred custom action without `msidbCustomActionTypeNoImpersonate` runs as the person running the install or removal, so a per-user removal started unelevated has `Pitboard.exe --unregister` pass the core's gate and reach that person's renewal task. One started from an elevated terminal runs it elevated, the gate refuses it, and the task stays | [Custom action in-script execution options](https://learn.microsoft.com/en-us/windows/win32/msi/custom-action-in-script-execution-options) | The session of 18 October 2026 saw `--unregister` delete the person's `Run` value, and read no token. No runner installs an MSI; the next session removes Pitboard from a terminal that is not elevated and from one that is, and reads whether the task went. |
 | `msiexec /a` extracts an MSI only on a machine whose platform its `Template` names, as an install would, so `windows-msi`, `windows-feed-key` and `windows-install` each read the MSI for their own machine | [Template Summary property](https://learn.microsoft.com/en-us/windows/win32/msi/template-summary) | Each runner extracts only its own MSI: no row tries the other's. |
 | `RemovePackageAsync` shuts down every process of the package as it removes it, so `PitboardShare.exe` could not remove its own package | [PackageManager.RemovePackageAsync](https://learn.microsoft.com/en-us/uwp/api/windows.management.deployment.packagemanager.removepackageasync) | CF8 removed PitboardShare's with no process of the package running (run 38928930271). P1 uninstalls Pitboard and finds the package gone. |
 | A process that `PitboardShare.exe` starts through `CreateProcess` carries none of its package identity, since a process with no desktop app policy set starts its children outside the package | [UpdateProcThreadAttribute](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-updateprocthreadattribute) | The probe's identity process, started by path, gave its `CreateProcessW` children none, and one handed a link as its only argument got it whole (runs 38928930271, 39291962999 and 39301311398, CF8 under [Windows](#windows)). No runner activates a share target, whose activation may set a policy that keeps children in the package: the 1.0 session's P1 reads `GetCurrentPackageFamilyName` in a `Pitboard.exe` a real share started and, with no copy running, whether it keeps running once `PitboardShare.exe` has returned. |
@@ -3712,7 +3732,8 @@ real `auth.json` that build wrote. The register is `provider/codex/assumptions.r
   - (`codex_windows_app_server`) the background app server runs
     `<CODEX_HOME>\packages\app-server-daemon\current\bin\codex.exe`, `current` a
     junction Codex points at one of its releases. It is started with `DETACHED_PROCESS |
-    CREATE_BREAKAWAY_FROM_JOB`, never from an elevated terminal.
+    CREATE_BREAKAWAY_FROM_JOB`, never from an elevated terminal, so its remedy there says to
+    run `codex app-server daemon restart` from a terminal that is not elevated.
   - (`codex_windows_app_identity`) the desktop app for Windows, ChatGPT- or Codex-branded,
     is the package of family `OpenAI.Codex_2p2nqsd0c76g0`, its app
     `OpenAI.Codex_2p2nqsd0c76g0!App`, and Codex tells its process by that family. So
@@ -3793,7 +3814,10 @@ real `auth.json` that build wrote. The register is `provider/codex/assumptions.r
 - Read on 16 October 2026 from 0.163.0's source and its linux-x64 build (`codex_wsl`): the
   Linux build takes itself to run in WSL where `WSL_DISTRO_NAME` is set or `/proc/version`
   names Microsoft, and there starts no shared background server where its home is on 9p,
-  as WSL 2 mounts Windows' drives. Doctor reads WSL the same way.
+  as WSL 2 mounts Windows' drives. Doctor reads WSL the same way. On Windows it says a
+  switch changes the login of a Codex in WSL that uses the Windows Codex home. Whether the
+  ChatGPT app's WSL mode hands its Linux codex that home is not measured (session M8), so
+  doctor says it of no distribution in particular.
 - Read on 15 October 2026 from the win32 builds of 0.162.1 (`codex_windows_version`):
   `codex.exe` has no version resource. The package it runs from, npm's vendored one or a
   standalone release, holds `codex-package.json` beside its `bin`, whose `version` doctor
@@ -4472,7 +4496,11 @@ Microsoft's documentation.
   where WebView2's own browser keys serve Back, Forward and Reload. So an account window takes
   Ctrl+W, and the browser keys for its Back, Forward and Reload, on its root, for its toolbar
   and its note (`AccountWindowTests.TheWindowTakesTheKeysOfItsCommands`,
-  `TheToolbarTakesBackAndCtrlW`).
+  `TheToolbarTakesBackAndCtrlW`). An accelerator for Alt+Left on the root missed the key with
+  the command bar's More focused on windows-2025 (run 39310757537), though
+  `CommandBar_Partial.cpp` at `winui3/release/2.5.1` moves focus on Left or Right only with
+  Alt up, so Alt+Left and Alt+Right are read in the root's `PreviewKeyDown`, Alt from the
+  thread's key state.
 - Microsoft's User Interface Text guidelines (updated 15 April 2025) title a top-level
   document-centric window "document name - program name", the document first. So an account
   window is titled with its page's `DocumentTitle`, a hyphen and the account's title, where
@@ -4558,11 +4586,12 @@ Microsoft's documentation.
   dialog opens; a dialog made in code, outside the live tree, is put whole in its popup.
   `KeyboardInputProcessor.cpp` raises `PreviewKeyDown` and `KeyDown` with one event
   argument, so a `PreviewKeyDown` handled on the dialog keeps Esc from its close button.
-  `InfoBar.cpp` announces an InfoBar as it opens only through an automation peer it has
-  already. So `AccountSheet` cancels each button's click and leaves closing to the model,
-  dims its close button through `CloseButtonStyle` while nothing may close it, keeps Esc
-  from a sign-in that waits on its app, and keeps its failure's InfoBar in the tree while it
-  is closed. `AccountSheetTests` holds what runs without a person on the runners.
+  `InfoBar.cpp` announces an InfoBar as it opens, by its severity, title and message, only
+  through an automation peer it has already. So `AccountSheet` cancels each button's click
+  and leaves closing to the model, dims its close button through `CloseButtonStyle` while
+  nothing may close it, keeps Esc from a sign-in that waits on its app, and keeps its
+  failure's InfoBar in the tree while it is closed. `AccountSheetTests` holds what runs
+  without a person on the runners.
 - Microsoft's InfoBar page raises no notification for a bar changed while open, and has it
   closed and opened again for a screen reader to hear the new content
   ([InfoBar](https://learn.microsoft.com/windows/apps/develop/ui/controls/infobar), updated 25
@@ -4930,6 +4959,10 @@ Measured on 6 October 2026 on macOS 27.0, with `pitboard-ffi` built for
   `.credentials.json` behind Claude Code's store. Its read warns `fallback_login` with the
   notice's Put Away…, the read of what is known says nothing of it, and Put Away keeps the
   login for personal and deletes the file.
+- loginReplaced, which the Swift fixture never had, is oneTool after personal signed in
+  with Claude Code itself over work's only login, recorded by a terminal's read ten minutes
+  before. Every read, the one of what is known too, warns `login_replaced`, work's row reads
+  `login_replaced`, and the app's first read posts it.
 - stuck shows the notice offering Give Up… as the app starts, as the Swift fixture did, now
   from the core's own read: a read says an interrupted switch is waiting wherever the next
   change would be refused over it, as a warning with the refusal's code,

@@ -118,6 +118,8 @@ pub(crate) trait Items {
     fn get(&self, name: &str) -> Result<Option<String>, Error>;
     fn set(&self, permit: Permit, name: &str, value: &str) -> Result<(), Error>;
     fn delete(&self, permit: Permit, name: &str) -> Result<(), Error>;
+    // How a hint names `claude` here, which a read nothing can join says to run.
+    fn spelling(&self) -> crate::words::Spelling;
 }
 
 // Claude Code takes an item holding nothing for one that is not there.
@@ -141,7 +143,11 @@ pub(crate) fn read(items: &dyn Items, target: &str) -> Result<Option<String>, Er
     let Some(text) = found(items, MANIFEST)? else {
         return found(items, WHOLE);
     };
-    let unreadable = |why: &str| Err(Error::Broken(format!("`{target}` {why}")));
+    let broken = |why: String| Error::Broken {
+        why,
+        spelling: items.spelling(),
+    };
+    let unreadable = |why: &str| Err(broken(format!("`{target}` {why}")));
     let Some(manifest) = Manifest::read(&text) else {
         return unreadable("has a manifest `#m` Claude Code does not write");
     };
@@ -170,7 +176,7 @@ pub(crate) fn read(items: &dyn Items, target: &str) -> Result<Option<String>, Er
     crate::base64::decode(&joined)
         .and_then(|bytes| String::from_utf8(bytes).ok())
         .map(Some)
-        .ok_or_else(|| Error::Broken(format!("`{target}` has pieces that are not base64 of text")))
+        .ok_or_else(|| broken(format!("`{target}` has pieces that are not base64 of text")))
 }
 
 // Each step is a durable change a test can stop a write after.
@@ -299,6 +305,10 @@ mod tests {
         fn delete(&self, _: Permit, name: &str) -> Result<(), Error> {
             self.0.borrow_mut().remove(name);
             Ok(())
+        }
+
+        fn spelling(&self) -> crate::words::Spelling {
+            crate::words::Spelling::Bare
         }
     }
 
@@ -557,11 +567,11 @@ mod tests {
         items
             .set(Permit::for_a_test(), MANIFEST, r#"{"n":9,"l":1}"#)
             .unwrap();
-        assert!(matches!(read(&items, "t"), Err(Error::Broken(_))));
+        assert!(matches!(read(&items, "t"), Err(Error::Broken { .. })));
         items
             .set(Permit::for_a_test(), MANIFEST, "not a manifest")
             .unwrap();
-        let Err(Error::Broken(why)) = read(&items, "t") else {
+        let Err(Error::Broken { why, .. }) = read(&items, "t") else {
             panic!("a bad #m");
         };
         assert_eq!(why, "`t` has a manifest `#m` Claude Code does not write");

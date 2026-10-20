@@ -83,11 +83,13 @@ pub(crate) enum World {
     /// own store, as a sign-in that could not reach the store leaves one, so the app offers to
     /// put it away.
     LeftInFile,
+    // `OneTool`, then personal signs in with Claude Code over work's only login, read by a CLI.
+    LoginReplaced,
 }
 
 impl World {
     /// Every world, in the order the macOS app's `Fixture` listed them.
-    pub(crate) const ALL: [World; 14] = [
+    pub(crate) const ALL: [World; 15] = [
         World::TwoTools,
         World::OneTool,
         World::Empty,
@@ -102,6 +104,7 @@ impl World {
         World::ClaudeDesktopOpen,
         World::WarmUp,
         World::LeftInFile,
+        World::LoginReplaced,
     ];
 
     /// Its name, as `PITBOARD_FIXTURE` gives it and the UI tests launch it.
@@ -121,6 +124,7 @@ impl World {
             World::ClaudeDesktopOpen => "claudeDesktopOpen",
             World::WarmUp => "warmUp",
             World::LeftInFile => "leftInFile",
+            World::LoginReplaced => "loginReplaced",
         }
     }
 
@@ -151,7 +155,8 @@ impl World {
             | World::Stuck
             | World::ChatGptOpen
             | World::WarmUp
-            | World::LeftInFile => &[ProviderId::Claude, ProviderId::Codex],
+            | World::LeftInFile
+            | World::LoginReplaced => &[ProviderId::Claude, ProviderId::Codex],
             World::ClaudeDesktop | World::ClaudeDesktopOpen => {
                 &[ProviderId::Claude, ProviderId::Desktop]
             }
@@ -942,6 +947,11 @@ fn seed(world: World, machine: &Machine) -> Result<(), Unmade> {
             left_in_a_file(machine);
             Ok(())
         }
+        World::LoginReplaced => {
+            claude_accounts(machine)?;
+            claude_switches(machine)?;
+            signed_in_outside(machine)
+        }
         World::OnlyOne => {
             let work = work();
             uses(machine, &work);
@@ -1047,6 +1057,19 @@ fn claude_desktop(machine: &Machine) -> Result<(), Unmade> {
     let (_, front_end) = machine.front_end("cli", 2 * DAY);
     desktop::signs_in_inside(&front_end, &machine.claude, "desktop/work", &desktop::WORK)
         .map_err(Unmade)
+}
+
+fn signed_in_outside(machine: &Machine) -> Result<(), Unmade> {
+    let personal = personal();
+    let now = machine.now;
+    let login = machine.login(&personal, now + DAY, now + 30 * DAY);
+    machine.signs_in(&personal, &login)?;
+    machine
+        .front_end("cli", 10 * 60)
+        .1
+        .status(false)
+        .map(drop)
+        .map_err(|error| Unmade(format!("reading the accounts from a terminal: {error}")))
 }
 
 /// A Claude Code account parked a month ago and never switched to since: its access token

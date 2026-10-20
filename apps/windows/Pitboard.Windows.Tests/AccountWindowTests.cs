@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.VisualStudio.TestTools.UnitTesting.AppContainer;
@@ -278,6 +279,34 @@ public sealed partial class AccountWindowTests
         }
     }
 
+    // As the model answers a window opened again: its last page, under a new number.
+    [UITestMethod]
+    public async Task AWindowBackInSightKeepsItsPageAndLoadsALinkChosenForIt()
+    {
+        using var site = new StandInSite();
+        await using var webs = await Webs.Make();
+        var account = webs.Own(Main);
+        var (windows, model) = AccountWindowsOver(webs, account);
+        try
+        {
+            var window = await Away(windows, model, account, site);
+            var started = new List<string>();
+            Page(window)!.NavigationStarting += (_, args) => started.Add(args.Uri);
+            var open = model.Snapshot().AccountWindows.Open.Single();
+
+            windows.Open(account);
+            windows.Follow(model.Snapshot().AccountWindows with { Open = [open with { Load = new PageLoad(2, Home) }] });
+            windows.Follow(model.Snapshot().AccountWindows with { Open = [open with { Load = new PageLoad(3, Chat) }] });
+
+            await Views.Until(() => started.Count > 0, "the link chosen for the window did not load", Webs.Patience);
+            Assert.AreEqual(Chat, string.Join(", ", started));
+        }
+        finally
+        {
+            windows.Window(account.Store)?.Close();
+        }
+    }
+
     // Exit asks in the window of the download it would stop, back in sight where the person closed it.
     [UITestMethod]
     public async Task ExitAsksInTheWindowOfADownloadOutOfSight()
@@ -381,13 +410,16 @@ public sealed partial class AccountWindowTests
             await Views.Until(() => sent.Contains(new Intent.PageShown(store, Home)), "the page did not load", Webs.Patience);
             var note = Views.Element<InfoBar>(window.Content, "window.note");
             Assert.IsTrue(note.IsOpen);
-            var opened = new List<bool>();
-            note.RegisterPropertyChangedCallback(InfoBar.IsOpenProperty, (_, _) => opened.Add(note.IsOpen));
+            // InfoBar.cpp announces its title and message as it opens, through a peer it has already.
+            Assert.IsInstanceOfType<InfoBarAutomationPeer>(FrameworkElementAutomationPeer.CreatePeerForElement(note));
+            var opened = new List<string>();
+            note.RegisterPropertyChangedCallback(InfoBar.IsOpenProperty, (_, _) => opened.Add(note.IsOpen ? $"opened: {note.Message}" : "closed"));
 
             await Page(window)!.Script("location.href = 'https://accounts.google.com/o/oauth2/v2/auth'; 0");
 
-            await Views.Until(() => note.Message.StartsWith("Google does not allow", StringComparison.Ordinal), "Google's refusal was not said", Webs.Patience);
-            Assert.AreEqual("closed, opened", string.Join(", ", opened.Select(open => open ? "opened" : "closed")));
+            await Views.Until(() => opened.Count == 2, () => $"the bar went {string.Join(", ", opened)}", Webs.Patience);
+            Assert.AreEqual("closed", opened[0]);
+            StringAssert.StartsWith(opened[1], "opened: Google does not allow");
         }
         finally
         {
@@ -431,7 +463,7 @@ public sealed partial class AccountWindowTests
             var root = (UIElement)window.Content;
 
             Assert.AreEqual(
-                "Control+W, Menu+Left, Menu+Right, None+F5, Control+R",
+                "Control+W, None+F5, Control+R",
                 string.Join(", ", root.KeyboardAccelerators.Select(key => $"{key.Modifiers}+{key.Key}")));
         }
         finally

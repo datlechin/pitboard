@@ -56,8 +56,7 @@ public static class Shell
 
     public static void DestroyIcon(nint icon) => PInvoke.DestroyIcon((HICON)icon);
 
-    // SM_CXSMICON at the primary display's scale, where the notification area is. GetSystemMetrics gives it at the scale
-    // the session started at.
+    // At the primary display's scale, where the notification area is: GetSystemMetrics answers at the session's first one.
     public static int NotificationIconSize()
     {
         var primary = PInvoke.MonitorFromPoint(default, MONITOR_FROM_FLAGS.MONITOR_DEFAULTTOPRIMARY);

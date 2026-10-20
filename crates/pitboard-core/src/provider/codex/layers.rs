@@ -275,12 +275,13 @@ impl Store {
 
     /// What would put the login in the file store instead, as a sentence with no full stop,
     /// for a store that is not the file: the line to set and where, or who can.
-    pub(crate) fn to_use_the_file(&self) -> String {
+    pub(crate) fn to_use_the_file(&self, program: &str) -> String {
         let line = format!("`{STORE} = \"file\"`");
         let place = self.place(self.chosen_by);
         match self.chosen_by {
             Layer::Packaged | Layer::System | Layer::Own | Layer::CommandLine => format!(
-                "To use the file store, set {line} in {}, then sign in again with `codex login`",
+                "To use the file store, set {line} in {}, then sign in again with `{program} \
+                 login`",
                 self.own.display()
             ),
             Layer::Managed => format!(
@@ -842,7 +843,7 @@ mod tests {
             format!("pinned to `ephemeral` by {}", etc("requirements.toml"))
         );
         assert_eq!(
-            store.to_use_the_file(),
+            store.to_use_the_file("codex"),
             format!(
                 "No line in your own config.toml can change it: {} pins it, and only an \
                  administrator can change that",
@@ -868,7 +869,7 @@ mod tests {
             )
         );
         assert_eq!(
-            store.to_use_the_file(),
+            store.to_use_the_file("codex"),
             format!(
                 "To use the file store, set `cli_auth_credentials_store = \"file\"` in {OWN}, \
                  then sign in again with `codex login`"
@@ -876,7 +877,7 @@ mod tests {
         );
         let store = machine(Os::Linux, &[(Layer::Managed, KEYRING)]);
         assert_eq!(
-            store.to_use_the_file(),
+            store.to_use_the_file("codex"),
             format!(
                 "{} sets it over your own config.toml, so only an administrator can change it \
                  there to `cli_auth_credentials_store = \"file\"`",
@@ -1155,7 +1156,7 @@ mod tests {
                 format!("`cli_auth_credentials_store = \"keyring\"` in {OWN}")
             );
             assert_eq!(
-                store.to_use_the_file(),
+                store.to_use_the_file("codex"),
                 format!(
                     "To use the file store, set `cli_auth_credentials_store = \"file\"` in \
                      {OWN}, then sign in again with `codex login`"
@@ -1385,7 +1386,7 @@ mod tests {
             )
         );
         assert_eq!(
-            store.to_use_the_file(),
+            store.to_use_the_file("codex"),
             format!(
                 "To use the file store, set `cli_auth_credentials_store = \"file\"` in {OWN}, \
                  then sign in again with `codex login`"
@@ -1442,7 +1443,7 @@ mod tests {
             format!("pinned to `ephemeral` by {required}")
         );
         assert_eq!(
-            store.to_use_the_file(),
+            store.to_use_the_file("codex"),
             format!(
                 "No line in your own config.toml can change it: {required} pins it, and only an \
                  administrator can change that"

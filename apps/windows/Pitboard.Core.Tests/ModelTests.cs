@@ -36,7 +36,17 @@ public sealed class ModelTests
     {
         public Calls<RunOutNotice> Posted { get; } = new();
 
-        public void Post(RunOutNotice notice) => Posted.Add(notice);
+        // Why the system refuses each notification, where it does.
+        public string? Refuses { get; init; }
+
+        public void Post(RunOutNotice notice)
+        {
+            Posted.Add(notice);
+            if (Refuses is { } reason)
+            {
+                throw new PlatformException.Failed(reason);
+            }
+        }
     }
 
     // Rust calls the app's interfaces on threads of its own, so a test waits for a call.
@@ -765,7 +775,7 @@ public sealed class ModelTests
         [
             "twoTools", "oneTool", "empty", "firstLaunch", "noClaudeCode", "unnamed", "onlyOne",
             "readFailure", "stuck", "chatGPTOpen", "claudeDesktop", "claudeDesktopOpen",
-            "warmUp", "leftInFile",
+            "warmUp", "leftInFile", "loginReplaced",
         ];
         CollectionAssert.AreEqual(ordered, names);
         var unknown = Assert.ThrowsExactly<FixtureException.Unknown>(
@@ -925,6 +935,50 @@ public sealed class ModelTests
                 SwitchTo: "claude/work"),
         ];
         CollectionAssert.AreEqual(ranOut, posted);
+    }
+
+    [TestMethod]
+    public void ALoginReplacedOutsidePitboardIsPostedThroughTheAppsNotifications()
+    {
+        NeedsFixtures();
+        var waiting = new Waiting();
+        var posting = new Posting();
+        using var model = PitboardModel.FixtureIn("loginReplaced", _own, waiting, new StandInApps(), posting, new InUtc());
+        Start(model, waiting);
+
+        var posted = posting.Posted.Until(1, Patience);
+        model.Shutdown();
+
+        var again = OperatingSystem.IsWindows() ? "Sign in again…" : "Sign In Again…";
+        var notice = posted.Single();
+        Assert.AreEqual("A login was replaced outside Pitboard", notice.Title);
+        Assert.AreEqual(
+            "work’s login was replaced by a sign-in outside Pitboard: Claude Code now has personal’s login stored, " +
+            $"and Pitboard holds no login for work. Choose {again} on its row.",
+            notice.Body);
+        Assert.IsNull(notice.SwitchTo);
+    }
+
+    [TestMethod]
+    public void ANotificationTheAppsNotificationsRefusedIsSaidAfterDoctorsChecks()
+    {
+        NeedsFixtures();
+        var waiting = new Waiting();
+        var posting = new Posting { Refuses = "COMException 0x80070490" };
+        using var model = PitboardModel.FixtureIn("loginReplaced", _own, waiting, new StandInApps(), posting, new InUtc());
+        Start(model, waiting);
+        Assert.HasCount(1, posting.Posted.Until(1, Patience));
+
+        model.Send(new Intent.PaneShown(Pane.Machine));
+        var checkedIn = waiting.Until(
+            snapshot => snapshot.Machine.Checks.Lines.LastOrDefault()?.Code == "notification_not_posted", Patience);
+        model.Shutdown();
+
+        Assert.IsNotNull(checkedIn, "the machine pane never said the refusal");
+        var line = checkedIn.Machine.Checks.Lines[^1];
+        Assert.AreEqual(Level.Warn, line.Level);
+        Assert.StartsWith("“A login was replaced outside Pitboard” not posted at ", line.Detail);
+        Assert.EndsWith(" · COMException 0x80070490", line.Detail);
     }
 
     private static bool LibraryIsOpened =>

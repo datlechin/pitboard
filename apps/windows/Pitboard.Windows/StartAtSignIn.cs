@@ -76,11 +76,9 @@ public sealed class StartAtSignIn(IStartupItem item)
 }
 
 #if DEBUG
-// Starts nothing, so a fixture's settings turn start at sign-in on and off as the macOS fixture's login item does. Off in
-// Settings, it is a Run value that Settings > Apps > Startup turned off, which RunValue leaves as it finds it.
+// Starts nothing. Off in Settings, it stands for a Run value Settings > Apps > Startup turned off.
 public sealed class FixtureStartupItem(bool offInSettings = false) : IStartupItem
 {
-    // A UI test sets it to "off".
     public const string Variable = "PITBOARD_FIXTURE_STARTUP";
 
     private readonly bool _offInSettings = offInSettings;

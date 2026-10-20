@@ -11,8 +11,12 @@ internal static partial class Builds
     // As the MSI lays it out: CI passes the Pitboard.exe of its administrative image.
     public static string Release => Built("PitboardAppRelease");
 
+    public static int ProductMajor() => int.Parse(ProductVersion().Split('.')[0], CultureInfo.InvariantCulture);
+
+    public static bool ProductBeta() => ProductVersion().Contains('-', StringComparison.Ordinal);
+
     // The version the release gate reads, from Cargo.toml rather than the build under test.
-    public static int ProductMajor()
+    private static string ProductVersion()
     {
         for (var folder = new DirectoryInfo(AppContext.BaseDirectory); folder is not null; folder = folder.Parent)
         {
@@ -20,7 +24,7 @@ internal static partial class Builds
             var version = File.Exists(manifest) ? WorkspaceVersion().Match(File.ReadAllText(manifest)) : Match.Empty;
             if (version.Success)
             {
-                return int.Parse(version.Groups[1].Value, CultureInfo.InvariantCulture);
+                return version.Groups[1].Value;
             }
         }
 
@@ -36,6 +40,6 @@ internal static partial class Builds
             : path;
     }
 
-    [GeneratedRegex(@"^\[workspace\.package\]$[^\[]*?^version = ""(\d+)\.", RegexOptions.Multiline)]
+    [GeneratedRegex(@"^\[workspace\.package\]$[^\[]*?^version = ""([^""]+)""", RegexOptions.Multiline)]
     private static partial Regex WorkspaceVersion();
 }

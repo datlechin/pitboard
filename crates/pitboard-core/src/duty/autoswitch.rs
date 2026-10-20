@@ -827,6 +827,7 @@ mod tests {
     fn row(label: &str, signed_in: bool, windows: Vec<Window>) -> Row {
         Row {
             provider: ProviderId::Claude,
+            spelling: crate::words::Spelling::Bare,
             label: Some(label.into()),
             email: format!("{label}@example.com"),
             id: label.into(),

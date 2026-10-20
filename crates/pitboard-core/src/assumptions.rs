@@ -57,6 +57,15 @@ impl Platform {
             Platform::Windows => "windows",
         }
     }
+
+    pub(crate) fn of(os: crate::host::Os) -> Platform {
+        use crate::host::Os;
+        match os {
+            Os::MacOs => Platform::MacOs,
+            Os::Linux => Platform::Linux,
+            Os::Windows => Platform::Windows,
+        }
+    }
 }
 
 /// What a register says of one fact on one system.

@@ -123,10 +123,12 @@ pub(crate) fn human(report: &Report) -> String {
     let now = report.now;
     if report.rows.is_empty() {
         // With nothing enrolled, only Claude Code was read.
-        let mut said = "No account is enrolled, and Pitboard found no Claude Code login.\n\
-                        Run `claude` and sign in, then `pitboard enroll <label>`.\n\
-                        For Codex, run `pitboard enroll codex/<label>`.\n"
-            .to_string();
+        let mut said = format!(
+            "No account is enrolled, and Pitboard found no Claude Code login.\n\
+             Run `{}` and sign in, then `pitboard enroll <label>`.\n\
+             For Codex, run `pitboard enroll codex/<label>`.\n",
+            report.spelling.of(ProviderId::Claude)
+        );
         if ProviderId::Desktop.supported_on(pitboard_core::host::OS) {
             said.push_str(
                 "For Claude Desktop, quit Claude, then run `pitboard enroll desktop/<label>`.\n",
@@ -474,6 +476,7 @@ mod tests {
             plan: None,
             read_at: None,
             reason: None,
+            spelling: words::Spelling::Bare,
         }
     }
 
@@ -491,6 +494,7 @@ mod tests {
                 email: "work@example.com".into(),
                 organization_uuid: "org".into(),
             }),
+            spelling: words::Spelling::Bare,
         }
     }
 
@@ -504,8 +508,21 @@ mod tests {
     fn an_empty_report_says_what_was_read_and_how_to_enrol_each_tool() {
         let text = plain(&human(&report(Vec::new())));
         assert!(
-            text.starts_with("No account is enrolled, and Pitboard found no Claude Code login.\n"),
+            text.starts_with(
+                "No account is enrolled, and Pitboard found no Claude Code login.\n\
+                 Run `claude` and sign in, then `pitboard enroll <label>`.\n"
+            ),
             "{text}"
+        );
+        // Windows PowerShell 5.1 refuses the `claude.ps1` beside npm's `claude.cmd`.
+        let npm = Report {
+            spelling: words::Spelling::Cmd,
+            ..report(Vec::new())
+        };
+        assert!(
+            plain(&human(&npm)).contains("\nRun `claude.cmd` and sign in, then"),
+            "{}",
+            human(&npm)
         );
         assert!(text.contains("`pitboard enroll codex/<label>`"), "{text}");
         assert_eq!(

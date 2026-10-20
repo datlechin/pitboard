@@ -390,13 +390,13 @@ internal sealed class Launched : IDisposable
 
     public static void RemoveWeb()
     {
-        if (!Web.IsValueCreated)
+        if (Web.IsValueCreated)
         {
-            return;
+            Remove(Web.Value.FullName);
         }
-
-        Retry.WhileFalse(() => Emptied(Web.Value.FullName), Shortly, TimeSpan.FromMilliseconds(250));
     }
+
+    public static void Remove(string folder) => Retry.WhileFalse(() => Emptied(folder), Shortly, TimeSpan.FromMilliseconds(250));
 
     // Chromium holds it while a browser process runs over the folder.
     private static bool LetGo(string folder)

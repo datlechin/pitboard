@@ -10,6 +10,7 @@
 //! codex runs in that package waits on the session's step 10.
 
 use crate::holder::{AppId, Holder, Location, Noun, Remedy};
+use crate::host::{OS, Os};
 
 pub(crate) const HOLDERS: &[Holder] = &[
     // `/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex`,
@@ -41,7 +42,7 @@ pub(crate) const HOLDERS: &[Holder] = &[
         kind: "app_server_daemon",
         noun: Noun::One("Codex's background app server"),
         location: Location::Within("app-server-daemon"),
-        remedy: Remedy::Run("codex app-server daemon restart"),
+        remedy: restart_the_app_server(OS),
     },
     // `<extensions>/openai.chatgpt-<version>-<platform>/bin/<platform>/codex`.
     Holder {
@@ -62,10 +63,18 @@ pub(crate) const HOLDERS: &[Holder] = &[
     },
 ];
 
+// Codex refuses to start its Windows daemon from an elevated terminal (codex_windows_app_server).
+const fn restart_the_app_server(os: Os) -> Remedy {
+    Remedy::Run {
+        arguments: "app-server daemon restart",
+        not_elevated: matches!(os, Os::Windows),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::holder::classify;
+    use crate::holder::{Holding, classify};
     use crate::host::Process;
     use std::path::PathBuf;
 
@@ -88,7 +97,7 @@ mod tests {
                 package: None,
             })
             .collect();
-        let holding = classify(&processes, HOLDERS);
+        let holding = classify(&processes, HOLDERS, "codex");
         let kinds: Vec<(&str, Vec<u32>)> = holding
             .iter()
             .map(|h| (h.holder.kind, h.pids.clone()))
@@ -133,7 +142,7 @@ mod tests {
                 package: package.map(str::to_owned),
             })
             .collect();
-        let holding = classify(&processes, HOLDERS);
+        let holding = classify(&processes, HOLDERS, "codex");
         let kinds: Vec<(&str, Vec<u32>)> = holding
             .iter()
             .map(|h| (h.holder.kind, h.pids.clone()))
@@ -154,6 +163,99 @@ mod tests {
                 name: "ChatGPT",
             }
         );
+    }
+
+    #[test]
+    fn the_app_server_is_restarted_from_a_terminal_codex_starts_it_from() {
+        let server = *HOLDERS
+            .iter()
+            .find(|h| h.kind == "app_server_daemon")
+            .expect("the app server");
+        assert_eq!(server.remedy, restart_the_app_server(OS));
+        let said = |os, program| {
+            let holding = [Holding {
+                holder: Holder {
+                    remedy: restart_the_app_server(os),
+                    ..server
+                },
+                pids: vec![7],
+                program,
+            }];
+            crate::holder::remedies(&holding, "to take a switch")
+        };
+        for os in [Os::MacOs, Os::Linux] {
+            assert_eq!(
+                said(os, "codex"),
+                "Run `codex app-server daemon restart` to take a switch."
+            );
+        }
+        assert_eq!(
+            said(Os::Windows, "codex"),
+            "From a terminal that is not elevated, run `codex app-server daemon restart` to take \
+             a switch."
+        );
+        assert_eq!(
+            said(Os::Windows, "codex.cmd"),
+            "From a terminal that is not elevated, run `codex.cmd app-server daemon restart` to \
+             take a switch."
+        );
+    }
+
+    #[test]
+    #[allow(
+        clippy::disallowed_methods,
+        reason = "a test lays out an npm prefix as `npm install -g` leaves one"
+    )]
+    fn the_app_server_is_restarted_by_the_codex_cmd_pitboard_found_on_windows() {
+        let scratch = tempfile::tempdir().expect("a scratch home");
+        let npm = scratch.path().join("npm");
+        let native = scratch.path().join("bin");
+        for (folder, name) in [
+            (&npm, "codex"),
+            (&npm, "codex.cmd"),
+            (&npm, "codex.ps1"),
+            (&native, "codex.exe"),
+        ] {
+            std::fs::create_dir_all(folder).expect("a folder");
+            std::fs::write(folder.join(name), "").expect("a program");
+            crate::host::fs::testing::make_runnable(&folder.join(name)).expect("runnable");
+        }
+        let mem = crate::host::memory::MemoryHost::new();
+        mem.runs_at(
+            "codex",
+            &["C:/Users/a/.codex/packages/app-server-daemon/current/bin/codex.exe"],
+        );
+        let home = scratch.path().join("home");
+        for (os, folder, run) in [
+            (Os::Windows, &npm, "codex.cmd"),
+            (Os::Windows, &native, "codex"),
+            (Os::MacOs, &npm, "codex"),
+        ] {
+            let env = crate::context::Environment::on(
+                os,
+                [
+                    ("HOME", home.as_os_str()),
+                    ("USERPROFILE", home.as_os_str()),
+                    ("CODEX_HOME", home.join("codex").as_os_str()),
+                    ("PATH", folder.as_os_str()),
+                ],
+            );
+            let ctx = crate::context::Context::for_command_line(&env)
+                .with_memory_stores(std::sync::Arc::clone(&mem));
+            let holding =
+                crate::holder::find(&ctx, crate::provider::ProviderId::Codex, "codex", HOLDERS)
+                    .expect("a process list");
+            let restart = format!("`{run} app-server daemon restart` to take a switch.");
+            assert_eq!(
+                crate::holder::remedies(&holding, "to take a switch"),
+                match OS {
+                    Os::Windows => format!("From a terminal that is not elevated, run {restart}"),
+                    Os::MacOs | Os::Linux => format!("Run {restart}"),
+                },
+                "{os:?} {}",
+                folder.display()
+            );
+        }
     }
 
     /// Every list ends with a kind that is anywhere, so no `codex` goes unsaid.

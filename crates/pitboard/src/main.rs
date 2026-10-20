@@ -81,10 +81,10 @@ const STOW: &str = if cfg!(windows) {
     "Put away the login Claude Code left in a file behind the keychain, then delete the file"
 };
 
-// The default folder, by the name a person knows it by on each system.
+// On Windows it is under the profile whatever `LOCALAPPDATA` says (`default_pitboard_home`).
 const RENEWS_THE_DEFAULT: &str = if cfg!(windows) {
-    "Renew as the daily renewal schedule does: %LOCALAPPDATA%\\Pitboard, whatever \
-     PITBOARD_HOME says"
+    "Renew as the daily renewal schedule does: %USERPROFILE%\\AppData\\Local\\Pitboard, \
+     whatever PITBOARD_HOME says"
 } else {
     "Renew as the daily renewal schedule does: ~/.pitboard, whatever PITBOARD_HOME says"
 };
@@ -1879,11 +1879,12 @@ mod tests {
             .map(ToString::to_string)
             .expect("its help");
         let folder = if cfg!(windows) {
-            r"%LOCALAPPDATA%\Pitboard"
+            r"%USERPROFILE%\AppData\Local\Pitboard"
         } else {
             "~/.pitboard"
         };
         assert!(scheduled.contains(folder), "{scheduled}");
+        assert!(!scheduled.contains("LOCALAPPDATA"), "{scheduled}");
     }
 
     // A file under `path`, as before; Task Scheduler's task under `task`, with no `path`.

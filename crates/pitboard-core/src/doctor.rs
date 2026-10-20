@@ -80,8 +80,8 @@ pub(crate) struct Facts {
     pub(crate) pending_parks: Vec<String>,
     /// Which Claude Code is installed here, read off disk.
     pub(crate) claude_version: Option<String>,
-    // Whether a `claude` program is found where Pitboard looks for one.
-    pub(crate) claude_program: bool,
+    // The `claude` program Pitboard finds where it looks for one.
+    pub(crate) claude_program: Option<PathBuf>,
     /// Every reason a session here would authenticate as something other than the stored
     /// login, read from settings files as well as from this process's environment.
     pub(crate) auth_overrides: Vec<crate::settings::Override>,
@@ -524,7 +524,7 @@ pub(crate) fn gather(ctx: &Context) -> Facts {
         daemon: daemon::read(ctx),
         pending_parks: crate::pending::outstanding(ctx, state.as_ref().ok()),
         claude_version: claude::installed_version(ctx),
-        claude_program: claude::program(ctx).is_some(),
+        claude_program: claude::program(ctx),
         auth_overrides: crate::settings::overrides(ctx),
         asking_held: crate::usage::budget::holds(ctx),
         in_use: state
@@ -755,7 +755,10 @@ fn codex_facts(ctx: &Context, state: Option<&State>) -> CodexFacts {
         backend_remedy: match backend {
             codex::Backend::File => String::new(),
             codex::Backend::Unknown => store.while_unknown().unwrap_or_default(),
-            _ => store.to_use_the_file(),
+            _ => store.to_use_the_file(
+                words::spelling(ctx.os, ProviderId::Codex, program.as_deref())
+                    .of(ProviderId::Codex),
+            ),
         },
         auth_access: crate::host::fs::access(&auth_file),
         // Read only from the default store. A keychain item Codex created for itself
@@ -895,7 +898,7 @@ fn running_codex(ctx: &Context) -> Option<Vec<crate::holder::Holding>> {
     else {
         return Some(Vec::new());
     };
-    crate::holder::find(ctx, program, holders)
+    crate::holder::find(ctx, ProviderId::Codex, program, holders)
 }
 
 /// The check that fails where this process runs as root or under sudo, or elevated on
@@ -990,11 +993,16 @@ fn judge_windows_settings(facts: &Facts) -> Vec<Check> {
     let mut checks = Vec::new();
     let settings = facts.windows_settings.clone().unwrap_or_default();
     if !settings.wsl.is_empty() {
+        // The ChatGPT app's WSL mode can hand a Linux codex this home (H9), not yet measured.
         checks.push(Check {
-            advice: "Claude Code and Codex installed there are installs of their own, with logins \
-                     of their own, which Pitboard on Windows does not switch. WSL 2 runs them in a \
-                     virtual machine, so Windows' list of processes does not show them running."
-                .into(),
+            advice: format!(
+                "Claude Code and Codex installed there are installs of their own, which Pitboard \
+                 on Windows does not switch. Claude Code there keeps its own login. Where Codex \
+                 there uses {}, Codex's home here, a switch here changes its login too. WSL 2 \
+                 runs them in a virtual machine, so Windows' list of processes does not show \
+                 them running.",
+                facts.codex.home.display()
+            ),
             ..ok(
                 "wsl",
                 "WSL",
@@ -1254,11 +1262,12 @@ fn running(said: &[String]) -> String {
 }
 
 // Claude Code writes its config and its account once it has run.
-fn run_claude_once(facts: &Facts) -> &'static str {
-    if facts.claude_program {
-        "Run `claude` once."
-    } else {
-        "Install Claude Code, then run `claude` once."
+fn run_claude_once(facts: &Facts) -> String {
+    let found = facts.claude_program.as_deref();
+    let program = words::spelling(facts.os, ProviderId::Claude, found).of(ProviderId::Claude);
+    match found {
+        Some(_) => format!("Run `{program}` once."),
+        None => format!("Install Claude Code, then run `{program}` once."),
     }
 }
 
@@ -1312,7 +1321,7 @@ pub(crate) fn evaluate_with(facts: &Facts, moment: &dyn Fn(i64, i64) -> String) 
             ),
         ),
         // Claude Code writes it on its first run, and a switch does without it.
-        Err(Error::ClaudeConfigMissing { path }) if !facts.claude_program => warn(
+        Err(Error::ClaudeConfigMissing { path, .. }) if facts.claude_program.is_none() => warn(
             "config_file",
             "config file",
             format!(
@@ -2022,12 +2031,15 @@ fn judge_credential(facts: &Facts) -> Check {
             ),
         ),
         // `claude auth login` writes nothing over it (`credman_move_lost_a_piece`).
-        Err(store::Error::Broken(why)) => fail(
+        Err(store::Error::Broken { why, spelling }) => fail(
             "credential",
             "credential",
             format!("{why}, which Claude Code cannot read either"),
-            "Run `claude auth logout`, which deletes it, then sign in to Claude Code again. \
-             Signing in before that leaves it as it is.",
+            format!(
+                "Run `{} auth logout`, which deletes it, then sign in to Claude Code again. \
+                 Signing in before that leaves it as it is.",
+                spelling.of(ProviderId::Claude)
+            ),
         ),
         Err(e) => fail(
             "credential",
@@ -2538,7 +2550,7 @@ fn judge_auth(facts: &Facts) -> Check {
 /// be noise on every machine. What is worth a warning is an assumption that has actually
 /// stopped holding, which is a probe's job and not a version number's.
 fn judge_claude_version(facts: &Facts) -> Check {
-    let verified = crate::provider::claude::assumptions::VERIFIED_AGAINST;
+    let verified = read_from(ProviderId::Claude, facts.os);
     match facts.claude_version.as_deref() {
         None => ok(
             "claude_version",
@@ -2556,6 +2568,10 @@ fn judge_claude_version(facts: &Facts) -> Check {
             format!("{installed} installed; Pitboard's facts were read from {verified}"),
         ),
     }
+}
+
+fn read_from(tool: ProviderId, os: Os) -> &'static str {
+    crate::assumptions::verified_against(tool, crate::assumptions::Platform::of(os))
 }
 
 // A path to pitboard.exe, or a script of the person's own, needs no PATH of Pitboard's.
@@ -2900,6 +2916,8 @@ fn judge_codex(
 ) -> Vec<Check> {
     let mut checks = Vec::new();
     let enrolled = facts.enrolled > 0 || !parks.is_empty();
+    let program =
+        words::spelling(os, ProviderId::Codex, facts.program.as_deref()).of(ProviderId::Codex);
     let broken = |code, name: &str, detail: String, advice: String| {
         if enrolled {
             fail(code, name, detail, advice)
@@ -2978,8 +2996,10 @@ fn judge_codex(
                     "{} is absent: nothing is signed in to Codex",
                     facts.auth_file.display()
                 ),
-                "Put one of your enrolled accounts in use with `pitboard use \
-                 codex/<label>`, or sign in with `codex login`.",
+                format!(
+                    "Put one of your enrolled accounts in use with `pitboard use \
+                     codex/<label>`, or sign in with `{program} login`."
+                ),
             ),
             None => ok(
                 "codex_auth_file",
@@ -3037,10 +3057,12 @@ fn judge_codex(
                 "codex_login",
                 "Codex login",
                 why.clone(),
-                "Pitboard parks and switches Codex's ChatGPT sign-ins, so `pitboard use \
-                 codex/<label>` refuses while Codex is signed in this way rather than replace \
-                 a login it has nowhere to park. `codex login` signs in with a ChatGPT \
-                 account.",
+                format!(
+                    "Pitboard parks and switches Codex's ChatGPT sign-ins, so `pitboard use \
+                     codex/<label>` refuses while Codex is signed in this way rather than \
+                     replace a login it has nowhere to park. `{program} login` signs in with a \
+                     ChatGPT account."
+                ),
             )),
             Err(CodexLoginTrouble::NotAnAccount(why)) => {
                 checks.push(ok("codex_login", "Codex login", why.clone()));
@@ -3049,9 +3071,10 @@ fn judge_codex(
                 "codex_login",
                 "Codex login",
                 format!("it cannot be used: {why}"),
-                "Pitboard will not park or switch a Codex login it cannot read as one \
-                 account's. Signing in with `codex` again writes a fresh one."
-                    .into(),
+                format!(
+                    "Pitboard will not park or switch a Codex login it cannot read as one \
+                     account's. Signing in with `{program}` again writes a fresh one."
+                ),
             )),
             Err(CodexLoginTrouble::NoHome(path)) => checks.push(broken(
                 "codex_login",
@@ -3091,7 +3114,7 @@ fn judge_codex(
     checks.extend(parks.iter().map(|p| judge_park(p, now, moment)));
     checks.extend(parks.iter().filter_map(|p| judge_dormant(p, now)));
 
-    checks.push(judge_codex_version(facts));
+    checks.push(judge_codex_version(os, facts));
     checks.push(judge_codex_running(facts.running.as_deref()));
     checks
 }
@@ -3118,8 +3141,8 @@ fn judge_codex_running(running: Option<&[crate::holder::Holding]>) -> Check {
 
 /// Which Codex is installed, against which one Pitboard's facts were read. Stated rather
 /// than warned about, for the reason Claude Code's is.
-fn judge_codex_version(facts: &CodexFacts) -> Check {
-    let verified = crate::provider::codex::assumptions::VERIFIED_AGAINST;
+fn judge_codex_version(os: Os, facts: &CodexFacts) -> Check {
+    let verified = read_from(ProviderId::Codex, os);
     ok(
         "codex_version",
         "Codex build",
@@ -4617,7 +4640,7 @@ mod tests {
             daemon: None,
             pending_parks: Vec::new(),
             claude_version: Some(crate::provider::claude::assumptions::VERIFIED_AGAINST.into()),
-            claude_program: true,
+            claude_program: Some(PathBuf::from("/opt/homebrew/bin/claude")),
             auth_overrides: Vec::new(),
             asking_held: Vec::new(),
             state: Ok(State::default()),
@@ -7082,6 +7105,13 @@ mod tests {
             "{}",
             file.advice
         );
+
+        // Windows PowerShell 5.1 refuses the `codex.ps1` beside npm's `codex.cmd`.
+        f.os = Os::Windows;
+        f.codex.program = Some(PathBuf::from("C:/Users/x/AppData/Roaming/npm/codex.cmd"));
+        let checks = evaluate(&f);
+        let file = check(&checks, "codex_auth_file");
+        assert!(file.advice.contains("`codex.cmd login`"), "{}", file.advice);
     }
 
     // The session's This PC listed no Codex section for a Codex installed with npm and never
@@ -7485,6 +7515,41 @@ mod tests {
         assert!(version.starts_with("not found here"), "{version}");
     }
 
+    // Windows' facts are read from builds of their own, which its version lines name.
+    #[test]
+    fn a_build_is_set_beside_the_one_read_for_this_system() {
+        use crate::assumptions::{Platform, verified_against};
+        for os in [Os::MacOs, Os::Linux, Os::Windows] {
+            let claude = verified_against(ProviderId::Claude, Platform::of(os));
+            let mut f = facts();
+            f.os = os;
+            f.claude_version = None;
+            assert_eq!(
+                check(&evaluate(&f), "claude_version").detail,
+                format!("not found here; Pitboard's facts were read from {claude}"),
+                "{os:?}"
+            );
+            f.claude_version = Some(claude.into());
+            assert_eq!(
+                check(&evaluate(&f), "claude_version").detail,
+                format!("{claude}, which is what Pitboard's facts were read from"),
+                "{os:?}"
+            );
+
+            let codex = verified_against(ProviderId::Codex, Platform::of(os));
+            let installed = CodexFacts {
+                version: Some(codex.into()),
+                ..with_codex()
+            };
+            let checks = judge_codex(os, None, &installed, &[], NOW, &time::moment);
+            assert_eq!(
+                check(&checks, "codex_version").detail,
+                format!("{codex}, which is what Pitboard's facts were read from"),
+                "{os:?}"
+            );
+        }
+    }
+
     /// Each way Codex is installed, laid out in a scratch directory, and a shim that names
     /// nothing. Only the two directories above the program are looked at, names first, so a
     /// standalone install is named without opening any file inside it.
@@ -7645,7 +7710,11 @@ mod tests {
         };
         let holders = crate::provider::codex::holders::HOLDERS;
         let mut codex = with_codex();
-        codex.running = Some(classify(&[at(4321, "codex"), at(99, "codex")], holders));
+        codex.running = Some(classify(
+            &[at(4321, "codex"), at(99, "codex")],
+            holders,
+            "codex",
+        ));
         let checks = codex_checks(&codex);
         let running = check(&checks, "codex_running");
         assert_eq!(running.level, Level::Ok);
@@ -7667,7 +7736,7 @@ mod tests {
         );
 
         let many: Vec<Process> = (1..=23).map(|pid| at(pid, "codex")).collect();
-        codex.running = Some(classify(&many, holders));
+        codex.running = Some(classify(&many, holders, "codex"));
         let detail = check(&codex_checks(&codex), "codex_running").detail.clone();
         assert!(detail.starts_with("23 `codex` sessions"), "{detail}");
         assert!(detail.contains("1, 2, 3 and 20 more"), "{detail}");
@@ -7679,6 +7748,7 @@ mod tests {
                  Contents/MacOS/codex",
             )],
             holders,
+            "codex",
         ));
         let checks = codex_checks(&codex);
         let app = check(&checks, "codex_running");
@@ -8080,6 +8150,7 @@ mod tests {
             admin_approval: Some(true),
         });
         facts.pitboards = vec![copy("a"), copy("b"), copy("c")];
+        facts.codex.home = PathBuf::from(r"C:\Users\x\.codex");
         assert_eq!(
             said(&facts),
             [
@@ -8087,9 +8158,11 @@ mod tests {
                     "wsl",
                     Level::Ok,
                     "WSL holds Ubuntu and Debian".to_string(),
-                    "Claude Code and Codex installed there are installs of their own, with logins \
-                     of their own, which Pitboard on Windows does not switch. WSL 2 runs them in \
-                     a virtual machine, so Windows' list of processes does not show them running."
+                    "Claude Code and Codex installed there are installs of their own, which \
+                     Pitboard on Windows does not switch. Claude Code there keeps its own login. \
+                     Where Codex there uses C:\\Users\\x\\.codex, Codex's home here, a switch here \
+                     changes its login too. WSL 2 runs them in a virtual machine, so Windows' list \
+                     of processes does not show them running."
                         .to_string()
                 ),
                 (
@@ -8533,9 +8606,10 @@ mod tests {
     #[test]
     fn a_machine_without_claude_code_is_told_to_install_it() {
         let mut facts = facts();
-        facts.claude_program = false;
+        facts.claude_program = None;
         facts.config = Err(Error::ClaudeConfigMissing {
             path: PathBuf::from("/home/x/.claude.json"),
+            spelling: words::Spelling::Bare,
         });
         facts.config_account = None;
         let checks = evaluate(&facts);
@@ -8559,25 +8633,48 @@ mod tests {
         );
     }
 
+    // Windows PowerShell 5.1 refuses the `claude.ps1` beside npm's `claude.cmd`.
     #[test]
     fn a_machine_where_claude_code_never_ran_is_told_to_run_it() {
-        let mut facts = facts();
-        let missing = Error::ClaudeConfigMissing {
-            path: PathBuf::from("/home/x/.claude.json"),
-        };
-        let detail = missing.to_string();
-        facts.config = Err(missing);
-        facts.config_account = None;
-        let checks = evaluate(&facts);
-        let said = |code: &str| {
-            let check = checks.iter().find(|c| c.code == code).expect(code);
-            (check.detail.clone(), check.advice.clone())
-        };
-        assert_eq!(said("config_file"), (detail, "Run `claude` once.".into()));
-        assert_eq!(
-            said("identity").1,
-            "It writes this after its first successful call. Run `claude` once."
-        );
+        for (os, found, spelling) in [
+            (Os::MacOs, "/opt/homebrew/bin/claude", words::Spelling::Bare),
+            (
+                Os::Windows,
+                "C:/Users/x/.local/bin/claude.exe",
+                words::Spelling::Bare,
+            ),
+            (
+                Os::Windows,
+                "C:/Users/x/AppData/Roaming/npm/claude.cmd",
+                words::Spelling::Cmd,
+            ),
+        ] {
+            let program = spelling.of(ProviderId::Claude);
+            let mut facts = facts();
+            facts.os = os;
+            facts.claude_program = Some(PathBuf::from(found));
+            let missing = Error::ClaudeConfigMissing {
+                path: PathBuf::from("/home/x/.claude.json"),
+                spelling,
+            };
+            let detail = missing.to_string();
+            facts.config = Err(missing);
+            facts.config_account = None;
+            let checks = evaluate(&facts);
+            let said = |code: &str| {
+                let check = checks.iter().find(|c| c.code == code).expect(code);
+                (check.detail.clone(), check.advice.clone())
+            };
+            assert_eq!(
+                said("config_file"),
+                (detail, format!("Run `{program}` once.")),
+                "{found}"
+            );
+            assert_eq!(
+                said("identity").1,
+                format!("It writes this after its first successful call. Run `{program}` once.")
+            );
+        }
     }
 
     // The session's fresh PC read "1 broken: do not switch accounts until fixed." for this
@@ -8587,12 +8684,13 @@ mod tests {
         let mut facts = facts();
         facts.config = Err(Error::ClaudeConfigMissing {
             path: PathBuf::from("/home/x/.claude.json"),
+            spelling: words::Spelling::Bare,
         });
         facts.config_account = None;
         facts.in_use = None;
         facts.credential = Ok(None);
         for installed in [true, false] {
-            facts.claude_program = installed;
+            facts.claude_program = installed.then(|| PathBuf::from("/opt/homebrew/bin/claude"));
             let checks = evaluate(&facts);
             assert_eq!(
                 check(&checks, "config_file").level,
@@ -8640,6 +8738,7 @@ mod tests {
             facts.claude_present = false;
             facts.config = Err(Error::ClaudeConfigMissing {
                 path: PathBuf::from("/nowhere/.claude.json"),
+                spelling: words::Spelling::Bare,
             });
             facts.codex.present = true;
             let checks = evaluate(&facts);
@@ -8833,26 +8932,39 @@ mod tests {
     // into Credential Manager, which a fresh session read as "Not logged in".
     #[test]
     fn pieces_nobody_can_join_are_said_to_be_unreadable_to_claude_code_too() {
-        let mut facts = facts();
-        facts.os = Os::Windows;
-        facts.backend = Ok(store::Backend::CredentialManager);
-        facts.credential = Err(store::Error::Broken(
-            "`Claude Code-credentials/claude-code-user` lacks piece #2 of the 3 its manifest \
-             names"
-                .into(),
-        ));
-        let check = judge_credential(&facts);
-        assert_eq!(check.level, Level::Fail);
-        assert_eq!(
-            check.detail,
-            "`Claude Code-credentials/claude-code-user` lacks piece #2 of the 3 its manifest \
-             names, which Claude Code cannot read either"
-        );
-        assert!(
-            check.advice.starts_with("Run `claude auth logout`"),
-            "{}",
-            check.advice
-        );
+        for (found, spelling) in [
+            ("C:/Users/x/.local/bin/claude.exe", words::Spelling::Bare),
+            (
+                "C:/Users/x/AppData/Roaming/npm/claude.cmd",
+                words::Spelling::Cmd,
+            ),
+        ] {
+            let program = spelling.of(ProviderId::Claude);
+            let mut facts = facts();
+            facts.os = Os::Windows;
+            facts.claude_program = Some(PathBuf::from(found));
+            facts.backend = Ok(store::Backend::CredentialManager);
+            facts.credential = Err(store::Error::Broken {
+                why: "`Claude Code-credentials/claude-code-user` lacks piece #2 of the 3 its \
+                      manifest names"
+                    .into(),
+                spelling,
+            });
+            let check = judge_credential(&facts);
+            assert_eq!(check.level, Level::Fail);
+            assert_eq!(
+                check.detail,
+                "`Claude Code-credentials/claude-code-user` lacks piece #2 of the 3 its manifest \
+                 names, which Claude Code cannot read either"
+            );
+            assert!(
+                check
+                    .advice
+                    .starts_with(&format!("Run `{program} auth logout`")),
+                "{}",
+                check.advice
+            );
+        }
     }
 
     /// What `/logout` leaves is nobody signed in, not a login whose shape moved.

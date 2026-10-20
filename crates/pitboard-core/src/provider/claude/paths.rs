@@ -338,7 +338,10 @@ pub(crate) fn load_config(ctx: &Context) -> Result<Value> {
     let path = config_file(ctx);
     let raw = std::fs::read_to_string(&path).map_err(|source| {
         if source.kind() == std::io::ErrorKind::NotFound {
-            Error::ClaudeConfigMissing { path: path.clone() }
+            Error::ClaudeConfigMissing {
+                path: path.clone(),
+                spelling: crate::words::spelled(ctx, crate::provider::ProviderId::Claude),
+            }
         } else {
             Error::ClaudeConfigUnreadable {
                 path: path.clone(),

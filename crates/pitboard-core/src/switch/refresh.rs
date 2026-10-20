@@ -304,7 +304,7 @@ fn save_left(
             Ok(())
         }
         Err(Stop::Failed(error)) => Err(error),
-        Err(Stop::Unrenewed(error)) => Err(super::unidentified(left.tool, error)),
+        Err(Stop::Unrenewed(error)) => Err(super::unidentified(ctx, left.tool, error)),
     }
 }
 

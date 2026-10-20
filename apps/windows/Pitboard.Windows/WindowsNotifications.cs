@@ -90,7 +90,15 @@ public sealed class WindowsNotifications(Build build, Func<IAppNotifications> sy
             registered = _registered;
         }
 
-        registered?.Show(Notification(notice));
+        try
+        {
+            registered?.Show(Notification(notice));
+        }
+        catch (Exception refused)
+        {
+            // This PC shows the reason, and a message can name a path.
+            throw new PlatformException.Failed($"{refused.GetType().Name} 0x{refused.HResult:X8}");
+        }
     }
 
     // At each settings visit, since the person turns them off and on in Settings while Pitboard runs.

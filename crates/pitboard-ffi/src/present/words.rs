@@ -690,6 +690,10 @@ pub(crate) fn checked_at(clock: &str) -> String {
     format!("Checked at {clock}")
 }
 
+pub(crate) fn not_posted(title: &str, clock: &str, reason: &str) -> String {
+    format!("“{title}” not posted at {clock} · {reason}")
+}
+
 pub(crate) const NO_USAGE_READ: &str = "No usage read";
 
 // Why the app it asked to quit stopped a change: "… Quit it, then switch again."
@@ -1055,6 +1059,7 @@ pub(crate) fn in_app_refusal(os: Os, error: &Error) -> Option<String> {
             login: Unidentified::Parked { label },
             cause,
             detail,
+            ..
         } if !cause.worth_retrying() && *cause != Cause::AnswerNotUnderstood => format!(
             "Pitboard couldn’t confirm with {} whose login is parked for {1} ({detail}), so \
              nothing has changed. Choose Sign In Again… on {1}’s row.",
@@ -2192,6 +2197,7 @@ mod tests {
             },
             cause,
             detail: "Anthropic answered 400".into(),
+            spelling: pitboard_core::words::Spelling::Bare,
         };
         assert_eq!(
             in_app_refusal(Os::MacOs, &untold(Cause::Refused)).as_deref(),
@@ -2457,6 +2463,7 @@ mod tests {
                 from: typed("work"),
                 to: typed("work"),
                 detail: "the jar is gone".into(),
+                spelling: pitboard_core::words::Spelling::Bare,
             },
             Error::RecoveryElsewhere {
                 tool,
@@ -2471,6 +2478,7 @@ mod tests {
             Error::LiveCredentialAbsent {
                 tool,
                 label: Some(typed("travel")),
+                spelling: pitboard_core::words::Spelling::Bare,
             },
             Error::LiveAccountNotEnrolled {
                 tool,

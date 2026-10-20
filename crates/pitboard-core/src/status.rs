@@ -21,6 +21,7 @@ use crate::state::{Key, Park, State};
 use crate::switch::identify;
 use crate::usage::{Snapshot, Source};
 use crate::usage::{budget, readings};
+use crate::words::Spelling;
 use serde_json::Value;
 use std::collections::{BTreeMap, HashMap};
 
@@ -125,17 +126,18 @@ impl Stale {
     /// Named for the tool the row belongs to. "Anthropic could not be reached" said about a
     /// Codex account sends somebody to check the wrong service, and "`claude` renews it"
     /// said about a Codex session names a program that has nothing to do with it.
-    pub(crate) fn explanation_for(self, provider: ProviderId) -> Option<&'static str> {
+    pub(crate) fn explanation_for(self, provider: ProviderId, program: &str) -> Option<String> {
         // A sentence per tool rather than one assembled at run time, so every word a person
         // reads is here to be read, and Claude Code's are exactly what they always were.
-        let per_tool = |claude: &'static str, codex: &'static str| match provider {
-            ProviderId::Claude => Some(claude),
-            ProviderId::Codex => Some(codex),
+        let per_tool = |claude: &str, codex: &str| match provider {
+            ProviderId::Claude => Some(claude.to_owned()),
+            ProviderId::Codex => Some(codex.to_owned()),
             // No service is asked for it, so no service's answer is said of it.
             ProviderId::Desktop => None,
         };
+        let said = |words: &str| Some(words.to_owned());
         match self {
-            Stale::NothingSignedIn => Some("nothing is signed in"),
+            Stale::NothingSignedIn => said("nothing is signed in"),
             Stale::LoginUnreadable => per_tool(
                 "Claude Code's login could not be read; run `pitboard doctor`",
                 "Codex's login could not be read; run `pitboard doctor`",
@@ -145,11 +147,11 @@ impl Stale {
                 "Codex's login is not one Pitboard can park or switch; run `pitboard doctor`",
             ),
             Stale::SessionExpired => per_tool(
-                "Claude Code's session has expired; `claude` renews it",
-                "Codex's session has expired; `codex` renews it",
+                &format!("Claude Code's session has expired; `{program}` renews it"),
+                &format!("Codex's session has expired; `{program}` renews it"),
             ),
             Stale::ParkedAccessExpired | Stale::NothingParked => None,
-            Stale::LoginReplaced => Some(match provider {
+            Stale::LoginReplaced => said(match provider {
                 ProviderId::Claude | ProviderId::Codex => {
                     "its login was replaced by a sign-in outside Pitboard; sign in again"
                 }
@@ -157,7 +159,7 @@ impl Stale {
                     "its login was signed out or replaced in Claude; sign in again"
                 }
             }),
-            Stale::ParkUnreadable => Some("its parked login cannot be read; run `pitboard doctor`"),
+            Stale::ParkUnreadable => said("its parked login cannot be read; run `pitboard doctor`"),
             Stale::RateLimited => per_tool(
                 "Anthropic is rate limiting usage checks",
                 "OpenAI is rate limiting usage checks",
@@ -182,16 +184,16 @@ impl Stale {
                 "Anthropic's answer was not understood",
                 "OpenAI's answer was not understood",
             ),
-            Stale::LoginRefused => Some("its parked login is no longer accepted; sign in again"),
+            Stale::LoginRefused => said("its parked login is no longer accepted; sign in again"),
             // Not worth a word: it is the ordinary state of a number that is
             // already as true as asking again would make it.
             Stale::AskedRecently => None,
-            Stale::Interrupted => Some("the check did not finish"),
+            Stale::Interrupted => said("the check did not finish"),
             Stale::NotAsked => per_tool(
                 "read without asking Anthropic",
                 "read without asking OpenAI",
             ),
-            Stale::NoUsage => Some("Pitboard reads no usage for Claude Desktop"),
+            Stale::NoUsage => said("Pitboard reads no usage for Claude Desktop"),
         }
     }
 }
@@ -226,6 +228,8 @@ pub struct Row {
     /// Why the login on an [unplaced](Row::unplaced) row is pinned on no account, as its
     /// tool's store or service said it.
     pub reason: Option<String>,
+    // How a hint names its tool's program here.
+    pub spelling: Spelling,
 }
 
 impl Row {
@@ -267,12 +271,13 @@ impl Row {
             ));
         }
         match (self.stale, self.provider) {
-            (Some(Stale::LoginRefused), ProviderId::Claude) if self.signed_in => Some(
-                "Claude Code's login is no longer accepted; run `claude` and sign in again".into(),
-            ),
-            (stale, provider) => stale
-                .and_then(|stale| stale.explanation_for(provider))
-                .map(str::to_owned),
+            (Some(Stale::LoginRefused), ProviderId::Claude) if self.signed_in => Some(format!(
+                "Claude Code's login is no longer accepted; run `{}` and sign in again",
+                self.spelling.of(ProviderId::Claude)
+            )),
+            (stale, provider) => {
+                stale.and_then(|stale| stale.explanation_for(provider, self.spelling.of(provider)))
+            }
         }
     }
 
@@ -312,6 +317,8 @@ pub struct Report {
     pub slot: Slot,
     // Each sign-in inside an app that is waited for, with an account parked for it.
     pub awaiting: Vec<SignInAwaited>,
+    // How a hint names the default tool's program here. Every row says its own.
+    pub spelling: Spelling,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -481,22 +488,42 @@ pub(crate) fn gather_offline(ctx: &Context, state: &State) -> Report {
         plans: BTreeMap::new(),
     };
     let remembered = readings::load(ctx);
-    Report {
-        now: ctx.now(),
-        slot: slot_of(ctx),
-        awaiting: awaiting(state),
-        rows: assemble(
+    let (rows, spelling) = with_spellings(
+        ctx,
+        assemble(
             state,
             &facts,
             |uuid| remembered.get(uuid).cloned(),
             ctx.now(),
         ),
+    );
+    Report {
+        now: ctx.now(),
+        slot: slot_of(ctx),
+        awaiting: awaiting(state),
+        rows,
         signed_in: known
             .get(&crate::label::DEFAULT)
             .cloned()
             .flatten()
             .ok_or_else(|| "not asked".into()),
+        spelling,
     }
+}
+
+// Once a tool, and the default's for the report, since on Windows each is a search of `PATH`.
+fn with_spellings(ctx: &Context, mut rows: Vec<Row>) -> (Vec<Row>, Spelling) {
+    let mut spelled: BTreeMap<ProviderId, Spelling> = BTreeMap::new();
+    let mut spelling = |tool| {
+        *spelled
+            .entry(tool)
+            .or_insert_with(|| crate::words::spelled(ctx, tool))
+    };
+    for row in &mut rows {
+        row.spelling = spelling(row.provider);
+    }
+    let default = spelling(crate::label::DEFAULT);
+    (rows, default)
 }
 
 /// What one account's request came to: the reading, and what the budget should learn from
@@ -928,7 +955,10 @@ pub(crate) fn report(ctx: &Context, permit: Permit, state: &State, answers: Answ
             .collect(),
     };
     let remembered = readings::load(ctx);
-    let rows = assemble(state, &facts, |uuid| remembered.get(uuid).cloned(), now);
+    let (rows, spelling) = with_spellings(
+        ctx,
+        assemble(state, &facts, |uuid| remembered.get(uuid).cloned(), now),
+    );
     crate::home::remove_retired(ctx, permit);
     readings::answered(
         ctx,
@@ -957,6 +987,7 @@ pub(crate) fn report(ctx: &Context, permit: Permit, state: &State, answers: Answ
             Some(Err(why)) => Err(why),
             None => Err("nothing is signed in".into()),
         },
+        spelling,
     }
 }
 
@@ -1064,6 +1095,7 @@ fn assemble(
                 plan,
                 read_at: read_at(state, which, signed_in),
                 reason: None,
+                spelling: Spelling::Bare,
             }
         })
         .collect();
@@ -1098,6 +1130,7 @@ fn assemble(
                 plan,
                 read_at: read_at(state, which, true),
                 reason: None,
+                spelling: Spelling::Bare,
             });
             continue;
         }
@@ -1124,6 +1157,7 @@ fn assemble(
                 plan: None,
                 read_at: None,
                 reason: live.signed_in.clone().and_then(Result::err),
+                spelling: Spelling::Bare,
             });
         }
     }
@@ -1849,11 +1883,20 @@ mod tests {
         };
         for stale in EVERY_STALE {
             assert_eq!(
-                stale.explanation_for(ProviderId::Claude),
+                stale
+                    .explanation_for(ProviderId::Claude, "claude")
+                    .as_deref(),
                 before(stale),
                 "{stale:?}"
             );
         }
+        // npm's `claude.cmd`, where Pitboard found it on Windows.
+        assert_eq!(
+            Stale::SessionExpired
+                .explanation_for(ProviderId::Claude, "claude.cmd")
+                .as_deref(),
+            Some("Claude Code's session has expired; `claude.cmd` renews it")
+        );
     }
 
     /// "Anthropic could not be reached" said about a Codex account sends somebody to check
@@ -1866,8 +1909,12 @@ mod tests {
             if stale == Stale::NoUsage {
                 continue;
             }
-            let Some(said) = stale.explanation_for(ProviderId::Codex) else {
-                assert_eq!(stale.explanation_for(ProviderId::Claude), None, "{stale:?}");
+            let Some(said) = stale.explanation_for(ProviderId::Codex, "codex") else {
+                assert_eq!(
+                    stale.explanation_for(ProviderId::Claude, "claude"),
+                    None,
+                    "{stale:?}"
+                );
                 continue;
             };
             for other in ["Anthropic", "Claude", "claude"] {
@@ -1875,13 +1922,19 @@ mod tests {
             }
         }
         assert_eq!(
-            Stale::Unreachable.explanation_for(ProviderId::Codex),
+            Stale::Unreachable
+                .explanation_for(ProviderId::Codex, "codex")
+                .as_deref(),
             Some("OpenAI could not be reached")
         );
-        assert_eq!(
-            Stale::SessionExpired.explanation_for(ProviderId::Codex),
-            Some("Codex's session has expired; `codex` renews it")
-        );
+        for program in ["codex", "codex.cmd"] {
+            assert_eq!(
+                Stale::SessionExpired.explanation_for(ProviderId::Codex, program),
+                Some(format!(
+                    "Codex's session has expired; `{program}` renews it"
+                ))
+            );
+        }
 
         // And a row asks in its own tool's words without the caller having to know which.
         let mut codex = codex_account("work", "work-acc");
@@ -2778,6 +2831,7 @@ mod tests {
             plan: None,
             read_at: None,
             reason: None,
+            spelling: Spelling::Bare,
         };
         assert!(row.unplaced());
         row.stale = Some(Stale::LoginUnusable);
@@ -2789,6 +2843,61 @@ mod tests {
         row.label = Some("work".into());
         row.stale = Some(Stale::LoginUnreadable);
         assert!(!row.unplaced(), "an account");
+    }
+
+    #[test]
+    #[allow(
+        clippy::disallowed_methods,
+        reason = "a test lays out an npm prefix as `npm install -g` leaves one"
+    )]
+    fn every_row_of_a_tool_names_its_program_as_this_system_runs_it() {
+        let scratch = tempfile::tempdir().expect("a scratch home");
+        let npm = scratch.path().join("npm");
+        let native = scratch.path().join("bin");
+        for (folder, name) in [(&npm, "claude.cmd"), (&native, "codex.exe")] {
+            std::fs::create_dir_all(folder).expect("a folder");
+            std::fs::write(folder.join(name), "").expect("a program");
+            crate::host::fs::testing::make_runnable(&folder.join(name)).expect("runnable");
+        }
+        let home = scratch.path().join("home");
+        let search = std::env::join_paths([&npm, &native]).expect("a search path");
+        let env = crate::context::Environment::on(
+            crate::host::Os::Windows,
+            [
+                ("HOME", home.as_os_str()),
+                ("USERPROFILE", home.as_os_str()),
+                ("PATH", search.as_os_str()),
+            ],
+        );
+        let ctx = Context::for_command_line(&env);
+        let row = |provider| Row {
+            provider,
+            label: None,
+            email: String::new(),
+            id: String::new(),
+            account_uuid: String::new(),
+            organization_uuid: None,
+            signed_in: false,
+            parked: None,
+            usage: None,
+            stale: None,
+            plan: None,
+            read_at: None,
+            reason: None,
+            spelling: Spelling::Bare,
+        };
+        let (rows, default) = with_spellings(
+            &ctx,
+            vec![
+                row(ProviderId::Claude),
+                row(ProviderId::Codex),
+                row(ProviderId::Claude),
+            ],
+        );
+        let spelled: Vec<Spelling> = rows.iter().map(|row| row.spelling).collect();
+        assert_eq!(spelled, [Spelling::Cmd, Spelling::Bare, Spelling::Cmd]);
+        assert_eq!(default, Spelling::Cmd);
+        assert_eq!(with_spellings(&ctx, Vec::new()).1, Spelling::Cmd);
     }
 
     /// A machine of this test's own: stores in memory, services from a script, a clock

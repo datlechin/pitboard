@@ -103,6 +103,12 @@ public sealed class WebSession
             return;
         }
 
+        // A window back in sight is offered the page it still shows.
+        if (Failure is null && load.Url == _shown)
+        {
+            return;
+        }
+
         if (Failure is not null)
         {
             Failure = null;

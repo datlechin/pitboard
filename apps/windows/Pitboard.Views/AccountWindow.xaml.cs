@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
@@ -6,6 +7,8 @@ using Microsoft.Web.WebView2.Core;
 using Pitboard.Core;
 using Pitboard.Windows;
 using Windows.Graphics;
+using Windows.System;
+using Windows.UI.Core;
 using WinRT.Interop;
 
 namespace Pitboard.Views;
@@ -89,7 +92,6 @@ public sealed partial class AccountWindow : Window, ISessionWindow
     // A window closed or out of sight meanwhile answers no.
     public Task<bool> Confirm(Question question) => _dialogs.Confirm(question);
 
-    // Back in sight, with the page it kept.
     public void Return()
     {
         Away = false;
@@ -350,9 +352,7 @@ public sealed partial class AccountWindow : Window, ISessionWindow
         }
     }
 
-    // The person's close while a download of the window is under way. WebView2 ends a download with its browser
-    // process, which exits as its last page closes, so the window goes out of sight with its page, as a macOS download
-    // goes on past its window.
+    // WebView2 ends a download with its browser process, which exits with its last page.
     private bool GoAway()
     {
         if (_closed || !_downloads.UnderWay(Store))
@@ -388,16 +388,30 @@ public sealed partial class AccountWindow : Window, ISessionWindow
             }
         }));
 
-    private void OnBackKey(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args) =>
-        args.Handled = Commanded(BackButton, () => Page?.GoBack());
+    // An accelerator on Root missed Alt+Left from the command bar's More on windows-2025 (run 39310757537).
+    private void OnPreviewKeyDown(object sender, KeyRoutedEventArgs args)
+    {
+        if (!Held(VirtualKey.Menu) || Held(VirtualKey.Control) || Held(VirtualKey.Shift))
+        {
+            return;
+        }
 
-    private void OnForwardKey(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args) =>
-        args.Handled = Commanded(ForwardButton, () => Page?.GoForward());
+        if (args.Key == VirtualKey.Left)
+        {
+            args.Handled = Commanded(BackButton, () => Page?.GoBack());
+        }
+        else if (args.Key == VirtualKey.Right)
+        {
+            args.Handled = Commanded(ForwardButton, () => Page?.GoForward());
+        }
+    }
+
+    private static bool Held(VirtualKey key) =>
+        InputKeyboardSource.GetKeyStateForCurrentThread(key).HasFlag(CoreVirtualKeyStates.Down);
 
     private void OnReloadKey(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args) =>
         args.Handled = Commanded(ReloadButton, TryAgain);
 
-    // What its button would do, while the button could be pressed.
     private static bool Commanded(Control button, Action does)
     {
         if (!button.IsEnabled)

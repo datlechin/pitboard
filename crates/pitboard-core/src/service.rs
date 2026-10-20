@@ -149,6 +149,7 @@ pub enum Warning {
         tool: ProviderId,
         label: String,
         why: String,
+        spelling: crate::words::Spelling,
     },
     /// An interrupted switch is waiting that the next change cannot finish, and every change
     /// stops at it until it can be finished or is given up on. The refusal that change would
@@ -470,14 +471,19 @@ impl fmt::Display for Warning {
                  refreshes its token.",
                 tool.name()
             ),
-            Warning::SignInParkedNotInUse { tool, label, why } => write!(
+            Warning::SignInParkedNotInUse {
+                tool,
+                label,
+                why,
+                spelling,
+            } => write!(
                 f,
                 "{} goes on with the login it has: Pitboard could not tell whose it is \
                  ({why}), so it parked the new login for `{label}` rather than write over \
                  that one. If that login no longer works, {} and sign in to `{label}` \
                  there.",
                 tool.name(),
-                crate::words::sign_in_yourself(*tool, false)
+                crate::words::sign_in_yourself(*tool, spelling.of(*tool), false)
             ),
             Warning::LoginReplaced {
                 tool, label, now, ..
@@ -2457,16 +2463,17 @@ mod tests {
             assert!(home.switchable(now), "no deadline is known");
             assert_eq!(gone.stale, Some(Stale::LoginReplaced));
             assert_eq!(
-                gone.stale
-                    .and_then(|stale| stale.explanation_for(gone.provider)),
+                gone.explanation().as_deref(),
                 Some("its login was signed out or replaced in Claude; sign in again")
             );
             assert_eq!(
-                Stale::NoUsage.explanation_for(ProviderId::Desktop),
+                Stale::NoUsage
+                    .explanation_for(ProviderId::Desktop, "Claude")
+                    .as_deref(),
                 Some("Pitboard reads no usage for Claude Desktop")
             );
             assert_eq!(
-                Stale::Unreachable.explanation_for(ProviderId::Desktop),
+                Stale::Unreachable.explanation_for(ProviderId::Desktop, "Claude"),
                 None
             );
         }

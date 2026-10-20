@@ -542,7 +542,6 @@ fn login_unread(account: &Account) -> bool {
     !account.signed_in && account.stale.as_deref() == Some("login_unreadable")
 }
 
-/// The menu's line under an account where something stands in the way of its limits.
 fn in_place_of_limits(account: &Account, switching: bool, needs_sign_in: bool) -> Option<String> {
     if switching {
         return Some("Switching…".into());
@@ -568,7 +567,6 @@ fn in_place_of_limits(account: &Account, switching: bool, needs_sign_in: bool) -
     windows.is_empty().then(|| account.email.clone())
 }
 
-/// The menu's line under an account otherwise: its limits, and when a used-up one is back.
 fn limits_said(seen: &Seen, account: &Account) -> String {
     let windows = account.usage.as_ref().map_or(&[][..], |u| &u.windows);
     // The limit that runs out first, said beside its own figure, where there is one.

@@ -119,8 +119,8 @@ a mistake here can sign someone out of a paid account. These rules apply to peop
   scratch homes: only CI's UI tests of the release gate start one. At 0.x it refuses. At 1.x
   `TheReleasedBuildTakesBackWhatItRegisteredOnUnregister` starts it, exits it and runs it with
   `--unregister`, only on a GitHub-hosted runner as the fresh standard user
-  `test-as-standard-user.ps1` makes. [The session machine](#the-session-machine) is the
-  exception.
+  `test-as-standard-user.ps1` makes. That build reads Task Scheduler and writes no task.
+  [The session machine](#the-session-machine) is the exception.
 - Never start a built `Pitboard.exe` or `PitboardShare.exe` from Explorer, Start, a shortcut,
   `start`, `Invoke-Item`, a notification, the share sheet or a `pitboard://` or
   `pitboard-debug://` link, on any account but [the session machine's](#the-session-machine)
@@ -154,8 +154,10 @@ a mistake here can sign someone out of a paid account. These rules apply to peop
 - Never weaken or get around the release gate in a build anybody installs. No release,
   script or package passes `--cfg pitboard_unreleased_windows`, `test-support` or
   `fixture`.
-- Tests never touch Task Scheduler, never write the registry or the user `PATH`, and never run
-  elevated on a machine that holds logins. They may read the registry.
+- Tests never touch Task Scheduler, but for the read of the Release build
+  `TheReleasedBuildTakesBackWhatItRegisteredOnUnregister` starts. They never write the registry
+  or the user `PATH`, and never run elevated on a machine that holds logins. They may read the
+  registry.
 - A test seals and unseals only with `CryptProtectData` and `CryptUnprotectData` under the
   running user's own key, never with `CRYPTPROTECT_LOCAL_MACHINE`, and never backs up, exports
   or deletes a master key. Every Windows test that parks a login seals it.

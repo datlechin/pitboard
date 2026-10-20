@@ -4,6 +4,7 @@
 use crate::host::Os;
 use crate::provider::ProviderId;
 use crate::state::Key;
+use crate::words::Spelling;
 use std::path::PathBuf;
 
 /// The labels an account list holds, rendered for a message: " Enrolled: `a`, `b`." or
@@ -344,9 +345,10 @@ pub enum Error {
 
     #[error(
         "Claude Code has not run on this machine yet ({path} does not exist). \
-         Run `claude` once, sign in, then try again."
+         Run `{}` once, sign in, then try again.",
+        spelling.of(ProviderId::Claude)
     )]
-    ClaudeConfigMissing { path: PathBuf },
+    ClaudeConfigMissing { path: PathBuf, spelling: Spelling },
 
     #[error("could not read Claude Code's config at {path}: {source}")]
     ClaudeConfigUnreadable {
@@ -365,11 +367,12 @@ pub enum Error {
         source: serde_json::Error,
     },
 
-    #[error("{}", crate::words::nothing_signed_in(*tool, label.as_deref()))]
+    #[error("{}", crate::words::nothing_signed_in(*tool, spelling.of(*tool), label.as_deref()))]
     LiveCredentialAbsent {
         tool: ProviderId,
         // the label typed, where a sentence names the command to run for it
         label: Option<String>,
+        spelling: Spelling,
     },
 
     #[error("{}", login_elsewhere(crate::host::OS, email))]
@@ -486,15 +489,20 @@ pub enum Error {
     /// The service refused the login's access token as expired. `refused` where Pitboard
     /// tried to renew the login and its service refuses its refresh token for good, or it
     /// has none, so only signing in again mends it.
-    #[error("{}", session_expired(*tool, *refused))]
-    SessionExpired { tool: ProviderId, refused: bool },
+    #[error("{}", session_expired(*tool, spelling.of(*tool), *refused))]
+    SessionExpired {
+        tool: ProviderId,
+        refused: bool,
+        spelling: Spelling,
+    },
 
-    #[error("{}", identity_unverifiable(*tool, login, *cause, detail))]
+    #[error("{}", identity_unverifiable(*tool, spelling.of(*tool), login, *cause, detail))]
     IdentityUnverifiable {
         tool: ProviderId,
         login: Unidentified,
         cause: Cause,
         detail: String,
+        spelling: Spelling,
     },
 
     #[error("the signed-in account changed while switching. Nothing was moved; try again.")]
@@ -539,12 +547,13 @@ pub enum Error {
         link: Option<String>,
     },
 
-    #[error("{}", recovery_undetermined(*tool, from, to, detail))]
+    #[error("{}", recovery_undetermined(*tool, spelling.of(*tool), from, to, detail))]
     RecoveryUndetermined {
         tool: ProviderId,
         from: String,
         to: String,
         detail: String,
+        spelling: Spelling,
     },
 
     #[error(
@@ -587,12 +596,13 @@ pub enum Error {
 
     #[error(
         "signed in as `{to}`, and the login was gone again before Pitboard finished. {}",
-        after_it_did_not_hold(*tool, from, to)
+        after_it_did_not_hold(*tool, spelling.of(*tool), from, to)
     )]
     SwitchDidNotHold {
         tool: ProviderId,
         from: String,
         to: String,
+        spelling: Spelling,
     },
 
     #[error(
@@ -613,20 +623,21 @@ pub enum Error {
         "could not sign in as `{to}`, and could not put `{from}` back either ({detail}). \
          `{from}`'s login is still parked: {} and sign in to any enrolled account, then \
          `pitboard use {from}`.",
-        crate::words::sign_in_yourself(*tool, false)
+        crate::words::sign_in_yourself(*tool, spelling.of(*tool), false)
     )]
     SwitchCorrupted {
         tool: ProviderId,
         from: String,
         to: String,
         detail: String,
+        spelling: Spelling,
     },
 
     #[error(
         "signed in to `{label}` again, and Pitboard could not confirm that its new login \
          took the place of the one in use ({detail}), so {} may have no login for it now. {}",
         tool.name(),
-        not_in_use(*tool, label, *parked)
+        not_in_use(*tool, spelling.of(*tool), label, *parked)
     )]
     SignInNotInstalled {
         tool: ProviderId,
@@ -634,6 +645,7 @@ pub enum Error {
         detail: String,
         /// Whether the new login was parked instead, which keeps the one copy of it.
         parked: bool,
+        spelling: Spelling,
         /// What writing it and parking it warned about, which is still true of a change
         /// that failed afterwards. Taken out by the service and reported beside the error.
         warnings: Vec<crate::service::Warning>,
@@ -765,9 +777,13 @@ pub enum Error {
          token stored is spent. {}, sign in, then try again.",
         sentence(error),
         tool.name(),
-        crate::words::sign_in_yourself(*tool, true)
+        crate::words::sign_in_yourself(*tool, spelling.of(*tool), true)
     )]
-    RenewalLost { tool: ProviderId, error: Box<Error> },
+    RenewalLost {
+        tool: ProviderId,
+        error: Box<Error>,
+        spelling: Spelling,
+    },
 
     // A refusal after the change had done what `said` says. The service takes it apart.
     #[error("{error}")]
@@ -1221,6 +1237,7 @@ fn not_absolute(variable: &str, path: &std::path::Path) -> String {
 /// [`Error::IdentityUnverifiable`]'s words: what to do follows from why.
 fn identity_unverifiable(
     tool: ProviderId,
+    program: &str,
     login: &Unidentified,
     cause: Cause,
     detail: &str,
@@ -1231,7 +1248,7 @@ fn identity_unverifiable(
         (None, Cause::AnswerNotUnderstood, _) => "Check for a Pitboard update.".to_owned(),
         (None, _, Unidentified::SignedIn | Unidentified::Unnamed) => format!(
             "{}, sign in, then try again.",
-            crate::words::sign_in_yourself(tool, true)
+            crate::words::sign_in_yourself(tool, program, true)
         ),
         (None, _, Unidentified::Parked { label } | Unidentified::SignIn { label }) => {
             format!("Sign in to it again with `pitboard enroll {label} --sign-in`.")
@@ -1297,20 +1314,20 @@ fn try_again(cause: Cause) -> Option<&'static str> {
 }
 
 /// [`Error::SessionExpired`]'s words.
-fn session_expired(tool: ProviderId, refused: bool) -> String {
+fn session_expired(tool: ProviderId, program: &str, refused: bool) -> String {
     if refused {
         return format!(
             "{}'s login in use has expired and cannot be renewed, so Pitboard cannot confirm \
              which account is signed in. {}, sign in, then try again.",
             tool.name(),
-            crate::words::sign_in_yourself(tool, true)
+            crate::words::sign_in_yourself(tool, program, true)
         );
     }
     format!(
         "{}'s session has expired, so Pitboard cannot confirm which account is signed in. \
          {} once so it refreshes, then try again.",
         tool.name(),
-        crate::words::run_it(tool, true)
+        crate::words::run_it(tool, program, true)
     )
 }
 
@@ -1371,12 +1388,12 @@ fn smaller(tool: ProviderId) -> &'static str {
 
 /// Which write took a switched-in login away again, as far as each tool is known to make
 /// one, and what that leaves.
-fn after_it_did_not_hold(tool: ProviderId, from: &str, to: &str) -> String {
+fn after_it_did_not_hold(tool: ProviderId, program: &str, from: &str, to: &str) -> String {
     match tool {
         ProviderId::Claude => format!(
             "Claude Code removes a login without taking the write lock when `/logout` has \
              given up waiting, which is the one write Pitboard cannot exclude. Nothing was \
-             lost: both `{from}` and `{to}` are parked. Run `claude` and sign in to any \
+             lost: both `{from}` and `{to}` are parked. Run `{program}` and sign in to any \
              enrolled account, then `pitboard use {to}`."
         ),
         // Not "nothing was lost": the likeliest writer is a codex session refreshing the
@@ -1386,8 +1403,8 @@ fn after_it_did_not_hold(tool: ProviderId, from: &str, to: &str) -> String {
             "Codex takes no lock, so a codex session still running from before the switch, \
              refreshing or signing out, rewrote auth.json underneath it. `{to}` is still \
              parked. `{from}`'s park may hold a token that refresh spent. Quit every running \
-             codex, then run `pitboard` to see what is signed in; do not run `codex login` \
-             or `codex logout` until you have, because either revokes the login they find."
+             codex, then run `pitboard` to see what is signed in; do not run `{program} login` \
+             or `{program} logout` until you have, because either revokes the login they find."
         ),
         ProviderId::Desktop => "Claude was opened before Pitboard finished and wrote its own \
                                 login back. Quit Claude, then run `pitboard` to see which \
@@ -1397,18 +1414,18 @@ fn after_it_did_not_hold(tool: ProviderId, from: &str, to: &str) -> String {
 }
 
 /// Where a new login that could not be put in use went, and the way back from there.
-fn not_in_use(tool: ProviderId, label: &str, parked: bool) -> String {
+fn not_in_use(tool: ProviderId, program: &str, label: &str, parked: bool) -> String {
     if parked {
         format!(
             "The new login is parked, so it is not lost. Run `pitboard` to see what is \
              signed in; if nothing is, {} and sign in to any enrolled account, then \
              `pitboard use {label}`.",
-            crate::words::sign_in_yourself(tool, false)
+            crate::words::sign_in_yourself(tool, program, false)
         )
     } else {
         format!(
             "It could not be parked either: {} and sign in to `{label}` again.",
-            crate::words::sign_in_yourself(tool, false)
+            crate::words::sign_in_yourself(tool, program, false)
         )
     }
 }
@@ -1658,14 +1675,20 @@ fn between(from: &str, to: &str) -> String {
     }
 }
 
-fn recovery_undetermined(tool: ProviderId, from: &str, to: &str, detail: &str) -> String {
+fn recovery_undetermined(
+    tool: ProviderId,
+    program: &str,
+    from: &str,
+    to: &str,
+    detail: &str,
+) -> String {
     match tool {
         ProviderId::Claude | ProviderId::Codex => format!(
             "an earlier switch {} was interrupted, and Pitboard cannot yet \
              tell whether it finished ({detail}). Nothing was changed. {} once so its session \
              is current, then try again.",
             between(from, to),
-            crate::words::run_it(tool, true)
+            crate::words::run_it(tool, program, true)
         ),
         ProviderId::Desktop => format!(
             "An earlier move of `{to}`'s login was interrupted, and Pitboard cannot tell where it \
@@ -1744,35 +1767,45 @@ mod tests {
         }
     }
 
-    // Word for word what each said before a tool could be an app.
+    // Word for word what each said before a tool could be an app, with npm's `.cmd` where found.
     #[test]
     fn every_claude_code_and_codex_sentence_reads_as_it_did() {
-        let said = |tool: ProviderId| {
-            let moved = |make: fn(ProviderId, String, String, String) -> Error| {
-                make(tool, "a".into(), "b".into(), "d".into()).to_string()
+        let said = |tool: ProviderId, spelling: Spelling| {
+            let moved = |make: fn(ProviderId, Spelling, String, String, String) -> Error| {
+                make(tool, spelling, "a".into(), "b".into(), "d".into()).to_string()
             };
             let not_installed = |parked| Error::SignInNotInstalled {
                 tool,
                 label: "l".into(),
                 detail: "d".into(),
                 parked,
+                spelling,
                 warnings: Vec::new(),
             };
             vec![
-                Error::LiveCredentialAbsent { tool, label: None }.to_string(),
-                moved(|tool, from, to, detail| Error::RecoveryUndetermined {
+                Error::LiveCredentialAbsent {
+                    tool,
+                    label: None,
+                    spelling,
+                }
+                .to_string(),
+                moved(
+                    |tool, spelling, from, to, detail| Error::RecoveryUndetermined {
+                        tool,
+                        from,
+                        to,
+                        detail,
+                        spelling,
+                    },
+                ),
+                moved(|tool, spelling, from, to, detail| Error::SwitchCorrupted {
                     tool,
                     from,
                     to,
                     detail,
+                    spelling,
                 }),
-                moved(|tool, from, to, detail| Error::SwitchCorrupted {
-                    tool,
-                    from,
-                    to,
-                    detail,
-                }),
-                moved(|tool, from, to, slot| Error::RecoveryElsewhere {
+                moved(|tool, _, from, to, slot| Error::RecoveryElsewhere {
                     tool,
                     from,
                     to,
@@ -1781,16 +1814,19 @@ mod tests {
                 Error::RenewalLost {
                     tool,
                     error: Box::new(Error::SignedInAccountChanged),
+                    spelling,
                 }
                 .to_string(),
                 Error::SessionExpired {
                     tool,
                     refused: true,
+                    spelling,
                 }
                 .to_string(),
                 Error::SessionExpired {
                     tool,
                     refused: false,
+                    spelling,
                 }
                 .to_string(),
                 not_installed(true).to_string(),
@@ -1799,6 +1835,7 @@ mod tests {
                     tool,
                     label: "l".into(),
                     why: "w".into(),
+                    spelling,
                 }
                 .to_string(),
                 Error::LiveAccountNotEnrolled {
@@ -1878,33 +1915,41 @@ mod tests {
                 ),
             ]
         };
-        let pairs = |tool, expected: Vec<String>| {
-            for (now, then) in said(tool).into_iter().zip(expected) {
+        let pairs = |tool, spelling, expected: Vec<String>| {
+            for (now, then) in said(tool, spelling).into_iter().zip(expected) {
                 assert_eq!(now, then, "{tool}");
             }
         };
-        pairs(
-            ProviderId::Claude,
-            before(
-                "Claude Code",
-                "claude",
-                "claude",
-                "CLAUDE_CONFIG_DIR",
-                "<label>",
-            ),
-        );
-        pairs(
-            ProviderId::Codex,
-            before(
-                "Codex",
-                "codex login",
-                "codex",
-                "CODEX_HOME",
-                "codex/<label>",
-            ),
-        );
+        for spelling in [Spelling::Bare, Spelling::Cmd] {
+            let (claude, codex) = (
+                spelling.of(ProviderId::Claude),
+                spelling.of(ProviderId::Codex),
+            );
+            pairs(
+                ProviderId::Claude,
+                spelling,
+                before(
+                    "Claude Code",
+                    claude,
+                    claude,
+                    "CLAUDE_CONFIG_DIR",
+                    "<label>",
+                ),
+            );
+            pairs(
+                ProviderId::Codex,
+                spelling,
+                before(
+                    "Codex",
+                    &format!("{codex} login"),
+                    codex,
+                    "CODEX_HOME",
+                    "codex/<label>",
+                ),
+            );
+        }
         // Claude Desktop has words of its own for each, and none names a program to run.
-        for sentence in said(ProviderId::Desktop) {
+        for sentence in said(ProviderId::Desktop, Spelling::Bare) {
             assert!(!sentence.contains("Run `Claude`"), "{sentence}");
             assert!(!sentence.contains("run `Claude`"), "{sentence}");
         }
@@ -1912,6 +1957,7 @@ mod tests {
             Error::LiveCredentialAbsent {
                 tool: ProviderId::Desktop,
                 label: label.map(str::to_string),
+                spelling: Spelling::Bare,
             }
             .to_string()
         };
@@ -1922,6 +1968,50 @@ mod tests {
              name Claude kept first."
         );
         assert!(absent(None).contains("`pitboard enroll desktop/<label> --sign-in`"));
+    }
+
+    // Windows PowerShell 5.1 refuses the `claude.ps1` beside npm's `claude.cmd`.
+    #[test]
+    fn every_command_to_run_names_the_cmd_pitboard_found() {
+        let missing = Error::ClaudeConfigMissing {
+            path: PathBuf::from("C:/Users/x/.claude.json"),
+            spelling: Spelling::Cmd,
+        };
+        assert!(
+            missing
+                .to_string()
+                .ends_with("Run `claude.cmd` once, sign in, then try again."),
+            "{missing}"
+        );
+        let gone = |tool, spelling| {
+            Error::SwitchDidNotHold {
+                tool,
+                from: "a".into(),
+                to: "b".into(),
+                spelling,
+            }
+            .to_string()
+        };
+        let claude = gone(ProviderId::Claude, Spelling::Cmd);
+        assert!(
+            claude.contains("Run `claude.cmd` and sign in to any enrolled account"),
+            "{claude}"
+        );
+        let codex = gone(ProviderId::Codex, Spelling::Cmd);
+        assert!(
+            codex.contains("do not run `codex.cmd login` or `codex.cmd logout`"),
+            "{codex}"
+        );
+        let broken = crate::store::Error::Broken {
+            why: "`t` lacks piece #2 of the 3 its manifest names".into(),
+            spelling: Spelling::Cmd,
+        };
+        assert!(
+            broken
+                .to_string()
+                .contains("`claude.cmd auth logout` deletes it"),
+            "{broken}"
+        );
     }
 
     #[test]
@@ -2093,6 +2183,7 @@ mod tests {
             Error::LiveCredentialAbsent {
                 tool: ProviderId::Claude,
                 label: None,
+                spelling: Spelling::Bare,
             },
             Error::ParkSlotExhausted,
             Error::SignedInAccountChanged,
@@ -2239,11 +2330,13 @@ mod tests {
             Error::LiveCredentialAbsent {
                 tool: ProviderId::Claude,
                 label: None,
+                spelling: Spelling::Bare,
             }
             .to_string(),
             Error::LiveCredentialAbsent {
                 tool: ProviderId::Codex,
                 label: None,
+                spelling: Spelling::Bare,
             }
             .to_string(),
             Error::AccountUnknown {
@@ -2292,6 +2385,7 @@ mod tests {
         let codex = Error::LiveCredentialAbsent {
             tool: ProviderId::Codex,
             label: None,
+            spelling: Spelling::Bare,
         }
         .to_string();
         assert!(
@@ -2305,6 +2399,7 @@ mod tests {
             login: Unidentified::SignedIn,
             cause: Cause::Unreachable,
             detail: "offline".into(),
+            spelling: Spelling::Bare,
         }
         .to_string();
         assert!(unverifiable.contains("OpenAI"), "{unverifiable}");
@@ -2314,6 +2409,7 @@ mod tests {
             login: Unidentified::SignedIn,
             cause: Cause::Unreachable,
             detail: "offline".into(),
+            spelling: Spelling::Bare,
         }
         .to_string();
         assert!(claude.contains("confirm with Anthropic"), "{claude}");
@@ -2328,6 +2424,7 @@ mod tests {
                 login: Unidentified::SignedIn,
                 cause,
                 detail: "Anthropic answered 400: No organization associated with this token".into(),
+                spelling: Spelling::Bare,
             }
             .to_string()
         };
@@ -2355,6 +2452,7 @@ mod tests {
                 },
                 cause,
                 detail: "Anthropic answered 400".into(),
+                spelling: Spelling::Bare,
             }
             .to_string()
         };
@@ -2378,6 +2476,7 @@ mod tests {
             },
             cause: Cause::Refused,
             detail: "Anthropic answered 400".into(),
+            spelling: Spelling::Bare,
         }
         .to_string();
         assert_eq!(

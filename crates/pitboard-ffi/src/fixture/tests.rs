@@ -146,6 +146,7 @@ fn each_fixture_starts_where_its_tests_expect() {
             World::OneTool | World::Stuck | World::WarmUp | World::LeftInFile => {
                 vec![work, "claude/personal"]
             }
+            World::LoginReplaced => vec!["claude/personal, in use", "claude/work, login_replaced"],
             World::OnlyOne => vec![work],
             World::Unnamed => vec!["dana@work.example, in use"],
             World::Empty | World::FirstLaunch | World::NoClaudeCode => Vec::new(),
@@ -174,6 +175,7 @@ fn each_fixture_starts_where_its_tests_expect() {
             let expected: &[&str] = match world {
                 World::Stuck => &["recovery_undetermined"],
                 World::LeftInFile => &["fallback_login"],
+                World::LoginReplaced => &["login_replaced"],
                 _ => &[],
             };
             assert_eq!(warned, expected, "{}", world.name());
@@ -187,7 +189,17 @@ fn each_fixture_starts_where_its_tests_expect() {
             );
             let offline = core.status_offline().expect("what is known");
             assert_eq!(who(&offline), who(&fresh), "{}", world.name());
-            assert_eq!(offline.warnings, Vec::new(), "{}", world.name());
+            let standing: Vec<&str> = offline
+                .warnings
+                .iter()
+                .map(|warning| warning.code.as_str())
+                .collect();
+            // What Pitboard recorded is said by a read that asks nobody too.
+            let expected: &[&str] = match world {
+                World::LoginReplaced => &["login_replaced"],
+                _ => &[],
+            };
+            assert_eq!(standing, expected, "{}", world.name());
         }
         let listed: &[&str] = match OS {
             Os::MacOs => &["claude", "codex", "desktop"],
@@ -240,6 +252,7 @@ fn the_ui_tests_name_every_fixture_as_the_app_does() {
             "claudeDesktopOpen",
             "warmUp",
             "leftInFile",
+            "loginReplaced",
         ]
     );
 }
@@ -2947,4 +2960,78 @@ fn a_run_out_is_posted_through_the_notifications_fixture_in_is_given() {
         }]
     );
     model.shutdown();
+}
+
+#[test]
+fn a_login_replaced_outside_is_posted_through_the_notifications_fixture_in_is_given() {
+    let own = Folder::own("given-replaced").expect("a folder");
+    let posted = Arc::new(Posted::default());
+    let (model, _) = started_in(
+        &own,
+        World::LoginReplaced,
+        &StandInApps::new(&[], true),
+        &posted,
+    );
+
+    eventually("posted the login replaced", || !posted.posted().is_empty());
+    model.shutdown();
+
+    let said: Vec<(String, String, Option<String>)> = posted
+        .posted()
+        .into_iter()
+        .map(|notice| (notice.title, notice.body, notice.switch_to))
+        .collect();
+    assert_eq!(
+        said,
+        [(
+            "A login was replaced outside Pitboard".into(),
+            format!(
+                "work’s login was replaced by a sign-in outside Pitboard: Claude Code now has \
+                 personal’s login stored, and Pitboard holds no login for work. Choose {} on \
+                 its row.",
+                titled(OS, "Sign In Again…", "Sign in again…")
+            ),
+            None
+        )]
+    );
+}
+
+#[test]
+fn a_notification_the_system_refused_is_said_after_doctors_checks() {
+    let own = Folder::own("refused-notifications").expect("a folder");
+    let posted = Arc::new(Posted::refusing("COMException 0x80070490"));
+    let (model, told) = started_in(
+        &own,
+        World::LoginReplaced,
+        &StandInApps::new(&[], true),
+        &posted,
+    );
+    eventually("posted the login replaced", || !posted.posted().is_empty());
+
+    model.send(Intent::PaneShown {
+        pane: Pane::Machine,
+    });
+    let checked = told.until("the checks with the refusal", |snapshot| {
+        snapshot
+            .machine
+            .checks
+            .lines
+            .last()
+            .is_some_and(|line| line.code == "notification_not_posted")
+    });
+    model.shutdown();
+
+    let line = checked.machine.checks.lines.last().expect("a line");
+    assert_eq!(line.level, crate::Level::Warn);
+    assert!(
+        line.detail
+            .starts_with("“A login was replaced outside Pitboard” not posted at "),
+        "{}",
+        line.detail
+    );
+    assert!(
+        line.detail.ends_with(" · COMException 0x80070490"),
+        "{}",
+        line.detail
+    );
 }

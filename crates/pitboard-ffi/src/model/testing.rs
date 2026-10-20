@@ -412,9 +412,18 @@ impl AppControl for StandInApps {
 #[derive(Default)]
 pub(crate) struct Posted {
     posted: Mutex<Vec<RunOutNotice>>,
+    // why the system refuses each one, where it does
+    refused: Option<String>,
 }
 
 impl Posted {
+    pub(crate) fn refusing(reason: &str) -> Posted {
+        Posted {
+            refused: Some(reason.into()),
+            ..Posted::default()
+        }
+    }
+
     pub(crate) fn posted(&self) -> Vec<RunOutNotice> {
         self.posted.lock().expect("a test's own lock").clone()
     }
@@ -423,7 +432,12 @@ impl Posted {
 impl Notifications for Posted {
     fn post(&self, notice: RunOutNotice) -> Result<(), PlatformError> {
         self.posted.lock().expect("a test's own lock").push(notice);
-        Ok(())
+        match &self.refused {
+            Some(reason) => Err(PlatformError::Failed {
+                reason: reason.clone(),
+            }),
+            None => Ok(()),
+        }
     }
 }
 
@@ -546,6 +560,8 @@ pub(super) struct Machine {
     pub kept: Vec<Told>,
     /// Every notification posted, in order.
     pub posted: Vec<RunOutNotice>,
+    // why the app's system refuses each notification, while it does
+    pub post_refused: Option<String>,
     /// What `app.json` held before the model started, where it was there.
     pub preferences_file: Option<String>,
     /// `app.json` is there and cannot be read, whatever it holds.
@@ -664,6 +680,7 @@ impl Machine {
             told_before: Told::new(),
             kept: Vec::new(),
             posted: Vec::new(),
+            post_refused: None,
             preferences_file: None,
             preferences_unreadable: false,
             earlier: None,
@@ -1015,8 +1032,12 @@ impl Machine {
                 Answer::Saved
             }
             Job::Post { notice } => {
+                let title = notice.title.clone();
                 self.posted.push(notice);
-                Answer::Posted
+                Answer::Posted {
+                    title,
+                    refused: self.post_refused.clone(),
+                }
             }
             Job::SignInOver { id, enrol } => {
                 self.over.push((id, enrol));

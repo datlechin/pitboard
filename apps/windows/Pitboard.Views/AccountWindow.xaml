@@ -10,13 +10,10 @@
   <Window.SystemBackdrop>
     <MicaBackdrop />
   </Window.SystemBackdrop>
-  <Grid x:Name="Root" KeyboardAcceleratorPlacementMode="Hidden">
-    <!-- Microsoft's keyboard guidance: Ctrl+W closes. Back, Forward and Reload take the keys WebView2 gives them in the page.
-         Placed nowhere, or the grid shows "Ctrl+W" as a tooltip wherever the pointer rests. -->
+  <Grid x:Name="Root" KeyboardAcceleratorPlacementMode="Hidden" PreviewKeyDown="OnPreviewKeyDown">
+    <!-- Placed nowhere, or the grid shows "Ctrl+W" as a tooltip wherever the pointer rests. -->
     <Grid.KeyboardAccelerators>
       <KeyboardAccelerator Key="W" Modifiers="Control" Invoked="OnClose" />
-      <KeyboardAccelerator Key="Left" Modifiers="Menu" Invoked="OnBackKey" />
-      <KeyboardAccelerator Key="Right" Modifiers="Menu" Invoked="OnForwardKey" />
       <KeyboardAccelerator Key="F5" Invoked="OnReloadKey" />
       <KeyboardAccelerator Key="R" Modifiers="Control" Invoked="OnReloadKey" />
     </Grid.KeyboardAccelerators>

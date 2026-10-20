@@ -33,10 +33,11 @@ Nothing that runs Codex follows a switch, so restart each:
 | A `codex` session | Quit it and start it again. |
 | The ChatGPT app on macOS | Quit it with Command-Q, not by closing its windows, and open it again. |
 | The ChatGPT app on Windows | Quit it from its icon in the notification area, and open it again. |
-| Codex's background app server | Run `codex app-server daemon restart`. |
+| Codex's background app server on macOS and Linux | Run `codex app-server daemon restart`. |
+| Codex's background app server on Windows | Run `codex app-server daemon restart` from a terminal that is not elevated. |
 | Codex in an editor | Run **Developer: Reload Window** in each window that uses Codex. |
 
-Read in the ChatGPT app 26.928.31416 for macOS and Codex 0.159.3. Quitting the ChatGPT app on Windows, by hand or for a switch, has not been measured, and neither has the editor row.
+Read in the ChatGPT app 26.928.31416 for macOS and Codex 0.159.3. The app server's Windows row is read in Codex 0.162.1 for Windows. Quitting the ChatGPT app on Windows, by hand or for a switch, has not been measured, and neither has the editor row.
 
 After a Codex switch, Pitboard lists which of these still run. If it cannot read the process list, it warns with `sessions_unknown`.
 

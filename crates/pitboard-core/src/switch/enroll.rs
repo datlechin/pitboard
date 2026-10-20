@@ -747,6 +747,7 @@ fn record_current(
         return Err(Error::LiveCredentialAbsent {
             tool: which,
             label: None,
+            spelling: crate::words::spelled(ctx, which),
         });
     };
     let lost = stored.lock_warning(which);
@@ -797,7 +798,7 @@ fn from_sign_in(
             let login = crate::error::Unidentified::SignIn {
                 label: state.typed(key),
             };
-            super::unidentified_as(tool.id(), login, e)
+            super::unidentified_as(ctx, tool.id(), login, e)
         })?;
     claim(state, key, &owner)?;
     let (now, lost) = signed_in_now(ctx, login.permit, state, tool, &owner);
@@ -824,6 +825,7 @@ fn from_sign_in(
                     tool: key.provider,
                     label: state.typed(key),
                     why: identify::untold(&why),
+                    spelling: crate::words::spelled(ctx, key.provider),
                 });
             }
             Ok(said((enrolled, warnings)))
@@ -919,6 +921,7 @@ fn install_signed_in(
 
     let written = on_the_command_line.into_iter().collect::<Vec<_>>();
     match super::install_with(
+        ctx,
         which,
         |body| store::write_raw(&live.chain, permit, &live.service, body),
         || store::read_raw(&live.chain, &live.service),
@@ -1033,6 +1036,7 @@ fn not_installed(
         label: state.typed(key),
         detail,
         parked,
+        spelling: crate::words::spelled(ctx, key.provider),
         warnings,
     }
 }

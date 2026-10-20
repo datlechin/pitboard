@@ -12,12 +12,12 @@ use super::machine::ScheduleFailure;
 use super::state::Job;
 use super::testing::{
     Hand, Machine, PLIST, a_look_or_a_read, any_read, change, check, claude, codex_account,
-    fresh_read, installed_ask, refusal, renewed, status,
+    fresh_read, installed_ask, refusal, renewed, status, warned, warning,
 };
 use super::{Intent, Pane};
 use crate::present::testing::Utc;
 use crate::present::{CheckLine, MachineShown, present_on};
-use crate::{FoundCommandLine, Level, OwnCommandLine, Schedule};
+use crate::{FoundCommandLine, Level, OwnCommandLine, Schedule, Warning};
 use pitboard_core::host::Os;
 use std::time::Duration;
 
@@ -811,6 +811,63 @@ fn doctor_is_only_read_when_asked_for() {
     assert_eq!(codes, ["state"]);
     assert!(checks.checked.is_some());
     assert_eq!(machine.doctor_asks, 1);
+}
+
+// The 2026-10-18 session saw no replaced-login toast, and nothing said whether Windows refused it.
+#[test]
+fn a_notification_the_system_refused_is_said_after_doctors_checks_until_one_is_posted() {
+    let replaced = |label: &str| Warning {
+        account: Some(format!("claude:{label}")),
+        ..warning(
+            "login_replaced",
+            &format!("{label}’s login was replaced by a sign-in outside Pitboard."),
+        )
+    };
+    let accounts = || vec![claude("home", true, 5.0), claude("work", false, 0.0)];
+    let mut model = Hand::new();
+    let mut machine = Machine::reading(Ok(warned(accounts(), vec![replaced("work")])));
+    machine.checks = vec![check("keychain", "Keychain", Level::Ok, "unlocked", "")];
+    machine.post_refused = Some("COMException 0x80070490".into());
+
+    model.refresh(&mut machine);
+    assert_eq!(machine.posted.len(), 1);
+    let checks = shown(&model).checks;
+    assert!(checks.lines.is_empty(), "said beside doctor's checks alone");
+    assert_eq!(checks.waiting.as_deref(), Some("Checking this Mac…"));
+
+    model.send(Intent::PaneShown {
+        pane: Pane::Machine,
+    });
+    model.run(&mut machine);
+    let checks = shown(&model).checks;
+    assert_eq!(
+        checks.lines[1..],
+        [CheckLine {
+            id: 1,
+            code: "notification_not_posted".into(),
+            name: "Notifications".into(),
+            level: Level::Warn,
+            spoken_level: "Worth looking at".into(),
+            detail: "“A login was replaced outside Pitboard” not posted at 08:00 · \
+                     COMException 0x80070490"
+                .into(),
+            advice: None,
+        }]
+    );
+    assert_eq!(
+        (checks.summary.as_deref(), checks.level),
+        (Some("One thing is worth looking at."), Level::Warn)
+    );
+
+    machine.post_refused = None;
+    machine.answer = Ok(warned(accounts(), vec![replaced("work"), replaced("home")]));
+    model.send(Intent::Refresh { asked: true });
+    model.run(&mut machine);
+    assert_eq!(machine.posted.len(), 2);
+    let checks = shown(&model).checks;
+    let codes: Vec<&str> = checks.lines.iter().map(|line| line.code.as_str()).collect();
+    assert_eq!(codes, ["keychain"], "gone once one is posted");
+    assert_eq!(checks.level, Level::Ok);
 }
 
 /// When the checks were made is a clock time, made again on the minute tick: once the day

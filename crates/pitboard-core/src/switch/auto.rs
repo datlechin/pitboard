@@ -187,7 +187,7 @@ fn unreadable_here(error: &Error) -> bool {
             Error::Store(
                 crate::store::Error::Locked
                     | crate::store::Error::Unreadable(_)
-                    | crate::store::Error::Broken(_)
+                    | crate::store::Error::Broken { .. }
             )
         ),
     }

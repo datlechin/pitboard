@@ -728,10 +728,14 @@ impl Worker {
                 }
                 Answer::Saved
             }
-            Job::Post { notice } => {
-                let _ = self.notifications.post(notice);
-                Answer::Posted
-            }
+            Job::Post { notice } => Answer::Posted {
+                title: notice.title.clone(),
+                refused: self
+                    .notifications
+                    .post(notice)
+                    .err()
+                    .map(|refused| refused.to_string()),
+            },
             Job::RepairSchedule => Answer::Repaired {
                 repaired: core.schedule_repair(),
                 own: core.own_command_line(),
@@ -953,6 +957,38 @@ mod tests {
         let answer = worker.work(Job::AskInstalled);
         let mut jobs = state.apply(Msg::Done(answer), now);
         jobs.pop().expect("a read")
+    }
+
+    #[test]
+    fn a_notification_the_system_refused_answers_with_why() {
+        let world = World::new("refused-post");
+        let mut worker = worker(world.core(), StandInApps::new(&[], true));
+        let notice = crate::model::RunOutNotice {
+            id: "claude/work/session/-1800018000".into(),
+            title: "work has no 5-hour limit left".into(),
+            subtitle: None,
+            body: "spare has 80% of its own left.".into(),
+            switch_to: Some("claude/spare".into()),
+        };
+        let answered = |worker: &Worker| match worker.work(Job::Post {
+            notice: notice.clone(),
+        }) {
+            Answer::Posted { title, refused } => (title, refused),
+            _ => panic!("a post answers as one"),
+        };
+        assert_eq!(
+            answered(&worker),
+            ("work has no 5-hour limit left".into(), None)
+        );
+
+        worker.notifications = Arc::new(Posted::refusing("COMException 0x80070490"));
+        assert_eq!(
+            answered(&worker),
+            (
+                "work has no 5-hour limit left".into(),
+                Some("COMException 0x80070490".into())
+            )
+        );
     }
 
     /// A read takes when the readings and the index were last written as they stood before

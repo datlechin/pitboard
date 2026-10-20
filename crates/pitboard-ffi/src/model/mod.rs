@@ -698,6 +698,7 @@ pub struct RunOutNotice {
 #[uniffi::export(with_foreign)]
 pub trait Notifications: Send + Sync {
     /// Posts `notice`, with a button that switches to its `switch_to` where it names one.
+    // This Mac and This PC show why it was refused, so the reason names no path or secret.
     fn post(&self, notice: RunOutNotice) -> Result<(), PlatformError>;
 }
 

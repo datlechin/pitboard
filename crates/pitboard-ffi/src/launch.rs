@@ -208,8 +208,8 @@ impl From<pitboard_core::holder::Holding> for Holding {
                     app_id: app.as_str().into(),
                     name: name.into(),
                 },
-                Core::Run(command) => Remedy::Run {
-                    command: command.into(),
+                Core::Run { arguments, .. } => Remedy::Run {
+                    command: format!("{} {arguments}", held.program),
                 },
                 Core::Do(instruction) => Remedy::Do {
                     instruction: instruction.into(),
