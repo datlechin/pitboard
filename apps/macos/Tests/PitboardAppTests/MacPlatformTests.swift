@@ -173,7 +173,8 @@ private final class Opened: @unchecked Sendable {
     for category in categories {
         #expect(category.actions.map(\.title) == [category.identifier])
         let opens = buttons.first { $0.title == category.identifier }?.opensWindow ?? false
-        #expect(category.actions.allSatisfy { $0.options == (opens ? [.foreground] : []) })
+        let options: UNNotificationActionOptions = opens ? .foreground : []
+        #expect(category.actions.allSatisfy { $0.options == options })
     }
     #expect(buttons.contains { $0.title == "Sign In Again" && $0.opensWindow })
     #expect(buttons.contains { $0.title == "Switch" && !$0.opensWindow })
