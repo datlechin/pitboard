@@ -60,7 +60,7 @@ As read in Claude Code 2.1.309, each of these makes Claude Code ignore the login
 
 `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `CLAUDE_CODE_OAUTH_TOKEN`, `CLAUDE_CODE_USE_BEDROCK`, `CLAUDE_CODE_USE_VERTEX`, `CLAUDE_CODE_USE_FOUNDRY`, `CLAUDE_CODE_USE_GATEWAY`, `CLAUDE_CODE_USE_ANTHROPIC_AWS`, `CLAUDE_CODE_USE_ANTHROPIC_GOOGLE_CLOUD`, `CLAUDE_CODE_USE_MANTLE`.
 
-Pitboard reads them from its environment and from Claude Code's settings, along with `apiKeyHelper` and [Claude Code's remote token files](/reference/files#claude-code-files). Managed settings that set `forceLoginMethod` to `gateway`, or name a `forceLoginGatewayUrl`, send every session through the Cloud gateway and count the same way. In your own `settings.json`, those two only aim `/login` at a gateway. While any is set, changes to Claude Code accounts go ahead but warn with `auth_overridden`, as does `pitboard doctor`. The automatic switch holds back.
+Pitboard reads them from its environment and from Claude Code's settings, along with `apiKeyHelper` and [Claude Code's remote token files](/reference/files#claude-code-files). Managed settings that set `forceLoginMethod` to `gateway`, or name a `forceLoginGatewayUrl`, send every session through the Cloud gateway and count the same way. In your own `settings.json`, those two only aim `/login` at a gateway. While any is set, changes to Claude Code accounts go ahead but warn with `auth_overridden`, as does `pitboard doctor`. The automatic switch holds back. A `forceLoginMethod` of `claudeai` or `console` only chooses how Claude Code signs in, and a session still takes the login Pitboard switches.
 
 ## Anthropic profiles
 

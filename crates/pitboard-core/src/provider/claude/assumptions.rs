@@ -484,6 +484,7 @@ pub(crate) const PER_SYSTEM: &[PerSystem] = &[
         windows: Read("2.1.309"),
     },
     read_from_2_1_309("organisation_pin"),
+    read_from_2_1_309("login_method_pin"),
     PerSystem {
         name: "macos_managed_preferences",
         macos: Read("2.1.309"),
@@ -2137,6 +2138,33 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
         absent: &[],
     },
     Assumption {
+        name: "login_method_pin",
+        fact: "`forceLoginMethod` `claudeai` or `console`, from the highest settings source \
+               that sets it, a managed one, the person's own, a project's or the command line's, \
+               pins only how Claude Code signs in: `/login` and `claude auth login` sign in that \
+               way, and under `console` a claude.ai sign-in from the SDK, `setup-token`, Claude \
+               Desktop or a cloud session is refused. A session that starts with a claude.ai \
+               login stored takes it whatever the setting says, and renews it unchecked",
+        read_from: "the method pin's reader, which takes the merged settings, and its check; \
+                    `/login`'s and `claude auth login`'s choice of sign-in, and the SDK's \
+                    `claude_authenticate`, `setup-token`, the desktop app's sign-in and a cloud \
+                    session's sign-in, which refuse under it; and the session's start, its token \
+                    source and its renewal, none of which reads it, in the darwin-arm64, \
+                    linux-x64, win32-x64 and win32-arm64 builds of 2.1.309, read as bytes on \
+                    2026-10-24",
+        verified_against: "2.1.309",
+        depends: "settings::overrides, which leaves `forceLoginMethod` out where it is not \
+                  `gateway`, so a switch under `console` warns of nothing and the automatic \
+                  switch goes on: a session takes the login a switch puts in place",
+        probe: &[
+            "forceLoginMethod is 'console' in ",
+            "; log in with an Anthropic Console account instead.",
+            "Signing in isn't available here: a cloud session needs a claude.ai sign-in, and the \
+             forceLoginMethod setting on this machine requires a different sign-in method.",
+        ],
+        absent: &[],
+    },
+    Assumption {
         name: "macos_managed_preferences",
         fact: "on macOS Claude Code also takes managed settings from a configuration profile's \
                plist: `/Library/Managed Preferences/<user>/com.anthropic.claudecode.plist`, \
@@ -2236,6 +2264,7 @@ mod tests {
                 "anthropic_profiles",
                 "windows_profile_folder",
                 "organisation_pin",
+                "login_method_pin",
             ]
         );
         for name in [
