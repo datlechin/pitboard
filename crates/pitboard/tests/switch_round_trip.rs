@@ -575,8 +575,8 @@ fn a_parked_login_anthropic_refuses_is_dropped_with_the_way_back() {
     renewal.assert();
 }
 
-/// `pitboard renew` says what it did in the sentence the app's Renew Now shows: nothing due
-/// reads as the good answer it is, and one renewal as one.
+/// `pitboard renew` says what it did in one sentence: nothing due reads as the good answer it
+/// is, and one renewal as one.
 #[test]
 fn renew_says_what_it_did_as_the_app_says_it() {
     let mut env = two_accounts("renew-words");

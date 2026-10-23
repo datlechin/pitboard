@@ -24,6 +24,7 @@
     <Manifest Include="$(ApplicationManifest)" />
     <!-- Each window's icon, which Pitboard.exe carries beside it. -->
     <Content Include="../Pitboard.App/Pitboard.ico" Link="Pitboard.ico" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../Pitboard.App/Tray/*.ico" Link="Tray/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.WindowsAppSDK" />

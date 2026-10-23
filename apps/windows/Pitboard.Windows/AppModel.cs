@@ -112,6 +112,8 @@ public sealed class AppModel : INotifyPropertyChanged
 
     public AccountSection[] Sections => Part<AccountSection[]>();
 
+    public AccountMenuShown AccountMenu => Part<AccountMenuShown>();
+
     public bool ShowsTools => Part<bool>();
 
     public PanelNotice[] Notices => Part<PanelNotice[]>();

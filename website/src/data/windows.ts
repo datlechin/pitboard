@@ -125,18 +125,20 @@ export function accountsPage(moment: Moment) {
 
 const threshold = 95;
 
-// SettingsPage.xaml's Limits, with machine.rs's words under Switch Claude Code automatically and
-// Warm up limits open on its hours and WarmAccountRow.cs's rows
+// SettingsPage.xaml's Limits, with machine.rs's words under When a limit reaches, set to Switch
+// automatically, and Warm up limits open on its hours and WarmAccountRow.cs's rows
 export const settingsPage = {
   title: "Settings",
   section: "Limits",
-  autoSwitch: {
-    header: "Switch Claude Code automatically",
-    on: true,
+  atLimit: {
+    header: "When a limit reaches",
+    choice: "Switch automatically",
     standing: `Watching work: 40% of its weekly limit, as of ${clock.read}.`,
-    note: `Pitboard switches Claude Code to another of your accounts with room below ${threshold}% in every limit, once a limit of the one in use reaches ${threshold}%, while the app is open. Sessions already running follow within about 33 seconds. It never switches back by itself, and never switches Codex: a running codex keeps its account until restarted.`,
+    note: `Pitboard switches Claude Code once a limit of the account in use reaches ${threshold}%, never back by itself, and notifies you of Codex. Sessions already running follow within about 33 seconds.`,
+    terms: "Anthropic's terms may cover automatic switching and warm-ups.",
+    link: "Is this allowed?",
   },
-  share: { header: "Switch when a limit reaches", range: "From 50% to 99%", value: threshold },
+  share: { header: "Share of a limit", range: "From 50% to 99%", value: threshold },
   warm: {
     header: "Warm up limits",
     range: `${warmUp.from} to ${warmUp.to}`,

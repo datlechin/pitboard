@@ -73,7 +73,9 @@ const rowTip = updates ? "bottom-450" : "bottom-418";
     >{accountTip("work", "before")}</Tooltip
   >}
   {demo && <Tooltip class="absolute bottom-56 left-500 z-3 hidden -translate-x-1/2 demo-reach:block"
-    >{trayTip("after")}</Tooltip
+    >{trayTip("after")
+      .split("\n")
+      .map((line) => <span class="block">{line}</span>)}</Tooltip
   >}
   <svg
     class:list={[

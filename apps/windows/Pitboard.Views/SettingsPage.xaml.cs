@@ -15,8 +15,6 @@ public sealed partial class SettingsPage : Page
     public SettingsPage()
     {
         InitializeComponent();
-        NoWarmAccount.Header = SettingsViewModel.NoWarmAccount;
-        WhatItDoes.Text = SettingsViewModel.WhatItDoes;
         About.Description = SettingsViewModel.Copyright;
         foreach (var link in SettingsViewModel.Links)
         {
@@ -42,6 +40,11 @@ public sealed partial class SettingsPage : Page
             _context = (PaneContext)e.Parameter;
             ViewModel = new SettingsViewModel(
                 _context.Model, _context.StartAtSignIn, _context.Updates, _context.Version, _context.Notifications);
+            foreach (var title in ViewModel.AtLimitTitles)
+            {
+                AtLimitChoices.Items.Add(title);
+            }
+
             Bindings.Update();
             // After the bindings, so a failure's words are in place before Narrator is told of them.
             ViewModel.PropertyChanged += OnViewModelChanged;
@@ -50,6 +53,27 @@ public sealed partial class SettingsPage : Page
         ViewModel.Listen();
         ViewModel.Shown();
     }
+
+    // The page keeps where it was scrolled to, and a notice about a limit opens it on that setting.
+    public void ShowLimits()
+    {
+        if (IsLoaded)
+        {
+            BringLimitsIntoView();
+            return;
+        }
+
+        RoutedEventHandler? once = null;
+        once = (_, _) =>
+        {
+            Loaded -= once;
+            BringLimitsIntoView();
+        };
+        Loaded += once;
+    }
+
+    private void BringLimitsIntoView() =>
+        LimitsHeader.StartBringIntoView(new BringIntoViewOptions { VerticalAlignmentRatio = 0, AnimationDesired = false });
 
     private void OnViewModelChanged(object? sender, PropertyChangedEventArgs args)
     {
@@ -79,7 +103,16 @@ public sealed partial class SettingsPage : Page
     private void OnOpenNotificationSettings(object sender, RoutedEventArgs args) =>
         Context.Open(new Uri(SettingsViewModel.NotificationSettings));
 
-    private void OnAutoSwitchToggled(object sender, RoutedEventArgs args) => ViewModel?.SetAutoSwitch(((ToggleSwitch)sender).IsOn);
+    private void OnAtLimitChosen(object sender, SelectionChangedEventArgs args) =>
+        ViewModel?.ChooseAtLimit(((ComboBox)sender).SelectedIndex);
+
+    private void OnOpenTerms(object sender, RoutedEventArgs args)
+    {
+        if (ViewModel is { } shown)
+        {
+            Context.Open(new Uri(shown.TermsLink));
+        }
+    }
 
     // A cleared box shows the share again once its change has run.
     private void OnShareChanged(NumberBox sender, NumberBoxValueChangedEventArgs args)
@@ -116,16 +149,6 @@ public sealed partial class SettingsPage : Page
     }
 
     private void OnRenewDailyToggled(object sender, RoutedEventArgs args) => ViewModel?.SetRenewsDaily(((ToggleSwitch)sender).IsOn);
-
-    private void OnCopyScheduledIn(object sender, RoutedEventArgs args)
-    {
-        if (ViewModel is { HasScheduledIn: true } shown)
-        {
-            Context.Copy(shown.ScheduledIn);
-        }
-    }
-
-    private void OnRenewNow(object sender, RoutedEventArgs args) => ViewModel?.RenewNow();
 
     private void OnAutomaticChecksToggled(object sender, RoutedEventArgs args) =>
         ViewModel?.SetChecksAutomatically(((ToggleSwitch)sender).IsOn);

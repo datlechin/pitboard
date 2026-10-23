@@ -4,8 +4,8 @@
 
 use super::words;
 use super::{
-    AccountItem, AccountSection, ItemAction, ItemOffer, LimitPace, LimitRow, MenuBarText,
-    PaceStanding, Question, Seen, WindowOffer,
+    AccountItem, AccountMenuShown, AccountSection, ItemAction, ItemOffer, LimitPace, LimitRow,
+    MenuBarText, MenuNotices, PaceStanding, Question, Seen, WindowOffer,
 };
 use crate::account_windows::{forget_message_on, windows_of_account};
 use crate::model::{Intent, Sheet};
@@ -112,26 +112,47 @@ pub(crate) fn bar_title(accounts: &[Account], tools: &[Tool], usage_only: bool) 
     }
 }
 
-pub(crate) fn menu_bar(seen: &Seen) -> MenuBarText {
+pub(crate) fn menu_bar(seen: &Seen, notices: &MenuNotices) -> MenuBarText {
     let accounts = seen.accounts();
     let name_and_usage = bar_title(accounts, &seen.tools, false);
-    // Once more than one tool is shown it names the tool too: the bar follows whichever
-    // account is closest to running out, and two tools can each have a `work`.
-    let spoken = if name_and_usage.is_empty() {
-        "Pitboard".to_owned()
-    } else {
-        match titled(accounts, &seen.tools)
+    let titled = titled(accounts, &seen.tools);
+    let attention =
+        notices.install.is_some() || !notices.switches.is_empty() || notices.others.is_some();
+    let mut spoken = vec!["Pitboard".to_owned()];
+    if !name_and_usage.is_empty() {
+        spoken.push(name_and_usage.clone());
+        // The bar follows whichever account is closest to running out, and two tools can each
+        // have a `work`.
+        if let Some(tool) = titled
             .filter(|_| seen.shows_tools())
             .and_then(|account| seen.tool(&account.provider))
         {
-            Some(tool) => format!("Pitboard, {name_and_usage}, {}", tool.name),
-            None => format!("Pitboard, {name_and_usage}"),
+            spoken.push(tool.name.clone());
         }
-    };
+    }
+    if attention {
+        spoken.push("needs attention".into());
+    }
+    let mut tip = vec!["Pitboard".to_owned()];
+    // Before the accounts, which can run past the 127 characters a tooltip holds.
+    if attention {
+        tip.push("Needs attention".into());
+    }
+    tip.extend(
+        accounts
+            .iter()
+            .filter(|account| account.signed_in)
+            .map(|account| format!("{}: {}", seen.name_of(account), summary(seen, account))),
+    );
     MenuBarText {
         usage: bar_title(accounts, &seen.tools, true),
         name_and_usage,
-        spoken,
+        spoken: spoken.join(", "),
+        level: titled
+            .and_then(|account| headline(account.usage.as_ref().map_or(&[], |u| &u.windows)))
+            .map(|limit| crate::usage_level(limit.percent)),
+        attention,
+        tip: tip.join("\n"),
     }
 }
 
@@ -173,11 +194,7 @@ pub(crate) fn item(seen: &Seen, account: &Account) -> AccountItem {
     let switching_for = state.switch_under_way();
     let busy = state.sign_in_under_way();
     let in_use = account.signed_in;
-    let needs_sign_in = !account.unplaced
-        && account.label.is_some()
-        && !account.signed_in
-        && !account.switchable
-        && !login_unread(account);
+    let needs_sign_in = needs_sign_in(account);
     let switching = account.qualified.is_some() && account.qualified.as_deref() == switching_for;
     let title = if account.unplaced {
         match account.stale.as_deref() {
@@ -200,7 +217,7 @@ pub(crate) fn item(seen: &Seen, account: &Account) -> AccountItem {
         busy,
         &spoken_name,
     );
-    let problem = if account.unplaced || (!account.switchable && !account.signed_in) {
+    let problem = if account.unplaced || (!usable(account) && !account.signed_in) {
         account.stale_explanation.clone()
     } else {
         None
@@ -227,7 +244,7 @@ pub(crate) fn item(seen: &Seen, account: &Account) -> AccountItem {
         let windows = account.usage.as_ref().map_or(&[][..], |u| &u.windows);
         words::capitalised(&said::runs_out(&scoped_name(&windows[limit]), in_seconds))
     });
-    let in_place_of_limits = in_place_of_limits(account, switching, needs_sign_in);
+    let in_place_of_limits = in_place_of_limits(seen, account);
     let figure = headline(account.usage.as_ref().map_or(&[], |usage| &usage.windows))
         .filter(|_| in_place_of_limits.is_none())
         .map(|limit| words::figure(limit.percent));
@@ -247,7 +264,7 @@ pub(crate) fn item(seen: &Seen, account: &Account) -> AccountItem {
         id: account.id.clone(),
         provider: account.provider.clone(),
         qualified: account.qualified.clone(),
-        summary: in_place_of_limits.unwrap_or_else(|| limits_said(seen, account)),
+        summary: summary(seen, account),
         title,
         email: account.email.clone(),
         plan: account.plan.clone(),
@@ -259,7 +276,7 @@ pub(crate) fn item(seen: &Seen, account: &Account) -> AccountItem {
         switching,
         offers: offers(seen.os, account, action.as_ref(), busy)
             .into_iter()
-            .chain(warm_offers(seen, account))
+            .chain(warm_offer(seen, account))
             .collect(),
         warm_note: warm_note(seen, account),
         windows: windows_of_account(account, seen.accounts())
@@ -292,40 +309,37 @@ pub(crate) fn item(seen: &Seen, account: &Account) -> AccountItem {
     }
 }
 
-/// What an account's own menu offers to do to it, above its windows: its own action where
-/// that switches to it or names it, and then, for an account Pitboard has a name for and can
-/// place, signing in to it again and renaming it. Signing in again is offered here for every
-/// such account, so not a second time as the account's own action, and is held back while a
-/// sign-in runs, as the action is; nothing else is held back, here or by a switch under way.
-///
-/// AccountsPane.swift's shortcut menu as it was at c1be7c3: its `offeredInItsMenu`, and the
-/// items it worded and sent from `renamable` and `busy`.
+// Signing in again is offered here for every named account, so never as its own action too.
 fn offers(os: Os, account: &Account, action: Option<&ItemAction>, busy: bool) -> Vec<ItemOffer> {
     let offer = |title: String, intent: Intent, enabled: bool| ItemOffer {
         title,
         intent,
         enabled,
         confirm: None,
-        checked: None,
     };
-    let own = action.and_then(|action| {
-        let title = match &action.intent {
-            Intent::SwitchTo { .. } => format!("Use {}", account.label.as_deref()?),
-            Intent::PresentSheet {
-                sheet: Sheet::Name { .. },
-            } => action.title.clone(),
-            _ => return None,
-        };
-        Some(offer(title, action.intent.clone(), true))
+    let own = action.and_then(|action| match &action.intent {
+        Intent::PresentSheet {
+            sheet: Sheet::Name { .. },
+        } => Some(offer(action.title.clone(), action.intent.clone(), true)),
+        _ => None,
     });
+    let switches = action.is_some_and(|action| matches!(action.intent, Intent::SwitchTo { .. }));
     let named = account
         .label
         .as_deref()
+        .zip(account.qualified.as_ref())
         .filter(|_| !account.unplaced)
-        .map(|label| {
+        .map(|(label, qualified)| {
             let provider = account.provider.clone();
             let label = label.to_owned();
             [
+                offer(
+                    format!("Use {label}"),
+                    Intent::SwitchTo {
+                        qualified: qualified.clone(),
+                    },
+                    switches,
+                ),
                 offer(
                     words::titled(os, "Sign In Again…", "Sign in again…"),
                     Intent::PresentSheet {
@@ -364,42 +378,24 @@ fn warm_choice<'a>(
         .find(|choice| choice.qualified == qualified)
 }
 
-/// What an account's own menu offers of warming it up, after everything else it offers:
-/// **Warm Up Now**, which can be chosen while its five-hour period is not running and nothing
-/// holds a warm-up back, and none is under way; and **Warm Up Automatically**, checked while
-/// it is turned on.
-fn warm_offers(seen: &Seen, account: &Account) -> Vec<ItemOffer> {
-    let Some(choice) = warm_choice(seen, account) else {
-        return Vec::new();
-    };
+// Turning warm-ups on and off is Settings' alone, where the hours and every account show.
+fn warm_offer(seen: &Seen, account: &Account) -> Option<ItemOffer> {
+    let choice = warm_choice(seen, account)?;
     let warm = &seen.state.warm;
     let halted = warm
         .overview
         .as_ref()
         .is_some_and(|overview| overview.halted.is_some());
-    vec![
-        ItemOffer {
-            title: words::titled(seen.os, "Warm Up Now", "Warm up now"),
-            intent: Intent::WarmNow {
-                qualified: choice.qualified.clone(),
-            },
-            enabled: !halted
-                && warm.running.is_none()
-                && choice.now == pitboard_core::duty::warm::Standing::Due,
-            confirm: None,
-            checked: None,
+    Some(ItemOffer {
+        title: words::titled(seen.os, "Warm Up Now", "Warm up now"),
+        intent: Intent::WarmNow {
+            qualified: choice.qualified.clone(),
         },
-        ItemOffer {
-            title: words::titled(seen.os, "Warm Up Automatically", "Warm up automatically"),
-            intent: Intent::SetWarm {
-                qualified: choice.qualified.clone(),
-                on: !choice.on,
-            },
-            enabled: true,
-            confirm: None,
-            checked: Some(choice.on),
-        },
-    ]
+        enabled: !halted
+            && warm.running.is_none()
+            && choice.now == pitboard_core::duty::warm::Standing::Due,
+        confirm: None,
+    })
 }
 
 /// Where an account turned on for warm-ups stands, as the line under it says: "Warms up again
@@ -421,28 +417,38 @@ fn warm_note(seen: &Seen, account: &Account) -> Option<String> {
     )))
 }
 
-/// Forgetting an account, with the question asked first, where it may be forgotten: one
-/// enrolled, and not the one in use, whose record is the only one of who is signed in, and
-/// which the core refuses. The question names it, and says what forgetting it deletes in the
-/// words the account windows say it in.
+// The question names it, and says what forgetting it deletes in the account windows' words.
 fn forget(seen: &Seen, account: &Account, spoken_name: &str) -> Option<ItemOffer> {
     let qualified = account
         .qualified
         .as_ref()
-        .filter(|_| account.label.is_some() && !account.signed_in)?;
+        .filter(|_| account.label.is_some())?;
     Some(ItemOffer {
-        checked: None,
-        title: "Forget…".into(),
+        title: FORGET.into(),
         intent: Intent::Forget {
             qualified: qualified.clone(),
         },
-        enabled: true,
+        // The core refuses it.
+        enabled: !account.signed_in,
         confirm: Some(Question {
             title: format!("Forget “{spoken_name}”?"),
             message: forget_message_on(seen.os, account, seen.accounts()),
             confirm: "Forget".into(),
         }),
     })
+}
+
+const FORGET: &str = "Forget…";
+
+pub(crate) fn account_menu(os: Os) -> AccountMenuShown {
+    AccountMenuShown {
+        offers: vec![
+            "Use".into(),
+            words::titled(os, "Sign In Again…", "Sign in again…"),
+            "Rename…".into(),
+        ],
+        forget: FORGET.into(),
+    }
 }
 
 /// What pressing an account does, decided once so the menu and the window cannot disagree.
@@ -475,7 +481,7 @@ fn action(
     if account.signed_in {
         return None;
     }
-    if account.switchable
+    if usable(account)
         && let Some(qualified) = &account.qualified
     {
         return Some(ItemAction {
@@ -536,14 +542,33 @@ fn runs_out_first(account: &Account, now: i64) -> Option<(usize, i64)> {
     )
 }
 
+// A refused login is parked all the same, and a switch to it would fail.
+pub(crate) fn usable(account: &Account) -> bool {
+    account.switchable && account.stale.as_deref() != Some("login_refused")
+}
+
+pub(crate) fn needs_sign_in(account: &Account) -> bool {
+    !account.unplaced
+        && account.label.is_some()
+        && !account.signed_in
+        && !usable(account)
+        && !login_unread(account)
+}
+
 /// An account not in use whose login may be the one in use that could not be read, which no
 /// sign-in would fix.
 fn login_unread(account: &Account) -> bool {
     !account.signed_in && account.stale.as_deref() == Some("login_unreadable")
 }
 
-fn in_place_of_limits(account: &Account, switching: bool, needs_sign_in: bool) -> Option<String> {
-    if switching {
+// The line under an account in the menu: its limits, or what stands in their way.
+fn summary(seen: &Seen, account: &Account) -> String {
+    in_place_of_limits(seen, account).unwrap_or_else(|| limits_said(seen, account))
+}
+
+fn in_place_of_limits(seen: &Seen, account: &Account) -> Option<String> {
+    if account.qualified.is_some() && account.qualified.as_deref() == seen.state.switch_under_way()
+    {
         return Some("Switching…".into());
     }
     if account.unplaced || login_unread(account) {
@@ -557,7 +582,7 @@ fn in_place_of_limits(account: &Account, switching: bool, needs_sign_in: bool) -
     if account.label.is_none() {
         return Some("Not named yet".into());
     }
-    if needs_sign_in {
+    if needs_sign_in(account) {
         return Some("Needs signing in again".into());
     }
     let windows = account.usage.as_ref().map_or(&[][..], |u| &u.windows);
@@ -933,6 +958,138 @@ mod tests {
             None
         );
         assert_eq!(titled(&[], &both_tools()), None);
+    }
+
+    fn bar(accounts: Vec<Account>, warnings: Vec<crate::Warning>) -> MenuBarText {
+        let state = read(status(accounts, warnings), both_tools());
+        present_on(Os::Windows, &state, 0, &Utc).menu_bar
+    }
+
+    /// The step of the limit the bar names, which an icon can show where the bar has no
+    /// words: none before anything is measured, and none with nobody signed in.
+    #[test]
+    fn the_menu_bar_says_the_step_of_the_limit_it_names() {
+        let level = |percent: f64| {
+            bar(
+                vec![
+                    account(Some("work"))
+                        .signed_in()
+                        .limits(vec![window("session", percent)])
+                        .build(),
+                ],
+                Vec::new(),
+            )
+            .level
+        };
+        assert_eq!(level(12.0), Some(crate::UsageLevel::Plenty));
+        assert_eq!(level(75.0), Some(crate::UsageLevel::Low));
+        assert_eq!(level(96.0), Some(crate::UsageLevel::Out));
+        assert_eq!(
+            bar(vec![account(Some("work")).signed_in().build()], Vec::new()).level,
+            None
+        );
+        assert_eq!(
+            bar(
+                vec![
+                    account(Some("work"))
+                        .limits(vec![window("session", 96.0)])
+                        .build()
+                ],
+                Vec::new()
+            )
+            .level,
+            None
+        );
+    }
+
+    /// The bar is flagged while the menu opens on something to look at, and says so aloud.
+    #[test]
+    fn the_menu_bar_is_flagged_while_the_menu_has_something_to_look_at() {
+        let work = || {
+            account(Some("work"))
+                .signed_in()
+                .limits(vec![window("session", 42.0)])
+                .build()
+        };
+        let calm = bar(vec![work()], Vec::new());
+        assert!(!calm.attention);
+        assert_eq!(calm.spoken, "Pitboard, work 42%");
+        let warned = bar(
+            vec![work()],
+            vec![crate::Warning {
+                code: "keychain_locked".into(),
+                message: "The keychain is locked.".into(),
+                account: None,
+                held: None,
+                provider: None,
+            }],
+        );
+        assert!(warned.attention);
+        assert_eq!(warned.spoken, "Pitboard, work 42%, needs attention");
+
+        let state = read(status(Vec::new(), Vec::new()), Vec::new());
+        let bare = present_on(Os::Windows, &state, 0, &Utc).menu_bar;
+        assert!(bare.attention, "no tool here");
+        assert_eq!(bare.spoken, "Pitboard, needs attention");
+    }
+
+    /// Windows' notification area has a tooltip and no title: it lists each account in use,
+    /// with its tool beside another tool's, and its limits as the menu says them, after whether
+    /// the menu needs attention, which Narrator reads with the icon's name.
+    #[test]
+    fn the_notification_areas_tip_lists_each_account_in_use() {
+        let tip = bar(
+            vec![
+                account(Some("work"))
+                    .signed_in()
+                    .limits(vec![window("session", 12.0), window("weekly_all", 64.4)])
+                    .build(),
+                account(Some("spare"))
+                    .limits(vec![window("session", 3.0)])
+                    .build(),
+                account(Some("job"))
+                    .of("codex")
+                    .signed_in()
+                    .limits(vec![window("five_hour", 71.0).length(18_000)])
+                    .build(),
+            ],
+            Vec::new(),
+        )
+        .tip;
+        assert_eq!(
+            tip,
+            "Pitboard\nwork (Claude Code): 5-hour 12%, weekly 64%\njob (Codex): 5-hour 71%"
+        );
+        let one = bar(
+            vec![
+                account(Some("work"))
+                    .signed_in()
+                    .limits(vec![window("session", 12.0)])
+                    .build(),
+            ],
+            Vec::new(),
+        );
+        assert_eq!(one.tip, "Pitboard\nwork: 5-hour 12%");
+        assert_eq!(bar(Vec::new(), Vec::new()).tip, "Pitboard");
+        let warned = bar(
+            vec![
+                account(Some("work"))
+                    .signed_in()
+                    .limits(vec![window("session", 12.0)])
+                    .build(),
+            ],
+            vec![crate::Warning {
+                code: "keychain_locked".into(),
+                message: "The keychain is locked.".into(),
+                account: None,
+                held: None,
+                provider: None,
+            }],
+        );
+        assert_eq!(warned.tip, "Pitboard\nNeeds attention\nwork: 5-hour 12%");
+        let state = read(status(Vec::new(), Vec::new()), Vec::new());
+        let bare = present_on(Os::Windows, &state, 0, &Utc).menu_bar;
+        assert_eq!(bare.tip, "Pitboard\nNeeds attention", "no tool here");
     }
 
     /// Sections come in the order the tools are listed, each once, whatever order the rows

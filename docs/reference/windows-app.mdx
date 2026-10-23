@@ -18,6 +18,14 @@ Strings here are those the app shows while one tool has accounts. [Accounts of s
 
 Pitboard's icon shows the Pitboard mark. Windows puts a new icon in the overflow, behind the arrow at the end of the taskbar. Drag it onto the taskbar to keep it in sight.
 
+| The icon shows | When |
+| --- | --- |
+| Its lit row whole | The limit the [menu bar item](/reference/mac-app#menu-bar-item) would show is under 70% used. |
+| Its lit row half lit | That limit is from 70% used. |
+| A sliver of its lit row | That limit is from 90% used. |
+| Its row unlit | Nobody is signed in, or that limit has no reading. |
+| Windows' warning symbol at its bottom right | [The menu](#menu) opens on something that needs attention. |
+
 | Action | Does |
 | --- | --- |
 | Click | Opens the Pitboard window |
@@ -27,7 +35,7 @@ Pitboard's icon shows the Pitboard mark. Windows puts a new icon in the overflow
 
 To reach the icon from the keyboard, press Win+B, then the arrow keys. While the icon is in the overflow, first press Enter on the arrow to open the overflow.
 
-Its tooltip reads **Pitboard**, then the label and percentage the menu bar item would show, such as **Pitboard, work 42%**. [Menu bar item](/reference/mac-app#menu-bar-item) says which account and which limit those follow. With several tools, the tool's name ends it: **Pitboard, work 42%, Claude Code**.
+Its tooltip reads **Pitboard**, then **Needs attention** while the menu opens on something to look at, then a line for each account in use: its label and the line [the menu](#menu) shows under it, such as **work: 5-hour 42%, weekly 12%**. With several tools, each label names its tool: **work (Claude Code): 5-hour 42%**. Windows shows the first 127 characters.
 
 ## Menu
 
@@ -74,13 +82,18 @@ Instead of the list, it can show:
 | --- | --- | --- |
 | **Claude Code isn't installed** | Same as the menu's **Claude Code isn't installed**. | **How to install Claude Code** |
 | **Couldn't read accounts** and the reason | A read failed, with no account to list. | **Try again**, dimmed during a read |
-| **No accounts** | No tool is signed in and no account is enrolled. | **Add account** |
+| **No accounts** | No tool is signed in, no account is enrolled, and the tip **Use Pitboard with Codex** does not apply. | **Add account** |
 | **Reading accounts** | The first read has not finished. | None |
+
+The setup tip is the first of these that applies:
 
 | Setup tip | Shown when | Buttons |
 | --- | --- | --- |
 | **Give this account a name** | A tool is signed in to an account Pitboard has not enrolled. | **Name**, which opens **Name this account** |
 | **Add a second account** | Claude Code's or Codex's only enrolled account is the one in use. | **Add account**, set to that tool. **Not now** stops the tip for that tool. |
+| **Use Pitboard with Codex** | Codex is installed and no Codex account is enrolled. Where Claude Code is signed in to nothing, it shows in place of **No accounts**. | **Add Codex account**, which reads which account Codex is signed in to and opens **Name this account** for it, or **Add account** set to Codex where it is signed in to none. **Not now** stops the tip. |
+| **Start when you sign in to Windows** | Windows does not start Pitboard when you sign in, and Settings > Apps > Startup did not turn it off. The tip says where Windows puts the icon. | **Turn on**, which turns on [Start when you sign in to Windows](/reference/settings#start-when-you-sign-in-to-windows), or opens **Settings**, which says why, where Windows refuses. **Taskbar settings** opens Windows' taskbar settings, where **Other system tray icons** can keep the icon in view. **Not now** stops the tip. |
+| **Switch before a limit runs out** | Claude Code has two enrolled accounts, and nothing was chosen in [When a limit reaches](/reference/settings#when-a-limit-reaches). | **Open settings**, which opens **Settings** scrolled to **Limits** and stops the tip. **Not now** stops it too. |
 
 | Part of a row | Shows |
 | --- | --- |
@@ -96,7 +109,7 @@ Notices, most pressing first. Each shows an x to close it where the menu bar app
 | **An interrupted switch is waiting** | A switch stopped partway, and Pitboard cannot yet tell whether it finished. | **Give up**, which asks first |
 | **Couldn't read usage** | The last read failed, for the reason under the title. | None |
 | **work has no 5-hour limit left** | The account in use ran out of a limit, and another account of its tool has room. | **Switch to personal** |
-| **Switched to work** | The app finished a switch, asked for or automatic. | None |
+| **Switched to work** | The app finished a switch, asked for or automatic. One with nothing under its title goes once its countdown ends. | None |
 | **work has a new login** | A sign-in in the app gave the account in use a new login. | None |
 | **Claude Code's config names another account** | The config names another account than the one whose login Claude Code has stored. | **Update Claude Code's config**, while the account in use is enrolled |
 | **A login file is left behind Credential Manager** | `.credentials.json` sits behind Credential Manager. | **Put away**. None when Pitboard cannot read the file. |
@@ -128,13 +141,12 @@ Right-clicking an account in **Accounts**, or selecting it and pressing Shift+F1
 | --- | --- | --- |
 | **Use work** | An account you can switch to, while no switch runs | Switches to it. |
 | **Name** | The account in use, when it is not enrolled | Opens **Name this account**. |
-| **Sign in again** | Every enrolled account, the one in use too | Opens **Sign in to work again**. Dimmed while a sign-in runs. |
-| **Rename** | Every enrolled account | Opens **Rename "work"**. |
-| **Warm up now** | Every enrolled Claude Code account | [Warms it up](/guides/warm-up#warm-up-an-account-now). Dimmed while its five-hour period runs, while it is held back, while a warm-up runs and while nothing can be warmed up here. |
-| **Warm up automatically** | Every enrolled Claude Code account | Turns its warm-up on or off. Checked while it is on. |
+| **Sign in again** | Every enrolled account, the one in use too, while no sign-in runs | Opens **Sign in to work again**. |
+| **Rename** | Every enrolled account | Opens **Rename "work"**. F2 on the row does the same. |
+| **Warm up now** | Every enrolled Claude Code account, while it can be warmed up | [Warms it up](/guides/warm-up#warm-up-an-account-now). It cannot while its five-hour period runs, while it is held back, while a warm-up runs or while nothing can be warmed up here. |
 | **Open claude.ai** or **Open chatgpt.com** | Every enrolled Claude Code or Codex account | Opens the account's [window](/reference/account-windows#account-windows). |
-| **Copy email address** | Every account with an email address | Copies it. |
-| **Forget** | An enrolled account not in use | Asks, then forgets the account. |
+| **Copy email address** | Every account with an email address | Copies it. Ctrl+C on the row does the same. |
+| **Forget** | An enrolled account not in use | Asks, then forgets the account. Delete on the row does the same. |
 
 ## Dialogs and alerts
 
@@ -144,7 +156,7 @@ Dialogs open over the Pitboard window.
 | --- | --- | --- |
 | **Add account** | **Add account** in the menu, the page or a tip | A **Tool** choice of Claude Code and Codex, a **Name** field and **Sign in**. For a tool Pitboard cannot find, a warning such as **Pitboard can't find the Codex CLI on this PC.** with a link to install it, and **Sign in** dimmed. |
 | **Sign in to work again** | **Sign in again** | The account and **Sign in**. |
-| **Name this account** | **Name** | A **Name** field and **Save**. |
+| **Name this account** | **Name** | A **Name** field and **Save**. The field starts with a name from the email address that no other account of the tool has: the domain's first word for a work address, such as `acme` for `dana@acme.io`, or the part before the `@` for one at a mail service such as Gmail. |
 | **Rename "work"** | **Rename** | A **Name** field holding the label, and **Rename**. |
 | **Put away the login left in a file** | **Put away** on its notice | What the file holds and what putting it away does, as [`pitboard stow`](/reference/recovery-commands#stow) says it, and **Put away**. |
 
@@ -164,7 +176,7 @@ Each says what the menu bar app's says, as its [Alerts](/reference/mac-app#alert
 
 ## Notifications
 
-The app posts the notifications the [menu bar app](/reference/mac-app#notifications) lists, as Windows notifications, with the same titles, bodies and **Switch** button. Selecting a notification itself opens **Accounts**.
+The app posts the notifications the [menu bar app](/reference/mac-app#notifications) lists, as Windows notifications, with the same titles, bodies and buttons. Its button **Sign in again** is in sentence case. Selecting a notification opens what it opens on macOS, with **Settings** scrolled to **Limits** in place of its **Limits** pane.
 
 Windows can turn them off in **Settings** > **System** > **Notifications**. Where Windows shows none of Pitboard's notifications, Pitboard's **Settings** says why under **General**, as [Notifications in Settings](/reference/settings#notifications) lists.
 
@@ -184,5 +196,6 @@ Windows can turn them off in **Settings** > **System** > **Notifications**. Wher
 | Enter, or double-click | A row in **Accounts** | What the row's button does. On the account in use when it is not enrolled, opens **Name this account**. |
 | Delete | A row in **Accounts** | **Forget**, after asking |
 | F2 | A row in **Accounts** | **Rename** |
+| Ctrl+C | A row in **Accounts** | **Copy email address** |
 | Enter | A dialog | Its default button |
 | Escape | A dialog | **Cancel**, where it is not dimmed |

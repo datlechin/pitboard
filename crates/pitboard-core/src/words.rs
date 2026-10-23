@@ -306,9 +306,11 @@ pub(crate) fn out_of_reach(os: Os) -> &'static str {
 // A network logon, which has no Credential Manager (MC-net).
 pub(crate) const SSH_SIGN_IN: &str = "a sign-in over SSH with a key";
 
-/// Said where switching by itself and warming up are turned on, in each front end.
-pub const IS_THIS_ALLOWED: &str = "Anthropic's terms may cover automatic switching and \
-     warm-ups: https://docs.usepitboard.com/concepts/limits#is-this-allowed";
+// Said where switching by itself and warming up are turned on, in each front end, with the link.
+pub const TERMS_MAY_COVER_THIS: &str =
+    "Anthropic's terms may cover automatic switching and warm-ups";
+pub const IS_THIS_ALLOWED_URL: &str =
+    "https://docs.usepitboard.com/concepts/limits#is-this-allowed";
 
 pub(crate) fn past_credential_manager(bytes: usize, limit: usize) -> String {
     format!("{bytes} bytes, past the {limit} Claude Code keeps in Credential Manager")

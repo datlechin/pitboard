@@ -154,7 +154,8 @@ fn a_warm_up_by_itself_that_came_to_nothing_is_notified_once_and_waits() {
             body: "`personal` was not warmed up: the request was answered, and Anthropic \
                    still has no period running."
                 .into(),
-            switch_to: None,
+            clicked: "limits".into(),
+            button: None,
         }]
     );
     assert!(
@@ -315,10 +316,9 @@ fn turning_an_account_on_warms_it_up_where_it_is_due() {
     assert_eq!(shown.range_label, "07:00 to 23:00");
 }
 
-/// Each row turned on says where its warm-up stands, and its menu offers both: Warm Up Now
-/// while its period is not running, and Warm Up Automatically, checked while it is on.
+// Turning it on and off is Settings' alone, where the hours and every account's state are.
 #[test]
-fn a_row_says_where_its_warm_up_stands_and_its_menu_offers_it() {
+fn a_row_says_where_its_warm_up_stands_and_its_menu_offers_warm_up_now() {
     let mut machine = reading(overview(
         true,
         Standing::Running {
@@ -342,22 +342,15 @@ fn a_row_says_where_its_warm_up_stands_and_its_menu_offers_it() {
         .find(|item| item.title == "personal")
         .expect("personal");
     assert_eq!(item.warm_note.as_deref(), Some("Warms up again at 10:00"));
-    let warm: Vec<(String, bool, Option<bool>)> = item
+    let warm: Vec<(String, bool)> = item
         .offers
         .iter()
         .filter(|offer| offer.title.starts_with("Warm"))
-        .map(|offer| (offer.title.clone(), offer.enabled, offer.checked))
+        .map(|offer| (offer.title.clone(), offer.enabled))
         .collect();
     assert_eq!(
         warm,
-        [
-            (titled("Warm Up Now", "Warm up now"), false, None),
-            (
-                titled("Warm Up Automatically", "Warm up automatically"),
-                true,
-                Some(true)
-            )
-        ],
+        [(titled("Warm Up Now", "Warm up now"), false)],
         "its period runs, so nothing to start now"
     );
 }

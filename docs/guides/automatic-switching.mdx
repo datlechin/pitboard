@@ -4,7 +4,7 @@ sidebarTitle: "Switch automatically"
 description: "Have Pitboard switch Claude Code to another of your accounts before the one in use reaches a limit."
 ---
 
-Automatic switching is off until you turn it on. It acts once a limit of the Claude Code account in use reaches a share you choose: 95% by default, from 50% to 99%.
+Automatic switching is off until you choose it. It acts once a limit of the Claude Code account in use reaches a share you choose: 95% by default, from 50% to 99%.
 
 Pitboard switches early because open Claude Code sessions take up to about 33 seconds to follow. It never switches Codex, whose open sessions do not follow a switch. [Open sessions](/concepts/open-sessions) explains both.
 
@@ -12,16 +12,16 @@ Pitboard switches early because open Claude Code sessions take up to about 33 se
 
 <Tabs>
   <Tab title="macOS">
-    In **Settings** > **Limits**, under **Before an account runs out**, turn on **Switch Claude Code automatically**. Set the share with **Switch when a limit reaches 95%**.
+    In **Settings** > **Limits**, under **Before an account runs out**, choose **Switch Automatically** in **When a limit reaches**. Set the share in the field or with the stepper beside it, 95% at first.
   </Tab>
   <Tab title="Windows">
-    Right-click Pitboard's icon in the notification area and select **Settings**. Under **Limits**, turn on **Switch Claude Code automatically**, then expand it and set the share in **Switch when a limit reaches**.
+    Right-click Pitboard's icon in the notification area and select **Settings**. Under **Limits**, select **Switch automatically** in **When a limit reaches**, then expand it and set the share in **Share of a limit**.
   </Tab>
 </Tabs>
 
-The app switches only while it is open, and posts a notification for each switch. [Switch Claude Code automatically](/reference/settings#switch-claude-code-automatically) lists what the line under the setting says.
+The app switches only while it is open, and posts a notification for each switch. [When a limit reaches](/reference/settings#when-a-limit-reaches) lists what the line under the setting says.
 
-On the command line, run `pitboard watch` and leave the terminal open. It switches whether the app's setting is on or off, at its own share: `--at`, 95 by default.
+On the command line, run `pitboard watch` and leave the terminal open. It switches whatever the app's **When a limit reaches** setting says, at its own share: `--at`, 95 by default.
 
 ```sh
 pitboard watch --at 90

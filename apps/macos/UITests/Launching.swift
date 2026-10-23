@@ -30,8 +30,9 @@ class FixtureTestCase: XCTestCase {
     /// The app, started into `fixture`: nothing it does reaches the keychain, the network,
     /// launchd, the login items or an administrator's password.
     @MainActor
-    func launch(_ fixture: Fixture) -> XCUIApplication {
+    func launch(_ fixture: Fixture, environment: [String: String] = [:]) -> XCUIApplication {
         let app = XCUIApplication()
+        app.launchEnvironment = environment
         app.launchEnvironment["PITBOARD_FIXTURE"] = fixture.rawValue
         app.launch()
         return app
@@ -50,6 +51,15 @@ extension XCUIApplication {
         openMenu()
         menuItem("Open Pitboard").click()
         XCTAssertTrue(windows.firstMatch.waitForExistence(timeout: 5))
+    }
+
+    // The tips past a second account: opening at login, then what happens at a limit.
+    func putTheTipsAway() {
+        for tip in ["Open Pitboard at login", "Switch before a limit runs out"] {
+            XCTAssertTrue(staticTexts[tip].waitForExistence(timeout: 5), tip)
+            buttons["Not Now"].click()
+            XCTAssertTrue(staticTexts[tip].waitForNonExistence(timeout: 5), tip)
+        }
     }
 
     func openSettings() {
@@ -87,6 +97,15 @@ extension XCUIApplication {
 
     func accountRow(_ qualified: String) -> XCUIElement {
         descendants(matching: .any)["account.\(qualified)"]
+    }
+
+    // The menu bar's menus are found whether open or not, and none holds Copy Email Address.
+    var shortcutMenu: XCUIElement {
+        menus.containing(NSPredicate(format: "title == %@", "Copy Email Address")).firstMatch
+    }
+
+    var accountMenu: XCUIElement {
+        menuBars.menuBarItems["Account"]
     }
 
     /// macOS titles an account's window with the account's label, then a dash and the page's

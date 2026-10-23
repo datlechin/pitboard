@@ -70,8 +70,8 @@ impl Job {
     pub(crate) fn lane(&self) -> Lane {
         match self {
             // The schedule, doctor and the log are read where the Swift service read them, on
-            // its queue of reads, and changes to the schedule and renewals are made on its
-            // queue of changes, one at a time with every other.
+            // its queue of reads, and changes to the schedule are made on its queue of changes,
+            // one at a time with every other.
             Job::Read { .. }
             | Job::ReadOffline { .. }
             | Job::Look
@@ -92,13 +92,12 @@ impl Job {
             | Job::RepairSchedule
             | Job::SetSchedule { .. }
             | Job::SetWarm { .. }
-            | Job::SetWarmRange { .. }
-            | Job::Renew => Lane::Changes,
+            | Job::SetWarmRange { .. } => Lane::Changes,
             Job::WarmUp | Job::WarmNow { .. } => Lane::Warm,
             Job::Holding { .. } | Job::Quit { .. } | Job::Open { .. } => Lane::Processes,
             // Where the login shell's `PATH` is asked, as the Swift service asked it for
             // `searchPath`, apart from every queue of its own.
-            Job::AskInstalled | Job::FindCommandLine => Lane::Discovery,
+            Job::AskInstalled | Job::FindCommandLine | Job::ReadSignedIn { .. } => Lane::Discovery,
             Job::SignIn { .. } | Job::SignInOver { .. } => Lane::SignIn,
             Job::PasteCode { .. } | Job::StopSignIn { .. } => Lane::SignInCalls,
             Job::LoadKept
@@ -557,6 +556,10 @@ impl Worker {
             Job::AskInstalled => Answer::Installed {
                 tools: core.installed(),
             },
+            Job::ReadSignedIn { provider } => Answer::SignedIn {
+                email: core.signed_in_email(&provider),
+                provider,
+            },
             Job::Holding { qualified, then } => {
                 let holdings = core.holding(split(&qualified).0);
                 Answer::Held {
@@ -758,9 +761,6 @@ impl Worker {
                     own,
                 }
             }
-            Job::Renew => Answer::Renewed {
-                renewals: core.renew(),
-            },
             Job::Check => Answer::Checked {
                 checks: core.doctor(self.local_time.as_ref()),
             },
@@ -968,7 +968,8 @@ mod tests {
             title: "work has no 5-hour limit left".into(),
             subtitle: None,
             body: "spare has 80% of its own left.".into(),
-            switch_to: Some("claude/spare".into()),
+            clicked: "accounts".into(),
+            button: None,
         };
         let answered = |worker: &Worker| match worker.work(Job::Post {
             notice: notice.clone(),
@@ -1525,11 +1526,7 @@ mod tests {
         ] {
             assert_eq!(job.lane(), Lane::Reads, "{job:?}");
         }
-        for job in [
-            Job::RepairSchedule,
-            Job::SetSchedule { on: true },
-            Job::Renew,
-        ] {
+        for job in [Job::RepairSchedule, Job::SetSchedule { on: true }] {
             assert_eq!(job.lane(), Lane::Changes, "{job:?}");
         }
         assert_eq!(Job::FindCommandLine.lane(), Lane::Discovery);

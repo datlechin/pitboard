@@ -10,6 +10,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     let model: AppModel
     let windows: AccountWindows
     let openAtLogin: OpenAtLogin
+    let notificationsAllowed: NotificationsAllowed
     let commandLineLink: CommandLineLink
     let windowRequests = WindowRequests()
     let defaults: UserDefaults
@@ -22,7 +23,10 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         defaults = dependencies.defaults
         windows = AccountWindows(
             model: model, environment: dependencies.web, presence: .live())
-        openAtLogin = OpenAtLogin(dependencies.loginItem)
+        openAtLogin = OpenAtLogin(dependencies.loginItem) { [model] on in
+            model.send(.opensAtLogin(on: on))
+        }
+        notificationsAllowed = NotificationsAllowed(status: dependencies.notificationStatus)
         commandLineLink = CommandLineLink(dependencies.commandLineTool, model: model)
         quitting = dependencies.quitting
         super.init()
@@ -30,7 +34,14 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
     public func applicationDidFinishLaunching(_ notification: Notification) {
         let model = model
+        let openAtLogin = openAtLogin
         watching = [
+            // Login Items is changed in System Settings, and coming back is the next look.
+            NotificationCenter.default.addObserver(
+                forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main
+            ) { _ in
+                MainActor.assumeIsolated { openAtLogin.read() }
+            },
             // Numbers read before the Mac slept say nothing about now.
             NSWorkspace.shared.notificationCenter.addObserver(
                 forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
@@ -50,6 +61,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             },
         ]
         model.send(.start)
+        openAtLogin.read()
     }
 
     public func applicationWillTerminate(_ notification: Notification) {

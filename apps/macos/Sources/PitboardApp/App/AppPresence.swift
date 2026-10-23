@@ -19,7 +19,7 @@ final class AppPresence {
     private let settle: @MainActor () async -> Void
 
     /// `settle` waits for a window that replaces one closing to open, before the app goes
-    /// back to the menu bar.
+    /// back to the menu bar, and for an activation to take.
     init(
         apply: @escaping @MainActor (NSApplication.ActivationPolicy) -> Void,
         bringForward: @escaping @MainActor () -> Void,
@@ -55,6 +55,11 @@ final class AppPresence {
     func activate() {
         apply(.regular)
         bringForward()
+        // Refused after a notification's button too, where nobody clicked Pitboard itself.
+        Task {
+            await settle()
+            if !isActive() { reopen() }
+        }
     }
 
     /// Brings Pitboard to the front for something that came from another app, a shared link,

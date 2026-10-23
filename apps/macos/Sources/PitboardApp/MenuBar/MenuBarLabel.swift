@@ -2,16 +2,15 @@ import AppKit
 import PitboardKit
 import SwiftUI
 
-/// The one view alive from launch to quit, so it is also what opens a window asked for away
-/// from any view: the main window whenever the model asks for it, from the menu, from a
-/// notification's button, or on the first launch ever, and an account's window from the
-/// Dock icon's menu.
+// Alive from launch to quit, so it opens a window asked for away from any view.
 struct MenuBarLabel: View {
     let model: AppModel
     let windows: AccountWindows
     let requests: WindowRequests
     @Environment(\.openWindow) private var openWindow
+    @Environment(\.openSettings) private var openSettings
     @AppStorage(DefaultsKey.menuBarShows) private var shows = MenuBarShows.nameAndUsage
+    @AppStorage(DefaultsKey.settingsTab) private var settingsTab = SettingsView.Tab.general
 
     var body: some View {
         let title = shows.text(of: model.menuBar)
@@ -19,7 +18,7 @@ struct MenuBarLabel: View {
         // first, and an item that is only text is the widest thing up there. A Label would
         // render as the icon alone, so both are placed by hand.
         HStack(spacing: 4) {
-            Image(nsImage: MenuBarMark.image)
+            Image(nsImage: model.menuBar.attention ? MenuBarMark.attention : MenuBarMark.image)
             if !title.isEmpty {
                 Text(title).monospacedDigit()
             }
@@ -32,7 +31,12 @@ struct MenuBarLabel: View {
             // An app with no Dock icon has nothing to bring forward but itself, and the
             // window opens behind whatever is in front otherwise.
             windows.presence.activate()
-            openWindow(id: MainWindow.id)
+            if model.windowRequest.settings {
+                settingsTab = .limits
+                openSettings()
+            } else {
+                openWindow(id: MainWindow.id)
+            }
         }
         .onChange(of: windows.requested) {
             for store in windows.takeRequests() {

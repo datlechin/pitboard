@@ -14,13 +14,14 @@ public sealed class WindowsNotificationsTests
 
     private static readonly RunOutNotice RunOut = new(
         Id: "claude/personal/session/-1800018000", Title: "personal has no 5-hour limit left", Subtitle: "Claude Code",
-        Body: "work has 58% of its own left.", SwitchTo: "claude/work");
+        Body: "work has 58% of its own left.", Clicked: "accounts", Button: new NotificationButton("Switch", "switch/claude/work"));
 
     // A warm-up by itself that came to nothing, whose id carries its message (crates/pitboard-ffi/src/model/warming.rs).
     private static readonly RunOutNotice WarmFailed = new(
         Id: "warm-failed/warm_up_not_started/`personal` was not warmed up: the request was answered, and Anthropic still has no period running.",
         Title: "Pitboard could not warm up an account", Subtitle: null,
-        Body: "`personal` was not warmed up: the request was answered, and Anthropic still has no period running.", SwitchTo: null);
+        Body: "`personal` was not warmed up: the request was answered, and Anthropic still has no period running.",
+        Clicked: "limits", Button: null);
 
     private static readonly TimeSpan Patience = TimeSpan.FromSeconds(30);
 
@@ -36,8 +37,8 @@ public sealed class WindowsNotificationsTests
         CollectionAssert.AreEqual(said, toast.Descendants("text").Select(text => text.Value).ToArray());
         var button = toast.Descendants("action").Single();
         Assert.AreEqual("Switch", (string?)button.Attribute("content"));
-        Assert.AreEqual("switch=claude/work", (string?)button.Attribute("arguments"));
-        Assert.IsNull(toast.Attribute("launch"));
+        Assert.AreEqual("clicked=switch/claude/work", (string?)button.Attribute("arguments"));
+        Assert.AreEqual("clicked=accounts", (string?)toast.Attribute("launch"));
         Assert.AreEqual(WindowsNotifications.Tag(RunOut.Id), notification.Tag);
     }
 
@@ -66,20 +67,25 @@ public sealed class WindowsNotificationsTests
 
     // Windows hands a button's arguments back as the payload holds them.
     [TestMethod]
-    public void TheSwitchButtonGivesBackTheAccountItNames()
+    public void AButtonGivesBackWhatItAsksFor()
     {
-        foreach (var account in new[] { "claude/work", "codex/a;b=c%3B", "claude/Zoë & <Ö>'s \"team\"" })
+        foreach (var clicked in new[] { "switch/claude/work", "switch/codex/a;b=c%3B", "sign-in-again/claude/Zoë & <Ö>'s \"team\"" })
         {
-            var arguments = (string)Toast(RunOut with { SwitchTo = account }).Descendants("action").Single().Attribute("arguments")!;
+            var notice = RunOut with { Button = new NotificationButton("Switch", clicked) };
+            var arguments = (string)Toast(notice).Descendants("action").Single().Attribute("arguments")!;
 
-            Assert.AreEqual(new Intent.SwitchTo(account), WindowsNotifications.Read(Decoded(arguments)), arguments);
+            Assert.AreEqual(new Intent.NotificationClicked(clicked), WindowsNotifications.Read(Decoded(arguments)), arguments);
         }
     }
 
+    // One an older Pitboard posted hands back nothing the model reads, which opens the accounts.
     [TestMethod]
-    public void AClickOnTheNotificationItselfOpensTheWindowOnTheAccounts()
+    public void AClickOnTheNotificationItselfGivesBackWhatItAsksFor()
     {
-        Assert.AreEqual(new Intent.ShowWindow(Pane.Accounts), WindowsNotifications.Read(Decoded("")));
+        var launch = (string)Toast(WarmFailed).Attribute("launch")!;
+
+        Assert.AreEqual(new Intent.NotificationClicked("limits"), WindowsNotifications.Read(Decoded(launch)));
+        Assert.AreEqual(new Intent.NotificationClicked(""), WindowsNotifications.Read(Decoded("")));
     }
 
     [TestMethod]
@@ -124,19 +130,20 @@ public sealed class WindowsNotificationsTests
         var clicked = new List<Intent>();
         notifications.Start(clicked.Add);
 
-        system.Click(Decoded("switch=claude/work"));
-        system.Click(Decoded(""));
+        system.Click(Decoded("clicked=switch/claude/work"));
+        system.Click(Decoded("clicked=accounts"));
 
-        CollectionAssert.AreEqual(new Intent[] { new Intent.SwitchTo("claude/work"), new Intent.ShowWindow(Pane.Accounts) }, clicked);
+        Intent[] handed = [new Intent.NotificationClicked("switch/claude/work"), new Intent.NotificationClicked("accounts")];
+        CollectionAssert.AreEqual(handed, clicked);
     }
 
     [TestMethod]
     public void TheSwitchButtonThatStartedPitboardSwitches()
     {
-        var system = new StandInNotifications { Launched = Decoded("switch=claude/work") };
+        var system = new StandInNotifications { Launched = Decoded("clicked=switch/claude/work") };
         var notifications = new WindowsNotifications(Build.Release, () => system, Icon);
 
-        Assert.AreEqual(new Intent.SwitchTo("claude/work"), notifications.Start(_ => Assert.Fail("a click while running")));
+        Assert.AreEqual(new Intent.NotificationClicked("switch/claude/work"), notifications.Start(_ => Assert.Fail("a click while running")));
     }
 
     [TestMethod]
@@ -257,7 +264,7 @@ public sealed class WindowsNotificationsTests
         Assert.IsTrue(shown, "nothing was shown");
         var toast = XElement.Parse(notification!.Payload);
         Assert.AreEqual("personal has no 5-hour limit left", toast.Descendants("text").First().Value);
-        Assert.AreEqual("switch=claude/work", (string?)toast.Descendants("action").Single().Attribute("arguments"));
+        Assert.AreEqual("clicked=switch/claude/work", (string?)toast.Descendants("action").Single().Attribute("arguments"));
     }
 
     // As the Windows App SDK 2.5.1 reads Arguments: pairs at ';', each at its first '=', then %25, %3B and %3D.

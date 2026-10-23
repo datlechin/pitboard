@@ -3,13 +3,14 @@
 //! through `State::apply` by hand. Where a Swift test also checked what is said about a
 //! read, which comes with the model's wording, the rest of it is kept here.
 
+use super::advice::Told;
 use super::state::{Answer, Job};
 use super::switching::switch;
 use super::testing::{
     Hand, Machine, account, any_read, claude, claude_code, codex, codex_account, fresh_read,
-    installed_ask, offline_read, percent, refusal, status, warned, warning,
+    installed_ask, offline_read, percent, refusal, status, titled, warned, warning,
 };
-use super::{Intent, ReadFailure};
+use super::{Intent, NotificationButton, ReadFailure, RunOutNotice, Sheet};
 use crate::{Account, Warning};
 use std::time::Duration;
 
@@ -255,8 +256,8 @@ fn replaced(who: &str, now: &str) -> Warning {
 
 /// A sign-in outside Pitboard that replaced the only login of an account is said on every
 /// read until it is put right, and posted once while it stands, since nobody may have the
-/// window open: a read that carries it again posts nothing, and one after it went and came
-/// back posts it again.
+/// window open, with a button that signs in to it again: a read that carries it again posts
+/// nothing, and one after it went and came back posts it again.
 #[test]
 fn a_login_replaced_outside_is_posted_once_while_it_stands() {
     let replaced = replaced("work", "home");
@@ -265,24 +266,19 @@ fn a_login_replaced_outside_is_posted_once_while_it_stands() {
     let mut machine = Machine::reading(Ok(warned(accounts(), vec![replaced.clone()])));
 
     model.refresh(&mut machine);
-    let posted: Vec<(&str, &str, Option<&str>)> = machine
-        .posted
-        .iter()
-        .map(|notice| {
-            (
-                notice.title.as_str(),
-                notice.body.as_str(),
-                notice.switch_to.as_deref(),
-            )
-        })
-        .collect();
     assert_eq!(
-        posted,
-        [(
-            "A login was replaced outside Pitboard",
-            replaced.message.as_str(),
-            None
-        )]
+        machine.posted,
+        [RunOutNotice {
+            id: "warning/login_replaced/claude:work".into(),
+            title: "A login was replaced outside Pitboard".into(),
+            subtitle: None,
+            body: replaced.message.clone(),
+            clicked: "accounts".into(),
+            button: Some(NotificationButton {
+                title: titled("Sign In Again", "Sign in again"),
+                clicked: "sign-in-again/claude/work".into(),
+            }),
+        }]
     );
 
     model.send(Intent::Refresh { asked: true });
@@ -296,6 +292,48 @@ fn a_login_replaced_outside_is_posted_once_while_it_stands() {
     model.send(Intent::Refresh { asked: true });
     model.run(&mut machine);
     assert_eq!(machine.posted.len(), 2, "and again once it is back");
+}
+
+/// Its notice in the window offers the sign-in its row offers, and its notification the
+/// same, by a button macOS registered at launch.
+#[test]
+fn a_login_replaced_outside_offers_to_sign_in_again() {
+    let mut model = Hand::new();
+    let mut machine = Machine::reading(Ok(warned(
+        vec![claude("home", true, 5.0), claude("work", false, 0.0)],
+        vec![replaced("work", "home")],
+    )));
+    model.refresh(&mut machine);
+    let notice = model
+        .shown()
+        .notices
+        .into_iter()
+        .find(|notice| notice.id == "warning/login_replaced/claude:work")
+        .expect("its notice");
+    let offered: Vec<(String, Intent)> = notice
+        .actions
+        .into_iter()
+        .map(|action| (action.title, action.intent))
+        .collect();
+    assert_eq!(
+        offered,
+        [(
+            titled("Sign In Again…", "Sign in again…"),
+            Intent::PresentSheet {
+                sheet: Sheet::SignInAgain {
+                    provider: "claude".into(),
+                    label: "work".into(),
+                },
+            }
+        )]
+    );
+    let button = machine.posted[0].button.clone().expect("a button");
+    assert!(
+        crate::notification_buttons()
+            .iter()
+            .any(|kind| kind.title == button.title && kind.opens_window),
+        "its sheet needs the window"
+    );
 }
 
 /// What a replaced login's words say Claude Code holds now changes with every switch made
@@ -340,6 +378,158 @@ fn a_login_replaced_outside_is_posted_once_whatever_is_stored_since() {
             both[1].message.as_str()
         )]
     );
+}
+
+/// `label`, parked, its login no longer one Pitboard can switch to.
+fn expired(label: &str) -> Account {
+    Account {
+        switchable: false,
+        ..claude(label, false, 0.0)
+    }
+}
+
+/// A parked login that stops being usable is posted once for its account, with a button that
+/// signs in to it again: not again while it stays so, and again once it was usable between.
+#[test]
+fn a_parked_login_that_stops_being_usable_is_posted_once() {
+    let mut model = Hand::new();
+    let mut machine = Machine::reading(Ok(status(vec![
+        claude("home", true, 5.0),
+        claude("work", false, 0.0),
+    ])));
+    model.refresh(&mut machine);
+    assert!(machine.posted.is_empty());
+
+    machine.answer = Ok(status(vec![claude("home", true, 5.0), expired("work")]));
+    model.refresh(&mut machine);
+    assert_eq!(
+        machine.posted,
+        [RunOutNotice {
+            id: "unusable/claude:work".into(),
+            title: "work needs signing in again".into(),
+            subtitle: None,
+            body: "Its parked login can no longer be used, so Pitboard can’t switch to it.".into(),
+            clicked: "accounts".into(),
+            button: Some(NotificationButton {
+                title: titled("Sign In Again", "Sign in again"),
+                clicked: "sign-in-again/claude/work".into(),
+            }),
+        }]
+    );
+    assert_eq!(
+        machine.kept.last(),
+        Some(&Told::from([("unusable/claude:work".to_owned(), 0)]))
+    );
+    model.refresh(&mut machine);
+    assert_eq!(machine.posted.len(), 1, "once while it stands");
+
+    machine.answer = Ok(status(vec![
+        claude("home", true, 5.0),
+        claude("work", false, 0.0),
+    ]));
+    model.refresh(&mut machine);
+    assert_eq!(machine.kept.last(), Some(&Told::new()), "usable again");
+    machine.answer = Ok(status(vec![claude("home", true, 5.0), expired("work")]));
+    model.refresh(&mut machine);
+    assert_eq!(machine.posted.len(), 2, "and posted again once it stops");
+}
+
+/// What was posted before a relaunch is not posted again after it.
+#[test]
+fn a_parked_login_posted_before_a_relaunch_is_not_posted_again() {
+    let mut model = Hand::new();
+    let mut machine =
+        Machine::reading(Ok(status(vec![claude("home", true, 5.0), expired("work")])));
+    machine.told_before = Told::from([("unusable/claude:work".to_owned(), 0)]);
+    model.send(Intent::Start);
+    model.run(&mut machine);
+    assert!(machine.posted.is_empty());
+}
+
+/// A parked login its service refused is as unusable as an expired one: its row offers to
+/// sign in again in place of a switch that would fail, and it is posted the same way. One
+/// replaced outside Pitboard has a notice of its own.
+#[test]
+fn a_refused_parked_login_needs_signing_in_again() {
+    let refused = Account {
+        stale: Some("login_refused".into()),
+        stale_explanation: Some("Its parked login is no longer accepted; sign in again".into()),
+        ..claude("work", false, 0.0)
+    };
+    let replaced_away = Account {
+        stale: Some("login_replaced".into()),
+        ..expired("side")
+    };
+    let mut model = Hand::new();
+    let mut machine = Machine::reading(Ok(warned(
+        vec![claude("home", true, 5.0), refused, replaced_away],
+        vec![replaced("side", "home")],
+    )));
+    model.refresh(&mut machine);
+    let row = model.shown().sections[0].accounts[1].clone();
+    assert!(row.needs_sign_in);
+    assert_eq!(
+        row.action.map(|action| action.intent),
+        Some(Intent::PresentSheet {
+            sheet: Sheet::SignInAgain {
+                provider: "claude".into(),
+                label: "work".into(),
+            },
+        })
+    );
+    let posted: Vec<&str> = machine
+        .posted
+        .iter()
+        .map(|notice| notice.id.as_str())
+        .collect();
+    assert_eq!(
+        posted,
+        ["warning/login_replaced/claude:side", "unusable/claude:work"]
+    );
+}
+
+/// A read that did not ask the service about a refused login, one that asks nobody or one the
+/// service held back, says nothing of it: the row still needs signing in again, and the next
+/// refusal is not posted again.
+#[test]
+fn a_refusal_stands_through_reads_that_did_not_ask() {
+    let parked = |stale: &str| Account {
+        stale: Some(stale.into()),
+        ..claude("work", false, 0.0)
+    };
+    let mut model = Hand::new();
+    let mut machine = Machine::reading(Ok(status(vec![
+        claude("home", true, 5.0),
+        parked("login_refused"),
+    ])));
+    model.refresh(&mut machine);
+    assert_eq!(machine.posted.len(), 1);
+
+    machine.offline = Ok(status(vec![claude("home", true, 5.0), parked("not_asked")]));
+    machine.changed += 1;
+    model.notice(&mut machine);
+    assert!(model.shown().sections[0].accounts[1].needs_sign_in);
+
+    machine.answer = Ok(status(vec![
+        claude("home", true, 5.0),
+        parked("asked_recently"),
+    ]));
+    model.refresh(&mut machine);
+    assert!(model.shown().sections[0].accounts[1].needs_sign_in);
+
+    machine.answer = Ok(status(vec![
+        claude("home", true, 5.0),
+        parked("login_refused"),
+    ]));
+    model.refresh(&mut machine);
+    assert_eq!(machine.posted.len(), 1, "once while it stands");
+
+    machine.answer = Ok(status(vec![
+        claude("home", true, 5.0),
+        claude("work", false, 0.0),
+    ]));
+    model.refresh(&mut machine);
+    assert!(!model.shown().sections[0].accounts[1].needs_sign_in);
 }
 
 fn bodies(machine: &Machine) -> Vec<&str> {

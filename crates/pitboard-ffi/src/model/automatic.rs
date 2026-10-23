@@ -7,7 +7,7 @@ use super::advice::Told;
 use super::preferences::Preferences;
 use super::state::{Answer, Job};
 use super::testing::{Hand, Machine, Refusal, any_read, offline_read, refusal, status, watching};
-use super::{Intent, RunOutNotice};
+use super::{AtLimit, Intent, RunOutNotice};
 use crate::present::testing::{LimitExt, account, window};
 use crate::{Account, Adoption, AutoLooked, AutoSwitched, Status};
 use std::time::Duration;
@@ -132,7 +132,7 @@ fn nothing(_: &Job) -> bool {
 
 /// What the settings say under the switch now.
 fn standing(model: &Hand) -> Option<String> {
-    model.shown().machine.auto_switch.standing
+    model.shown().machine.at_limit.standing
 }
 
 #[test]
@@ -144,8 +144,8 @@ fn nothing_is_switched_by_itself_unless_somebody_turned_it_on() {
     model.refresh(&mut machine);
     assert_eq!(model.count(auto_look), 0, "the core is not even asked");
     assert_eq!(model.count(auto_switch), 0);
-    let shown = model.shown().machine.auto_switch;
-    assert!(!shown.on);
+    let shown = model.shown().machine.at_limit;
+    assert_eq!(shown.choice, AtLimit::Notify);
     assert_eq!(shown.standing, None);
 }
 
@@ -246,7 +246,10 @@ fn the_settings_say_which_account_it_watches_and_how_old_its_reading_is() {
         )
     );
 
-    model.send(Intent::SetAutoSwitch { on: false, at: 95 });
+    model.send(Intent::SetAtLimit {
+        choice: AtLimit::Nothing,
+        at: 95,
+    });
     assert_eq!(standing(&model), None);
 }
 
@@ -355,7 +358,8 @@ fn a_switch_it_made_is_said_and_taken_as_a_switch_somebody_asked_for() {
             body: "work had used 97% of its 5-hour limit. Sessions already running follow \
                    within 33 seconds."
                 .into(),
-            switch_to: None,
+            clicked: "accounts".into(),
+            button: None,
         }]
     );
     let last = &model.shown().last_switches;
@@ -389,11 +393,15 @@ fn a_switch_it_made_is_said_and_taken_as_a_switch_somebody_asked_for() {
 fn the_setting_promises_33_seconds_only_while_no_file_is_behind_the_keychain() {
     let mut model = Hand::new();
     let mut machine = Machine::reading(Ok(status(vec![work(40.0), personal()])));
+    turned_on(&mut model, &mut machine);
     model.refresh(&mut machine);
-    let note = model.shown().machine.auto_switch.note;
-    assert!(
-        note.contains("Sessions already running follow within about 33 seconds."),
-        "{note}"
+    assert_eq!(
+        model.shown().machine.at_limit.note.as_deref(),
+        Some(
+            "Pitboard switches Claude Code once a limit of the account in use reaches 95%, never \
+             back by itself, and notifies you of Codex. Sessions already running follow within \
+             about 33 seconds."
+        )
     );
 
     machine.answer = Ok(super::testing::warned(
@@ -404,7 +412,7 @@ fn the_setting_promises_33_seconds_only_while_no_file_is_behind_the_keychain() {
         )],
     ));
     model.refresh(&mut machine);
-    let note = model.on_a_mac().machine.auto_switch.note;
+    let note = model.on_a_mac().machine.at_limit.note.unwrap_or_default();
     assert!(!note.contains("33 seconds"), "{note}");
     assert!(
         note.contains(
@@ -414,7 +422,7 @@ fn the_setting_promises_33_seconds_only_while_no_file_is_behind_the_keychain() {
         ),
         "{note}"
     );
-    let note = model.on_windows().machine.auto_switch.note;
+    let note = model.on_windows().machine.at_limit.note.unwrap_or_default();
     assert!(
         note.contains("While a login file is left behind Credential Manager, Claude Code"),
         "{note}"
@@ -455,7 +463,8 @@ fn a_reason_it_did_not_switch_is_said_once() {
         "work has used 97% of its 5-hour limit. Claude Code signs in another way, set by \
          apiKeyHelper, so a switch would change nothing its sessions use."
     );
-    assert_eq!(machine.posted[0].switch_to, None);
+    assert_eq!(machine.posted[0].button, None);
+    assert_eq!(machine.posted[0].clicked, "limits");
 
     machine.look = Ok(AutoLooked::Stands(overridden(27_000)));
     model.refresh(&mut machine);
@@ -488,7 +497,8 @@ fn a_reason_it_is_not_watching_is_said_once() {
             title: "Pitboard is not switching Claude Code".into(),
             subtitle: None,
             body: "A switch was interrupted, and the next change you make finishes it.".into(),
-            switch_to: None,
+            clicked: "limits".into(),
+            button: None,
         }]
     );
     assert!(model.state.switch_under_way().is_none());
@@ -654,8 +664,14 @@ fn turned_off_and_on_again_it_asks_at_once_though_a_refusals_wait_runs() {
     assert_eq!(machine.auto_at.len(), 1);
 
     model.later(Duration::from_secs(10));
-    model.send(Intent::SetAutoSwitch { on: false, at: 95 });
-    model.send(Intent::SetAutoSwitch { on: true, at: 95 });
+    model.send(Intent::SetAtLimit {
+        choice: AtLimit::Nothing,
+        at: 95,
+    });
+    model.send(Intent::SetAtLimit {
+        choice: AtLimit::Switch,
+        at: 95,
+    });
     model.run(&mut machine);
     assert_eq!(machine.auto_at.len(), 2);
 }
@@ -670,7 +686,10 @@ fn a_look_answered_after_it_was_turned_off_asks_for_no_switch() {
     machine.look = Ok(AutoLooked::Act);
     model.send(Intent::Refresh { asked: false });
     model.run_but(&mut machine, auto_look);
-    model.send(Intent::SetAutoSwitch { on: false, at: 95 });
+    model.send(Intent::SetAtLimit {
+        choice: AtLimit::Nothing,
+        at: 95,
+    });
     model.run(&mut machine);
     assert_eq!(machine.looked_at.len(), 1);
     assert_eq!(model.count(auto_switch), 0);
@@ -690,7 +709,10 @@ fn a_decision_answered_after_it_was_turned_off_says_nothing_and_holds_nothing_ba
         machine.auto = came;
         model.send(Intent::Refresh { asked: false });
         model.run_but(&mut machine, auto_switch);
-        model.send(Intent::SetAutoSwitch { on: false, at: 95 });
+        model.send(Intent::SetAtLimit {
+            choice: AtLimit::Nothing,
+            at: 95,
+        });
         model.run(&mut machine);
         assert!(machine.posted.is_empty(), "{:?}", machine.posted);
         assert!(model.state.switch_under_way().is_none(), "let go");
@@ -698,7 +720,10 @@ fn a_decision_answered_after_it_was_turned_off_says_nothing_and_holds_nothing_ba
         let asked = machine.auto_at.len();
         model.later(Duration::from_secs(5));
         machine.auto = Ok(watching("work"));
-        model.send(Intent::SetAutoSwitch { on: true, at: 95 });
+        model.send(Intent::SetAtLimit {
+            choice: AtLimit::Switch,
+            at: 95,
+        });
         model.run(&mut machine);
         assert_eq!(machine.auto_at.len(), asked + 1, "asked at once");
         assert_eq!(standing(&model).as_deref(), Some("Watching work."));
@@ -716,7 +741,10 @@ fn a_switch_made_as_it_was_turned_off_is_still_said() {
     machine.auto = switched_work_to_personal();
     model.send(Intent::Refresh { asked: false });
     model.run_but(&mut machine, auto_switch);
-    model.send(Intent::SetAutoSwitch { on: false, at: 95 });
+    model.send(Intent::SetAtLimit {
+        choice: AtLimit::Nothing,
+        at: 95,
+    });
     machine.answer = Ok(personal_in_use());
     model.run(&mut machine);
     assert_eq!(
@@ -856,27 +884,28 @@ fn not_while_another_switch_is_under_way() {
     assert_eq!(model.count(auto_switch), 0);
 }
 
-/// Nor while another change this app made is under way, such as a renewal waiting on the
-/// network: the switch would wait behind it on the lane of changes, and hold every switch
-/// somebody asks for meanwhile. It is asked for at the next look once that change is over.
+// The switch would wait behind the other on the lane of changes, holding every switch asked for.
 #[test]
 fn not_while_another_change_is_under_way() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(vec![work(90.0), personal()])));
+    let spare = account(Some("spare")).build();
+    let mut machine = Machine::reading(Ok(status(vec![work(90.0), personal(), spare])));
     turned_on(&mut model, &mut machine);
     model.refresh(&mut machine);
-    model.send(Intent::RenewNow);
+    model.send(Intent::Forget {
+        qualified: "claude/spare".into(),
+    });
     machine.answer = Ok(status(vec![work(97.0), personal()]));
     machine.look = Ok(AutoLooked::Act);
     model.send(Intent::Refresh { asked: false });
-    model.run_but(&mut machine, |job| matches!(job, Job::Renew));
+    model.run_but(&mut machine, |job| matches!(job, Job::Forget { .. }));
     assert_eq!(model.count(auto_switch), 0);
 
     model.run(&mut machine);
     assert_eq!(
         model.count(auto_switch),
         1,
-        "once the renewal and the read after it are over"
+        "once the forget and the read after it are over"
     );
 }
 
@@ -886,18 +915,24 @@ fn not_while_another_change_is_under_way() {
 fn turning_it_on_is_kept_and_looks_at_once() {
     let mut model = Hand::new();
     assert_eq!(
-        model.send(Intent::SetAutoSwitch { on: true, at: 90 }),
+        model.send(Intent::SetAtLimit {
+            choice: AtLimit::Switch,
+            at: 90,
+        }),
         [],
         "not before the preferences are read"
     );
-    assert!(!model.shown().machine.auto_switch.enabled);
+    assert!(!model.shown().machine.at_limit.enabled);
 
     read_preferences(&mut model, false);
     let mut machine = Machine::reading(Ok(status(vec![work(92.0), personal()])));
     model.refresh(&mut machine);
     assert_eq!(model.count(auto_look), 0);
 
-    let jobs = model.send(Intent::SetAutoSwitch { on: true, at: 90 });
+    let jobs = model.send(Intent::SetAtLimit {
+        choice: AtLimit::Switch,
+        at: 90,
+    });
     assert_eq!(
         jobs,
         [
@@ -905,6 +940,7 @@ fn turning_it_on_is_kept_and_looks_at_once() {
                 preferences: Preferences {
                     auto_switch: true,
                     auto_switch_at: Some(90),
+                    at_limit: Some("switch".into()),
                     has_been_seen: true,
                     ..Preferences::default()
                 }
@@ -912,18 +948,24 @@ fn turning_it_on_is_kept_and_looks_at_once() {
             Job::AutoLook { at: 90 },
         ]
     );
-    let shown = model.shown().machine.auto_switch;
-    assert!(shown.on && shown.enabled);
+    let shown = model.shown().machine.at_limit;
+    assert!(shown.choice == AtLimit::Switch && shown.enabled);
     assert_eq!((shown.at, shown.lowest, shown.highest), (90, 50, 99));
-    assert_eq!(shown.at_label, "Switch when a limit reaches 90%");
+    assert_eq!(shown.at_label, "When a limit reaches 90%");
 
     model.run(&mut machine);
     assert_eq!(
-        model.send(Intent::SetAutoSwitch { on: true, at: 90 }),
+        model.send(Intent::SetAtLimit {
+            choice: AtLimit::Switch,
+            at: 90,
+        }),
         [],
         "what it already is"
     );
-    let jobs = model.send(Intent::SetAutoSwitch { on: false, at: 120 });
+    let jobs = model.send(Intent::SetAtLimit {
+        choice: AtLimit::Nothing,
+        at: 120,
+    });
     assert_eq!(jobs.len(), 1);
     assert_eq!(
         model.state.preferences.auto_switch_at,

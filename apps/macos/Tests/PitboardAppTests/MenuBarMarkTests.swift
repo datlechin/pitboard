@@ -46,6 +46,22 @@ private func alphas(of image: NSImage, scale: Int) throws -> [[UInt8]] {
 /// between pixels and blurs.
 @Test(arguments: [1, 2]) func theMenuBarMarkLandsOnWholePixels(scale: Int) throws {
     let dim = UInt8(MenuBarMark.dimAlpha * 255 + 0.5)
-    let values = Set(try alphas(of: MenuBarMark.image, scale: scale).joined())
-    #expect(values == [0, dim, 255])
+    for image in [MenuBarMark.image, MenuBarMark.attention] {
+        let values = Set(try alphas(of: image, scale: scale).joined())
+        #expect(values == [0, dim, 255])
+    }
+}
+
+/// While the menu opens on something to look at, the mark carries a dot at its bottom right,
+/// clear of the board and the pole, and is the same mark beside it.
+@Test func theAttentionMarkAddsADotBesideTheBoard() throws {
+    #expect(MenuBarMark.attention.isTemplate)
+    #expect(MenuBarMark.attention.size == MenuBarMark.size)
+    let plain = try alphas(of: MenuBarMark.image, scale: 1)
+    let alpha = try alphas(of: MenuBarMark.attention, scale: 1)
+    #expect(alpha[13][13] == 255, "the dot")
+    #expect(alpha[12][12] == 0, "the dot's cut corner")
+    #expect(alpha[11][13] == 0, "a row clear between the board and the dot")
+    #expect(Array(alpha[0..<11]) == Array(plain[0..<11]), "the board as it was")
+    #expect(alpha[13][7] == 255, "the pole")
 }

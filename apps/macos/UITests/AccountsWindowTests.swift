@@ -127,7 +127,7 @@ final class AccountsWindowTests: FixtureTestCase {
         let row = app.accountRow("claude/personal")
         XCTAssertTrue(row.waitForExistence(timeout: 5))
         row.rightClick()
-        app.menuItems["Rename…"].click()
+        app.shortcutMenu.menuItems["Rename…"].click()
         let name = app.textFields["sheet.name"]
         XCTAssertTrue(name.waitForExistence(timeout: 5))
         name.click()
@@ -151,16 +151,17 @@ final class AccountsWindowTests: FixtureTestCase {
         let row = app.accountRow("claude/personal")
         XCTAssertTrue(row.waitForExistence(timeout: 5))
         row.rightClick()
-        app.menuItems["Forget…"].click()
+        app.shortcutMenu.menuItems["Forget…"].click()
         XCTAssertTrue(app.alert.buttons["Forget"].waitForExistence(timeout: 5))
         app.alert.buttons["Cancel"].click()
         XCTAssertTrue(row.exists)
         row.rightClick()
-        app.menuItems["Forget…"].click()
+        app.shortcutMenu.menuItems["Forget…"].click()
         app.alert.buttons["Forget"].click()
         XCTAssertTrue(row.waitForNonExistence(timeout: 5))
     }
 
+    /// Its shortcut menu leaves Forget out, and the Account menu dims it.
     @MainActor
     func testTheAccountInUseOffersNoForget() {
         let app = launch(.oneTool)
@@ -168,8 +169,79 @@ final class AccountsWindowTests: FixtureTestCase {
         let row = app.accountRow("claude/work")
         XCTAssertTrue(row.waitForExistence(timeout: 5))
         row.rightClick()
-        XCTAssertTrue(app.menuItems["Rename…"].waitForExistence(timeout: 5))
-        XCTAssertFalse(app.menuItems["Forget…"].exists)
+        XCTAssertTrue(app.shortcutMenu.menuItems["Rename…"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.shortcutMenu.menuItems["Forget…"].exists)
+        app.typeKey(.escape, modifierFlags: [])
+        row.click()
+        app.accountMenu.click()
+        let forget = app.accountMenu.menuItems["Forget…"]
+        XCTAssertTrue(forget.waitForExistence(timeout: 5))
+        XCTAssertFalse(forget.isEnabled)
+        app.typeKey(.escape, modifierFlags: [])
+    }
+
+    /// Command-Delete in a sheet's field deletes to the start of the line, and asks nothing of
+    /// the account selected behind the sheet.
+    @MainActor
+    func testCommandDeleteInASheetEditsItsField() {
+        let app = launch(.oneTool)
+        app.openWindow()
+        let row = app.accountRow("claude/personal")
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        row.click()
+        app.accountMenu.click()
+        app.accountMenu.menuItems["Rename…"].click()
+        let name = app.textFields["sheet.name"]
+        XCTAssertTrue(name.waitForExistence(timeout: 5))
+        name.typeKey(.delete, modifierFlags: .command)
+        name.typeText("home")
+        XCTAssertEqual(name.value as? String, "home")
+        app.sheets.firstMatch.buttons["Cancel"].click()
+        XCTAssertTrue(app.sheets.firstMatch.waitForNonExistence(timeout: 5))
+        XCTAssertFalse(app.alert.buttons["Forget"].waitForExistence(timeout: 2))
+    }
+
+    @MainActor
+    func testTheAccountMenuActsOnTheSelectedAccount() {
+        let app = launch(.oneTool)
+        app.openWindow()
+        let row = app.accountRow("claude/personal")
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        row.click()
+        app.accountMenu.click()
+        XCTAssertTrue(app.accountMenu.menuItems["Use personal"].waitForExistence(timeout: 5))
+        app.accountMenu.menuItems["Rename…"].click()
+        XCTAssertTrue(app.textFields["sheet.name"].waitForExistence(timeout: 5))
+        app.sheets.firstMatch.buttons["Cancel"].click()
+        XCTAssertTrue(app.sheets.firstMatch.waitForNonExistence(timeout: 5))
+
+        row.click()
+        app.typeKey("c", modifierFlags: .command)
+        XCTAssertEqual(NSPasteboard.general.string(forType: .string), "dana@home.example")
+        app.typeKey(.delete, modifierFlags: .command)
+        XCTAssertTrue(app.alert.buttons["Forget"].waitForExistence(timeout: 5))
+        app.alert.buttons["Cancel"].click()
+        XCTAssertTrue(row.exists)
+    }
+
+    // personal warms up at launch, so its period runs and Warm Up Now cannot be chosen.
+    @MainActor
+    func testWarmUpNowIsLeftOutOfTheShortcutMenuAndDimmedInTheAccountMenu() {
+        let app = launch(.warmUp)
+        app.openWindow()
+        XCTAssertTrue(
+            app.text("BEGINSWITH", "Warms up again at ").waitForExistence(timeout: 30))
+        let row = app.accountRow("claude/personal")
+        row.rightClick()
+        XCTAssertTrue(app.shortcutMenu.menuItems["Rename…"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.shortcutMenu.menuItems["Warm Up Now"].exists)
+        app.typeKey(.escape, modifierFlags: [])
+
+        row.click()
+        app.accountMenu.click()
+        let now = app.accountMenu.menuItems["Warm Up Now"]
+        XCTAssertTrue(now.waitForExistence(timeout: 5))
+        XCTAssertFalse(now.isEnabled)
         app.typeKey(.escape, modifierFlags: [])
     }
 
@@ -177,6 +249,8 @@ final class AccountsWindowTests: FixtureTestCase {
     func testUsingACodexAccountSaysSessionsKeepTheOldOne() {
         let app = launch(.twoTools)
         app.openWindow()
+        // With a tip above them, spare is scrolled to and the notice goes out of sight.
+        app.putTheTipsAway()
         let spare = app.accountRow("codex/spare")
         XCTAssertTrue(spare.waitForExistence(timeout: 5))
         // Named with its tool, since Claude Code could have a `spare` too.
@@ -220,16 +294,18 @@ final class AccountsWindowTests: FixtureTestCase {
         app.buttons["Name…"].firstMatch.click()
         let name = app.textFields["sheet.name"]
         XCTAssertTrue(name.waitForExistence(timeout: 5))
-        name.click()
-        name.typeText("work")
+        XCTAssertEqual(name.value as? String, "work", "the name dana@work.example suggests")
         app.buttons["Save"].click()
         XCTAssertTrue(app.accountRow("claude/work").waitForExistence(timeout: 5))
     }
 
+    /// With Codex installed, after the tip to use Pitboard with it.
     @MainActor
     func testAnEmptyMachineOffersAnAccount() {
         let app = launch(.empty)
         app.openWindow()
+        XCTAssertTrue(app.staticTexts["Use Pitboard with Codex"].waitForExistence(timeout: 5))
+        app.buttons["Not Now"].click()
         XCTAssertTrue(app.staticTexts["No Accounts"].waitForExistence(timeout: 5))
         app.buttons["Add Account…"].click()
         XCTAssertTrue(app.textFields["sheet.name"].waitForExistence(timeout: 5))
@@ -277,9 +353,20 @@ final class AccountsWindowTests: FixtureTestCase {
         XCTAssertTrue(activity.waitForNonExistence(timeout: 5))
     }
 
+    /// macOS can refuse the login item, which Settings says under General, so the tip opens
+    /// it there rather than seeming to do nothing.
+    @MainActor
+    func testOpenAtLoginMacOSRefusesOpensTheSettings() {
+        let app = launch(.twoTools, environment: ["PITBOARD_FIXTURE_LOGIN_ITEM_REFUSES": "1"])
+        app.openWindow()
+        XCTAssertTrue(app.staticTexts["Open Pitboard at login"].waitForExistence(timeout: 5))
+        app.buttons["Open at Login"].click()
+        XCTAssertTrue(app.windows["General"].waitForExistence(timeout: 5))
+    }
+
     @MainActor
     func testTheFirstLaunchOpensTheWindow() {
         let app = launch(.firstLaunch)
-        XCTAssertTrue(app.staticTexts["No Accounts"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["Use Pitboard with Codex"].waitForExistence(timeout: 10))
     }
 }

@@ -557,8 +557,7 @@ impl Machine {
             _ => {
                 let access = format!("{}-access-{n}", person.id);
                 self.answers_for(person, &access);
-                // Anthropic renews it once, for a parked login renewed before it lapses,
-                // as Renew Now and the schedule renew one.
+                // Anthropic renews it once, for a parked login renewed before it lapses.
                 let renewed = format!("{access}-renewed");
                 self.answers_for(person, &renewed);
                 self.api.renews(
@@ -1023,8 +1022,8 @@ fn uses(machine: &Machine, person: &Person) {
 
 /// Claude Code's two accounts: work signed in and enrolled from a terminal three days ago,
 /// and personal signed in privately and parked from the app two days ago. Personal's parked
-/// login lasts two days more, so it is due to be renewed, which Renew Now does, and doctor
-/// warns of it, as it does of every parked login that is due.
+/// login lasts two days more, so it is due to be renewed, and doctor warns of it, as it does
+/// of every parked login that is due.
 fn claude_accounts(machine: &Machine) -> Result<(), Unmade> {
     let (work, personal) = (work(), personal());
     uses(machine, &work);

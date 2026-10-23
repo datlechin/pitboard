@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
@@ -8,6 +9,8 @@ using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Navigation;
 using Pitboard.Core;
 using Pitboard.Windows;
+using Windows.System;
+using Windows.UI.Core;
 
 namespace Pitboard.Views;
 
@@ -42,7 +45,13 @@ public sealed partial class AccountsPage : Page
 
     public static bool Busy(EmptyKind kind) => kind == EmptyKind.Reading;
 
-    public static string SetupGlyph(bool names) => names ? Glyphs.Name : Glyphs.Switch;
+    public static string SetupGlyph(Footing footing) => footing switch
+    {
+        Footing.Unnamed => Glyphs.Name,
+        Footing.NotOpenedAtLogin => Glyphs.Power,
+        Footing.AtLimitUnchosen => Glyphs.Limits,
+        _ => Glyphs.Switch,
+    };
 
     protected override void OnNavigatedTo(NavigationEventArgs e)
     {
@@ -110,8 +119,32 @@ public sealed partial class AccountsPage : Page
                 button.Style = (Style)Application.Current.Resources["AccentButtonStyle"];
             }
 
-            button.Click += (_, _) => ViewModel.Send(choice.Intent);
+            button.Click += (_, _) => Choose(choice.Intent);
             SetupChoices.Children.Add(button);
+        }
+
+        if (step.Link is { } link)
+        {
+            var opens = new HyperlinkButton { Content = link.Title };
+            opens.Click += (_, _) => ViewModel.OpenSetupLink();
+            SetupChoices.Children.Add(opens);
+        }
+    }
+
+    // Starting at sign-in is Windows': the app turns it on, and says what Windows has. A refusal is said in Settings.
+    private void Choose(Intent intent)
+    {
+        if (intent is Intent.OpensAtLogin opens)
+        {
+            Context.StartAtSignIn.Set(opens.On);
+            if (Context.StartAtSignIn.Failed is not null)
+            {
+                Context.ShowSettings();
+            }
+        }
+        else
+        {
+            ViewModel!.Send(intent);
         }
     }
 
@@ -177,7 +210,13 @@ public sealed partial class AccountsPage : Page
             return;
         }
 
-        if (AccountKeys.Pressed(args.Key, shown.Item) is var (confirm, intent))
+        var control = InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Control).HasFlag(CoreVirtualKeyStates.Down);
+        if (AccountKeys.Copied(args.Key, control, shown.Item) is { } email)
+        {
+            args.Handled = true;
+            Context.Copy(email);
+        }
+        else if (AccountKeys.Pressed(args.Key, shown.Item) is var (confirm, intent))
         {
             args.Handled = true;
             Ask(confirm, intent);

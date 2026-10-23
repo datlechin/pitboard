@@ -25,7 +25,7 @@ public static class Program
 
     private static readonly RunOutNotice RunOut = new(
         Id: "pitboard-probe-run-out", Title: "work has no 5-hour limit left", Subtitle: null,
-        Body: "spare has 80% of its own left.", SwitchTo: "claude/spare");
+        Body: "spare has 80% of its own left.", Clicked: "accounts", Button: new NotificationButton("Switch", "switch/claude/spare"));
 
     // As long as the model waits for an app it asked to quit, looking as often.
     private static readonly TimeSpan QuitWithin = TimeSpan.FromSeconds(30);
@@ -109,8 +109,8 @@ public static class Program
     private static string Said(Intent? intent) =>
         intent switch
         {
-            Intent.SwitchTo switched => $"Switch to {switched.Qualified}",
-            Intent.ShowWindow => "the notification itself",
+            Intent.NotificationClicked { Argument: "switch/claude/spare" } => "Switch to claude/spare",
+            Intent.NotificationClicked => "the notification itself",
             _ => "nothing",
         };
 

@@ -1,22 +1,41 @@
 import PitboardKit
 import SwiftUI
 
-struct CommandLineSettings: View {
+struct AdvancedSettings: View {
     let model: AppModel
     let link: CommandLineLink
 
     var body: some View {
-        let shown = model.machine.commandLine
+        let schedule = model.machine.schedule
+        let commandLine = model.machine.commandLine
         Form {
             Section {
+                Toggle(
+                    "Renew parked logins daily",
+                    isOn: Binding(
+                        get: { schedule.on }, set: { model.send(.setSchedule(on: $0)) })
+                )
+                .accessibilityIdentifier("settings.renewDaily")
+                .disabled(!schedule.enabled)
+                if let note = schedule.note {
+                    Text(note).explanatory()
+                }
+                if let failed = schedule.failed {
+                    Text(failed).explanatory()
+                }
+            } footer: {
+                Text(schedule.about).footnote()
+            }
+
+            Section {
                 LabeledContent("In your terminal") {
-                    if let found = shown.inTerminal {
+                    if let found = commandLine.inTerminal {
                         Text(found).foregroundStyle(.secondary).textSelection(.enabled)
                     } else {
                         ProgressView().controlSize(.small)
                     }
                 }
-                if shown.offersLink {
+                if commandLine.offersLink {
                     LabeledContent {
                         Button("Install Command Line Tool…") {
                             Task { await link.install() }
@@ -29,30 +48,23 @@ struct CommandLineSettings: View {
                         )
                         .explanatory()
                     }
-                } else if let cannot = shown.cannotLink {
+                } else if let cannot = commandLine.cannotLink {
                     Text(cannot).explanatory()
                 }
                 if let failed = link.failed {
                     Text(failed).explanatory()
                 }
             } footer: {
-                VStack(alignment: .leading, spacing: Design.rowSpacing) {
-                    if let note = shown.updateNote {
-                        Text(note).footnote()
-                    }
-                    // One literal, so its code spans are drawn as code.
-                    Text(
-                        """
-                        The command line does everything the app does, and more: \
-                        `pitboard status` in a script, and `pitboard repair` for a parked \
-                        login Pitboard’s records have lost track of.
-                        """
-                    )
-                    .footnote()
+                if let note = commandLine.updateNote {
+                    Text(note).footnote()
                 }
             }
         }
         .formStyle(.grouped)
-        .task { model.send(.lookForCommandLine) }
+        // A terminal can change both while the app runs.
+        .task {
+            model.send(.readSchedule)
+            model.send(.lookForCommandLine)
+        }
     }
 }

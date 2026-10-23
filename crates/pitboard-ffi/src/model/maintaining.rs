@@ -1,18 +1,16 @@
 //! What the model keeps of this machine rather than its accounts, as MachineModelTests.swift
 //! drove MachineModel.swift: the daily renewal schedule and the one change to it at a time,
-//! the repair once a launch, renewing now, doctor's checks, the activity log and the
+//! the repair once a launch, doctor's checks, the activity log and the
 //! `pitboard` a terminal runs, each under its own name in snake case, with what the settings,
 //! MachinePane.swift and ActivityPane.swift said of them. The state is driven through
 //! `State::apply` by hand over a core the test scripts, and read as `present` makes it on a
 //! Mac, its clock times in UTC. Opening at login and linking the command line with an
 //! administrator's password are the app's own, and so are their tests.
 
-use super::changing::a_look_landing_after;
 use super::machine::ScheduleFailure;
 use super::state::Job;
 use super::testing::{
-    Hand, Machine, PLIST, a_look_or_a_read, any_read, change, check, claude, codex_account,
-    fresh_read, installed_ask, refusal, renewed, status, warned, warning,
+    Hand, Machine, PLIST, change, check, claude, refusal, status, warned, warning,
 };
 use super::{Intent, Pane};
 use crate::present::testing::Utc;
@@ -97,25 +95,20 @@ fn daily_renewal_is_on_only_while_the_scheduler_has_it() {
     assert_eq!(machine.schedule_reads, 3);
 }
 
-/// While the scheduler has it, the settings say how often it runs and where the scheduler
-/// keeps it; on a machine with no scheduler Pitboard writes to, they say so, and nothing else.
+// On a machine with no scheduler Pitboard writes to, the settings say so.
 #[test]
-fn the_settings_say_how_often_it_runs_and_where_it_is() {
+fn the_settings_say_where_no_scheduler_is() {
     let mut model = Hand::new();
     let mut machine = machine().with_a_command_line_inside();
     machine.scheduled = installed();
     model.send(Intent::ReadSchedule);
     model.run(&mut machine);
-    let schedule = shown(&model).schedule;
-    assert_eq!(schedule.runs.as_deref(), Some("Every day"));
-    assert_eq!(schedule.scheduled_in.as_deref(), Some(PLIST));
-    assert_eq!(schedule.note, None);
+    assert_eq!(shown(&model).schedule.note, None);
 
     machine.scheduled = Schedule::Unsupported;
     model.send(Intent::ReadSchedule);
     model.run(&mut machine);
     let schedule = shown(&model).schedule;
-    assert_eq!((schedule.runs, schedule.scheduled_in), (None, None));
     assert_eq!(
         schedule.note.as_deref(),
         Some("This Mac has no scheduler Pitboard knows how to write to.")
@@ -426,135 +419,6 @@ fn an_older_apps_schedule_is_read_again_only_once_it_was_repaired() {
         model.run(&mut machine);
         assert_eq!(machine.repair_asks, 1, "once a launch");
     }
-}
-
-/// Renewing now says what each parked login came to, shows it is running while it runs and
-/// until the accounts have been read again, once, asking every service, with what it renewed.
-///
-/// MachineModelTests.swift's renewingNowSaysWhatItRenewedAndReadsTheAccountsOnce.
-#[test]
-fn renewing_now_says_what_it_renewed_and_reads_the_accounts_once() {
-    let mut model = Hand::new();
-    let mut machine = machine();
-    machine.renewals = Ok(vec![
-        renewed("work", "claude", "renewed"),
-        renewed("codex/spare", "codex", "renewal_deferred"),
-    ]);
-    model.refresh(&mut machine);
-    let reads = model.count(any_read);
-    let renewal = shown(&model).renewal;
-    assert!(!renewal.renewing);
-    assert_eq!(renewal.note, "Renew every parked login that is due.");
-
-    assert_eq!(model.send(Intent::RenewNow), [Job::Renew]);
-    assert!(shown(&model).renewal.renewing);
-    let renew = model.next();
-    let read = model.give(machine.answer(renew));
-    assert!(matches!(read[..], [Job::Read { fresh: true, .. }]));
-    assert!(
-        shown(&model).renewal.renewing,
-        "until the accounts are read again"
-    );
-    model.run(&mut machine);
-    assert_eq!(machine.renew_asks, 1);
-    assert_eq!(model.count(any_read), reads + 1);
-    assert_eq!(model.count(fresh_read), 1);
-    let renewal = shown(&model).renewal;
-    assert!(!renewal.renewing);
-    assert_eq!(
-        renewal.note,
-        "Renewed 1 of 2; the rest are tried again next time."
-    );
-}
-
-/// A renewal the core refused, as it refuses every change where Pitboard runs as root or
-/// under sudo, is said in the core's words. The core answered an empty list, which read as
-/// "No parked login was due." when nothing had been looked at. The accounts are read again
-/// after it, as after any renewal.
-#[test]
-fn a_refused_renewal_says_why_rather_than_that_nothing_was_due() {
-    let mut model = Hand::new();
-    let mut machine = machine();
-    let refused = "Pitboard changes nothing when it runs as root or with sudo. Run it as yourself.";
-    machine.renewals = Err(refusal("elevated", refused, Vec::new()));
-    model.refresh(&mut machine);
-    let reads = model.count(any_read);
-
-    model.send(Intent::RenewNow);
-    model.run(&mut machine);
-
-    assert_eq!(machine.renew_asks, 1);
-    assert_eq!(model.count(any_read), reads + 1);
-    let renewal = shown(&model).renewal;
-    assert!(!renewal.renewing);
-    assert_eq!(renewal.note, refused);
-}
-
-/// `changing.rs`'s look landing after a change, for renewing now: a renewal writes the account
-/// index with each parked login it renews, and the read after it, asking every service, was
-/// dropped as one that started before a change made elsewhere.
-#[test]
-fn a_look_landing_after_renewing_leaves_the_read_after_it() {
-    let after = vec![
-        codex_account("personal", true),
-        codex_account("spare", false),
-    ];
-    a_look_landing_after(after, |model, machine| {
-        model.send(Intent::RenewNow);
-        model.run_but(machine, a_look_or_a_read);
-        assert!(
-            shown(model).renewal.renewing,
-            "until the read after it is over"
-        );
-    });
-}
-
-/// A second Renew Now while one runs does nothing, as the Swift settings held its button
-/// back meanwhile: two renewals would ask each service twice for nothing.
-#[test]
-fn renew_now_while_a_renewal_runs_does_nothing() {
-    let mut model = Hand::new();
-    let mut machine = machine();
-    model.refresh(&mut machine);
-    model.send(Intent::RenewNow);
-    assert_eq!(model.send(Intent::RenewNow), []);
-    model.run(&mut machine);
-    assert_eq!(machine.renew_asks, 1);
-    assert_eq!(
-        model.send(Intent::RenewNow),
-        [Job::Renew],
-        "once it is over"
-    );
-}
-
-/// The read after a renewal ends it however that read goes: one that started before a change
-/// and is dropped, and one that has to wait for what is installed first.
-#[test]
-fn a_renewal_is_over_once_the_read_after_it_is() {
-    let mut model = Hand::new();
-    let mut machine = machine();
-    model.send(Intent::RenewNow);
-    let renew = model.next();
-    let asked = model.give(machine.answer(renew));
-    assert!(
-        asked.iter().any(installed_ask),
-        "waits for what is installed"
-    );
-    assert!(shown(&model).renewal.renewing);
-    model.run(&mut machine);
-    assert!(!shown(&model).renewal.renewing);
-
-    model.send(Intent::RenewNow);
-    let renew = model.next();
-    model.give(machine.answer(renew));
-    let read = model.next();
-    machine.changed += 1;
-    model.notice(&mut machine);
-    model.give(machine.answer(read));
-    assert!(
-        !shown(&model).renewal.renewing,
-        "dropped, and over all the same"
-    );
 }
 
 /// Doctor's checks are shown with when they were made, in place of the last ones, made again
@@ -1123,8 +987,7 @@ fn a_copy_run_from_a_temporary_place_is_told_why_it_cannot_link() {
 }
 
 /// What came to nothing on a lane leaves what was shown, and nothing under way for good: a
-/// change to the schedule reads it back, a check is no longer counted, and a renewal reads
-/// the accounts all the same.
+/// change to the schedule reads it back, and a check is no longer counted.
 #[test]
 fn what_came_to_nothing_holds_nothing_back() {
     use super::state::Answer;
@@ -1149,18 +1012,4 @@ fn what_came_to_nothing_holds_nothing_back() {
     let check = model.next();
     model.give(Answer::Lost(check));
     assert!(!shown(&model).checks.checking);
-
-    model.send(Intent::RenewNow);
-    let renew = model.next();
-    assert!(matches!(
-        model.give(Answer::Lost(renew))[..],
-        [Job::Read { fresh: true, .. }]
-    ));
-    model.run(&mut machine);
-    let renewal = shown(&model).renewal;
-    assert!(!renewal.renewing);
-    assert_eq!(
-        renewal.note, "Renew every parked login that is due.",
-        "nothing said of what it did"
-    );
 }

@@ -35,7 +35,7 @@ Pitboard creates each directory at mode 0700 and each file at 0600. On Windows, 
 | `backups/` | Claude Code's config as it was before Pitboard rewrote it, named `claude.json.<seconds since 1970>`. The 10 newest stay. | A Claude Code switch, and `pitboard use` of the account in use where the config names another |
 | `audit.log`, `audit.log.1` | The activity log that [`pitboard log`](/reference/maintenance-commands#log) prints, and the one before it | Every change, renewal and automatic switch, and a read that finds a sign-in outside Pitboard |
 | `app.json` | The app's preferences, listed in [The app](/reference/files#the-app) | The app |
-| `told.json` | Each run-out the app has notified you of, by account and limit, with its reset | The app |
+| `told.json` | Each limit the app has notified you of, by account and limit, with its reset, and each account whose parked login it asked you to sign in to again | The app |
 | `app.lock` | The lock the app holds while it is open, which `pitboard uninstall` refuses over | The app |
 | `schedule.env` | Windows: the proxy variables daily renewal runs with, as [Renewal schedule](/reference/files#renewal-schedule) says | `pitboard schedule install` |
 | `watch.env` | Windows: the proxy variables the watch service runs with, as [Watch service](/reference/files#watch-service) says | `pitboard watch install` |
@@ -211,7 +211,7 @@ Pitboard reads the list of processes to tell whether Claude is open:
 
 ## Renewal schedule
 
-`pitboard schedule install`, or turning on **Renew parked logins daily** in the app's **Renewal** settings, writes these. `pitboard schedule uninstall`, or turning it off, removes them. So does `pitboard uninstall` while Pitboard's directory is its default one. On Windows, [uninstalling the app](/install/remove#remove-pitboard-itself) removes the task where it runs the app's own `pitboard.exe`.
+`pitboard schedule install`, or turning on **Renew parked logins daily** in the app's **Settings** > **Advanced**, writes these. `pitboard schedule uninstall`, or turning it off, removes them. So does `pitboard uninstall` while Pitboard's directory is its default one. On Windows, [uninstalling the app](/install/remove#remove-pitboard-itself) removes the task where it runs the app's own `pitboard.exe`.
 
 | Item | macOS | Windows | Linux |
 | --- | --- | --- | --- |
@@ -292,9 +292,11 @@ Both apps keep these in `app.json` in Pitboard's directory, so they follow `PITB
 | Key | Holds |
 | --- | --- |
 | `second_account_declined` | The tools, `claude`, `codex` or `desktop`, whose second-account tip you dismissed with **Not Now** |
+| `tips_declined` | The other setup tips you dismissed with **Not Now**: `open_at_login`, `at_limit` or `use_codex` |
 | `has_been_seen` | Whether the app has opened its window at first launch |
-| `auto_switch` | `true` while **Switch Claude Code automatically** is on. Left out while it is off. |
-| `auto_switch_at` | The share it switches at, a whole percentage. 95 while left out. A value outside 50 to 99 reads as the nearer end. |
+| `at_limit` | The choice in **When a limit reaches**: `nothing`, `notify` or `switch`. While left out, `auto_switch` decides. |
+| `auto_switch` | `true` while **Switch Automatically** is chosen. Left out otherwise. Without `at_limit`, `true` reads as **Switch Automatically** and anything else as **Notify Me**. |
+| `auto_switch_at` | The share it notifies or switches at, a whole percentage. 95 while left out. A value outside 50 to 99 reads as the nearer end. |
 
 ## Account windows
 

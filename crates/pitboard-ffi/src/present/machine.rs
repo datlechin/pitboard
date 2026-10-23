@@ -1,14 +1,15 @@
 //! What the settings and the window's other panes show of this machine rather than its
 //! accounts, as SettingsView.swift, MachinePane.swift and ActivityPane.swift said it from
-//! MachineModel.swift: daily renewal and why it cannot be turned on, Renew Now and what it
-//! did, doctor's checks with the line over them, every change Pitboard made, and the
-//! `pitboard` a terminal runs and how it is kept up to date.
+//! MachineModel.swift: daily renewal and why it cannot be turned on, doctor's checks with the
+//! line over them, every change Pitboard made, and the `pitboard` a terminal runs and how it
+//! is kept up to date.
 //!
 //! What only labels a control, such as "Renew parked logins daily", "Check Again" or "In your
 //! terminal", and what is about the app's own system, such as opening at login or linking the
 //! command line with an administrator's password, is each app's own.
 
 use super::{Seen, words};
+use crate::model::AtLimit;
 use crate::model::machine::ScheduleFailure;
 use crate::model::state::AutoStanding;
 use crate::{AutoSwitched, Check, FoundCommandLine, Level, Schedule};
@@ -20,16 +21,13 @@ use pitboard_core::duty::autoswitch::Threshold;
 pub struct MachineShown {
     /// Daily renewal, the settings' switch and what is said around it.
     pub schedule: ScheduleShown,
-    /// Renew Now, and what the last renewal did.
-    pub renewal: RenewalShown,
     /// Doctor's checks, as the window's machine pane shows them.
     pub checks: ChecksShown,
     /// Every change Pitboard made, as the window's activity pane lists them.
     pub activity: ActivityShown,
     /// The `pitboard` a terminal runs, as the settings show it.
     pub command_line: CommandLineShown,
-    /// Switching Claude Code by itself, as the settings show it.
-    pub auto_switch: AutoSwitchShown,
+    pub at_limit: AtLimitShown,
     /// Warming up accounts, as the settings show it.
     pub warm: WarmShown,
 }
@@ -38,21 +36,24 @@ pub struct MachineShown {
 /// account with whether it is warmed up, what comes next, and what is said under them.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct WarmShown {
-    /// The span, in minutes of the day, which `Intent::SetWarmRange` takes back: `to` up to
-    /// 24 hours, and a `from` later than it runs past midnight.
+    pub title: String,
+    // minutes of the day, as `Intent::SetWarmRange` takes them; a `from` past `to` runs past
+    // midnight
     pub from: u16,
     pub to: u16,
-    /// The span in words, on the person's clock: "6:00 AM to 10:00 PM", "6:00 AM to
-    /// midnight", "All day".
+    // "6:00 AM to 10:00 PM", "6:00 AM to midnight", "All day", on the person's clock
     pub range_label: String,
-    /// Each Claude Code account enrolled under a name, in the order they were enrolled.
+    // each Claude Code account enrolled under a name, in the order they were enrolled
     pub accounts: Vec<WarmAccountShown>,
-    /// What comes next, once anything is turned on: the next warm-up, or why none is made.
+    // in place of `accounts` while there are none
+    pub none_enrolled: Option<String>,
+    // the next warm-up, or why none is made, once anything is turned on
     pub standing: Option<String>,
-    /// What is said under them: what a warm-up does and what it never does.
+    // what a warm-up does and what it never does
     pub note: String,
-    /// Whether anything here can be changed: once the core has said what it is.
+    // once the core has said what it is
     pub enabled: bool,
+    pub terms: TermsShown,
 }
 
 /// One Claude Code account, as the settings' warm-up lists it.
@@ -70,71 +71,63 @@ pub struct WarmAccountShown {
     pub standing: Option<String>,
 }
 
-/// Switching Claude Code by itself before the account in use runs out, as the settings show
-/// it: their switch, the share it switches at, what it came to last, and what is said under
-/// them.
+// What the app does once a limit of the account in use reaches a share, as the settings show it.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
-pub struct AutoSwitchShown {
-    /// Whether the switch shows it as on. Off unless somebody turned it on.
-    pub on: bool,
-    /// The share of a limit it switches at, a whole percentage, which `Intent::SetAutoSwitch`
-    /// takes back.
+pub struct AtLimitShown {
+    // over the choice, where a system heads it
+    pub title: String,
+    pub choice: AtLimit,
+    pub choices: Vec<AtLimitChoice>,
+    // a whole percentage, which `Intent::SetAtLimit` takes back
     pub at: u8,
-    /// The lowest and highest shares there can be, for the control that picks one.
     pub lowest: u8,
     pub highest: u8,
-    /// Whether the switch and the share can be changed: not until the app's preferences
-    /// have been read, where a change would be lost under what they say, nor for good where
-    /// they could not be.
+    // not before the preferences are read, nor ever where they could not be
     pub enabled: bool,
-    /// The share as the control names it: "Switch when a limit reaches 95%".
+    // and while something happens at the share
+    pub share_enabled: bool,
+    // "When a limit reaches", beside the field that shows the share
+    pub heading: String,
+    // "When a limit reaches 95%", the choice's name for VoiceOver and Narrator
     pub at_label: String,
-    /// What is said under them: what it does and what it never does.
-    pub note: String,
-    /// While it is on, what it came to last, once there is anything: which account it
-    /// watches, how much of its fullest limit is used and when that was read, or why it is
-    /// not switching and when it acts again.
+    // the control that sets the share
+    pub share_label: String,
+    pub note: Option<String>,
+    // under Switch, what switching came to last
     pub standing: Option<String>,
+    // under Switch
+    pub terms: Option<TermsShown>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct AtLimitChoice {
+    pub choice: AtLimit,
+    pub title: String,
+}
+
+// A sentence and the page that says whether Anthropic's and OpenAI's terms allow it.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct TermsShown {
+    pub sentence: String,
+    pub link_title: String,
+    pub link: String,
 }
 
 /// Daily renewal, as the settings show it.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct ScheduleShown {
-    /// The schedule as the core last read it, `None` before it has been read.
+    // as the core last read it
     pub schedule: Option<Schedule>,
-    /// Whether the switch shows daily renewal as on: while a change is under way, what was
-    /// asked for, rather than snapping back until the scheduler answers; and otherwise
-    /// whether the scheduler has it. A machine with no scheduler Pitboard writes to, or one
-    /// whose schedule has not been read yet, has it off.
+    // what was asked for while a change is under way, so the switch does not snap back
     pub on: bool,
-    /// A change is under way, from the moment it is asked for until the schedule has been
-    /// read back after it.
+    // from the moment it is asked for until the schedule is read back after it
     pub changing: bool,
-    /// Whether the switch can be pressed: not while a change is under way, when the model
-    /// drops a second press, and not to turn renewal on where this copy of the app cannot.
-    /// Turning it off always can, which is how a schedule that cannot work goes.
+    // turning renewal off always can, which is how a schedule that cannot work goes
     pub enabled: bool,
-    /// How often it runs, while the scheduler has it: "Every day".
-    pub runs: Option<String>,
-    /// Where the scheduler keeps it, while it has it.
-    pub scheduled_in: Option<String>,
-    /// Said under the switch while the scheduler does not have it: that this machine has no
-    /// scheduler Pitboard writes to, or why this copy cannot schedule renewal.
+    // while the scheduler does not have it: none here, or why this copy cannot schedule
     pub note: Option<String>,
-    /// Why the last change could not be made, until the next is asked for, where `note` does
-    /// not say it already.
+    // why the last change failed, until the next, where `note` does not say it
     pub failed: Option<String>,
-}
-
-/// Renew Now, as the settings show it.
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
-pub struct RenewalShown {
-    /// A renewal is under way, from the moment it is asked for until the accounts have been
-    /// read again after it: the button holds back.
-    pub renewing: bool,
-    /// What the button is beside: what it does, until it has been pressed, and then what the
-    /// last renewal did, in the words `pitboard renew` says it in.
-    pub note: String,
     // what daily renewal does, under its switch
     pub about: String,
 }
@@ -240,11 +233,10 @@ pub struct CommandLineShown {
 pub(crate) fn machine(seen: &Seen) -> MachineShown {
     MachineShown {
         schedule: schedule(seen),
-        renewal: renewal(seen),
         checks: checks(seen),
         activity: activity(seen),
         command_line: command_line(seen),
-        auto_switch: auto_switch(seen),
+        at_limit: at_limit(seen),
         warm: warm(seen),
     }
 }
@@ -299,6 +291,10 @@ fn warm(seen: &Seen) -> WarmShown {
             })
     });
     WarmShown {
+        title: "Warm up limits".into(),
+        none_enrolled: accounts
+            .is_empty()
+            .then(|| "No Claude Code account is enrolled yet.".into()),
         from: range.from(),
         to: range.to(),
         range_label: words::warm_hours(range.from(), range.to(), |minutes| {
@@ -307,20 +303,30 @@ fn warm(seen: &Seen) -> WarmShown {
         .unwrap_or_else(|| range.to_string()),
         accounts,
         standing,
-        note: "Pitboard starts the five-hour period of each account turned on as soon as the last \
-               one resets, within these hours, while the app is open, so it resets as early as it \
-               can. Claude Code sends one short request with that account's own login. Pitboard \
-               warms up Claude Code accounts only, and none with a limit used up."
+        note: "Pitboard starts each account’s five-hour period as soon as the last one resets, \
+               within these hours, while the app is open."
             .into(),
         enabled: overview.is_some(),
+        terms: terms(),
+    }
+}
+
+fn terms() -> TermsShown {
+    TermsShown {
+        sentence: format!("{}.", pitboard_core::words::TERMS_MAY_COVER_THIS),
+        link_title: "Is this allowed?".into(),
+        link: pitboard_core::words::IS_THIS_ALLOWED_URL.into(),
     }
 }
 
 // How soon running sessions follow is promised only while the last read found no file behind
 // the store.
-fn auto_switch(seen: &Seen) -> AutoSwitchShown {
+const AT_LIMIT: &str = "When a limit reaches";
+
+fn at_limit(seen: &Seen) -> AtLimitShown {
     let state = seen.state;
     let at = state.preferences.threshold().percent();
+    let choice = state.preferences.at_limit();
     let follows = if state
         .warnings
         .iter()
@@ -337,24 +343,51 @@ fn auto_switch(seen: &Seen) -> AutoSwitchShown {
             pitboard_core::switch::ADOPTION_CEILING_SECONDS
         )
     };
-    AutoSwitchShown {
-        on: state.preferences.auto_switch,
+    let note = match choice {
+        AtLimit::Nothing => None,
+        AtLimit::Notify => Some(format!(
+            "Pitboard notifies you once a limit of the account in use reaches {at}%, while the app \
+             is open."
+        )),
+        AtLimit::Switch => Some(format!(
+            "Pitboard switches Claude Code once a limit of the account in use reaches {at}%, never \
+             back by itself, and notifies you of Codex. {follows}"
+        )),
+    };
+    let switching = choice == AtLimit::Switch;
+    AtLimitShown {
+        title: "Before an account runs out".into(),
+        choice,
+        choices: [
+            (AtLimit::Nothing, "Do Nothing", "Do nothing"),
+            (AtLimit::Notify, "Notify Me", "Notify me"),
+            (
+                AtLimit::Switch,
+                "Switch Automatically",
+                "Switch automatically",
+            ),
+        ]
+        .into_iter()
+        .map(|(choice, title, sentence)| AtLimitChoice {
+            choice,
+            title: words::titled(seen.os, title, sentence),
+        })
+        .collect(),
         at,
         lowest: Threshold::LOWEST,
         highest: Threshold::HIGHEST,
         enabled: state.preferences_have_been_read(),
-        at_label: format!("Switch when a limit reaches {at}%"),
-        note: format!(
-            "Pitboard switches Claude Code to another of your accounts with room below \
-             {at}% in every limit, once a limit of the one in use reaches {at}%, while the app \
-             is open. {follows} It never switches back by itself, and never switches Codex: a \
-             running codex keeps its account until restarted."
-        ),
+        share_enabled: state.preferences_have_been_read() && choice != AtLimit::Nothing,
+        heading: AT_LIMIT.into(),
+        at_label: format!("{AT_LIMIT} {at}%"),
+        share_label: "Share of a limit".into(),
+        note,
         standing: state
             .auto_standing
             .as_ref()
-            .filter(|_| state.preferences.auto_switch)
+            .filter(|_| switching)
             .map(|standing| auto_standing(seen, standing)),
+        terms: switching.then(terms),
     }
 }
 
@@ -426,17 +459,10 @@ fn schedule(seen: &Seen) -> ScheduleShown {
         .own
         .filter(|own| !own.lasting())
         .map(|own| words::cannot_schedule(seen.os, own.temporary));
-    let (runs, scheduled_in, note) = match &machine.schedule {
-        Some(Schedule::Installed {
-            path,
-            every_seconds,
-        }) => (
-            Some(words::runs_every(*every_seconds)),
-            Some(path.clone()),
-            None,
-        ),
-        Some(Schedule::Unsupported) => (None, None, Some(words::no_scheduler(seen.os))),
-        Some(Schedule::Absent) | None => (None, None, cannot.clone()),
+    let note = match &machine.schedule {
+        Some(Schedule::Installed { .. }) => None,
+        Some(Schedule::Unsupported) => Some(words::no_scheduler(seen.os)),
+        Some(Schedule::Absent) | None => cannot.clone(),
     };
     // Said once: a refusal the note under the switch says already is not said again.
     let failed = machine
@@ -454,25 +480,8 @@ fn schedule(seen: &Seen) -> ScheduleShown {
         on: machine.scheduling.unwrap_or(renews_daily),
         changing: machine.scheduling.is_some(),
         enabled: machine.scheduling.is_none() && (renews_daily || cannot.is_none()),
-        runs,
-        scheduled_in,
         note,
         failed,
-    }
-}
-
-/// Renew Now, and what the last renewal did, in `pitboard renew`'s words, or why it was
-/// refused, in the core's: a run that renewed nothing because it was refused does not read
-/// as one where nothing was due.
-fn renewal(seen: &Seen) -> RenewalShown {
-    let machine = &seen.state.machine;
-    RenewalShown {
-        renewing: machine.renewing,
-        note: match &machine.renewals {
-            None => words::RENEWS_WHAT_IS_DUE.to_owned(),
-            Some(Ok(renewals)) => crate::renewal_note(renewals),
-            Some(Err(refused)) => refused.to_string(),
-        },
         about: words::renewal_about(
             seen.os,
             seen.accounts()
@@ -638,6 +647,19 @@ mod tests {
     fn a_range_to_the_end_of_the_day_ends_at_midnight() {
         assert_eq!(hours(6 * 60, 24 * 60, &Twelve), "6:00 AM to midnight");
         assert_eq!(hours(6 * 60, 0, &Utc), "06:00 to midnight");
+    }
+
+    #[test]
+    fn warm_up_says_so_while_no_claude_code_account_is_enrolled() {
+        let state = read(status(Vec::new(), Vec::new()), vec![claude_code()]);
+        assert_eq!(
+            present_on(Os::Windows, &state, 0, &Utc)
+                .machine
+                .warm
+                .none_enrolled
+                .as_deref(),
+            Some("No Claude Code account is enrolled yet.")
+        );
     }
 
     #[test]
@@ -844,15 +866,16 @@ mod tests {
                 status(accounts, Vec::new()),
                 vec![claude_code(), claude_desktop()],
             );
-            present_on(Os::MacOs, &state, 0, &Utc).machine.renewal.about
+            present_on(Os::MacOs, &state, 0, &Utc)
+                .machine
+                .schedule
+                .about
         };
         let claude_code_alone = about(vec![account(Some("work")).signed_in().build()]);
         assert_eq!(
             claude_code_alone,
-            "A parked login is renewed whenever Pitboard runs, and otherwise not, so one you \
-             leave alone for weeks expires and needs a browser sign-in. Daily renewal hands \
-             that to your Mac’s own scheduler. It renews your parked logins and does nothing \
-             else: it never switches account and never asks for usage."
+            "Your Mac’s own scheduler renews your parked logins once a day, so one you leave \
+             alone does not expire."
         );
         assert_eq!(
             about(vec![
@@ -895,13 +918,12 @@ mod tests {
             let windows = present_on(Os::Windows, &state, 0, &Utc).machine.warm;
             assert_eq!(windows, present_on(Os::MacOs, &state, 0, &Utc).machine.warm);
             assert!(windows.enabled, "{on}");
+            assert_eq!(windows.none_enrolled, None);
             assert_eq!(windows.standing.as_deref(), said, "{on}");
-            assert!(
-                windows
-                    .note
-                    .starts_with("Pitboard starts the five-hour period"),
-                "{}",
-                windows.note
+            assert_eq!(
+                windows.note,
+                "Pitboard starts each account’s five-hour period as soon as the last one resets, \
+                 within these hours, while the app is open."
             );
         }
     }

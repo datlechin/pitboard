@@ -6,7 +6,7 @@
 use super::preferences::Preferences;
 use super::state::{Answer, Job};
 use super::testing::{Hand, Machine, status};
-use super::{EarlierPreferences, Intent, WindowRequest};
+use super::{AtLimit, EarlierPreferences, Intent, Tip, WindowRequest};
 use crate::Footing;
 use crate::present::testing::account;
 use std::collections::BTreeSet;
@@ -76,6 +76,84 @@ fn a_second_account_is_declined_per_tool() {
     assert_eq!(later.shown().footing, Footing::Ready);
 }
 
+/// Past a second account the tips go on, one at a time: opening at login, where the app's
+/// system says it does not, then what happens at a limit, once Claude Code has two accounts
+/// and nobody chose. Not Now puts each away for good, and doing what it asks ends it too.
+#[test]
+fn setup_goes_on_to_opening_at_login_then_to_what_happens_at_a_limit() {
+    let mut machine = Machine::reading(Ok(status(vec![
+        account(Some("work")).signed_in().build(),
+        account(Some("personal")).build(),
+    ])));
+    let mut model = started(&mut machine);
+    assert_eq!(
+        model.shown().footing,
+        Footing::AtLimitUnchosen,
+        "nothing asked of an app that never said whether it opens at login"
+    );
+    model.send(Intent::OpensAtLogin { on: false });
+    assert_eq!(model.shown().footing, Footing::NotOpenedAtLogin);
+    model.send(Intent::OpensAtLogin { on: true });
+    assert_eq!(model.shown().footing, Footing::AtLimitUnchosen);
+
+    model.send(Intent::OpensAtLogin { on: false });
+    model.send(Intent::DeclineTip {
+        tip: Tip::OpenAtLogin,
+    });
+    model.run(&mut machine);
+    assert_eq!(model.shown().footing, Footing::AtLimitUnchosen);
+    let kept = machine.kept_preferences.last().expect("kept");
+    assert_eq!(
+        kept.tips_declined
+            .iter()
+            .map(String::as_str)
+            .collect::<Vec<_>>(),
+        ["open_at_login"]
+    );
+
+    let mut later = started(&mut machine);
+    later.send(Intent::OpensAtLogin { on: false });
+    assert_eq!(
+        later.shown().footing,
+        Footing::AtLimitUnchosen,
+        "and it is remembered"
+    );
+    later.send(Intent::DeclineTip { tip: Tip::AtLimit });
+    later.run(&mut machine);
+    assert_eq!(later.shown().footing, Footing::Ready);
+
+    let mut chose = started(&mut Machine::reading(Ok(status(vec![
+        account(Some("work")).signed_in().build(),
+        account(Some("personal")).build(),
+    ]))));
+    chose.send(Intent::SetAtLimit {
+        choice: AtLimit::Notify,
+        at: 95,
+    });
+    assert_eq!(chose.shown().footing, Footing::Ready, "a choice made");
+}
+
+/// Opening the settings from the tip takes it up, whether or not the choice shown there
+/// changes: keeping Notify Me writes nothing of its own.
+#[test]
+fn opening_the_settings_from_the_tip_ends_it() {
+    let mut machine = Machine::reading(Ok(status(vec![
+        account(Some("work")).signed_in().build(),
+        account(Some("personal")).build(),
+    ])));
+    let mut model = started(&mut machine);
+    assert_eq!(model.shown().footing, Footing::AtLimitUnchosen);
+    model.send(Intent::ShowLimits);
+    model.run(&mut machine);
+    assert!(model.shown().window_request.settings);
+    assert_eq!(model.shown().footing, Footing::Ready);
+    assert_eq!(
+        started(&mut machine).shown().footing,
+        Footing::Ready,
+        "and it is remembered"
+    );
+}
+
 /// "Not now" said before there was a second tool was said about Claude Code, the only tool
 /// there was, and does not hide the prompt for a first Codex account. It is moved into the
 /// model's file once, so the earlier store is read no more.
@@ -117,7 +195,8 @@ fn the_first_launch_opens_the_window_once() {
         first.shown().window_request,
         WindowRequest {
             serial: 1,
-            pane: None
+            pane: None,
+            settings: false,
         }
     );
     assert!(machine.kept_preferences.last().expect("kept").has_been_seen);

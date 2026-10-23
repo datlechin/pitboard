@@ -73,6 +73,24 @@ private final class PresenceLog {
     #expect(log.said == ["regular", "activate"])
 }
 
+/// A window asked for after a notification's button, a switch that ends in a question, finds
+/// Pitboard in the background, where its own activation is refused: Launch Services then
+/// brings it forward.
+@MainActor
+@Test func aWindowRefusedTheFrontComesForwardThroughLaunchServices() async {
+    let log = PresenceLog()
+    log.active = false
+    let presence = log.presence()
+    presence.activate()
+    await settled()
+    #expect(log.said == ["regular", "activate", "reopen"])
+    log.said = []
+    log.active = true
+    presence.activate()
+    await settled()
+    #expect(log.said == ["regular", "activate"])
+}
+
 @MainActor
 private func settled() async {
     for _ in 0..<10 { await Task.yield() }

@@ -12,8 +12,8 @@ use std::collections::BTreeMap;
 /// at 100% of any has nothing left to offer.
 const FULL: u8 = 100;
 
-/// What has been told about, by `Advice::key`: the reset of the limit last told, in epoch
-/// seconds, or 0 where none was known. Kept in Pitboard's directory between launches.
+// Kept across launches: each limit told by `Advice::key`, at its reset or 0, and each parked
+// login told unusable, by its account under `unusable/`, at 0.
 pub(crate) type Told = BTreeMap<String, i64>;
 
 /// An account in use has run out of a limit, and another account of the same tool has room
@@ -37,7 +37,7 @@ pub(crate) struct Advice {
     pub(crate) switch_to: String,
 }
 
-fn window(limit: &Limit) -> usage::Window {
+pub(crate) fn window(limit: &Limit) -> usage::Window {
     usage::Window {
         kind: limit.kind.clone(),
         scope: limit.scope.clone(),
@@ -54,19 +54,20 @@ fn windows_of(measured: &Usage) -> Vec<usage::Window> {
 }
 
 /// The account of the same tool that can be switched to at `now` for a switch away from
-/// `ran` of `current`, by the rule the automatic switch keeps, and what it has left of that
-/// kind of limit: none when none has room.
+/// `ran` of `current`, by the rule the automatic switch keeps at `share`, and what it has left
+/// of that kind of limit: none when none has room.
 fn spare(
     ran: &Limit,
     current: &Account,
     mine: &[&Account],
+    share: u8,
     now: i64,
 ) -> Option<(String, Option<i64>, String)> {
     let ran = window(ran);
     let in_use = current.usage.as_ref().map(windows_of).unwrap_or_default();
     let (spare, room) = usage::preferred(
         mine.iter()
-            .filter(|account| account.switchable && account.qualified.is_some())
+            .filter(|account| crate::present::usable(account) && account.qualified.is_some())
             .filter_map(|account| {
                 let theirs = account.usage.as_ref()?;
                 let room = usage::room(
@@ -74,7 +75,7 @@ fn spare(
                     theirs.lists_every_limit,
                     &in_use,
                     &ran,
-                    FULL,
+                    share,
                     now,
                 )?;
                 Some((account, room))
@@ -113,44 +114,23 @@ impl Advice {
     /// A limit told about at a reset one minute from this one's, by the core's rule for one
     /// reset, has been told.
     pub(crate) fn about(status: &Status, tools: &[Tool], told: &Told) -> Vec<Advice> {
-        let codes: Vec<&str> = status
-            .accounts
-            .iter()
-            .map(|account| account.provider.as_str())
-            .collect();
-        let providers = crate::present::in_order(&codes, tools);
-        providers
-            .iter()
-            .filter_map(|provider| {
-                let mine: Vec<&Account> = status
-                    .accounts
-                    .iter()
-                    .filter(|account| &account.provider == provider)
-                    .collect();
-                let current = mine
-                    .iter()
-                    .find(|account| account.signed_in && account.label.is_some())?;
-                let ran = current.label.as_deref()?;
-                let windows = current.usage.iter().flat_map(|usage| &usage.windows);
+        in_use(status, tools)
+            .into_iter()
+            .filter_map(|found| {
+                let ran = found.current.label.as_deref()?;
+                let windows = found.current.usage.iter().flat_map(|usage| &usage.windows);
                 for window in windows.filter(|window| window.percent >= 100.0) {
-                    if let Some(&at) = told.get(&Advice::key(provider, ran, window))
-                        && same_reset(at, window.resets_at.unwrap_or(0))
-                    {
+                    if told_at_its_reset(told, found.provider, ran, window) {
                         continue;
                     }
                     let Some((instead, left, switch_to)) =
-                        spare(window, current, &mine, status.now)
+                        spare(window, found.current, &found.mine, FULL, status.now)
                     else {
                         continue;
                     };
                     return Some(Advice {
-                        provider: provider.clone(),
-                        tool: (providers.len() > 1).then(|| {
-                            tools
-                                .iter()
-                                .find(|tool| &tool.code == provider)
-                                .map_or_else(|| provider.clone(), |tool| tool.name.clone())
-                        }),
+                        provider: found.provider.to_owned(),
+                        tool: found.tool,
                         ran: ran.to_owned(),
                         window: window.clone(),
                         instead,
@@ -174,7 +154,7 @@ impl Advice {
             .iter()
             .filter(|account| account.provider == self.provider)
             .collect();
-        let (instead, left, switch_to) = spare(&self.window, current, &mine, status.now)?;
+        let (instead, left, switch_to) = spare(&self.window, current, &mine, FULL, status.now)?;
         Some(Advice {
             instead,
             left,
@@ -224,6 +204,98 @@ impl Advice {
             ..self.clone()
         }
     }
+}
+
+// A limit of an account in use that has reached the share chosen, and the account of the same
+// tool there is room on for a switch away from it, where there is one.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct HeadsUp {
+    pub(crate) provider: String,
+    pub(crate) tool: Option<String>,
+    pub(crate) ran: String,
+    pub(crate) window: Limit,
+    // the account offered, what it has left of that kind of limit, and what to switch to
+    pub(crate) instead: Option<(String, Option<i64>, String)>,
+}
+
+impl HeadsUp {
+    pub(crate) fn key_of(&self) -> String {
+        Advice::key(&self.provider, &self.ran, &self.window)
+    }
+
+    // At most one for each tool, of a limit not told about at its reset, as `Advice::about`.
+    pub(crate) fn about(status: &Status, tools: &[Tool], told: &Told, at: u8) -> Vec<HeadsUp> {
+        in_use(status, tools)
+            .into_iter()
+            .filter_map(|found| {
+                let ran = found.current.label.as_deref()?;
+                let window = found
+                    .current
+                    .usage
+                    .iter()
+                    .flat_map(|usage| &usage.windows)
+                    .filter(|window| whole(window.percent) >= i64::from(at))
+                    .find(|window| !told_at_its_reset(told, found.provider, ran, window))?;
+                Some(HeadsUp {
+                    provider: found.provider.to_owned(),
+                    tool: found.tool,
+                    ran: ran.to_owned(),
+                    window: window.clone(),
+                    instead: spare(window, found.current, &found.mine, at, status.now),
+                })
+            })
+            .collect()
+    }
+}
+
+struct InUse<'a> {
+    provider: &'a str,
+    // where accounts of more than one tool were read and a sentence has to say which
+    tool: Option<String>,
+    current: &'a Account,
+    mine: Vec<&'a Account>,
+}
+
+// Each tool's account in use under a name, with every account of that tool, in the order
+// `tools` lists them.
+fn in_use<'a>(status: &'a Status, tools: &[Tool]) -> Vec<InUse<'a>> {
+    let codes: Vec<&str> = status
+        .accounts
+        .iter()
+        .map(|account| account.provider.as_str())
+        .collect();
+    let providers = crate::present::in_order(&codes, tools);
+    providers
+        .iter()
+        .filter_map(|provider| {
+            let mine: Vec<&Account> = status
+                .accounts
+                .iter()
+                .filter(|account| &account.provider == provider)
+                .collect();
+            let current = *mine
+                .iter()
+                .find(|account| account.signed_in && account.label.is_some())?;
+            let provider = current.provider.as_str();
+            Some(InUse {
+                provider,
+                tool: (providers.len() > 1).then(|| {
+                    tools
+                        .iter()
+                        .find(|tool| tool.code == provider)
+                        .map_or_else(|| provider.to_owned(), |tool| tool.name.clone())
+                }),
+                current,
+                mine,
+            })
+        })
+        .collect()
+}
+
+// By the core's rule for one reset.
+fn told_at_its_reset(told: &Told, provider: &str, label: &str, window: &Limit) -> bool {
+    told.get(&Advice::key(provider, label, window))
+        .is_some_and(|&at| same_reset(at, window.resets_at.unwrap_or(0)))
 }
 
 /// What was told about the account `label` of `provider`'s tool, kept as told about it as

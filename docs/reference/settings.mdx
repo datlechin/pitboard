@@ -5,10 +5,10 @@ description: "Look up each control in the app's Settings, section by section, on
 
 <Tabs>
   <Tab title="macOS">
-    Click Pitboard's item in the menu bar, then choose **Settings** (Command-Comma). Settings opens in a window of its own, on the pane you used last: **General**, **Limits**, **Renewal**, **Command Line** or **Updates**.
+    Click Pitboard's item in the menu bar, then choose **Settings** (Command-Comma). Settings opens in a window of its own, on the pane you used last: **General**, **Limits** or **Advanced**.
   </Tab>
   <Tab title="Windows">
-    Right-click Pitboard's icon in the notification area and select **Settings**, or select **Settings** at the foot of the Pitboard window's navigation pane (Ctrl+Comma). Settings is one page in the Pitboard window, with the sections **General**, **Limits**, **Renewal**, **Command line**, **Updates** and **About**.
+    Right-click Pitboard's icon in the notification area and select **Settings**, or select **Settings** at the foot of the Pitboard window's navigation pane (Ctrl+Comma). Settings is one page in the Pitboard window, with the sections **General**, **Limits**, **Advanced** and **About**.
   </Tab>
 </Tabs>
 
@@ -28,11 +28,13 @@ If macOS refuses the change, its reason shows under the setting.
 
 ### Start when you sign in to Windows
 
-On Windows, turned on, it writes the value `Pitboard` in your account's `Run` key, which starts Pitboard without its window when you sign in. Under it, the card reads **Settings > Apps > Startup can turn it off too.**
+On Windows, turned on, it writes the value `Pitboard` in your account's `Run` key, which starts Pitboard without its window when you sign in.
 
 Where Windows' own **Startup** settings turned Pitboard off, the switch is dimmed and reads **Turned off in Settings > Apps > Startup, where you can turn it on again.** **Open Startup settings** under it opens that page. Pitboard reads the setting again each time Settings opens, and as you come back to the Pitboard window while it shows Settings.
 
 ### Notifications
+
+On macOS, when Pitboard's notifications are turned off in **System Settings** > **Notifications**, **General** reads **Notifications from Pitboard are turned off in System Settings.** with **Open Notification Settings**, which opens that page. Pitboard reads it again each time Settings opens, and as you come back to the app.
 
 On Windows, when Windows shows none of Pitboard's notifications, a **Notifications** card under **Start when you sign in to Windows** says why. Pitboard reads it again whenever it reads that switch's setting.
 
@@ -56,34 +58,73 @@ On macOS, Pitboard's item in the menu bar shows:
 
 [Menu bar item](/reference/mac-app#menu-bar-item) says which account and which limit the percentage follows. On Windows, the icon's tooltip says the same, as [Icon in the notification area](/reference/windows-app#icon-in-the-notification-area) describes.
 
+### Updates
+
+<Tabs>
+  <Tab title="macOS">
+    A copy from a release download or the `pitboard-app` cask has these controls:
+
+    | Control | Default | What it does |
+    | --- | --- | --- |
+    | **Check for updates automatically** | On | Checks GitHub for a newer version once a day. |
+    | **Download and install updates automatically** | Off | Downloads an update in the background and installs it when Pitboard quits. Dimmed while the daily check is off. |
+
+    **Check Now** checks at once, in the updater's own window. Beside it, the pane names your version, such as **Pitboard 0.10.0**. Once a daily check finds a newer one, it reads **Pitboard 0.10.1 is ready to install.** and Pitboard's [menu](/reference/mac-app#menu) offers **Install Pitboard 0.10.1**.
+
+    A copy built from source has no update key and cannot update itself. In place of these controls, **General** shows **Version** and a note saying so.
+  </Tab>
+  <Tab title="Windows">
+    A copy installed from a release has these controls:
+
+    | Control | Default | What it does |
+    | --- | --- | --- |
+    | **Check for updates automatically** | On | Checks GitHub for a newer full release by itself. |
+    | **Check now** | A button | Checks at once, in the updater's own window. |
+
+    Beside **Check now**, the section names your version. Once a check finds a newer one, it reads **Pitboard 1.0.1 is ready to install.** and Pitboard's [menu](/reference/windows-app#menu) offers **Install Pitboard 1.0.1**.
+
+    A beta finds only the next full release, and says so: **A beta updates itself to 1.0.0 once that is out. Install a later beta by hand.** Until a full release of Pitboard for Windows is out, a beta checks for nothing and says **No full release of Pitboard for Windows is out yet, so there is no update to check for.** It looks again each time Settings opens.
+
+    A copy that cannot update itself, or a beta with nothing to check for, says why, has no **Check for updates automatically**, and dims **Check now**.
+  </Tab>
+</Tabs>
+
+[What leaves your machine](/security#what-leaves-your-machine) lists what a check sends.
+
 ## Limits
 
 | Control | Section | Default |
 | --- | --- | --- |
-| **Switch Claude Code automatically** | macOS: **Before an account runs out** | Off |
-| **Switch when a limit reaches** | macOS: **Before an account runs out**. Windows: under **Switch Claude Code automatically** | 95%, from 50% to 99% in steps of 1% |
+| **When a limit reaches** | macOS: **Before an account runs out**. Windows: **Limits** | **Notify Me** |
+| The share in it | macOS: a field and a stepper beside the choice. Windows: **Share of a limit**, under the choice | 95%, from 50% to 99% in steps of 1% |
 | **From** | **Warm up limits** | 06:00 |
 | **To** | **Warm up limits** | 22:00 |
 | A switch for each Claude Code account | **Warm up limits** | Off |
 
-The two switching settings are kept in `app.json`, as [The app](/reference/files#the-app) describes. Both stay dimmed until the app has read that file.
+The choice and its share are kept in `app.json`, as [The app](/reference/files#the-app) describes. Both stay dimmed until the app has read that file.
 
-### Switch Claude Code automatically
+### When a limit reaches
 
-While the app is open, it switches Claude Code once a limit of the account in use reaches the share. [Switch before an account runs out](/guides/automatic-switching) gives the rules. [`pitboard watch`](/reference/account-commands#watch) never reads this setting.
+While the app is open, it acts once a limit of the account in use reaches the share:
 
-**Switch when a limit reaches** is dimmed while this setting is off. On Windows, it is a number box from 50 to 99.
+| Choice | What the app does |
+| --- | --- |
+| **Do Nothing** | Posts nothing. Pitboard's menu and window still offer a switch once the account runs out. |
+| **Notify Me** | Posts one notification for each limit and reset, with **Switch** where another account of the tool is under the share in every limit. [Notifications](/reference/mac-app#notifications) lists its words. |
+| **Switch Automatically** | Switches Claude Code, as [Switch before an account runs out](/guides/automatic-switching) gives the rules. It notifies of Codex as **Notify Me** does. |
 
-The app decides:
+On Windows, the choices are **Do nothing**, **Notify me** and **Switch automatically**, and the share is a number box from 50 to 99. The share is dimmed under **Do Nothing**. [`pitboard watch`](/reference/account-commands#watch) never reads this setting.
 
-- When you turn the setting on or change the share.
+A note under the choice says what it does. Under **Switch Automatically**, it says when running sessions follow, as [Open sessions](/concepts/open-sessions) explains, and **Anthropic's terms may cover automatic switching and warm-ups.** follows with **Is this allowed?**, which opens [Is this allowed](/concepts/limits#is-this-allowed).
+
+Under **Switch Automatically**, the app decides whether to switch:
+
+- When you choose it or change the share.
 - After each usage read.
 - After another Pitboard run records a switch or usage.
 - At least every 30 seconds.
 
-The note under the setting says when running sessions follow, as [Open sessions](/concepts/open-sessions) explains.
-
-While the setting is on, a line says what the app last decided:
+A line says what the app last decided:
 
 | Line | Shown when |
 | --- | --- |
@@ -104,6 +145,8 @@ While the app is open, it warms up each Claude Code account turned on here, betw
 
 **To** at 00:00 is the end of the day. A **From** later than **To** runs past midnight.
 
+Under the list, **Anthropic's terms may cover automatic switching and warm-ups.** sits with **Is this allowed?**, which opens [Is this allowed](/concepts/limits#is-this-allowed).
+
 Each account's row shows where its warm-up stands while it is on. A line under the list says what comes next:
 
 | Line | Shown when |
@@ -116,21 +159,15 @@ Each account's row shows where its warm-up stands while it is on. A line under t
 
 On Windows, the line sits under **Warm up limits** and its hours, and shows while the section is closed.
 
-## Renewal
-
-| Control | System | Default |
-| --- | --- | --- |
-| **Renew parked logins daily** | macOS, Windows | Off |
-| **Renew Now** | macOS | A button |
-| **Renew now** | Windows | A button |
-
-A note says what daily renewal does. Once a Claude Desktop account is enrolled on macOS, the note ends **A parked Claude Desktop login is never renewed.**
+## Advanced
 
 ### Renew parked logins daily
 
+Off by default. A note under it says what daily renewal does. Once a Claude Desktop account is enrolled on macOS, the note ends **A parked Claude Desktop login is never renewed.**
+
 It has the system's scheduler run `pitboard renew` once a day, with the command line that came with the app. That run renews due parked logins and nothing else. [Keep parked logins alive](/guides/renewal) says why.
 
-The setting is on whenever the scheduler has the job, including one `pitboard schedule install` made. It then shows **Runs** as **Every day**, and **Scheduled in** with where the job is, as [Renewal schedule](/reference/files#renewal-schedule) names it. On Windows, **Copy** beside it copies the task's path. A change that fails says why under the setting.
+The setting is on whenever the scheduler has the job, including one `pitboard schedule install` made. `pitboard schedule status` says where the job is, as [Renewal schedule](/reference/files#renewal-schedule) names it. A change that fails says why under the setting.
 
 You can always turn it off. You cannot turn it on in these cases:
 
@@ -140,13 +177,7 @@ You can always turn it off. You cannot turn it on in these cases:
 | No command line that can run came with the app, as in a build run from Xcode or from its build folder | macOS, Windows | Dimmed, with **This copy of Pitboard has no command line inside it to run on a schedule.** |
 | `PITBOARD_HOME` names a directory other than [the default one](/reference/files#the-pitboard-directory) | macOS, Windows | A refusal under the setting: the schedule renews only the parked logins in the default directory. |
 
-### Renew Now
-
-Renews due parked logins, as `pitboard renew` does, then asks for usage again.
-
-Beside the button, **Renew every parked login that is due.** gives way to the result: the line `pitboard renew` prints, or why Pitboard refused. [`renew`](/reference/maintenance-commands#renew) lists the lines.
-
-## Command line
+### Command line
 
 **In your terminal** shows the path of the `pitboard` a terminal would run, or **Not installed**. A note under it says how that `pitboard` updates:
 
@@ -154,8 +185,6 @@ Beside the button, **Renew every parked login that is due.** gives way to the re
 | --- | --- |
 | The one that came with the app, directly or through a link | **The one inside this app, so it updates with the app.** |
 | Any other | **Installed apart from this app, so update it the way you installed it.** |
-
-A note at the foot of the section points to [`status`](/reference/account-commands#status) for scripts and [`repair`](/reference/recovery-commands#repair).
 
 <Tabs>
   <Tab title="macOS">
@@ -176,39 +205,6 @@ A note at the foot of the section points to [`status`](/reference/account-comman
     The installer puts the command line on your `PATH`, so the section has no install button. With none found, the note reads **Pitboard's installer puts pitboard on your PATH, which terminals opened after it ran see.**
   </Tab>
 </Tabs>
-
-## Updates
-
-<Tabs>
-  <Tab title="macOS">
-    A copy from a release download or the `pitboard-app` cask has these controls:
-
-    | Control | Default | What it does |
-    | --- | --- | --- |
-    | **Check for updates automatically** | On | Checks GitHub for a newer version once a day. |
-    | **Download and install updates automatically** | Off | Downloads an update in the background and installs it when Pitboard quits. Dimmed while the daily check is off. |
-
-    **Check Now** checks at once, in the updater's own window. Beside it, the pane names your version, such as **Pitboard 0.10.0**. Once a daily check finds a newer one, it reads **Pitboard 0.10.1 is ready to install.** and Pitboard's [menu](/reference/mac-app#menu) offers **Install Pitboard 0.10.1**.
-
-    A copy built from source has no update key and cannot update itself. Its **Updates** pane shows only **Version** and a note saying so.
-  </Tab>
-  <Tab title="Windows">
-    A copy installed from a release has these controls:
-
-    | Control | Default | What it does |
-    | --- | --- | --- |
-    | **Check for updates automatically** | On | Checks GitHub for a newer full release by itself. |
-    | **Check now** | A button | Checks at once, in the updater's own window. |
-
-    Beside **Check now**, the section names your version. Once a check finds a newer one, it reads **Pitboard 1.0.1 is ready to install.** and Pitboard's [menu](/reference/windows-app#menu) offers **Install Pitboard 1.0.1**.
-
-    A beta finds only the next full release, and says so: **A beta updates itself to 1.0.0 once that is out. Install a later beta by hand.** Until a full release of Pitboard for Windows is out, a beta checks for nothing and says **No full release of Pitboard for Windows is out yet, so there is no update to check for.** It looks again each time Settings opens.
-
-    A copy that cannot update itself, or a beta with nothing to check for, says why, has no **Check for updates automatically**, and dims **Check now**.
-  </Tab>
-</Tabs>
-
-[What leaves your machine](/security#what-leaves-your-machine) lists what a check sends.
 
 ## About
 

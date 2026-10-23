@@ -126,29 +126,62 @@ private final class Opened: @unchecked Sendable {
     #expect(try twentyFour.timeOfDay(minutes: 6 * 60) == "06:00")
 }
 
-@Test func aRunOutIsPostedWithTheAccountItsButtonSwitchesTo() {
+@Test func aRunOutIsPostedWithItsButtonsCategoryAndWhatEachClickHandsBack() {
     let content = MacNotifications.content(
         of: RunOutNotice(
             id: "claude/work/session/1768399500", title: "work has no 5-hour limit left",
             subtitle: "Claude Code", body: "spare has 80% of its own left.",
-            switchTo: "claude/spare"))
+            clicked: "accounts",
+            button: NotificationButton(title: "Switch", clicked: "switch/claude/spare")))
     #expect(content.title == "work has no 5-hour limit left")
     #expect(content.subtitle == "Claude Code")
     #expect(content.body == "spare has 80% of its own left.")
-    #expect(content.categoryIdentifier == MacNotifications.category)
-    #expect(content.userInfo["label"] as? String == "claude/spare")
+    #expect(content.categoryIdentifier == "Switch")
+    #expect(
+        MacNotifications.argument(of: MacNotifications.action, in: content.userInfo)
+            == "switch/claude/spare")
+    #expect(
+        MacNotifications.argument(
+            of: UNNotificationDefaultActionIdentifier, in: content.userInfo)
+            == "accounts")
+    #expect(
+        MacNotifications.argument(
+            of: UNNotificationDismissActionIdentifier, in: content.userInfo)
+            == nil)
 }
 
-/// No category, so no Switch button.
-@Test func aSwitchMadeByItselfIsPostedWithNoButton() {
+/// No category, so no button, and a click on it still hands back what it asks for.
+@Test func aNoticeWithNoButtonHasNoCategory() {
     let content = MacNotifications.content(
         of: RunOutNotice(
-            id: "auto/work/spare/1768399500", title: "Switched Claude Code to spare",
-            subtitle: nil,
-            body: "work had used 96% of its 5-hour limit. "
-                + "Sessions already running follow within 33 seconds.",
-            switchTo: nil))
-    #expect(content.title == "Switched Claude Code to spare")
+            id: "auto-refused/switch_failed", title: "Pitboard could not switch Claude Code",
+            subtitle: nil, body: "It was refused.", clicked: "limits", button: nil))
     #expect(content.categoryIdentifier.isEmpty)
-    #expect(content.userInfo.isEmpty)
+    #expect(
+        MacNotifications.argument(
+            of: UNNotificationDefaultActionIdentifier, in: content.userInfo)
+            == "limits")
+    #expect(MacNotifications.argument(of: MacNotifications.action, in: content.userInfo) == nil)
+}
+
+/// Each button the model can post is registered at launch, and only one that opens a window
+/// brings Pitboard forward, which macOS refuses the app itself from the background.
+@Test func everyButtonHasACategoryOfItsOwn() {
+    let buttons = notificationButtons()
+    let categories = MacNotifications.categories(buttons)
+    #expect(Set(categories.map(\.identifier)) == Set(buttons.map(\.title)))
+    for category in categories {
+        #expect(category.actions.map(\.title) == [category.identifier])
+        let opens = buttons.first { $0.title == category.identifier }?.opensWindow ?? false
+        let options: UNNotificationActionOptions = opens ? .foreground : []
+        #expect(category.actions.allSatisfy { $0.options == options })
+    }
+    #expect(buttons.contains { $0.title == "Sign In Again" && $0.opensWindow })
+    #expect(buttons.contains { $0.title == "Switch" && !$0.opensWindow })
+}
+
+/// A notification an older Pitboard posted has no click of its own, and opens the accounts.
+@Test func aClickOnAnOlderNotificationOpensTheAccounts() {
+    #expect(
+        MacNotifications.argument(of: UNNotificationDefaultActionIdentifier, in: [:]) == "")
 }

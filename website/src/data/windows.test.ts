@@ -75,7 +75,7 @@ test("an account's tooltip in the icon's menu is the line the menu bar app shows
   assert.ok(views("IconMenuFlyout.cs").includes("ToolTipService.SetToolTip(item, detail);"));
   assert.ok(
     present("accounts.rs").includes(
-      "summary: in_place_of_limits.unwrap_or_else(|| limits_said(seen, account)),",
+      "in_place_of_limits(seen, account).unwrap_or_else(|| limits_said(seen, account))",
     ),
   );
   const [work] = iconMenu("before", false)
@@ -100,11 +100,15 @@ test("a site with several accounts' windows is a submenu of their labels", () =>
   for (const host of ["claude.ai", "chatgpt.com"]) assert.ok(named.includes(`host: "${host}"`));
 });
 
-test("the icon's tooltip names Pitboard, the account the menu bar would and its tool", () => {
-  assert.ok(
-    present("accounts.rs").includes('format!("Pitboard, {name_and_usage}, {}", tool.name)'),
+test("the icon's tooltip names Pitboard, then each account in use with its tool and its menu line", () => {
+  const source = present("accounts.rs");
+  assert.ok(source.includes('let mut tip = vec!["Pitboard".to_owned()];'));
+  assert.ok(source.includes('format!("{}: {}", seen.name_of(account), summary(seen, account))'));
+  assert.ok(present("words.rs").includes('format!("{label} ({tool})")'));
+  assert.equal(
+    trayTip("after"),
+    "Pitboard\nwork (Claude Code): 5-hour 12%, weekly 40%\nmain (Codex): 5-hour 18%, weekly 7%",
   );
-  assert.equal(trayTip("after"), "Pitboard, work 40%, Claude Code");
 });
 
 test("the window and its panes are named as MainWindow.xaml names them", () => {
@@ -171,34 +175,48 @@ test("Settings says what SettingsPage.xaml, SettingsViewModel.cs and machine.rs 
   const xaml = views("SettingsPage.xaml");
   assert.ok(xaml.includes(`Text="${s.title}"`));
   assert.ok(xaml.includes(`Text="${s.section}"`));
-  assert.ok(xaml.includes(`<toolkit:SettingsExpander Header="${s.autoSwitch.header}"`));
-  assert.ok(xaml.includes(`Header="${s.share.header}"`));
-  assert.ok(shell("SettingsViewModel.cs").includes('$"From {Auto.Lowest}% to {Auto.Highest}%"'));
+  assert.ok(
+    xaml.includes(
+      '<toolkit:SettingsExpander Header="{x:Bind ViewModel.AtLimitHeading, Mode=OneWay}"',
+    ),
+  );
+  const machine = joined(present("machine.rs"));
+  assert.ok(machine.includes(`const AT_LIMIT: &str = "${s.atLimit.header}";`));
+  assert.ok(machine.includes(`"${s.atLimit.choice}",`));
+  assert.ok(machine.includes(`share_label: "${s.share.header}".into(),`));
+  assert.ok(
+    shell("SettingsViewModel.cs").includes('$"From {AtLimit.Lowest}% to {AtLimit.Highest}%"'),
+  );
   const autoswitch = core("duty/autoswitch.rs");
   assert.ok(autoswitch.includes("pub const LOWEST: u8 = 50;"));
   assert.ok(autoswitch.includes("pub const HIGHEST: u8 = 99;"));
   assert.equal(s.share.range, "From 50% to 99%");
   assert.ok(core("words.rs").includes('let mut said = format!("Watching {account}");'));
   assert.match(
-    s.autoSwitch.standing,
+    s.atLimit.standing,
     /^Watching \w+: \d+% of its (5-hour|weekly) limit, as of \d\d:\d\d\.$/,
   );
-  const machine = joined(present("machine.rs"));
-  const note = `Pitboard switches Claude Code to another of your accounts with room below ${s.share.value}% in every limit, once a limit of the one in use reaches ${s.share.value}%, while the app is open. Sessions already running follow within about 33 seconds. It never switches back by itself, and never switches Codex: a running codex keeps its account until restarted.`;
+  const note = `Pitboard switches Claude Code once a limit of the account in use reaches ${s.share.value}%, never back by itself, and notifies you of Codex. Sessions already running follow within about 33 seconds.`;
   assert.ok(machine.includes('"Sessions already running follow within about {} seconds."'));
   assert.ok(
     machine.includes(
-      "{at}% in every limit, once a limit of the one in use reaches {at}%, while the app is open. {follows} It never switches back by itself, and never switches Codex: a running codex keeps its account until restarted.",
+      "Pitboard switches Claude Code once a limit of the account in use reaches {at}%, never back by itself, and notifies you of Codex. {follows}",
     ),
   );
   assert.ok(core("switch/mod.rs").includes("pub const ADOPTION_CEILING_SECONDS: u32 = 33;"));
-  assert.equal(s.autoSwitch.note, note);
+  assert.equal(s.atLimit.note, note);
+  assert.ok(core("words.rs").includes(`"${s.atLimit.terms.slice(0, -1)}";`));
+  assert.ok(
+    machine.includes('sentence: format!("{}.", pitboard_core::words::TERMS_MAY_COVER_THIS),'),
+  );
+  assert.ok(machine.includes(`link_title: "${s.atLimit.link}".into(),`));
 });
 
 test("Warm up limits says what SettingsPage.xaml, WarmAccountRow.cs and machine.rs say", () => {
   const w = settingsPage.warm;
   const xaml = views("SettingsPage.xaml");
-  assert.ok(xaml.includes(`Header="${w.header}"`));
+  assert.ok(xaml.includes('Header="{x:Bind ViewModel.WarmTitle, Mode=OneWay}"'));
+  assert.ok(present("machine.rs").includes(`title: "${w.header}".into(),`));
   for (const [name] of w.hours) {
     assert.ok(xaml.includes(`<toolkit:SettingsCard Header="${name}"`), name);
   }
@@ -241,7 +259,8 @@ test("Activity lists Windows' changes in the app's words, dated as the regional 
 test("the run-out notification says what WindowsNotifications.cs builds from notices.rs", () => {
   const source = shell("WindowsNotifications.cs");
   assert.ok(source.includes('public const string DisplayName = "Pitboard";'));
-  assert.ok(source.includes('new AppNotificationButton("Switch")'));
+  assert.ok(source.includes("new AppNotificationButton(button.Title)"));
+  assert.ok(present("notices.rs").includes('fn switch_button() -> String {\n    "Switch".into()'));
   const words = present("words.rs");
   assert.ok(words.includes('format!("{account} has no {limit} limit left")'));
   assert.ok(words.includes('Some(left) => format!("{account} has {left}% of its own left."),'));

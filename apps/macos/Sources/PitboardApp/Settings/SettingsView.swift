@@ -4,6 +4,7 @@ import SwiftUI
 struct SettingsView: View {
     let model: AppModel
     let openAtLogin: OpenAtLogin
+    let notifications: NotificationsAllowed
     let commandLineLink: CommandLineLink
     let presence: AppPresence
     let updates: any Updates
@@ -12,9 +13,17 @@ struct SettingsView: View {
     enum Tab: String, CaseIterable {
         case general
         case limits
-        case renewal
-        case commandLine
-        case updates
+        case advanced
+
+        // The panes an earlier version kept open the one that holds them now.
+        init?(rawValue: String) {
+            switch rawValue {
+            case "general", "updates": self = .general
+            case "limits": self = .limits
+            case "advanced", "renewal", "commandLine": self = .advanced
+            default: return nil
+            }
+        }
     }
 
     // A taller pane scrolls. With the window at the top of a 1024 x 768 screen, 590 points
@@ -25,21 +34,17 @@ struct SettingsView: View {
 
     var body: some View {
         TabView(selection: $tab) {
-            GeneralSettings(openAtLogin: openAtLogin)
-                .tabItem { Label("General", systemImage: Symbol.general) }
-                .tag(Tab.general)
+            GeneralSettings(
+                openAtLogin: openAtLogin, notifications: notifications, updates: updates
+            )
+            .tabItem { Label("General", systemImage: Symbol.general) }
+            .tag(Tab.general)
             LimitsSettings(model: model)
                 .tabItem { Label("Limits", systemImage: Symbol.limits) }
                 .tag(Tab.limits)
-            RenewalSettings(model: model)
-                .tabItem { Label("Renewal", systemImage: Symbol.renewal) }
-                .tag(Tab.renewal)
-            CommandLineSettings(model: model, link: commandLineLink)
-                .tabItem { Label("Command Line", systemImage: Symbol.terminal) }
-                .tag(Tab.commandLine)
-            UpdatesSettings(updates: updates)
-                .tabItem { Label("Updates", systemImage: Symbol.update) }
-                .tag(Tab.updates)
+            AdvancedSettings(model: model, link: commandLineLink)
+                .tabItem { Label("Advanced", systemImage: Symbol.advanced) }
+                .tag(Tab.advanced)
         }
         .frame(width: 500)
         .frame(maxHeight: Self.tallestPane)

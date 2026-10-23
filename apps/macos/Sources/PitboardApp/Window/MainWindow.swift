@@ -7,6 +7,7 @@ struct MainWindow: View {
     let model: AppModel
     let windows: AccountWindows
     let requests: WindowRequests
+    let openAtLogin: OpenAtLogin
     @SceneStorage("pane") private var pane = WindowPane.accounts
 
     var body: some View {
@@ -19,7 +20,8 @@ struct MainWindow: View {
             .navigationSplitViewColumnWidth(min: 150, ideal: 170, max: 220)
         } detail: {
             switch pane {
-            case .accounts: AccountsPane(model: model, windows: windows)
+            case .accounts:
+                AccountsPane(model: model, windows: windows, openAtLogin: openAtLogin)
             case .activity: ActivityPane(model: model)
             case .machine: MachinePane(model: model)
             }

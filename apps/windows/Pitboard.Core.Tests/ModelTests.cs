@@ -108,8 +108,11 @@ public sealed class ModelTests
             LastSwitches: [], Abandoned: null, Failure: null,
             WindowRequest: new WindowRequest(Serial: 0, Pane: null),
             SigningIn: null, Sheet: null, SheetFailure: null,
-            MenuBar: new MenuBarText(NameAndUsage: "work 42%", Usage: "42%", Spoken: "Pitboard, work 42%"),
-            Sections: [], ShowsTools: false, Notices: [],
+            MenuBar: new MenuBarText(
+                NameAndUsage: "work 42%", Usage: "42%", Spoken: "Pitboard, work 42%", Level: UsageLevel.Plenty, Attention: false,
+                Tip: "Pitboard\nwork: 5-hour 42%"),
+            Sections: [], AccountMenu: new AccountMenuShown(Offers: ["Use", "Sign in again…", "Rename…"], Forget: "Forget…"),
+            ShowsTools: false, Notices: [],
             MenuNotices: new MenuNotices(Install: null, Switches: [], Others: null),
             Footing: new Footing.OnlyOne(Provider: "claude", Label: "work"), Setup: null,
             AccountsShown: new AccountsShown.List(), MenuAccountsNote: null,
@@ -126,22 +129,32 @@ public sealed class ModelTests
 
     private static MachineShown Unread() => new(
         Schedule: new ScheduleShown(
-            Schedule: null, On: false, Changing: false, Enabled: true, Runs: null, ScheduledIn: null, Note: null,
-            Failed: null),
-        Renewal: new RenewalShown(
-            Renewing: false, Note: "Renew every parked login that is due.",
+            Schedule: null, On: false, Changing: false, Enabled: true, Note: null, Failed: null,
             About: "A parked login is renewed whenever Pitboard runs, and otherwise not."),
         Checks: new ChecksShown(Lines: [], Summary: null, Level: Level.Ok, Checking: false, Checked: null, Waiting: "Checking this Mac…"),
         Activity: new ActivityShown(
             Lines: [], Empty: new EmptyList(Title: "No Activity", Detail: "Pitboard lists every change it makes here.")),
         CommandLine: new CommandLineShown(
             Found: null, InTerminal: null, UpdateNote: null, OffersLink: false, CannotLink: null),
-        AutoSwitch: new AutoSwitchShown(
-            On: false, At: 95, Lowest: 50, Highest: 99, Enabled: true,
-            AtLabel: "Switch when a limit reaches 95%", Note: "", Standing: null),
+        AtLimit: new AtLimitShown(
+            Title: "Before an account runs out",
+            Choice: AtLimit.Notify,
+            Choices: AtLimitChoices,
+            At: 95, Lowest: 50, Highest: 99, Enabled: true, ShareEnabled: true, Heading: "When a limit reaches",
+            AtLabel: "When a limit reaches 95%",
+            ShareLabel: "Share of a limit", Note: null, Standing: null, Terms: null),
         Warm: new WarmShown(
-            From: 360, To: 1320, RangeLabel: "06:00 to 22:00", Accounts: [], Standing: null, Note: "",
-            Enabled: false));
+            Title: "Warm up limits", From: 360, To: 1320, RangeLabel: "06:00 to 22:00", Accounts: [],
+            NoneEnrolled: "No Claude Code account is enrolled yet.", Standing: null, Note: "", Enabled: false, Terms: Terms));
+
+    // One array, so two snapshots made here are equal.
+    private static readonly AtLimitChoice[] AtLimitChoices =
+    [
+        new(AtLimit.Nothing, "Do nothing"), new(AtLimit.Notify, "Notify me"), new(AtLimit.Switch, "Switch automatically"),
+    ];
+
+    private static readonly TermsShown Terms = new(
+        "Anthropic's terms may cover automatic switching and warm-ups.", "Is this allowed?", "https://docs.usepitboard.com/concepts/limits#is-this-allowed");
 
     // ChatGPT, open, as the fixture chatGPTOpen's process list has it. On Windows its running copy is its AUMID.
     private sealed class StandInApps : AppControl
@@ -228,7 +241,7 @@ public sealed class ModelTests
             Assert.AreEqual("Not read yet", first.UpdatedMenu);
             Assert.IsNull(first.Machine.Schedule.Schedule);
             Assert.IsFalse(first.Machine.Schedule.On);
-            Assert.AreEqual("Renew every parked login that is due.", first.Machine.Renewal.Note);
+            Assert.Contains("renews your parked logins once a day", first.Machine.Schedule.About);
             Assert.IsEmpty(first.Machine.Checks.Lines);
             Assert.StartsWith("Checking ", first.Machine.Checks.Waiting!);
             Assert.AreEqual(OperatingSystem.IsWindows() ? "No activity" : "No Activity", first.Machine.Activity.Empty?.Title);
@@ -566,17 +579,17 @@ public sealed class ModelTests
             ParkedNote: "Parked login good for 3 more days", WarmNote: null, Help: null, Limits: [limit],
             Offers:
             [
-                new ItemOffer(Title: "Use spare", Intent: use.Intent, Enabled: true, Confirm: null, Checked: null),
+                new ItemOffer(Title: "Use spare", Intent: use.Intent, Enabled: true, Confirm: null),
                 new ItemOffer(
                     Title: "Sign In Again…", Intent: new Intent.PresentSheet(new Sheet.SignInAgain("codex", "spare")),
-                    Enabled: false, Confirm: null, Checked: null),
+                    Enabled: false, Confirm: null),
                 new ItemOffer(
                     Title: "Rename…", Intent: new Intent.PresentSheet(new Sheet.Rename("codex", "spare")),
-                    Enabled: true, Confirm: null, Checked: null),
+                    Enabled: true, Confirm: null),
             ],
             Windows: [new WindowOffer(Title: "Open chatgpt.com", Window: window)],
             Forget: new ItemOffer(
-                Title: "Forget…", Intent: new Intent.Forget("codex/spare"), Enabled: true, Checked: null,
+                Title: "Forget…", Intent: new Intent.Forget("codex/spare"), Enabled: true,
                 Confirm: new Question(
                     Title: "Forget “spare (Codex)”?",
                     Message: "Pitboard deletes the login it parked for this account.", Confirm: "Forget")));
@@ -632,8 +645,7 @@ public sealed class ModelTests
         Intent[] intents =
         [
             new Intent.PaneShown(Pane: Pane.Machine), new Intent.PaneShown(Pane: Pane.Activity),
-            new Intent.ReadSchedule(), new Intent.SetSchedule(On: true), new Intent.RenewNow(),
-            new Intent.LookForCommandLine(),
+            new Intent.ReadSchedule(), new Intent.SetSchedule(On: true), new Intent.LookForCommandLine(),
         ];
 
         Assert.AreEqual<Intent>(new Intent.PaneShown(Pane.Machine), intents[0]);
@@ -642,7 +654,6 @@ public sealed class ModelTests
         Assert.IsTrue(intents.OfType<Intent.SetSchedule>().Single().On);
         Assert.AreNotEqual<Intent>(new Intent.SetSchedule(false), intents[3]);
         Assert.AreEqual(1, intents.OfType<Intent.ReadSchedule>().Count());
-        Assert.AreEqual(1, intents.OfType<Intent.RenewNow>().Count());
         Assert.AreEqual(1, intents.OfType<Intent.LookForCommandLine>().Count());
     }
 
@@ -660,9 +671,7 @@ public sealed class ModelTests
         {
             Schedule = new ScheduleShown(
                 Schedule: new Schedule.Installed(Path: plist, EverySeconds: 86_400), On: true, Changing: false,
-                Enabled: true, Runs: "Every day", ScheduledIn: plist, Note: null, Failed: null),
-            Renewal = new RenewalShown(
-                Renewing: false, Note: "Renewed one.",
+                Enabled: true, Note: null, Failed: null,
                 About: "A parked login is renewed whenever Pitboard runs, and otherwise not."),
             Checks = new ChecksShown(
                 Lines: [keychain], Summary: "1 broken: do not switch accounts until fixed.", Level: Level.Fail,
@@ -678,7 +687,6 @@ public sealed class ModelTests
 
         Assert.AreEqual(plist, ((Schedule.Installed)snapshot.Machine.Schedule.Schedule!).Path);
         Assert.AreEqual(86_400U, ((Schedule.Installed)snapshot.Machine.Schedule.Schedule!).EverySeconds);
-        Assert.AreEqual("Renewed one.", snapshot.Machine.Renewal.Note);
         Assert.AreEqual(Level.Fail, snapshot.Machine.Checks.Lines[0].Level);
         Assert.AreEqual("Failed", snapshot.Machine.Checks.Lines[0].SpokenLevel);
         Assert.AreEqual(0UL, snapshot.Machine.Checks.Lines[0].Id);
@@ -932,7 +940,7 @@ public sealed class ModelTests
             new(
                 Id: $"claude/personal/session/-{resetsAt.ToString(CultureInfo.InvariantCulture)}",
                 Title: "personal has no 5-hour limit left", Subtitle: null, Body: "work has 58% of its own left.",
-                SwitchTo: "claude/work"),
+                Clicked: "accounts", Button: new NotificationButton("Switch", "switch/claude/work")),
         ];
         CollectionAssert.AreEqual(ranOut, posted);
     }
@@ -946,17 +954,18 @@ public sealed class ModelTests
         using var model = PitboardModel.FixtureIn("loginReplaced", _own, waiting, new StandInApps(), posting, new InUtc());
         Start(model, waiting);
 
-        var posted = posting.Posted.Until(1, Patience);
+        // The account in use has run out too, which is posted after it.
+        var posted = posting.Posted.Until(2, Patience);
         model.Shutdown();
 
-        var again = OperatingSystem.IsWindows() ? "Sign in again…" : "Sign In Again…";
-        var notice = posted.Single();
+        var again = OperatingSystem.IsWindows() ? "Sign in again" : "Sign In Again";
+        var notice = posted.Single(notice => notice.Id.StartsWith("warning/login_replaced/", StringComparison.Ordinal));
         Assert.AreEqual("A login was replaced outside Pitboard", notice.Title);
         Assert.AreEqual(
             "work’s login was replaced by a sign-in outside Pitboard: Claude Code now has personal’s login stored, " +
-            $"and Pitboard holds no login for work. Choose {again} on its row.",
+            "and Pitboard holds no login for work.",
             notice.Body);
-        Assert.IsNull(notice.SwitchTo);
+        Assert.AreEqual(new NotificationButton(again, "sign-in-again/claude/work"), notice.Button);
     }
 
     [TestMethod]
@@ -967,7 +976,8 @@ public sealed class ModelTests
         var posting = new Posting { Refuses = "COMException 0x80070490" };
         using var model = PitboardModel.FixtureIn("loginReplaced", _own, waiting, new StandInApps(), posting, new InUtc());
         Start(model, waiting);
-        Assert.HasCount(1, posting.Posted.Until(1, Patience));
+        // The login replaced, then the run-out of the account in use, the last refused.
+        Assert.HasCount(2, posting.Posted.Until(2, Patience));
 
         model.Send(new Intent.PaneShown(Pane.Machine));
         var checkedIn = waiting.Until(
@@ -977,7 +987,7 @@ public sealed class ModelTests
         Assert.IsNotNull(checkedIn, "the machine pane never said the refusal");
         var line = checkedIn.Machine.Checks.Lines[^1];
         Assert.AreEqual(Level.Warn, line.Level);
-        Assert.StartsWith("“A login was replaced outside Pitboard” not posted at ", line.Detail);
+        Assert.StartsWith("“personal has no 5-hour limit left” not posted at ", line.Detail);
         Assert.EndsWith(" · COMException 0x80070490", line.Detail);
     }
 

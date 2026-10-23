@@ -12,7 +12,7 @@ use crate::account_windows::records::{self, Entry, Records};
 use crate::{
     Account, Adoption, AppCore, AutoLooked, AutoSwitched, Change, Check, Enrolled, EnrolledAs,
     FoundCommandLine, GaveUp, Holding, Level, Limit, Made, OwnCommandLine, PitboardError, Remedy,
-    Renewed, Schedule, Source, Status, Switch, Switched, Tool, Usage, Warning,
+    Schedule, Source, Status, Switch, Switched, Tool, Usage, Warning,
 };
 use pitboard_core::context::Context;
 use pitboard_core::provider::ProviderId;
@@ -492,6 +492,8 @@ pub(super) struct Machine {
     pub readings: i64,
     /// The tools whose program the app found.
     pub found: Vec<Tool>,
+    // whose login each tool stores, as the login says it
+    pub stored_email: Option<String>,
     /// What a switch gives.
     pub switched: Result<Switched, Refusal>,
     /// Every account switched to, as the model named it.
@@ -598,9 +600,6 @@ pub(super) struct Machine {
     pub repair_asks: usize,
     /// The command line inside this copy of the app: none, unless a test says.
     pub own: OwnCommandLine,
-    /// What renewing gives, or what it is refused with.
-    pub renewals: Result<Vec<Renewed>, Refusal>,
-    pub renew_asks: usize,
     /// Doctor's checks.
     pub checks: Vec<Check>,
     pub doctor_asks: usize,
@@ -642,6 +641,7 @@ impl Machine {
             changed: 0,
             readings: 0,
             found: vec![claude_code()],
+            stored_email: None,
             switched: already_active("work", Vec::new()),
             switched_to: Vec::new(),
             replaced_with: Vec::new(),
@@ -700,8 +700,6 @@ impl Machine {
             repairs: Ok(false),
             repair_asks: 0,
             own: OwnCommandLine::default(),
-            renewals: Ok(Vec::new()),
-            renew_asks: 0,
             checks: Vec::new(),
             doctor_asks: 0,
             history: Vec::new(),
@@ -830,6 +828,10 @@ impl Machine {
             },
             Job::AskInstalled => Answer::Installed {
                 tools: self.found.clone(),
+            },
+            Job::ReadSignedIn { provider } => Answer::SignedIn {
+                provider,
+                email: self.stored_email.clone(),
             },
             // What holds the login, and quitting an app, by the lanes' own rules over what
             // the test says runs, with no time given to quit: an app quits when asked, or
@@ -1088,12 +1090,6 @@ impl Machine {
                     Ok(())
                 }),
             },
-            Job::Renew => {
-                self.renew_asks += 1;
-                Answer::Renewed {
-                    renewals: self.renewals.clone().map_err(|refused| refused.error()),
-                }
-            }
             Job::Check => {
                 self.doctor_asks += 1;
                 Answer::Checked {
@@ -1145,15 +1141,6 @@ pub(super) fn change(at: &str, caller: &str, verb: &str, subject: &str, outcome:
         caller: caller.into(),
         verb: verb.into(),
         subject: subject.into(),
-        outcome: outcome.into(),
-    }
-}
-
-/// A parked login renewed or not, as the core reports it.
-pub(super) fn renewed(label: &str, provider: &str, outcome: &str) -> Renewed {
-    Renewed {
-        label: label.into(),
-        provider: provider.into(),
         outcome: outcome.into(),
     }
 }

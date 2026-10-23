@@ -10,8 +10,6 @@ public sealed record SettingsLink(string Title, string Url);
 // model says, so a control set to the model's value sends nothing.
 public sealed partial class SettingsViewModel : INotifyPropertyChanged
 {
-    public const string SignInNote = "Settings > Apps > Startup can turn it off too.";
-
     public const string TurnedOffNote = "Turned off in Settings > Apps > Startup, where you can turn it on again.";
 
     // Settings > Apps > Startup and System > Notifications, by the URIs Microsoft's "Launch the Windows Settings app" lists.
@@ -23,13 +21,7 @@ public sealed partial class SettingsViewModel : INotifyPropertyChanged
 
     public const string NewTerminals = "Pitboard’s installer puts pitboard on your PATH, which terminals opened after it ran see.";
 
-    public const string WhatItDoes =
-        "The command line does everything the app does, and more: pitboard status in a script, and pitboard repair "
-        + "for a parked login Pitboard’s records have lost track of.";
-
     public const string Copyright = "Copyright 2026 the Pitboard authors";
-
-    public const string NoWarmAccount = "No Claude Code account is enrolled yet.";
 
     private const int MinutesInADay = 24 * 60;
 
@@ -62,7 +54,7 @@ public sealed partial class SettingsViewModel : INotifyPropertyChanged
 
     private MachineShown Machine => _model.Machine;
 
-    private AutoSwitchShown Auto => Machine.AutoSwitch;
+    private AtLimitShown AtLimit => Machine.AtLimit;
 
     private WarmShown Warm => Machine.Warm;
 
@@ -74,7 +66,9 @@ public sealed partial class SettingsViewModel : INotifyPropertyChanged
 
     public bool CanStartAtSignIn => _start.Refusal is null && !_start.TurnedOff;
 
-    public string StartupNote => _start.Refusal ?? (_start.TurnedOff ? TurnedOffNote : SignInNote);
+    public string StartupNote => _start.Refusal ?? (_start.TurnedOff ? TurnedOffNote : "");
+
+    public bool HasStartupNote => StartupNote.Length > 0;
 
     public string? StartupFailed => _start.Failed;
 
@@ -87,28 +81,47 @@ public sealed partial class SettingsViewModel : INotifyPropertyChanged
 
     public bool OffersNotificationSettings => _blocked?.InSettings == true;
 
-    public bool AutoSwitch => Auto.On;
+    // The choice's name, which says the share; its card's header stays put.
+    public string AtLimitHeading => AtLimit.Heading;
 
-    public bool CanAutoSwitch => Auto.Enabled;
+    public string AtLimitLabel => AtLimit.AtLabel;
 
-    public string AutoSwitchStanding => Auto.Standing ?? "";
+    public string[] AtLimitTitles => [.. AtLimit.Choices.Select(choice => choice.Title)];
 
-    public bool HasAutoSwitchStanding => Auto.Standing is not null;
+    public int AtLimitIndex => Array.FindIndex(AtLimit.Choices, choice => choice.Choice == AtLimit.Choice);
 
-    public string AutoSwitchNote => Auto.Note;
+    public bool CanChooseAtLimit => AtLimit.Enabled;
 
-    public double Share => Auto.At;
+    public string AutoSwitchStanding => AtLimit.Standing ?? "";
 
-    public double LowestShare => Auto.Lowest;
+    public bool HasAutoSwitchStanding => AtLimit.Standing is not null;
 
-    public double HighestShare => Auto.Highest;
+    public string AtLimitNote => AtLimit.Note ?? "";
 
-    // The control's name, which says the share it holds; its card's header stays put.
-    public string ShareLabel => Auto.AtLabel;
+    public bool HasAtLimitNote => AtLimit.Note is not null;
 
-    public string ShareRange => $"From {Auto.Lowest}% to {Auto.Highest}%";
+    public string AtLimitTerms => AtLimit.Terms?.Sentence ?? "";
 
-    public bool CanSetShare => Auto.Enabled && Auto.On;
+    public bool HasAtLimitTerms => AtLimit.Terms is not null;
+
+    public string WarmTerms => Warm.Terms.Sentence;
+
+    // The same page beside switching and beside warm-up.
+    public string TermsLinkTitle => Warm.Terms.LinkTitle;
+
+    public string TermsLink => Warm.Terms.Link;
+
+    public double Share => AtLimit.At;
+
+    public double LowestShare => AtLimit.Lowest;
+
+    public double HighestShare => AtLimit.Highest;
+
+    public string ShareTitle => AtLimit.ShareLabel;
+
+    public string ShareRange => $"From {AtLimit.Lowest}% to {AtLimit.Highest}%";
+
+    public bool CanSetShare => AtLimit.ShareEnabled;
 
     public string WarmRange => Warm.RangeLabel;
 
@@ -124,7 +137,11 @@ public sealed partial class SettingsViewModel : INotifyPropertyChanged
 
     public ObservableCollection<WarmAccountRow> WarmAccounts { get; } = [];
 
-    public bool NoWarmAccounts => Warm.Accounts.Length == 0;
+    public string WarmTitle => Warm.Title;
+
+    public bool NoWarmAccounts => Warm.NoneEnrolled is not null;
+
+    public string NoWarmAccount => Warm.NoneEnrolled ?? "";
 
     public string WarmNote => Warm.Note;
 
@@ -132,25 +149,13 @@ public sealed partial class SettingsViewModel : INotifyPropertyChanged
 
     public bool CanRenewDaily => Schedule.Enabled;
 
-    public string RenewalAbout => Machine.Renewal.About;
+    public string RenewalAbout => Schedule.About;
 
     public string ScheduleNote => Schedule.Note ?? "";
 
     public bool HasScheduleNote => Schedule.Note is not null;
 
     public string? ScheduleFailed => Schedule.Failed;
-
-    public bool HasRuns => Schedule.Runs is not null;
-
-    public string Runs => Schedule.Runs ?? "";
-
-    public bool HasScheduledIn => Schedule.ScheduledIn is not null;
-
-    public string ScheduledIn => Schedule.ScheduledIn ?? "";
-
-    public string RenewalNote => Machine.Renewal.Note;
-
-    public bool CanRenewNow => !Machine.Renewal.Renewing;
 
     public bool LookingForCommandLine => CommandLine.InTerminal is null;
 
@@ -185,8 +190,8 @@ public sealed partial class SettingsViewModel : INotifyPropertyChanged
     public static ushort Minutes(TimeSpan time) => (ushort)(((time.Hours * 60) + time.Minutes) % MinutesInADay);
 
     // A NumberBox holds NaN once its text is cleared.
-    public static byte? ShareOf(double value, AutoSwitchShown auto) =>
-        double.IsNaN(value) ? null : (byte)Math.Clamp(Math.Round(value), auto.Lowest, auto.Highest);
+    public static byte? ShareOf(double value, AtLimitShown atLimit) =>
+        double.IsNaN(value) ? null : (byte)Math.Clamp(Math.Round(value), atLimit.Lowest, atLimit.Highest);
 
     public void Listen()
     {
@@ -229,25 +234,25 @@ public sealed partial class SettingsViewModel : INotifyPropertyChanged
         }
     }
 
-    public void SetAutoSwitch(bool on)
+    public void ChooseAtLimit(int index)
     {
-        if (on != Auto.On)
+        if (index >= 0 && index < AtLimit.Choices.Length && AtLimit.Choices[index].Choice != AtLimit.Choice)
         {
-            _model.Send(new Intent.SetAutoSwitch(on, Auto.At));
+            _model.Send(new Intent.SetAtLimit(AtLimit.Choices[index].Choice, AtLimit.At));
         }
     }
 
     // False for a cleared box, which then shows the share again.
     public bool SetShare(double value)
     {
-        if (ShareOf(value, Auto) is not { } at)
+        if (ShareOf(value, AtLimit) is not { } at)
         {
             return false;
         }
 
-        if (at != Auto.At)
+        if (at != AtLimit.At)
         {
-            _model.Send(new Intent.SetAutoSwitch(Auto.On, at));
+            _model.Send(new Intent.SetAtLimit(AtLimit.Choice, at));
         }
 
         return true;
@@ -285,8 +290,6 @@ public sealed partial class SettingsViewModel : INotifyPropertyChanged
             _model.Send(new Intent.SetSchedule(on));
         }
     }
-
-    public void RenewNow() => _model.Send(new Intent.RenewNow());
 
     public void SetChecksAutomatically(bool on)
     {

@@ -49,6 +49,7 @@ public sealed partial class MainWindow : Window
         {
             OpenWindow = openWindow,
             Notifications = notifications ?? (() => null),
+            ShowSettings = () => Select(null),
         };
         // A dialog needs the window's XamlRoot, which its content has once loaded.
         Navigation.Loaded += (_, _) =>
@@ -105,6 +106,14 @@ public sealed partial class MainWindow : Window
         Navigation.SelectedItem = pane is { } shown
             ? Navigation.MenuItems.OfType<NavigationViewItem>().First(item => item.Tag as string == shown.ToString())
             : Navigation.SettingsItem;
+
+    public void ShowLimits()
+    {
+        if (Pages.Content is SettingsPage page)
+        {
+            page.ShowLimits();
+        }
+    }
 
     // As NavigationView's own guidance navigates its frame: once, and only to a page not shown already.
     private void OnSelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
