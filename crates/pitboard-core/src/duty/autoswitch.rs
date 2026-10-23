@@ -45,6 +45,7 @@ use crate::provider::ProviderId;
 use crate::service::Permit;
 use crate::state::{Account, Key, State};
 use crate::status::Row;
+use crate::switch::Holder;
 use crate::usage::budget;
 use crate::usage::{self, Snapshot, Window, same_reset};
 use crate::{home, in_use};
@@ -688,12 +689,7 @@ impl Ledger {
     }
 }
 
-/// What Pitboard would do now, from its files alone: no lock, no keychain and no network, so
-/// a look that finds nothing to do costs nobody anything. The account in use is the one
-/// Pitboard's record says Anthropic last named for the login Claude Code has stored. Where
-/// that record is in doubt, a switch may be due, a reason not to switch was not yet recorded,
-/// or another run is in the middle of a switch, only the decision under the lock can say,
-/// from whose login is stored by then.
+// From files alone, waiting on no lock: what only a decision under the lock can say is `Act`.
 pub(crate) fn look(ctx: &Context, state: &State, threshold: Threshold) -> Look {
     let unfinished = crate::switch::unfinished(ctx);
     if let Some(why) = blind(ctx, unfinished) {
@@ -703,6 +699,8 @@ pub(crate) fn look(ctx: &Context, state: &State, threshold: Threshold) -> Look {
         return Look::Act;
     }
     let now = ctx.now();
+    // A decision records its attempt before its switch leaves a record.
+    let others = crate::switch::holder(ctx);
     let ledger = Ledger::load(ctx);
     let known = in_use::known(ctx, state, ProviderId::Claude);
     let known_at = known.last.as_ref().map(|last| last.known_at);
@@ -719,6 +717,7 @@ pub(crate) fn look(ctx: &Context, state: &State, threshold: Threshold) -> Look {
     match judge(ctx, state, account, &ledger, threshold, now) {
         Judged::Hold(hold) if ledger.said(&hold) => Look::Stands(Box::new(hold.skipped(state))),
         Judged::Switch(_) | Judged::Hold(_) => Look::Act,
+        Judged::Stands(Auto::Waiting { .. }) if matches!(others, Holder::Another) => Look::Act,
         Judged::Stands(stands) => Look::Stands(Box::new(stands)),
     }
 }

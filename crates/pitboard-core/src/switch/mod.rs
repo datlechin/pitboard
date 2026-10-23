@@ -352,20 +352,33 @@ pub(crate) enum Unfinished {
     Interrupted,
 }
 
-/// The record of a switch not finished, where one is there. It only asks whether the lock is
-/// held: the lock's file is opened to read, never made, and no file is no holder. The lock is
-/// asked for shared, kept over a second look at the record so no run begins or ends a switch
-/// between the two, and let go of at once.
+// The lock kept over a second look at the record, so no run begins or ends a switch between.
 pub(crate) fn unfinished(ctx: &Context) -> Option<Unfinished> {
     if !journal::pending(ctx) {
         return None;
     }
+    match holder(ctx) {
+        Holder::Another => Some(Unfinished::UnderWay),
+        Holder::Nobody(None) => Some(Unfinished::Interrupted),
+        Holder::Nobody(Some(_kept)) => journal::pending(ctx).then_some(Unfinished::Interrupted),
+    }
+}
+
+pub(crate) enum Holder {
+    Another,
+    // Pitboard's lock, held shared until dropped, where its file is there.
+    Nobody(Option<std::fs::File>),
+}
+
+// For a look that waits on nobody: the lock's file is opened to read, never made, and no file
+// is no holder.
+pub(crate) fn holder(ctx: &Context) -> Holder {
     let Ok(lock) = std::fs::File::open(home::dir(ctx).join("state.lock")) else {
-        return Some(Unfinished::Interrupted);
+        return Holder::Nobody(None);
     };
     match lock.try_lock_shared() {
-        Err(std::fs::TryLockError::WouldBlock) => Some(Unfinished::UnderWay),
-        _ => journal::pending(ctx).then_some(Unfinished::Interrupted),
+        Err(std::fs::TryLockError::WouldBlock) => Holder::Another,
+        _ => Holder::Nobody(Some(lock)),
     }
 }
 
