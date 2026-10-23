@@ -2054,7 +2054,9 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
                     builds of 2.1.309, read as bytes on 2026-10-23",
         verified_against: "2.1.309",
         depends: "settings::Profiles and settings::overrides, so doctor's auth_source check, a \
-                  switch's auth_overridden warning and the automatic switch name the profile",
+                  switch's auth_overridden warning and the automatic switch name the profile. \
+                  They take a credentials file that is there and not empty for one that holds a \
+                  login, and never read it",
         probe: &[
             r#"["ANTHROPIC_FEDERATION_RULE_ID","ANTHROPIC_ORGANIZATION_ID"]"#,
             "An Anthropic profile (~/.config/anthropic) is configured, but a claude.ai login \

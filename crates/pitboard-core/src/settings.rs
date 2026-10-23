@@ -333,7 +333,7 @@ fn profile_file(folder: &Path, name: &str) -> PathBuf {
 }
 
 // A profile's `authentication.type`. Claude Code takes a `user_oauth` one only with a login in
-// its credentials file.
+// its credentials file, which a file that is there and not empty stands for: it holds a token.
 fn mode(folder: &Path, name: &str) -> Option<String> {
     let profile: Value =
         serde_json::from_str(&std::fs::read_to_string(profile_file(folder, name)).ok()?).ok()?;
@@ -347,9 +347,9 @@ fn mode(folder: &Path, name: &str) -> Option<String> {
                 || folder.join("credentials").join(format!("{name}.json")),
                 PathBuf::from,
             );
-        std::fs::read_to_string(credentials)
+        std::fs::metadata(credentials)
             .ok()
-            .filter(|login| !login.trim().is_empty())?;
+            .filter(|file| file.is_file() && file.len() > 0)?;
     }
     Some(mode.to_owned())
 }
@@ -1107,6 +1107,27 @@ mod profile_tests {
 
         signed_in(&folder, "work");
         assert_eq!(said(&ctx), ["ANTHROPIC_PROFILE in the environment"]);
+    }
+
+    // The file holds a login, so it is looked at for being there and not empty, never read.
+    #[cfg(unix)]
+    #[test]
+    fn a_profiles_credentials_file_is_never_read() {
+        use std::os::unix::fs::PermissionsExt;
+        let scratch = tempfile::tempdir().expect("a scratch home");
+        let folder = scratch.path().join(".config").join("anthropic");
+        let ctx = on(Os::Linux, scratch.path(), &[("ANTHROPIC_PROFILE", "work")]);
+        profile(&folder, "work", "user_oauth");
+        signed_in(&folder, "work");
+        let credentials = folder.join("credentials").join("work.json");
+        std::fs::set_permissions(&credentials, std::fs::Permissions::from_mode(0o000))
+            .expect("unreadable");
+        assert_eq!(said(&ctx), ["ANTHROPIC_PROFILE in the environment"]);
+
+        std::fs::set_permissions(&credentials, std::fs::Permissions::from_mode(0o600))
+            .expect("readable");
+        std::fs::write(&credentials, "").expect("emptied");
+        assert_eq!(said(&ctx), Vec::<String>::new());
     }
 
     // Both variables, with no `ANTHROPIC_PROFILE`, are a federation of their own.
