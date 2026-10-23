@@ -155,6 +155,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `pitboard status` says `login refused` and the command that signs in again beside an account
   whose parked login Anthropic or OpenAI refused, and neither its `--json` nor the automatic
   switch counts that account as one to switch to, as the app does not.
+- `pitboard doctor` fails a stored Claude Code login that is not a JSON object, as a switch
+  refuses it, where it said nobody was signed in.
 
 ## [1.0.0-beta.5] - 2026-10-23
 

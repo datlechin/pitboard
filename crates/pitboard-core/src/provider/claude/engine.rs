@@ -307,9 +307,9 @@ impl Provider for Claude {
     }
 
     fn behind(&self, ctx: &Context) -> Option<Behind> {
-        let held = match live::behind(ctx)? {
-            Ok(held) if live::login_in(&held).is_some() => Held::Login,
-            Ok(_) => Held::NoLogin,
+        let held = match live::login_behind(ctx)? {
+            Ok(Some(_)) => Held::Login,
+            Ok(None) => Held::NoLogin,
             Err(_) => Held::Unreadable,
         };
         Some(Behind {
@@ -336,10 +336,8 @@ impl Provider for Claude {
         Isolation::Isolated
     }
 
-    /// A document with no `claudeAiOauth` is what `/logout` leaves: it deletes the account's
-    /// keys and keeps the machine's, such as MCP tokens. That is nobody signed in.
     fn slice(&self, live: &Value) -> Result<Value, ProviderError> {
-        if live.is_object() && live.get("claudeAiOauth").is_none() {
+        if document::signed_out(live) {
             return Err(ProviderError::NoLogin {
                 provider: ProviderId::Claude,
             });

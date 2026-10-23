@@ -618,17 +618,14 @@ fn pitboards(ctx: &Context) -> Vec<PathBuf> {
     copies
 }
 
-/// Claude Code's fallback file, where it is behind the keychain, and the login it holds.
-/// Where whether it is there cannot be told, nothing is said of it: a keychain that cannot
-/// be read is the `credential_store` check's to say, and a file that cannot even be looked
-/// at is one Claude Code's own look takes for not there.
+// Nothing where whether it is there cannot be told: an unreadable keychain is the
+// `credential_store` check's to say.
 fn fallback_login(ctx: &Context) -> Option<FallbackLogin> {
-    let held = claude_live::behind(ctx)?;
+    let login = claude_live::login_behind(ctx)?;
     Some(FallbackLogin {
         path: claude_live::credential_file(ctx),
-        fingerprint: held.map(|held| {
-            claude_live::login_in(&held)
-                .map(|document| crate::provider::claude::document::fingerprint_of(&document))
+        fingerprint: login.map(|login| {
+            login.map(|document| crate::provider::claude::document::fingerprint_of(&document))
         }),
     })
 }
@@ -1998,9 +1995,7 @@ fn judge_credential(facts: &Facts) -> Check {
                 .as_object()
                 .map(|o| o.keys().map(String::as_str).collect())
                 .unwrap_or_default();
-            // What `/logout` leaves: the account's keys gone, the machine's still there. That
-            // is nobody signed in, which the switch and enrolment already read it as.
-            if doc.get("claudeAiOauth").is_none() {
+            if crate::provider::claude::document::signed_out(doc) {
                 return warn(
                     "credential",
                     "credential",
@@ -9322,5 +9317,19 @@ mod tests {
         let check = judge_credential(&facts);
         assert!(matches!(check.level, Level::Warn), "{}", check.detail);
         assert!(check.detail.contains("signed out"), "{}", check.detail);
+    }
+
+    // A switch refuses it as a shape it does not know, so it is no signed-out document.
+    #[test]
+    fn a_credential_that_is_not_an_object_is_a_failure() {
+        use crate::provider::ProviderError;
+        let document = serde_json::json!(["claudeAiOauth"]);
+        assert!(matches!(
+            crate::provider::claude_code().slice(&document),
+            Err(ProviderError::ShapeUnexpected { .. })
+        ));
+        let mut facts = facts();
+        facts.credential = Ok(Some(document));
+        assert_eq!(judge_credential(&facts).level, Level::Fail);
     }
 }

@@ -20,6 +20,11 @@ pub(crate) const ACCOUNT_SCOPED: [&str; 6] = [
     "cloudSessionsOauth",
 ];
 
+// What `/logout` leaves: the account's keys deleted and the machine's, such as MCP tokens, kept.
+pub(crate) fn signed_out(document: &Value) -> bool {
+    document.is_object() && document.get("claudeAiOauth").is_none()
+}
+
 /// The account's whole slice of a credential document: `claudeAiOauth` and whatever else of
 /// [`ACCOUNT_SCOPED`] is there.
 ///
