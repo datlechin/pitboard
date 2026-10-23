@@ -629,7 +629,7 @@ pub(crate) fn auto_switched_notice(
     adoption: &Adoption,
     at: i64,
 ) -> RunOutNotice {
-    let follows = adoption.follows();
+    let follows = words::follows(adoption);
     posted(
         format!("auto/{from}/{to}/{at}"),
         format!("Switched Claude Code to {to}"),

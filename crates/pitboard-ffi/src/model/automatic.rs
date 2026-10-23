@@ -60,7 +60,7 @@ fn switched_work_to_personal() -> Result<AutoSwitched, Refusal> {
     Ok(AutoSwitched::Switched {
         from: "work".into(),
         to: "personal".into(),
-        adoption: Adoption::Follows { within_seconds: 33 },
+        adoption: Adoption::PollingWithin(33),
         warnings: Vec::new(),
         used: "97% of its 5-hour limit".into(),
     })
@@ -315,7 +315,7 @@ fn the_settings_say_why_it_is_not_switching() {
             AutoSwitched::Switched {
                 from: "work".into(),
                 to: "personal".into(),
-                adoption: Adoption::Follows { within_seconds: 33 },
+                adoption: Adoption::PollingWithin(33),
                 warnings: Vec::new(),
                 used: "97% of its 5-hour limit".into(),
             }

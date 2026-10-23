@@ -197,11 +197,12 @@ pub(super) fn switched(
     warnings: Vec<Warning>,
 ) -> Result<Switched, Refusal> {
     let adoption = if provider == "codex" {
-        Adoption::Restart {
-            program: "codex".into(),
+        Adoption::RestartRequired {
+            program: "codex",
+            holders: &[],
         }
     } else {
-        Adoption::Follows { within_seconds: 33 }
+        Adoption::PollingWithin(33)
     };
     Ok(Switched {
         outcome: Switch::Switched {

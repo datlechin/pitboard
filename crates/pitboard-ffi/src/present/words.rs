@@ -167,6 +167,14 @@ pub(crate) fn pace_help(pace: &Pace) -> String {
     }
 }
 
+// The tool is named in the title above it.
+pub(crate) fn follows(adoption: &pitboard_core::provider::Adoption) -> String {
+    format!(
+        "{}.",
+        pitboard_core::words::after_a_switch(adoption, "Sessions")
+    )
+}
+
 /// What a switch means for sessions of a tool that never picks one up by itself. Said of any
 /// session and not of running ones, since the core counts those itself when it can, and a
 /// notice left in the panel should not claim sessions that may not exist. `from` is empty

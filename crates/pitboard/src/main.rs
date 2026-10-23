@@ -656,47 +656,33 @@ fn switched_report(switched: Changing<Outcome>) -> Report {
     })
 }
 
-/// What becomes of sessions already running after a switch: within how many seconds they
-/// follow, where they do, said as a sentence and for `--json`.
-///
-/// The tool's own answer, not a constant. A number of seconds is only ever shown for a tool
-/// that really does follow on its own within them, and one whose sessions follow at their
-/// login's next renewal, or that needs restarting, has no number at all rather than a zero
-/// that reads as "at once".
+// A number of seconds only for a tool whose sessions follow by themselves, never a zero that
+// reads as "at once".
 fn followed(
     provider: pitboard_core::provider::ProviderId,
     adoption: &Adoption,
 ) -> (Option<u32>, String, Value) {
+    let said =
+        pitboard_core::words::after_a_switch(adoption, &format!("{} sessions", provider.name()));
     match adoption {
         Adoption::PollingWithin(seconds) => (
             Some(*seconds),
-            format!(
-                "{} sessions already running follow within {seconds} seconds.\n",
-                provider.name()
-            ),
+            format!("{said}.\n"),
             json!({ "follows": "polling", "within_seconds": seconds }),
         ),
         Adoption::AtRenewal { file } => (
             None,
-            format!(
-                "{} sessions already running {}: {} is there. `pitboard stow` puts it away.\n",
-                provider.name(),
-                pitboard_core::words::kept_until_renewed(),
-                file.display()
-            ),
+            format!("{said}. `pitboard stow` puts it away.\n"),
             json!({ "follows": "renewal", "path": file }),
         ),
         Adoption::RestartRequired { program, .. } => (
             None,
-            format!(
-                "Restart any running `{program}` for this to take effect. \
-                 It will not pick the switch up on its own.\n"
-            ),
+            format!("{said}. It will not pick the switch up on its own.\n"),
             json!({ "follows": "restart", "program": program }),
         ),
         Adoption::NextOpen { app } => (
             None,
-            format!("{app} opens signed in to it.\n"),
+            format!("{said}.\n"),
             json!({ "follows": "open", "app": app }),
         ),
     }

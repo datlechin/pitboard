@@ -1598,7 +1598,7 @@ fn a_switch_that_sessions_take_at_renewal_counts_down_nothing() {
             provider: "claude".into(),
             from: "personal".into(),
             to: "work".into(),
-            adoption: crate::Adoption::Renewal { path: path.into() },
+            adoption: crate::Adoption::AtRenewal { file: path.into() },
         },
         warnings: vec![left.clone()],
     });
@@ -1625,7 +1625,7 @@ fn a_switch_that_sessions_take_at_renewal_counts_down_nothing() {
             "personal",
             "work",
             "96% of its 5-hour limit",
-            &crate::Adoption::Renewal { path: path.into() },
+            &crate::Adoption::AtRenewal { file: path.into() },
             NOON,
         )
         .body,

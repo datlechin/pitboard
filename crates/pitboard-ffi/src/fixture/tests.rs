@@ -312,7 +312,7 @@ fn a_switch_moves_who_is_in_use_within_its_own_tool() {
             claude.outcome,
             Switch::Switched {
                 ref provider,
-                adoption: Adoption::Follows { within_seconds: 33 },
+                adoption: Adoption::PollingWithin(33),
                 ..
             } if provider == "claude"
         ),
@@ -331,16 +331,21 @@ fn a_switch_moves_who_is_in_use_within_its_own_tool() {
     );
 
     let codex = core.switch_to("codex/spare").expect("a switch");
-    assert_eq!(
-        codex.outcome,
-        Switch::Switched {
-            provider: "codex".into(),
-            from: "codex/main".into(),
-            to: "codex/spare".into(),
-            adoption: Adoption::Restart {
-                program: "codex".into()
-            },
-        }
+    assert!(
+        matches!(
+            codex.outcome,
+            Switch::Switched {
+                ref provider,
+                ref from,
+                ref to,
+                adoption: Adoption::RestartRequired {
+                    program: "codex",
+                    ..
+                },
+            } if provider == "codex" && from == "codex/main" && to == "codex/spare"
+        ),
+        "{:?}",
+        codex.outcome
     );
     let after_codex = read(core);
     assert_eq!(in_use(&after_codex), ["claude/personal", "codex/spare"]);
@@ -417,7 +422,7 @@ fn a_switch_names_the_accounts_as_the_core_types_them() {
                 provider: "claude".into(),
                 from: "work".into(),
                 to: "personal".into(),
-                adoption: Adoption::Follows { within_seconds: 33 },
+                adoption: Adoption::PollingWithin(33),
             }
         );
     }

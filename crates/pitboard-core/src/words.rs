@@ -325,6 +325,26 @@ pub fn kept_until_renewed() -> &'static str {
      started again"
 }
 
+/// What becomes of `sessions` already running once a switch is made, as a sentence with no
+/// full stop: "Claude Code sessions already running follow within 33 seconds".
+pub fn after_a_switch(adoption: &crate::provider::Adoption, sessions: &str) -> String {
+    use crate::provider::Adoption;
+    match adoption {
+        Adoption::PollingWithin(seconds) => {
+            format!("{sessions} already running follow within {seconds} seconds")
+        }
+        Adoption::AtRenewal { file } => format!(
+            "{sessions} already running {}: {} is there",
+            kept_until_renewed(),
+            file.display()
+        ),
+        Adoption::RestartRequired { program, .. } => {
+            format!("Restart any running `{program}` for this to take effect")
+        }
+        Adoption::NextOpen { app } => format!("{app} opens signed in to it"),
+    }
+}
+
 /// What is said where nothing is left behind the store Claude Code keeps its login in, as
 /// `pitboard stow` and the app's sheet say it. On Linux the file is that store.
 pub fn nothing_left() -> &'static str {

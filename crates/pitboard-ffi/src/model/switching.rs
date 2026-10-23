@@ -1452,9 +1452,7 @@ fn putting_the_parked_account_back_stops_the_wait_only_once_claude_has_quit() {
         outcome: crate::Switch::Installed {
             provider: "desktop".into(),
             to: "desktop/work".into(),
-            adoption: crate::Adoption::NextOpen {
-                name: "Claude".into(),
-            },
+            adoption: crate::Adoption::NextOpen { app: "Claude" },
         },
         warnings: Vec::new(),
     });

@@ -3611,16 +3611,17 @@ impl State {
                 return;
             }
         };
-        let opens = matches!(adoption, Adoption::NextOpen { .. }).then(|| adoption.follows());
+        let opens = matches!(adoption, Adoption::NextOpen { .. })
+            .then(|| crate::present::words::follows(&adoption));
         let (follows_at, restart) = match adoption {
-            Adoption::Follows { within_seconds } => {
+            Adoption::PollingWithin(within_seconds) => {
                 (Some(now.epoch() + i64::from(within_seconds)), None)
             }
-            Adoption::Renewal { .. } | Adoption::NextOpen { .. } => (None, None),
-            Adoption::Restart { program } => (
+            Adoption::AtRenewal { .. } | Adoption::NextOpen { .. } => (None, None),
+            Adoption::RestartRequired { program, .. } => (
                 None,
                 from.map(|from| RestartNeeded {
-                    program,
+                    program: program.to_owned(),
                     from: split(&from).1.to_owned(),
                 }),
             ),

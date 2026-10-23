@@ -146,46 +146,7 @@ pub(crate) struct Change {
     pub(crate) outcome: String,
 }
 
-/// When a session of the tool that is already running picks a switch up.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum Adoption {
-    /// On its own, within this many seconds.
-    Follows {
-        within_seconds: u32,
-    },
-    /// On its own, when its login is next renewed, because the file at `path` sits behind
-    /// the store the switch wrote.
-    Renewal {
-        path: String,
-    },
-    /// Never: `program` has to be quit and started again.
-    Restart {
-        program: String,
-    },
-    // The app `name` was closed for the switch and holds the login from its next opening.
-    NextOpen {
-        name: String,
-    },
-}
-
-impl Adoption {
-    // What becomes of what is already running, as a sentence.
-    pub(crate) fn follows(&self) -> String {
-        match self {
-            Adoption::Follows { within_seconds } => {
-                format!("Sessions already running follow within {within_seconds} seconds.")
-            }
-            Adoption::Renewal { path } => format!(
-                "Sessions already running {}: {path} is there.",
-                words::kept_until_renewed()
-            ),
-            Adoption::Restart { program } => {
-                format!("Restart any running `{program}` for this to take effect.")
-            }
-            Adoption::NextOpen { name } => format!("{name} opens signed in to it."),
-        }
-    }
-}
+pub(crate) use pitboard_core::provider::Adoption;
 
 /// What makes one kind of process take a switch.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -432,7 +393,7 @@ fn switched(changing: Changing<switch::Outcome>) -> Result<Switched, PitboardErr
                 provider: provider.code().into(),
                 from,
                 to,
-                adoption: adoption_of(adoption),
+                adoption,
             },
             switch::Outcome::Installed {
                 provider,
@@ -441,7 +402,7 @@ fn switched(changing: Changing<switch::Outcome>) -> Result<Switched, PitboardErr
             } => Switch::Installed {
                 provider: provider.code().into(),
                 to,
-                adoption: adoption_of(adoption),
+                adoption,
             },
             switch::Outcome::AlreadyActive { label, .. } => Switch::AlreadyActive { label },
         },
@@ -475,22 +436,6 @@ fn status_of(done: service::Done<status::Report>) -> Status {
     }
 }
 
-/// When sessions already running follow a switch, as the core says it for the tool.
-fn adoption_of(adoption: provider::Adoption) -> Adoption {
-    match adoption {
-        provider::Adoption::PollingWithin(seconds) => Adoption::Follows {
-            within_seconds: seconds,
-        },
-        provider::Adoption::AtRenewal { file } => Adoption::Renewal {
-            path: file.display().to_string(),
-        },
-        provider::Adoption::RestartRequired { program, .. } => Adoption::Restart {
-            program: program.into(),
-        },
-        provider::Adoption::NextOpen { app } => Adoption::NextOpen { name: app.into() },
-    }
-}
-
 /// What switching Claude Code by itself at `threshold` came to, as the model takes it, with
 /// what a switch warned of.
 fn auto_switched(auto: Auto, warnings: Vec<Warning>, threshold: Threshold) -> AutoSwitched {
@@ -519,7 +464,7 @@ fn auto_switched(auto: Auto, warnings: Vec<Warning>, threshold: Threshold) -> Au
         } => AutoSwitched::Switched {
             from,
             to,
-            adoption: adoption_of(adoption),
+            adoption,
             warnings,
             used: words::share_of_limit(&limit),
         },
