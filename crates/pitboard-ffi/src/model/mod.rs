@@ -73,8 +73,9 @@ mod windowing;
 
 use crate::account_windows::AlertText;
 use crate::present::{
-    AccountSection, AccountWindowsShown, AccountsShown, Footing, MachineShown, MenuBarText,
-    MenuNotices, PanelNotice, Question, SetupStep, SheetText, SigningInText, StowText, present,
+    AccountMenuShown, AccountSection, AccountWindowsShown, AccountsShown, Footing, MachineShown,
+    MenuBarText, MenuNotices, PanelNotice, Question, SetupStep, SheetText, SigningInText, StowText,
+    present,
 };
 use crate::{Abandoned, AppCore, Status, Tool, Warning};
 use lanes::Lanes;
@@ -634,6 +635,7 @@ pub struct Snapshot {
     pub menu_bar: MenuBarText,
     /// The accounts, a section per tool once there is more than one, each as its row.
     pub sections: Vec<AccountSection>,
+    pub account_menu: AccountMenuShown,
     /// Whether accounts of more than one tool are shown, which is when anything says which
     /// tool an account is for.
     pub shows_tools: bool,

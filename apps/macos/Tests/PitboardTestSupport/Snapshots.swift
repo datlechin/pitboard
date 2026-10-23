@@ -50,6 +50,8 @@ package func snapshot(
             nameAndUsage: "", usage: "", spoken: "Pitboard", level: nil, attention: false,
             tip: "Pitboard"),
         sections: [],
+        accountMenu: AccountMenuShown(
+            offers: ["Use", "Sign In Again…", "Rename…"], forget: "Forget…"),
         showsTools: false, notices: [],
         menuNotices: MenuNotices(install: nil, switches: [], others: nil), footing: .ready,
         setup: nil, accountsShown: .reading(title: "Reading accounts…"),

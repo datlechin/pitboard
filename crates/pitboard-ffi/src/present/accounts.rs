@@ -4,8 +4,8 @@
 
 use super::words;
 use super::{
-    AccountItem, AccountSection, ItemAction, ItemOffer, LimitPace, LimitRow, MenuBarText,
-    MenuNotices, PaceStanding, Question, Seen, WindowOffer,
+    AccountItem, AccountMenuShown, AccountSection, ItemAction, ItemOffer, LimitPace, LimitRow,
+    MenuBarText, MenuNotices, PaceStanding, Question, Seen, WindowOffer,
 };
 use crate::account_windows::{forget_message_on, windows_of_account};
 use crate::model::{Intent, Sheet};
@@ -317,24 +317,29 @@ fn offers(os: Os, account: &Account, action: Option<&ItemAction>, busy: bool) ->
         enabled,
         confirm: None,
     };
-    let own = action.and_then(|action| {
-        let title = match &action.intent {
-            Intent::SwitchTo { .. } => format!("Use {}", account.label.as_deref()?),
-            Intent::PresentSheet {
-                sheet: Sheet::Name { .. },
-            } => action.title.clone(),
-            _ => return None,
-        };
-        Some(offer(title, action.intent.clone(), true))
+    let own = action.and_then(|action| match &action.intent {
+        Intent::PresentSheet {
+            sheet: Sheet::Name { .. },
+        } => Some(offer(action.title.clone(), action.intent.clone(), true)),
+        _ => None,
     });
+    let switches = action.is_some_and(|action| matches!(action.intent, Intent::SwitchTo { .. }));
     let named = account
         .label
         .as_deref()
+        .zip(account.qualified.as_ref())
         .filter(|_| !account.unplaced)
-        .map(|label| {
+        .map(|(label, qualified)| {
             let provider = account.provider.clone();
             let label = label.to_owned();
             [
+                offer(
+                    format!("Use {label}"),
+                    Intent::SwitchTo {
+                        qualified: qualified.clone(),
+                    },
+                    switches,
+                ),
                 offer(
                     words::titled(os, "Sign In Again…", "Sign in again…"),
                     Intent::PresentSheet {
@@ -412,27 +417,38 @@ fn warm_note(seen: &Seen, account: &Account) -> Option<String> {
     )))
 }
 
-/// Forgetting an account, with the question asked first, where it may be forgotten: one
-/// enrolled, and not the one in use, whose record is the only one of who is signed in, and
-/// which the core refuses. The question names it, and says what forgetting it deletes in the
-/// words the account windows say it in.
+// The question names it, and says what forgetting it deletes in the account windows' words.
 fn forget(seen: &Seen, account: &Account, spoken_name: &str) -> Option<ItemOffer> {
     let qualified = account
         .qualified
         .as_ref()
-        .filter(|_| account.label.is_some() && !account.signed_in)?;
+        .filter(|_| account.label.is_some())?;
     Some(ItemOffer {
-        title: "Forget…".into(),
+        title: FORGET.into(),
         intent: Intent::Forget {
             qualified: qualified.clone(),
         },
-        enabled: true,
+        // The core refuses it.
+        enabled: !account.signed_in,
         confirm: Some(Question {
             title: format!("Forget “{spoken_name}”?"),
             message: forget_message_on(seen.os, account, seen.accounts()),
             confirm: "Forget".into(),
         }),
     })
+}
+
+const FORGET: &str = "Forget…";
+
+pub(crate) fn account_menu(os: Os) -> AccountMenuShown {
+    AccountMenuShown {
+        offers: vec![
+            "Use".into(),
+            words::titled(os, "Sign In Again…", "Sign in again…"),
+            "Rename…".into(),
+        ],
+        forget: FORGET.into(),
+    }
 }
 
 /// What pressing an account does, decided once so the menu and the window cannot disagree.

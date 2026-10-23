@@ -161,6 +161,7 @@ final class AccountsWindowTests: FixtureTestCase {
         XCTAssertTrue(row.waitForNonExistence(timeout: 5))
     }
 
+    /// Its shortcut menu leaves Forget out, and the Account menu dims it.
     @MainActor
     func testTheAccountInUseOffersNoForget() {
         let app = launch(.oneTool)
@@ -171,6 +172,33 @@ final class AccountsWindowTests: FixtureTestCase {
         XCTAssertTrue(app.shortcutMenu.menuItems["Rename…"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.shortcutMenu.menuItems["Forget…"].exists)
         app.typeKey(.escape, modifierFlags: [])
+        row.click()
+        app.accountMenu.click()
+        let forget = app.accountMenu.menuItems["Forget…"]
+        XCTAssertTrue(forget.waitForExistence(timeout: 5))
+        XCTAssertFalse(forget.isEnabled)
+        app.typeKey(.escape, modifierFlags: [])
+    }
+
+    /// Command-Delete in a sheet's field deletes to the start of the line, and asks nothing of
+    /// the account selected behind the sheet.
+    @MainActor
+    func testCommandDeleteInASheetEditsItsField() {
+        let app = launch(.oneTool)
+        app.openWindow()
+        let row = app.accountRow("claude/personal")
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        row.click()
+        app.accountMenu.click()
+        app.accountMenu.menuItems["Rename…"].click()
+        let name = app.textFields["sheet.name"]
+        XCTAssertTrue(name.waitForExistence(timeout: 5))
+        name.typeKey(.delete, modifierFlags: .command)
+        name.typeText("home")
+        XCTAssertEqual(name.value as? String, "home")
+        app.sheets.firstMatch.buttons["Cancel"].click()
+        XCTAssertTrue(app.sheets.firstMatch.waitForNonExistence(timeout: 5))
+        XCTAssertFalse(app.alert.buttons["Forget"].waitForExistence(timeout: 2))
     }
 
     @MainActor

@@ -13,8 +13,9 @@ extension FocusedValues {
     @Entry var account: AccountCommand?
 }
 
-// The HIG lists a shortcut menu's items in the menu bar too.
+// The HIG lists a shortcut menu's items in the menu bar too, dimmed rather than left out.
 struct AccountCommands: Commands {
+    let model: AppModel
     @FocusedValue(\.account) private var account
 
     var body: some Commands {
@@ -22,10 +23,12 @@ struct AccountCommands: Commands {
             if let account {
                 AccountMenuItems(command: account, place: .menuBar)
             } else {
-                Button("Rename…") {}
-                    .disabled(true)
+                ForEach(model.accountMenu.offers, id: \.self) { title in
+                    Button(title) {}
+                        .disabled(true)
+                }
                 Divider()
-                Button("Forget…") {}
+                Button(model.accountMenu.forget) {}
                     .keyboardShortcut(.delete)
                     .disabled(true)
             }
@@ -67,11 +70,16 @@ struct AccountMenuItems: View {
                 NSPasteboard.general.setString(item.email, forType: .string)
             }
         }
-        if let forget = item.forget {
+        if let forget = item.forget, place == .menuBar || forget.enabled {
             Divider()
-            Button(forget.title, role: .destructive) { command.choose(forget) }
-                .keyboardShortcut(.delete)
-                .disabled(!forget.enabled)
+            // The HIG shows keyboard shortcuts in the main menus, not in a shortcut menu.
+            if place == .menuBar {
+                Button(forget.title, role: .destructive) { command.choose(forget) }
+                    .keyboardShortcut(.delete)
+                    .disabled(!forget.enabled)
+            } else {
+                Button(forget.title, role: .destructive) { command.choose(forget) }
+            }
         }
     }
 }

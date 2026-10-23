@@ -16,8 +16,9 @@ use super::{Intent, Pane, Sheet, Snapshot, Tip, WindowRequest};
 use crate::account_windows::forget_message_on;
 use crate::present::testing::{LimitExt, Unreadable, account, unplaced, window};
 use crate::present::{
-    AccountItem, AccountsShown, Choice, Footing, ItemOffer, MenuEntry, NoticeAction, PaceStanding,
-    PanelNotice, Question, SetupLink, SetupStep, Severity, WindowOffer, present,
+    AccountItem, AccountMenuShown, AccountsShown, Choice, Footing, ItemOffer, MenuEntry,
+    NoticeAction, PaceStanding, PanelNotice, Question, SetupLink, SetupStep, Severity, WindowOffer,
+    present,
 };
 use crate::{Abandoned, Account, EnrolledAs, GaveUp, Limit, Warning};
 use pitboard_core::host::OS;
@@ -321,10 +322,17 @@ fn a_switch_running_holds_back_every_account_and_marks_only_its_own() {
     assert!(!other.switching);
     assert_eq!(other.summary, "5-hour 5%");
     assert_eq!(other.action, None);
-    // Its own menu offers no switch either, and what else it offers it offers as the Swift
+    // Its own menu holds its switch back too, and what else it offers it offers as the Swift
     // menu did, which held nothing else back for a switch.
     let again = titled("Sign In Again…", "Sign in again…");
-    assert_eq!(offered(&other), [(again.as_str(), true), ("Rename…", true)]);
+    assert_eq!(
+        offered(&other),
+        [
+            ("Use other", false),
+            (again.as_str(), true),
+            ("Rename…", true)
+        ]
+    );
     assert!(other.forget.as_ref().is_some_and(|forget| forget.enabled));
     let unnamed = || account(None).signed_in().uuid("u").build();
     assert_eq!(described_while(unnamed(), switching(running)).action, None);
@@ -377,16 +385,21 @@ fn a_sign_in_running_holds_back_only_another_sign_in() {
     assert_eq!(sends(&stale), None);
     assert_eq!(
         offered(&stale),
-        [(again.as_str(), false), ("Rename…", true)]
+        [
+            ("Use stale", false),
+            (again.as_str(), false),
+            ("Rename…", true)
+        ]
     );
 }
 
 /// What an account's own menu offers, each with its words, what it sends, and whether it can
-/// be chosen now: switching to it or naming it, where pressing the account does that, then,
-/// for an account Pitboard has a name for, signing in to it again and renaming it; each of
-/// its windows; and forgetting it, asked first, where it may be. Signing in again is offered
-/// once, not again as the account's own action, and a login Pitboard cannot use offers
-/// nothing.
+/// be chosen now: naming it, where pressing the account does that, or, for an account
+/// Pitboard has a name for, switching to it, signing in to it again and renaming it; each of
+/// its windows; and forgetting it, asked first. Every enrolled account has the same items,
+/// dimmed where they cannot be chosen now, as the menu bar's menu keeps them. Signing in
+/// again is offered once, not again as the account's own action, and a login Pitboard cannot
+/// use offers nothing.
 ///
 /// AccountsPane.swift's shortcut menu, as it was at c1be7c3, which the Swift tested nowhere,
 /// and which AccountsWindowTests.swift's testRenamingAnAccount, testForgettingAsksFirst and
@@ -412,6 +425,13 @@ fn an_accounts_own_menu_offers_what_can_be_done_to_it() {
         enabled: true,
         confirm: None,
     };
+    let dimmed = |title: &str, intent: Intent| ItemOffer {
+        enabled: false,
+        ..offer(title, intent)
+    };
+    let switch = |label: &str| Intent::SwitchTo {
+        qualified: format!("claude/{label}"),
+    };
     let spare = account(Some("spare")).build();
     let accounts = vec![
         account(Some("work")).signed_in().build(),
@@ -426,13 +446,15 @@ fn an_accounts_own_menu_offers_what_can_be_done_to_it() {
     assert_eq!(
         work.offers,
         [
+            dimmed("Use work", switch("work")),
             offer(&sign_in_again, again("work")),
             offer("Rename…", rename("work"))
         ],
         "nothing to switch to: it is the one in use"
     );
     assert_eq!(
-        work.forget, None,
+        work.forget.as_ref().map(|forget| forget.enabled),
+        Some(false),
         "the core refuses to forget the one in use"
     );
 
@@ -468,6 +490,7 @@ fn an_accounts_own_menu_offers_what_can_be_done_to_it() {
     assert_eq!(
         stale.offers,
         [
+            dimmed("Use stale", switch("stale")),
             offer(&sign_in_again, again("stale")),
             offer("Rename…", rename("stale"))
         ],
@@ -497,6 +520,21 @@ fn an_accounts_own_menu_offers_what_can_be_done_to_it() {
         assert!(cannot.windows.is_empty());
         assert_eq!(cannot.forget, None);
     }
+}
+
+/// With no account selected, the menu bar's Account menu keeps the items an enrolled account
+/// has, dimmed, in the system's case.
+#[test]
+fn the_account_menu_with_nothing_selected_keeps_its_items() {
+    let (model, _) = reading(vec![account(Some("work")).signed_in().build()]);
+    assert_eq!(
+        model.on_a_mac().account_menu,
+        AccountMenuShown {
+            offers: vec!["Use".into(), "Sign In Again…".into(), "Rename…".into()],
+            forget: "Forget…".into(),
+        }
+    );
+    assert_eq!(model.on_windows().account_menu.offers[1], "Sign in again…");
 }
 
 /// An account's own menu opens each of its windows, one per site of its tool, named by the
@@ -948,7 +986,18 @@ fn only_an_enrolled_account_not_in_use_may_be_forgotten() {
     let accounts = vec![account(Some("work")).signed_in().build(), spare.clone()];
     let (model, _) = reading(accounts.clone());
     let shown = rows(&model);
-    assert_eq!(shown[0].forget, None);
+    assert!(
+        shown[0]
+            .forget
+            .as_ref()
+            .is_some_and(|forget| !forget.enabled)
+    );
+    assert!(
+        shown[1]
+            .forget
+            .as_ref()
+            .is_some_and(|forget| forget.enabled)
+    );
     let forget = shown[1].forget.as_ref().expect("spare may be forgotten");
     assert_eq!(
         forget.intent,

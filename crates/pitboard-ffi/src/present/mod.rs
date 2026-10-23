@@ -145,17 +145,22 @@ pub struct AccountItem {
     pub help: Option<String>,
     /// Each of its limits, in the order its service gave them.
     pub limits: Vec<LimitRow>,
-    /// What its own menu offers to do to it, in order: switching to it, or naming it, where
-    /// pressing it does that; then, for an account Pitboard has a name for, signing in to it
-    /// again and renaming it. Signing in again is offered once, here, and held back while
-    /// another sign-in runs.
+    // in order: naming it, where pressing it does that, or for an account Pitboard has a name
+    // for, switching to it, signing in to it again and renaming it, each dimmed while it
+    // cannot be chosen, which a shortcut menu leaves out
     pub offers: Vec<ItemOffer>,
     /// Its windows, one for each site of its tool, as its own menu offers to open them.
     pub windows: Vec<WindowOffer>,
-    /// Forgetting it, with the question asked first, where it may be forgotten: enrolled,
-    /// and not the one in use, whose record is the only one of who is signed in, and which
-    /// the core refuses. What its own menu offers last, and what deleting its row does.
+    // for an enrolled account, dimmed for the one in use, whose record is the only one of who
+    // is signed in; what its own menu offers last, and what deleting its row does
     pub forget: Option<ItemOffer>,
+}
+
+// The Account menu's items, dimmed, while no account is selected.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct AccountMenuShown {
+    pub offers: Vec<String>,
+    pub forget: String,
 }
 
 /// What pressing an account does.
@@ -745,6 +750,7 @@ pub(crate) fn present_on(os: Os, state: &State, now: i64, local: &dyn LocalTime)
         sheet_failure: state.sheet_failure.clone(),
         menu_bar: accounts::menu_bar(&seen, &menu_notices),
         sections: accounts::sections(&seen),
+        account_menu: accounts::account_menu(seen.os),
         shows_tools: seen.shows_tools(),
         menu_notices,
         notices,

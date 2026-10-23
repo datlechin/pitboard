@@ -53,14 +53,14 @@ pub use fixture::{FixtureError, fixture_names, fixture_page};
 
 mod present;
 pub use present::{
-    AccountItem, AccountSection, AccountWindowsShown, AccountsShown, ActivityLine, ActivityShown,
-    AtLimitChoice, AtLimitShown, CheckLine, ChecksShown, Choice, CommandLineShown, DownloadShown,
-    DownloadState, EmptyList, Footing, ItemAction, ItemOffer, LimitPace, LimitRow, LinkPicker,
-    MachineShown, MenuBarText, MenuEntry, MenuNotices, Missing, NameCheck, NoticeAction,
-    OpenWindow, PaceStanding, PageLoad, PanelNotice, PickerAccount, PickerShown, Question,
-    ScheduleShown, SetupLink, SetupStep, Severity, SheetText, SheetTool, SigningInText,
-    StoreDeletion, StowText, TermsShown, WaitingShown, WarmAccountShown, WarmShown, WindowOffer,
-    WindowWaiting, check_name, downloads_quit_question,
+    AccountItem, AccountMenuShown, AccountSection, AccountWindowsShown, AccountsShown,
+    ActivityLine, ActivityShown, AtLimitChoice, AtLimitShown, CheckLine, ChecksShown, Choice,
+    CommandLineShown, DownloadShown, DownloadState, EmptyList, Footing, ItemAction, ItemOffer,
+    LimitPace, LimitRow, LinkPicker, MachineShown, MenuBarText, MenuEntry, MenuNotices, Missing,
+    NameCheck, NoticeAction, OpenWindow, PaceStanding, PageLoad, PanelNotice, PickerAccount,
+    PickerShown, Question, ScheduleShown, SetupLink, SetupStep, Severity, SheetText, SheetTool,
+    SigningInText, StoreDeletion, StowText, TermsShown, WaitingShown, WarmAccountShown, WarmShown,
+    WindowOffer, WindowWaiting, check_name, downloads_quit_question,
 };
 
 mod account_windows;

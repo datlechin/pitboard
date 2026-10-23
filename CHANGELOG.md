@@ -46,7 +46,7 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   stepper.
 - The macOS app's **Pitboard** menu offers **Check for Updates** while a window is open.
 - The macOS app has an **Account** menu with what an account's shortcut menu offers, for the
-  account selected, and **Forget** on Command-Delete.
+  account selected, dimming what cannot be chosen now, and **Forget** on Command-Delete.
 - The macOS app's **Edit** > **Copy** copies the email address of the account selected.
 - The Windows app copies an account's email address with Ctrl+C on its row, and its shortcut
   menu shows F2, Del and Ctrl+C beside the items they do.
@@ -80,8 +80,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   attention** while its menu opens on something to look at.
 - The app's **Settings** say what switching, warm-up and daily renewal do in one or two
   sentences.
-- An account's shortcut menu in the macOS app leaves out **Warm Up Now** and **Sign In Again**
-  while they cannot be chosen.
+- An account's shortcut menu leaves out **Warm Up Now** and **Sign In Again** while they cannot
+  be chosen, where the Windows app dimmed them.
 - **Open Pitboard** in the macOS app's menu no longer takes Command-0, which is **Actual Size**
   for an account's window.
 - The macOS app's **Settings** has three panes, **General**, **Limits** and **Advanced**, and

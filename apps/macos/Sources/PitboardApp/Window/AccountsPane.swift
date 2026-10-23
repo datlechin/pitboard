@@ -39,7 +39,10 @@ struct AccountsPane: View {
                     model.send(.refresh(asked: true))
                 }
             )
-            .focusedSceneValue(\.account, selection.flatMap(model.item).map(command(for:)))
+            // Command-Delete in a sheet's text field deletes to the start of the line.
+            .focusedSceneValue(
+                \.account,
+                model.sheet == nil ? selection.flatMap(model.item).map(command(for:)) : nil)
             .task { model.send(.paneShown(pane: .accounts)) }
             .alert(
                 asking?.question.title ?? "",

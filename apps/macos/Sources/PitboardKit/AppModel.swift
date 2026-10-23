@@ -61,6 +61,8 @@ public final class AppModel {
     public private(set) var menuBar: MenuBarText
     /// The accounts, a section per tool once there is more than one.
     public private(set) var sections: [AccountSection]
+    /// The Account menu's items while no account is selected.
+    public private(set) var accountMenu: AccountMenuShown
     /// Whether accounts of more than one tool are shown.
     public private(set) var showsTools: Bool
     /// Everything to tell somebody that is not an account, the most pressing first.
@@ -127,6 +129,7 @@ public final class AppModel {
         sheetFailure = first.sheetFailure
         menuBar = first.menuBar
         sections = first.sections
+        accountMenu = first.accountMenu
         showsTools = first.showsTools
         notices = first.notices
         menuNotices = first.menuNotices
@@ -204,6 +207,7 @@ public final class AppModel {
         update(\.sheetFailure, snapshot.sheetFailure)
         update(\.menuBar, snapshot.menuBar)
         update(\.sections, snapshot.sections)
+        update(\.accountMenu, snapshot.accountMenu)
         update(\.showsTools, snapshot.showsTools)
         update(\.notices, snapshot.notices)
         update(\.menuNotices, snapshot.menuNotices)

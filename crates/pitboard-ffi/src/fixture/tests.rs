@@ -2022,14 +2022,14 @@ fn a_sign_in_asked_for_at_once_after_a_cancel_asks_for_the_code() {
 
 /// A rename to a name another account has is refused in its sheet, and a free name is
 /// taken, as AccountsWindowTests.swift's testRenamingAnAccount reads it; the account in use
-/// offers no Forget, and any other is forgotten, as its testTheAccountInUseOffersNoForget
-/// and testForgettingAsksFirst read it.
+/// offers Forget dimmed, which its shortcut menu leaves out, and any other is forgotten, as
+/// its testTheAccountInUseOffersNoForget and testForgettingAsksFirst read it.
 #[test]
 fn accounts_are_renamed_and_forgotten_as_the_window_offers() {
     let launched = made(World::OneTool);
     let (model, told) = started(&launched);
     let shown = told.until("the accounts read", read_in);
-    // Each row's own menu, by its items' titles, with Forget… last where it is offered.
+    // Each row's own menu, by its items' titles, with Forget… last.
     let menus: Vec<(String, Vec<String>)> = shown
         .sections
         .iter()
@@ -2050,13 +2050,18 @@ fn accounts_are_renamed_and_forgotten_as_the_window_offers() {
     assert_eq!(
         menus,
         [
-            ("work".into(), titles(&[&again, "Rename…", &now])),
+            (
+                "work".into(),
+                titles(&["Use work", &again, "Rename…", &now, "Forget…"])
+            ),
             (
                 "personal".into(),
                 titles(&["Use personal", &again, "Rename…", &now, "Forget…"])
             ),
         ]
     );
+    let work = &shown.sections[0].accounts[0];
+    assert!(!work.offers[0].enabled && work.forget.as_ref().is_some_and(|f| !f.enabled));
 
     model.send(Intent::PresentSheet {
         sheet: Sheet::Rename {
