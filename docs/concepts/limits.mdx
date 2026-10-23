@@ -15,7 +15,7 @@ Pitboard is for one person with several accounts of their own in Claude Code, Op
 - Pitboard renews a login a tool may be using only in the cases [When Pitboard renews a login in use](/concepts/identity#when-pitboard-renews-a-login-in-use) lists.
 - Pitboard never copies a parked login to another machine. Once one machine renews it, the other machine's copy is spent.
 - Each machine signs in to each account itself. [The Pitboard directory came from another computer](/troubleshooting/recovery#the-pitboard-directory-came-from-another-computer) covers a copied Pitboard directory.
-- Pitboard changes nothing with `sudo`, or as root where [Pitboard changes nothing as root](/troubleshooting/refused-changes#pitboard-changes-nothing-as-root) says. On Windows, it changes nothing when it runs elevated: as administrator, with User Account Control off, or as the built-in Administrator. Either would leave files your own runs cannot reach.
+- Pitboard changes nothing with `sudo`, or as root on macOS. On Linux, root changes nothing where another user owns a folder Pitboard writes in, as [Pitboard changes nothing as root](/troubleshooting/refused-changes#pitboard-changes-nothing-as-root) says. On Windows, Pitboard changes nothing when it runs elevated. Each would leave files your own runs cannot reach.
 
 ## What a switch costs you
 
