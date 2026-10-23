@@ -133,6 +133,27 @@ fn setup_goes_on_to_opening_at_login_then_to_what_happens_at_a_limit() {
     assert_eq!(chose.shown().footing, Footing::Ready, "a choice made");
 }
 
+/// Opening the settings from the tip takes it up, whether or not the choice shown there
+/// changes: keeping Notify Me writes nothing of its own.
+#[test]
+fn opening_the_settings_from_the_tip_ends_it() {
+    let mut machine = Machine::reading(Ok(status(vec![
+        account(Some("work")).signed_in().build(),
+        account(Some("personal")).build(),
+    ])));
+    let mut model = started(&mut machine);
+    assert_eq!(model.shown().footing, Footing::AtLimitUnchosen);
+    model.send(Intent::ShowLimits);
+    model.run(&mut machine);
+    assert!(model.shown().window_request.settings);
+    assert_eq!(model.shown().footing, Footing::Ready);
+    assert_eq!(
+        started(&mut machine).shown().footing,
+        Footing::Ready,
+        "and it is remembered"
+    );
+}
+
 /// "Not now" said before there was a second tool was said about Claude Code, the only tool
 /// there was, and does not hide the prompt for a first Codex account. It is moved into the
 /// model's file once, so the earlier store is read no more.

@@ -343,7 +343,7 @@ pub enum Intent {
     /// What the app's system says of opening the app at login. A setup step offers it for the
     /// app to do itself, which then says what its system says.
     OpensAtLogin { on: bool },
-    /// The settings, on what happens at a limit.
+    /// The settings, on what happens at a limit, from the tip that asks, which it ends.
     ShowLimits,
     /// Reads whose login the tool stores, which nothing reads before: Name This Account for it,
     /// or Add Account set to the tool where it stores none.

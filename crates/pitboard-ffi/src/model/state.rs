@@ -42,7 +42,7 @@ use super::machine::{LOG_LIMIT, MachineState, Scheduled};
 use super::preferences::Preferences;
 use super::windows::Windows;
 use super::{AtLimit, Failure, Intent, LastSwitch, Pane, QuitQuestion, ReadFailure, RestartNeeded};
-use super::{RunOutNotice, RunningSignIn, Sheet, WindowRequest};
+use super::{RunOutNotice, RunningSignIn, Sheet, Tip, WindowRequest};
 use crate::account_windows::records::{Entry, Loaded};
 use crate::present::{Clicked, UNUSABLE};
 use crate::{
@@ -1358,15 +1358,13 @@ impl State {
                 }
             }
             Intent::SetAtLimit { choice, at } => self.at_limit_set(choice, at, jobs),
-            Intent::DeclineTip { tip } => {
-                if self.preferences.decline(tip) && self.preferences_read {
-                    jobs.push(Job::KeepPreferences {
-                        preferences: self.preferences.clone(),
-                    });
-                }
-            }
+            Intent::DeclineTip { tip } => self.put_away(tip, jobs),
             Intent::OpensAtLogin { on } => self.opens_at_login = Some(on),
-            Intent::ShowLimits => self.show_settings(),
+            // Keeping the choice shown there writes nothing, and the tip has done its work.
+            Intent::ShowLimits => {
+                self.show_settings();
+                self.put_away(Tip::AtLimit, jobs);
+            }
             Intent::NameSignedIn { provider } => jobs.push(Job::ReadSignedIn { provider }),
             Intent::SetWarm { qualified, on } => jobs.push(Job::SetWarm { qualified, on }),
             Intent::SetWarmRange { from, to } => jobs.push(Job::SetWarmRange { from, to }),
@@ -4077,6 +4075,14 @@ impl State {
             pane,
             settings: false,
         };
+    }
+
+    fn put_away(&mut self, tip: Tip, jobs: &mut Vec<Job>) {
+        if self.preferences.decline(tip) && self.preferences_read {
+            jobs.push(Job::KeepPreferences {
+                preferences: self.preferences.clone(),
+            });
+        }
     }
 
     fn show_settings(&mut self) {
