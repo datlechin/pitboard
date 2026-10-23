@@ -67,10 +67,11 @@ def write_ico(path, drawn):
 
 write_ico(HERE.parent / "Pitboard.App" / "Pitboard.ico", DRAWN)
 
-# One for each step a limit's colour changes at, at the sizes the notification area draws: its
-# lit row is as long as what is left, in a neutral tone.
-for level in ("Plenty", "Low", "Out"):
-    drawn = {size: f"tray-{level.lower()}-{24 if size == 24 else 16}.svg" for size in (16, 20, 24, 32)}
+# One for each step a limit's colour changes at, and None for no reading, at the sizes the
+# notification area draws, up to 300%: its lit row is as long as what is left, in a neutral tone.
+GRID = {16: 16, 20: 16, 24: 24, 32: 16, 40: 48, 48: 48}
+for level in ("Plenty", "Low", "Out", "None"):
+    drawn = {size: f"tray-{level.lower()}-{grid}.svg" for size, grid in GRID.items()}
     write_ico(HERE.parent / "Pitboard.App" / "Tray" / f"{level}.ico", drawn)
 
 # Unqualified files: a sparse package has no resources.pri to pick a scale or target size by.

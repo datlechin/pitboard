@@ -57,10 +57,10 @@ public static class Shell
 
     public static void DestroyIcon(nint icon) => PInvoke.DestroyIcon((HICON)icon);
 
-    // Tray holds a drawing for each level beside Pitboard.exe, which ../Icon/make-ico.py writes.
+    // Tray holds a drawing for each level, and None for no reading, beside Pitboard.exe, which ../Icon/make-ico.py writes.
     public static unsafe nint NotificationIcon(int size, IconLook look)
     {
-        var drawn = Path.Combine(AppContext.BaseDirectory, "Tray", $"{look.Level ?? UsageLevel.Plenty}.ico");
+        var drawn = Path.Combine(AppContext.BaseDirectory, "Tray", $"{look.Level?.ToString() ?? "None"}.ico");
         HANDLE loaded;
         fixed (char* file = drawn)
         {
@@ -118,6 +118,12 @@ public static class Shell
         var drawing = PInvoke.CreateCompatibleDC(HDC.Null);
         try
         {
+            // Past GDI's limits, drawing would write through a null pointer, which .NET cannot catch.
+            if (color.IsNull || mask.IsNull || drawing.IsNull || bits is null)
+            {
+                return null;
+            }
+
             var before = PInvoke.SelectObject(drawing, color);
             PInvoke.DrawIconEx(drawing, 0, 0, (HICON)icon, size, size, 0, HBRUSH.Null, DI_FLAGS.DI_NORMAL);
             PInvoke.DrawIconEx(drawing, size - side, size - side, warning, side, side, 0, HBRUSH.Null, DI_FLAGS.DI_NORMAL);

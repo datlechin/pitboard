@@ -95,13 +95,14 @@ public sealed class IconImageTests
         Assert.AreEqual("load 16, load 24, show 24, destroy 16", string.Join(", ", done));
     }
 
-    // Drawn in ../Icon: the notification area takes an image at its own size, and Explorer would stretch another.
+    // Drawn in ../Icon: the notification area takes an image at its own size, 40 and 48 at 250% and 300%, and Explorer would
+    // stretch another.
     [TestMethod]
     public void EachLevelIsLoadedAtTheSizeAskedFor()
     {
         foreach (var level in new UsageLevel?[] { null, UsageLevel.Plenty, UsageLevel.Low, UsageLevel.Out })
         {
-            foreach (var size in new[] { 16, 20, 24, 32 })
+            foreach (var size in new[] { 16, 20, 24, 32, 40, 48 })
             {
                 var icon = Shell.NotificationIcon(size, new IconLook(level, Attention: false));
                 try
@@ -116,12 +117,31 @@ public sealed class IconImageTests
         }
     }
 
+    // With no reading the lit row shows only its track: plenty would claim room nobody measured.
+    [TestMethod]
+    public void NoReadingLeavesTheRowUnlit()
+    {
+        var plenty = Shell.NotificationIcon(16, new IconLook(UsageLevel.Plenty, Attention: false));
+        var none = Shell.NotificationIcon(16, new IconLook(null, Attention: false));
+        try
+        {
+            // tray-*-16.svg's row, at (5, 4).
+            Assert.AreEqual(0xF3F4F6u, Pixels(plenty)[4][5] & 0xFFFFFF);
+            Assert.AreEqual(0x4B5158u, Pixels(none)[4][5] & 0xFFFFFF);
+        }
+        finally
+        {
+            Shell.DestroyIcon(plenty);
+            Shell.DestroyIcon(none);
+        }
+    }
+
     // The warning goes over the bottom right, and the drawing beside it is the level's, its partly
     // covered edges at 20 px included.
     [TestMethod]
     public void AttentionPutsTheStandardWarningOverTheBottomRight()
     {
-        foreach (var size in new[] { 16, 20, 24, 32 })
+        foreach (var size in new[] { 16, 20, 24, 32, 40, 48 })
         {
             var plain = Shell.NotificationIcon(size, Low);
             var flagged = Shell.NotificationIcon(size, Low with { Attention = true });
