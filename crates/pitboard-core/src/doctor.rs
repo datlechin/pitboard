@@ -789,7 +789,7 @@ fn codex_facts(ctx: &Context, state: Option<&State>) -> CodexFacts {
                 .filter(|a| a.provider() == ProviderId::Codex)
                 .count()
         }),
-        backend: backend_name(backend),
+        backend: backend.word(),
         backend_setting: match backend {
             codex::Backend::Unknown => store.why_unknown().unwrap_or_default(),
             _ => store.setting(),
@@ -840,26 +840,6 @@ fn stored_elsewhere(ctx: &Context) -> (usize, usize) {
         count("cli|", Family::CodexCli),
         count("secrets|", Family::CodexSecrets),
     )
-}
-
-/// Codex's own word for where it keeps its login, as `cli_auth_credentials_store` spells
-/// it in `config.toml`.
-///
-/// Every store by name, with no catch-all: a store this build does not know is a compile
-/// error here, rather than a report calling it something the configuration does not say.
-fn backend_name(backend: codex::Backend) -> &'static str {
-    match backend {
-        codex::Backend::File => "file",
-        codex::Backend::Keyring => "keyring",
-        codex::Backend::Either => "auto",
-        codex::Backend::Ephemeral => "ephemeral",
-        // A keychain store with `[features] secret_auth_storage`: an encrypted file whose key
-        // is in the keychain. Codex has no one word for it, so it gets the name of the
-        // directory it keeps the file in.
-        codex::Backend::Secrets => "secrets",
-        // Not Codex's word: nobody can tell, Codex included.
-        codex::Backend::Unknown => "unknown",
-    }
 }
 
 /// What the file store's line adds: the one layer Pitboard leaves unread, and what it does.
@@ -3067,16 +3047,8 @@ fn judge_codex(
                     facts.backend_remedy
                 ),
                 _ => format!(
-                    "Pitboard reads only Codex's file store, auth.json, and {}, so no enrolled \
-                     Codex account can be switched to. {}.",
-                    match os {
-                        Os::MacOs | Os::Linux => {
-                            "will not touch the keychain item Codex created for itself, because \
-                             every read of it would ask you for permission"
-                        }
-                        Os::Windows =>
-                            "does not follow Codex into a store it uses only when told to",
-                    },
+                    "{}, so no enrolled Codex account can be switched to. {}.",
+                    crate::provider::codex::layers::file_store_only(os),
                     facts.backend_remedy
                 ),
             },
@@ -7434,7 +7406,7 @@ mod tests {
             assert!(found.detail.contains("file store"), "{}", found.detail);
         }
         let leaves = match crate::host::OS {
-            Os::MacOs | Os::Linux => "will not touch",
+            Os::MacOs | Os::Linux => "does not read an item",
             Os::Windows => "does not follow Codex",
         };
         for store in ["keyring", "auto", "secrets"] {
@@ -7621,17 +7593,16 @@ mod tests {
         for os in [Os::MacOs, Os::Linux] {
             assert_eq!(
                 advice(os),
-                "Pitboard reads only Codex's file store, auth.json, and will not touch the \
-                 keychain item Codex created for itself, because every read of it would ask \
-                 you for permission, so no enrolled Codex account can be switched to. To use \
-                 the file store, set it."
+                "Pitboard handles Codex's file store, auth.json, and does not read an item \
+                 Codex created for itself, because every read would ask you for permission, so \
+                 no enrolled Codex account can be switched to. To use the file store, set it."
             );
         }
         assert_eq!(
             advice(Os::Windows),
-            "Pitboard reads only Codex's file store, auth.json, and does not follow Codex into \
-             a store it uses only when told to, so no enrolled Codex account can be switched \
-             to. To use the file store, set it."
+            "Pitboard handles Codex's file store, auth.json, and does not follow Codex into a \
+             store it uses only when told to, so no enrolled Codex account can be switched to. \
+             To use the file store, set it."
         );
     }
 
