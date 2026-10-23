@@ -457,15 +457,7 @@ fn desktop_facts(ctx: &Context, state: &State) -> Option<DesktopFacts> {
         facts.known = Some(known);
         facts.signed_out = signed_out.is_some();
         facts.settings = Some(settings.map(|read| (read.sidecar, read.file.is_some())));
-        facts.unread = std::fs::read_dir(root)
-            .into_iter()
-            .flatten()
-            .flatten()
-            .map(|entry| entry.file_name())
-            .filter(|name| app.classify(name) == crate::provider::folder::Class::Unread)
-            .map(|name| name.to_string_lossy().into_owned())
-            .collect();
-        facts.unread.sort();
+        facts.unread = switch::folder::unread_parts(app, root).unwrap_or_default();
     }
     Some(facts)
 }
@@ -3190,7 +3182,13 @@ fn judge_desktop(
                     "desktop_data_folder",
                     folder,
                     format!("{shown} {unfit}"),
-                    "Pitboard moves no Claude Desktop login beside a third-party deployment.",
+                    "Pitboard moves no Claude Desktop login for a third-party deployment.",
+                ),
+                Some(unfit @ Unfit::ResetWaits) => fail(
+                    "desktop_data_folder",
+                    folder,
+                    format!("{shown} {unfit}"),
+                    "Open Claude to let the reset finish, then quit it with Command-Q.",
                 ),
                 None if facts.present => ok("desktop_data_folder", folder, shown.to_string()),
                 None => warn(
@@ -3230,25 +3228,33 @@ fn judge_desktop(
         });
         if facts.present {
             let name = "Claude data folder layout";
-            checks.push(if facts.unread.is_empty() {
-                ok(
+            checks.push(match facts.unread.as_slice() {
+                [] => ok(
                     "desktop_layout",
                     name,
-                    "every entry is one Pitboard has read",
-                )
-            } else {
-                let names = facts.unread.iter().map(|n| format!("`{n}`")).collect();
-                warn(
+                    "each part of the account's data is one Pitboard moves",
+                ),
+                [part] => warn(
                     "desktop_layout",
                     name,
                     format!(
-                        "holds {}, which this Pitboard has not read",
-                        words::listed(names)
+                        "holds `{part}`, a part of the account's data this Pitboard has not read"
+                    ),
+                    "Pitboard starts no move of a Claude Desktop login while it is there. Update \
+                     Pitboard, or report it at https://github.com/datlechin/pitboard/issues if no \
+                     release reads it yet.",
+                ),
+                parts => warn(
+                    "desktop_layout",
+                    name,
+                    format!(
+                        "holds {}, parts of the account's data this Pitboard has not read",
+                        words::listed(parts.iter().map(|part| format!("`{part}`")).collect())
                     ),
                     "Pitboard starts no move of a Claude Desktop login while they are there. \
                      Update Pitboard, or report them at \
                      https://github.com/datlechin/pitboard/issues if no release reads them yet.",
-                )
+                ),
             });
         }
     }
@@ -3580,14 +3586,17 @@ fn judge_desktop_park(facts: &DesktopFacts, fact: &ParkFact, now: i64) -> Check 
 
 // Said, never a gate: Pitboard checks the folder before each move, not the build.
 fn judge_desktop_build(facts: &DesktopFacts) -> Check {
-    use crate::provider::desktop::assumptions::{READ_FROM_THE_ARCHIVE, VERIFIED_AGAINST};
+    use crate::provider::desktop::assumptions::{
+        READ_FROM_CLAUDE_3, READ_FROM_THE_ARCHIVE, READ_FROM_THE_NEWER_BUNDLE, VERIFIED_AGAINST,
+    };
     match &facts.build {
         Some(build) => ok(
             "desktop_build",
             "Claude",
             format!(
-                "Claude {build}; Pitboard's facts were read from {VERIFIED_AGAINST} and \
-                 {READ_FROM_THE_ARCHIVE}, and it checks the folder before each move, not the build"
+                "Claude {build}; Pitboard's facts were read from {VERIFIED_AGAINST}, \
+                 {READ_FROM_THE_ARCHIVE}, {READ_FROM_THE_NEWER_BUNDLE} and {READ_FROM_CLAUDE_3}, \
+                 and it checks the folder before each move, not the build"
             ),
         ),
         None => ok("desktop_build", "Claude", "not found in /Applications"),
@@ -4076,12 +4085,12 @@ mod tests {
         );
         assert_eq!(
             said(&checks, "desktop_build")[0].1,
-            "Claude 2.31226.1; Pitboard's facts were read from 2.19675.0 and 2.7032.0, and it \
-             checks the folder before each move, not the build"
+            "Claude 2.31226.1; Pitboard's facts were read from 2.19675.0, 2.7032.0, \
+             2.42304.0 and 3.6556.2, and it checks the folder before each move, not the build"
         );
         assert!(checks.iter().all(|c| !c.code.contains("dormant")));
 
-        facts.unread = vec!["Network".into(), "Partitions".into()];
+        facts.unread = vec!["CdmStorage.db-wal".into(), "Cookies-wal".into()];
         facts.settings = Some(Err(Unread::Unknown {
             what: "has a settings file, `config.json`, that is not valid JSON".into(),
             then: crate::error::Then::CopyAside,
@@ -4094,7 +4103,9 @@ mod tests {
             said(&checks, "desktop_layout"),
             [(
                 Level::Warn,
-                "holds `Network` and `Partitions`, which this Pitboard has not read".into()
+                "holds `CdmStorage.db-wal` and `Cookies-wal`, parts of the account's data this \
+                 Pitboard has not read"
+                    .into()
             )]
         );
         let settings = checks
@@ -4135,9 +4146,15 @@ mod tests {
             ),
             (
                 Unfit::ThirdParty("Claude-3p"),
-                "/Users/dana/Library/Application Support/Claude has a `Claude-3p` folder beside \
-                 it, which a third-party deployment of Claude uses",
-                "Pitboard moves no Claude Desktop login beside a third-party deployment.",
+                "/Users/dana/Library/Application Support/Claude is not the one Claude runs \
+                 from: it runs as a third-party deployment, from `Claude-3p` beside it",
+                "Pitboard moves no Claude Desktop login for a third-party deployment.",
+            ),
+            (
+                Unfit::ResetWaits,
+                "/Users/dana/Library/Application Support/Claude is waiting for Reset App Data, \
+                 which deletes what it holds the next time Claude opens",
+                "Open Claude to let the reset finish, then quit it with Command-Q.",
             ),
         ] {
             facts.refused = Some(unfit);

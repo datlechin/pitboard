@@ -2209,6 +2209,23 @@ mod tests {
               in use. The next change to a Claude Desktop account checks."
             ]
         );
+        let mut kept: serde_json::Map<String, serde_json::Value> =
+            serde_json::from_str(&std::fs::read_to_string(&settings).expect("settings"))
+                .expect("JSON");
+        kept.insert(
+            "custom3pMcpOAuth".into(),
+            serde_json::json!({"grant": "kept"}),
+        );
+        std::fs::write(
+            &settings,
+            serde_json::to_string_pretty(&kept).expect("JSON"),
+        )
+        .expect("grants");
+        assert_eq!(
+            said(&pitboard),
+            warned,
+            "a Log out leaves the connector grants"
+        );
         assert_eq!(m.mem.listings(), 1, "the enrolment's look, and no read's");
     }
 

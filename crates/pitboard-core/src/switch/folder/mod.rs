@@ -27,6 +27,7 @@ use crate::provider::Adoption;
 use crate::provider::folder::{AppSettings, Folder};
 use crate::service::{Permit, Warning};
 use crate::state::{self, Key, ParkKind, SetAside, State, new_id};
+pub(crate) use moves::unread_parts;
 use std::path::Path;
 use verdict::{Named, Unsure, Verdict, look};
 
@@ -216,9 +217,8 @@ fn looks_signed_out(state: &State, app: &dyn Folder, settings: &AppSettings) -> 
     }
     let keys = settings.account_keys(app);
     let emptied = app
-        .keys()
+        .caches()
         .iter()
-        .filter(|key| **key != app.naming_key())
         .all(|key| keys.get(key).is_some_and(|value| app.emptied(key, value)));
     if !emptied {
         return None;

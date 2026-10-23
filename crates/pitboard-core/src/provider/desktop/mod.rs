@@ -8,11 +8,10 @@ mod settings;
 use crate::context::Context;
 use crate::holder::{AppId, Holder, Location, Noun, Remedy};
 use crate::host::Listed;
-use crate::provider::folder::{AppSettings, Class, Folder, Keys, SignedIn, Unfit, Unread};
+use crate::provider::folder::{AppSettings, Folder, Keys, SignedIn, Unfit, Unread};
 use crate::provider::{ProviderError, ProviderId};
 use crate::service::Permit;
 use serde_json::value::RawValue;
-use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
 pub(crate) const BUNDLE_ID: &str = "com.anthropic.claudefordesktop";
@@ -37,10 +36,29 @@ const ITEMS: &[&str] = &[
     "IndexedDB/https_claude.ai_0.indexeddb.blob",
     "WebStorage",
     "File System",
+    "Service Worker",
+    "Platform Notifications",
+    "CdmStorage.db",
+    "CdmStorage.db-journal",
+    "declarative_performance_observer.db",
+    "declarative_performance_observer.db-journal",
+    "Partitions",
+    "chrome-import-sites.json",
+    "builtin-mcp-auth",
+    "custom3p-builtin-mcp.json",
+    "custom3p-builtin-mcp.json.journal",
+    "session-popouts.json",
+    "local-sessions.json",
 ];
 
 const NAMING_KEY: &str = "lastKnownAccountUuid";
-const KEYS: &[&str] = &["oauth:tokenCache", "oauth:tokenCacheV2", NAMING_KEY];
+const CACHES: &[&str] = &["oauth:tokenCache", "oauth:tokenCacheV2"];
+const KEYS: &[&str] = &[
+    "oauth:tokenCache",
+    "oauth:tokenCacheV2",
+    NAMING_KEY,
+    "custom3pMcpOAuth",
+];
 
 #[derive(Debug)]
 pub(crate) struct Desktop;
@@ -66,12 +84,16 @@ impl Folder for Desktop {
         KEYS
     }
 
+    fn caches(&self) -> &'static [&'static str] {
+        CACHES
+    }
+
     fn naming_key(&self) -> &'static str {
         NAMING_KEY
     }
 
-    fn classify(&self, name: &OsStr) -> Class {
-        layout::classify(name)
+    fn unread_part(&self, path: &str) -> bool {
+        layout::unread_part(path)
     }
 
     fn settings(&self, root: &Path) -> Result<AppSettings, Unread> {

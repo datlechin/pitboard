@@ -1,10 +1,14 @@
 // `M` is 2.7032.0's `.vite/build/index.chunk-D3OyLXgG.js`, `P` its `index.pre.js`, `@n` a byte.
+// `N` is 2.42304.0's `.vite/build/index.chunk-muI2IV6k.js`; its other chunks go by their hash.
+// `R` is 3.6556.2's `.vite/build/index.pre.js`, and `Q` its `index.chunk-jPKPzV-P.js`.
 
 use crate::assumptions::OnSystem::{NotRead, Read};
 use crate::assumptions::{Assumption, PerSystem};
 
 pub(crate) const VERIFIED_AGAINST: &str = "2.19675.0";
 pub(crate) const READ_FROM_THE_ARCHIVE: &str = "2.7032.0";
+pub(crate) const READ_FROM_THE_NEWER_BUNDLE: &str = "2.42304.0";
+pub(crate) const READ_FROM_CLAUDE_3: &str = "3.6556.2";
 
 const NOT_HERE: &str =
     "Pitboard switches Claude Desktop accounts on macOS only, and nothing of it was read here";
@@ -65,13 +69,27 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
     },
     Assumption {
         name: "desktop_third_party_folder",
-        fact: "With a third-party deployment, Claude keeps its data in the data folder's name \
-               with `-3p` after it, `Claude-3p`.",
+        fact: "Claude runs from `Claude-3p`, the data folder's name with `-3p` after it, and keeps \
+               its settings there, once its managed configuration turns on a third-party \
+               deployment. The person can then pick claude.ai in its chooser, which writes \
+               `deploymentMode` `1p` in `Claude-3p/claude_desktop_config.json`, and Claude runs \
+               from `Claude` again, unless the configuration turns claude.ai sign-in off. A \
+               `Claude-3p` can hold that file alone with no deployment, as an earlier build \
+               left it.",
         read_from: "This repository's static read of `app.asar`, 11 October 2026, `P` @965537, \
-                    @1030355",
-        verified_against: READ_FROM_THE_ARCHIVE,
-        depends: "`Folder::refuses` refuses a root with `Claude-3p` beside it",
-        probe: &["[custom-3p] userData mkdir failed"],
+                    @1030355; of 3.6556.2's, 23 October 2026, `R` @877849 to @878100 for the \
+                    chooser, @975562 for the data folder, `Q` @544813 for the settings; a \
+                    person's report of a `Claude-3p` holding only that file, on a Mac with no \
+                    deployment, issue 271, 21 October 2026",
+        verified_against: READ_FROM_CLAUDE_3,
+        depends: "`Folder::refuses` refuses a root whose `Claude-3p` holds `config.json`, unless \
+                  its `claude_desktop_config.json` names `deploymentMode` `1p`; a configuration \
+                  that turns claude.ai sign-in off is not read, since no account then signs in \
+                  to switch",
+        probe: &[
+            "[custom-3p] userData mkdir failed",
+            "[custom-3p] deploymentMode written",
+        ],
         absent: &[],
     },
     Assumption {
@@ -84,7 +102,7 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
         read_from: "The contributor's experiment E2, 4 October 2026: two accounts, one switch \
                     each way, name, conversations, Code tab, Cowork and connectors checked by eye",
         verified_against: VERIFIED_AGAINST,
-        depends: "`Desktop::items`: a leave and an arrive move exactly these",
+        depends: "`Desktop::items` starts with these, the jar first",
         probe: &[],
         absent: &[],
     },
@@ -96,7 +114,8 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
         read_from: "The contributor's experiments E2 and E9, 4 October 2026; read again in \
                     `app.asar`, 11 October 2026, `M` @650532, @2938290, @2956446",
         verified_against: VERIFIED_AGAINST,
-        depends: "`Desktop::keys`, `naming_key`: the splice moves exactly these three",
+        depends: "`Desktop::keys`, `naming_key`: the splice moves these three, and \
+                  `custom3pMcpOAuth` of `desktop_cleared_for_another_account`",
         probe: &[
             "lastKnownAccountUuid",
             "oauth:tokenCacheV2",
@@ -105,60 +124,103 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
         absent: &[],
     },
     Assumption {
-        name: "desktop_first_level_entries",
-        fact: "The data folder's first level holds the names `desktop::layout` lists, each the \
-               account's, staying or passing: those a listing under 2.7032.0 held, the items \
-               E2 moved, and `Claude Extensions`, `Claude Extensions Settings` and \
-               `extensions-installations.json`, which 2.7032.0's code makes for installed \
-               extensions. Every other name its code makes is unread.",
-        read_from: "A listing of a data folder under 2.7032.0, names only, 11 October 2026; the \
-                    contributor's experiment E2, 4 October 2026; the three extension names read \
-                    in `app.asar`, 11 October 2026, `P` @965893",
-        verified_against: READ_FROM_THE_ARCHIVE,
-        depends: "`Desktop::classify`: a name it does not classify stops the start of a move",
+        name: "desktop_names_stay",
+        fact: "Claude keeps every name in its data folder across another account's sign-in but \
+               those `desktop_cleared_for_another_account` names. 2.42304.0, 3.1623.0 and \
+               3.6556.2 run the same seventeen named resets on that change, while each build \
+               makes names of its own there, such as `design`, Claude Design's window, from \
+               3.1623.0.",
+        read_from: "This repository's static read of 2.42304.0's `app.asar`, 19 October 2026, \
+                    `N` @2937198 to @2942600, and of 3.1623.0's and 3.6556.2's, 23 October \
+                    2026, `Q` @3095967 to @3098442, each reset compared by its name and body; \
+                    `design` at `Q` @4911399",
+        verified_against: READ_FROM_CLAUDE_3,
+        depends: "`Desktop::unread_part`: a switch carries `Desktop::items` and leaves every \
+                  other name where Claude keeps it",
         probe: &[
-            "config.json.journal",
-            "Claude Extensions Settings",
-            "extensions-installations.json",
+            "project-upload-folder-grants",
+            "handoff-invalidate",
+            "sp-section-prompts",
         ],
         absent: &[],
     },
     Assumption {
-        name: "desktop_kept_by_account",
-        fact: "`claude-code-sessions/<account>/<org>` and `local-agent-mode-sessions/<account>/\
-               <org>` carry the account in their path, `spaces-present` is keyed by eight hex \
-               digits of it, `fcache` is dropped for another organisation, and \
-               `cowork-enabled-cli-ops.json` carries its owner, so each stays in the data \
-               folder.",
-        read_from: "This repository's static read of `app.asar`, 11 October 2026, `M` @5333662, \
-                    @2776214, @2758122, @2209405, @5647316",
-        verified_against: READ_FROM_THE_ARCHIVE,
-        depends: "`Desktop::classify` gives each `Stays`",
-        probe: &[
-            "claude-code-sessions",
-            "local-agent-mode-sessions",
-            "spaces-present",
-            "ownerAccountId",
-        ],
-        absent: &[],
-    },
-    Assumption {
-        name: "desktop_chromium_temporary",
-        fact: "Chromium writes a file through a temporary beside it named `.<base bundle \
-               id>.<file>.XXXXXX`, and Electron makes Claude's base bundle id its \
-               `ElectronTeamID` and bundle id: `.Q6L2SF6YDW.com.anthropic.claudefordesktop.\
-               <file>.` and six letters or digits.",
-        read_from: "Electron v44.4.3's `shell/app/electron_main_delegate_mac.mm` \
-                    (`SetUpBundleOverrides`) and Chromium 152.0.7977.130's \
-                    `base/files/file_util_posix.cc` (`FormatTemporaryFileName`) and \
-                    `base/files/important_file_writer.cc`, the versions 2.7032.0's framework \
-                    names; `ElectronTeamID` and `CFBundleIdentifier` from \
-                    `/Applications/Claude.app/Contents/Info.plist` of 2.7032.0, 13 October \
-                    2026. No listing has held one",
-        verified_against: READ_FROM_THE_ARCHIVE,
-        depends: "`Desktop::classify` passes such a name where `<file>` stays; any other \
-                  temporary of Chromium's is unread and stops the start of a move",
+        name: "desktop_store_parts",
+        fact: "SQLite keeps a database's `-journal`, `-wal` and `-shm` beside it, and Claude's \
+               stores keep a `.journal`, each named for the file and part of it. Chromium names \
+               claude.ai's IndexedDB stores for its origin, `https_claude.ai_0`. Electron keeps \
+               the jar at the data folder's first level, and in `Network` once Chromium moves \
+               its network service's files, which on macOS it does only under the \
+               `TriggerNetworkDataMigration` feature.",
+        read_from: "SQLite's \"Temporary Files Used By SQLite\"; 2.42304.0's `app.asar`, 19 \
+                    October 2026, `N` @493566, for the stores' journals; the items E2 moved, \
+                    for the IndexedDB stores; Electron v44.9.0's and v44.9.3's \
+                    `shell/browser/net/network_context_service.cc`, \
+                    `ShouldTriggerNetworkDataMigration`, the versions 3.1623.0 and 3.6556.2 run, \
+                    23 October 2026",
+        verified_against: READ_FROM_CLAUDE_3,
+        depends: "`Desktop::unread_part`: such a part that no item names stops the start of a \
+                  move, since the move would split it from its store",
         probe: &[],
+        absent: &[],
+    },
+    Assumption {
+        name: "desktop_cleared_for_another_account",
+        fact: "When the account that signs in is not `lastKnownAccountUuid`, Claude empties \
+               its preview browsers, `launch-preview-static`, `launch-preview-cowork-shared` \
+               and one per workspace under `Partitions`, and `chrome-import-sites.json`, and \
+               sets `launchChromeImportPrompt` in `claude_desktop_config.json` back to \
+               pending. Where a policy sets up its Microsoft 365 connector, it also drops \
+               the grants in `config.json`'s `custom3pMcpOAuth` and the sign-ins in \
+               `builtin-mcp-auth` and `custom3p-builtin-mcp.json`, and signs out of the \
+               system's Microsoft broker, which no switch moves. None of these names its \
+               account. Its other resets on that change clear memory, or what names its \
+               account or session. A first sign-in with no `lastKnownAccountUuid` runs the \
+               preview resets too, and empties `preview-last-frames`.",
+        read_from: "This repository's static read of 2.42304.0's `app.asar`, 19 October 2026: \
+                    the account remembered at `N` @2937198, the resets @2938000 to @2942600, \
+                    a first sign-in @2939820, the preview browsers @4857844, the broker \
+                    @1454853, the connectors @2877456 and their files in \
+                    a claude.ai sign-in @903626 to @904139, the preferences file @1684323",
+        verified_against: READ_FROM_THE_NEWER_BUNDLE,
+        depends: "`Desktop::items` and `Desktop::keys` carry each with the login, since a \
+                  switch puts the arriving account's `lastKnownAccountUuid` in and Claude \
+                  sees no change; `launchChromeImportPrompt` stays with the preferences",
+        probe: &[
+            "resetAllPreviewIsolationSurfaces",
+            "disconnectConnectorsForNewPerson",
+            "custom3pMcpOAuth",
+            "chrome-import-sites.json",
+        ],
+        absent: &[],
+    },
+    Assumption {
+        name: "desktop_site_stores",
+        fact: "Chromium keeps `Service Worker`, `Platform Notifications`, `CdmStorage.db` and \
+               `declarative_performance_observer.db`, the last two with a `-journal`, for \
+               each site in the data folder. claude.ai's are the signed-in account's.",
+        read_from: "Chromium 152.0.7977.149's `content/browser/storage_partition_impl.cc` and \
+                    `content/browser/declarative_performance_observer/\
+                    declarative_performance_observer_store.cc`, the version 2.42304.0's \
+                    framework names, 19 October 2026; `N` @6788047 grants claude.ai \
+                    notifications from a service worker. That claude.ai registers a service \
+                    worker or shows a notification was not read",
+        verified_against: READ_FROM_THE_NEWER_BUNDLE,
+        depends: "`Desktop::items` carries each with the login",
+        probe: &[],
+        absent: &[],
+    },
+    Assumption {
+        name: "desktop_account_files",
+        fact: "`session-popouts.json` holds the open session windows' ids and titles with no \
+               account in it, and Claude opens them again at launch. `local-sessions.json`, \
+               which only earlier builds write, is taken in by the next account to sign in.",
+        read_from: "This repository's static read of 2.42304.0's `app.asar`, 19 October 2026: \
+                    `N` @2989501 and @2990962; `migrateLegacySessions` at `CFJssAFf` @1526454 \
+                    and `CB6cNSrW` @474151",
+        verified_against: READ_FROM_THE_NEWER_BUNDLE,
+        depends: "`Desktop::items` carries both with the login",
+        probe: &["session-popouts.json", "migrateLegacySessions"],
         absent: &[],
     },
     Assumption {
@@ -287,15 +349,31 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
     },
     Assumption {
         name: "desktop_no_singleton_lock",
-        fact: "Claude takes no single-instance lock and writes no `SingletonLock`; its main \
-               process holds the `LOCK` files of its leveldb stores.",
+        fact: "Claude takes its single-instance lock only while it runs Reset App Data, and \
+               otherwise writes no `SingletonLock`; its main process holds the `LOCK` files of \
+               its leveldb stores.",
         read_from: "The contributor's experiment E14, 4 October 2026, a listing and `lsof`; the \
-                    absence read again in 2.7032.0's archive, 11 October 2026",
-        verified_against: VERIFIED_AGAINST,
-        depends: "the running check is the process list; a `Singleton*` name in the folder is \
-                  unread and stops a move",
-        probe: &[],
-        absent: &["requestSingleInstanceLock"],
+                    absence read again in 2.7032.0's archive, 11 October 2026; 3.6556.2's \
+                    `app.asar`, 23 October 2026, `R` @960795, where a start that finds no \
+                    reset asked for returns before the lock at @961471",
+        verified_against: READ_FROM_CLAUDE_3,
+        depends: "the running check is the process list",
+        probe: &["data folder's single-instance lock"],
+        absent: &[],
+    },
+    Assumption {
+        name: "desktop_reset_app_data",
+        fact: "From 3.1623.0, Reset App Data writes `reset-app-data` in the data folder and \
+               opens Claude again, which deletes what the folder holds before it shows a \
+               window, and removes the file once done. Beside `reset-app-data.given-up`, \
+               Claude has given the reset up and deletes nothing.",
+        read_from: "This repository's static read of 3.1623.0's and 3.6556.2's `app.asar`, 23 \
+                    October 2026: the names at `R` @850745, the start that deletes at @960795",
+        verified_against: READ_FROM_CLAUDE_3,
+        depends: "`Folder::refuses` refuses a data folder holding `reset-app-data` and no \
+                  `reset-app-data.given-up`: a login moved in would be deleted",
+        probe: &["reset-app-data.given-up"],
+        absent: &[],
     },
     Assumption {
         name: "desktop_helpers_exit_with_main",
@@ -393,12 +471,17 @@ pub(crate) const PER_SYSTEM: &[PerSystem] = &[
     on_a_mac("desktop_app", VERIFIED_AGAINST),
     on_a_mac("desktop_native_host_is_chromes", VERIFIED_AGAINST),
     on_a_mac("desktop_data_folder", READ_FROM_THE_ARCHIVE),
-    on_a_mac("desktop_third_party_folder", READ_FROM_THE_ARCHIVE),
+    on_a_mac("desktop_third_party_folder", READ_FROM_CLAUDE_3),
     on_a_mac("desktop_account_items", VERIFIED_AGAINST),
     on_a_mac("desktop_account_keys", VERIFIED_AGAINST),
-    on_a_mac("desktop_first_level_entries", READ_FROM_THE_ARCHIVE),
-    on_a_mac("desktop_kept_by_account", READ_FROM_THE_ARCHIVE),
-    on_a_mac("desktop_chromium_temporary", READ_FROM_THE_ARCHIVE),
+    on_a_mac("desktop_names_stay", READ_FROM_CLAUDE_3),
+    on_a_mac("desktop_store_parts", READ_FROM_CLAUDE_3),
+    on_a_mac(
+        "desktop_cleared_for_another_account",
+        READ_FROM_THE_NEWER_BUNDLE,
+    ),
+    on_a_mac("desktop_site_stores", READ_FROM_THE_NEWER_BUNDLE),
+    on_a_mac("desktop_account_files", READ_FROM_THE_NEWER_BUNDLE),
     on_a_mac("desktop_cookie_jar", VERIFIED_AGAINST),
     on_a_mac("desktop_cookie_host_hash", READ_FROM_THE_ARCHIVE),
     on_a_mac("desktop_session_cookie_names", READ_FROM_THE_ARCHIVE),
@@ -409,7 +492,8 @@ pub(crate) const PER_SYSTEM: &[PerSystem] = &[
     on_a_mac("desktop_name_after_sign_in", VERIFIED_AGAINST),
     on_a_mac("desktop_name_written_on_report", READ_FROM_THE_ARCHIVE),
     on_a_mac("desktop_writes_at_quit", VERIFIED_AGAINST),
-    on_a_mac("desktop_no_singleton_lock", VERIFIED_AGAINST),
+    on_a_mac("desktop_no_singleton_lock", READ_FROM_CLAUDE_3),
+    on_a_mac("desktop_reset_app_data", READ_FROM_CLAUDE_3),
     on_a_mac("desktop_helpers_exit_with_main", VERIFIED_AGAINST),
     on_a_mac("desktop_stays_quit", VERIFIED_AGAINST),
     on_a_mac("desktop_quit_can_wait", READ_FROM_THE_ARCHIVE),

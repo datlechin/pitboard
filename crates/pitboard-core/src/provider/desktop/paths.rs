@@ -73,11 +73,32 @@ pub(super) fn refuses(root: &Path) -> Option<Unfit> {
     if std::fs::symlink_metadata(root).is_ok_and(|found| found.file_type().is_symlink()) {
         return Some(Unfit::Link);
     }
+    if reset_waits(root) {
+        return Some(Unfit::ResetWaits);
+    }
     let mut beside = root.as_os_str().to_owned();
     beside.push("-3p");
-    std::fs::symlink_metadata(PathBuf::from(beside))
-        .is_ok()
-        .then_some(Unfit::ThirdParty("Claude-3p"))
+    third_party(Path::new(&beside)).then_some(Unfit::ThirdParty("Claude-3p"))
+}
+
+// The register's `desktop_third_party_folder`: Claude has kept its settings there, and the
+// person has not picked claude.ai in its chooser since.
+fn third_party(beside: &Path) -> bool {
+    if std::fs::symlink_metadata(beside.join("config.json")).is_err() {
+        return false;
+    }
+    let picked = std::fs::read(beside.join("claude_desktop_config.json"))
+        .ok()
+        .and_then(|raw| serde_json::from_slice::<serde_json::Value>(&raw).ok())
+        .and_then(|config| config.get("deploymentMode")?.as_str().map(str::to_owned));
+    picked.as_deref() != Some("1p")
+}
+
+// The register's `desktop_reset_app_data`.
+fn reset_waits(root: &Path) -> bool {
+    let asked = std::fs::symlink_metadata(root.join("reset-app-data"));
+    asked.is_ok_and(|found| found.is_file())
+        && std::fs::symlink_metadata(root.join("reset-app-data.given-up")).is_err()
 }
 
 #[cfg(test)]
@@ -147,23 +168,72 @@ mod tests {
         windows,
         ignore = "Claude Desktop is macOS only: Windows makes no link"
     )]
-    fn a_link_or_a_third_party_folder_beside_it_is_refused() {
+    fn a_link_or_a_third_party_deployment_beside_it_is_refused() {
         let base = std::env::temp_dir().join(format!("pitboard-refuses-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&base);
         let root = base.join("Claude");
         std::fs::create_dir_all(&root).unwrap();
         assert_eq!(refuses(&root), None);
-        std::fs::create_dir_all(base.join("Claude-3p")).unwrap();
+        let third = base.join("Claude-3p");
+        std::fs::create_dir_all(&third).unwrap();
+        let chose = |config: &[u8]| {
+            std::fs::write(third.join("claude_desktop_config.json"), config).unwrap();
+            refuses(&root)
+        };
+        // Issue 271's: an earlier build's, on a Mac with no deployment.
+        let left = br#"{"enterpriseConfig": {}, "_cfprefsMigrated": true}"#;
+        assert_eq!(chose(left), None, "Claude never ran from it");
+        assert_eq!(
+            chose(br#"{"deploymentMode": "3p"}"#),
+            None,
+            "nor yet from this one"
+        );
+        std::fs::write(third.join("config.json"), b"{}").unwrap();
+        assert_eq!(chose(left), Some(Unfit::ThirdParty("Claude-3p")));
+        assert_eq!(
+            chose(br#"{"deploymentMode": "3p"}"#),
+            Some(Unfit::ThirdParty("Claude-3p"))
+        );
+        assert_eq!(chose(b"{"), Some(Unfit::ThirdParty("Claude-3p")));
+        assert_eq!(
+            chose(br#"{"deploymentMode": "1p"}"#),
+            None,
+            "claude.ai picked"
+        );
+        std::fs::remove_file(third.join("claude_desktop_config.json")).unwrap();
         let beside = refuses(&root).expect("refused");
         assert_eq!(beside, Unfit::ThirdParty("Claude-3p"));
         assert_eq!(
             beside.to_string(),
-            "has a `Claude-3p` folder beside it, which a third-party deployment of Claude uses"
+            "is not the one Claude runs from: it runs as a third-party deployment, from \
+             `Claude-3p` beside it"
         );
         let link = base.join("Linked");
         host::fs::testing::link_dir(&root, &link).unwrap();
         assert_eq!(refuses(&link), Some(Unfit::Link));
         assert_eq!(Unfit::Link.to_string(), "is a link");
         let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn a_reset_of_claudes_data_waiting_is_refused_until_claude_ends_it() {
+        let root = tempfile::tempdir().unwrap();
+        let root = root.path();
+        assert_eq!(refuses(root), None);
+        std::fs::create_dir(root.join("reset-app-data")).unwrap();
+        assert_eq!(refuses(root), None, "Claude asks for a file");
+        std::fs::remove_dir(root.join("reset-app-data")).unwrap();
+        std::fs::write(
+            root.join("reset-app-data"),
+            br#"{"choice":"restart","tries":0}"#,
+        )
+        .unwrap();
+        assert_eq!(refuses(root), Some(Unfit::ResetWaits));
+        assert_eq!(
+            Unfit::ResetWaits.to_string(),
+            "is waiting for Reset App Data, which deletes what it holds the next time Claude opens"
+        );
+        std::fs::write(root.join("reset-app-data.given-up"), b"").unwrap();
+        assert_eq!(refuses(root), None, "given up, it deletes nothing");
     }
 }

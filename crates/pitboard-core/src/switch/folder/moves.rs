@@ -3,12 +3,12 @@
 
 use super::super::identify::{self, Noticed};
 use super::super::{Error, Result, enrolled, purge};
-use super::{midway, quiet, settle, there};
+use super::{midway, quiet, settle};
 use crate::context::Context;
 use crate::error::Then;
 use crate::fault;
 use crate::in_use::InUse;
-use crate::provider::folder::{AppSettings, Class, Folder, Keys, SignedIn, Unread};
+use crate::provider::folder::{AppSettings, Folder, Keys, SignedIn, Unread};
 use crate::service::{Permit, Warning};
 use crate::state::{self, Aside, Awaited, Half, Key, Moving, Park, ParkKind, SetAside, State};
 use crate::store::folder::{self as parks, Manifest};
@@ -107,50 +107,54 @@ pub(super) fn leave_point(jar: bool) -> &'static str {
     }
 }
 
-// Asked only before a move starts: every entry is one this Pitboard has read.
-fn layout(app: &dyn Folder, root: &Path) -> Result<()> {
-    let tool = app.id();
-    let unknown = |name: String| Error::LoginFolderUnknown {
-        tool,
-        what: format!("holds `{name}`, which this Pitboard has not read"),
-        then: Then::UpdatePitboard,
-    };
-    let listing = |dir: &Path| -> Result<Vec<std::ffi::OsString>> {
-        let unread = |e: std::io::Error| Error::LoginFolderUnknown {
-            tool,
-            what: format!("could not be listed ({e})"),
-            then: Then::Nothing,
+// The parts of the items' stores that no item names, by their paths from the root, in order.
+pub(crate) fn unread_parts(app: &dyn Folder, root: &Path) -> std::io::Result<Vec<String>> {
+    let mut folders = vec![""];
+    folders.extend(
+        app.items()
+            .iter()
+            .filter_map(|item| item.rsplit_once('/').map(|(parent, _)| parent)),
+    );
+    folders.dedup();
+    let mut parts = Vec::new();
+    for folder in folders {
+        let entries = match std::fs::read_dir(root.join(folder)) {
+            Err(e) if !folder.is_empty() && e.kind() == std::io::ErrorKind::NotFound => continue,
+            entries => entries?,
         };
-        let mut names = Vec::new();
-        for entry in std::fs::read_dir(dir).map_err(unread)? {
-            names.push(entry.map_err(unread)?.file_name());
-        }
-        names.sort();
-        Ok(names)
-    };
-    for name in listing(root)? {
-        if app.classify(&name) == Class::Unread {
-            return Err(unknown(name.to_string_lossy().into_owned()));
-        }
-    }
-    let mut parents: Vec<&str> = app
-        .items()
-        .iter()
-        .filter_map(|item| item.rsplit_once('/').map(|(parent, _)| parent))
-        .collect();
-    parents.dedup();
-    for parent in parents {
-        if !there(tool, &root.join(parent))? {
-            continue;
-        }
-        for name in listing(&root.join(parent))? {
-            let inside = format!("{parent}/{}", name.to_string_lossy());
-            if !app.items().contains(&inside.as_str()) {
-                return Err(unknown(inside));
+        for entry in entries {
+            let name = entry?.file_name();
+            let path = match folder {
+                "" => name.to_string_lossy().into_owned(),
+                _ => format!("{folder}/{}", name.to_string_lossy()),
+            };
+            if app.unread_part(&path) {
+                parts.push(path);
             }
         }
     }
-    Ok(())
+    parts.sort();
+    Ok(parts)
+}
+
+// Asked only before a move starts.
+fn layout(app: &dyn Folder, root: &Path) -> Result<()> {
+    let tool = app.id();
+    let parts = unread_parts(app, root).map_err(|e| Error::LoginFolderUnknown {
+        tool,
+        what: format!("could not be listed ({e})"),
+        then: Then::Nothing,
+    })?;
+    match parts.first() {
+        Some(part) => Err(Error::LoginFolderUnknown {
+            tool,
+            what: format!(
+                "holds `{part}`, a part of the account's data this Pitboard has not read"
+            ),
+            then: Then::UpdatePitboard,
+        }),
+        None => Ok(()),
+    }
 }
 
 // Each item there, and each folder between it and the root: no link, and on the root's volume.

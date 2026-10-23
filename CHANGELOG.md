@@ -7,6 +7,31 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.15.1] - 2026-10-23
+
+### Changed
+
+- Pitboard says to open Claude when a Claude Desktop change finds Claude's Reset App Data
+  waiting to delete its data folder, instead of asking you to update Pitboard.
+- A Claude Desktop switch moves Claude's preview browsers, the Microsoft 365 connector's
+  sign-ins and the session windows with the account, since Claude clears them only when it
+  sees another account sign in.
+
+### Fixed
+
+- Pitboard adds and switches Claude Desktop accounts with Claude 2.42304.0 and later, Claude 3
+  included, and leaves the names it does not move where Claude keeps them, such as
+  `GPUPersistentCache`, `SharedStorage` and `design`, instead of refusing each name it has not
+  read.
+- Pitboard switches Claude Desktop accounts beside a `Claude-3p` folder that Claude does not
+  run from, such as one an earlier build left holding only `claude_desktop_config.json`.
+
+### Security
+
+- Pitboard's HTTPS uses rustls-webpki 0.103.16, which fixes RUSTSEC-2026-0382.
+- A switch parks Claude Code's `cloudSessionsOauth` and `trustedDeviceEnrolledAfterRefusalAtMs`
+  with the outgoing account's login, and no longer leaves them for the incoming account.
+
 ## [0.15.0] - 2026-10-17
 
 ### Added
@@ -895,7 +920,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Pitboard keeps an audit log of every change it makes.
 - The account index is schema 3, with one parked login per account and its expiry.
 
-[Unreleased]: https://github.com/datlechin/pitboard/compare/v0.15.0...HEAD
+[Unreleased]: https://github.com/datlechin/pitboard/compare/v0.15.1...HEAD
+[0.15.1]: https://github.com/datlechin/pitboard/compare/v0.15.0...v0.15.1
 [0.15.0]: https://github.com/datlechin/pitboard/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/datlechin/pitboard/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/datlechin/pitboard/compare/v0.12.0...v0.13.0

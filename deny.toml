@@ -25,6 +25,9 @@ exclude = ["uniffi-bindgen-csharp"]
 [advisories]
 version = 2
 yanked = "deny"
+ignore = [
+  { id = "RUSTSEC-2026-0374", reason = "basic-toml is unmaintained, not vulnerable, and runs only inside askama's derive at build time; every askama release still uses it" },
+]
 
 [licenses]
 version = 2

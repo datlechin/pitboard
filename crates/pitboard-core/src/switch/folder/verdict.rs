@@ -76,7 +76,7 @@ pub(crate) fn look(ctx: &Context, state: &State, app: &'static dyn Folder) -> Re
         return Err(Error::LoginFolderUnknown {
             tool: app.id(),
             what: unfit.to_string(),
-            then: Then::Nothing,
+            then: unfit.then(),
         });
     }
     let holds = holds(ctx, app, &root)?;
@@ -98,12 +98,7 @@ pub(crate) fn holds(ctx: &Context, app: &dyn Folder, root: &Path) -> Result<Hold
         known => unread(known),
     })?;
     let keys = settings.account_keys(app);
-    let caches: Vec<&str> = app
-        .keys()
-        .iter()
-        .copied()
-        .filter(|key| *key != app.naming_key())
-        .collect();
+    let caches = app.caches();
     let jar = root.join(app.items()[0]);
     if !there(tool, &jar)? {
         let mut item = None;

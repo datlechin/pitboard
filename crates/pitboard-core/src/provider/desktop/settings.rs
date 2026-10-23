@@ -245,7 +245,7 @@ mod tests {
         windows,
         ignore = "Claude Desktop is macOS only: Windows refuses the write's file calls"
     )]
-    fn a_splice_touches_only_three_keys() {
+    fn a_splice_touches_only_the_account_keys() {
         use crate::provider::folder::Keys;
         let s = scratch();
         let file = s.path().join(FILE);
@@ -256,7 +256,7 @@ mod tests {
         assert_eq!(
             std::fs::read_to_string(&file).unwrap(),
             "{\n\t\"locale\": \"en-US\",\n\t\"userThemeMode\": \"dark\"\n}",
-            "the three keys out, every other key in order, its value byte for byte"
+            "the account's keys out, every other key in order, its value byte for byte"
         );
         assert!(
             !crate::host::fs::testing::is_private(&file).unwrap(),

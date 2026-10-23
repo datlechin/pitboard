@@ -11,7 +11,7 @@ On macOS, Claude Code and Codex parked logins are keychain items whose names sta
 
 On Linux, parked logins are files in `~/.pitboard/vault/`, at mode 0600 in a 0700 directory, and Claude Code keeps its own login in a plaintext `~/.claude/.credentials.json`. Any process running as you can read both. `pitboard doctor` fails if anyone else has access to either, and warns for Codex's `auth.json`.
 
-A Claude Desktop parked login is Claude's own files and three keys of `config.json`, in a folder under `~/.pitboard/parks` that only you can open. Pitboard renames them there and back, and never copies them. It reads no keychain item for Claude Desktop, `Claude Safe Storage` included, and decrypts no cookie. Of the session cookie, it keeps only a fingerprint. `pitboard doctor` fails if anyone else has access to `parks`. [Folders in parks](/reference/files#folders-in-parks) has the layout.
+A Claude Desktop parked login is Claude's own files and keys of `config.json`, in a folder under `~/.pitboard/parks` that only you can open. Pitboard renames them there and back, and never copies them. It reads no keychain item for Claude Desktop, `Claude Safe Storage` included, and decrypts no cookie. Of the session cookie, it keeps only a fingerprint. `pitboard doctor` fails if anyone else has access to `parks`. [Folders in parks](/reference/files#folders-in-parks) has the layout.
 
 A Claude Code parked login holds the OAuth block and the account's other fields, such as `trustedDeviceToken`. Whether restoring a device token spares a re-verification has not been measured. A Codex parked login is the whole `auth.json`, which can also hold an OpenAI API key, as read in Codex 0.154.0.
 

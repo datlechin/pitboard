@@ -3,19 +3,7 @@ use crate::host::Listed;
 use crate::provider::{ProviderError, ProviderId};
 use serde_json::value::RawValue;
 use std::collections::BTreeMap;
-use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Class {
-    // moves with the account
-    Account,
-    Stays,
-    // a temporary that never moves and never stops a move
-    Passing,
-    // not read: stops the start of a move
-    Unread,
-}
 
 pub(crate) struct SignedIn {
     // the fingerprint of the session as stored
@@ -175,17 +163,33 @@ pub(crate) enum Unread {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Unfit {
     Link,
-    // the folder a third-party deployment of the app keeps beside it, by name
+    // the app runs from the folder a third-party deployment keeps beside it, by name
     ThirdParty(&'static str),
+    // the app deletes what the folder holds the next time it opens
+    ResetWaits,
+}
+
+impl Unfit {
+    pub(crate) fn then(self) -> crate::error::Then {
+        match self {
+            Unfit::Link | Unfit::ThirdParty(_) => crate::error::Then::Nothing,
+            Unfit::ResetWaits => crate::error::Then::OpenAndQuit,
+        }
+    }
 }
 
 impl std::fmt::Display for Unfit {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Unfit::Link => f.write_str("is a link"),
+            Unfit::ResetWaits => f.write_str(
+                "is waiting for Reset App Data, which deletes what it holds the next time \
+                 Claude opens",
+            ),
             Unfit::ThirdParty(name) => write!(
                 f,
-                "has a `{name}` folder beside it, which a third-party deployment of Claude uses"
+                "is not the one Claude runs from: it runs as a third-party deployment, from \
+                 `{name}` beside it"
             ),
         }
     }
@@ -198,8 +202,12 @@ pub(crate) trait Folder: Send + Sync + std::fmt::Debug {
     // the account's items, in the order a login leaves by; the first holds the session
     fn items(&self) -> &'static [&'static str];
     fn keys(&self) -> &'static [&'static str];
+    // the keys among `keys` that a Log out empties
+    fn caches(&self) -> &'static [&'static str];
     fn naming_key(&self) -> &'static str;
-    fn classify(&self, name: &OsStr) -> Class;
+    // whether a name, by its path from the root, is a part of an item's store that no item
+    // names: a move would split it from the store
+    fn unread_part(&self, path: &str) -> bool;
     fn settings(&self, root: &Path) -> Result<AppSettings, Unread>;
     // `read` is the settings as just read: a file changed since is refused, not written over.
     fn write_settings(

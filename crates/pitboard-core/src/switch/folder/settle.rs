@@ -9,7 +9,7 @@ use crate::context::Context;
 use crate::error::Then;
 use crate::fault;
 use crate::provider::ProviderId;
-use crate::provider::folder::{Folder, Keys, Unread};
+use crate::provider::folder::{Folder, Keys, Unfit, Unread};
 use crate::service::{Permit, Warning};
 use crate::state::{self, Half, Key, Moving, ParkKind, SetAside, State};
 use crate::store::folder as parks;
@@ -254,7 +254,6 @@ fn facts(
     let unknown = |what, _| undetermined(format!("{}'s data folder {what}", app.app_name()));
     let places = places(ctx, app, root, moving, &unseen, &unknown)?;
     let held = read.account_keys(app);
-    let caches = app.keys().iter().filter(|key| **key != app.naming_key());
     let uuid = state
         .by_id(app.id(), &moving.id)
         .map(|a| a.account_uuid.clone());
@@ -262,8 +261,9 @@ fn facts(
         KeysAre::None
     } else if held.digests() == moving.keys {
         KeysAre::Mine
-    } else if caches
-        .clone()
+    } else if app
+        .caches()
+        .iter()
         .all(|key| held.get(key).is_none_or(|value| app.emptied(key, value)))
     {
         KeysAre::SignedOut
@@ -319,11 +319,22 @@ pub(super) fn settle(
             app.app_name()
         )));
     }
-    if let Some(unfit) = app.refuses(&root) {
-        return Err(undetermined(format!(
-            "{}'s data folder {unfit}",
-            app.app_name()
-        )));
+    match app.refuses(&root) {
+        // Where the move stopped is known; nothing moves in a folder the app is to empty.
+        Some(unfit @ Unfit::ResetWaits) => {
+            return Err(Error::LoginFolderUnknown {
+                tool,
+                what: unfit.to_string(),
+                then: unfit.then(),
+            });
+        }
+        Some(unfit) => {
+            return Err(undetermined(format!(
+                "{}'s data folder {unfit}",
+                app.app_name()
+            )));
+        }
+        None => {}
     }
     // A temporary a kill left inside a settings write holds the keys.
     crate::atomic::sweep(permit, &root);
