@@ -1223,47 +1223,24 @@ fn not_given_up(os: Os, tool: ProviderId, label: &str, why: &Error) -> String {
         "use any {} account: Pitboard settles the move first",
         tool.name()
     );
-    let (because, then) = match why {
-        Error::AppOpen { still, .. } if still.is_empty() => (
-            Some(format!("{app} is open")),
-            format!("Quit {app}, then {settles}."),
+    let because = pitboard_core::words::not_given_up_because(why);
+    let then = match why {
+        Error::AppOpen { still, .. } if still.is_empty() => format!("Quit {app}, then {settles}."),
+        Error::AppOpen { .. } => pitboard_core::words::wait_for_still(os, &settles),
+        Error::LoginFolderBusy { .. } => format!("Once it has finished, {settles}."),
+        Error::LoginFolderUnreadable { .. } => format!("Open {app}, quit it, then {settles}."),
+        Error::AppOpenedMidway { .. } => format!("Nothing is lost. Quit {app}, then {settles}."),
+        Error::MoveMixed { .. } => format!(
+            "Open {app}, check which account it shows, quit it, then {}",
+            add_what_it_shows(app)
         ),
-        Error::AppOpen { still, .. } => (
-            Some(format!("{} from {app} is still running", listed(still))),
-            pitboard_core::words::wait_for_still(os, &settles),
-        ),
-        Error::AppStateUnknown { why, .. } => (
-            Some(format!("it couldn’t tell whether {app} is open ({why})")),
-            format!("To try again, {settles}."),
-        ),
-        Error::LoginFolderBusy { .. } => (
-            Some(format!("another Pitboard is changing {app}’s login")),
-            format!("Once it has finished, {settles}."),
-        ),
-        Error::LoginFolderUnreadable { detail, .. } => (
-            Some(format!("it couldn’t read {app}’s cookie store ({detail})")),
-            format!("Open {app}, quit it, then {settles}."),
-        ),
-        Error::AppOpenedMidway { .. } => (
-            Some(format!("{app} was opened meanwhile")),
-            format!("Nothing is lost. Quit {app}, then {settles}."),
-        ),
-        Error::MoveMixed { places, .. } => (
-            Some(format!(
-                "giving it up would leave parts of it beside another login in {app}’s folder: {}",
-                places.join(", ")
-            )),
-            format!(
-                "Open {app}, check which account it shows, quit it, then {}",
-                add_what_it_shows(app)
-            ),
-        ),
-        _ => (None, format!("Quit {app}, then {settles}.")),
+        _ if because.is_some() => format!("To try again, {settles}."),
+        _ => format!("Quit {app}, then {settles}."),
     };
     match because {
         Some(because) => format!(
-            "Pitboard didn’t give up the interrupted move of {label}’s login, because {because}. \
-             {then}"
+            "Pitboard didn’t give up the interrupted move of {label}’s login, because {}. {then}",
+            because.replace('`', "")
         ),
         None => {
             format!("Pitboard couldn’t give up the interrupted move of {label}’s login. {then}")
@@ -1273,33 +1250,15 @@ fn not_given_up(os: Os, tool: ProviderId, label: &str, why: &Error) -> String {
 
 pub(crate) fn in_app_given_up(given_up: &pitboard_core::switch::GivenUp) -> String {
     let app = given_up.tool.program();
-    let mut said = format!(
-        "Pitboard gave up the move of {}’s login and kept every folder: {} parked, {} set aside.",
+    pitboard_core::words::given_up(
+        given_up,
         bare(&given_up.label),
-        given_up.parked,
-        given_up.set_aside
-    );
-    if let Some(slot) = &given_up.slot {
-        said.push_str(&format!(
-            " The move was in {slot}, which Pitboard did not read."
-        ));
-    }
-    if !given_up.left.is_empty() {
-        let stay = if given_up.left.len() == 1 {
-            "stays"
-        } else {
-            "stay"
-        };
-        said.push_str(&format!(
-            " {} {stay} in {app}’s folder. Open {app} once and quit it.",
-            listed(&given_up.left)
-        ));
-    }
-    said.push_str(&format!(
-        " Choose Add Account… and Add the Account {app} Shows for the account {app} shows, or \
-         Use on an account where {app} is signed out."
-    ));
-    said
+        &format!(
+            "choose Add Account… and Add the Account {app} Shows for the account {app} shows, or \
+             Use on an account where {app} is signed out."
+        ),
+    )
+    .replace('`', "")
 }
 
 #[cfg(test)]
@@ -2268,6 +2227,58 @@ mod tests {
                 )
             );
         }
+    }
+
+    /// A park it could not look at is said as the core says it, where the app gave no reason.
+    #[test]
+    fn a_move_not_given_up_over_a_park_it_could_not_look_at_says_why() {
+        let why = pitboard_core::testing::park_unread(
+            "desktop/work",
+            std::path::Path::new("/Users/me/.pitboard/parks/a1"),
+            "permission denied",
+        );
+        assert_eq!(
+            in_app_warning(
+                Os::MacOs,
+                &CoreWarning::MoveNotGivenUp {
+                    tool: ProviderId::Desktop,
+                    label: "desktop/work".into(),
+                    why,
+                },
+            )
+            .expect("the app's words"),
+            "Pitboard didn’t give up the interrupted move of work’s login, because \
+             desktop/work's parked login at /Users/me/.pitboard/parks/a1 could not be looked at \
+             (permission denied). To try again, use any Claude Desktop account: Pitboard settles \
+             the move first."
+        );
+    }
+
+    /// The summary is the command line's, with the app's way on and no backticks.
+    #[test]
+    fn a_move_given_up_is_summed_up_as_the_command_line_sums_it_up() {
+        let given_up = pitboard_core::switch::GivenUp {
+            tool: ProviderId::Desktop,
+            label: "work".into(),
+            parked: 1,
+            set_aside: 0,
+            left: vec!["Session Storage".into()],
+            slot: Some("/Volumes/Old/Claude".into()),
+        };
+        assert_eq!(
+            in_app_given_up(&given_up),
+            "Pitboard gave up the move of work's login and kept every folder: 1 parked, 0 set \
+             aside. The move was in /Volumes/Old/Claude, which Pitboard did not read. Session \
+             Storage stays in Claude's folder. Open Claude once and quit it with Command-Q, then \
+             choose Add Account… and Add the Account Claude Shows for the account Claude shows, \
+             or Use on an account where Claude is signed out."
+        );
+        assert!(given_up.to_string().starts_with(
+            "Pitboard gave up the move of `desktop/work`'s login and kept every folder: 1 parked, \
+             0 set aside. The move was in /Volumes/Old/Claude, which Pitboard did not read. \
+             `Session Storage` stays in Claude's folder. Open Claude once and quit it with \
+             Command-Q, then run `pitboard enroll desktop/<label>`"
+        ));
     }
 
     #[test]

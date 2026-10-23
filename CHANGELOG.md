@@ -139,6 +139,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The app notifies you once of a warm-up that came to nothing for an account and reason, as
   `pitboard watch` says it once, where a run of Claude Code that failed in other words was
   notified again.
+- The app says why it could not give up an interrupted Claude Desktop move whose parked login it
+  could not look at, as the command line does.
 
 ## [1.0.0-beta.5] - 2026-10-23
 

@@ -1871,7 +1871,7 @@ fn giving_up_gives_up_a_waiting_move_too() {
     machine.switched = Err(refusal("recovery_undetermined", "undetermined", Vec::new()));
     model.refresh(&mut machine);
     switch(&mut model, &mut machine, "desktop/home");
-    let given = "Pitboard gave up the move of work’s login and kept every folder: 1 parked, 1 set \
+    let given = "Pitboard gave up the move of work's login and kept every folder: 1 parked, 1 set \
                  aside.";
     machine.abandoned = Ok(GaveUp {
         switch: None,

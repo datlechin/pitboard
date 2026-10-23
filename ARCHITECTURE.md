@@ -484,7 +484,9 @@ window loads its site, and whatever the site's pages load, as a browser would.
   At each decision it also asks the core to warm up whichever account turned on is due
   (`Pitboard::warm_up`, which looks at the files first), with a refusal row of its own, and
   says each warm-up, each reason an account is held back once until it warms up, and why
-  nothing is warmed up here once until that ends. No warm-up error ends it. `warm.rs` is
+  nothing is warmed up here once until that ends. A warm-up that came to nothing is said once
+  until that account warms up, told apart as the app tells it (`switch::warm::told_apart`):
+  by the account and the code, never by Claude Code's words. No warm-up error ends it. `warm.rs` is
   `pitboard warm`. `build/versioninfo.rs` is the Windows version resource SignPath asks of
   what it signs: ProductName `Pitboard`, CompanyName `Pitboard` and the crate's version, and
   `pitboard.exe`'s manifest. The build scripts of `pitboard-ffi` and `pitboard-share-ffi`
@@ -1836,6 +1838,9 @@ window loads its site, and whatever the site's pages load, as a browser would.
   reading that folder. Where a move cannot be given up and `abandon` has done nothing yet,
   it refuses. Where it has already given up or settled something, it says the move as
   `move_not_given_up` instead, since the refusal's "nothing has changed" would be false.
+  Why it was not given up is the core's clause in both front ends
+  (`words::not_given_up_because`), each adding its own way out, and the summary of a move
+  given up is `words::given_up` in both, each with its own way on.
 - `adopt` drops each waiting move and awaited sign-in, since they were about the other
   computer's Claude. Each folder a dropped move names that no account holds is kept aside
   as `another_machine`.

@@ -1528,7 +1528,7 @@ fn a_stopped_move_is_given_up_from_the_app() {
         .expect("its notice");
     assert_eq!(notice.title, "Gave up on the interrupted move");
     assert!(
-        notice.lines[0].starts_with("Pitboard gave up the move of work’s login"),
+        notice.lines[0].starts_with("Pitboard gave up the move of work's login"),
         "{notice:?}"
     );
     assert!(!launched.core.moving("desktop"), "nothing waits");

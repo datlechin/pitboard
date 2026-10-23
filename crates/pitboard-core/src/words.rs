@@ -817,70 +817,75 @@ pub(crate) fn move_waiting(label: &str) -> String {
     )
 }
 
-// Why a waiting move was left as it was, and what to do, for a refusal `abandon` and `repair`
-// both meet. `command` is the one to run again.
-fn move_left(why: &crate::error::Error, command: &str) -> Option<(String, String)> {
+/// Why an interrupted move of a Claude Desktop login was not given up, as a clause that
+/// follows "because", where there is one to give. Each front end adds its own way out.
+pub fn not_given_up_because(why: &crate::error::Error) -> Option<String> {
+    match why {
+        crate::error::Error::MoveMixed { places, .. } => Some(format!(
+            "giving it up would leave parts of it beside another login in Claude's folder: {}",
+            places.join(", ")
+        )),
+        other => left_because(other),
+    }
+}
+
+// Why a waiting move was left as it was, for a refusal `abandon` and `repair` both meet.
+fn left_because(why: &crate::error::Error) -> Option<String> {
     use crate::error::Error;
-    let again = format!("run `{command}` again");
     Some(match why {
-        Error::AppOpen { app, still } if still.is_empty() => (
-            format!("{app} is open"),
-            format!("Quit {app} with Command-Q, then {again}."),
+        Error::AppOpen { app, still } if still.is_empty() => format!("{app} is open"),
+        Error::AppOpen { app, still } => {
+            format!("{} from {app} is still running", listed(still.clone()))
+        }
+        Error::AppStateUnknown { app, why } => {
+            format!("it could not tell whether {app} is open ({why})")
+        }
+        Error::LoginFolderBusy { app } => format!("another Pitboard is changing {app}'s login"),
+        Error::LoginFolderUnreadable { tool, detail } => format!(
+            "it could not read {}'s cookie store ({detail})",
+            tool.program()
         ),
-        Error::AppOpen { app, still } => (
-            format!("{} from {app} is still running", listed(still.clone())),
-            wait_for_still(crate::host::OS, &again),
-        ),
-        Error::AppStateUnknown { app, why } => (
-            format!("it could not tell whether {app} is open ({why})"),
-            format!("Run `{command}` again."),
-        ),
-        Error::LoginFolderBusy { app } => (
-            format!("another Pitboard is changing {app}'s login"),
-            format!("Run `{command}` again once it has finished."),
-        ),
-        Error::LoginFolderUnreadable { tool, detail } => (
-            format!(
-                "it could not read {}'s cookie store ({detail})",
-                tool.program()
-            ),
-            format!(
-                "Open {program}, quit it with Command-Q, then {again}.",
-                program = tool.program()
-            ),
-        ),
-        Error::AppOpenedMidway { app, .. } => (
-            format!("{app} was opened meanwhile"),
-            format!("Nothing is lost. Quit {app} with Command-Q, then {again}."),
-        ),
+        Error::AppOpenedMidway { app, .. } => format!("{app} was opened meanwhile"),
         // A park Pitboard could not look at, as `store::folder::unread` says it.
-        Error::Store(crate::store::Error::Unreadable(detail)) => (
-            detail.clone(),
-            format!("Make that path, and each folder it is in, readable to you, then {again}."),
-        ),
+        Error::Store(crate::store::Error::Unreadable(detail)) => detail.clone(),
         _ => return None,
     })
+}
+
+// What to do about a refusal `left_because` says why of. `command` is the one to run again.
+fn left_way_out(why: &crate::error::Error, command: &str) -> String {
+    use crate::error::Error;
+    let again = format!("run `{command}` again");
+    match why {
+        Error::AppOpen { app, still } if still.is_empty() => {
+            format!("Quit {app} with Command-Q, then {again}.")
+        }
+        Error::AppOpen { .. } => wait_for_still(crate::host::OS, &again),
+        Error::LoginFolderBusy { .. } => format!("Run `{command}` again once it has finished."),
+        Error::LoginFolderUnreadable { tool, .. } => format!(
+            "Open {program}, quit it with Command-Q, then {again}.",
+            program = tool.program()
+        ),
+        Error::AppOpenedMidway { app, .. } => {
+            format!("Nothing is lost. Quit {app} with Command-Q, then {again}.")
+        }
+        Error::Store(_) => {
+            format!("Make that path, and each folder it is in, readable to you, then {again}.")
+        }
+        _ => format!("Run `{command}` again."),
+    }
 }
 
 // After `abandon` gave up a switch, so never that nothing has changed.
 pub(crate) fn move_not_given_up(label: &str, why: &crate::error::Error) -> String {
     use crate::error::Error;
-    let (because, then) = match (move_left(why, "pitboard abandon"), why) {
-        (Some((because, then)), _) => (Some(because), then),
-        (None, Error::MoveMixed { places, .. }) => (
-            Some(format!(
-                "giving it up would leave parts of it beside another login in Claude's folder: \
-                 {}",
-                places.join(", ")
-            )),
-            mixed_way_out(label),
-        ),
-        (None, other) => (
-            None,
-            format!(
-                "It stopped at `{}`: run `pitboard abandon` again to see why.",
-                other.code()
-            ),
+    let because = not_given_up_because(why);
+    let then = match (why, &because) {
+        (Error::MoveMixed { .. }, _) => mixed_way_out(label),
+        (why, Some(_)) => left_way_out(why, "pitboard abandon"),
+        (why, None) => format!(
+            "It stopped at `{}`: run `pitboard abandon` again to see why.",
+            why.code()
         ),
     };
     match because {
@@ -897,8 +902,8 @@ pub(crate) fn move_not_given_up(label: &str, why: &crate::error::Error) -> Strin
 // For `repair`, which goes on past the move, so never that nothing has changed.
 pub(crate) fn move_not_settled(label: &str, why: &crate::error::Error) -> String {
     use crate::error::Error;
-    let (because, then) = match (move_left(why, "pitboard repair"), why) {
-        (Some(left), _) => left,
+    let (because, then) = match (left_because(why), why) {
+        (Some(because), _) => (because, left_way_out(why, "pitboard repair")),
         (None, Error::RecoveryUndetermined { detail, .. }) => (
             format!("it cannot tell where it stopped ({detail})"),
             undetermined_way_out(),
@@ -1006,25 +1011,24 @@ pub(crate) fn item_gone(label: &str, item: &str) -> String {
     )
 }
 
-pub(crate) fn given_up(given_up: &crate::switch::GivenUp) -> String {
-    let label = crate::state::Key::new(given_up.tool, &given_up.label).typed();
-    let enroll = crate::state::Key::new(given_up.tool, "<label>").typed();
+/// What giving up a Claude Desktop move did and what is left to do, as every front end says
+/// it: `name` is the account as the front end names one, and `way_on`, a clause, its way to
+/// the account Claude shows.
+pub fn given_up(given_up: &crate::switch::GivenUp, name: &str, way_on: &str) -> String {
+    let app = given_up.tool.program();
     let mut said = format!(
-        "Pitboard gave up the move of `{label}`'s login and kept every folder: {} parked, {} \
-         set aside.",
+        "Pitboard gave up the move of {name}'s login and kept every folder: {} parked, {} set \
+         aside.",
         given_up.parked, given_up.set_aside
     );
     if let Some(slot) = &given_up.slot {
-        said.push_str(&format!(
-            " The move was in {slot}, which this run did not read."
-        ));
+        let _ = write!(
+            said,
+            " The move was in {slot}, which Pitboard did not read."
+        );
     }
-    let way_on = format!(
-        "`pitboard enroll {enroll}` for the account Claude shows, or `pitboard use {enroll}` \
-         where Claude is signed out."
-    );
     if given_up.left.is_empty() {
-        said.push_str(&format!(" Run {way_on}"));
+        let _ = write!(said, " {}", crate::holder::capitalised(way_on));
     } else {
         let left = listed(
             given_up
@@ -1038,10 +1042,11 @@ pub(crate) fn given_up(given_up: &crate::switch::GivenUp) -> String {
         } else {
             "stay"
         };
-        said.push_str(&format!(
-            " {left} {stay} in Claude's folder. Open Claude once and quit it with Command-Q, \
-             then run {way_on}"
-        ));
+        let _ = write!(
+            said,
+            " {left} {stay} in {app}'s folder. Open {app} once and quit it with Command-Q, then \
+             {way_on}"
+        );
     }
     said
 }
