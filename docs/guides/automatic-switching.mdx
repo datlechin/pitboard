@@ -19,7 +19,7 @@ It switches early because open Claude Code sessions take up to about 33 seconds 
   </Tab>
 </Tabs>
 
-The app switches only while it is open, and posts a notification for each switch. [When a limit reaches](/reference/settings#when-a-limit-reaches) lists the line under the setting.
+The app switches only while it is open, and posts a notification for each switch.
 
 On the command line, run `pitboard watch` and leave the terminal open. It switches whatever the app's **When a limit reaches** setting says, at its own share: `--at`, 95 by default.
 
@@ -41,11 +41,13 @@ pitboard watch install --at 90
 
 The app, `pitboard watch` and `pitboard use` can run at once and never make two switches from one reading. [What a switch does](/concepts/switching#what-a-switch-does) explains why.
 
+Anthropic's terms may cover automatic switching: see [Is this allowed](/concepts/limits#is-this-allowed).
+
 ## Which account it switches to
 
 Pitboard watches the account whose login Claude Code has stored, as Anthropic [identifies it](/concepts/identity), not the account Claude Code's config names.
 
-Once a limit of that account reaches the share, Pitboard switches to another enrolled Claude Code account with room under the share in every limit. An account without a weekly limit for all models, such as a Team seat, goes first. [Which account it switches to](/reference/automatic-switching#which-account-it-switches-to) gives every rule.
+Pitboard switches to another enrolled Claude Code account with room under the share in every limit. [Which account it switches to](/reference/automatic-switching#which-account-it-switches-to) gives every rule.
 
 If no account qualifies, nothing moves until the account runs out. The app then offers a switch by the same rules at 100%, as [When an account runs out](/guides/switch#when-an-account-runs-out) describes.
 
@@ -59,9 +61,9 @@ If no account qualifies, nothing moves until the account runs out. The app then 
 
 When Pitboard stays on the account or cannot decide, the app posts a notification and `pitboard watch` prints the reason. [Automatic switching](/reference/automatic-switching) lists each reason and what ends it.
 
-A run that cannot reach the keychain or Credential Manager, such as `pitboard watch` over SSH, fails only its own tries: see [macOS says the keychain is locked](/troubleshooting/accounts#macos-says-the-keychain-is-locked) and [Windows says Credential Manager cannot be reached](/troubleshooting/accounts#windows-says-credential-manager-cannot-be-reached).
+On macOS, a run that cannot read the keychain, such as `pitboard watch` over SSH, fails only its own tries: see [macOS says the keychain is locked](/troubleshooting/accounts#macos-says-the-keychain-is-locked). On Windows, the same holds for a run in a sign-in over SSH with a key: see [Windows says Credential Manager cannot be reached](/troubleshooting/accounts#windows-says-credential-manager-cannot-be-reached).
 
-A login file behind the keychain or Credential Manager does not stop a switch, though open sessions follow it later, as [Open sessions](/concepts/open-sessions) says.
+A login file behind the keychain, or on Windows behind Credential Manager, does not stop a switch. [Open sessions](/concepts/open-sessions) says when open sessions follow it.
 
 ## Keep the numbers fresh
 

@@ -48,17 +48,22 @@ Pitboard parks the account in use, which leaves Claude signed out and signs noth
   </Step>
 </Steps>
 
-On the command line, run the command, then sign in to the account you are adding in Claude, and quit Claude with Command-Q once it shows your chats. Pitboard says what it waits for meanwhile, as [`enroll`](/reference/account-commands#enroll) lists.
+On the command line, run the command, then do in Claude what it says:
 
 ```sh
 pitboard enroll desktop/travel --sign-in
 ```
 
 ```text
+Parked `desktop/work`. Claude is signed out, and nothing was signed out at claude.ai.
+Open Claude and sign in to the account to add as `desktop/travel`. When Claude shows your chats, quit it with Command-Q.
+Do not choose Log out in Claude: it ends the login Claude holds at claude.ai, and Pitboard cannot bring it back.
+Waiting for Claude to quit. Control-C stops waiting and keeps `desktop/work` parked; `pitboard use desktop/work` puts it back.
+Claude is open.
 Enrolled desktop/travel, the account Claude is signed in to now.
 ```
 
-If Claude quits before the sign-in has finished, Pitboard keeps waiting. If Claude is signed in to an account you have already added, Pitboard adds nothing and names the command to run.
+If Claude quits before the sign-in has finished, Pitboard says so and keeps waiting: [`enroll`](/reference/account-commands#enroll) lists each line. If Claude is signed in to an account you have already added, Pitboard adds nothing and names the command to run.
 
 Pitboard refuses to park an account it has not enrolled. Add that account first, as [Add the account Claude is signed in to](#add-the-account-claude-is-signed-in-to) shows.
 

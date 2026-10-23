@@ -18,7 +18,7 @@ Claude Desktop accounts are added inside Claude, on macOS, as [Use Pitboard with
   </Tab>
 </Tabs>
 
-The tip shows a Codex login only once a Codex account is enrolled. Until then the tip **Use Pitboard with Codex** adds it: see [Add Codex accounts](/guides/codex#add-codex-accounts). On the command line:
+Until a Codex account is enrolled, the tip **Use Pitboard with Codex** adds Codex's login instead: see [Add Codex accounts](/guides/codex#add-codex-accounts). On the command line:
 
 ```sh
 pitboard enroll personal          # Claude Code
@@ -27,6 +27,7 @@ pitboard enroll codex/personal    # Codex
 
 ```text
 Enrolled personal (me@example.com), the account signed in now.
+Add another without signing out of it: pitboard enroll <label> --sign-in
 ```
 
 ## Add another account

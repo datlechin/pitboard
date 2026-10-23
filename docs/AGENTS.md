@@ -65,8 +65,8 @@ pages say so.
 
 - Write what every system shares once. A difference on one system is an exception, in its own
   sentence or paragraph that starts with the system: "On Windows, the directory is
-  `%USERPROFILE%\AppData\Local\Pitboard`." Text that macOS and Linux share is written once, followed by
-  an "On Windows," paragraph.
+  `%USERPROFILE%\AppData\Local\Pitboard`." Text that macOS and Linux share is written once,
+  followed by an "On Windows," paragraph.
 - What differs by more than a paragraph goes in `<Tabs>`: steps, a picture of the app or a
   reference section. The app's steps get a `macOS` and a `Windows` tab, and the command line
   follows once, after the Tabs. Steps that differ on all three systems, such as installing,

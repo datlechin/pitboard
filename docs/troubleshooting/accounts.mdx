@@ -10,7 +10,7 @@ description: "Fix a tool on another account than Pitboard shows, a login store P
 
 Pitboard warns with the cause, such as `config_names_another` or `in_use_unconfirmed`, and [Warning codes](/reference/errors#warning-codes) gives each fix.
 
-After a switch, an open session keeps the old account for up to about 33 seconds, or until its next renewal while a login file sits behind the store: see [Claude Code over SSH uses another account](/troubleshooting#claude-code-over-ssh-uses-another-account).
+After a switch, an open session keeps the old account for up to about 33 seconds. While a login file sits behind the keychain, or on Windows behind Credential Manager, it keeps that account until its next renewal: see [Claude Code over SSH uses another account](/troubleshooting#claude-code-over-ssh-uses-another-account).
 
 ## Claude Code or Codex inside WSL keeps its account
 

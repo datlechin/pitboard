@@ -16,7 +16,7 @@ A Claude Desktop account signs in again inside Claude, as [Use Pitboard with Cla
 - `nothing parked`
 - `login replaced outside Pitboard`
 
-In the app, Pitboard's menu marks the account **Needs signing in again**, and its row in the Pitboard window and a notification offer **Sign In Again**. [Account status](/reference/account-status) says what each means.
+In the app, Pitboard's menu marks the account **Needs signing in again**, and its row in the Pitboard window and a notification offer **Sign In Again**. On Windows, the menu gives that line as the account's tooltip, and the button is **Sign in again**. [Account status](/reference/account-status) says what each means.
 
 A switch to such an account moves nothing and names the same command:
 
@@ -91,11 +91,11 @@ Everything that runs Codex keeps the old login until it starts again, and can wr
 
 ## If Pitboard cannot identify the login in use
 
-Pitboard replaces the login in use only once it has identified it. When it cannot, it parks the new login, and the tool keeps the one it has. That happens when:
+Pitboard replaces the login in use only once it has [identified it](/concepts/identity). When it cannot, it parks the new login, and the tool keeps the one it has. That happens when:
 
 - The login in use cannot be read or found.
 - A Claude Code login changed since Pitboard last identified it, and Anthropic no longer accepts it or does not answer.
 
-[How Pitboard knows whose login it is](/concepts/identity) says when Pitboard asks Anthropic. If `work` is the account Pitboard last recorded in use, it also warns with `sign_in_parked_not_in_use`, which says what to do if the tool's login no longer works. In the app, the notice is titled **The new login was parked, not put in use**.
+If `work` is the account Pitboard last recorded in use, it also warns with [`sign_in_parked_not_in_use`](/reference/errors#warning-codes). In the app, the notice is titled **The new login was parked, not put in use**.
 
 To keep parked logins from expiring, see [Keep parked logins alive](/guides/renewal).
