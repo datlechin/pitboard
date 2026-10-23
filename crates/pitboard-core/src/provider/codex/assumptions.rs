@@ -240,7 +240,7 @@ pub(crate) const PER_SYSTEM: &[PerSystem] = &[
         macos: NotRead(
             "ChatGPT for macOS is a bundle, which codex_runs_inside_the_chatgpt_app reads",
         ),
-        linux: Read("26.1016.61520"),
+        linux: Read("26.1021.22027"),
         windows: NotRead(
             "ChatGPT for Windows is a Store package, which codex_windows_app_identity reads",
         ),
@@ -1050,18 +1050,24 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
     },
     Assumption {
         name: "codex_linux_app",
-        fact: "OpenAI's ChatGPT app for Linux, the package `chatgpt`, installs to \
-               `/usr/lib/chatgpt`, and `/usr/bin/chatgpt` links to its launcher. It runs a codex \
-               of its own, `/usr/lib/chatgpt/resources/codex`, as `codex app-server` over stdio \
-               with the app's own environment, so it reads `$CODEX_HOME/auth.json` as any codex \
-               does. Whether it stays open after its last window closes turns on something of \
-               its own, not traced",
+        fact: "OpenAI's ChatGPT app for Linux, the package `chatgpt` in its `.deb` and `.rpm` \
+               and `chatgpt-bin` for Arch, installs to `/usr/lib/chatgpt`, and \
+               `/usr/bin/chatgpt` links to its launcher; each of the three holds the same app \
+               and codex. It runs a codex of its own, `/usr/lib/chatgpt/resources/codex`, as \
+               `codex app-server` over stdio with the app's own environment, so it reads \
+               `$CODEX_HOME/auth.json` as any codex does, unless \
+               `CODEX_APP_SERVER_USE_LOCAL_DAEMON=1` sends it to the background app server. It \
+               puts up a notification-area icon as it starts, and stays open after its last \
+               window closes while that icon is up",
         read_from: "the amd64 `.deb` of 26.1016.61520 from persistent.oaistatic.com, read as \
                     bytes on 2026-10-23 and never run: its file list, launcher and desktop file, \
                     and in `app.asar` the code that finds the bundled codex and starts it, and its \
-                    `window-all-closed` handler. Its codex is 0.163.0-alpha.11. The `.rpm` and \
-                    the Arch package were not read",
-        verified_against: "26.1016.61520",
+                    `window-all-closed` handler. Its codex is 0.163.0-alpha.11. The x86_64 \
+                    `.rpm`, the x86_64 Arch package and the amd64 `.deb` of 26.1021.22027, read \
+                    the same way on 2026-10-24: one file layout, one `app.asar` and one codex, \
+                    0.164.0-alpha.11, in all three, the transport's choice of the background \
+                    app server, and the tray the handler waits on, which Linux always sets up",
+        verified_against: "26.1021.22027",
         depends: "provider::codex::holders's chatgpt_app on Linux",
         probe: &[],
         absent: &[],

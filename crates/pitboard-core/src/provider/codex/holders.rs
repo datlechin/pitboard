@@ -8,7 +8,7 @@
 //! running there, so its place is the extension's packaged layout, unmeasured. On Windows the
 //! app server's place and ChatGPT's package are read from 0.162.1's source; that ChatGPT's own
 //! codex runs in that package waits on the session's step 10. ChatGPT for Linux is read from
-//! its package, 26.1016.61520, not run.
+//! its packages, 26.1016.61520 and 26.1021.22027, not run.
 
 use crate::context::Context;
 use crate::holder::{AppId, Holder, Location, Noun, Remedy};
@@ -38,7 +38,7 @@ pub(crate) const HOLDERS: &[Holder] = &[
         },
     },
     // `/usr/lib/chatgpt/resources/codex`, which the app runs as `codex app-server` with its own
-    // environment (codex_linux_app). It may stay open after its windows close.
+    // environment (codex_linux_app). It stays open after its windows close while its icon is up.
     Holder {
         kind: "chatgpt_app",
         noun: Noun::One("the ChatGPT app"),
@@ -253,8 +253,8 @@ mod tests {
         );
     }
 
-    // ChatGPT for Linux 26.1016.61520 runs `resources/codex` under `/usr/lib/chatgpt`
-    // (codex_linux_app).
+    // ChatGPT for Linux 26.1021.22027 runs `resources/codex` under `/usr/lib/chatgpt`, from its
+    // `.deb`, `.rpm` or Arch package alike (codex_linux_app).
     #[test]
     fn every_codex_on_linux_is_its_own_kind() {
         let listed = [

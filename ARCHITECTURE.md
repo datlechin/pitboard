@@ -3841,8 +3841,10 @@ real `auth.json` that build wrote. The register is `provider/codex/assumptions.r
 - Read on 23 October 2026 from the amd64 `.deb` of ChatGPT for Linux 26.1016.61520, as bytes
   and never run (`codex_linux_app`): it installs to `/usr/lib/chatgpt` and runs its own
   `resources/codex` as `codex app-server` with the app's environment. So a folder named
-  `chatgpt` holds a `chatgpt_app`, whose remedy says to quit ChatGPT and open it again: whether
-  closing its windows quits it turns on something of its own, not traced.
+  `chatgpt` holds a `chatgpt_app`, whose remedy says to quit ChatGPT and open it again. Read on
+  24 October 2026 from the `.rpm`, the Arch package and the `.deb` of 26.1021.22027: one layout,
+  one `app.asar` and one codex in all three, and the app stays open after its last window
+  closes while the notification-area icon it always puts up on Linux is there.
 - Read on 16 October 2026 from Codex's source at tag `rust-v0.162.1` and its win32 builds:
   - (`codex_windows_app_server`) the background app server runs
     `<CODEX_HOME>\packages\app-server-daemon\current\bin\codex.exe`, `current` a
