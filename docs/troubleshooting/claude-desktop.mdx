@@ -18,6 +18,16 @@ Closing its window leaves it running.
 
 If the error says Claude has quit and names a part of it still running, such as `ShipIt (pid 812)`, wait until it ends. Or quit it in Activity Monitor. Then try again.
 
+## Claude is waiting to reset its data
+
+A Claude Desktop change stops with `login_folder_unknown`, and changes nothing:
+
+```text
+error: Claude's data folder is waiting for Reset App Data, which deletes what it holds the next time Claude opens, so Pitboard moves no Claude Desktop login. Open Claude, quit it with Command-Q, then run this again. Nothing has changed.
+```
+
+Claude's **Reset App Data** did not finish. Open Claude to let it finish, which signs Claude out, then quit it and try again. Your parked accounts stay in Pitboard.
+
 ## A parked Claude Desktop account opens signed out
 
 After a switch to a Claude Desktop account, Claude shows its sign-in page: the parked login no longer works. `pitboard` may already have said `sign-in may have lapsed`.

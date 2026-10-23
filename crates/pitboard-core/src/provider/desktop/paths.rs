@@ -73,11 +73,21 @@ pub(super) fn refuses(root: &Path) -> Option<Unfit> {
     if std::fs::symlink_metadata(root).is_ok_and(|found| found.file_type().is_symlink()) {
         return Some(Unfit::Link);
     }
+    if reset_waits(root) {
+        return Some(Unfit::ResetWaits);
+    }
     let mut beside = root.as_os_str().to_owned();
     beside.push("-3p");
     std::fs::symlink_metadata(PathBuf::from(beside))
         .is_ok()
         .then_some(Unfit::ThirdParty("Claude-3p"))
+}
+
+// The register's `desktop_reset_app_data`.
+fn reset_waits(root: &Path) -> bool {
+    let asked = std::fs::symlink_metadata(root.join("reset-app-data"));
+    asked.is_ok_and(|found| found.is_file())
+        && std::fs::symlink_metadata(root.join("reset-app-data.given-up")).is_err()
 }
 
 #[cfg(test)]
@@ -165,5 +175,27 @@ mod tests {
         assert_eq!(refuses(&link), Some(Unfit::Link));
         assert_eq!(Unfit::Link.to_string(), "is a link");
         let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn a_reset_of_claudes_data_waiting_is_refused_until_claude_ends_it() {
+        let root = tempfile::tempdir().unwrap();
+        let root = root.path();
+        assert_eq!(refuses(root), None);
+        std::fs::create_dir(root.join("reset-app-data")).unwrap();
+        assert_eq!(refuses(root), None, "Claude asks for a file");
+        std::fs::remove_dir(root.join("reset-app-data")).unwrap();
+        std::fs::write(
+            root.join("reset-app-data"),
+            br#"{"choice":"restart","tries":0}"#,
+        )
+        .unwrap();
+        assert_eq!(refuses(root), Some(Unfit::ResetWaits));
+        assert_eq!(
+            Unfit::ResetWaits.to_string(),
+            "is waiting for Reset App Data, which deletes what it holds the next time Claude opens"
+        );
+        std::fs::write(root.join("reset-app-data.given-up"), b"").unwrap();
+        assert_eq!(refuses(root), None, "given up, it deletes nothing");
     }
 }

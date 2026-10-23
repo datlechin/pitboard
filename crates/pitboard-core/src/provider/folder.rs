@@ -177,12 +177,27 @@ pub(crate) enum Unfit {
     Link,
     // the folder a third-party deployment of the app keeps beside it, by name
     ThirdParty(&'static str),
+    // the app deletes what the folder holds the next time it opens
+    ResetWaits,
+}
+
+impl Unfit {
+    pub(crate) fn then(self) -> crate::error::Then {
+        match self {
+            Unfit::Link | Unfit::ThirdParty(_) => crate::error::Then::Nothing,
+            Unfit::ResetWaits => crate::error::Then::OpenAndQuit,
+        }
+    }
 }
 
 impl std::fmt::Display for Unfit {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Unfit::Link => f.write_str("is a link"),
+            Unfit::ResetWaits => f.write_str(
+                "is waiting for Reset App Data, which deletes what it holds the next time \
+                 Claude opens",
+            ),
             Unfit::ThirdParty(name) => write!(
                 f,
                 "has a `{name}` folder beside it, which a third-party deployment of Claude uses"

@@ -1,5 +1,6 @@
 // `M` is 2.7032.0's `.vite/build/index.chunk-D3OyLXgG.js`, `P` its `index.pre.js`, `@n` a byte.
 // `N` is 2.42304.0's `.vite/build/index.chunk-muI2IV6k.js`; its other chunks go by their hash.
+// `R` is 3.6556.2's `.vite/build/index.pre.js`, and `Q` its `index.chunk-jPKPzV-P.js`.
 
 use crate::assumptions::OnSystem::{NotRead, Read};
 use crate::assumptions::{Assumption, PerSystem};
@@ -7,6 +8,7 @@ use crate::assumptions::{Assumption, PerSystem};
 pub(crate) const VERIFIED_AGAINST: &str = "2.19675.0";
 pub(crate) const READ_FROM_THE_ARCHIVE: &str = "2.7032.0";
 pub(crate) const READ_FROM_THE_NEWER_BUNDLE: &str = "2.42304.0";
+pub(crate) const READ_FROM_CLAUDE_3: &str = "3.6556.2";
 
 const NOT_HERE: &str =
     "Pitboard switches Claude Desktop accounts on macOS only, and nothing of it was read here";
@@ -493,15 +495,31 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
     },
     Assumption {
         name: "desktop_no_singleton_lock",
-        fact: "Claude takes no single-instance lock and writes no `SingletonLock`; its main \
-               process holds the `LOCK` files of its leveldb stores.",
+        fact: "Claude takes its single-instance lock only while it runs Reset App Data, and \
+               otherwise writes no `SingletonLock`; its main process holds the `LOCK` files of \
+               its leveldb stores.",
         read_from: "The contributor's experiment E14, 4 October 2026, a listing and `lsof`; the \
-                    absence read again in 2.7032.0's archive, 11 October 2026",
-        verified_against: VERIFIED_AGAINST,
-        depends: "the running check is the process list; a `Singleton*` name in the folder is \
-                  unread and stops a move",
-        probe: &[],
-        absent: &["requestSingleInstanceLock"],
+                    absence read again in 2.7032.0's archive, 11 October 2026; 3.6556.2's \
+                    `app.asar`, 23 October 2026, `R` @960795, where a start that finds no \
+                    reset asked for returns before the lock at @961471",
+        verified_against: READ_FROM_CLAUDE_3,
+        depends: "the running check is the process list",
+        probe: &["data folder's single-instance lock"],
+        absent: &[],
+    },
+    Assumption {
+        name: "desktop_reset_app_data",
+        fact: "From 3.1623.0, Reset App Data writes `reset-app-data` in the data folder and \
+               opens Claude again, which deletes what the folder holds before it shows a \
+               window, and removes the file once done. Beside `reset-app-data.given-up`, \
+               Claude has given the reset up and deletes nothing.",
+        read_from: "This repository's static read of 3.1623.0's and 3.6556.2's `app.asar`, 23 \
+                    October 2026: the names at `R` @850745, the start that deletes at @960795",
+        verified_against: READ_FROM_CLAUDE_3,
+        depends: "`Folder::refuses` refuses a data folder holding `reset-app-data` and no \
+                  `reset-app-data.given-up`: a login moved in would be deleted",
+        probe: &["reset-app-data.given-up"],
+        absent: &[],
     },
     Assumption {
         name: "desktop_helpers_exit_with_main",
@@ -627,7 +645,8 @@ pub(crate) const PER_SYSTEM: &[PerSystem] = &[
     on_a_mac("desktop_name_after_sign_in", VERIFIED_AGAINST),
     on_a_mac("desktop_name_written_on_report", READ_FROM_THE_ARCHIVE),
     on_a_mac("desktop_writes_at_quit", VERIFIED_AGAINST),
-    on_a_mac("desktop_no_singleton_lock", VERIFIED_AGAINST),
+    on_a_mac("desktop_no_singleton_lock", READ_FROM_CLAUDE_3),
+    on_a_mac("desktop_reset_app_data", READ_FROM_CLAUDE_3),
     on_a_mac("desktop_helpers_exit_with_main", VERIFIED_AGAINST),
     on_a_mac("desktop_stays_quit", VERIFIED_AGAINST),
     on_a_mac("desktop_quit_can_wait", READ_FROM_THE_ARCHIVE),

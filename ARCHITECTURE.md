@@ -3542,11 +3542,12 @@ real `auth.json` that build wrote. The register is `provider/codex/assumptions.r
 
 ### Claude Desktop
 
-Read from three builds of Claude for macOS, and on no other system. The contributor measured
+Read from five builds of Claude for macOS, and on no other system. The contributor measured
 2.19675.0 with two claude.ai accounts: an inspection on 3 October 2026, experiments E1 to
 E18 on 4 October and a reading of `main.log` on 5 October. This repository read the
-`app.asar` and `Info.plist` of 2.7032.0 on 11 and 13 October, and the `app.asar` and
-`Electron Framework` of 2.42304.0 on 19 October, and never ran either. The register is
+`app.asar` and `Info.plist` of 2.7032.0 on 11 and 13 October, the `app.asar` and
+`Electron Framework` of 2.42304.0 on 19 October, and the `app.asar` of 3.1623.0 and 3.6556.2
+on 23 October, and never ran any. The register is
 `provider/desktop/assumptions.rs`, and each entry says who read it, when and how. Each fact
 here gives its build.
 
@@ -3621,7 +3622,12 @@ here gives its build.
   the one it holds (2.7032.0).
 - As it quits, Claude writes `Cookies`, `config.json`, `Local Storage`, `Session Storage`,
   `WebStorage` and `Preferences` (E8, 2.19675.0).
-- Claude takes no single-instance lock and writes no `SingletonLock` (E14, 2.19675.0).
+- Claude takes its single-instance lock only while it runs Reset App Data, and otherwise
+  writes no `SingletonLock` (E14, 2.19675.0; 3.6556.2).
+- From 3.1623.0, Reset App Data writes `reset-app-data` in the data folder and opens Claude
+  again, which deletes what the folder holds before it shows a window. Beside
+  `reset-app-data.given-up`, it deletes nothing. Pitboard moves nothing in a folder waiting
+  for a reset, the recovery of an interrupted move included (3.6556.2, 23 October 2026).
 - The helpers are gone once the main program has exited (E18, 2.19675.0).
 - Claude does not open itself again after a quit, checked at 0, 2, 5 and 30 seconds (E12,
   2.19675.0, one quit).

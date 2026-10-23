@@ -146,6 +146,10 @@ const STAYS: &[&str] = &[
     "mcp-user-tool-toggles.json",
     "ant-device-key-generation.json",
     "remote-control-state.json",
+    // `desktop_reset_app_data`
+    "reset-app-data",
+    "reset-app-data.given-up",
+    "reset-app-data.lock",
 ];
 
 // Each keeps `<file>.journal` beside it, which goes where the file goes.
@@ -445,6 +449,9 @@ mod tests {
             "mcp-user-tool-toggles.json",
             "ant-device-key-generation.json",
             "remote-control-state.json",
+            "reset-app-data",
+            "reset-app-data.given-up",
+            "reset-app-data.lock",
             "git-worktrees.json.journal",
             "buddy-tokens.json.journal",
             "cowork-plugin-oauth.json.journal",
@@ -457,7 +464,7 @@ mod tests {
             assert_eq!(classify(OsStr::new(name)), Class::Stays, "{name}");
         }
         assert_eq!((account.len(), ACCOUNT.len()), (20, 19));
-        assert_eq!((stays.len(), STAYS.len()), (123, 118));
+        assert_eq!((stays.len(), STAYS.len()), (126, 121));
         let stores = [
             "config.json",
             "git-worktrees.json",

@@ -9,6 +9,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- Pitboard says to open Claude when a Claude Desktop change finds Claude's Reset App Data
+  waiting to delete its data folder, instead of asking you to update Pitboard.
 - A Claude Desktop switch moves Claude's preview browsers, the Microsoft 365 connector's
   sign-ins and the session windows with the account, since Claude clears them only when it
   sees another account sign in.

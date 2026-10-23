@@ -3192,6 +3192,12 @@ fn judge_desktop(
                     format!("{shown} {unfit}"),
                     "Pitboard moves no Claude Desktop login beside a third-party deployment.",
                 ),
+                Some(unfit @ Unfit::ResetWaits) => fail(
+                    "desktop_data_folder",
+                    folder,
+                    format!("{shown} {unfit}"),
+                    "Open Claude to let the reset finish, then quit it with Command-Q.",
+                ),
                 None if facts.present => ok("desktop_data_folder", folder, shown.to_string()),
                 None => warn(
                     "desktop_data_folder",
@@ -3581,7 +3587,7 @@ fn judge_desktop_park(facts: &DesktopFacts, fact: &ParkFact, now: i64) -> Check 
 // Said, never a gate: Pitboard checks the folder before each move, not the build.
 fn judge_desktop_build(facts: &DesktopFacts) -> Check {
     use crate::provider::desktop::assumptions::{
-        READ_FROM_THE_ARCHIVE, READ_FROM_THE_NEWER_BUNDLE, VERIFIED_AGAINST,
+        READ_FROM_CLAUDE_3, READ_FROM_THE_ARCHIVE, READ_FROM_THE_NEWER_BUNDLE, VERIFIED_AGAINST,
     };
     match &facts.build {
         Some(build) => ok(
@@ -3589,8 +3595,8 @@ fn judge_desktop_build(facts: &DesktopFacts) -> Check {
             "Claude",
             format!(
                 "Claude {build}; Pitboard's facts were read from {VERIFIED_AGAINST}, \
-                 {READ_FROM_THE_ARCHIVE} and {READ_FROM_THE_NEWER_BUNDLE}, and it checks the \
-                 folder before each move, not the build"
+                 {READ_FROM_THE_ARCHIVE}, {READ_FROM_THE_NEWER_BUNDLE} and {READ_FROM_CLAUDE_3}, \
+                 and it checks the folder before each move, not the build"
             ),
         ),
         None => ok("desktop_build", "Claude", "not found in /Applications"),
@@ -4079,8 +4085,8 @@ mod tests {
         );
         assert_eq!(
             said(&checks, "desktop_build")[0].1,
-            "Claude 2.31226.1; Pitboard's facts were read from 2.19675.0, 2.7032.0 and \
-             2.42304.0, and it checks the folder before each move, not the build"
+            "Claude 2.31226.1; Pitboard's facts were read from 2.19675.0, 2.7032.0, \
+             2.42304.0 and 3.6556.2, and it checks the folder before each move, not the build"
         );
         assert!(checks.iter().all(|c| !c.code.contains("dormant")));
 
@@ -4141,6 +4147,12 @@ mod tests {
                 "/Users/dana/Library/Application Support/Claude has a `Claude-3p` folder beside \
                  it, which a third-party deployment of Claude uses",
                 "Pitboard moves no Claude Desktop login beside a third-party deployment.",
+            ),
+            (
+                Unfit::ResetWaits,
+                "/Users/dana/Library/Application Support/Claude is waiting for Reset App Data, \
+                 which deletes what it holds the next time Claude opens",
+                "Open Claude to let the reset finish, then quit it with Command-Q.",
             ),
         ] {
             facts.refused = Some(unfit);

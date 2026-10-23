@@ -76,7 +76,7 @@ pub(crate) fn look(ctx: &Context, state: &State, app: &'static dyn Folder) -> Re
         return Err(Error::LoginFolderUnknown {
             tool: app.id(),
             what: unfit.to_string(),
-            then: Then::Nothing,
+            then: unfit.then(),
         });
     }
     let holds = holds(ctx, app, &root)?;

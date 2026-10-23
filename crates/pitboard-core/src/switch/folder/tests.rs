@@ -1095,7 +1095,7 @@ fn a_name_that_is_no_account_id_is_never_enrolled() {
     windows,
     ignore = "Claude Desktop is macOS only: Windows refuses its folder calls"
 )]
-fn a_linked_data_folder_or_a_third_party_one_beside_it_refuses_every_change() {
+fn a_data_folder_pitboard_moves_no_login_in_refuses_every_change() {
     let refuses = |name: &str, spoil: &dyn Fn(&Machine), words: &str| {
         let m = two_accounts(&format!("row-4-{name}"));
         spoil(&m);
@@ -1124,6 +1124,16 @@ fn a_linked_data_folder_or_a_third_party_one_beside_it_refuses_every_change() {
         "has a `Claude-3p` folder beside it, which a third-party deployment of Claude uses",
     );
     refuses(
+        "reset",
+        &|m| {
+            let asked = br#"{"choice":"restart","tries":0}"#;
+            std::fs::write(data(m).join("reset-app-data"), asked).expect("a reset asked for");
+        },
+        "is waiting for Reset App Data, which deletes what it holds the next time Claude opens, \
+         so Pitboard moves no Claude Desktop login. Open Claude, quit it with Command-Q, then run \
+         this again.",
+    );
+    refuses(
         "link",
         &|m| {
             let real = m.ctx_home().join("claude/real");
@@ -1132,6 +1142,43 @@ fn a_linked_data_folder_or_a_third_party_one_beside_it_refuses_every_change() {
         },
         "data folder is a link",
     );
+}
+
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Claude Desktop is macOS only: Windows refuses its folder calls"
+)]
+fn a_reset_waiting_stops_the_recovery_of_a_move_as_it_stops_a_move() {
+    let m = desktop_pair("reset-mid-move");
+    killed(&m, "leave.jar_out", "home");
+    let asked = br#"{"choice":"restart","tries":0}"#;
+    std::fs::write(data(&m).join("reset-app-data"), asked).expect("a reset asked for");
+    recover(&m).expect("swept");
+    let before = snapshot(&m);
+    let stopped = refused(&m, "home");
+    assert_eq!(stopped.code(), "login_folder_unknown", "{stopped}");
+    let said = stopped.to_string();
+    assert!(said.contains("is waiting for Reset App Data"), "{said}");
+    assert!(
+        said.contains("Open Claude, quit it with Command-Q"),
+        "{said}"
+    );
+    unchanged(&m, &before, "a reset waiting");
+    assert!(
+        !state_of(&m).moving.is_empty(),
+        "the move waits for its recovery"
+    );
+
+    std::fs::write(data(&m).join("reset-app-data.given-up"), b"").expect("given up");
+    used(&m, "home");
+    assert!(
+        state_of(&m).moving.is_empty(),
+        "settled once Claude gave the reset up"
+    );
+    assert_eq!(in_use(&m).as_deref(), Some("home"));
+    hold(&m, "a reset given up");
+    rested(&m, "a reset given up");
 }
 
 #[test]
