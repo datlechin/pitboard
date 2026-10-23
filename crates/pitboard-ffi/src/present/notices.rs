@@ -8,12 +8,13 @@ use super::{
     spoken_severity,
 };
 use crate::model::advice::HeadsUp;
-use crate::model::state::{in_its_app, split};
+use crate::model::state::in_its_app;
 use crate::model::{Intent, LastSwitch, Pane, Sheet};
 use crate::model::{NotificationButton, NotificationButtonKind, RunOutNotice};
 use crate::{Account, Adoption, Held, Warning};
 use pitboard_core::host::{OS, Os};
 use pitboard_core::provider::ProviderId;
+use pitboard_core::state::Key;
 use pitboard_core::words as said;
 
 /// Where a person goes to install Claude Code, the tool a machine without one is told
@@ -92,7 +93,7 @@ fn awaiting(seen: &Seen) -> Vec<PanelNotice> {
         .map(|awaiting| {
             let provider = &awaiting.provider;
             let app = seen.program_of(provider);
-            let put_back = split(&awaiting.put_back).1;
+            let put_back = Key::parse(&awaiting.put_back).label;
             let (title, finish, sheet) = if awaiting.again {
                 (
                     format!("Signing in to {} again isn’t finished", awaiting.label),
@@ -118,7 +119,7 @@ fn awaiting(seen: &Seen) -> Vec<PanelNotice> {
                 format!("awaiting/{provider}"),
                 Severity::Warning,
                 title,
-                words::awaiting_lines(app, &awaiting.label, put_back, awaiting.again),
+                words::awaiting_lines(app, &awaiting.label, &put_back, awaiting.again),
                 vec![
                     NoticeAction {
                         title: finish,
@@ -134,7 +135,7 @@ fn awaiting(seen: &Seen) -> Vec<PanelNotice> {
                             &format!("Put {put_back} Back"),
                             &format!("Put {put_back} back"),
                         ),
-                        ..switch_action(seen, &awaiting.put_back, put_back)
+                        ..switch_action(seen, &awaiting.put_back, &put_back)
                     },
                 ],
             )
@@ -460,7 +461,7 @@ fn update_config_action(seen: &Seen) -> Vec<NoticeAction> {
 /// itself pick it up within a moment, and the notice counts down to it; once that moment has
 /// passed a countdown would count to something already over, so there is none.
 fn of_last_switch(seen: &Seen, last: &LastSwitch) -> PanelNotice {
-    let label = split(&last.to).1;
+    let label = Key::parse(&last.to).label;
     let tool = seen.tool_if_shown(&last.provider);
     let warned = warned_after(seen, last);
     let restart = restart_line(last);
@@ -478,9 +479,9 @@ fn of_last_switch(seen: &Seen, last: &LastSwitch) -> PanelNotice {
         .collect();
     lines.extend(warned.iter().map(|warning| warning.message.clone()));
     let title = if last.said.is_some() {
-        words::has_a_new_login(tool.as_deref(), label)
+        words::has_a_new_login(tool.as_deref(), &label)
     } else {
-        words::switched_to(tool.as_deref(), label)
+        words::switched_to(tool.as_deref(), &label)
     };
     let until = last.follows_at.filter(|at| *at > seen.now);
     PanelNotice {

@@ -270,6 +270,16 @@ impl Key {
             self.label
         )
     }
+
+    /// The account [`Key::typed`] or [`Key::qualified`] wrote: `codex/work` is Codex's `work`,
+    /// and `work` the default tool's, as is a label 0.1.x wrote with a slash, such as `team/a`,
+    /// where `team` names no tool.
+    pub fn parse(typed: &str) -> Key {
+        typed
+            .split_once(crate::label::SEPARATOR)
+            .and_then(|(tool, label)| Some(Key::new(ProviderId::parse(tool)?, label)))
+            .unwrap_or_else(|| Key::new(crate::label::DEFAULT, typed))
+    }
 }
 
 impl std::fmt::Display for Key {
@@ -1159,6 +1169,19 @@ pub(crate) fn save(ctx: &Context, permit: Permit, state: &State) -> Result<()> {
     reason = "a test sets up its scratch files as a person or a tool would"
 )]
 mod tests {
+    #[test]
+    fn a_key_reads_back_as_it_was_written() {
+        for key in [
+            Key::new(ProviderId::Claude, "work"),
+            Key::new(ProviderId::Codex, "work"),
+            Key::new(ProviderId::Desktop, "work"),
+            Key::new(ProviderId::Claude, "team/a"),
+        ] {
+            assert_eq!(Key::parse(&key.typed()), key);
+            assert_eq!(Key::parse(&key.qualified()), key);
+        }
+    }
+
     /// CLAUDE_CONFIG_DIR picks which keychain item is the live one, and one state file
     /// serves every slot on a machine. A record of whose login one slot holds says nothing
     /// about another, so it is not carried over, and says nothing about Codex's at all. It is

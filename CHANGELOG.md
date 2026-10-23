@@ -157,6 +157,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   switch counts that account as one to switch to, as the app does not.
 - `pitboard doctor` fails a stored Claude Code login that is not a JSON object, as a switch
   refuses it, where it said nobody was signed in.
+- The app names an account whose name from Pitboard 0.1 holds a slash, such as `team/a`, by its
+  whole name, as the command line does, where it said only what came after the slash.
 
 ## [1.0.0-beta.5] - 2026-10-23
 

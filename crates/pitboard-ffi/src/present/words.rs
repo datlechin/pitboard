@@ -12,7 +12,7 @@ use pitboard_core::host::{Os, Private};
 use pitboard_core::label::Unusable;
 use pitboard_core::provider::ProviderId;
 use pitboard_core::service::{Stored, Warning as CoreWarning};
-use pitboard_core::state::SetAside;
+use pitboard_core::state::{Key, SetAside};
 use pitboard_core::time::{DAY, HOUR, MINUTE};
 use pitboard_core::usage::pace::{Pace, Standing};
 use pitboard_core::usage::whole;
@@ -767,8 +767,8 @@ pub(crate) fn in_app_waiting(
 }
 
 // An account the core names as typed, `desktop/work`, as the app names it: `work`.
-fn bare(typed: &str) -> &str {
-    crate::model::state::split(typed).1
+fn bare(typed: &str) -> String {
+    Key::parse(typed).label
 }
 
 // Where an account is named: one added by its name, any other as the app can say it.
@@ -790,7 +790,7 @@ pub(crate) fn in_app_refusal(os: Os, error: &Error) -> Option<String> {
     let desktop = ProviderId::Desktop;
     let app = desktop.program();
     let inside = |tool: &ProviderId| in_its_app(tool.code());
-    let inside_label = |label: &str| in_its_app(crate::model::state::split(label).0);
+    let inside_label = |label: &str| in_its_app(Key::parse(label).provider.code());
     Some(match error {
         Error::AppOpen { app, still } if still.is_empty() => format!(
             "{app} is open, and Pitboard changes its login only while it is closed. Quit {app}, \
@@ -856,7 +856,7 @@ pub(crate) fn in_app_refusal(os: Os, error: &Error) -> Option<String> {
                 bare(recorded),
                 named
                     .as_deref()
-                    .map_or("an account you haven’t added", bare),
+                    .map_or_else(|| "an account you haven’t added".into(), bare),
                 add_what_it_shows(tool.program()),
                 app = tool.program()
             ),
@@ -1010,8 +1010,7 @@ pub(crate) fn in_app_refusal(os: Os, error: &Error) -> Option<String> {
         ),
         Error::AccountUnknown { label, .. } if inside_label(label) => format!(
             "No {} account is added as {}. Choose Add Account… to add it.",
-            ProviderId::parse(crate::model::state::split(label).0)
-                .map_or(desktop.name(), ProviderId::name),
+            Key::parse(label).provider.name(),
             bare(label)
         ),
         Error::ParkedCredentialMissing { label } if inside_label(label) => format!(
@@ -1170,7 +1169,7 @@ pub(crate) fn in_app_warning(os: Os, warning: &CoreWarning) -> Option<String> {
         CoreWarning::KeysSetAside { path, label, .. } => format!(
             "{app} rewrote {}’s keys. Pitboard kept the earlier ones in {} and deleted nothing. \
              This Mac lists them.",
-            label.as_deref().map_or("a login", bare),
+            label.as_deref().map_or_else(|| "a login".into(), bare),
             path.display()
         ),
         CoreWarning::MoveWaiting { label, .. } => format!(
@@ -1184,8 +1183,8 @@ pub(crate) fn in_app_warning(os: Os, warning: &CoreWarning) -> Option<String> {
             put_back,
             again,
             ..
-        } => awaiting_lines(app, bare(label), bare(put_back), *again).join(" "),
-        CoreWarning::MoveNotGivenUp { label, why, .. } => not_given_up(os, tool, bare(label), why),
+        } => awaiting_lines(app, &bare(label), &bare(put_back), *again).join(" "),
+        CoreWarning::MoveNotGivenUp { label, why, .. } => not_given_up(os, tool, &bare(label), why),
         _ => return None,
     })
 }
@@ -1226,7 +1225,7 @@ pub(crate) fn in_app_given_up(given_up: &pitboard_core::switch::GivenUp) -> Stri
     let app = given_up.tool.program();
     pitboard_core::words::given_up(
         given_up,
-        bare(&given_up.label),
+        &bare(&given_up.label),
         &format!(
             "choose Add Account… and Add the Account {app} Shows for the account {app} shows, or \
              Use on an account where {app} is signed out."
@@ -2329,6 +2328,25 @@ mod tests {
                 assert!(!said.contains("Sign in again"), "{said}");
             }
         }
+    }
+
+    // A label 0.1.x wrote can hold a slash, and is typed whole where what comes before it names
+    // no tool.
+    #[test]
+    fn a_label_with_a_slash_from_0_1_is_said_whole() {
+        let replaced = CoreWarning::LoginReplaced {
+            tool: ProviderId::Claude,
+            id: "claude_5b1e".into(),
+            label: "team/a".into(),
+            now: Stored::Nothing,
+        };
+        assert_eq!(
+            in_app_warning(Os::MacOs, &replaced).as_deref(),
+            Some(
+                "team/a’s login was replaced by a sign-in outside Pitboard: Claude Code now has \
+                 no login stored, and Pitboard holds no login for team/a."
+            )
+        );
     }
 
     #[test]

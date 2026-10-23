@@ -57,6 +57,7 @@ use pitboard_core::duty::cadence::{
 use pitboard_core::duty::warm::Overview;
 use pitboard_core::label::SEPARATOR;
 use pitboard_core::provider::{self, ProviderId, SignsIn};
+use pitboard_core::state::Key;
 use pitboard_core::switch::warm::WarmUp;
 use pitboard_core::switch::{Foreseen, Left, Stowed, WaitStep};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
@@ -676,7 +677,7 @@ impl Refused {
 
 /// "Couldn’t switch to personal", for the account `qualified` names.
 fn could_not_switch(qualified: &str) -> String {
-    format!("Couldn’t switch to {}", split(qualified).1)
+    format!("Couldn’t switch to {}", Key::parse(qualified).label)
 }
 
 const COULD_NOT_GIVE_UP: &str = "Couldn’t give up on the interrupted switch";
@@ -688,7 +689,7 @@ fn could_not_sign_in(name: &str) -> String {
 
 /// "Couldn’t forget work", for the account `qualified` names.
 fn could_not_forget(qualified: &str) -> String {
-    format!("Couldn’t forget {}", split(qualified).1)
+    format!("Couldn’t forget {}", Key::parse(qualified).label)
 }
 
 /// "Couldn’t rename work", for the account `label`.
@@ -706,7 +707,7 @@ const COULD_NOT_CHANGE_WARM: &str = "Couldn’t change which accounts are warmed
 
 /// "Couldn’t warm up work", for the account `qualified` names.
 fn could_not_warm(qualified: &str) -> String {
-    format!("Couldn’t warm up {}", split(qualified).1)
+    format!("Couldn’t warm up {}", Key::parse(qualified).label)
 }
 
 const COULD_NOT_NAME: &str = "Couldn’t name this account";
@@ -747,45 +748,13 @@ pub(crate) fn trimmed(typed: &str) -> &str {
     pitboard_sites::trimmed(typed)
 }
 
-/// The account `name` of `provider`'s tool as the core types it: bare for Claude Code, and
-/// with its tool for any other.
+// The account `name` of `provider`'s tool as the core types it.
 fn typed_as_core(provider: &str, name: &str) -> String {
-    if provider == ProviderId::Claude.code() {
-        name.to_owned()
-    } else {
-        format!("{provider}{SEPARATOR}{name}")
-    }
+    Key::parse(&format!("{provider}{SEPARATOR}{name}")).typed()
 }
 
-/// A label as the core types it, taken apart: `codex/work` is Codex's `work`, and a bare
-/// `work` is Claude Code's, which is what a bare label has always meant.
-/// What `switching` holds while Claude Code is switched by itself, which names no account:
-/// the core chooses which.
+// What `switching` holds while Claude Code is switched by itself: the core chooses the account.
 const AUTOMATICALLY: &str = "claude";
-
-/// An account's name with its tool, as `Account::qualified` gives it, from the name a switch
-/// said it by, which names its tool only where it is not Claude Code or another tool shares
-/// the name.
-fn qualified_claude(said: &str) -> String {
-    let (tool, label) = split(said);
-    format!("{tool}{SEPARATOR}{label}")
-}
-
-pub(crate) fn split(typed: &str) -> (&str, &str) {
-    typed
-        .split_once(SEPARATOR)
-        .unwrap_or((ProviderId::Claude.code(), typed))
-}
-
-/// An account as somebody types it at the command line, which is how the core names the
-/// account a switch went to: bare for Claude Code, and with its tool for any other.
-fn typed(account: &Account) -> Option<&str> {
-    if account.provider == ProviderId::Claude.code() {
-        account.label.as_deref()
-    } else {
-        account.qualified.as_deref()
-    }
-}
 
 /// A rename, as its answer is taken in.
 #[derive(Clone, Copy)]
@@ -1416,10 +1385,10 @@ impl State {
                     self.intent(Intent::SwitchTo { qualified }, now, jobs);
                 }
                 Clicked::SignInAgain(qualified) => {
-                    let (provider, label) = split(&qualified);
+                    let key = Key::parse(&qualified);
                     let sheet = Sheet::SignInAgain {
-                        provider: provider.to_owned(),
-                        label: label.to_owned(),
+                        provider: key.provider.code().to_owned(),
+                        label: key.label,
                     };
                     self.present_sheet(sheet, jobs);
                 }
@@ -1693,7 +1662,7 @@ impl State {
     ) {
         match then {
             After::Switch => {
-                let tool = split(&qualified).0.to_owned();
+                let tool = Key::parse(&qualified).provider.code().to_owned();
                 let kept = self
                     .reopen_after_switch
                     .take_if(|(of, _)| *of == tool)
@@ -1800,7 +1769,7 @@ impl State {
     fn switching_of(&self, tool: &str) -> bool {
         self.switching
             .as_deref()
-            .is_some_and(|switching| split(switching).0 == tool)
+            .is_some_and(|switching| Key::parse(switching).provider.code() == tool)
     }
 
     // A park of `tool` whose thread runs: one not yet asked for is still `signing_in`.
@@ -2294,7 +2263,7 @@ impl State {
                 });
                 self.auto_told.clear();
                 self.auto_refusals.ended();
-                let qualified = qualified_claude(&to);
+                let qualified = Key::parse(&to).qualified();
                 let switched = Switched {
                     outcome: Switch::Switched {
                         provider: ProviderId::Claude.code().into(),
@@ -3461,7 +3430,12 @@ impl State {
         }
         // Here, once a switch this quit was for has let go: one asked meanwhile holds it back.
         if let Some(copy) = lingering {
-            self.open_again(split(&qualified).0.to_owned(), copy, false, jobs);
+            self.open_again(
+                Key::parse(&qualified).provider.code().to_owned(),
+                copy,
+                false,
+                jobs,
+            );
         }
     }
 
@@ -3484,7 +3458,7 @@ impl State {
         // Pitboard closed it, so Pitboard opens it, whether or not the switch worked, where its
         // folder is whole: as soon as the switch is made, and not after the read that follows
         // it, which can wait on the network.
-        let tool = split(qualified).0;
+        let tool = Key::parse(qualified).provider.code();
         let kept = self
             .reopen_after_switch
             .take()
@@ -3509,7 +3483,7 @@ impl State {
                     done.outcome,
                     Switch::Switched { .. } | Switch::Installed { .. }
                 ) {
-                    let provider = split(qualified).0;
+                    let provider = Key::parse(qualified).provider.code();
                     self.advice.retain(|advice| advice.provider != provider);
                 }
                 self.said(qualified, done, now);
@@ -3583,7 +3557,7 @@ impl State {
                 if done.warnings.is_empty() {
                     return;
                 }
-                let provider = split(qualified).0;
+                let provider = Key::parse(qualified).provider.code();
                 let mut said = self
                     .last_switches
                     .iter()
@@ -3618,7 +3592,7 @@ impl State {
                 None,
                 from.map(|from| RestartNeeded {
                     program: program.to_owned(),
-                    from: split(&from).1.to_owned(),
+                    from: Key::parse(&from).label,
                 }),
             ),
         };
@@ -3655,7 +3629,10 @@ impl State {
             read.accounts.iter().any(|account| {
                 account.provider == last.provider
                     && account.signed_in
-                    && typed(account) == Some(last.to.as_str())
+                    && account
+                        .qualified
+                        .as_deref()
+                        .is_some_and(|qualified| Key::parse(qualified).typed() == last.to)
             })
         });
     }
@@ -3809,7 +3786,7 @@ impl State {
         now: Now,
         jobs: &mut Vec<Job>,
     ) {
-        let tool = split(qualified).0;
+        let tool = Key::parse(qualified).provider.code();
         match done {
             Ok(()) => {
                 self.changes_seen += 1;

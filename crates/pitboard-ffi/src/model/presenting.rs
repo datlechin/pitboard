@@ -3618,15 +3618,6 @@ fn the_service_asked_is_named_for_the_tools_shown() {
     assert!(shown.shows_tools);
 }
 
-/// A label as the core types it, taken apart: bare means Claude Code.
-///
-/// WordingTests.swift's aTypedLabelIsTakenApart.
-#[test]
-fn a_typed_label_is_taken_apart() {
-    assert_eq!(super::state::split("codex/work"), ("codex", "work"));
-    assert_eq!(super::state::split("work"), ("claude", "work"));
-}
-
 // What a sign-in or a recording inside Claude says in its sheet, driven through the model.
 
 #[test]

@@ -17,6 +17,7 @@ use crate::{
 use pitboard_core::context::Context;
 use pitboard_core::provider::ProviderId;
 use pitboard_core::service;
+use pitboard_core::state::Key;
 use pitboard_core::switch::{Left, Stowed};
 use pitboard_core::testing::desktop::{self, FakeClaude, JarAs};
 use pitboard_core::testing::{MemoryHost, ScriptedApi, live_service, stand_in, unsigned_token};
@@ -846,7 +847,7 @@ impl Machine {
             // the test says runs, with no time given to quit: an app quits when asked, or
             // is still running.
             Job::Holding { qualified, then } => {
-                let provider = super::state::split(&qualified).0;
+                let provider = Key::parse(&qualified).provider.code();
                 let holdings = self.held.get(provider).map_or(&[][..], Vec::as_slice);
                 Answer::Held {
                     question: lanes::holder(holdings, self.apps.as_ref(), &qualified),
@@ -1515,7 +1516,7 @@ impl World {
         desktop::leave_a_move_waiting(
             &self.ctx,
             &self.host,
-            &pitboard_core::state::Key::new(ProviderId::Desktop, "work"),
+            &Key::new(ProviderId::Desktop, "work"),
         );
     }
 
