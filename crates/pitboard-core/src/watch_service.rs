@@ -1,16 +1,4 @@
-//! Watching Claude Code without a terminal left open: `pitboard watch`, started by the system's
-//! own service manager from the person's sign-in on, for as long as their session lasts.
-//!
-//! Opt-in, as `pitboard watch` in a terminal is: somebody installs it knowing that it switches
-//! and warms up by itself ([`crate::duty::autoswitch`], [`crate::duty::warm`]). It runs what the
-//! terminal runs, at the share it was installed with. The app and it may both be switching: a
-//! switch is decided again under the lock every change takes, so two front ends never make two
-//! switches from one reading ([`crate::switch`]'s `auto`).
-//!
-//! What it installs is the system's own: a LaunchAgent on macOS, a systemd user service on
-//! Linux, and a task in Task Scheduler that starts at the person's sign-in on Windows. Like the
-//! renewal schedule ([`crate::schedule`]), it is the default home's alone, and it is given the
-//! installing Pitboard's proxy variables.
+//! `pitboard watch` run by the system's own service manager; ARCHITECTURE.md has its rules.
 
 use crate::context::Context;
 use crate::duty::autoswitch::Threshold;

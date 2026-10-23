@@ -30,7 +30,6 @@ impl Systemd {
         ctx.home().join(".config/systemd/user")
     }
 
-    // The service a job runs Pitboard from.
     fn service(job: Job) -> &'static str {
         match job {
             Job::Renew => SERVICE,

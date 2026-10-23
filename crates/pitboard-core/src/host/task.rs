@@ -45,7 +45,6 @@ pub(crate) trait Service: Send + Sync + std::fmt::Debug {
     fn read(&self, ctx: &Context, name: &str) -> Result<Option<Registered>>;
     fn register(&self, permit: Permit, ctx: &Context, name: &str, xml: &str) -> Result<()>;
     fn delete(&self, permit: Permit, ctx: &Context, name: &str) -> Result<()>;
-    // Start the task now, as its trigger would.
     fn run(&self, permit: Permit, ctx: &Context, name: &str) -> Result<()>;
     // End each of its runs under way; a task with none, or none at all, is already stopped.
     fn stop(&self, permit: Permit, ctx: &Context, name: &str) -> Result<()>;

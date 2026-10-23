@@ -107,7 +107,6 @@ pub(crate) struct Facts {
     pub desktop: Option<DesktopFacts>,
     /// The daily renewal schedule, where this home has one installed.
     pub(crate) schedule: Option<ScheduleFact>,
-    // The watch service, where this home has one installed.
     pub(crate) watch_service: Option<WatchServiceFact>,
     /// How Pitboard's requests leave this machine, as its environment says.
     pub(crate) network: NetworkFact,
@@ -206,7 +205,6 @@ pub(crate) struct ScheduleFact {
     pub(crate) network_differs: bool,
 }
 
-// The watch service as it is installed, read from what Pitboard wrote.
 pub(crate) struct WatchServiceFact {
     pub(crate) location: crate::schedule::Location,
     pub(crate) program: Option<PathBuf>,
@@ -679,7 +677,6 @@ fn schedule_fact(ctx: &Context) -> Option<ScheduleFact> {
     })
 }
 
-// The watch service, where this home has one.
 fn watch_service_fact(ctx: &Context) -> Option<WatchServiceFact> {
     if !crate::schedule::serves(ctx) {
         return None;

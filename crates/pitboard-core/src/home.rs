@@ -220,8 +220,7 @@ pub(crate) fn check_absolute(ctx: &Context) -> Result<()> {
     }
 }
 
-// Each place a change writes in: the home, Pitboard's directory, Claude Code's config folder,
-// its `.claude.json` and its login's folder, and Codex's home.
+// On Linux root may change things only where it owns each of these.
 #[cfg(any(target_os = "linux", test))]
 pub(crate) fn written(ctx: &Context) -> Vec<PathBuf> {
     use crate::provider::{claude, codex};
