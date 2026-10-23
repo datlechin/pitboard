@@ -463,9 +463,11 @@ Watching work: 62% of its 5-hour limit, as of 14:00.
 | `status` | Checks that the job is there, not whether it runs. | `Pitboard watches Claude Code in the background` or `Nothing watches Claude Code in the background here.` |
 | `uninstall` | Stops the job and deletes what `install` wrote. | `Stopped watching Claude Code in the background.` or `Nothing was watching Claude Code in the background.` |
 
-The service starts at each sign-in and runs `watch` at the share `install` was given. Its first line ends `` Stop it with `pitboard watch uninstall`. `` in place of `Stop with Ctrl-C.` On Linux, its lines go to your user's journal. On macOS and Windows, nothing keeps them. [`pitboard log`](/reference/maintenance-commands#log) records each switch and warm-up either way. [Watch service](/reference/files#watch-service) lists where each system keeps it.
+The service starts at each sign-in and runs `watch` at the share `install` was given. Its first line ends `` Stop it with `pitboard watch uninstall`. `` in place of `Stop with Ctrl-C.` On macOS, its lines go to `~/Library/Logs/Pitboard/watch.log`, and on Linux to your user's journal. On Windows, nothing keeps them. [`pitboard log`](/reference/maintenance-commands#log) records each switch and warm-up either way. [Watch service](/reference/files#watch-service) lists where each system keeps it.
 
-Where `watch` ends on an error, the service starts again at your next sign-in, or with `pitboard watch install`. On macOS and Linux, the system also starts it again after a crash.
+Where `watch` ends on an error or a crash, macOS and Linux start the service again a minute later. On Windows, it starts again at your next sign-in, or with `pitboard watch install`.
+
+After you update Pitboard, the service runs the update from your next sign-in, or at once after `pitboard watch install`. On Windows, Scoop and WinGet cannot update a `pitboard.exe` the service is running: `scoop update` skips it, and `winget upgrade` fails. Run `pitboard watch uninstall` before you update, and `pitboard watch install` after.
 
 `install` follows the rules of [`schedule install`](/reference/maintenance-commands#schedule):
 

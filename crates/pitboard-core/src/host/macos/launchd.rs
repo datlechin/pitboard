@@ -5,7 +5,7 @@ use super::super::unix::service::{self, Control};
 use crate::context::Context;
 use crate::error::{Error, Result};
 use crate::host::Scheduler;
-use crate::schedule::{EVERY_SECONDS, Job, Location};
+use crate::schedule::{EVERY_SECONDS, Job, Location, RESTART_AFTER_SECONDS};
 use crate::service::Permit;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -15,6 +15,7 @@ const LABEL: &str = "com.datlechin.pitboard.renew";
 const WATCH_LABEL: &str = "com.datlechin.pitboard.watch";
 
 const LAUNCHCTL: &str = "/bin/launchctl";
+const LOG: &str = "watch.log";
 
 #[derive(Debug)]
 pub(super) struct Launchd {
@@ -37,6 +38,10 @@ impl Launchd {
         ctx.home()
             .join("Library/LaunchAgents")
             .join(format!("{}.plist", Self::label(job)))
+    }
+
+    fn log_folder(home: &Path) -> PathBuf {
+        home.join("Library/Logs/Pitboard")
     }
 
     /// launchd's session for this user, which `bootstrap` and `bootout` name.
@@ -95,7 +100,20 @@ impl Scheduler for Launchd {
         }
         let path = Self::agent(ctx, job);
         let before = std::fs::read_to_string(&path).ok();
-        service::write(permit, &path, &plist(job, program, options, environment))?;
+        if job == Job::Watch {
+            let folder = Self::log_folder(ctx.home());
+            crate::host::fs::create_private_dir(permit, &folder).map_err(|source| {
+                Error::HomeUnwritable {
+                    path: folder,
+                    source,
+                }
+            })?;
+        }
+        service::write(
+            permit,
+            &path,
+            &plist(job, program, options, environment, ctx.home()),
+        )?;
         // `bootstrap` is launchd's own word for this, and replaces the deprecated `load`.
         let domain = Self::domain();
         let target = path.to_string_lossy();
@@ -128,6 +146,12 @@ impl Scheduler for Launchd {
             &["bootout", &Self::domain(), &path.to_string_lossy()],
         );
         service::remove(permit, &path)?;
+        if job == Job::Watch {
+            let folder = Self::log_folder(ctx.home());
+            service::remove(permit, &folder.join(LOG))?;
+            // Kept where something else is in it.
+            let _ = crate::host::fs::remove_dir(permit, &folder);
+        }
         Ok(true)
     }
 
@@ -155,15 +179,22 @@ fn runs(job: Job) -> &'static [&'static str] {
 
 /// launchd's own format. Renewal's `RunAtLoad` is off: installing it is not a reason to talk to
 /// Anthropic that second, and the first run comes at the first interval. The watch service
-/// runs at load, which is at each login too, and launchd starts it again only where a crash
-/// ended it (`KeepAlive`'s `Crashed`): a run that ended itself on an error it cannot mend
-/// would meet the same error again.
+/// runs at load, which is at each login too, and launchd starts it again a minute after it
+/// fails or crashes: a panic exits 101, and a run an update left behind exits on a state file
+/// the new build wrote. Its lines go to a log in `home`'s `Library/Logs`, where Console finds a
+/// user agent's.
 ///
 /// The job runs with launchd's environment, not the person's shell, so a variable they set
 /// would not reach it. `environment` is what it is given of the installing Pitboard's,
 /// `PITBOARD_NO_ARGV` and the proxy variables, under `EnvironmentVariables`, which is left out
 /// where there is nothing to give.
-fn plist(job: Job, program: &Path, options: &[String], environment: &[(String, String)]) -> String {
+fn plist(
+    job: Job,
+    program: &Path,
+    options: &[String],
+    environment: &[(String, String)],
+    home: &Path,
+) -> String {
     let environment = if environment.is_empty() {
         String::new()
     } else {
@@ -191,9 +222,17 @@ fn plist(job: Job, program: &Path, options: &[String], environment: &[(String, S
              <key>LowPriorityIO</key><true/>\n  \
              <key>ProcessType</key><string>Background</string>\n"
         ),
-        Job::Watch => "  <key>RunAtLoad</key><true/>\n  \
-                       <key>KeepAlive</key>\n  <dict>\n    <key>Crashed</key><true/>\n  </dict>\n"
-            .to_string(),
+        Job::Watch => {
+            let log = escape(&Launchd::log_folder(home).join(LOG).to_string_lossy());
+            format!(
+                "  <key>RunAtLoad</key><true/>\n  \
+                 <key>KeepAlive</key>\n  <dict>\n    \
+                 <key>SuccessfulExit</key><false/>\n    <key>Crashed</key><true/>\n  </dict>\n  \
+                 <key>ThrottleInterval</key><integer>{RESTART_AFTER_SECONDS}</integer>\n  \
+                 <key>StandardOutPath</key><string>{log}</string>\n  \
+                 <key>StandardErrorPath</key><string>{log}</string>\n"
+            )
+        }
     };
     format!(
         r#"<?xml version="1.0" encoding="UTF-8"?>
@@ -408,7 +447,13 @@ mod tests {
     /// point as what it does.
     #[test]
     fn the_agent_runs_one_verb_and_does_not_run_at_load() {
-        let body = plist(Job::Renew, Path::new("/usr/local/bin/pitboard"), &[], &[]);
+        let body = plist(
+            Job::Renew,
+            Path::new("/usr/local/bin/pitboard"),
+            &[],
+            &[],
+            Path::new("/Users/x"),
+        );
         assert!(body.contains("<string>/usr/local/bin/pitboard</string>"));
         assert!(body.contains("<string>renew</string>"));
         assert!(!body.contains("status"), "it never asks for usage");
@@ -420,11 +465,18 @@ mod tests {
         assert!(body.contains(&format!("<integer>{EVERY_SECONDS}</integer>")));
     }
 
-    // At load, which is at each login too, and again only after a crash.
+    // At load, which is at each login too, and again a minute after it fails or crashes, which a
+    // panic's exit and an older run meeting a newer state file both are.
     #[test]
-    fn the_watch_agent_runs_at_load_and_again_only_after_a_crash() {
+    fn the_watch_agent_runs_at_load_and_again_a_minute_after_it_fails() {
         let at = ["--at".to_string(), "90".to_string()];
-        let body = plist(Job::Watch, Path::new("/usr/local/bin/pitboard"), &at, &[]);
+        let body = plist(
+            Job::Watch,
+            Path::new("/usr/local/bin/pitboard"),
+            &at,
+            &[],
+            Path::new("/Users/x & y"),
+        );
         assert!(
             body.contains(
                 "  <key>Label</key><string>com.datlechin.pitboard.watch</string>\n  \
@@ -433,7 +485,13 @@ mod tests {
                  <string>--scheduled</string>\n    <string>--at</string>\n    \
                  <string>90</string>\n  </array>\n  \
                  <key>RunAtLoad</key><true/>\n  \
-                 <key>KeepAlive</key>\n  <dict>\n    <key>Crashed</key><true/>\n  </dict>\n\
+                 <key>KeepAlive</key>\n  <dict>\n    \
+                 <key>SuccessfulExit</key><false/>\n    <key>Crashed</key><true/>\n  </dict>\n  \
+                 <key>ThrottleInterval</key><integer>60</integer>\n  \
+                 <key>StandardOutPath</key>\
+                 <string>/Users/x &amp; y/Library/Logs/Pitboard/watch.log</string>\n  \
+                 <key>StandardErrorPath</key>\
+                 <string>/Users/x &amp; y/Library/Logs/Pitboard/watch.log</string>\n\
                  </dict>\n"
             ),
             "{body}"
@@ -449,6 +507,56 @@ mod tests {
                 "90"
             ]
         );
+        let renewal = plist(
+            Job::Renew,
+            Path::new("/usr/local/bin/pitboard"),
+            &[],
+            &[],
+            Path::new("/Users/x"),
+        );
+        assert!(!renewal.contains("Standard"), "{renewal}");
+    }
+
+    // launchd opens the log but makes no folder for it, and the log goes with the agent.
+    #[test]
+    fn the_watch_agent_keeps_its_lines_in_a_private_log_that_goes_with_it() {
+        let home = std::env::temp_dir().join(format!(
+            "pitboard-launchd-log-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let _ = std::fs::remove_dir_all(&home);
+        std::fs::create_dir_all(&home).expect("a scratch home");
+        let ctx = Context::new(home.clone()).with_memory_stores(MemoryHost::new());
+        let launchd = Launchd::new(Arc::new(service::Pretend {
+            refuse_start: Arc::default(),
+        }));
+        let log = home.join("Library/Logs/Pitboard/watch.log");
+        let at = ["--at".to_string(), "90".to_string()];
+        launchd
+            .put(
+                &ctx,
+                Permit::for_a_test(),
+                Job::Watch,
+                Path::new("/usr/local/bin/pitboard"),
+                &at,
+                &[],
+            )
+            .expect("installed");
+        let folder = log.parent().expect("its folder");
+        assert_eq!(
+            crate::host::fs::access(folder).map(|access| access.described),
+            Some("mode 700".to_string())
+        );
+        std::fs::write(&log, "Watching Claude Code.\n").expect("launchd's");
+
+        assert!(
+            launchd
+                .remove(&ctx, Permit::for_a_test(), Job::Watch)
+                .expect("taken away")
+        );
+        assert!(!folder.exists());
+        let _ = std::fs::remove_dir_all(&home);
     }
 
     /// launchd refuses a plist that is not well formed, and a folder's name can hold any of
@@ -460,6 +568,7 @@ mod tests {
             Path::new("/Users/x/A&B <old>/Pitboard.app"),
             &[],
             &[],
+            Path::new("/Users/x"),
         );
         assert!(
             body.contains("<string>/Users/x/A&amp;B &lt;old&gt;/Pitboard.app</string>"),
@@ -489,7 +598,7 @@ mod tests {
             ("no_proxy", ""),
             ("NO_PROXY", ".anthropic.com,localhost"),
         ]);
-        let body = plist(Job::Renew, program, &[], &handed);
+        let body = plist(Job::Renew, program, &[], &handed, Path::new("/Users/x"));
         assert!(
             body.contains(
                 "  <key>EnvironmentVariables</key>\n  <dict>\n    \
@@ -504,8 +613,14 @@ mod tests {
             "{body}"
         );
         assert_eq!(given(&body), handed);
-        assert!(!plist(Job::Renew, program, &[], &[]).contains("EnvironmentVariables"));
-        assert_eq!(given(&plist(Job::Renew, program, &[], &[])), Vec::new());
+        assert!(
+            !plist(Job::Renew, program, &[], &[], Path::new("/Users/x"))
+                .contains("EnvironmentVariables")
+        );
+        assert_eq!(
+            given(&plist(Job::Renew, program, &[], &[], Path::new("/Users/x"))),
+            Vec::new()
+        );
         let (_, after) = body
             .split_once("<key>ProgramArguments</key>")
             .expect("its arguments");
@@ -561,6 +676,7 @@ mod tests {
             Path::new("/usr/local/bin/pitboard"),
             &[],
             &handed,
+            Path::new("/Users/x"),
         );
         assert!(body.contains("<string>a&#13;b</string>"), "{body}");
         assert_eq!(given(&body), handed);

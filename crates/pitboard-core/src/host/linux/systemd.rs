@@ -5,7 +5,7 @@ use super::super::unix::service::{self, Control};
 use crate::context::Context;
 use crate::error::Result;
 use crate::host::Scheduler;
-use crate::schedule::{EVERY_SECONDS, Job, Location};
+use crate::schedule::{EVERY_SECONDS, Job, Location, RESTART_AFTER_SECONDS};
 use crate::service::Permit;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -204,9 +204,9 @@ fn command(body: &str, job: Job) -> Option<(PathBuf, Vec<String>)> {
 /// rejects the flag, so after going back to one the timer fails every day until that
 /// Pitboard's `schedule install` rewrites the unit, which the CHANGELOG says.
 ///
-/// The watch service starts with the person's systemd, at their first sign-in, and again only
-/// where it was killed by a signal such as a crash's (`on-abnormal`): a run that ended itself
-/// on an error it cannot mend would meet the same error again.
+/// The watch service starts with the person's systemd, at their first sign-in, and again a
+/// minute after it fails or crashes: a panic exits 101, and a run an update left behind exits
+/// on a state file the new build wrote.
 fn unit_file(
     job: Job,
     program: &Path,
@@ -239,7 +239,8 @@ fn unit_file(
              [Service]\n\
              {environment}\
              ExecStart={} {run}\n\
-             Restart=on-abnormal\n\
+             Restart=on-failure\n\
+             RestartSec={RESTART_AFTER_SECONDS}\n\
              \n\
              [Install]\n\
              WantedBy=default.target\n",
@@ -431,7 +432,7 @@ mod tests {
         assert_eq!(given(&unit), broken);
     }
 
-    // From the person's first sign-in, and again only after a signal such as a crash's.
+    // From the person's first sign-in, and again a minute after it fails or crashes.
     #[test]
     fn the_watch_service_starts_with_the_users_systemd_and_reads_back_its_share() {
         let at = ["--at".to_string(), "90".to_string()];
@@ -440,7 +441,8 @@ mod tests {
             unit.contains(
                 "[Service]\n\
                  ExecStart=/usr/local/bin/pitboard watch --scheduled --at 90\n\
-                 Restart=on-abnormal\n\
+                 Restart=on-failure\n\
+                 RestartSec=60\n\
                  \n\
                  [Install]\n\
                  WantedBy=default.target\n"

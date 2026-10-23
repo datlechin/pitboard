@@ -33,6 +33,9 @@ use std::path::{Path, PathBuf};
 /// three days out, so a daily check has three chances to catch each one, and a machine
 /// that was asleep for one of them still has two.
 pub(crate) const EVERY_SECONDS: u32 = 86_400;
+// How long both systems wait to start a watch service that failed again. systemd's default
+// of 100 ms would meet its start limit, five starts in 10 seconds, and give up.
+pub(crate) const RESTART_AFTER_SECONDS: u32 = 60;
 
 /// A job Pitboard hands the system's own scheduler.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

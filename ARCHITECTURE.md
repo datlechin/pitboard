@@ -1207,12 +1207,16 @@ window loads its site, and whatever the site's pages load, as a browser would.
   proxy: the app's switch would take a terminal's proxy away.
 - The watch service is a second job on the same scheduler (`schedule::Job::Watch`,
   `watch_service.rs`). It runs `pitboard watch --scheduled --at <share>` on every system
-  (`schedule::WATCH_RUN`): a LaunchAgent that runs at load and again only after a crash
-  (`KeepAlive`'s `Crashed`), a systemd user service enabled under `default.target` and started
-  again only `on-abnormal`, or a task `\Pitboard\Watch <SID>` with a `LogonTrigger` for the
-  person's SID and no time limit, which `put` starts at once after ending the run under the
-  definition before. A run that ended itself on an error it cannot mend starts again at the
-  next sign-in, not sooner. Its rules are the schedule's: it serves the default home alone
+  (`schedule::WATCH_RUN`): a LaunchAgent that runs at load and logs to
+  `~/Library/Logs/Pitboard/watch.log`, a systemd user service enabled under `default.target`,
+  or a task `\Pitboard\Watch <SID>` with a `LogonTrigger` for the person's SID and no time
+  limit, which `put` starts at once after ending the run under the definition before. launchd
+  (`KeepAlive`'s `SuccessfulExit` false and `ThrottleInterval`) and systemd (`on-failure`,
+  `RestartSec`) start a run that failed or crashed again a minute later
+  (`schedule::RESTART_AFTER_SECONDS`): a panic exits 101, which neither counts as a crash, and
+  a run an update left behind ends on the state file the update's build wrote, which a start
+  from the job's path mends. A run Task Scheduler started that ended starts again at the next
+  sign-in. Its rules are the schedule's: it serves the default home alone
   (`schedule::serves`, `schedule_not_default_home`), a run of it watches that home whatever
   `PITBOARD_HOME` says (`Context::started_by_the_watch_service`, `schedule::for_its_run`), it
   is given the installing Pitboard's proxy variables, in `watch.env` on Windows, and the gate
