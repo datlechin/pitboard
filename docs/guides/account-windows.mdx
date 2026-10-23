@@ -6,7 +6,7 @@ description: "Open claude.ai or chatgpt.com as each account in a window of its o
 
 The app opens account windows on macOS and Windows, and Linux has no app. Sending a page from your browser to an account works on macOS only, because Windows lists only a signed Pitboard in its share sheet.
 
-Each window keeps its own website data, so your accounts stay signed in side by side. A Claude Code account's window is on claude.ai, a Codex account's on chatgpt.com. [How account windows keep their data](/concepts/account-windows) says where it is and when Pitboard deletes it.
+A Claude Code account's window is on claude.ai, a Codex account's on chatgpt.com. Each keeps its own website data, so your accounts stay signed in side by side. Pitboard never reads or copies that data, adds no script to a page and never signs a window in with a Claude Code or Codex login. [Account windows](/reference/files#account-windows) says where the data is.
 
 ## Open an account window
 
@@ -16,12 +16,10 @@ Each window keeps its own website data, so your accounts stay signed in side by 
   </Tab>
   <Tab title="Windows">
     Right-click Pitboard's icon in the notification area and select **Open claude.ai as work**. When the site has several accounts, select **Open claude.ai**, then the account. In the Pitboard window, right-click an account and select **Open claude.ai** or **Open chatgpt.com**.
-
-    A window needs the Microsoft Edge WebView2 Runtime 144.0.3719.77 or later, which Windows Update keeps up to date.
   </Tab>
 </Tabs>
 
-A window's title is its account's label. Links to other sites open in your default browser, and anything you connect there goes to the account your browser is signed in to. [Account windows](/reference/account-windows#account-windows) lists every place a window opens from, and [Downloads](/reference/account-windows#downloads) where it saves files.
+A window's title is its account's label. Links to other sites open in your default browser, and anything you connect there goes to the account your browser is signed in to. [Account windows and shared links](/reference/account-windows) has every rule a window follows.
 
 ## Sign in
 
@@ -76,7 +74,11 @@ Pitboard refuses a page on another site, and a site's sign-in link, with **Can't
 
 With no account on the page's site, the **Open Link** window shows **No claude.ai Account**. Click **Add Account**, and the link waits there until you choose the account you added.
 
-If **Pitboard** is not in the Share menu, see [Pitboard is missing from the Share menu](/troubleshooting/account-windows#pitboard-is-missing-from-the-share-menu).
+### Pitboard is missing from the Share menu
+
+Turn it on in **System Settings** > **General** > **Login Items & Extensions** > **Sharing**. On macOS 14, it is in **System Settings** > **Privacy & Security** > **Extensions** > **Sharing**.
+
+Whether browsers other than Safari, Chrome and Firefox list Pitboard is not known. Without a Share menu, open the account window and go to the page there.
 
 ## Sign a window out
 
@@ -91,4 +93,24 @@ If **Pitboard** is not in the Share menu, see [Pitboard is missing from the Shar
 
 The window starts again at the site's home page, with the sign-in note. The site is not told, so the account stays signed in on your other devices and browsers.
 
-[Forgetting the account](/guides/accounts#forget-an-account) deletes its window's data too.
+[Forgetting the account](/guides/accounts#forget-an-account) deletes its window's data too. [Website data](/reference/account-windows#website-data) says when.
+
+## A window is signed in as the wrong account
+
+The window's title names the account it belongs to, whoever signed in. [Sign the window out](#sign-a-window-out), then sign in as the email address in the note at its top.
+
+## A window does not open or load
+
+| What you see | What to do |
+| --- | --- |
+| **Couldn't open this window**, on Windows | The Microsoft Edge WebView2 Runtime is missing or older than 144.0.3719.77. Update Windows, which keeps the Runtime up to date, then open the window again. |
+| A dimmed menu item for the window, on Windows | Its data waits to be deleted until every account window has closed. Close them, then open it again. |
+| **Couldn't Load the Page** and a reason, or **Couldn't load the page** on Windows | Fix what the reason names, such as a lost connection, then click **Try Again**, or select **Try again** on Windows. |
+
+A page that crashes loads again. A second crash within 60 seconds gives the reason **The page stopped working.**
+
+On macOS, the window sends WebKit's own user agent. Whether a site's check for automated traffic stops it is not known.
+
+## Downloads are not saved
+
+A failed download says why in the window's **Downloads** list. On macOS, if you clicked **Don't Allow** when macOS asked for your Downloads folder, open **System Settings** > **Privacy & Security** > **Files & Folders** and turn on **Downloads Folder** for Pitboard. On Windows, Pitboard needs no permission for it.

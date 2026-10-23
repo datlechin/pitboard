@@ -343,8 +343,7 @@ share sheet lists Pitboard once it is installed. Then rewrite, from what you mea
 - The Windows tab of Check the signature in `docs/install/verify.mdx`, and "SignPath has signed
   no Pitboard file." in `docs/install/code-signing-policy.mdx`.
 - The Smart App Control section of `docs/troubleshooting.mdx`.
-- What `docs/guides/account-windows.mdx`, `docs/concepts/account-windows.mdx`,
-  `docs/troubleshooting/account-windows.mdx` and `docs/reference/account-windows.mdx` say of the
+- What `docs/guides/account-windows.mdx` and `docs/reference/account-windows.mdx` say of the
   share sheet on Windows, and the Share extension's line in `SECURITY.md`.
 - The Share sentence of `#account-windows` in `website/src/pages/index.astro`, and the
   SmartScreen sentence in `website/src/components/InstallTabs.astro` and

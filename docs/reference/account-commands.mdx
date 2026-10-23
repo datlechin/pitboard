@@ -242,7 +242,7 @@ Usage: pitboard forget [OPTIONS] <LABEL>
 
 Pitboard does not revoke the login it deletes: see [SECURITY.md](https://github.com/datlechin/pitboard/blob/main/SECURITY.md#out-of-scope).
 
-For a Claude Code or Codex account, the app deletes its window data, sign-in included, at its next read of the accounts. [How account windows keep their data](/concepts/account-windows) has the rules.
+For a Claude Code or Codex account, the app deletes its window data, sign-in included, at its next read of the accounts. [Website data](/reference/account-windows#website-data) has the rules.
 
 `forget` refuses the account in use with `cannot_forget_active_account`. Where Pitboard cannot identify the login in use, it also refuses the account last in use, or one with no parked login, with the code of what stopped it, such as `identity_unverifiable` or `app_open`.
 
