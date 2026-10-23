@@ -146,7 +146,7 @@ pub enum Error {
     )]
     ParkUnread {
         label: String,
-        path: std::path::PathBuf,
+        path: PathBuf,
         why: String,
     },
     /// A park sealed to this account is there but does not open in this logon: an

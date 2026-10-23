@@ -271,14 +271,12 @@ impl Key {
         )
     }
 
-    /// The account [`Key::typed`] or [`Key::qualified`] wrote: `codex/work` is Codex's `work`,
-    /// and `work` the default tool's, as is a label 0.1.x wrote with a slash, such as `team/a`,
-    /// where `team` names no tool.
+    // A label 0.1.x wrote with a slash, such as `team/a`, where `team` names no tool, is whole.
     pub fn parse(typed: &str) -> Key {
-        typed
-            .split_once(crate::label::SEPARATOR)
-            .and_then(|(tool, label)| Some(Key::new(ProviderId::parse(tool)?, label)))
-            .unwrap_or_else(|| Key::new(crate::label::DEFAULT, typed))
+        match crate::label::parse(typed) {
+            Ok(crate::label::Spec::Qualified(provider, label)) => Key::new(provider, label),
+            _ => Key::new(crate::label::DEFAULT, typed),
+        }
     }
 }
 
