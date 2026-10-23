@@ -1,4 +1,3 @@
-import AppKit
 import PitboardKit
 import SwiftUI
 
@@ -40,6 +39,7 @@ struct AccountsPane: View {
                     model.send(.refresh(asked: true))
                 }
             )
+            .focusedSceneValue(\.account, selection.flatMap(model.item).map(command(for:)))
             .task { model.send(.paneShown(pane: .accounts)) }
             .alert(
                 asking?.question.title ?? "",
@@ -125,7 +125,7 @@ struct AccountsPane: View {
         .listStyle(.inset)
         .contextMenu(forSelectionType: String.self) { ids in
             if let item = ids.first.flatMap(model.item) {
-                menu(for: item)
+                AccountMenuItems(command: command(for: item), place: .shortcutMenu)
             }
         } primaryAction: { ids in
             if let action = ids.first.flatMap(model.item)?.action {
@@ -135,6 +135,14 @@ struct AccountsPane: View {
         .onDeleteCommand {
             if let item = selection.flatMap(model.item) { forget(item) }
         }
+        .copyable(selectedEmail)
+    }
+
+    private var selectedEmail: [String] {
+        guard let email = selection.flatMap(model.item)?.email, !email.isEmpty else {
+            return []
+        }
+        return [email]
     }
 
     private func rows(of section: AccountSection) -> some View {
@@ -146,34 +154,20 @@ struct AccountsPane: View {
 
     // MARK: - What can be done to an account
 
-    @ViewBuilder private func menu(for item: AccountItem) -> some View {
-        ForEach(item.offers, id: \.title) { offer in
-            Button(offer.title) { send(offer.intent, askingFirst: offer.confirm) }
-                .disabled(!offer.enabled)
-        }
-        if !item.windows.isEmpty {
-            Divider()
-            ForEach(item.windows, id: \.window.store) { offer in
-                Button(offer.title) {
-                    windows.presence.activate()
-                    openWindow(id: AccountWindowScene.id, value: offer.window.id)
+    private func command(for item: AccountItem) -> AccountCommand {
+        AccountCommand(
+            item: item,
+            choose: { [$asking, model] offer in
+                if let question = offer.confirm {
+                    $asking.wrappedValue = Asking(question: question, intent: offer.intent)
+                } else {
+                    model.send(offer.intent)
                 }
-            }
-        }
-        if !item.email.isEmpty {
-            Divider()
-            Button("Copy Email Address") {
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(item.email, forType: .string)
-            }
-        }
-        if let forget = item.forget {
-            Divider()
-            Button(forget.title, role: .destructive) {
-                send(forget.intent, askingFirst: forget.confirm)
-            }
-            .disabled(!forget.enabled)
-        }
+            },
+            open: { [windows, openWindow] offer in
+                windows.presence.activate()
+                openWindow(id: AccountWindowScene.id, value: offer.window.id)
+            })
     }
 
     private func forget(_ item: AccountItem) {

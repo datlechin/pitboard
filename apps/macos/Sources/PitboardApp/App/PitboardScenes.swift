@@ -55,6 +55,7 @@ public struct PitboardScenes: Scene {
                     .keyboardShortcut("n")
             }
             AccountWindowCommands(windows: windows)
+            AccountCommands()
             RefreshCommands()
             // Pitboard's help is its documentation site; the app has no help book.
             CommandGroup(replacing: .help) {

@@ -89,6 +89,15 @@ extension XCUIApplication {
         descendants(matching: .any)["account.\(qualified)"]
     }
 
+    // The menu bar's menus are found whether open or not, and none holds Copy Email Address.
+    var shortcutMenu: XCUIElement {
+        menus.containing(NSPredicate(format: "title == %@", "Copy Email Address")).firstMatch
+    }
+
+    var accountMenu: XCUIElement {
+        menuBars.menuBarItems["Account"]
+    }
+
     /// macOS titles an account's window with the account's label, then a dash and the page's
     /// title, so the title is the label or starts with it.
     func accountWindow(_ title: String) -> XCUIElement {

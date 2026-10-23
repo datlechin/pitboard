@@ -70,6 +70,18 @@ import Testing
     #expect(Set(severities.map(\.symbol)).count == severities.count)
 }
 
+@Test func aShortcutMenuHidesWhatCannotBeChosenAndTheMenuBarDimsIt() {
+    let now = ItemOffer(
+        title: "Warm Up Now", intent: .warmNow(qualified: "claude/work"), enabled: false,
+        confirm: nil)
+    let rename = ItemOffer(
+        title: "Rename…",
+        intent: .presentSheet(sheet: .rename(provider: "claude", label: "work")),
+        enabled: true, confirm: nil)
+    #expect(AccountMenuItems.shown([rename, now], in: .shortcutMenu) == [rename])
+    #expect(AccountMenuItems.shown([rename, now], in: .menuBar) == [rename, now])
+}
+
 /// A sheet put up in place of another is told apart from it, so the window puts it up
 /// afresh.
 @Test func eachSheetIsToldApart() {

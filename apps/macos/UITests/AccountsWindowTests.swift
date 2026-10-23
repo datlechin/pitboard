@@ -127,7 +127,7 @@ final class AccountsWindowTests: FixtureTestCase {
         let row = app.accountRow("claude/personal")
         XCTAssertTrue(row.waitForExistence(timeout: 5))
         row.rightClick()
-        app.menuItems["Rename…"].click()
+        app.shortcutMenu.menuItems["Rename…"].click()
         let name = app.textFields["sheet.name"]
         XCTAssertTrue(name.waitForExistence(timeout: 5))
         name.click()
@@ -151,12 +151,12 @@ final class AccountsWindowTests: FixtureTestCase {
         let row = app.accountRow("claude/personal")
         XCTAssertTrue(row.waitForExistence(timeout: 5))
         row.rightClick()
-        app.menuItems["Forget…"].click()
+        app.shortcutMenu.menuItems["Forget…"].click()
         XCTAssertTrue(app.alert.buttons["Forget"].waitForExistence(timeout: 5))
         app.alert.buttons["Cancel"].click()
         XCTAssertTrue(row.exists)
         row.rightClick()
-        app.menuItems["Forget…"].click()
+        app.shortcutMenu.menuItems["Forget…"].click()
         app.alert.buttons["Forget"].click()
         XCTAssertTrue(row.waitForNonExistence(timeout: 5))
     }
@@ -168,8 +168,52 @@ final class AccountsWindowTests: FixtureTestCase {
         let row = app.accountRow("claude/work")
         XCTAssertTrue(row.waitForExistence(timeout: 5))
         row.rightClick()
-        XCTAssertTrue(app.menuItems["Rename…"].waitForExistence(timeout: 5))
-        XCTAssertFalse(app.menuItems["Forget…"].exists)
+        XCTAssertTrue(app.shortcutMenu.menuItems["Rename…"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.shortcutMenu.menuItems["Forget…"].exists)
+        app.typeKey(.escape, modifierFlags: [])
+    }
+
+    @MainActor
+    func testTheAccountMenuActsOnTheSelectedAccount() {
+        let app = launch(.oneTool)
+        app.openWindow()
+        let row = app.accountRow("claude/personal")
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        row.click()
+        app.accountMenu.click()
+        XCTAssertTrue(app.accountMenu.menuItems["Use personal"].waitForExistence(timeout: 5))
+        app.accountMenu.menuItems["Rename…"].click()
+        XCTAssertTrue(app.textFields["sheet.name"].waitForExistence(timeout: 5))
+        app.sheets.firstMatch.buttons["Cancel"].click()
+        XCTAssertTrue(app.sheets.firstMatch.waitForNonExistence(timeout: 5))
+
+        row.click()
+        app.typeKey("c", modifierFlags: .command)
+        XCTAssertEqual(NSPasteboard.general.string(forType: .string), "dana@home.example")
+        app.typeKey(.delete, modifierFlags: .command)
+        XCTAssertTrue(app.alert.buttons["Forget"].waitForExistence(timeout: 5))
+        app.alert.buttons["Cancel"].click()
+        XCTAssertTrue(row.exists)
+    }
+
+    // personal warms up at launch, so its period runs and Warm Up Now cannot be chosen.
+    @MainActor
+    func testWarmUpNowIsLeftOutOfTheShortcutMenuAndDimmedInTheAccountMenu() {
+        let app = launch(.warmUp)
+        app.openWindow()
+        XCTAssertTrue(
+            app.text("BEGINSWITH", "Warms up again at ").waitForExistence(timeout: 30))
+        let row = app.accountRow("claude/personal")
+        row.rightClick()
+        XCTAssertTrue(app.shortcutMenu.menuItems["Rename…"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.shortcutMenu.menuItems["Warm Up Now"].exists)
+        app.typeKey(.escape, modifierFlags: [])
+
+        row.click()
+        app.accountMenu.click()
+        let now = app.accountMenu.menuItems["Warm Up Now"]
+        XCTAssertTrue(now.waitForExistence(timeout: 5))
+        XCTAssertFalse(now.isEnabled)
         app.typeKey(.escape, modifierFlags: [])
     }
 

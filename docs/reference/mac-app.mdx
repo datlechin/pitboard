@@ -190,18 +190,20 @@ Each check shows a green, orange or red symbol, its name, what it found and, whe
 
 ## Account actions
 
-Control-clicking an account in the **Accounts** pane opens its shortcut menu. For `work`, it lists, in order:
+Control-clicking an account in the **Accounts** pane opens its shortcut menu. The **Account** menu in the menu bar lists the same items for the account selected there. For `work`, they are, in order:
 
 | Item | Shown for | What it does |
 | --- | --- | --- |
 | **Use work** | An account you can switch to, while no switch runs | Switches to it. |
 | **Name** | The account in use, when it is not enrolled | Opens **Name This Account**. |
-| **Sign In Again** | Every enrolled account, the one in use too | Opens **Sign In to work Again**. Dimmed while a sign-in runs. |
+| **Sign In Again** | Every enrolled account, the one in use too | Opens **Sign In to work Again**. |
 | **Rename** | Every enrolled account | Opens **Rename "work"**. |
-| **Warm Up Now** | Every enrolled Claude Code account | [Warms it up](/guides/warm-up#warm-up-an-account-now). Dimmed while its five-hour period runs, while it is held back, while a warm-up runs and while nothing can be warmed up here. |
+| **Warm Up Now** | Every enrolled Claude Code account | [Warms it up](/guides/warm-up#warm-up-an-account-now). |
 | **Open claude.ai** or **Open chatgpt.com** | Every enrolled Claude Code or Codex account | Opens the account's [window](/reference/account-windows#account-windows). |
-| **Copy Email Address** | Every account with an email address | Copies it. |
-| **Forget** | An enrolled account not in use | Asks, then forgets the account. |
+| **Copy Email Address** | Every account with an email address, in the shortcut menu | Copies it. In the menu bar, **Edit** > **Copy** (Command-C) copies the selected account's. |
+| **Forget** | An enrolled account not in use | Asks, then forgets the account. Command-Delete in the menu bar. |
+
+**Sign In Again** cannot be chosen while a sign-in runs. **Warm Up Now** cannot be chosen while the account's five-hour period runs, while it is held back, while a warm-up runs or while nothing can be warmed up here. The shortcut menu leaves out an item that cannot be chosen, and the **Account** menu dims it. With no account selected, the **Account** menu shows **Rename** and **Forget** dimmed.
 
 ## Dialogs and alerts
 
@@ -327,6 +329,8 @@ Account windows' alerts are in [Account windows and shared links](/reference/acc
 | **File** | **Add Account** | Command-N | Opens **Add Account**. |
 | **File** | **Open claude.ai as work**, **Open chatgpt.com as main**, or a submenu for a site with several accounts | None | Opens that account's window. |
 | **File** | **Remove Website Data** | None | Asks, then [removes the website data](/reference/account-windows#remove-website-data) of the account window in front. Dimmed unless one is in front. |
+| **Edit** | **Copy** | Command-C | Copies the email address of the account selected in the **Accounts** pane. |
+| **Account** | The items of [Account actions](#account-actions) | Command-Delete for **Forget** | Acts on the account selected in the **Accounts** pane. |
 | **Edit** > **Find** | **Find**, **Find Next**, **Find Previous**, **Use Selection for Find** | Command-F, Command-G, Shift-Command-G, Command-E | Finds text in the page of the account window in front. |
 | **View** | **Refresh**, **Check Again** or **Reload Page** | Command-R | The button of the window in front: **Check Again** in **This Mac**, **Reload Page** in an account's window, **Refresh** in the other panes. Dimmed elsewhere, and while it runs. |
 | **View** | **Actual Size**, **Zoom In**, **Zoom Out** | Command-0, Command-Plus, Command-Minus | Zooms the page in the account window in front. |
