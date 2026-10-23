@@ -553,7 +553,12 @@ fn a_run_outs_button_switches_and_a_click_on_it_opens_the_accounts() {
     );
 
     let button = posted.button.expect("a Switch button");
-    assert!(crate::notification_buttons().contains(&button.title));
+    assert!(
+        crate::notification_buttons()
+            .iter()
+            .any(|kind| kind.title == button.title && !kind.opens_window),
+        "a switch needs no window"
+    );
     machine.switched = switched("claude", "work", "personal", Vec::new());
     model.send(Intent::NotificationClicked {
         argument: button.clicked,

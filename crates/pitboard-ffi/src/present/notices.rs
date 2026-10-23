@@ -10,7 +10,7 @@ use super::{
 use crate::model::advice::HeadsUp;
 use crate::model::state::{in_its_app, split};
 use crate::model::{Intent, LastSwitch, Pane, Sheet};
-use crate::model::{NotificationButton, RunOutNotice};
+use crate::model::{NotificationButton, NotificationButtonKind, RunOutNotice};
 use crate::{Account, Adoption, Held, Warning};
 use pitboard_core::host::{OS, Os};
 use pitboard_core::provider::ProviderId;
@@ -561,8 +561,18 @@ fn button(title: String, clicked: &Clicked) -> Option<NotificationButton> {
     })
 }
 
-pub(crate) fn notification_buttons() -> Vec<String> {
-    vec![switch_button(), sign_in_again_button(OS)]
+// A switch asks for a window only where it ends in a question.
+pub(crate) fn notification_buttons() -> Vec<NotificationButtonKind> {
+    vec![
+        NotificationButtonKind {
+            title: switch_button(),
+            opens_window: false,
+        },
+        NotificationButtonKind {
+            title: sign_in_again_button(OS),
+            opens_window: true,
+        },
+    ]
 }
 
 fn switch_button() -> String {

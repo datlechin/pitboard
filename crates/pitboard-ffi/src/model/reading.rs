@@ -328,7 +328,12 @@ fn a_login_replaced_outside_offers_to_sign_in_again() {
         )]
     );
     let button = machine.posted[0].button.clone().expect("a button");
-    assert!(crate::notification_buttons().contains(&button.title));
+    assert!(
+        crate::notification_buttons()
+            .iter()
+            .any(|kind| kind.title == button.title && kind.opens_window),
+        "its sheet needs the window"
+    );
 }
 
 /// What a replaced login's words say Claude Code holds now changes with every switch made

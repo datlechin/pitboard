@@ -164,12 +164,23 @@ private final class Opened: @unchecked Sendable {
     #expect(MacNotifications.argument(of: MacNotifications.action, in: content.userInfo) == nil)
 }
 
-/// Each button the model can post is registered at launch, and none brings Pitboard forward.
+/// Each button the model can post is registered at launch, and only one that opens a window
+/// brings Pitboard forward, which macOS refuses the app itself from the background.
 @Test func everyButtonHasACategoryOfItsOwn() {
-    let categories = MacNotifications.categories(notificationButtons())
-    #expect(Set(categories.map(\.identifier)) == Set(notificationButtons()))
+    let buttons = notificationButtons()
+    let categories = MacNotifications.categories(buttons)
+    #expect(Set(categories.map(\.identifier)) == Set(buttons.map(\.title)))
     for category in categories {
         #expect(category.actions.map(\.title) == [category.identifier])
-        #expect(category.actions.allSatisfy { $0.options.isEmpty })
+        let opens = buttons.first { $0.title == category.identifier }?.opensWindow ?? false
+        #expect(category.actions.allSatisfy { $0.options == (opens ? [.foreground] : []) })
     }
+    #expect(buttons.contains { $0.title == "Sign In Again" && $0.opensWindow })
+    #expect(buttons.contains { $0.title == "Switch" && !$0.opensWindow })
+}
+
+/// A notification an older Pitboard posted has no click of its own, and opens the accounts.
+@Test func aClickOnAnOlderNotificationOpensTheAccounts() {
+    #expect(
+        MacNotifications.argument(of: UNNotificationDefaultActionIdentifier, in: [:]) == "")
 }

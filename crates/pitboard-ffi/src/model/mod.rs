@@ -712,6 +712,14 @@ pub struct NotificationButton {
     pub clicked: String,
 }
 
+// A button any notification can carry, by its title, as macOS registers it at launch.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct NotificationButtonKind {
+    pub title: String,
+    // what it asks for always opens a window, so the system brings the app forward with it
+    pub opens_window: bool,
+}
+
 // The app's system's notifications, called on a thread of the model's own. Asking for
 // permission is the app's, and a refusal is no error: the window says the same either way.
 #[uniffi::export(with_foreign)]

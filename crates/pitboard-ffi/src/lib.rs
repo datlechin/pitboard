@@ -41,9 +41,9 @@ pub use sites::{Conjunction, Site, SiteLink, site_names, sites_for};
 mod model;
 pub use model::{
     AppControl, AppLaunch, AtLimit, DownloadEnd, EarlierPreferences, EarlierWindowRecords, Failure,
-    Intent, LastSwitch, LocalTime, ModelListener, NotificationButton, Notifications, Pane,
-    PitboardModel, PlatformError, QuitQuestion, ReadFailure, RestartNeeded, RunOutNotice,
-    RunningSignIn, Sheet, Snapshot, Tip, WindowRequest, WindowsLaunch,
+    Intent, LastSwitch, LocalTime, ModelListener, NotificationButton, NotificationButtonKind,
+    Notifications, Pane, PitboardModel, PlatformError, QuitQuestion, ReadFailure, RestartNeeded,
+    RunOutNotice, RunningSignIn, Sheet, Snapshot, Tip, WindowRequest, WindowsLaunch,
 };
 
 // The fixtures, which the `fixture` feature compiles; what is exported of them is the same
@@ -180,7 +180,7 @@ pub fn no_update_key() -> String {
 
 // macOS shows a notification's buttons from categories registered at launch, by their titles.
 #[uniffi::export]
-pub fn notification_buttons() -> Vec<String> {
+pub fn notification_buttons() -> Vec<NotificationButtonKind> {
     present::notification_buttons()
 }
 

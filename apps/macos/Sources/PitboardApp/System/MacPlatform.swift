@@ -99,14 +99,17 @@ final class MacNotifications: NSObject, Notifications, UNUserNotificationCenterD
         centre.setNotificationCategories(Self.categories(notificationButtons()))
     }
 
-    // The model opens a window where a click needs one, so no button brings Pitboard forward.
-    static func categories(_ titles: [String]) -> Set<UNNotificationCategory> {
+    // macOS refuses Pitboard's own activation from the background, so a button whose window
+    // always opens asks the system to bring the app forward.
+    static func categories(_ buttons: [NotificationButtonKind]) -> Set<UNNotificationCategory> {
         Set(
-            titles.map { title in
+            buttons.map { button in
                 UNNotificationCategory(
-                    identifier: title,
+                    identifier: button.title,
                     actions: [
-                        UNNotificationAction(identifier: action, title: title, options: [])
+                        UNNotificationAction(
+                            identifier: action, title: button.title,
+                            options: button.opensWindow ? [.foreground] : [])
                     ],
                     intentIdentifiers: [])
             })
@@ -125,10 +128,11 @@ final class MacNotifications: NSObject, Notifications, UNUserNotificationCenterD
         return content
     }
 
+    // An older Pitboard's notification has no click of its own, which the model reads as Accounts.
     static func argument(of response: String, in userInfo: [AnyHashable: Any]) -> String? {
         switch response {
         case action: userInfo[action] as? String
-        case UNNotificationDefaultActionIdentifier: userInfo[clicked] as? String
+        case UNNotificationDefaultActionIdentifier: userInfo[clicked] as? String ?? ""
         default: nil
         }
     }
