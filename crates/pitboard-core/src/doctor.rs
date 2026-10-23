@@ -1924,7 +1924,7 @@ fn judge_in_use(facts: &Facts, moment: &dyn Fn(i64, i64) -> String) -> Option<Ch
         Some(_) => format!("Anthropic named {in_use} {when}"),
         None => format!("Pitboard found no login stored {when}"),
     };
-    match known.doubt {
+    match known.unconfirmed() {
         Some(crate::in_use::Doubt::NeverEstablished) => {
             return Some(warn(
                 code,

@@ -87,6 +87,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   for an account's window.
 - The macOS app's **Settings** has three panes, **General**, **Limits** and **Advanced**, and
   the Windows app's **Settings** the same three sections before **About**.
+- A read that asks nobody warns with `in_use_unconfirmed` until Anthropic is first asked after an
+  update from 0.9.0 or earlier, as `pitboard doctor` does, whatever Claude Code's config names.
 
 ### Removed
 

@@ -36,7 +36,7 @@ The two options cannot be given together.
 | A renewal error, such as `renewal_failed` | Claude Code, Codex | Renewing a parked login failed for another reason. | No |
 | `recovery_undetermined` | Claude Code, Codex | An interrupted switch is waiting that the next change cannot finish. | Where Pitboard can tell without asking Anthropic |
 | `login_replaced` | Claude Code, Codex | A sign-in outside Pitboard replaced an account's only login. | Yes |
-| `in_use_unconfirmed` | Claude Code | Claude Code's config has named another account since Anthropic last identified the login stored. | Yes |
+| `in_use_unconfirmed` | Claude Code | Claude Code's config has named another account since Anthropic last identified the login stored, or Anthropic was not asked since an update from 0.9.0 or earlier. | Yes |
 | `config_names_another` | Claude Code | Claude Code's config names another account than the one whose login is stored. | Yes |
 | `fallback_login` | Claude Code | On macOS, `~/.claude/.credentials.json` sits behind the keychain. On Windows, `.credentials.json` sits behind Credential Manager. | No |
 | `login_replaced` | Claude Desktop | The account in use was signed out in Claude, or a sign-in outside Pitboard replaced its login. Pitboard holds no login for it. | Yes |

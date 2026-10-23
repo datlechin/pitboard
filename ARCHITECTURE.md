@@ -419,9 +419,11 @@ window loads its site, and whatever the site's pages load, as a browser would.
     could name is not asked, and the account the record names stands in for it. Offline rows
     (`gather_offline`) take the account in use from `in_use::known`, an account nobody
     enrolled included, which gets its row as it does online. `Pitboard::standing` says what
-    stands on every read: `login_replaced`, `in_use_unconfirmed` where Claude Code's config
-    has moved since the record was checked and the read could not ask, and
-    `config_names_another` where it names another account than the one in use.
+    stands on every read: `login_replaced`, `in_use_unconfirmed` where the read could not
+    ask and Claude Code's config has moved since the record was checked, or the record was
+    never checked, whatever the config names (`Known::unconfirmed`, which doctor's `in_use`
+    check follows too), and `config_names_another` where it names another account than the
+    one in use.
     `statusline.rs` files what a Claude Code session passed under the account its windows
     prove: the one account whose reading, as Anthropic last answered for it, holds a window
     the session passed and does not rule the session out. A reading rules it out with
