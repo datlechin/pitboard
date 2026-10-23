@@ -869,6 +869,11 @@ pub(crate) trait Host: Send + Sync + std::fmt::Debug {
     /// Unset in a build for tests, on the real hosts ([`administered::READ_BY_REAL_HOSTS`]).
     fn managed_preference(&self, domain: &str, key: &str) -> Administered;
 
+    // A configuration profile's plist as JSON: on macOS alone, and never in a build for tests.
+    fn managed_plist(&self, _path: &Path) -> Administered {
+        Administered::Unset
+    }
+
     // None in a build for tests, on the real hosts.
     fn administered_folder(&self, dir: &Path) -> Vec<PathBuf> {
         if administered::READ_BY_REAL_HOSTS {

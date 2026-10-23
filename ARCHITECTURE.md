@@ -3557,6 +3557,13 @@ treated, and only the macOS build shows it. The run reads both builds since.
   a login of another organisation as a session starts, so `Provider::refuses` asks it of the
   account going in, by the organisation Pitboard recorded for it. Where several managed
   sources set it, a login none of them names is refused.
+- Read on 23 October 2026 from the darwin-arm64 build of 2.1.309
+  (`macos_managed_preferences`): on macOS a configuration profile's plist, the person's in
+  `/Library/Managed Preferences/<user>` before the device's, is a managed source too. Claude
+  Code converts the first it can read with `plutil` and takes it over the folder unless
+  `managedSourcesBehavior` merges them, where it takes `HKLM` on Windows.
+  `host::Host::managed_plist` converts it the same way, and `settings::managed_taken` puts it
+  in `HKLM`'s place.
 - Read on 15 October 2026 from the win32-x64 and win32-arm64 builds of 2.1.300
   (`windows_version_resource`): `claude.exe` carries a version resource whose product
   version is `2.1.300.0`. So doctor reads the release there on Windows, once npm's
