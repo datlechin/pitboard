@@ -708,8 +708,8 @@ impl Method {
 }
 
 // Which ChatGPT logins this machine's Codex keeps (`codex_login_restrictions`). What the
-// configuration forces, Codex signs out of and deletes as it starts; what the requirements
-// leave out, it leaves unused.
+// configuration forces, the interactive `codex` signs out of and deletes as it starts; what
+// either leaves out, every Codex leaves unused.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Restrictions {
     method: Option<(Layer, Method)>,
@@ -732,7 +732,7 @@ impl Restrictions {
                 self.place(*layer)
             ));
         }
-        let signs_out = "so Codex signs out of it as it starts, and deletes it";
+        let signs_out = "so the interactive `codex` signs out of it as it starts, and deletes it";
         let unused = "so Codex does not use it";
         let of = |ids: &[String], workspace: Option<&str>| {
             (!workspace.is_some_and(|id| ids.iter().any(|allowed| allowed == id))).then(|| {
@@ -1836,7 +1836,8 @@ mod tests {
             one.refuses(Some("b"), Some("b")).as_deref(),
             Some(
                 "/Users/someone/.codex/config.toml sets `forced_chatgpt_workspace_id` to `a`, and \
-                 this login is of `b`, so Codex signs out of it as it starts, and deletes it"
+                 this login is of `b`, so the interactive `codex` signs out of it as it starts, \
+                 and deletes it"
             )
         );
         assert!(

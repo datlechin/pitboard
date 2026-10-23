@@ -3728,10 +3728,11 @@ real `auth.json` that build wrote. The register is `provider/codex/assumptions.r
   `forced_login_method` and `forced_chatgpt_workspace_id` come from the same layers as the
   store, and `allowed_login_methods` and `allowed_chatgpt_workspaces` from the requirements.
   As the TUI starts, Codex signs out of a login the forced two rule out, in every store, and
-  deletes it with no revoke; one the requirements rule out it leaves unused. A Codex park is
-  the only copy, so a switch, and a sign-in that would replace the login in use, ask
-  `Provider::refuses` of the login going in before anything moves, and stop with
-  `login_restricted`. `doctor` names each setting and the accounts it rules out.
+  deletes it with no revoke; `codex exec`, the app server and the ChatGPT app do not. Every
+  Codex leaves unused a login that any of the four rules out, by its `tokens.account_id`
+  first. A Codex park is the only copy, so a switch, and a sign-in that would replace the
+  login in use, ask `Provider::refuses` of the login going in before anything moves, and stop
+  with `login_restricted`. `doctor` names each setting and the accounts it rules out.
 - Read from 0.163.0's config loader on 16 October 2026 (`codex_windows_store_layers`): on
   Windows this machine's `config.toml` and `requirements.toml` are in `OpenAI\Codex` under
   `FOLDERID_ProgramData`, or under `C:\ProgramData` where Windows cannot say that folder.

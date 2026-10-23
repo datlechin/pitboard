@@ -29,8 +29,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   documentation](https://docs.rs/pitboard-core/0.17.0/pitboard_core/) shows the new one.
 - **Breaking:** Pitboard refuses with `login_restricted` to switch Codex to a login that Codex's
   `forced_login_method`, `forced_chatgpt_workspace_id`, `allowed_login_methods` or
-  `allowed_chatgpt_workspaces` rules out, since Codex would sign out of it and delete it. Switch
-  to an account those settings allow, or change them.
+  `allowed_chatgpt_workspaces` rules out, since Codex would sign out of it and delete it, or leave
+  it unused. Switch to an account those settings allow, or change them.
 - **Breaking:** Pitboard refuses with `login_restricted` to switch Claude Code to an account of an
   organisation that a managed `forceLoginOrgUUID` leaves out, since Claude Code would refuse its
   login. Switch to an account of an organisation the setting names.

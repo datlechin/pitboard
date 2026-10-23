@@ -164,7 +164,7 @@ The `Codex login store` line of `pitboard doctor` names the place that chose. Co
 
 Pitboard reads a `profile = "<name>"` line as choosing the `[profiles.<name>]` table, which never sets the store. It refuses a line that names a profile no table defines.
 
-As read in Codex 0.164.0, four settings limit which ChatGPT logins Codex keeps. Codex reads `forced_login_method` and `forced_chatgpt_workspace_id` from the same places as the store. As it starts, it signs out of a login they rule out and deletes it. It reads `allowed_login_methods` and `allowed_chatgpt_workspaces` from the requirements that pin the store, and leaves a login they rule out unused. Pitboard puts no such login in use, and refuses with `login_restricted`. The `Codex login restrictions` line of `pitboard doctor` names each setting and the accounts it rules out.
+As read in Codex 0.164.0, four settings limit which ChatGPT logins Codex keeps. Codex reads `forced_login_method` and `forced_chatgpt_workspace_id` from the same places as the store, and `allowed_login_methods` and `allowed_chatgpt_workspaces` from the requirements that pin the store. As the interactive `codex` starts, it signs out of a login the first two rule out and deletes it. Every Codex leaves unused a login that any of the four rules out. Pitboard puts no such login in use, and refuses with `login_restricted`. The `Codex login restrictions` line of `pitboard doctor` names each setting and the accounts it rules out.
 
 Pitboard does not read three places Codex also reads:
 
