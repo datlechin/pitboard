@@ -40,6 +40,9 @@ link from a page here to an id usepitboard.com does not have. Run them as
 - Each page goes in the folder its sidebar group uses, such as `guides/` for
   **Use Pitboard**, and in that group in `docs.json`. `index`, `quickstart`, `install`,
   `troubleshooting` and `security` sit at the top.
+- A page few readers still need, such as `install/upgrade-from-0-3-0`, keeps its place in
+  `docs.json` and gets `hidden: true` in its frontmatter. Mintlify then leaves it out of the
+  sidebar, the search and the sitemap, and its URL keeps working.
 - Images go in `images/` and are referenced as `/images/name.png`. The apps' UI tests take
   the pictures of the menu and the window. `menu.png` and `window.png` come from the macOS
   app, as [Run the debug build](../CONTRIBUTING.md#run-the-debug-build) says.
