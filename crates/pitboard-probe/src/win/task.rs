@@ -1,17 +1,19 @@
-//! E1-E4 and D2: register, run, read, list and delete probe tasks through `ITaskService`.
-//! Every task is named `pitboard-probe-<label>` (optionally with the account's SID after it,
-//! printed as `<sid>`, and another account's, which a list may see, as `<other_sid_N>`),
-//! its action runs one of the probe's own programs, and it is
+//! E1-E6 and D2: register, run, stop, read, list and delete probe tasks through
+//! `ITaskService`. Every task is named `pitboard-probe-<label>` (optionally with the account's
+//! SID after it, printed as `<sid>`, and another account's, which a list may see, as
+//! `<other_sid_N>`), its action runs one of the probe's own programs, and it is
 //! registered with an interactive token at the least privilege. The folder is the probe's
 //! own `\pitboard-probe\` unless E1 asks for W25's candidate `\Pitboard\` or the root; a
 //! folder the probe made is removed again when its last probe task goes, and a `\Pitboard\`
 //! folder the probe did not make is never removed. Listing names only `pitboard-probe-*`
-//! tasks. Everything but read and list needs the throwaway marker.
+//! tasks. E6 also reads, and never changes, the task Pitboard's watch service registered for
+//! this account. Everything but read and list needs the throwaway marker.
 
 use super::ffi::{self, Token};
 use super::{logon_now, sibling_exe};
 use crate::PROBE_PREFIX;
 use crate::cli::{TaskAction, TaskExec, TaskFolder};
+use crate::elevation::task_user;
 use crate::report::Report;
 use serde_json::{Value, json};
 use std::path::{Path, PathBuf};
@@ -21,9 +23,10 @@ use windows::Win32::System::Com::{
     CLSCTX_INPROC_SERVER, COINIT_MULTITHREADED, CoCreateInstance, CoInitializeEx,
 };
 use windows::Win32::System::TaskScheduler::{
-    IDailyTrigger, IExecAction, ITaskFolder, ITaskService, TASK_ACTION_EXEC, TASK_CREATE_OR_UPDATE,
-    TASK_ENUM_HIDDEN, TASK_LOGON_INTERACTIVE_TOKEN, TASK_RUNLEVEL_LUA, TASK_TRIGGER_DAILY,
-    TASK_TRIGGER_TIME, TaskScheduler,
+    IDailyTrigger, IExecAction, ILogonTrigger, ITaskDefinition, ITaskFolder, ITaskService,
+    TASK_ACTION_EXEC, TASK_CREATE_OR_UPDATE, TASK_ENUM_HIDDEN, TASK_LOGON_INTERACTIVE_TOKEN,
+    TASK_LOGON_TYPE, TASK_RUNLEVEL_LUA, TASK_RUNLEVEL_TYPE, TASK_TRIGGER_DAILY, TASK_TRIGGER_LOGON,
+    TASK_TRIGGER_TIME, TASK_TRIGGER_TYPE2, TaskScheduler,
 };
 use windows::Win32::System::Variant::VARIANT;
 use windows::core::{BSTR, Interface};
@@ -34,6 +37,7 @@ pub(super) struct Request<'a> {
     pub label: &'a str,
     pub folder: TaskFolder,
     pub sid_suffix: bool,
+    pub watch_service: bool,
     pub exec: TaskExec,
     pub args: Option<&'a str>,
     pub at_minutes: Option<u32>,
@@ -42,6 +46,8 @@ pub(super) struct Request<'a> {
     pub disabled: bool,
     pub start_when_available: bool,
     pub allow_battery: bool,
+    pub logon: bool,
+    pub time_limit: &'a str,
 }
 
 fn folder_path(f: TaskFolder) -> &'static str {
@@ -146,10 +152,17 @@ pub(super) fn task(req: &Request) -> Report {
         return Report::refused("task", logon, "--label takes up to 32 of a-z, 0-9 and -");
     }
     let sid = Token::current().ok().and_then(|t| t.user_sid());
-    let name = match (req.sid_suffix, &sid) {
-        (true, Some(s)) => format!("{PROBE_PREFIX}{}-{s}", req.label),
-        (true, None) => return Report::refused("task", logon, "cannot read the account's SID"),
-        (false, _) => format!("{PROBE_PREFIX}{}", req.label),
+    let (folder, name) = match (req.watch_service, req.sid_suffix, &sid) {
+        (true, _, _) if req.action != TaskAction::Read => {
+            return Report::refused("task", logon, "the probe changes no task of Pitboard's");
+        }
+        // As pitboard-core's `host::task::name` names it.
+        (true, _, Some(s)) => (TaskFolder::Pitboard, format!("Watch {s}")),
+        (false, true, Some(s)) => (req.folder, format!("{PROBE_PREFIX}{}-{s}", req.label)),
+        (_, _, None) if req.watch_service || req.sid_suffix => {
+            return Report::refused("task", logon, "cannot read the account's SID");
+        }
+        _ => (req.folder, format!("{PROBE_PREFIX}{}", req.label)),
     };
     // Every SID a printed name holds: this account's as `<sid>`, another's (a task another
     // user registered with --sid-suffix, which list sees) as a numbered `<other_sid_N>`.
@@ -172,18 +185,25 @@ pub(super) fn task(req: &Request) -> Report {
         Err(e) => return Report::refused("task", logon, e),
     };
     let result = match req.action {
-        TaskAction::Register => register(&service, req, &name, scratch.expect("checked")),
-        TaskAction::Run => run(&service, req.folder, &name),
-        TaskAction::Read => read(&service, req.folder, &name, sid.as_deref()),
+        TaskAction::Register => register(
+            &service,
+            req,
+            &name,
+            sid.as_deref(),
+            scratch.expect("checked"),
+        ),
+        TaskAction::Run => run(&service, folder, &name),
+        TaskAction::Stop => stop(&service, folder, &name),
+        TaskAction::Read => read(&service, folder, &name, sid.as_deref()),
         TaskAction::List => list(&service),
-        TaskAction::Delete => delete(&service, req.folder, &name, scratch.expect("checked")),
-        TaskAction::Enable => enable(&service, req.folder, &name),
+        TaskAction::Delete => delete(&service, folder, &name, scratch.expect("checked")),
+        TaskAction::Enable => enable(&service, folder, &name),
     };
     match result {
         Ok(mut v) => {
             if let Some(obj) = v.as_object_mut() {
                 obj.insert("name".into(), json!(shown(&name)));
-                obj.insert("folder".into(), json!(folder_path(req.folder)));
+                obj.insert("folder".into(), json!(folder_path(folder)));
             }
             if let Some(list) = v.get_mut("tasks").and_then(Value::as_array_mut) {
                 for t in list {
@@ -245,6 +265,7 @@ fn register(
     service: &ITaskService,
     req: &Request,
     name: &str,
+    sid: Option<&str>,
     scratch: &Path,
 ) -> Result<Value, String> {
     let exe = exec_path(req.exec);
@@ -276,7 +297,7 @@ fn register(
             .SetStopIfGoingOnBatteries(flag(!req.allow_battery))
             .map_err(err)?;
         settings
-            .SetExecutionTimeLimit(&BSTR::from("PT10M"))
+            .SetExecutionTimeLimit(&BSTR::from(req.time_limit))
             .map_err(err)?;
         settings.SetEnabled(flag(!req.disabled)).map_err(err)?;
 
@@ -311,6 +332,16 @@ fn register(
             let daily: IDailyTrigger = trigger.cast().map_err(err)?;
             daily.SetDaysInterval(1).map_err(err)?;
             boundary = Some(at);
+        }
+        if req.logon {
+            let sid = sid.ok_or("cannot read the account's SID")?;
+            let trigger = def
+                .Triggers()
+                .map_err(err)?
+                .Create(TASK_TRIGGER_LOGON)
+                .map_err(err)?;
+            let at_sign_in: ILogonTrigger = trigger.cast().map_err(err)?;
+            at_sign_in.SetUserId(&BSTR::from(sid)).map_err(err)?;
         }
 
         let action = def
@@ -347,6 +378,8 @@ fn register(
             "disabled": req.disabled,
             "start_when_available": req.start_when_available,
             "allow_battery": req.allow_battery,
+            "logon": req.logon,
+            "time_limit": req.time_limit,
             "exec": exe.file_name().map(|n| n.to_string_lossy().into_owned()),
             "folder_codes": codes,
         }))
@@ -365,6 +398,23 @@ fn run(service: &ITaskService, f: TaskFolder, name: &str) -> Result<Value, Strin
             "action": "run",
             "started": started.is_ok(),
             "error": started.err().map(err),
+        }))
+    }
+}
+
+fn stop(service: &ITaskService, f: TaskFolder, name: &str) -> Result<Value, String> {
+    // SAFETY: `service` is connected; the calls are on live interfaces; 0 is the only flag
+    // Stop takes.
+    unsafe {
+        let task = service
+            .GetFolder(&BSTR::from(folder_path(f)))
+            .and_then(|folder| folder.GetTask(&BSTR::from(name)))
+            .map_err(err)?;
+        let stopped = task.Stop(0);
+        Ok(json!({
+            "action": "stop",
+            "stopped": stopped.is_ok(),
+            "error": stopped.err().map(err),
         }))
     }
 }
@@ -409,21 +459,18 @@ fn read(
                 );
             }
         };
-        let mut user = BSTR::new();
-        let principal_is_self = task
-            .Definition()
-            .and_then(|d| d.Principal())
-            .and_then(|p| p.UserId(&mut user))
-            .ok()
-            .map(|()| {
-                let u = user.to_string();
-                sid == Some(u.as_str())
-                    || ffi::account_name().is_some_and(|n| {
-                        u.eq_ignore_ascii_case(&n)
-                            || u.to_lowercase()
-                                .ends_with(&format!("\\{}", n.to_lowercase()))
-                    })
-            });
+        let own_name = ffi::account_name();
+        let user = |given: &BSTR| task_user(&given.to_string(), sid, own_name.as_deref());
+        let definition = task.Definition().ok();
+        let principal = definition.as_ref().and_then(|d| d.Principal().ok());
+        let mut given = BSTR::new();
+        let principal_user = principal
+            .as_ref()
+            .and_then(|p| p.UserId(&mut given).ok())
+            .map(|()| user(&given));
+        let mut logon_type = TASK_LOGON_TYPE::default();
+        let mut run_level = TASK_RUNLEVEL_TYPE::default();
+        let mut limit = BSTR::new();
         Ok(json!({
             "action": "read",
             "task_present": true,
@@ -433,8 +480,50 @@ fn read(
             "last_run_time_ole_date": task.LastRunTime().ok(),
             "next_run_time_ole_date": task.NextRunTime().ok(),
             "number_of_missed_runs": task.NumberOfMissedRuns().ok(),
-            "principal_is_this_account": principal_is_self,
+            "principal_is_this_account": principal_user.map(|u| u.starts_with("self_")),
+            "principal_user": principal_user,
+            "principal_logon_type": principal
+                .as_ref()
+                .and_then(|p| p.LogonType(&mut logon_type).ok())
+                .map(|()| logon_type.0),
+            "principal_run_level": principal
+                .as_ref()
+                .and_then(|p| p.RunLevel(&mut run_level).ok())
+                .map(|()| run_level.0),
+            "execution_time_limit": definition
+                .as_ref()
+                .and_then(|d| d.Settings().ok())
+                .and_then(|s| s.ExecutionTimeLimit(&mut limit).ok())
+                .map(|()| limit.to_string()),
+            "triggers": definition.as_ref().map(|d| triggers(d, &user)),
+            "runs_under_way": task.GetInstances(0).and_then(|runs| runs.Count()).ok(),
         }))
+    }
+}
+
+// Each trigger's `TASK_TRIGGER_TYPE2`, and whom a sign-in trigger names.
+fn triggers(def: &ITaskDefinition, user: &dyn Fn(&BSTR) -> &'static str) -> Vec<Value> {
+    // SAFETY: a definition the service gave, and the triggers it holds, indexed from 1.
+    unsafe {
+        let Ok(all) = def.Triggers() else {
+            return Vec::new();
+        };
+        let mut count = 0;
+        let _ = all.Count(&mut count);
+        (1..=count)
+            .filter_map(|i| all.get_Item(i).ok())
+            .map(|trigger| {
+                let mut kind = TASK_TRIGGER_TYPE2::default();
+                let _ = trigger.Type(&mut kind);
+                let mut given = BSTR::new();
+                let named = (kind == TASK_TRIGGER_LOGON)
+                    .then(|| trigger.cast::<ILogonTrigger>().ok())
+                    .flatten()
+                    .and_then(|at_sign_in| at_sign_in.UserId(&mut given).ok())
+                    .map(|()| user(&given));
+                json!({ "type": kind.0, "user": named })
+            })
+            .collect()
     }
 }
 
@@ -523,6 +612,7 @@ pub(super) fn run_once(
         label,
         folder: TaskFolder::Probe,
         sid_suffix: false,
+        watch_service: false,
         exec,
         args: Some(args),
         at_minutes: None,
@@ -531,6 +621,8 @@ pub(super) fn run_once(
         disabled: false,
         start_when_available: false,
         allow_battery: true,
+        logon: false,
+        time_limit: "PT10M",
     };
     let registered = task(&req).to_json();
     if registered["ok"] != json!(true) {

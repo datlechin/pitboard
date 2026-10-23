@@ -155,6 +155,24 @@ pub fn relation(sid: &str, own: Option<&str>) -> &'static str {
     }
 }
 
+// How a task's `UserId` names an account, so a report says so without the SID or the name.
+pub fn task_user(given: &str, own_sid: Option<&str>, own_name: Option<&str>) -> &'static str {
+    if given.is_empty() {
+        return "none";
+    }
+    if given.starts_with("S-1-") {
+        return match relation(given, own_sid) {
+            "self" => "self_sid",
+            other => other,
+        };
+    }
+    let name = given.rsplit('\\').next().unwrap_or(given);
+    match own_name {
+        Some(own) if name.to_lowercase() == own.to_lowercase() => "self_name",
+        _ => "other_name",
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -255,6 +273,19 @@ mod tests {
         assert_eq!(relation("S-1-5-18", None), "system");
         assert_eq!(relation("S-1-5-32-544", None), "administrators");
         assert_eq!(relation("S-1-9-9", None), "other");
+    }
+
+    #[test]
+    fn a_tasks_user_is_named_by_how_it_names_the_account() {
+        let (sid, name) = (Some("S-1-5-21-1-2-3-1001"), Some("bé"));
+        assert_eq!(task_user("S-1-5-21-1-2-3-1001", sid, name), "self_sid");
+        assert_eq!(task_user("S-1-5-21-1-2-3-1002", sid, name), "other_account");
+        assert_eq!(task_user("S-1-5-18", sid, name), "system");
+        assert_eq!(task_user("bé", sid, name), "self_name");
+        assert_eq!(task_user(r"RUNNER\BÉ", sid, name), "self_name");
+        assert_eq!(task_user(r"RUNNER\dana", sid, name), "other_name");
+        assert_eq!(task_user("", sid, name), "none");
+        assert_eq!(task_user("bé", None, None), "other_name");
     }
 
     #[test]
