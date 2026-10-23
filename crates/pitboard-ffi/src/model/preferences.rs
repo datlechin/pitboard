@@ -4,7 +4,7 @@
 //! them in UserDefaults, and hands them over once, as `AppLaunch::earlier_preferences`: where
 //! the file is there, it wins.
 
-use super::{AtLimit, EarlierPreferences};
+use super::{AtLimit, EarlierPreferences, Tip};
 use pitboard_core::duty::autoswitch::Threshold;
 use pitboard_core::provider::ProviderId;
 use serde::{Deserialize, Serialize};
@@ -13,6 +13,13 @@ use std::collections::BTreeSet;
 const NOTHING: &str = "nothing";
 const NOTIFY: &str = "notify";
 const SWITCH: &str = "switch";
+
+fn tip_code(tip: Tip) -> &'static str {
+    match tip {
+        Tip::OpenAtLogin => "open_at_login",
+        Tip::AtLimit => "at_limit",
+    }
+}
 
 /// What `app.json` holds.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -36,6 +43,9 @@ pub(crate) struct Preferences {
     // Text, so a choice a later version adds leaves the rest of the file readable.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) at_limit: Option<String>,
+    // Text, as `at_limit` is, for a tip a later version adds.
+    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
+    pub(crate) tips_declined: BTreeSet<String>,
 }
 
 impl Preferences {
@@ -82,6 +92,19 @@ impl Preferences {
             _ if self.auto_switch => AtLimit::Switch,
             _ => AtLimit::Notify,
         }
+    }
+
+    pub(crate) fn at_limit_chosen(&self) -> bool {
+        self.at_limit.is_some() || self.auto_switch
+    }
+
+    pub(crate) fn declined(&self, tip: Tip) -> bool {
+        self.tips_declined.contains(tip_code(tip))
+    }
+
+    // Whether it was not declined already.
+    pub(crate) fn decline(&mut self, tip: Tip) -> bool {
+        self.tips_declined.insert(tip_code(tip).to_owned())
     }
 
     pub(crate) fn choose(&mut self, choice: AtLimit) {

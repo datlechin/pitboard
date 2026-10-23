@@ -56,6 +56,24 @@ private final class ScriptedLoginItem: LoginItem {
     #expect(openAtLogin.state == .disabled)
 }
 
+/// The model's setup tip asks to open at login only while macOS says the app does not, so
+/// each read and each change says what macOS has: a login item waiting for approval is not
+/// one to ask about again.
+@MainActor
+@Test func openingAtLoginIsSaidToTheModelAsMacOSHasIt() {
+    let item = ScriptedLoginItem()
+    var said: [Bool] = []
+    let openAtLogin = OpenAtLogin(item) { said.append($0) }
+    #expect(said.isEmpty, "nothing said before anything asks")
+
+    openAtLogin.read()
+    item.needsApproval = true
+    openAtLogin.set(true)
+    item.state = .disabled
+    openAtLogin.read()
+    #expect(said == [false, true, false])
+}
+
 /// macOS can hold a new login item until the person allows it, and until then the app does
 /// not open at login. That is not a failure.
 @MainActor

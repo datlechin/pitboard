@@ -35,6 +35,10 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The macOS menu bar mark has a dot while the menu opens on something that needs attention.
 - The Windows app's icon shows how much of its limit the account in use has left, and Windows'
   warning symbol while its menu opens on something that needs attention.
+- The app's setup tips go on past a second account: opening Pitboard at login, then what
+  happens when a limit reaches 95%, each with **Not Now**.
+- The Windows app's tip to start when you sign in says where Windows puts its icon, with a link
+  to Taskbar settings.
 
 ### Changed
 

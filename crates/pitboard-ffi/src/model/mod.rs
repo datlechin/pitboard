@@ -338,6 +338,13 @@ pub enum Intent {
     SetSchedule { on: bool },
     /// Taken only once the preferences are read, as `AtLimitShown::enabled` says.
     SetAtLimit { choice: AtLimit, at: u8 },
+    /// "Not Now" to a setup tip, kept with the app's preferences.
+    DeclineTip { tip: Tip },
+    /// What the app's system says of opening the app at login. A setup step offers it for the
+    /// app to do itself, which then says what its system says.
+    OpensAtLogin { on: bool },
+    /// The settings, on what happens at a limit.
+    ShowLimits,
     /// Warm up the account `qualified` names from now on, or stop: its own menu's **Warm Up
     /// Automatically**, or its row under the settings' warm-up. Kept by the core in Pitboard's
     /// directory, which the command line reads too. Turned on, an account due is warmed up at
@@ -402,6 +409,12 @@ pub enum Intent {
     DownloadEnded { id: String, end: DownloadEnd },
     /// Somebody cleared the downloads of the window whose store is `store` that have ended.
     ClearDownloads { store: String },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum Tip {
+    OpenAtLogin,
+    AtLimit,
 }
 
 // What the app does once a limit of the account in use reaches the share chosen. Only Claude

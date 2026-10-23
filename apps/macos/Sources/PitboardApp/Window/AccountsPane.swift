@@ -5,6 +5,7 @@ import SwiftUI
 struct AccountsPane: View {
     let model: AppModel
     let windows: AccountWindows
+    let openAtLogin: OpenAtLogin
     @State private var selection: String?
     /// A question the model asks before something that cannot be undone, and what to send
     /// once it is answered.
@@ -102,7 +103,14 @@ struct AccountsPane: View {
                     .selectionDisabled()
             }
             if let step = model.setup {
-                SetupTip(step: step, footing: model.footing) { model.send($0) }
+                SetupTip(step: step, footing: model.footing) { intent in
+                    // The login item is macOS's: the app turns it on, and says what macOS has.
+                    if case .opensAtLogin(let on) = intent {
+                        openAtLogin.set(on)
+                    } else {
+                        model.send(intent)
+                    }
+                }
             }
             ForEach(model.sections, id: \.id) { section in
                 // A heading per tool once there is more than one, and no section at all
@@ -223,6 +231,9 @@ private struct SetupTip: View {
                                 .disabled(!choice.enabled)
                         }
                     }
+                    if let link = step.link, let url = URL(string: link.link) {
+                        Link(link.title, destination: url)
+                    }
                 }
             }
             Spacer(minLength: 0)
@@ -232,7 +243,11 @@ private struct SetupTip: View {
     }
 
     private var symbol: String {
-        if case .unnamed = footing { return "tag" }
-        return Symbol.switchAccount
+        switch footing {
+        case .unnamed: "tag"
+        case .notOpenedAtLogin: "power"
+        case .atLimitUnchosen: Symbol.limits
+        default: Symbol.switchAccount
+        }
     }
 }

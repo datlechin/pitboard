@@ -730,7 +730,9 @@ window loads its site, and whatever the site's pages load, as a browser would.
     off. It reads `StartupApproved\Run`, which only Settings > Apps > Startup writes: where
     that turned the `Run` value off, the switch is off and held back, its note says to turn it
     on there, and a link opens `ms-settings:startupapps`. The settings read it again at each
-    visit and as `MainWindow` is activated while they show. `SettingsViewModel` is what the settings page shows and sends,
+    visit and as `MainWindow` is activated while they show. Each read and change is said to
+    the model as `Intent::OpensAtLogin`, on where Settings turned it off too, for its setup
+    tip, whose button `AccountsPage` turns into a change of its own. `SettingsViewModel` is what the settings page shows and sends,
     beyond the model's words its own, each warm-up account a `WarmAccountRow`, and
     `Versions` the app's own version. `AccountsViewModel`, `ActivityViewModel` and `MachineViewModel` are what
     the accounts, activity and This PC pages bind to, told part by part as `AppModel` tells
@@ -864,6 +866,9 @@ window loads its site, and whatever the site's pages load, as a browser would.
     hours).
     `LoginItem.swift` is opening at login (`SMAppService`) and `CommandLineTool.swift`
     linking the command line with an administrator's password, which stay the app's own.
+    The model is told what macOS says of the login item, `Intent::OpensAtLogin`, at launch,
+    on each change and as the app comes forward, for its setup tip, whose button the
+    accounts pane turns into a change of the login item and not a message to the model.
   - `PitboardApp/MenuBar`, `Window`, `Sheets`, `Settings` and `Design` are the views. They
     show the snapshot's parts and send its intents, and decide only what is the platform's:
     symbols, tints, layout and which pane the window shows.

@@ -38,23 +38,26 @@ final class MainAppLoginItem: LoginItem {
     func openSystemSettings() { SMAppService.openSystemSettingsLoginItems() }
 }
 
-/// The settings' Open Pitboard at login: what macOS has, and why a change it refused did not
-/// happen. macOS's own, never the model's: the login item belongs to this app's bundle.
+// The settings' Open Pitboard at login: what macOS has, and why a change it refused did not
+// happen. macOS's own: the login item belongs to this app's bundle, and the model is only told.
 @MainActor
 @Observable
 final class OpenAtLogin {
     @ObservationIgnored private let item: any LoginItem
+    @ObservationIgnored private let said: @MainActor (Bool) -> Void
     private(set) var state: LoginItemState
     private(set) var failed: String?
 
-    init(_ item: any LoginItem) {
+    init(_ item: any LoginItem, said: @escaping @MainActor (Bool) -> Void = { _ in }) {
         self.item = item
+        self.said = said
         state = item.state
     }
 
-    /// Asks macOS again, since the person can change it in System Settings at any time.
+    // The person can change it in System Settings at any time.
     func read() {
         state = item.state
+        said(state != .disabled)
     }
 
     func set(_ wanted: Bool) {
@@ -68,7 +71,7 @@ final class OpenAtLogin {
         } catch {
             failed = error.localizedDescription
         }
-        state = item.state
+        read()
     }
 
     func openSystemSettings() {

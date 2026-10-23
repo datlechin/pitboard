@@ -58,7 +58,10 @@ public partial class App : Application, IIconTargets
 
         _model = model;
         Shell.RestartAfterUpdate(_start.Identity.Build);
-        _startAtSignIn = StartAtSignIn.For(_start, Program.Exe);
+        var startAtSignIn = StartAtSignIn.For(_start, Program.Exe);
+        _startAtSignIn = startAtSignIn;
+        // Turned off in Windows Settings is a choice made there, which the setup tip does not ask about again.
+        startAtSignIn.Changed += (_, _) => model.Send(new Intent.OpensAtLogin(startAtSignIn.On || startAtSignIn.TurnedOff));
         model.PropertyChanged += OnModelChanged;
         var image = new IconImage(Shell.NotificationIconSize, Shell.NotificationIcon, Shell.DestroyIcon);
         _image = image;
@@ -83,6 +86,11 @@ public partial class App : Application, IIconTargets
         // A click arrives on a thread of COM's; the model takes a message from any.
         var launchedBy = notifications.Start(intent => _model?.Send(intent));
         model.Send(new Intent.Start());
+        if (startAtSignIn.Refusal is null)
+        {
+            startAtSignIn.Read();
+        }
+
         if (launchedBy is not null)
         {
             model.Send(launchedBy);

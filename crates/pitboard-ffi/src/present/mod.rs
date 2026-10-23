@@ -354,6 +354,11 @@ pub enum Footing {
     Unnamed { provider: String, email: String },
     /// A tool has one account, so there is nothing yet to switch to in it.
     OnlyOne { provider: String, label: String },
+    /// The app's system says it does not open the app at login, where nothing it does runs.
+    NotOpenedAtLogin,
+    /// Claude Code has two accounts, and nobody chose what happens once a limit reaches the
+    /// share.
+    AtLimitUnchosen,
     /// Set up, or too early to say.
     Ready,
 }
@@ -366,6 +371,15 @@ pub struct SetupStep {
     pub detail: String,
     /// What can be pressed, the one to press first first.
     pub actions: Vec<Choice>,
+    // a page of the system's own settings, which the app opens
+    #[uniffi(default)]
+    pub link: Option<SetupLink>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct SetupLink {
+    pub title: String,
+    pub link: String,
 }
 
 /// A button, what pressing it sends, and whether it can be pressed now.

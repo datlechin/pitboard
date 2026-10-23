@@ -37,7 +37,8 @@ public struct PitboardScenes: Scene {
         .menuBarExtraStyle(.menu)
 
         Window("Pitboard", id: MainWindow.id) {
-            MainWindow(model: model, windows: windows, requests: requests)
+            MainWindow(
+                model: model, windows: windows, requests: requests, openAtLogin: openAtLogin)
         }
         .defaultSize(width: 760, height: 560)
         .commands {

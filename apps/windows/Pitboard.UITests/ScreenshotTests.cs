@@ -31,6 +31,14 @@ public sealed partial class ScreenshotTests
             Assert.Inconclusive($"CF1: {Foreground.Holder()} keeps the foreground, so a picture would show it");
         }
 
+        // The pictures show the accounts: starting at sign-in, then what happens at a limit.
+        foreach (var tip in new[] { "Start when you sign in to Windows", "Switch before a limit runs out" })
+        {
+            launched.Named(tip);
+            launched.Invoke("Not now");
+            Assert.IsTrue(launched.Gone(found => found.ByName(tip)), tip);
+        }
+
         window.Move(0, 0);
         launched.Row("codex/spare");
         Launched.Shows(window, "5-hour limit, 42", exact: false);

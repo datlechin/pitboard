@@ -1056,6 +1056,8 @@ pub(crate) struct State {
     auto_refusals: Refusals,
     /// The app's own preferences, kept in Pitboard's directory.
     pub(crate) preferences: Preferences,
+    // as the app's system last said, which nothing guesses at before
+    pub(crate) opens_at_login: Option<bool>,
     /// Whether the preferences have been read. Until they are, and for good where they
     /// could not be, nothing is written over what may be in their file.
     preferences_read: bool,
@@ -1136,6 +1138,7 @@ impl State {
             warm: Warming::default(),
             told: Told::new(),
             preferences: Preferences::default(),
+            opens_at_login: None,
             preferences_read: false,
             loading_kept: false,
             standing_in: false,
@@ -1359,6 +1362,15 @@ impl State {
                 }
             }
             Intent::SetAtLimit { choice, at } => self.at_limit_set(choice, at, jobs),
+            Intent::DeclineTip { tip } => {
+                if self.preferences.decline(tip) && self.preferences_read {
+                    jobs.push(Job::KeepPreferences {
+                        preferences: self.preferences.clone(),
+                    });
+                }
+            }
+            Intent::OpensAtLogin { on } => self.opens_at_login = Some(on),
+            Intent::ShowLimits => self.show_settings(),
             Intent::SetWarm { qualified, on } => jobs.push(Job::SetWarm { qualified, on }),
             Intent::SetWarmRange { from, to } => jobs.push(Job::SetWarmRange { from, to }),
             Intent::WarmNow { qualified } => {

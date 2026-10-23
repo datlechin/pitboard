@@ -42,7 +42,13 @@ public sealed partial class AccountsPage : Page
 
     public static bool Busy(EmptyKind kind) => kind == EmptyKind.Reading;
 
-    public static string SetupGlyph(bool names) => names ? Glyphs.Name : Glyphs.Switch;
+    public static string SetupGlyph(Footing footing) => footing switch
+    {
+        Footing.Unnamed => Glyphs.Name,
+        Footing.NotOpenedAtLogin => Glyphs.Power,
+        Footing.AtLimitUnchosen => Glyphs.Limits,
+        _ => Glyphs.Switch,
+    };
 
     protected override void OnNavigatedTo(NavigationEventArgs e)
     {
@@ -110,8 +116,28 @@ public sealed partial class AccountsPage : Page
                 button.Style = (Style)Application.Current.Resources["AccentButtonStyle"];
             }
 
-            button.Click += (_, _) => ViewModel.Send(choice.Intent);
+            button.Click += (_, _) => Choose(choice.Intent);
             SetupChoices.Children.Add(button);
+        }
+
+        if (step.Link is { } link)
+        {
+            var opens = new HyperlinkButton { Content = link.Title };
+            opens.Click += (_, _) => ViewModel.OpenSetupLink();
+            SetupChoices.Children.Add(opens);
+        }
+    }
+
+    // Starting at sign-in is Windows': the app turns it on, and says what Windows has.
+    private void Choose(Intent intent)
+    {
+        if (intent is Intent.OpensAtLogin opens)
+        {
+            Context.StartAtSignIn.Set(opens.On);
+        }
+        else
+        {
+            ViewModel!.Send(intent);
         }
     }
 

@@ -84,10 +84,14 @@ Instead of the list, it can show:
 | **No accounts** | No tool is signed in and no account is enrolled. | **Add account** |
 | **Reading accounts** | The first read has not finished. | None |
 
+The setup tip is the first of these that applies:
+
 | Setup tip | Shown when | Buttons |
 | --- | --- | --- |
 | **Give this account a name** | A tool is signed in to an account Pitboard has not enrolled. | **Name**, which opens **Name this account** |
 | **Add a second account** | Claude Code's or Codex's only enrolled account is the one in use. | **Add account**, set to that tool. **Not now** stops the tip for that tool. |
+| **Start when you sign in to Windows** | Windows does not start Pitboard when you sign in, and Settings > Apps > Startup did not turn it off. The tip says where Windows puts the icon. | **Turn on**, which turns on [Start when you sign in to Windows](/reference/settings#start-when-you-sign-in-to-windows). **Taskbar settings** opens Windows' taskbar settings, where **Other system tray icons** can keep the icon in view. **Not now** stops the tip. |
+| **Switch before a limit runs out** | Claude Code has two enrolled accounts, and nothing was chosen in [When a limit reaches](/reference/settings#when-a-limit-reaches). | **Open settings**, which opens **Settings**. **Not now** stops the tip. |
 
 | Part of a row | Shows |
 | --- | --- |

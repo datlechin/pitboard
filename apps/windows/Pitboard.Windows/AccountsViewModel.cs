@@ -27,7 +27,7 @@ public sealed partial class AccountsViewModel(AppModel model, Action<Uri> open) 
         [nameof(AppModel.Reading)] = [nameof(CanRefresh)],
         [nameof(AppModel.Notices)] = [nameof(Notices)],
         [nameof(AppModel.Setup)] = [nameof(Setup), nameof(HasSetup), nameof(SetupTitle), nameof(SetupDetail)],
-        [nameof(AppModel.Footing)] = [nameof(SetupNames)],
+        [nameof(AppModel.Footing)] = [nameof(SetupFooting)],
         [nameof(AppModel.Sections)] = [nameof(Sections)],
     };
 
@@ -69,8 +69,7 @@ public sealed partial class AccountsViewModel(AppModel model, Action<Uri> open) 
 
     public string SetupDetail => model.Setup?.Detail ?? "";
 
-    // The setup step names an account first, and otherwise offers a second one to switch to.
-    public bool SetupNames => model.Footing is Footing.Unnamed;
+    public Footing SetupFooting => model.Footing;
 
     public IReadOnlyCollection<string> HeldWindows => model.AccountWindows.Held;
 
@@ -93,6 +92,14 @@ public sealed partial class AccountsViewModel(AppModel model, Action<Uri> open) 
     public void Refresh() => model.Send(new Intent.Refresh(Asked: true));
 
     public void Add() => model.Send(new Intent.PresentSheet(new Sheet.Add(Provider: null)));
+
+    public void OpenSetupLink()
+    {
+        if (model.Setup?.Link is { } link && Uri.TryCreate(link.Link, UriKind.Absolute, out var uri))
+        {
+            open(uri);
+        }
+    }
 
     public void ChooseEmpty()
     {

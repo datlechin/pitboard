@@ -11,12 +11,12 @@ use super::testing::{
     desktop_account, desktop_machine, desktop_warning, enrolled_as, refusal, status, switched,
     titled, warned, warning,
 };
-use super::{Intent, Pane, Sheet, Snapshot, WindowRequest};
+use super::{Intent, Pane, Sheet, Snapshot, Tip, WindowRequest};
 use crate::account_windows::forget_message_on;
 use crate::present::testing::{LimitExt, Unreadable, account, unplaced, window};
 use crate::present::{
     AccountItem, AccountsShown, Choice, Footing, ItemOffer, MenuEntry, NoticeAction, PaceStanding,
-    PanelNotice, Question, SetupStep, Severity, WindowOffer, present,
+    PanelNotice, Question, SetupLink, SetupStep, Severity, WindowOffer, present,
 };
 use crate::{Abandoned, Account, EnrolledAs, GaveUp, Limit, Warning};
 use pitboard_core::host::OS;
@@ -2552,6 +2552,7 @@ fn an_account_signed_in_without_a_name_is_asked_for_one() {
                 }),
                 enabled: true,
             }],
+            link: None,
         })
     );
 }
@@ -2597,19 +2598,128 @@ fn one_enrolled_account_is_told_there_is_nothing_to_switch_to() {
                     enabled: true,
                 },
             ],
+            link: None,
         })
     );
 }
 
-/// AppModelTests.swift's twoAccountsAreAskedNothing.
+/// Two Claude Code accounts are asked what happens at a limit, until somebody chooses in the
+/// settings, where the sentence on the plans' terms sits beside switching by itself.
+///
+/// AppModelTests.swift's twoAccountsAreAskedNothing, before there was the choice.
 #[test]
-fn two_accounts_are_asked_nothing() {
+fn two_accounts_are_asked_what_happens_at_a_limit() {
+    let (model, _) = reading(vec![
+        account(Some("work")).signed_in().build(),
+        account(Some("personal")).build(),
+    ]);
+    assert_eq!(model.shown().footing, Footing::AtLimitUnchosen);
+    let [mac, windows] = [model.on_a_mac(), model.on_windows()].map(|shown| shown.setup);
     assert_eq!(
-        footing(vec![
-            account(Some("work")).signed_in().build(),
-            account(Some("personal")).build(),
-        ]),
-        Footing::Ready
+        mac,
+        Some(SetupStep {
+            title: "Switch before a limit runs out".into(),
+            detail: "Pitboard notifies you once a limit of the account in use reaches 95%. It \
+                     can switch Claude Code to another of your accounts instead."
+                .into(),
+            actions: vec![
+                Choice {
+                    title: "Open Settings…".into(),
+                    intent: Intent::ShowLimits,
+                    enabled: true,
+                },
+                Choice {
+                    title: "Not Now".into(),
+                    intent: Intent::DeclineTip { tip: Tip::AtLimit },
+                    enabled: true,
+                },
+            ],
+            link: None,
+        })
+    );
+    let windows = windows.expect("a step");
+    assert_eq!(
+        windows
+            .actions
+            .iter()
+            .map(|choice| choice.title.as_str())
+            .collect::<Vec<_>>(),
+        ["Open settings", "Not now"]
+    );
+
+    let (mut chose, _) = reading(vec![
+        account(Some("work")).signed_in().build(),
+        account(Some("personal")).build(),
+    ]);
+    chose.state.preferences.choose(super::AtLimit::Switch);
+    assert_eq!(chose.shown().footing, Footing::Ready);
+    let codex_pair = footing(vec![
+        account(Some("job")).of("codex").signed_in().build(),
+        account(Some("side")).of("codex").build(),
+    ]);
+    assert_eq!(
+        codex_pair,
+        Footing::Ready,
+        "only Claude Code switches by itself"
+    );
+}
+
+/// The app opens at login only where somebody turned that on, and switches, notifies and
+/// warms up only while it is open, so the step after a second account asks, in each system's
+/// words. Windows puts a new icon behind the taskbar's arrow and lets nothing bring it out but
+/// its own settings, so its step says so and links them.
+#[test]
+fn an_app_that_does_not_open_at_login_is_asked_to() {
+    let (mut model, _) = reading(vec![
+        account(Some("work")).signed_in().build(),
+        account(Some("personal")).build(),
+    ]);
+    model.send(Intent::OpensAtLogin { on: false });
+    assert_eq!(model.shown().footing, Footing::NotOpenedAtLogin);
+    let not_now = |title: &str| Choice {
+        title: title.into(),
+        intent: Intent::DeclineTip {
+            tip: Tip::OpenAtLogin,
+        },
+        enabled: true,
+    };
+    assert_eq!(
+        model.on_a_mac().setup,
+        Some(SetupStep {
+            title: "Open Pitboard at login".into(),
+            detail: "Pitboard watches your limits only while it’s open.".into(),
+            actions: vec![
+                Choice {
+                    title: "Open at Login".into(),
+                    intent: Intent::OpensAtLogin { on: true },
+                    enabled: true,
+                },
+                not_now("Not Now"),
+            ],
+            link: None,
+        })
+    );
+    assert_eq!(
+        model.on_windows().setup,
+        Some(SetupStep {
+            title: "Start when you sign in to Windows".into(),
+            detail: "Pitboard watches your limits only while it’s running. Its icon starts \
+                     behind the arrow at the end of the taskbar, and Taskbar settings can keep \
+                     it in view."
+                .into(),
+            actions: vec![
+                Choice {
+                    title: "Turn on".into(),
+                    intent: Intent::OpensAtLogin { on: true },
+                    enabled: true,
+                },
+                not_now("Not now"),
+            ],
+            link: Some(SetupLink {
+                title: "Taskbar settings".into(),
+                link: "ms-settings:taskbar".into(),
+            }),
+        })
     );
 }
 
@@ -2682,8 +2792,7 @@ fn an_unplaced_login_is_neither_unenrolled_nor_offered_a_name() {
             row,
         ]);
         let shown = model.shown();
-        assert_eq!(shown.footing, Footing::Ready);
-        assert_eq!(shown.setup, None);
+        assert_eq!(shown.footing, Footing::AtLimitUnchosen, "nothing to name");
         assert!(
             rows(&model).iter().all(|row| !matches!(
                 row.action.as_ref().map(|a| &a.intent),
