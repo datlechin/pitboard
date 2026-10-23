@@ -14,7 +14,7 @@ Pitboard moves and stores the OAuth refresh tokens of Claude Code and OpenAI's C
     Codex keeps its own login in a plaintext `auth.json`. `pitboard doctor` fails if anyone else has access to a login file Claude Code left behind the keychain, and warns for Codex's `auth.json`.
   </Tab>
   <Tab title="Windows">
-    Parked logins are files in `vault` in Pitboard's directory, `%LOCALAPPDATA%\Pitboard`. Pitboard seals each with Windows' data protection under your own Windows account, never the machine's, so no other account can open one. Pitboard makes its folders and files reachable only by you, SYSTEM and Administrators.
+    Parked logins are files in `vault` in Pitboard's directory, `%USERPROFILE%\AppData\Local\Pitboard`. Pitboard seals each with Windows' data protection under your own Windows account, never the machine's, so no other account can open one. Pitboard makes its folders and files reachable only by you, SYSTEM and Administrators.
 
     Claude Code keeps its own login in a plaintext `.credentials.json`, which takes the access list of its folder, or in Credential Manager, which every sign-in of yours on that PC reads. Codex keeps its login in a plaintext `auth.json`. `pitboard doctor` fails if anyone else can reach a parked login or Claude Code's file, and warns for Codex's `auth.json`, each time with the `icacls` commands that fix it.
   </Tab>

@@ -9,7 +9,7 @@ Paths here are defaults. [Environment variables](/reference/environment-variable
 
 Pitboard's directory is `~/.pitboard`, or the path in `PITBOARD_HOME`. The command line and the app share it.
 
-On Windows, it is `AppData\Local\Pitboard` in your home, whatever `LOCALAPPDATA` names.
+On Windows, it is `%USERPROFILE%\AppData\Local\Pitboard`, whatever `LOCALAPPDATA` names.
 
 Pitboard creates each directory at mode 0700 and each file at 0600. On Windows, it gives each an access list that admits only you, SYSTEM and Administrators. A directory that already exists keeps its own. A copy in `backups/` keeps the access of Claude Code's config.
 

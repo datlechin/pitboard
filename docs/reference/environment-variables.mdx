@@ -13,7 +13,7 @@ A variable that names a folder must hold a full path: [`home_not_absolute`](/ref
 | --- | --- | --- | --- |
 | `HOME` | macOS, Linux | Both | Your home, the `~` in every path of [Files](/reference/files). Unset, your account's home. Where it names another folder than your account's own, Pitboard leaves Claude Desktop alone: see [Claude Desktop files](/reference/files#claude-desktop-files). |
 | `USERPROFILE` | Windows | Both | Your home, as `HOME` is elsewhere. Pitboard's directory and Claude Code's files are found from it. Unset, your account's profile folder. |
-| `PITBOARD_HOME` | All | Both | Pitboard's directory, in place of `~/.pitboard`, or `%LOCALAPPDATA%\Pitboard` on Windows. Daily renewal renews the default directory whatever this says. |
+| `PITBOARD_HOME` | All | Both | [Pitboard's directory](/reference/files#the-pitboard-directory), in place of `~/.pitboard`, or `%USERPROFILE%\AppData\Local\Pitboard` on Windows. Daily renewal renews the default directory whatever this says. |
 | `PITBOARD_NO_ARGV` | macOS | Both | `1`: Pitboard never writes a login on `security`'s argument line. See [Large logins on macOS](/security#large-logins-on-macos). On Windows it changes nothing, and `pitboard doctor` warns while it is set. |
 | `PITBOARD_API_BASE` | All | Both | For Pitboard's tests. An `http` URL on a loopback IP address gets Pitboard's requests. |
 | `PITBOARD_CLAUDE`, `PITBOARD_CODEX` | All | Both | The `claude` or `codex` program to sign in with, in place of the one Pitboard finds. Empty counts as unset. |

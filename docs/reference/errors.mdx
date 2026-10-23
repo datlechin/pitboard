@@ -205,7 +205,7 @@ An interrupted Claude Desktop move shows `move_waiting` on each read, as [Warnin
 | Code | Exit | Meaning | What to do |
 | --- | --- | --- | --- |
 | `schedule_unsupported` | 1 | This system has no scheduler Pitboard writes to. On Linux, systemd did not start the system, as in many containers. | Run `pitboard renew` yourself from time to time. |
-| `schedule_not_default_home` | 1 | `PITBOARD_HOME` names a directory other than Pitboard's own, `~/.pitboard` or `%LOCALAPPDATA%\Pitboard`, and the schedule renews only that one. A link to it counts as another directory. | Unset `PITBOARD_HOME`, then [turn on daily renewal](/guides/renewal#turn-on-daily-renewal) again. For the other directory, run `pitboard renew` with `PITBOARD_HOME` set. |
+| `schedule_not_default_home` | 1 | `PITBOARD_HOME` names a directory other than Pitboard's own, `~/.pitboard` or `%USERPROFILE%\AppData\Local\Pitboard`, and the schedule renews only that one. A link to it counts as another directory. | Unset `PITBOARD_HOME`, then [turn on daily renewal](/guides/renewal#turn-on-daily-renewal) again. For the other directory, run `pitboard renew` with `PITBOARD_HOME` set. |
 | `schedule_refused` | 1 | `launchctl` on macOS, Task Scheduler on Windows or `systemctl` on Linux refused the schedule. The message gives its answer. | Fix what it names, then turn on daily renewal again. |
 | `schedule_program_missing` | 1 | The app only: the command line inside the app, which the schedule would run, is not there. | Install the app again. |
 | `schedule_program_temporary` | 1 | On macOS, the app runs from a temporary copy macOS made, which is gone once the app quits. | Move Pitboard to your Applications folder, open it from there and turn on daily renewal again. |

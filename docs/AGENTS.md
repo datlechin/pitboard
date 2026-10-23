@@ -65,7 +65,7 @@ pages say so.
 
 - Write what every system shares once. A difference on one system is an exception, in its own
   sentence or paragraph that starts with the system: "On Windows, the directory is
-  `%LOCALAPPDATA%\Pitboard`." Text that macOS and Linux share is written once, followed by
+  `%USERPROFILE%\AppData\Local\Pitboard`." Text that macOS and Linux share is written once, followed by
   an "On Windows," paragraph.
 - What differs by more than a paragraph goes in `<Tabs>`: steps, a picture of the app or a
   reference section. The app's steps get a `macOS` and a `Windows` tab, and the command line
@@ -197,7 +197,7 @@ Use the first word, never the others.
 | Before | After |
 | --- | --- |
 | Open Claude Code sessions pick up the switch within about 33 seconds, unless a login file sits behind the keychain. | Open Claude Code sessions follow a switch within about 33 seconds, with no restart. The exception lives in Open sessions. |
-| Pitboard keeps its directory in `~/.pitboard`, or in `%LOCALAPPDATA%\Pitboard` if you are on Windows. | The directory is `~/.pitboard`. On Windows, it is `%LOCALAPPDATA%\Pitboard`. |
+| Pitboard keeps its directory in `~/.pitboard`, or in `%USERPROFILE%\AppData\Local\Pitboard` if you are on Windows. | The directory is `~/.pitboard`. On Windows, it is `%USERPROFILE%\AppData\Local\Pitboard`. |
 | A file with no login in it, such as `{}`, does the same. So does a file Pitboard cannot read. | Any file there pins open sessions: a login, `{}` or a file Pitboard cannot read. |
 | It switches whatever the app's setting says. | `pitboard watch` switches whether the app's setting is on or off, at its own share: `--at`, 95 by default. |
 | Run `pitboard renew` to renew it, or the command shown to sign in to it again. (one table cell) | One row per case, one instruction per row. |
