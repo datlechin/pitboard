@@ -302,7 +302,7 @@ impl Provider for Claude {
         Some(format!(
             "{layer} sets `forceLoginOrgUUID` to {}, and this login is of `{organisation}`, so \
              Claude Code refuses it as a session starts",
-            crate::words::listed(ids.iter().map(|id| format!("`{id}`")).collect())
+            crate::words::listed_values(ids)
         ))
     }
 

@@ -660,6 +660,11 @@ impl Host for MemoryHost {
             .unwrap_or(Administered::Unset)
     }
 
+    // A test says a plist's JSON with `administers`.
+    fn managed_plist(&self, path: &Path) -> Administered {
+        self.administered_file(path)
+    }
+
     fn administered_folder(&self, dir: &Path) -> Vec<PathBuf> {
         self.administered
             .lock()

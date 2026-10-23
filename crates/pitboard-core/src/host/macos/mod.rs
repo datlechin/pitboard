@@ -114,6 +114,14 @@ impl Host for MacOs {
             Administered::Unset
         }
     }
+
+    fn managed_plist(&self, path: &Path) -> Administered {
+        if administered::READ_BY_REAL_HOSTS {
+            preferences::as_json(path)
+        } else {
+            Administered::Unset
+        }
+    }
 }
 
 pub(super) fn host() -> Arc<dyn Host> {

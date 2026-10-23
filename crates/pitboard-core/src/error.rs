@@ -390,8 +390,9 @@ pub enum Error {
     LiveStoreUnsupported { tool: ProviderId, reason: String },
 
     #[error(
-        "{} would not keep `{label}`'s login: {reason}. Pitboard changed nothing.",
-        tool.name()
+        "{} would not keep `{label}`'s login: {reason}. Pitboard changed nothing. {}",
+        tool.name(),
+        crate::words::restricted_way_out(*tool)
     )]
     LoginRestricted {
         tool: ProviderId,
@@ -2420,10 +2421,24 @@ mod tests {
             }
             .to_string(),
             Error::ConfirmationNeeded { command: "forget" }.to_string(),
+            Error::LoginRestricted {
+                tool: ProviderId::Claude,
+                label: "work".into(),
+                reason: "a pin leaves it out".into(),
+            }
+            .to_string(),
+            Error::LoginRestricted {
+                tool: ProviderId::Codex,
+                label: "codex/work".into(),
+                reason: "a setting rules it out".into(),
+            }
+            .to_string(),
         ];
         for message in actionable {
             assert!(
-                message.contains("Run ") || message.contains("Sign in"),
+                ["Run ", "Sign in", "Switch to"]
+                    .iter()
+                    .any(|way| message.contains(way)),
                 "no action offered: {message}"
             );
         }

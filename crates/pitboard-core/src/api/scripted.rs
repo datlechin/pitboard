@@ -75,7 +75,6 @@ struct Script {
     usage: HashMap<String, Answer<Snapshot>>,
     renewals: HashMap<String, Answer<Renewed>>,
     codex_renewals: HashMap<String, Answer<Fresh>>,
-    // Where each Codex renewal went, and as which client.
     codex_renewed_as: Vec<(String, String)>,
     asked: Vec<Asked>,
     /// What happens elsewhere while a renewal of a refresh token is answered, once.

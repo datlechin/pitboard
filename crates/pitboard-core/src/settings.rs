@@ -15,7 +15,8 @@
 //! `/etc/claude-code` on Linux, as `managed-settings.json` and a `managed-settings.d`
 //! drop-in directory beside it; a person's own are `<config dir>/settings.json`. Read from
 //! 2.1.300, Windows keeps them in `C:\Program Files\ClaudeCode` and in the registry's
-//! policy value `Settings` (`windows_managed_settings` in the register).
+//! policy value `Settings` (`windows_managed_settings` in the register). Read from 2.1.309,
+//! macOS also takes a configuration profile's plist (`macos_managed_preferences`).
 //!
 //! Project settings are deliberately not read. `.claude/settings.json` is a fact about one
 //! directory, not about the machine, and an answer true in the directory Pitboard happened
@@ -69,6 +70,34 @@ pub(crate) fn managed_dir(os: Os) -> PathBuf {
 const POLICIES: &str = r"SOFTWARE\Policies\ClaudeCode";
 const POLICY: &str = "Settings";
 
+const PREFERENCES: &str = "com.anthropic.claudecode.plist";
+
+// A configuration profile's on macOS, the person's before the device's
+// (`macos_managed_preferences`).
+fn preferences(user: Option<String>) -> Vec<PathBuf> {
+    let root = Path::new("/Library/Managed Preferences");
+    user.map(|user| root.join(user).join(PREFERENCES))
+        .into_iter()
+        .chain([root.join(PREFERENCES)])
+        .collect()
+}
+
+// The first of `paths` Claude Code can read, where it holds a policy.
+fn plist_taken(ctx: &Context, paths: &[PathBuf]) -> Result<Option<Layer>, String> {
+    for path in paths {
+        match ctx.host().managed_plist(path) {
+            Administered::Set(text) => {
+                return Ok(
+                    holds_policy(&text).then(|| administered(path.display().to_string(), &text))
+                );
+            }
+            Administered::Unreadable(why) => return Err(format!("{}: {why}", path.display())),
+            Administered::Unset => {}
+        }
+    }
+    Ok(None)
+}
+
 struct Layer {
     name: String,
     text: String,
@@ -88,7 +117,8 @@ fn managed_files(ctx: &Context) -> Vec<PathBuf> {
     files
 }
 
-// `HKLM` wins over the folder unless they merge, so reading both finds more, never less.
+// `HKLM` and the managed preferences win over the folder unless they merge, so reading each
+// finds more, never less.
 fn managed(ctx: &Context) -> Vec<Layer> {
     let host = ctx.host();
     let mut there = false;
@@ -106,6 +136,13 @@ fn managed(ctx: &Context) -> Vec<Layer> {
             Administered::Unset => None,
         })
         .collect();
+    if ctx.os == Os::MacOs {
+        for path in preferences(crate::host::user::login_name()) {
+            if let Administered::Set(text) = host.managed_plist(&path) {
+                layers.push(administered(path.display().to_string(), &text));
+            }
+        }
+    }
     if ctx.os == Os::Windows {
         for hive in [Hive::Machine, Hive::User] {
             if hive == Hive::User && there {
@@ -130,9 +167,9 @@ fn managed(ctx: &Context) -> Vec<Layer> {
     layers
 }
 
-// The managed sources a session takes, as Claude Code picks them: `HKLM` over the folder unless
-// it merges them, `HKCU` where neither holds a policy. Err names one Pitboard cannot read that
-// may be taken.
+// The managed sources a session takes, as Claude Code picks them: `HKLM`, or on macOS the
+// managed preferences, over the folder unless it merges them, `HKCU` where neither holds a
+// policy. Err names one Pitboard cannot read that may be taken.
 fn managed_taken(ctx: &Context) -> Result<Vec<Layer>, String> {
     let host = ctx.host();
     let mut folder = Vec::new();
@@ -149,9 +186,6 @@ fn managed_taken(ctx: &Context) -> Result<Vec<Layer>, String> {
         }
     }
     let folder = || unread.map_or(Ok(folder), Err);
-    if ctx.os != Os::Windows {
-        return folder();
-    }
     let policy = |hive: Hive| {
         let name = format!(r"{}\{POLICIES}\{POLICY}", hive.name());
         match host.policy(hive, POLICIES, POLICY) {
@@ -160,19 +194,24 @@ fn managed_taken(ctx: &Context) -> Result<Vec<Layer>, String> {
             Administered::Unreadable(why) => Err(format!("{name}: {why}")),
         }
     };
-    if let Some(machine) = policy(Hive::Machine)? {
-        let merges = serde_json::from_str::<Value>(&machine.text)
+    let first = match ctx.os {
+        Os::Windows => policy(Hive::Machine)?,
+        Os::MacOs => plist_taken(ctx, &preferences(crate::host::user::login_name()))?,
+        Os::Linux => None,
+    };
+    if let Some(first) = first {
+        let merges = serde_json::from_str::<Value>(&first.text)
             .ok()
             .and_then(|json| Some(json.get("managedSourcesBehavior")?.as_str()? == "merge"))
             .unwrap_or(false);
-        let mut taken = vec![machine];
+        let mut taken = vec![first];
         if merges {
             taken.extend(folder()?);
         }
         return Ok(taken);
     }
     let folder = folder()?;
-    if folder.iter().any(|layer| holds_policy(&layer.text)) {
+    if ctx.os != Os::Windows || folder.iter().any(|layer| holds_policy(&layer.text)) {
         return Ok(folder);
     }
     Ok(policy(Hive::User)?.into_iter().collect())
@@ -284,7 +323,6 @@ fn gateway_in(layer: &Layer) -> Vec<Override> {
         .collect()
 }
 
-// Managed settings, then the `settings.json` given.
 fn layered(ctx: &Context, settings: &Path) -> Vec<Override> {
     managed(ctx)
         .iter()
@@ -333,7 +371,7 @@ fn profile_file(folder: &Path, name: &str) -> PathBuf {
 }
 
 // A profile's `authentication.type`. Claude Code takes a `user_oauth` one only with a login in
-// its credentials file.
+// its credentials file, which a file that is there and not empty stands for: it holds a token.
 fn mode(folder: &Path, name: &str) -> Option<String> {
     let profile: Value =
         serde_json::from_str(&std::fs::read_to_string(profile_file(folder, name)).ok()?).ok()?;
@@ -347,9 +385,9 @@ fn mode(folder: &Path, name: &str) -> Option<String> {
                 || folder.join("credentials").join(format!("{name}.json")),
                 PathBuf::from,
             );
-        std::fs::read_to_string(credentials)
+        std::fs::metadata(credentials)
             .ok()
-            .filter(|login| !login.trim().is_empty())?;
+            .filter(|file| file.is_file() && file.len() > 0)?;
     }
     Some(mode.to_owned())
 }
@@ -1007,6 +1045,80 @@ mod managed_tests {
         );
     }
 
+    // Read in 2.1.309 (macos_managed_preferences): a configuration profile's plist goes where
+    // `HKLM` goes on Windows.
+    #[test]
+    fn macos_managed_preferences_are_taken_over_the_folder_unless_they_merge() {
+        let memory = MemoryHost::new();
+        let plist =
+            PathBuf::from("/Library/Managed Preferences").join("com.anthropic.claudecode.plist");
+        let file =
+            PathBuf::from("/Library/Application Support/ClaudeCode").join("managed-settings.json");
+        let pins = |ctx: &Context| -> Vec<String> {
+            organisation_pins(ctx)
+                .into_iter()
+                .map(|(layer, _)| layer)
+                .collect()
+        };
+        memory.administers(&file, &json!({"forceLoginOrgUUID": "org-file"}).to_string());
+        memory.administers(
+            &plist,
+            &json!({"forceLoginOrgUUID": "org-mdm", "apiKeyHelper": "/opt/key"}).to_string(),
+        );
+        let (mac, _scratch) = on(Os::MacOs, &memory);
+        assert_eq!(pins(&mac), [plist.display().to_string()]);
+        assert_eq!(
+            said(&overrides(&mac)),
+            [(plist.display().to_string(), "apiKeyHelper".to_string())]
+        );
+        let (linux, _scratch) = on(Os::Linux, &memory);
+        assert_eq!(overrides(&linux), Vec::new(), "only macOS has them");
+
+        memory.administers(
+            &plist,
+            &json!({"forceLoginOrgUUID": "org-mdm", "managedSourcesBehavior": "merge"}).to_string(),
+        );
+        assert_eq!(
+            pins(&mac),
+            [plist.display().to_string(), file.display().to_string()]
+        );
+
+        memory.administers(
+            &plist,
+            &json!({"managedSourcesBehavior": "merge"}).to_string(),
+        );
+        assert_eq!(
+            pins(&mac),
+            [file.display().to_string()],
+            "no policy is not taken"
+        );
+    }
+
+    // Under the name the passwd entry gives, as Claude Code's `os.userInfo()` reads it.
+    #[test]
+    fn the_persons_managed_preferences_come_before_the_devices() {
+        let memory = MemoryHost::new();
+        let paths = preferences(Some("dana".into()));
+        let [person, device] = [&paths[0], &paths[1]];
+        assert_eq!(
+            person,
+            Path::new("/Library/Managed Preferences/dana/com.anthropic.claudecode.plist")
+        );
+        let (ctx, _scratch) = on(Os::MacOs, &memory);
+        let taken = |ctx: &Context| plist_taken(ctx, &paths).map(|plist| plist.map(|l| l.name));
+        memory.administers(device, &json!({"forceLoginOrgUUID": "org-d"}).to_string());
+        assert_eq!(taken(&ctx), Ok(Some(device.display().to_string())));
+
+        memory.administers(person, &json!({"forceLoginOrgUUID": "org-p"}).to_string());
+        assert_eq!(taken(&ctx), Ok(Some(person.display().to_string())));
+
+        memory.administers(person, "{}");
+        assert_eq!(taken(&ctx), Ok(None), "the first read is the one");
+
+        memory.administers_unreadably(person, "holds a date");
+        assert!(taken(&ctx).is_err());
+    }
+
     #[test]
     fn a_managed_file_keeps_the_persons_policy_out() {
         let memory = MemoryHost::new();
@@ -1107,6 +1219,23 @@ mod profile_tests {
 
         signed_in(&folder, "work");
         assert_eq!(said(&ctx), ["ANTHROPIC_PROFILE in the environment"]);
+    }
+
+    // The file holds a login, so it is looked at for being there and not empty, never read:
+    // what it holds, text or not, is Claude Code's to read.
+    #[test]
+    fn a_profiles_credentials_file_is_never_read() {
+        let scratch = tempfile::tempdir().expect("a scratch home");
+        let folder = scratch.path().join(".config").join("anthropic");
+        let ctx = on(Os::Linux, scratch.path(), &[("ANTHROPIC_PROFILE", "work")]);
+        profile(&folder, "work", "user_oauth");
+        signed_in(&folder, "work");
+        let credentials = folder.join("credentials").join("work.json");
+        std::fs::write(&credentials, b"\xff\xfe not text").expect("written");
+        assert_eq!(said(&ctx), ["ANTHROPIC_PROFILE in the environment"]);
+
+        std::fs::write(&credentials, "").expect("emptied");
+        assert_eq!(said(&ctx), Vec::<String>::new());
     }
 
     // Both variables, with no `ANTHROPIC_PROFILE`, are a federation of their own.

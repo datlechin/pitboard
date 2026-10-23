@@ -841,9 +841,13 @@ fn a_claude_code_login_of_an_organisation_the_managed_settings_leave_out_is_refu
             .and_then(|account| account.parked.clone())
     };
     let (live, vault, parked) = (m.live(), m.mem.vault().services(), there());
-    for pin in [
-        serde_json::json!("org-here"),
-        serde_json::json!(["org-here", "org-elsewhere"]),
+    for (pin, named) in [
+        (serde_json::json!("org-here"), "`org-here`"),
+        (
+            serde_json::json!(["org-here", "org-elsewhere"]),
+            "`org-here` and `org-elsewhere`",
+        ),
+        (serde_json::json!([]), "an empty list"),
     ] {
         m.mem.administers(
             &file,
@@ -855,8 +859,10 @@ fn a_claude_code_login_of_an_organisation_the_managed_settings_leave_out_is_refu
         let said = refused.to_string();
         assert!(
             said.starts_with("Claude Code would not keep `there`'s login:")
-                && said.contains(&format!("{} sets `forceLoginOrgUUID`", file.display()))
-                && said.contains("this login is of `org-there`"),
+                && said.contains(&format!(
+                    "{} sets `forceLoginOrgUUID` to {named}, and this login is of `org-there`",
+                    file.display()
+                )),
             "{said}"
         );
         assert_eq!(m.live(), live, "{pin}: the login in use stays");

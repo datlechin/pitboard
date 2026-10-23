@@ -40,8 +40,14 @@ pub(crate) fn withheld() -> impl Iterator<Item = &'static str> {
     reason = "the tests' own environment, from which this withholds what Pitboard reads"
 )]
 pub(crate) fn ctx() -> pitboard_core::context::Context {
+    // A folder nothing makes, so no Anthropic profile in the passed-on `HOME` is read.
+    let no_profiles = std::env::temp_dir().join(format!(
+        "pitboard-tests-{}-no-anthropic-profiles",
+        std::process::id()
+    ));
     let passed: Environment = std::env::vars_os()
         .filter(|(name, _)| !withheld().any(|kept| is(name, kept)))
+        .chain([("ANTHROPIC_CONFIG_DIR".into(), no_profiles.into_os_string())])
         .collect();
     pitboard_core::context::Context::for_command_line(&passed)
 }
@@ -331,6 +337,11 @@ impl Env {
             ),
             ("PITBOARD_API_BASE", self.server.url().into()),
             ("PATH", os::search_path(&self.root.join("bin"))),
+            // Ahead of `HOME`, which is passed on, for Claude Code's Anthropic profiles.
+            (
+                "ANTHROPIC_CONFIG_DIR",
+                self.root.join("anthropic").into_os_string(),
+            ),
         ];
         given.extend(
             os::account_folders(&self.root)

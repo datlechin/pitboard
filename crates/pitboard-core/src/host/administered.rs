@@ -88,14 +88,14 @@ fn not_a_file() -> Administered {
     Administered::Unreadable("is not a file".into())
 }
 
-fn as_text(bytes: Vec<u8>) -> Administered {
+pub(crate) fn as_text(bytes: Vec<u8>) -> Administered {
     match String::from_utf8(bytes) {
         Ok(text) => Administered::Set(text),
         Err(_) => Administered::Unreadable("is not UTF-8 text".into()),
     }
 }
 
-fn unread(e: &std::io::Error) -> Administered {
+pub(crate) fn unread(e: &std::io::Error) -> Administered {
     if e.kind() == std::io::ErrorKind::NotFound {
         Administered::Unset
     } else {
