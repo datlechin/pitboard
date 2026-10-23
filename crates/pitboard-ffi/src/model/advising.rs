@@ -694,6 +694,23 @@ fn a_limit_at_the_share_with_nowhere_to_go_says_when_it_resets() {
     assert_eq!(notice.button, None);
 }
 
+/// An account past the share has no room by the rule the automatic switch keeps, though it is
+/// under 100%.
+#[test]
+fn an_account_past_the_share_is_not_offered_at_the_share() {
+    let mut model = Hand::new();
+    let past = account(Some("personal"))
+        .limits(vec![window("session", 98.0).resets(Some(1_800_009_000))])
+        .build();
+    let mut read = status(vec![work(96.0, 1_800_003_900), past]);
+    read.now = 1_800_000_000;
+    let mut machine = Machine::reading(Ok(read));
+    model.refresh(&mut machine);
+    let notice = machine.posted.first().expect("posted");
+    assert_eq!(notice.body, "Resets in 1h 05m.");
+    assert_eq!(notice.button, None);
+}
+
 /// Do Nothing posts nothing, and the window still offers a switch once the account runs out.
 #[test]
 fn do_nothing_notifies_nothing() {

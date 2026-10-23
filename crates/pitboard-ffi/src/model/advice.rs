@@ -54,12 +54,13 @@ fn windows_of(measured: &Usage) -> Vec<usage::Window> {
 }
 
 /// The account of the same tool that can be switched to at `now` for a switch away from
-/// `ran` of `current`, by the rule the automatic switch keeps, and what it has left of that
-/// kind of limit: none when none has room.
+/// `ran` of `current`, by the rule the automatic switch keeps at `share`, and what it has left
+/// of that kind of limit: none when none has room.
 fn spare(
     ran: &Limit,
     current: &Account,
     mine: &[&Account],
+    share: u8,
     now: i64,
 ) -> Option<(String, Option<i64>, String)> {
     let ran = window(ran);
@@ -74,7 +75,7 @@ fn spare(
                     theirs.lists_every_limit,
                     &in_use,
                     &ran,
-                    FULL,
+                    share,
                     now,
                 )?;
                 Some((account, room))
@@ -123,7 +124,7 @@ impl Advice {
                         continue;
                     }
                     let Some((instead, left, switch_to)) =
-                        spare(window, found.current, &found.mine, status.now)
+                        spare(window, found.current, &found.mine, FULL, status.now)
                     else {
                         continue;
                     };
@@ -153,7 +154,7 @@ impl Advice {
             .iter()
             .filter(|account| account.provider == self.provider)
             .collect();
-        let (instead, left, switch_to) = spare(&self.window, current, &mine, status.now)?;
+        let (instead, left, switch_to) = spare(&self.window, current, &mine, FULL, status.now)?;
         Some(Advice {
             instead,
             left,
@@ -240,7 +241,7 @@ impl HeadsUp {
                     tool: found.tool,
                     ran: ran.to_owned(),
                     window: window.clone(),
-                    instead: spare(window, found.current, &found.mine, status.now),
+                    instead: spare(window, found.current, &found.mine, at, status.now),
                 })
             })
             .collect()
