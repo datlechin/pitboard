@@ -3075,6 +3075,10 @@ impl State {
         }
         match read {
             Ok(read) => {
+                let read = match &self.status {
+                    Some(shown) => refusals_kept(read, shown),
+                    None => read,
+                };
                 self.stuck = read
                     .warnings
                     .iter()
@@ -3208,7 +3212,7 @@ impl State {
                 if let Some(read) = read {
                     // A read that asks nobody knows no plan for a login nobody enrolled.
                     let read = match &self.status {
-                        Some(shown) => plans_kept(read, shown),
+                        Some(shown) => plans_kept(refusals_kept(read, shown), shown),
                         None => read,
                     };
                     // A read that asks nobody says a switch is stuck wherever that can be
@@ -4110,6 +4114,41 @@ fn plans_kept(mut read: Status, shown: &Status) -> Status {
             .iter()
             .find(|a| a.provider == account.provider && a.id == account.id)
             .and_then(|a| a.plan.clone());
+    }
+    read
+}
+
+// What a read says of a login it did not ask its service about.
+const UNASKED: [&str; 7] = [
+    "not_asked",
+    "asked_recently",
+    "unreachable",
+    "rate_limited",
+    "server_error",
+    "interrupted",
+    "parked_access_expired",
+];
+
+// `read`, where a parked login `shown` says its service refused, and `read` did not ask about
+// again, is still refused. Parked again, it is another login.
+fn refusals_kept(mut read: Status, shown: &Status) -> Status {
+    for account in read.accounts.iter_mut().filter(|account| {
+        !account.signed_in
+            && account
+                .stale
+                .as_deref()
+                .is_some_and(|stale| UNASKED.contains(&stale))
+    }) {
+        if let Some(refused) = shown.accounts.iter().find(|refused| {
+            refused.id == account.id
+                && refused.parked == account.parked
+                && refused.stale.as_deref() == Some("login_refused")
+        }) {
+            account.stale.clone_from(&refused.stale);
+            account
+                .stale_explanation
+                .clone_from(&refused.stale_explanation);
+        }
     }
     read
 }

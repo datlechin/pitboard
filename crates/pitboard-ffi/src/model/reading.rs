@@ -483,6 +483,50 @@ fn a_refused_parked_login_needs_signing_in_again() {
     );
 }
 
+/// A read that did not ask the service about a refused login, one that asks nobody or one the
+/// service held back, says nothing of it: the row still needs signing in again, and the next
+/// refusal is not posted again.
+#[test]
+fn a_refusal_stands_through_reads_that_did_not_ask() {
+    let parked = |stale: &str| Account {
+        stale: Some(stale.into()),
+        ..claude("work", false, 0.0)
+    };
+    let mut model = Hand::new();
+    let mut machine = Machine::reading(Ok(status(vec![
+        claude("home", true, 5.0),
+        parked("login_refused"),
+    ])));
+    model.refresh(&mut machine);
+    assert_eq!(machine.posted.len(), 1);
+
+    machine.offline = Ok(status(vec![claude("home", true, 5.0), parked("not_asked")]));
+    machine.changed += 1;
+    model.notice(&mut machine);
+    assert!(model.shown().sections[0].accounts[1].needs_sign_in);
+
+    machine.answer = Ok(status(vec![
+        claude("home", true, 5.0),
+        parked("asked_recently"),
+    ]));
+    model.refresh(&mut machine);
+    assert!(model.shown().sections[0].accounts[1].needs_sign_in);
+
+    machine.answer = Ok(status(vec![
+        claude("home", true, 5.0),
+        parked("login_refused"),
+    ]));
+    model.refresh(&mut machine);
+    assert_eq!(machine.posted.len(), 1, "once while it stands");
+
+    machine.answer = Ok(status(vec![
+        claude("home", true, 5.0),
+        claude("work", false, 0.0),
+    ]));
+    model.refresh(&mut machine);
+    assert!(!model.shown().sections[0].accounts[1].needs_sign_in);
+}
+
 fn bodies(machine: &Machine) -> Vec<&str> {
     machine
         .posted
