@@ -1934,12 +1934,15 @@ fn judge_in_use(facts: &Facts, moment: &dyn Fn(i64, i64) -> String) -> Option<Ch
         ));
     }
     // The login stored now by its fingerprint, empty for a login with no refresh token:
-    // `Some(None)` where none is stored, and `None` where the store cannot be read.
+    // `Some(None)` where none is stored, and `None` where the store or its shape cannot be read.
+    let claude_code = crate::provider::claude_code();
     let stored = match &facts.credential {
-        Ok(Some(document)) if document.get("claudeAiOauth").is_some() => {
-            Some(Some(crate::provider::claude_code().fingerprint(document)))
-        }
-        Ok(_) => Some(None),
+        Ok(Some(document)) if crate::provider::claude::document::signed_out(document) => Some(None),
+        Ok(Some(document)) => claude_code
+            .slice(document)
+            .ok()
+            .map(|slice| Some(claude_code.fingerprint(&slice))),
+        Ok(None) => Some(None),
         Err(_) => None,
     };
     let renewed = "the next `pitboard status` asks whose it is";
@@ -1978,13 +1981,21 @@ fn judge_credential(facts: &Facts) -> Check {
                     "Nothing is signed in for this slot.",
                 );
             }
-            let Some(oauth) = doc.get("claudeAiOauth").and_then(Value::as_object) else {
-                return fail(
+            let changed = |detail: String| {
+                fail(
                     "credential",
                     "credential",
-                    format!("claudeAiOauth is not an object; the keys are {keys:?}"),
+                    detail,
                     "The credential's shape changed. Do not switch accounts until this is understood.",
-                );
+                )
+            };
+            if !doc.is_object() {
+                return changed("the stored login is not a JSON object".into());
+            }
+            let Some(oauth) = doc.get("claudeAiOauth").and_then(Value::as_object) else {
+                return changed(format!(
+                    "claudeAiOauth is not an object; the keys are {keys:?}"
+                ));
             };
             let fingerprint = oauth
                 .get("refreshToken")
@@ -9295,6 +9306,21 @@ mod tests {
         ));
         let mut facts = facts();
         facts.credential = Ok(Some(document));
-        assert_eq!(judge_credential(&facts).level, Level::Fail);
+        let judged = judge_credential(&facts);
+        assert_eq!(judged.level, Level::Fail);
+        assert_eq!(judged.detail, "the stored login is not a JSON object");
+    }
+
+    // Which login it is cannot be told, which is not that none is stored.
+    #[test]
+    fn a_stored_login_that_is_not_an_object_leaves_the_account_in_use_as_named() {
+        use crate::switch::harness::{NOW, machine};
+        let m = machine("doctor-not-an-object");
+        m.sign_in(&serde_json::json!(["claudeAiOauth"]));
+        let checks = evaluate(&gather(&m.ctx));
+        assert_eq!(
+            check(&checks, "in_use").detail,
+            format!("`here`, as Anthropic said {}", time::moment(NOW, NOW))
+        );
     }
 }
