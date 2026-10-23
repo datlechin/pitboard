@@ -593,10 +593,9 @@ pub(crate) fn at_limit_notice(heads_up: &HeadsUp, now: i64) -> RunOutNotice {
             &said::limit_name(&limit.kind, limit.length_seconds),
         )
     } else {
-        format!(
-            "{} has used {}",
-            heads_up.ran,
-            said::share_of_limit(&crate::model::advice::window(limit))
+        said::has_used(
+            &heads_up.ran,
+            &said::share_of_limit(&crate::model::advice::window(limit)),
         )
     };
     let body = match (&heads_up.instead, limit.resets_at) {
@@ -619,7 +618,7 @@ pub(crate) fn at_limit_notice(heads_up: &HeadsUp, now: i64) -> RunOutNotice {
 }
 
 /// What Pitboard switched by itself, posted since nobody was there to ask for it: "Switched
-/// Claude Code to home", and "work had used 96% of its 5-hour limit. Sessions already running
+/// Claude Code to home", and "work has used 96% of its 5-hour limit. Sessions already running
 /// follow within 33 seconds.", or, while a file sits behind the keychain, when they do
 /// instead. It has nothing to switch to: the account left has reached the share it was
 /// switched away at.
@@ -634,7 +633,7 @@ pub(crate) fn auto_switched_notice(
     posted(
         format!("auto/{from}/{to}/{at}"),
         format!("Switched Claude Code to {to}"),
-        format!("{from} had used {used}. {follows}"),
+        format!("{}. {follows}", said::has_used(from, used)),
         &Clicked::Accounts,
     )
 }
@@ -645,7 +644,7 @@ pub(crate) fn auto_skipped_notice(key: &str, from: &str, used: &str, why: &str) 
     posted(
         format!("auto-{key}"),
         "Claude Code was not switched".into(),
-        format!("{from} has used {used}. {}.", capitalised(why)),
+        format!("{}. {}.", said::has_used(from, used), capitalised(why)),
         &Clicked::Limits,
     )
 }

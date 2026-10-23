@@ -89,6 +89,10 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the Windows app's **Settings** the same three sections before **About**.
 - A read that asks nobody warns with `in_use_unconfirmed` until Anthropic is first asked after an
   update from 0.9.0 or earlier, as `pitboard doctor` does, whatever Claude Code's config names.
+- After the app switches Claude Code by itself, its notification and **Settings** say the
+  account it left has used its share, as `pitboard watch` says it, where they said had used.
+- `pitboard watch` says that no other account has room as it says every other reason it is not
+  switching, after `Pitboard is not switching:`, as the app says it.
 
 ### Removed
 

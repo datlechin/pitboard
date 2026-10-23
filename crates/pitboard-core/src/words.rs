@@ -93,6 +93,49 @@ pub fn share_of_limit(limit: &crate::usage::Window) -> String {
     format!("{}% of its {name} limit", whole(limit.percent))
 }
 
+/// How much of a limit `account` has used, as every sentence about a limit at the share starts:
+/// "work has used 96% of its 5-hour limit". `used` is [`share_of_limit`].
+pub fn has_used(account: &str, used: &str) -> String {
+    format!("{account} has used {used}")
+}
+
+/// An attempt to switch away from `from` came to nothing a moment ago, and the next is made at
+/// `until`, written as each front end writes a clock time.
+pub fn auto_waiting(from: &str, used: &str, until: &str) -> String {
+    format!("{}. Pitboard tries again at {until}.", has_used(from, used))
+}
+
+/// Claude Code was switched by itself from `from` to `to`.
+pub fn auto_switched(from: &str, to: &str, used: &str) -> String {
+    format!(
+        "Switched Claude Code from {from} to {to}: {}.",
+        has_used(from, used)
+    )
+}
+
+/// Pitboard does not switch away from a limit of `from` at the share, for `why`, a clause from
+/// [`not_switching`], and decides again at `until` where it waits to.
+pub fn auto_skipped(from: &str, used: &str, why: &str, until: Option<&str>) -> String {
+    let mut said = format!(
+        "{}. Pitboard is not switching: {why}.",
+        has_used(from, used)
+    );
+    if let Some(until) = until {
+        let _ = write!(said, " It decides again at {until}.");
+    }
+    said
+}
+
+/// Pitboard cannot judge whether to switch Claude Code, for `why`, a clause from
+/// [`not_watching`], and asks again at `until` where it waits to.
+pub fn auto_not_watching(why: &str, until: Option<&str>) -> String {
+    let mut said = format!("Pitboard is not switching Claude Code: {why}.");
+    if let Some(until) = until {
+        let _ = write!(said, " It asks again at {until}.");
+    }
+    said
+}
+
 /// What the automatic switch watches where it has nothing to do: "Watching work: 62% of its
 /// 5-hour limit, as of 16:40." `used` is [`share_of_limit`] of its fullest limit, and the
 /// clock times come as each front end writes them: `as_of`, when that was read, and

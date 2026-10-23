@@ -551,10 +551,12 @@ fn event(value: Auto, threshold: Threshold) -> (Value, String) {
                 "until": until,
             }),
             format!(
-                "{} has used {}. Pitboard tries again at {}.\n",
-                ui::paint(ui::BOLD, &from),
-                words::share_of_limit(&limit),
-                moment(until),
+                "{}\n",
+                words::auto_waiting(
+                    &ui::paint(ui::BOLD, &from),
+                    &words::share_of_limit(&limit),
+                    &moment(until)
+                )
             ),
         ),
         Auto::Switched {
@@ -574,57 +576,52 @@ fn event(value: Auto, threshold: Threshold) -> (Value, String) {
                     "adoption": adoption_json,
                 }),
                 format!(
-                    "Switched Claude Code from {} to {}: {from} has used {}. {follows}",
-                    ui::paint(ui::BOLD, &from),
-                    ui::paint(ui::BOLD, &to),
-                    words::share_of_limit(&limit),
+                    "{} {follows}",
+                    words::auto_switched(
+                        &ui::paint(ui::BOLD, &from),
+                        &ui::paint(ui::BOLD, &to),
+                        &words::share_of_limit(&limit)
+                    )
                 ),
             )
         }
         Auto::Skipped { from, limit, why } => {
-            let used = format!(
-                "{} has used {}",
-                ui::paint(ui::BOLD, &from),
-                words::share_of_limit(&limit)
+            let until = match &why {
+                Skip::Settling { until } => Some(*until),
+                _ => None,
+            };
+            let line = words::auto_skipped(
+                &ui::paint(ui::BOLD, &from),
+                &words::share_of_limit(&limit),
+                &words::not_switching(&why, threshold),
+                until.map(moment).as_deref(),
             );
-            let reason = words::not_switching(&why, threshold);
-            match &why {
+            let data = match &why {
                 // No room has an event of its own, as it always had.
-                Skip::NoRoom { unread } => (
-                    json!({
-                        "event": "no_room",
-                        "threshold": percent,
-                        "from": from,
-                        "limit": limit_json(&limit),
-                        "unread": unread,
-                    }),
-                    format!("{used}, and {reason}.\n"),
-                ),
-                Skip::Settling { until } => (
-                    json!({
-                        "event": "skipped",
-                        "threshold": percent,
-                        "from": from,
-                        "limit": limit_json(&limit),
-                        "reason": why.code(),
-                        "until": until,
-                    }),
-                    format!(
-                        "{used}. Pitboard is not switching: {reason}. It decides again at {}.\n",
-                        moment(*until)
-                    ),
-                ),
-                _ => (
-                    json!({
-                        "event": "skipped",
-                        "threshold": percent,
-                        "from": from,
-                        "limit": limit_json(&limit),
-                        "reason": why.code(),
-                    }),
-                    format!("{used}. Pitboard is not switching: {reason}.\n"),
-                ),
-            }
+                Skip::NoRoom { unread } => json!({
+                    "event": "no_room",
+                    "threshold": percent,
+                    "from": from,
+                    "limit": limit_json(&limit),
+                    "unread": unread,
+                }),
+                Skip::Settling { until } => json!({
+                    "event": "skipped",
+                    "threshold": percent,
+                    "from": from,
+                    "limit": limit_json(&limit),
+                    "reason": why.code(),
+                    "until": until,
+                }),
+                _ => json!({
+                    "event": "skipped",
+                    "threshold": percent,
+                    "from": from,
+                    "limit": limit_json(&limit),
+                    "reason": why.code(),
+                }),
+            };
+            (data, format!("{line}\n"))
         }
         Auto::NotWatching { why } => {
             let mut data = json!({
@@ -633,6 +630,7 @@ fn event(value: Auto, threshold: Threshold) -> (Value, String) {
                 "reason": why.code(),
             });
             let mut line = words::not_watching(&why);
+            let mut until = None;
             match &why {
                 // The command line has a command for giving up on it, which the app has a
                 // button for in its place.
@@ -641,16 +639,16 @@ fn event(value: Auto, threshold: Threshold) -> (Value, String) {
                 }
                 Blind::NotEnrolled { email } => data["email"] = json!(email),
                 Blind::NoReading { account } => data["account"] = json!(account),
-                Blind::Unidentified { detail, until } => {
+                Blind::Unidentified { detail, until: at } => {
                     data["detail"] = json!(detail);
-                    data["until"] = json!(until);
-                    line = format!("{line}. It asks again at {}", moment(*until));
+                    data["until"] = json!(at);
+                    until = Some(moment(*at));
                 }
                 _ => {}
             }
             (
                 data,
-                format!("Pitboard is not switching Claude Code: {line}.\n"),
+                format!("{}\n", words::auto_not_watching(&line, until.as_deref())),
             )
         }
     }
@@ -928,8 +926,9 @@ mod tests {
         );
         assert_eq!(
             plain(&no_room),
-            "work has used 97% of its 5-hour limit, and no other Claude Code account has room \
-             below 95% in every limit, and there is no reading of spare from Anthropic yet.\n"
+            "work has used 97% of its 5-hour limit. Pitboard is not switching: no other Claude \
+             Code account has room below 95% in every limit, and there is no reading of spare \
+             from Anthropic yet.\n"
         );
         for (why, code) in [
             (Skip::AlreadyLeft, "already_switched"),

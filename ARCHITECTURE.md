@@ -1917,7 +1917,9 @@ window loads its site, and whatever the site's pages load, as a browser would.
   late as an answer may give it, so an answer a second later neither forgets a limit
   already left nor says a reason again. What tells one reason, or one wait, from another
   is the core's one rule, `Auto::told_apart`, and every front end says by it, building no
-  key of its own, so the app and `pitboard watch` never tell them apart differently.
+  key of its own, so the app and `pitboard watch` never tell them apart differently. What
+  each says is the core's sentence too (`words::auto_waiting`, `auto_switched`,
+  `auto_skipped`, `auto_not_watching`), given clock times as each writes them.
 - Additive writes become durable before destructive ones. A run that dies midway through a
   Claude Code or Codex switch leaves a spare copy of a login, never a missing one.
 - A Claude Desktop login is never copied, so its move has no spare. Before the first

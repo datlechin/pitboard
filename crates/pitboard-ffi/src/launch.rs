@@ -285,7 +285,7 @@ pub(crate) enum AutoSwitched {
         until: i64,
     },
     /// Claude Code was switched from `from` to `to`, which running sessions take as `adoption`
-    /// says, with what the switch warned of, and how much the account it left had used: "96%
+    /// says, with what the switch warned of, and how much the account it left has used: "96%
     /// of its 5-hour limit".
     Switched {
         from: String,

@@ -1632,7 +1632,7 @@ fn an_account_at_its_share_is_switched_from_by_itself_on_the_real_core() {
     assert_eq!(notice.title, "Switched Claude Code to spare");
     assert_eq!(
         notice.body,
-        "work had used 97% of its 5-hour limit. Sessions already running follow within 33 \
+        "work has used 97% of its 5-hour limit. Sessions already running follow within 33 \
          seconds."
     );
     assert_eq!(notice.button, None);

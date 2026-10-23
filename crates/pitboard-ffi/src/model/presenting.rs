@@ -1630,7 +1630,7 @@ fn a_switch_that_sessions_take_at_renewal_counts_down_nothing() {
         )
         .body,
         format!(
-            "personal had used 96% of its 5-hour limit. Sessions already running keep the \
+            "personal has used 96% of its 5-hour limit. Sessions already running keep the \
              account they are on until their login is next renewed, or until they are started \
              again: {path} is there."
         )

@@ -392,8 +392,8 @@ fn at_limit(seen: &Seen) -> AtLimitShown {
 }
 
 /// What switching Claude Code by itself came to last, as the line under the setting says it:
-/// the core's words for the account watched and each reason, in sentences of the app's own,
-/// which `pitboard watch` frames apart, with clock times as the person's own clock says them.
+/// the core's sentences, as `pitboard watch` says them, with clock times as the person's own
+/// clock says them.
 fn auto_standing(seen: &Seen, standing: &AutoStanding) -> String {
     match standing {
         AutoStanding::Came(AutoSwitched::Watching {
@@ -407,12 +407,11 @@ fn auto_standing(seen: &Seen, standing: &AutoStanding) -> String {
             as_of.map(|at| seen.clock(at)).as_deref(),
             held_until.map(|until| seen.clock(until)).as_deref(),
         ),
-        AutoStanding::Came(AutoSwitched::Waiting { from, used, until }) => format!(
-            "{from} has used {used}. Pitboard tries again at {}.",
-            seen.clock(*until)
-        ),
+        AutoStanding::Came(AutoSwitched::Waiting { from, used, until }) => {
+            pitboard_core::words::auto_waiting(from, used, &seen.clock(*until))
+        }
         AutoStanding::Came(AutoSwitched::Switched { from, to, used, .. }) => {
-            format!("Switched Claude Code from {from} to {to}: {from} had used {used}.")
+            pitboard_core::words::auto_switched(from, to, used)
         }
         AutoStanding::Came(AutoSwitched::Skipped {
             from,
@@ -420,19 +419,17 @@ fn auto_standing(seen: &Seen, standing: &AutoStanding) -> String {
             why,
             until,
             ..
-        }) => {
-            let said = format!("{from} has used {used}. Pitboard is not switching: {why}.");
-            match until {
-                Some(until) => format!("{said} It decides again at {}.", seen.clock(*until)),
-                None => said,
-            }
-        }
+        }) => pitboard_core::words::auto_skipped(
+            from,
+            used,
+            why,
+            until.map(|until| seen.clock(until)).as_deref(),
+        ),
         AutoStanding::Came(AutoSwitched::NotWatching { why, until, .. }) => {
-            let said = format!("Pitboard is not switching Claude Code: {why}.");
-            match until {
-                Some(until) => format!("{said} It asks again at {}.", seen.clock(*until)),
-                None => said,
-            }
+            pitboard_core::words::auto_not_watching(
+                why,
+                until.map(|until| seen.clock(until)).as_deref(),
+            )
         }
         AutoStanding::Stopped {
             message,
