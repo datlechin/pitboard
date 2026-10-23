@@ -141,7 +141,7 @@ enum Command {
     },
     /// Switch Claude Code before the account in use runs out, and warm up accounts
     #[command(
-        after_help = pitboard_core::words::IS_THIS_ALLOWED,
+        after_help = watch::terms(),
         args_conflicts_with_subcommands = true
     )]
     Watch {

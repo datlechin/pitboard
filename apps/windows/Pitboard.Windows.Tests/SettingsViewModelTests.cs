@@ -5,9 +5,12 @@ namespace Pitboard.Windows.Tests;
 [TestClass]
 public sealed class SettingsViewModelTests
 {
-    private static readonly AutoSwitchShown Auto = new(
-        On: true, At: 95, Lowest: 50, Highest: 99, Enabled: true, AtLabel: "Switch when a limit reaches 95%", Note: "",
-        Standing: null);
+    private static readonly AtLimitShown Switching = Snapshots.Read(1).Machine.AtLimit with
+    {
+        Choice = AtLimit.Switch,
+        Note = "Pitboard switches Claude Code.",
+        Terms = Snapshots.Terms,
+    };
 
     private static readonly WarmShown TwoWarmed = new(
         From: 360, To: 24 * 60, RangeLabel: "6:00 AM to midnight",
@@ -16,7 +19,8 @@ public sealed class SettingsViewModelTests
             new WarmAccountShown("claude/personal", "personal", "Max", On: true, Standing: "Warms up again at 22:50"),
             new WarmAccountShown("claude/work", "work", Plan: null, On: false, Standing: null),
         ],
-        Standing: "Next warm-up: personal at 22:50.", Note: "Pitboard warms up Claude Code accounts only.", Enabled: true);
+        Standing: "Next warm-up: personal at 22:50.", Note: "Pitboard warms up Claude Code accounts only.", Enabled: true,
+        Terms: Snapshots.Terms);
 
     private static Snapshot With(ulong revision, Func<MachineShown, MachineShown> change)
     {
@@ -87,10 +91,10 @@ public sealed class SettingsViewModelTests
     [TestMethod]
     public void TheShareIsAWholePercentageTheModelTakes()
     {
-        Assert.AreEqual((byte)96, SettingsViewModel.ShareOf(96.4, Auto));
-        Assert.AreEqual((byte)99, SettingsViewModel.ShareOf(120, Auto));
-        Assert.AreEqual((byte)50, SettingsViewModel.ShareOf(10, Auto));
-        Assert.IsNull(SettingsViewModel.ShareOf(double.NaN, Auto), "a cleared box sends nothing");
+        Assert.AreEqual((byte)96, SettingsViewModel.ShareOf(96.4, Switching));
+        Assert.AreEqual((byte)99, SettingsViewModel.ShareOf(120, Switching));
+        Assert.AreEqual((byte)50, SettingsViewModel.ShareOf(10, Switching));
+        Assert.IsNull(SettingsViewModel.ShareOf(double.NaN, Switching), "a cleared box sends nothing");
     }
 
     [TestMethod]
@@ -111,12 +115,13 @@ public sealed class SettingsViewModelTests
     {
         var (shown, model, _) = Over(With(1, machine => machine with
         {
-            AutoSwitch = Auto,
+            AtLimit = Switching,
             Warm = TwoWarmed,
             Schedule = machine.Schedule with { On = true, Runs = "Every day" },
         }));
 
-        shown.SetAutoSwitch(true);
+        shown.ChooseAtLimit(2);
+        shown.ChooseAtLimit(-1);
         Assert.IsTrue(shown.SetShare(95));
         shown.SetWarmFrom(new TimeSpan(6, 0, 0));
         shown.SetWarmTo(TimeSpan.Zero);
@@ -131,9 +136,9 @@ public sealed class SettingsViewModelTests
     [TestMethod]
     public void EachChangeSendsWhatTheModelTakes()
     {
-        var (shown, model, _) = Over(With(1, machine => machine with { AutoSwitch = Auto with { On = false }, Warm = TwoWarmed }));
+        var (shown, model, _) = Over(With(1, machine => machine with { Warm = TwoWarmed }));
 
-        shown.SetAutoSwitch(true);
+        shown.ChooseAtLimit(2);
         shown.SetShare(96.4);
         shown.SetWarmFrom(new TimeSpan(7, 0, 0));
         shown.SetWarmTo(new TimeSpan(21, 0, 0));
@@ -144,8 +149,8 @@ public sealed class SettingsViewModelTests
         CollectionAssert.AreEqual(
             new Intent[]
             {
-                new Intent.SetAutoSwitch(true, 95),
-                new Intent.SetAutoSwitch(false, 96),
+                new Intent.SetAtLimit(AtLimit.Switch, 95),
+                new Intent.SetAtLimit(AtLimit.Notify, 96),
                 new Intent.SetWarmRange(420, 1440),
                 new Intent.SetWarmRange(360, 1260),
                 new Intent.SetWarm("claude/work", true),
@@ -158,7 +163,7 @@ public sealed class SettingsViewModelTests
     [TestMethod]
     public void AClearedShareBoxSendsNothingAndIsShownTheShareAgain()
     {
-        var (shown, model, _) = Over(With(1, machine => machine with { AutoSwitch = Auto }));
+        var (shown, model, _) = Over(Snapshots.Read(1));
 
         Assert.IsFalse(shown.SetShare(double.NaN));
         Assert.IsEmpty(model.Sent);
@@ -175,19 +180,30 @@ public sealed class SettingsViewModelTests
         CollectionAssert.AreEqual(new Intent[] { new Intent.ReadSchedule(), new Intent.LookForCommandLine() }, model.Sent.ToArray());
     }
 
-    // The share's control is named by what it holds; its card's header stays put.
+    // The choice is named by the share it is made at; the share's card keeps its header.
     [TestMethod]
-    public void TheShareIsNamedByWhatItHoldsAndItsRangeIsSaid()
+    public void TheChoiceIsNamedByItsShareAndTheShareItsRange()
     {
-        var (shown, _, app) = Over(With(1, machine => machine with { AutoSwitch = Auto }));
+        var (shown, _, app) = Over(With(1, machine => machine with { AtLimit = Switching }));
 
-        Assert.AreEqual("Switch when a limit reaches 95%", shown.ShareLabel);
+        Assert.AreEqual("When a limit reaches 95%", shown.AtLimitLabel);
+        CollectionAssert.AreEqual(new[] { "Do nothing", "Notify me", "Switch automatically" }, shown.AtLimitTitles);
+        Assert.AreEqual(2, shown.AtLimitIndex);
+        Assert.AreEqual("Share of a limit", shown.ShareTitle);
         Assert.AreEqual("From 50% to 99%", shown.ShareRange);
         Assert.IsTrue(shown.CanSetShare);
+        Assert.IsTrue(shown.HasAtLimitTerms);
+        Assert.AreEqual("Anthropic's terms may cover automatic switching and warm-ups.", shown.AtLimitTerms);
 
-        app.Apply(With(2, machine => machine with { AutoSwitch = Auto with { On = false } }));
+        app.Apply(With(2, machine => machine with
+        {
+            AtLimit = Switching with { Choice = AtLimit.Nothing, ShareEnabled = false, Note = null, Terms = null },
+        }));
 
-        Assert.IsFalse(shown.CanSetShare, "no share to change while it is off");
+        Assert.AreEqual(0, shown.AtLimitIndex);
+        Assert.IsFalse(shown.CanSetShare, "no share while nothing happens at it");
+        Assert.IsFalse(shown.HasAtLimitNote);
+        Assert.IsFalse(shown.HasAtLimitTerms);
     }
 
     [TestMethod]

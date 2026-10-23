@@ -26,6 +26,9 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   window, offer **Sign In Again**.
 - The app posts a notification once for each account whose parked login can no longer be used,
   with **Sign In Again**.
+- The app notifies you once a limit of the account in use reaches the share in **Settings**, 95%
+  at first, before it runs out, with **Switch** where another account has room.
+- The app's **Settings** link **Is this allowed?** beside switching automatically and warm-up.
 
 ### Changed
 
@@ -43,6 +46,11 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   same.
 - The app's **Switch** button on a notification no longer brings Pitboard to the front on
   macOS.
+- The app's **Switch Claude Code automatically** is now **Switch Automatically**, one of three
+  choices in **When a limit reaches** beside **Do Nothing** and **Notify Me**, and the app keeps
+  switching where it switched before.
+- Under **Switch Automatically**, the app notifies you of Codex at the share, since it never
+  switches Codex.
 
 ### Fixed
 

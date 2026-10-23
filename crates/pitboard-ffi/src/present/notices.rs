@@ -7,7 +7,7 @@ use super::{
     Footing, MenuEntry, MenuNotices, NoticeAction, PanelNotice, Question, Seen, Severity,
     spoken_severity,
 };
-use crate::model::advice::Advice;
+use crate::model::advice::HeadsUp;
 use crate::model::state::{in_its_app, split};
 use crate::model::{Intent, LastSwitch, Pane, Sheet};
 use crate::model::{NotificationButton, RunOutNotice};
@@ -566,23 +566,36 @@ fn sign_in_again_button(os: Os) -> String {
     words::titled(os, "Sign In Again", "Sign in again")
 }
 
-/// The notification that tells somebody an account in use has run out, worded as the window's
-/// notice is: its title the account and the limit, the tool beneath it beside another tool's
-/// accounts, and the account offered with what it has left. Its id names the account, the
-/// limit and the reset, so the same run-out is one notification.
-pub(crate) fn run_out_notice(advice: &Advice) -> RunOutNotice {
-    let limit = said::limit_name(&advice.window.kind, advice.window.length_seconds);
+// Worded as the window's notice of a run-out is, past 100%. Its id names the account, the limit
+// and the reset, so one limit is one notification however far it goes.
+pub(crate) fn at_limit_notice(heads_up: &HeadsUp, now: i64) -> RunOutNotice {
+    let limit = &heads_up.window;
+    let title = if limit.percent >= 100.0 {
+        words::ran_out(
+            &heads_up.ran,
+            &said::limit_name(&limit.kind, limit.length_seconds),
+        )
+    } else {
+        format!(
+            "{} has used {}",
+            heads_up.ran,
+            said::share_of_limit(&crate::model::advice::window(limit))
+        )
+    };
+    let body = match (&heads_up.instead, limit.resets_at) {
+        (Some((instead, left, _)), _) => words::room_left(instead, *left),
+        (None, Some(at)) => format!("{}.", capitalised(&said::resets(at, now))),
+        (None, None) => String::new(),
+    };
     RunOutNotice {
-        subtitle: advice.tool.clone(),
-        button: button(switch_button(), &Clicked::Switch(advice.switch_to.clone())),
+        subtitle: heads_up.tool.clone(),
+        button: heads_up.instead.as_ref().and_then(|(_, _, switch_to)| {
+            button(switch_button(), &Clicked::Switch(switch_to.clone()))
+        }),
         ..posted(
-            format!(
-                "{}-{}",
-                advice.key_of(),
-                advice.window.resets_at.unwrap_or(0)
-            ),
-            words::ran_out(&advice.ran, &limit),
-            words::room_left(&advice.instead, advice.left),
+            format!("{}-{}", heads_up.key_of(), limit.resets_at.unwrap_or(0)),
+            title,
+            body,
             &Clicked::Accounts,
         )
     }

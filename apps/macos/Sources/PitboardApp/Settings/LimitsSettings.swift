@@ -5,28 +5,43 @@ struct LimitsSettings: View {
     let model: AppModel
 
     var body: some View {
-        let auto = model.machine.autoSwitch
+        let atLimit = model.machine.atLimit
         let warm = model.machine.warm
         Form {
             Section {
-                Toggle(
-                    "Switch Claude Code automatically",
-                    isOn: Binding(
-                        get: { auto.on },
-                        set: { model.send(.setAutoSwitch(on: $0, at: auto.at)) })
-                )
-                .accessibilityIdentifier("settings.autoSwitch")
-                .disabled(!auto.enabled)
-                Stepper(
-                    auto.atLabel,
-                    value: Binding(
-                        get: { Int(auto.at) },
-                        set: { model.send(.setAutoSwitch(on: auto.on, at: UInt8($0))) }),
-                    in: Int(auto.lowest)...Int(auto.highest)
-                )
-                .accessibilityIdentifier("settings.autoSwitchAt")
-                .disabled(!auto.enabled || !auto.on)
-                if let standing = auto.standing {
+                // Read as the sentence it is: when a limit reaches the share, do what is chosen.
+                LabeledContent(atLimit.atLabel) {
+                    HStack {
+                        Stepper(
+                            atLimit.shareLabel,
+                            value: Binding(
+                                get: { Int(atLimit.at) },
+                                set: {
+                                    model.send(
+                                        .setAtLimit(choice: atLimit.choice, at: UInt8($0)))
+                                }),
+                            in: Int(atLimit.lowest)...Int(atLimit.highest)
+                        )
+                        .labelsHidden()
+                        .disabled(!atLimit.shareEnabled)
+                        .accessibilityIdentifier("settings.atLimitShare")
+                        Picker(
+                            atLimit.atLabel,
+                            selection: Binding(
+                                get: { atLimit.choice },
+                                set: { model.send(.setAtLimit(choice: $0, at: atLimit.at)) })
+                        ) {
+                            ForEach(atLimit.choices, id: \.choice) { choice in
+                                Text(choice.title).tag(choice.choice)
+                            }
+                        }
+                        .labelsHidden()
+                        .fixedSize()
+                        .accessibilityIdentifier("settings.atLimit")
+                    }
+                }
+                .disabled(!atLimit.enabled)
+                if let standing = atLimit.standing {
                     Text(standing)
                         .explanatory()
                         .accessibilityIdentifier("settings.autoSwitchStanding")
@@ -34,7 +49,10 @@ struct LimitsSettings: View {
             } header: {
                 Text("Before an account runs out")
             } footer: {
-                Text(auto.note).footnote()
+                VStack(alignment: .leading, spacing: 4) {
+                    if let note = atLimit.note { Text(note).footnote() }
+                    if let terms = atLimit.terms { TermsText(terms: terms) }
+                }
             }
 
             Section {
@@ -78,11 +96,25 @@ struct LimitsSettings: View {
             } header: {
                 Text("Warm up limits")
             } footer: {
-                Text(warm.note).footnote()
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(warm.note).footnote()
+                    TermsText(terms: warm.terms)
+                }
             }
             .disabled(!warm.enabled)
         }
         .formStyle(.grouped)
+    }
+}
+
+// The sentence, then the page that says whether the terms allow it, as one text that wraps.
+private struct TermsText: View {
+    let terms: TermsShown
+
+    var body: some View {
+        var link = AttributedString(terms.linkTitle)
+        link.link = URL(string: terms.link)
+        return Text(AttributedString("\(terms.sentence) ") + link).footnote()
     }
 }
 

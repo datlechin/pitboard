@@ -62,7 +62,7 @@ public sealed partial class SettingsViewModel : INotifyPropertyChanged
 
     private MachineShown Machine => _model.Machine;
 
-    private AutoSwitchShown Auto => Machine.AutoSwitch;
+    private AtLimitShown AtLimit => Machine.AtLimit;
 
     private WarmShown Warm => Machine.Warm;
 
@@ -87,28 +87,45 @@ public sealed partial class SettingsViewModel : INotifyPropertyChanged
 
     public bool OffersNotificationSettings => _blocked?.InSettings == true;
 
-    public bool AutoSwitch => Auto.On;
+    // The choice's name, which says the share; its card's header stays put.
+    public string AtLimitLabel => AtLimit.AtLabel;
 
-    public bool CanAutoSwitch => Auto.Enabled;
+    public string[] AtLimitTitles => [.. AtLimit.Choices.Select(choice => choice.Title)];
 
-    public string AutoSwitchStanding => Auto.Standing ?? "";
+    public int AtLimitIndex => Array.FindIndex(AtLimit.Choices, choice => choice.Choice == AtLimit.Choice);
 
-    public bool HasAutoSwitchStanding => Auto.Standing is not null;
+    public bool CanChooseAtLimit => AtLimit.Enabled;
 
-    public string AutoSwitchNote => Auto.Note;
+    public string AutoSwitchStanding => AtLimit.Standing ?? "";
 
-    public double Share => Auto.At;
+    public bool HasAutoSwitchStanding => AtLimit.Standing is not null;
 
-    public double LowestShare => Auto.Lowest;
+    public string AtLimitNote => AtLimit.Note ?? "";
 
-    public double HighestShare => Auto.Highest;
+    public bool HasAtLimitNote => AtLimit.Note is not null;
 
-    // The control's name, which says the share it holds; its card's header stays put.
-    public string ShareLabel => Auto.AtLabel;
+    public string AtLimitTerms => AtLimit.Terms?.Sentence ?? "";
 
-    public string ShareRange => $"From {Auto.Lowest}% to {Auto.Highest}%";
+    public bool HasAtLimitTerms => AtLimit.Terms is not null;
 
-    public bool CanSetShare => Auto.Enabled && Auto.On;
+    public string WarmTerms => Warm.Terms.Sentence;
+
+    // The same page beside switching and beside warm-up.
+    public string TermsLinkTitle => Warm.Terms.LinkTitle;
+
+    public string TermsLink => Warm.Terms.Link;
+
+    public double Share => AtLimit.At;
+
+    public double LowestShare => AtLimit.Lowest;
+
+    public double HighestShare => AtLimit.Highest;
+
+    public string ShareTitle => AtLimit.ShareLabel;
+
+    public string ShareRange => $"From {AtLimit.Lowest}% to {AtLimit.Highest}%";
+
+    public bool CanSetShare => AtLimit.ShareEnabled;
 
     public string WarmRange => Warm.RangeLabel;
 
@@ -185,8 +202,8 @@ public sealed partial class SettingsViewModel : INotifyPropertyChanged
     public static ushort Minutes(TimeSpan time) => (ushort)(((time.Hours * 60) + time.Minutes) % MinutesInADay);
 
     // A NumberBox holds NaN once its text is cleared.
-    public static byte? ShareOf(double value, AutoSwitchShown auto) =>
-        double.IsNaN(value) ? null : (byte)Math.Clamp(Math.Round(value), auto.Lowest, auto.Highest);
+    public static byte? ShareOf(double value, AtLimitShown atLimit) =>
+        double.IsNaN(value) ? null : (byte)Math.Clamp(Math.Round(value), atLimit.Lowest, atLimit.Highest);
 
     public void Listen()
     {
@@ -229,25 +246,25 @@ public sealed partial class SettingsViewModel : INotifyPropertyChanged
         }
     }
 
-    public void SetAutoSwitch(bool on)
+    public void ChooseAtLimit(int index)
     {
-        if (on != Auto.On)
+        if (index >= 0 && index < AtLimit.Choices.Length && AtLimit.Choices[index].Choice != AtLimit.Choice)
         {
-            _model.Send(new Intent.SetAutoSwitch(on, Auto.At));
+            _model.Send(new Intent.SetAtLimit(AtLimit.Choices[index].Choice, AtLimit.At));
         }
     }
 
     // False for a cleared box, which then shows the share again.
     public bool SetShare(double value)
     {
-        if (ShareOf(value, Auto) is not { } at)
+        if (ShareOf(value, AtLimit) is not { } at)
         {
             return false;
         }
 
-        if (at != Auto.At)
+        if (at != AtLimit.At)
         {
-            _model.Send(new Intent.SetAutoSwitch(Auto.On, at));
+            _model.Send(new Intent.SetAtLimit(AtLimit.Choice, at));
         }
 
         return true;

@@ -76,31 +76,28 @@ public sealed class SettingsTests
     }
 
     [TestMethod]
-    public void SwitchingBeforeAnAccountRunsOut()
+    public void WhatHappensBeforeAnAccountRunsOut()
     {
         using var launched = Launched.Start(Builds.Debug, fixture: "oneTool");
         OpenSettings(launched);
-        var toggle = Control(launched, "settings.autoSwitch");
-        Expand(launched, "settings.autoSwitchGroup");
-        var share = Control(launched, "settings.autoSwitchAt");
+        var choice = Control(launched, "settings.atLimit").AsComboBox();
+        Expand(launched, "settings.atLimitGroup");
+        var share = Control(launched, "settings.atLimitShare");
 
         // Both are held back until the app's preferences have been read.
-        Assert.IsTrue(Enables(toggle, true));
-        Assert.AreEqual(ToggleState.Off, State(toggle));
-        Assert.IsFalse(share.IsEnabled, "no share to change while it is off");
-        Assert.IsTrue(launched.Gone(found => found.ByAutomationId("settings.autoSwitchStanding")), "nothing said while it is off");
-
-        toggle.Patterns.Toggle.Pattern.Toggle();
-        Assert.IsTrue(Becomes(toggle, ToggleState.On));
+        Assert.IsTrue(Enables(choice, true));
+        Assert.AreEqual("Notify me", choice.SelectedItem?.Name, "a fresh install notifies");
         Assert.IsTrue(Enables(share, true));
-        launched.Named("Switch when a limit reaches 95%");
+        Assert.IsTrue(launched.Gone(found => found.ByAutomationId("settings.autoSwitchStanding")), "nothing said while it does not switch");
+        launched.Named("When a limit reaches 95%");
+
+        choice.Select("Switch automatically");
         Control(launched, "settings.autoSwitchStanding");
 
         share.Patterns.RangeValue.Pattern.SetValue(96);
-        launched.Named("Switch when a limit reaches 96%");
+        launched.Named("When a limit reaches 96%");
 
-        toggle.Patterns.Toggle.Pattern.Toggle();
-        Assert.IsTrue(Becomes(toggle, ToggleState.Off));
+        choice.Select("Do nothing");
         Assert.IsTrue(Enables(share, false));
         Assert.IsTrue(launched.Gone(found => found.ByAutomationId("settings.autoSwitchStanding")));
     }

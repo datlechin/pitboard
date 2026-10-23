@@ -39,8 +39,9 @@ pub(crate) mod words;
 pub(crate) mod testing;
 
 pub use machine::{
-    ActivityLine, ActivityShown, AutoSwitchShown, CheckLine, ChecksShown, CommandLineShown,
-    EmptyList, MachineShown, RenewalShown, ScheduleShown, WarmAccountShown, WarmShown,
+    ActivityLine, ActivityShown, AtLimitChoice, AtLimitShown, CheckLine, ChecksShown,
+    CommandLineShown, EmptyList, MachineShown, RenewalShown, ScheduleShown, TermsShown,
+    WarmAccountShown, WarmShown,
 };
 pub use sheets::check_name;
 pub use windows::{
@@ -51,9 +52,9 @@ pub use windows::{
 
 pub(crate) use accounts::{in_order, needs_sign_in, usable};
 pub(crate) use notices::{
-    Clicked, UNUSABLE, auto_not_watching_notice, auto_refused_notice, auto_skipped_notice,
-    auto_switched_notice, notification_buttons, run_out_notice, standing_notice, unusable_notice,
-    warm_failed_notice,
+    Clicked, UNUSABLE, at_limit_notice, auto_not_watching_notice, auto_refused_notice,
+    auto_skipped_notice, auto_switched_notice, notification_buttons, standing_notice,
+    unusable_notice, warm_failed_notice,
 };
 
 use crate::account_windows::{AlertText, WindowAccount};

@@ -9,6 +9,7 @@
 //! command line with an administrator's password, is each app's own.
 
 use super::{Seen, words};
+use crate::model::AtLimit;
 use crate::model::machine::ScheduleFailure;
 use crate::model::state::AutoStanding;
 use crate::{AutoSwitched, Check, FoundCommandLine, Level, Schedule};
@@ -28,8 +29,7 @@ pub struct MachineShown {
     pub activity: ActivityShown,
     /// The `pitboard` a terminal runs, as the settings show it.
     pub command_line: CommandLineShown,
-    /// Switching Claude Code by itself, as the settings show it.
-    pub auto_switch: AutoSwitchShown,
+    pub at_limit: AtLimitShown,
     /// Warming up accounts, as the settings show it.
     pub warm: WarmShown,
 }
@@ -53,6 +53,7 @@ pub struct WarmShown {
     pub note: String,
     /// Whether anything here can be changed: once the core has said what it is.
     pub enabled: bool,
+    pub terms: TermsShown,
 }
 
 /// One Claude Code account, as the settings' warm-up lists it.
@@ -70,31 +71,42 @@ pub struct WarmAccountShown {
     pub standing: Option<String>,
 }
 
-/// Switching Claude Code by itself before the account in use runs out, as the settings show
-/// it: their switch, the share it switches at, what it came to last, and what is said under
-/// them.
+// What the app does once a limit of the account in use reaches a share, as the settings show it.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
-pub struct AutoSwitchShown {
-    /// Whether the switch shows it as on. Off unless somebody turned it on.
-    pub on: bool,
-    /// The share of a limit it switches at, a whole percentage, which `Intent::SetAutoSwitch`
-    /// takes back.
+pub struct AtLimitShown {
+    pub choice: AtLimit,
+    pub choices: Vec<AtLimitChoice>,
+    // a whole percentage, which `Intent::SetAtLimit` takes back
     pub at: u8,
-    /// The lowest and highest shares there can be, for the control that picks one.
     pub lowest: u8,
     pub highest: u8,
-    /// Whether the switch and the share can be changed: not until the app's preferences
-    /// have been read, where a change would be lost under what they say, nor for good where
-    /// they could not be.
+    // not before the preferences are read, nor ever where they could not be
     pub enabled: bool,
-    /// The share as the control names it: "Switch when a limit reaches 95%".
+    // and while something happens at the share
+    pub share_enabled: bool,
+    // "When a limit reaches 95%"
     pub at_label: String,
-    /// What is said under them: what it does and what it never does.
-    pub note: String,
-    /// While it is on, what it came to last, once there is anything: which account it
-    /// watches, how much of its fullest limit is used and when that was read, or why it is
-    /// not switching and when it acts again.
+    // the control that sets the share
+    pub share_label: String,
+    pub note: Option<String>,
+    // under Switch, what switching came to last
     pub standing: Option<String>,
+    // under Switch
+    pub terms: Option<TermsShown>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct AtLimitChoice {
+    pub choice: AtLimit,
+    pub title: String,
+}
+
+// A sentence and the page that says whether Anthropic's and OpenAI's terms allow it.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct TermsShown {
+    pub sentence: String,
+    pub link_title: String,
+    pub link: String,
 }
 
 /// Daily renewal, as the settings show it.
@@ -244,7 +256,7 @@ pub(crate) fn machine(seen: &Seen) -> MachineShown {
         checks: checks(seen),
         activity: activity(seen),
         command_line: command_line(seen),
-        auto_switch: auto_switch(seen),
+        at_limit: at_limit(seen),
         warm: warm(seen),
     }
 }
@@ -313,14 +325,24 @@ fn warm(seen: &Seen) -> WarmShown {
                warms up Claude Code accounts only, and none with a limit used up."
             .into(),
         enabled: overview.is_some(),
+        terms: terms(),
+    }
+}
+
+fn terms() -> TermsShown {
+    TermsShown {
+        sentence: format!("{}.", pitboard_core::words::TERMS_MAY_COVER_THIS),
+        link_title: "Is this allowed?".into(),
+        link: pitboard_core::words::IS_THIS_ALLOWED.into(),
     }
 }
 
 // How soon running sessions follow is promised only while the last read found no file behind
 // the store.
-fn auto_switch(seen: &Seen) -> AutoSwitchShown {
+fn at_limit(seen: &Seen) -> AtLimitShown {
     let state = seen.state;
     let at = state.preferences.threshold().percent();
+    let choice = state.preferences.at_limit();
     let follows = if state
         .warnings
         .iter()
@@ -337,24 +359,51 @@ fn auto_switch(seen: &Seen) -> AutoSwitchShown {
             pitboard_core::switch::ADOPTION_CEILING_SECONDS
         )
     };
-    AutoSwitchShown {
-        on: state.preferences.auto_switch,
+    let note = match choice {
+        AtLimit::Nothing => None,
+        AtLimit::Notify => Some(format!(
+            "Pitboard notifies you once for each limit of the account in use that reaches {at}%, \
+             while the app is open, with a Switch button where another account has room."
+        )),
+        AtLimit::Switch => Some(format!(
+            "Pitboard switches Claude Code to another of your accounts with room below {at}% in \
+             every limit, once a limit of the one in use reaches {at}%, while the app is open. \
+             {follows} It never switches back by itself. It notifies you of Codex instead: a \
+             running codex keeps its account until restarted."
+        )),
+    };
+    let switching = choice == AtLimit::Switch;
+    AtLimitShown {
+        choice,
+        choices: [
+            (AtLimit::Nothing, "Do Nothing", "Do nothing"),
+            (AtLimit::Notify, "Notify Me", "Notify me"),
+            (
+                AtLimit::Switch,
+                "Switch Automatically",
+                "Switch automatically",
+            ),
+        ]
+        .into_iter()
+        .map(|(choice, title, sentence)| AtLimitChoice {
+            choice,
+            title: words::titled(seen.os, title, sentence),
+        })
+        .collect(),
         at,
         lowest: Threshold::LOWEST,
         highest: Threshold::HIGHEST,
         enabled: state.preferences_have_been_read(),
-        at_label: format!("Switch when a limit reaches {at}%"),
-        note: format!(
-            "Pitboard switches Claude Code to another of your accounts with room below \
-             {at}% in every limit, once a limit of the one in use reaches {at}%, while the app \
-             is open. {follows} It never switches back by itself, and never switches Codex: a \
-             running codex keeps its account until restarted."
-        ),
+        share_enabled: state.preferences_have_been_read() && choice != AtLimit::Nothing,
+        at_label: format!("When a limit reaches {at}%"),
+        share_label: "Share of a limit".into(),
+        note,
         standing: state
             .auto_standing
             .as_ref()
-            .filter(|_| state.preferences.auto_switch)
+            .filter(|_| switching)
             .map(|standing| auto_standing(seen, standing)),
+        terms: switching.then(terms),
     }
 }
 

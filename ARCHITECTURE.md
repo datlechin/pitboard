@@ -540,16 +540,16 @@ window loads its site, and whatever the site's pages load, as a browser would.
   - `model/` is the app model the macOS app shows and the Windows app is to show. An app
     makes a `PitboardModel`, sends it an `Intent` for each thing asked of it, and its
     `ModelListener` is told of each numbered `Snapshot`; its `AppControl` quits and opens
-    other apps, and its `Notifications` posts what has run out, a login to sign in to again
-    and what switching or warming up by itself came to. Each notice carries the text a click
-    on it, or on its one button, hands back as `Intent::NotificationClicked`, which the model
-    reads as one of four requests and nothing else. `state.rs` holds what the model knows and
-    decides what follows each message. What follows an answer to the quit question is
-    `After`, private to the model: a switch, a sign-in inside an app, or recording the
-    account an app is signed in to. `advice.rs`
-    says which account to offer once the one in use has run out, `preferences.rs` what the
-    app's own preferences are, `machine.rs` what the model knows of this machine rather than
-    its accounts, and `windows.rs` the account windows' bookkeeping; `lanes.rs` runs what it
+    other apps, and its `Notifications` posts a limit at the share chosen, a login to sign
+    in to again and what switching or warming up by itself came to. Each notice carries the
+    text a click on it, or on its one button, hands back as `Intent::NotificationClicked`,
+    which the model reads as one of four requests and nothing else. `state.rs` holds what
+    the model knows and decides what follows each message. What follows an answer to the
+    quit question is `After`, private to the model: a switch, a sign-in inside an app, or
+    recording the account an app is signed in to. `advice.rs` says which account to offer
+    once the one in use has run out, `preferences.rs` what the app's own preferences are,
+    `machine.rs` what the model knows of this machine rather than its accounts, and
+    `windows.rs` the account windows' bookkeeping; `lanes.rs` runs what it
     decides, on a lane of reads, which reads the schedule, doctor's checks and the log too
     and asks the core's look whether to switch Claude Code by itself, a lane of changes, one
     at a time, which also repairs and changes the schedule and renews, a lane that lists
@@ -567,11 +567,12 @@ window loads its site, and whatever the site's pages load, as a browser would.
     quit signed in, enrols the login signed in now, renames and forgets, writes the account
     in use into Claude Code's config, puts away a login left in a file behind the keychain
     or Credential Manager from a sheet that looks first, keeps the sheet over the main
-    window, says which account to switch to once the one in use has run out, notified once
-    for each reset, switches Claude Code by itself with its setting on, asking the core's
-    look after every read and every 30 seconds and saying under the setting what it came to,
-    warms up the accounts turned on on a lane of its own, asking after every read and every
-    30 seconds, with every read's `Overview` of them, or why it cannot be read, and a
+    window, says which account to switch to once the one in use has run out, notifies once
+    for each limit and reset at the share chosen, switches Claude Code by itself where that
+    is chosen, asking the core's look after every read and every 30 seconds and saying under
+    the setting what it came to, warms up the accounts turned on on a lane of its own,
+    asking after every read and every 30 seconds, with every read's `Overview` of them, or
+    why it cannot be read, and a
     notification once for the words of a warm-up by itself that came to nothing, keeps the
     app's own preferences, and keeps the daily renewal schedule, renews now, makes doctor's
     checks, reads the activity log and finds the `pitboard` a terminal runs. It keeps the

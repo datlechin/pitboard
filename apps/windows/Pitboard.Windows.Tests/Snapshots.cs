@@ -53,10 +53,21 @@ internal static class Snapshots
             Lines: [], Empty: new EmptyList(Title: "No activity", Detail: "Pitboard lists every change it makes here.")),
         CommandLine: new CommandLineShown(
             Found: null, InTerminal: null, UpdateNote: null, OffersLink: false, CannotLink: null),
-        AutoSwitch: new AutoSwitchShown(
-            On: false, At: 95, Lowest: 50, Highest: 99, Enabled: true,
-            AtLabel: "Switch when a limit reaches 95%", Note: "", Standing: null),
+        AtLimit: new AtLimitShown(
+            Choice: AtLimit.Notify,
+            Choices: AtLimitChoices,
+            At: 95, Lowest: 50, Highest: 99, Enabled: true, ShareEnabled: true, AtLabel: "When a limit reaches 95%",
+            ShareLabel: "Share of a limit", Note: null, Standing: null, Terms: null),
         Warm: new WarmShown(
             From: 360, To: 1320, RangeLabel: "06:00 to 22:00", Accounts: [], Standing: null, Note: "",
-            Enabled: false));
+            Enabled: false, Terms: Terms));
+
+    // One array, so two snapshots made here are equal.
+    private static readonly AtLimitChoice[] AtLimitChoices =
+    [
+        new(AtLimit.Nothing, "Do nothing"), new(AtLimit.Notify, "Notify me"), new(AtLimit.Switch, "Switch automatically"),
+    ];
+
+    public static readonly TermsShown Terms = new(
+        "Anthropic's terms may cover automatic switching and warm-ups.", "Is this allowed?", "https://docs.usepitboard.com/concepts/limits#is-this-allowed");
 }

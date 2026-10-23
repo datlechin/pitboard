@@ -24,7 +24,8 @@ public sealed class SettingsPageTests
             new WarmAccountShown("claude/personal", "personal", "Max", On: true, Standing: "Warms up again at 22:50"),
             new WarmAccountShown("claude/work", "work", Plan: null, On: false, Standing: null),
         ],
-        Standing: "Next warm-up: personal at 22:50.", Note: "Pitboard warms up Claude Code accounts only.", Enabled: true);
+        Standing: "Next warm-up: personal at 22:50.", Note: "Pitboard warms up Claude Code accounts only.", Enabled: true,
+        Terms: Snapshots.Terms);
 
     private static Snapshot With(ulong revision, Func<MachineShown, MachineShown> change)
     {
@@ -150,42 +151,58 @@ public sealed class SettingsPageTests
     }
 
     [UITestMethod]
-    public async Task SwitchingAutomaticallySendsTheSwitchAndTheShare()
+    public async Task ChoosingWhatHappensAtALimitSendsTheChoiceAndTheShare()
     {
         var model = new StandInModel(Snapshots.Read(1));
         var app = new AppModel(model);
         var page = await Shown(app);
-        var toggle = Views.Element<ToggleSwitch>(page, "settings.autoSwitch");
-        await Expand(page, "settings.autoSwitchGroup", "Switch when a limit reaches");
-        var share = Views.Element<NumberBox>(page, "settings.autoSwitchAt");
+        var choice = Views.Element<ComboBox>(page, "settings.atLimit");
+        await Expand(page, "settings.atLimitGroup", "Share of a limit");
+        var share = Views.Element<NumberBox>(page, "settings.atLimitShare");
 
-        Assert.IsTrue(toggle.IsEnabled);
-        Assert.IsFalse(toggle.IsOn);
-        Assert.IsFalse(share.IsEnabled, "no share to change while it is off");
-        Assert.IsFalse(Shows(page, "settings.autoSwitchStanding"), "nothing said while it is off");
-        Assert.AreEqual("Switch when a limit reaches 95%", AutomationProperties.GetName(share));
-
-        toggle.IsOn = true;
-        Assert.Contains(new Intent.SetAutoSwitch(true, 95), model.Sent);
-
-        app.Apply(With(2, machine => machine with { AutoSwitch = machine.AutoSwitch with { On = true, Standing = Watching } }));
+        Assert.IsTrue(choice.IsEnabled);
+        CollectionAssert.AreEqual(new object[] { "Do nothing", "Notify me", "Switch automatically" }, choice.Items.ToArray());
+        Assert.AreEqual(1, choice.SelectedIndex, "a fresh install notifies");
+        Assert.AreEqual("When a limit reaches 95%", AutomationProperties.GetName(choice));
         Assert.IsTrue(share.IsEnabled);
+        Assert.IsFalse(Shows(page, "settings.autoSwitchStanding"), "nothing said while it does not switch");
+
+        choice.SelectedIndex = 2;
+        Assert.Contains(new Intent.SetAtLimit(AtLimit.Switch, 95), model.Sent);
+
+        app.Apply(With(2, machine => machine with
+        {
+            AtLimit = machine.AtLimit with { Choice = AtLimit.Switch, Standing = Watching, Terms = Snapshots.Terms },
+        }));
         Assert.IsTrue(Shows(page, "settings.autoSwitchStanding"));
         Assert.Contains(Watching, Views.Texts(page));
+        Assert.Contains(Snapshots.Terms.Sentence, Views.Texts(page));
 
         share.Value = 96;
-        Assert.Contains(new Intent.SetAutoSwitch(true, 96), model.Sent);
+        Assert.Contains(new Intent.SetAtLimit(AtLimit.Switch, 96), model.Sent);
     }
 
     [UITestMethod]
-    public async Task TheModelHeldBackSwitchesUntilItHasReadThePreferences()
+    public async Task TheModelHeldBackTheChoiceUntilItHasReadThePreferences()
     {
-        var unread = With(1, machine => machine with { AutoSwitch = machine.AutoSwitch with { Enabled = false } });
+        var unread = With(1, machine => machine with { AtLimit = machine.AtLimit with { Enabled = false, ShareEnabled = false } });
         var page = await Shown(new AppModel(new StandInModel(unread)));
-        await Expand(page, "settings.autoSwitchGroup", "Switch when a limit reaches");
+        await Expand(page, "settings.atLimitGroup", "Share of a limit");
 
-        Assert.IsFalse(Views.Element<ToggleSwitch>(page, "settings.autoSwitch").IsEnabled);
-        Assert.IsFalse(Views.Element<NumberBox>(page, "settings.autoSwitchAt").IsEnabled);
+        Assert.IsFalse(Views.Element<ComboBox>(page, "settings.atLimit").IsEnabled);
+        Assert.IsFalse(Views.Element<NumberBox>(page, "settings.atLimitShare").IsEnabled);
+    }
+
+    [UITestMethod]
+    public async Task TheTermsLinkOpensWhetherThisIsAllowed()
+    {
+        var opened = new List<Uri>();
+        var page = await Shown(new AppModel(new StandInModel(With(1, machine => machine with { Warm = TwoWarmed }))), open: opened.Add);
+        await Expand(page, "settings.warm", Snapshots.Terms.Sentence);
+
+        new HyperlinkButtonAutomationPeer(Views.Element<HyperlinkButton>(page, "settings.warmTerms")).Invoke();
+
+        Assert.AreEqual(new Uri(Snapshots.Terms.Link), opened.Single());
     }
 
     // Each control raises its change event when the page sets it to what the model says.
@@ -196,12 +213,12 @@ public sealed class SettingsPageTests
         var app = new AppModel(model);
         var page = await Shown(app);
         await Expand(page, "settings.warm", "No Claude Code account is enrolled yet.");
-        await Expand(page, "settings.autoSwitchGroup", "Switch when a limit reaches");
+        await Expand(page, "settings.atLimitGroup", "Share of a limit");
         var sent = model.Sent.Count;
 
         app.Apply(With(2, machine => machine with
         {
-            AutoSwitch = machine.AutoSwitch with { On = true, At = 90, AtLabel = "Switch when a limit reaches 90%" },
+            AtLimit = machine.AtLimit with { Choice = AtLimit.Switch, At = 90, AtLabel = "When a limit reaches 90%" },
             Warm = TwoWarmed with { From = 420, To = 1260 },
             Schedule = machine.Schedule with { On = true, Runs = "Every day" },
         }));
@@ -210,7 +227,8 @@ public sealed class SettingsPageTests
             () => Views.Descendants(page).OfType<ToggleSwitch>().Any(on => AutomationProperties.GetAutomationId(on) == "settings.warm.claude/personal"),
             "the warm-up's accounts did not show");
 
-        Assert.AreEqual(90.0, Views.Element<NumberBox>(page, "settings.autoSwitchAt").Value);
+        Assert.AreEqual(90.0, Views.Element<NumberBox>(page, "settings.atLimitShare").Value);
+        Assert.AreEqual(2, Views.Element<ComboBox>(page, "settings.atLimit").SelectedIndex);
         Assert.IsTrue(Views.Element<ToggleSwitch>(page, "settings.warm.claude/personal").IsOn);
         Assert.AreEqual(new TimeSpan(7, 0, 0), Views.Element<TimePicker>(page, "settings.warmFrom").SelectedTime);
         Assert.AreEqual(sent, model.Sent.Count, string.Join(", ", model.Sent.Skip(sent)));
@@ -482,7 +500,7 @@ public sealed class SettingsPageTests
         await Expand(page, "settings.warm", "personal · Max");
 
         var toggles = Views.Visible<ToggleSwitch>(page).ToArray();
-        Assert.HasCount(6, toggles, "start at sign-in, the automatic switch, two warm-ups, daily renewal and automatic checks");
+        Assert.HasCount(5, toggles, "start at sign-in, two warm-ups, daily renewal and automatic checks");
         foreach (var toggle in toggles)
         {
             var card = Card(toggle);
@@ -504,35 +522,39 @@ public sealed class SettingsPageTests
         var model = new StandInModel(Snapshots.Read(1));
         var app = new AppModel(model);
         var page = await Shown(app);
-        await Expand(page, "settings.autoSwitchGroup", "Switch when a limit reaches");
-        var card = Card(Views.Element<NumberBox>(page, "settings.autoSwitchAt"));
-
-        Assert.IsFalse(card.IsEnabled);
-
-        app.Apply(With(2, machine => machine with { AutoSwitch = machine.AutoSwitch with { On = true } }));
+        await Expand(page, "settings.atLimitGroup", "Share of a limit");
+        var card = Card(Views.Element<NumberBox>(page, "settings.atLimitShare"));
 
         Assert.IsTrue(card.IsEnabled);
+
+        app.Apply(With(2, machine => machine with
+        {
+            AtLimit = machine.AtLimit with { Choice = AtLimit.Nothing, ShareEnabled = false },
+        }));
+
+        Assert.IsFalse(card.IsEnabled);
     }
 
-    // The header repeated the share the box beside it held; the box's name says it for Narrator.
+    // The header repeated the share the box beside it held; the choice's name says it for Narrator.
     [UITestMethod]
     public async Task TheShareCardKeepsItsHeaderAsTheShareChanges()
     {
         var model = new StandInModel(Snapshots.Read(1));
         var app = new AppModel(model);
         var page = await Shown(app);
-        await Expand(page, "settings.autoSwitchGroup", "Switch when a limit reaches");
-        var share = Views.Element<NumberBox>(page, "settings.autoSwitchAt");
+        await Expand(page, "settings.atLimitGroup", "Share of a limit");
+        var share = Views.Element<NumberBox>(page, "settings.atLimitShare");
         var card = Card(share);
 
         app.Apply(With(2, machine => machine with
         {
-            AutoSwitch = machine.AutoSwitch with { On = true, At = 90, AtLabel = "Switch when a limit reaches 90%" },
+            AtLimit = machine.AtLimit with { At = 90, AtLabel = "When a limit reaches 90%" },
         }));
 
-        Assert.AreEqual("Switch when a limit reaches", card.Header);
+        Assert.AreEqual("Share of a limit", card.Header);
         Assert.AreEqual("From 50% to 99%", card.Description);
-        Assert.AreEqual("Switch when a limit reaches 90%", AutomationProperties.GetName(share));
+        Assert.AreEqual("Share of a limit", AutomationProperties.GetName(share));
+        Assert.AreEqual("When a limit reaches 90%", AutomationProperties.GetName(Views.Element<ComboBox>(page, "settings.atLimit")));
         Assert.AreEqual(90.0, share.Value);
     }
 

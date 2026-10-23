@@ -37,11 +37,11 @@
 //! A test hands `apply` answers in whatever order it likes, which is how the interleavings
 //! the Swift model's tests reached with gates are reached here without a thread.
 
-use super::advice::{Advice, Told, rename_told};
+use super::advice::{Advice, HeadsUp, Told, rename_told};
 use super::machine::{LOG_LIMIT, MachineState, Scheduled};
 use super::preferences::Preferences;
 use super::windows::Windows;
-use super::{Failure, Intent, LastSwitch, Pane, QuitQuestion, ReadFailure, RestartNeeded};
+use super::{AtLimit, Failure, Intent, LastSwitch, Pane, QuitQuestion, ReadFailure, RestartNeeded};
 use super::{RunOutNotice, RunningSignIn, Sheet, WindowRequest};
 use crate::account_windows::records::{Entry, Loaded};
 use crate::present::{Clicked, UNUSABLE};
@@ -57,7 +57,6 @@ use pitboard_core::label::SEPARATOR;
 use pitboard_core::provider::{self, ProviderId, SignsIn};
 use pitboard_core::switch::warm::WarmUp;
 use pitboard_core::switch::{Foreseen, Left, Stowed, WaitStep};
-use pitboard_core::usage::same_reset;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::time::Duration;
 
@@ -1359,7 +1358,7 @@ impl State {
                     });
                 }
             }
-            Intent::SetAutoSwitch { on, at } => self.auto_switch_set(on, at, jobs),
+            Intent::SetAtLimit { choice, at } => self.at_limit_set(choice, at, jobs),
             Intent::SetWarm { qualified, on } => jobs.push(Job::SetWarm { qualified, on }),
             Intent::SetWarmRange { from, to } => jobs.push(Job::SetWarmRange { from, to }),
             Intent::WarmNow { qualified } => {
@@ -2076,31 +2075,19 @@ impl State {
     /// read, seconds after it was said, with the account still out. One per tool, the newer
     /// first. Nothing while what was told is still being read.
     ///
-    /// What is new this launch is notified only where no launch has notified it at the same
-    /// reset, by the core's rule for one reset, and the record of that is kept.
+    /// What reached the share chosen is notified only where no launch has notified it at the
+    /// same reset, by the core's rule for one reset, and the record of that is kept.
     fn advise(&mut self, read: &Status, jobs: &mut Vec<Job>) {
         if self.loading_kept {
             return;
         }
         let tools = crate::tools_on(pitboard_core::host::OS);
         let new = Advice::about(read, &tools, &self.told_this_launch);
-        let mut kept = false;
         for advice in &new {
-            let (key, at) = (advice.key_of(), advice.window.resets_at.unwrap_or(0));
-            self.told_this_launch.insert(key.clone(), at);
-            if self
-                .told
-                .get(&key)
-                .is_some_and(|&told| same_reset(told, at))
-            {
-                continue;
-            }
-            self.told.insert(key, at);
-            kept = true;
-            jobs.push(Job::Post {
-                notice: crate::present::run_out_notice(advice),
-            });
+            self.told_this_launch
+                .insert(advice.key_of(), advice.window.resets_at.unwrap_or(0));
         }
+        let mut kept = self.notify_at_limit(read, &tools, jobs);
         kept |= self.tell_unusable(read, jobs);
         if kept {
             jobs.push(Job::KeepTold {
@@ -2119,6 +2106,28 @@ impl State {
             .collect();
     }
 
+    // Under Switch, Claude Code's own notices say what switching came to.
+    fn notify_at_limit(&mut self, read: &Status, tools: &[Tool], jobs: &mut Vec<Job>) -> bool {
+        let choice = self.preferences.at_limit();
+        if choice == AtLimit::Nothing {
+            return false;
+        }
+        let at = self.preferences.threshold().percent();
+        let mut kept = false;
+        for heads_up in HeadsUp::about(read, tools, &self.told, at) {
+            if choice == AtLimit::Switch && heads_up.provider == ProviderId::Claude.code() {
+                continue;
+            }
+            self.told
+                .insert(heads_up.key_of(), heads_up.window.resets_at.unwrap_or(0));
+            kept = true;
+            jobs.push(Job::Post {
+                notice: crate::present::at_limit_notice(&heads_up, read.now),
+            });
+        }
+        kept
+    }
+
     // Kept with what was told, so it is posted once for each account across launches, until
     // its login can be used again. One replaced outside Pitboard has a notice of its own.
     fn tell_unusable(&mut self, read: &Status, jobs: &mut Vec<Job>) -> bool {
@@ -2135,14 +2144,15 @@ impl State {
         self.told
             .retain(|key, _| !key.starts_with(UNUSABLE) || unusable.contains_key(key));
         let mut kept = self.told.len() != before;
-        let several = read
+        let tools: BTreeSet<&str> = read
             .accounts
             .iter()
-            .any(|account| read.accounts[0].provider != account.provider);
+            .map(|account| account.provider.as_str())
+            .collect();
         for (key, account) in unusable {
             if self.told.insert(key, 0).is_none() {
                 kept = true;
-                let tool = several.then(|| {
+                let tool = (tools.len() > 1).then(|| {
                     ProviderId::parse(&account.provider)
                         .map_or_else(|| account.provider.clone(), |tool| tool.name().into())
                 });
@@ -2154,29 +2164,35 @@ impl State {
         kept
     }
 
-    /// The settings' switch for switching Claude Code by itself, with its share. Taken only
-    /// once the preferences have been read, so it is never kept over a file that could not
-    /// be, and never lost under what the file says once it is. Turned on, or at another
-    /// share, the core looks at once. Turned off, nothing is said under it, and a refusal's
-    /// wait is over: turned on again, it is somebody asking.
-    fn auto_switch_set(&mut self, on: bool, at: u8, jobs: &mut Vec<Job>) {
+    // Taken only once the preferences have been read, so never kept over a file that could
+    // not be, nor lost under what the file says. Leaving Switch ends what it said and its wait.
+    fn at_limit_set(&mut self, choice: AtLimit, at: u8, jobs: &mut Vec<Job>) {
         if !self.preferences_read {
             return;
         }
         let at = Some(i64::from(Threshold::clamped(i64::from(at)).percent()));
-        if self.preferences.auto_switch == on && self.preferences.auto_switch_at == at {
+        if self.preferences.at_limit() == choice && self.preferences.auto_switch_at == at {
             return;
         }
-        self.preferences.auto_switch = on;
+        self.preferences.choose(choice);
         self.preferences.auto_switch_at = at;
         jobs.push(Job::KeepPreferences {
             preferences: self.preferences.clone(),
         });
-        if !on {
+        if choice != AtLimit::Switch {
             self.auto_standing = None;
             self.auto_refusals.ended();
         }
+        if let Some(status) = self.status.clone()
+            && !self.standing_in
+        {
+            self.advise(&status, jobs);
+        }
         self.look_to_switch(jobs);
+    }
+
+    fn switches(&self) -> bool {
+        self.preferences.at_limit() == AtLimit::Switch
     }
 
     /// Asks the core's look whether to switch Claude Code by itself, where somebody turned
@@ -2184,7 +2200,7 @@ impl State {
     /// on, and every `decide_every`. The look reads files alone and claims nothing, so it is
     /// asked whatever else is under way.
     fn look_to_switch(&mut self, jobs: &mut Vec<Job>) {
-        if !self.preferences_read || !self.preferences.auto_switch {
+        if !self.preferences_read || !self.switches() {
             self.decide = Timer::Off;
             return;
         }
@@ -2197,7 +2213,7 @@ impl State {
     /// The core's look is next due `decide_every` from now, or as a refusal's wait ends where
     /// that comes first, while switching by itself is on and the model runs by itself.
     fn decide_later(&mut self, now: Now) {
-        self.decide = if self.started && self.preferences.auto_switch {
+        self.decide = if self.started && self.switches() {
             Timer::Due(
                 self.auto_refusals
                     .due(now.running, self.cadence.decide_every),
@@ -2217,7 +2233,7 @@ impl State {
         jobs: &mut Vec<Job>,
     ) {
         self.decide_later(now);
-        if !self.preferences.auto_switch {
+        if !self.switches() {
             return;
         }
         match looked {
@@ -2301,7 +2317,7 @@ impl State {
                 }));
                 self.switched(&qualified, None, Ok(switched), now, jobs);
             }
-            _ if !self.preferences.auto_switch => self.switching = None,
+            _ if !self.switches() => self.switching = None,
             Ok(outcome) => {
                 self.switching = None;
                 self.auto_stands(outcome, jobs);

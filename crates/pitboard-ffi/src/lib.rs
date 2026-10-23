@@ -40,10 +40,10 @@ pub use sites::{Conjunction, Site, SiteLink, site_names, sites_for};
 
 mod model;
 pub use model::{
-    AppControl, AppLaunch, DownloadEnd, EarlierPreferences, EarlierWindowRecords, Failure, Intent,
-    LastSwitch, LocalTime, ModelListener, NotificationButton, Notifications, Pane, PitboardModel,
-    PlatformError, QuitQuestion, ReadFailure, RestartNeeded, RunOutNotice, RunningSignIn, Sheet,
-    Snapshot, WindowRequest, WindowsLaunch,
+    AppControl, AppLaunch, AtLimit, DownloadEnd, EarlierPreferences, EarlierWindowRecords, Failure,
+    Intent, LastSwitch, LocalTime, ModelListener, NotificationButton, Notifications, Pane,
+    PitboardModel, PlatformError, QuitQuestion, ReadFailure, RestartNeeded, RunOutNotice,
+    RunningSignIn, Sheet, Snapshot, WindowRequest, WindowsLaunch,
 };
 
 // The fixtures, which the `fixture` feature compiles; what is exported of them is the same
@@ -54,13 +54,13 @@ pub use fixture::{FixtureError, fixture_names, fixture_page};
 mod present;
 pub use present::{
     AccountItem, AccountSection, AccountWindowsShown, AccountsShown, ActivityLine, ActivityShown,
-    AutoSwitchShown, CheckLine, ChecksShown, Choice, CommandLineShown, DownloadShown,
+    AtLimitChoice, AtLimitShown, CheckLine, ChecksShown, Choice, CommandLineShown, DownloadShown,
     DownloadState, EmptyList, Footing, ItemAction, ItemOffer, LimitPace, LimitRow, LinkPicker,
     MachineShown, MenuBarText, MenuEntry, MenuNotices, Missing, NameCheck, NoticeAction,
     OpenWindow, PaceStanding, PageLoad, PanelNotice, PickerAccount, PickerShown, Question,
     RenewalShown, ScheduleShown, SetupStep, Severity, SheetText, SheetTool, SigningInText,
-    StoreDeletion, StowText, WaitingShown, WarmAccountShown, WarmShown, WindowOffer, WindowWaiting,
-    check_name, downloads_quit_question,
+    StoreDeletion, StowText, TermsShown, WaitingShown, WarmAccountShown, WarmShown, WindowOffer,
+    WindowWaiting, check_name, downloads_quit_question,
 };
 
 mod account_windows;

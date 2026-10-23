@@ -97,7 +97,7 @@ pub(crate) fn service(pitboard: &Pitboard, what: &WatchCommand) -> Report {
                          and warms up the accounts `pitboard warm on` turned on.\n{location}\n\n\
                          {}\n",
                         threshold.percent(),
-                        words::IS_THIS_ALLOWED
+                        terms()
                     ),
                 ),
             }
@@ -163,6 +163,14 @@ pub(crate) fn service(pitboard: &Pitboard, what: &WatchCommand) -> Report {
 /// Decides once from the usage Pitboard last measured, and says what it came to. Nobody is
 /// asked for usage; a decision under the lock may ask Anthropic whose login Claude Code has
 /// stored, as a switch does.
+pub(crate) fn terms() -> String {
+    format!(
+        "{}: {}",
+        words::TERMS_MAY_COVER_THIS,
+        words::IS_THIS_ALLOWED
+    )
+}
+
 pub(crate) fn once(pitboard: &Pitboard, threshold: Threshold) -> Report {
     said(pitboard.auto_switch(threshold), threshold, false)
 }
@@ -756,9 +764,7 @@ mod tests {
             installed.human
         );
         assert!(
-            installed
-                .human
-                .ends_with(&format!("\n\n{}\n", words::IS_THIS_ALLOWED)),
+            installed.human.ends_with(&format!("\n\n{}\n", terms())),
             "{}",
             installed.human
         );

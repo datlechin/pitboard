@@ -64,11 +64,21 @@ package func snapshot(
             commandLine: CommandLineShown(
                 found: nil, inTerminal: nil, updateNote: nil, offersLink: false,
                 cannotLink: nil),
-            autoSwitch: AutoSwitchShown(
-                on: false, at: 95, lowest: 50, highest: 99, enabled: true,
-                atLabel: "Switch when a limit reaches 95%", note: "", standing: nil),
+            atLimit: AtLimitShown(
+                choice: .notify,
+                choices: [
+                    AtLimitChoice(choice: .nothing, title: "Do Nothing"),
+                    AtLimitChoice(choice: .notify, title: "Notify Me"),
+                    AtLimitChoice(choice: .switch, title: "Switch Automatically"),
+                ], at: 95, lowest: 50, highest: 99, enabled: true, shareEnabled: true,
+                atLabel: "When a limit reaches 95%", shareLabel: "Share of a limit", note: nil,
+                standing: nil, terms: nil),
             warm: WarmShown(
                 from: 360, to: 1320, rangeLabel: "06:00 to 22:00", accounts: warming,
-                standing: nil, note: "", enabled: false)),
+                standing: nil, note: "", enabled: false,
+                terms: TermsShown(
+                    sentence: "Anthropic's terms may cover automatic switching and warm-ups.",
+                    linkTitle: "Is this allowed?",
+                    link: "https://docs.usepitboard.com/concepts/limits#is-this-allowed"))),
         accountWindows: windows)
 }

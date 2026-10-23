@@ -76,25 +76,34 @@
         </toolkit:SettingsCard>
 
         <TextBlock Style="{StaticResource SettingsSectionHeaderTextBlockStyle}" Text="Limits" />
-        <toolkit:SettingsExpander Header="Switch Claude Code automatically" AutomationProperties.AutomationId="settings.autoSwitchGroup">
+        <toolkit:SettingsExpander Header="When a limit reaches" AutomationProperties.AutomationId="settings.atLimitGroup">
           <toolkit:SettingsExpander.Description>
             <StackPanel>
               <TextBlock
                   Text="{x:Bind ViewModel.AutoSwitchStanding, Mode=OneWay}"
                   Visibility="{x:Bind ViewModel.HasAutoSwitchStanding, Mode=OneWay}"
                   AutomationProperties.AutomationId="settings.autoSwitchStanding" />
-              <TextBlock Text="{x:Bind ViewModel.AutoSwitchNote, Mode=OneWay}" />
+              <TextBlock Text="{x:Bind ViewModel.AtLimitNote, Mode=OneWay}" Visibility="{x:Bind ViewModel.HasAtLimitNote, Mode=OneWay}" />
+              <TextBlock Text="{x:Bind ViewModel.AtLimitTerms, Mode=OneWay}" Visibility="{x:Bind ViewModel.HasAtLimitTerms, Mode=OneWay}" />
+              <HyperlinkButton
+                  Content="{x:Bind ViewModel.TermsLinkTitle, Mode=OneWay}"
+                  Visibility="{x:Bind ViewModel.HasAtLimitTerms, Mode=OneWay}"
+                  AutomationProperties.AutomationId="settings.atLimitTerms"
+                  Click="OnOpenTerms" />
             </StackPanel>
           </toolkit:SettingsExpander.Description>
-          <ToggleSwitch
-              IsOn="{x:Bind ViewModel.AutoSwitch, Mode=OneWay}"
-              IsEnabled="{x:Bind ViewModel.CanAutoSwitch, Mode=OneWay}"
-              AutomationProperties.AutomationId="settings.autoSwitch"
-              AutomationProperties.Name="Switch Claude Code automatically"
-              Toggled="OnAutoSwitchToggled" />
+          <!-- Its items are added once the page has the model's words, before its bindings select one. -->
+          <ComboBox
+              x:Name="AtLimitChoices"
+              MinWidth="200"
+              SelectedIndex="{x:Bind ViewModel.AtLimitIndex, Mode=OneWay}"
+              IsEnabled="{x:Bind ViewModel.CanChooseAtLimit, Mode=OneWay}"
+              AutomationProperties.AutomationId="settings.atLimit"
+              AutomationProperties.Name="{x:Bind ViewModel.AtLimitLabel, Mode=OneWay}"
+              SelectionChanged="OnAtLimitChosen" />
           <toolkit:SettingsExpander.Items>
             <toolkit:SettingsCard
-                Header="Switch when a limit reaches"
+                Header="{x:Bind ViewModel.ShareTitle, Mode=OneWay}"
                 Description="{x:Bind ViewModel.ShareRange, Mode=OneWay}"
                 IsEnabled="{x:Bind ViewModel.CanSetShare, Mode=OneWay}">
               <NumberBox
@@ -106,8 +115,8 @@
                   SmallChange="1"
                   LargeChange="5"
                   SpinButtonPlacementMode="Inline"
-                  AutomationProperties.AutomationId="settings.autoSwitchAt"
-                  AutomationProperties.Name="{x:Bind ViewModel.ShareLabel, Mode=OneWay}"
+                  AutomationProperties.AutomationId="settings.atLimitShare"
+                  AutomationProperties.Name="{x:Bind ViewModel.ShareTitle, Mode=OneWay}"
                   ValueChanged="OnShareChanged" />
             </toolkit:SettingsCard>
           </toolkit:SettingsExpander.Items>
@@ -172,7 +181,14 @@
               <toolkit:SettingsCard
                   ContentAlignment="Left"
                   Style="{StaticResource DefaultSettingsExpanderItemStyle}">
-                <TextBlock Text="{x:Bind ViewModel.WarmNote, Mode=OneWay}" Style="{StaticResource SecondaryCaptionTextBlockStyle}" />
+                <StackPanel>
+                  <TextBlock Text="{x:Bind ViewModel.WarmNote, Mode=OneWay}" Style="{StaticResource SecondaryCaptionTextBlockStyle}" />
+                  <TextBlock Text="{x:Bind ViewModel.WarmTerms, Mode=OneWay}" Style="{StaticResource SecondaryCaptionTextBlockStyle}" />
+                  <HyperlinkButton
+                      Content="{x:Bind ViewModel.TermsLinkTitle, Mode=OneWay}"
+                      AutomationProperties.AutomationId="settings.warmTerms"
+                      Click="OnOpenTerms" />
+                </StackPanel>
               </toolkit:SettingsCard>
             </StackPanel>
           </toolkit:SettingsExpander.ItemsFooter>

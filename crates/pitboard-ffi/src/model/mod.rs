@@ -336,12 +336,8 @@ pub enum Intent {
     /// command line that a schedule would keep reaching, and nothing is asked of the
     /// scheduler; turning it off never is, since that is how such a schedule is taken away.
     SetSchedule { on: bool },
-    /// Switch Claude Code by itself, or stop: the settings' switch, with the share of a limit
-    /// it switches at, a whole percentage, taken as the nearest there can be. Kept in the
-    /// app's preferences in Pitboard's directory, and taken only once they have been read,
-    /// as `MachineShown::auto_switch` says by `enabled`. Turned on, or at another share, the
-    /// core looks at once whether to switch.
-    SetAutoSwitch { on: bool, at: u8 },
+    /// Taken only once the preferences are read, as `AtLimitShown::enabled` says.
+    SetAtLimit { choice: AtLimit, at: u8 },
     /// Warm up the account `qualified` names from now on, or stop: its own menu's **Warm Up
     /// Automatically**, or its row under the settings' warm-up. Kept by the core in Pitboard's
     /// directory, which the command line reads too. Turned on, an account due is warmed up at
@@ -406,6 +402,15 @@ pub enum Intent {
     DownloadEnded { id: String, end: DownloadEnd },
     /// Somebody cleared the downloads of the window whose store is `store` that have ended.
     ClearDownloads { store: String },
+}
+
+// What the app does once a limit of the account in use reaches the share chosen. Only Claude
+// Code switches: Codex is notified of under Switch.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum AtLimit {
+    Nothing,
+    Notify,
+    Switch,
 }
 
 /// A sheet over the main window, as the Swift model's `AccountSheet` has them. Not called

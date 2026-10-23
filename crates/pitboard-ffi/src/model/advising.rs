@@ -9,7 +9,7 @@ use super::switching::switch;
 use super::testing::{
     Hand, Machine, already_active, refusal, status, switched, titled, warned, warning,
 };
-use super::{Intent, NotificationButton, Pane, RunOutNotice, Sheet, WindowRequest};
+use super::{AtLimit, Intent, NotificationButton, Pane, RunOutNotice, Sheet, WindowRequest};
 use crate::Account;
 use crate::present::testing::{LimitExt, account, window};
 
@@ -627,4 +627,165 @@ fn model_clicked(argument: &str, then: impl FnOnce(&Hand)) {
         argument: argument.into(),
     });
     then(&model);
+}
+
+// What happens once a limit reaches the share chosen.
+
+/// The app's preferences read from their file, with `choice` made at the default share.
+fn chose(model: &mut Hand, machine: &mut Machine, choice: AtLimit) {
+    let mut preferences = super::preferences::Preferences::default();
+    preferences.choose(choice);
+    model.give(super::state::Answer::Kept {
+        told: Told::new(),
+        preferences: Some((preferences, true)),
+        windows: None,
+    });
+    model.run(machine);
+}
+
+/// A fresh install notifies once a limit of the account in use reaches 95%, before it runs
+/// out, with the account to switch to, and once only for that limit and reset, whatever it
+/// reaches after.
+#[test]
+fn a_limit_at_the_share_is_notified_once_before_it_runs_out() {
+    let mut model = Hand::new();
+    let mut machine = Machine::reading(Ok(status(vec![work(94.0, 7_200), personal()])));
+    model.refresh(&mut machine);
+    assert!(machine.posted.is_empty(), "below the share");
+
+    machine.answer = Ok(status(vec![work(96.0, 7_200), personal()]));
+    model.refresh(&mut machine);
+    assert_eq!(
+        machine.posted,
+        [RunOutNotice {
+            id: "claude/work/session/-7200".into(),
+            title: "work has used 96% of its 5-hour limit".into(),
+            subtitle: None,
+            body: "personal has 90% of its own left.".into(),
+            clicked: "accounts".into(),
+            button: Some(NotificationButton {
+                title: "Switch".into(),
+                clicked: "switch/claude/personal".into(),
+            }),
+        }]
+    );
+    assert!(
+        model.state.advice.is_empty(),
+        "the window offers it at 100%"
+    );
+
+    machine.answer = Ok(status(vec![work(100.0, 7_200), personal()]));
+    model.refresh(&mut machine);
+    assert_eq!(machine.posted.len(), 1, "one limit, one notification");
+    assert_eq!(switches_to(&model), ["claude/personal"]);
+}
+
+/// With no other account to switch to, it says when the limit resets.
+#[test]
+fn a_limit_at_the_share_with_nowhere_to_go_says_when_it_resets() {
+    let mut model = Hand::new();
+    let mut read = status(vec![work(97.0, 1_800_003_900)]);
+    read.now = 1_800_000_000;
+    let mut machine = Machine::reading(Ok(read));
+    model.refresh(&mut machine);
+    let notice = machine.posted.first().expect("posted");
+    assert_eq!(notice.title, "work has used 97% of its 5-hour limit");
+    assert_eq!(notice.body, "Resets in 1h 05m.");
+    assert_eq!(notice.button, None);
+}
+
+/// Do Nothing posts nothing, and the window still offers a switch once the account runs out.
+#[test]
+fn do_nothing_notifies_nothing() {
+    let mut model = Hand::new();
+    let mut machine = Machine::reading(Ok(status(vec![work(100.0, 7_200), personal()])));
+    chose(&mut model, &mut machine, AtLimit::Nothing);
+    model.refresh(&mut machine);
+    assert!(machine.posted.is_empty());
+    assert_eq!(switches_to(&model), ["claude/personal"]);
+}
+
+/// Under Switch, Claude Code's own notices say what switching came to, and Codex, which is
+/// never switched by itself, is notified as under Notify.
+#[test]
+fn switch_notifies_of_codex_alone() {
+    let codex = |label: &str, percent: f64, signed_in: bool| {
+        let made = account(Some(label)).of("codex").limits(vec![
+            window("five_hour", percent)
+                .length(18_000)
+                .resets(Some(7_200)),
+        ]);
+        if signed_in { made.signed_in() } else { made }.build()
+    };
+    let mut model = Hand::new();
+    let mut machine = Machine::reading(Ok(status(vec![
+        work(97.0, 7_200),
+        personal(),
+        codex("job", 97.0, true),
+        codex("side", 10.0, false),
+    ])));
+    machine.look = Ok(crate::AutoLooked::Stands(super::testing::watching("work")));
+    chose(&mut model, &mut machine, AtLimit::Switch);
+    model.refresh(&mut machine);
+    let posted: Vec<(&str, Option<&str>)> = machine
+        .posted
+        .iter()
+        .map(|notice| (notice.title.as_str(), notice.subtitle.as_deref()))
+        .collect();
+    assert_eq!(
+        posted,
+        [("job has used 97% of its 5-hour limit", Some("Codex"))]
+    );
+}
+
+/// The settings offer the three choices in the system's own case, and the sentence on the
+/// terms beside switching while it is chosen, and beside warm-up always.
+#[test]
+fn the_settings_offer_three_choices_and_the_terms_beside_switching() {
+    let mut model = Hand::new();
+    let mut machine = Machine::reading(Ok(status(vec![work(10.0, 7_200), personal()])));
+    chose(&mut model, &mut machine, AtLimit::Notify);
+    let shown = model.on_a_mac().machine;
+    let titles: Vec<String> = shown
+        .at_limit
+        .choices
+        .iter()
+        .map(|choice| choice.title.clone())
+        .collect();
+    assert_eq!(titles, ["Do Nothing", "Notify Me", "Switch Automatically"]);
+    assert_eq!(
+        model.on_windows().machine.at_limit.choices[1].title,
+        "Notify me"
+    );
+    assert_eq!(shown.at_limit.at_label, "When a limit reaches 95%");
+    assert!(shown.at_limit.share_enabled);
+    assert_eq!(shown.at_limit.terms, None);
+    assert_eq!(
+        shown.warm.terms.link,
+        "https://docs.usepitboard.com/concepts/limits#is-this-allowed"
+    );
+
+    model.send(Intent::SetAtLimit {
+        choice: AtLimit::Switch,
+        at: 95,
+    });
+    let terms = model
+        .shown()
+        .machine
+        .at_limit
+        .terms
+        .expect("beside switching");
+    assert_eq!(
+        terms.sentence,
+        "Anthropic's terms may cover automatic switching and warm-ups."
+    );
+    assert_eq!(terms.link_title, "Is this allowed?");
+
+    model.send(Intent::SetAtLimit {
+        choice: AtLimit::Nothing,
+        at: 95,
+    });
+    let shown = model.shown().machine.at_limit;
+    assert!(!shown.share_enabled, "nothing happens at the share");
+    assert_eq!((shown.note, shown.terms), (None, None));
 }

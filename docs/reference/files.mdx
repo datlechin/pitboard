@@ -290,8 +290,9 @@ Both apps keep these in `app.json` in Pitboard's directory, so they follow `PITB
 | --- | --- |
 | `second_account_declined` | The tools, `claude`, `codex` or `desktop`, whose second-account tip you dismissed with **Not Now** |
 | `has_been_seen` | Whether the app has opened its window at first launch |
-| `auto_switch` | `true` while **Switch Claude Code automatically** is on. Left out while it is off. |
-| `auto_switch_at` | The share it switches at, a whole percentage. 95 while left out. A value outside 50 to 99 reads as the nearer end. |
+| `at_limit` | The choice in **When a limit reaches**: `nothing`, `notify` or `switch`. While left out, `auto_switch` decides. |
+| `auto_switch` | `true` while **Switch Automatically** is chosen. Left out otherwise. Without `at_limit`, `true` reads as **Switch Automatically** and anything else as **Notify Me**. |
+| `auto_switch_at` | The share it notifies or switches at, a whole percentage. 95 while left out. A value outside 50 to 99 reads as the nearer end. |
 
 ## Account windows
 

@@ -136,12 +136,23 @@ public sealed class ModelTests
             Lines: [], Empty: new EmptyList(Title: "No Activity", Detail: "Pitboard lists every change it makes here.")),
         CommandLine: new CommandLineShown(
             Found: null, InTerminal: null, UpdateNote: null, OffersLink: false, CannotLink: null),
-        AutoSwitch: new AutoSwitchShown(
-            On: false, At: 95, Lowest: 50, Highest: 99, Enabled: true,
-            AtLabel: "Switch when a limit reaches 95%", Note: "", Standing: null),
+        AtLimit: new AtLimitShown(
+            Choice: AtLimit.Notify,
+            Choices: AtLimitChoices,
+            At: 95, Lowest: 50, Highest: 99, Enabled: true, ShareEnabled: true, AtLabel: "When a limit reaches 95%",
+            ShareLabel: "Share of a limit", Note: null, Standing: null, Terms: null),
         Warm: new WarmShown(
             From: 360, To: 1320, RangeLabel: "06:00 to 22:00", Accounts: [], Standing: null, Note: "",
-            Enabled: false));
+            Enabled: false, Terms: Terms));
+
+    // One array, so two snapshots made here are equal.
+    private static readonly AtLimitChoice[] AtLimitChoices =
+    [
+        new(AtLimit.Nothing, "Do nothing"), new(AtLimit.Notify, "Notify me"), new(AtLimit.Switch, "Switch automatically"),
+    ];
+
+    private static readonly TermsShown Terms = new(
+        "Anthropic's terms may cover automatic switching and warm-ups.", "Is this allowed?", "https://docs.usepitboard.com/concepts/limits#is-this-allowed");
 
     // ChatGPT, open, as the fixture chatGPTOpen's process list has it. On Windows its running copy is its AUMID.
     private sealed class StandInApps : AppControl
@@ -946,11 +957,12 @@ public sealed class ModelTests
         using var model = PitboardModel.FixtureIn("loginReplaced", _own, waiting, new StandInApps(), posting, new InUtc());
         Start(model, waiting);
 
-        var posted = posting.Posted.Until(1, Patience);
+        // The account in use has run out too, which is posted after it.
+        var posted = posting.Posted.Until(2, Patience);
         model.Shutdown();
 
         var again = OperatingSystem.IsWindows() ? "Sign in again" : "Sign In Again";
-        var notice = posted.Single();
+        var notice = posted.Single(notice => notice.Id.StartsWith("warning/login_replaced/", StringComparison.Ordinal));
         Assert.AreEqual("A login was replaced outside Pitboard", notice.Title);
         Assert.AreEqual(
             "work’s login was replaced by a sign-in outside Pitboard: Claude Code now has personal’s login stored, " +
@@ -967,7 +979,8 @@ public sealed class ModelTests
         var posting = new Posting { Refuses = "COMException 0x80070490" };
         using var model = PitboardModel.FixtureIn("loginReplaced", _own, waiting, new StandInApps(), posting, new InUtc());
         Start(model, waiting);
-        Assert.HasCount(1, posting.Posted.Until(1, Patience));
+        // The login replaced, then the run-out of the account in use, the last refused.
+        Assert.HasCount(2, posting.Posted.Until(2, Patience));
 
         model.Send(new Intent.PaneShown(Pane.Machine));
         var checkedIn = waiting.Until(
@@ -977,7 +990,7 @@ public sealed class ModelTests
         Assert.IsNotNull(checkedIn, "the machine pane never said the refusal");
         var line = checkedIn.Machine.Checks.Lines[^1];
         Assert.AreEqual(Level.Warn, line.Level);
-        Assert.StartsWith("“A login was replaced outside Pitboard” not posted at ", line.Detail);
+        Assert.StartsWith("“personal has no 5-hour limit left” not posted at ", line.Detail);
         Assert.EndsWith(" · COMException 0x80070490", line.Detail);
     }
 

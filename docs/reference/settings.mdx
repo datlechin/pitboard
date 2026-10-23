@@ -60,30 +60,36 @@ On macOS, Pitboard's item in the menu bar shows:
 
 | Control | Section | Default |
 | --- | --- | --- |
-| **Switch Claude Code automatically** | macOS: **Before an account runs out** | Off |
-| **Switch when a limit reaches** | macOS: **Before an account runs out**. Windows: under **Switch Claude Code automatically** | 95%, from 50% to 99% in steps of 1% |
+| **When a limit reaches 95%** | macOS: **Before an account runs out**. Windows: **Limits** | **Notify Me** |
+| The share in it | macOS: a stepper beside the choice. Windows: **Share of a limit**, under the choice | 95%, from 50% to 99% in steps of 1% |
 | **From** | **Warm up limits** | 06:00 |
 | **To** | **Warm up limits** | 22:00 |
 | A switch for each Claude Code account | **Warm up limits** | Off |
 
-The two switching settings are kept in `app.json`, as [The app](/reference/files#the-app) describes. Both stay dimmed until the app has read that file.
+The choice and its share are kept in `app.json`, as [The app](/reference/files#the-app) describes. Both stay dimmed until the app has read that file.
 
-### Switch Claude Code automatically
+### When a limit reaches
 
-While the app is open, it switches Claude Code once a limit of the account in use reaches the share. [Switch before an account runs out](/guides/automatic-switching) gives the rules. [`pitboard watch`](/reference/account-commands#watch) never reads this setting.
+While the app is open, it acts once a limit of the account in use reaches the share:
 
-**Switch when a limit reaches** is dimmed while this setting is off. On Windows, it is a number box from 50 to 99.
+| Choice | What the app does |
+| --- | --- |
+| **Do Nothing** | Posts nothing. Pitboard's menu and window still offer a switch once the account runs out. |
+| **Notify Me** | Posts one notification for each limit and reset, with **Switch** where another account of the tool has room. [Notifications](/reference/mac-app#notifications) lists its words. |
+| **Switch Automatically** | Switches Claude Code, as [Switch before an account runs out](/guides/automatic-switching) gives the rules. It notifies of Codex as **Notify Me** does. |
 
-The app decides:
+On Windows, the choices are **Do nothing**, **Notify me** and **Switch automatically**, and the share is a number box from 50 to 99. The share is dimmed under **Do Nothing**. [`pitboard watch`](/reference/account-commands#watch) never reads this setting.
 
-- When you turn the setting on or change the share.
+A note under the choice says what it does. Under **Switch Automatically**, it says when running sessions follow, as [Open sessions](/concepts/open-sessions) explains, and **Anthropic's terms may cover automatic switching and warm-ups.** follows with **Is this allowed?**, which opens [Is this allowed](/concepts/limits#is-this-allowed).
+
+Under **Switch Automatically**, the app decides:The app decides:
+
+- When you choose it or change the share.
 - After each usage read.
 - After another Pitboard run records a switch or usage.
 - At least every 30 seconds.
 
-The note under the setting says when running sessions follow, as [Open sessions](/concepts/open-sessions) explains.
-
-While the setting is on, a line says what the app last decided:
+A line says what the app last decided:
 
 | Line | Shown when |
 | --- | --- |
@@ -103,6 +109,8 @@ While the setting is on, a line says what the app last decided:
 While the app is open, it warms up each Claude Code account turned on here, between **From** and **To** each day, as [Warm up accounts](/guides/warm-up) describes. `pitboard warm` changes the same setting, and `pitboard watch` reads it.
 
 **To** at 00:00 is the end of the day. A **From** later than **To** runs past midnight.
+
+Under the list, **Anthropic's terms may cover automatic switching and warm-ups.** sits with **Is this allowed?**, which opens [Is this allowed](/concepts/limits#is-this-allowed).
 
 Each account's row shows where its warm-up stands while it is on. A line under the list says what comes next:
 

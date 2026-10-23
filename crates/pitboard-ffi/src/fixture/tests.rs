@@ -2980,9 +2980,11 @@ fn a_login_replaced_outside_is_posted_through_the_notifications_fixture_in_is_gi
     eventually("posted the login replaced", || !posted.posted().is_empty());
     model.shutdown();
 
+    // The account in use has run out too, which is posted after it.
     let said: Vec<(String, String, Option<NotificationButton>)> = posted
         .posted()
         .into_iter()
+        .filter(|notice| notice.id.starts_with("warning/login_replaced/"))
         .map(|notice| (notice.title, notice.body, notice.button))
         .collect();
     assert_eq!(
@@ -3010,7 +3012,8 @@ fn a_notification_the_system_refused_is_said_after_doctors_checks() {
         &StandInApps::new(&[], true),
         &posted,
     );
-    eventually("posted the login replaced", || !posted.posted().is_empty());
+    // The login replaced, then the run-out of the account in use, the last refused.
+    eventually("posted both", || posted.posted().len() == 2);
 
     model.send(Intent::PaneShown {
         pane: Pane::Machine,
@@ -3029,7 +3032,7 @@ fn a_notification_the_system_refused_is_said_after_doctors_checks() {
     assert_eq!(line.level, crate::Level::Warn);
     assert!(
         line.detail
-            .starts_with("“A login was replaced outside Pitboard” not posted at "),
+            .starts_with("“personal has no 5-hour limit left” not posted at "),
         "{}",
         line.detail
     );

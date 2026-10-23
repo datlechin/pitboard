@@ -336,9 +336,9 @@ Opening Pitboard from Finder or Spotlight with no window open opens the Pitboard
 
 | Title | Posted | Body | Button | Clicking the notification |
 | --- | --- | --- | --- | --- |
-| **work has no 5-hour limit left** | When the account in use runs out of a limit and another account of its tool has room, as [When an account runs out](/guides/switch#when-an-account-runs-out) says. Once for each limit and reset, even across restarts. | **personal has 58% of its own left.**, or **seat has no such limit.** for an account without that limit | **Switch**, which switches to `personal` | Opens **Accounts** |
+| **work has used 96% of its 5-hour limit**, or **work has no 5-hour limit left** from 100% | With **Notify Me** chosen, when a limit of the account in use reaches the share in [When a limit reaches](/reference/settings#when-a-limit-reaches). With **Switch Automatically**, for Codex only. Once for each limit and reset, even across restarts. | **personal has 58% of its own left.**, or **seat has no such limit.** for an account without that limit. With no account to switch to, **Resets in 1h 05m.** | **Switch**, which switches to `personal`, where another account of its tool has room | Opens **Accounts** |
 | **Switched Claude Code to personal** | After each switch the app makes by itself. | **work had used 96% of its 5-hour limit. Sessions already running follow within 33 seconds.** | None | Opens **Accounts** |
-| **Claude Code was not switched** | When a limit of the account in use reaches the share in **Switch when a limit reaches**, and Pitboard holds back. Once for each limit, reset and reason. | **work has used 96% of its 5-hour limit.**, then a reason from [When it stays on the account](/reference/automatic-switching#when-it-stays-on-the-account) | None | Opens **Settings** on **Limits** |
+| **Claude Code was not switched** | When a limit of the account in use reaches the share in **When a limit reaches**, and Pitboard holds back. Once for each limit, reset and reason. | **work has used 96% of its 5-hour limit.**, then a reason from [When it stays on the account](/reference/automatic-switching#when-it-stays-on-the-account) | None | Opens **Settings** on **Limits** |
 | **Pitboard is not switching Claude Code** | When Pitboard cannot decide whether to switch. Once for each reason and what it names. | A reason from [When it decides nothing](/reference/automatic-switching#when-it-decides-nothing) | None | Opens **Settings** on **Limits** |
 | **Pitboard could not switch Claude Code** | When an automatic switch fails. Once for each kind of error. | The error | None | Opens **Settings** on **Limits** |
 | **Pitboard could not warm up an account** | When a warm-up the app made by itself came to nothing. Once for each error until a warm-up starts a period. | The error | None | Opens **Settings** on **Limits** |
@@ -347,9 +347,9 @@ Opening Pitboard from Finder or Spotlight with no window open opens the Pitboard
 
 While a login file sits behind the keychain, the second sentence of **Switched Claude Code to personal** reads **Sessions already running keep the account they are on until their login is next renewed, or until they are started again:** and names the file.
 
-The three that hold back or fail come only while **Switch Claude Code automatically** is on. They can come again after the app next switches. A notification starts its reason with a capital letter and ends it with a full stop.
+The three that hold back or fail come only while **Switch Automatically** is chosen. They can come again after the app next switches. A notification starts its reason with a capital letter and ends it with a full stop.
 
-Only **work has no 5-hour limit left** and **work needs signing in again** can have a subtitle. A button does not bring Pitboard forward unless it needs to ask something. Notifications play no sound and set no badge. macOS asks whether to allow them the first time the app posts one.
+Only **work has used 96% of its 5-hour limit** and **work needs signing in again** can have a subtitle. A button does not bring Pitboard forward unless it needs to ask something. Notifications play no sound and set no badge. macOS asks whether to allow them the first time the app posts one.
 
 ## Keyboard shortcuts
 
@@ -371,7 +371,7 @@ Once more than one tool has accounts, these strings name the tool:
 | --- | --- | --- |
 | Menu and **Accounts** pane | One list of accounts | A heading for each tool: Claude Code, then Codex, then Claude Desktop |
 | Run-out notice | **work has no 5-hour limit left** | **Claude Code: work has no 5-hour limit left** |
-| Run-out and sign-in notifications | No subtitle | The subtitle **Claude Code** or **Codex** |
+| Limit and sign-in notifications | No subtitle | The subtitle **Claude Code** or **Codex** |
 | Switch notice | **Switched to work** | **Switched Codex to work** |
 | Its countdown | **Sessions already open follow in** | **Claude Code sessions already open follow in** |
 | New-login notice | **work has a new login** | **work in Codex has a new login** |

@@ -42,6 +42,11 @@ public sealed partial class SettingsPage : Page
             _context = (PaneContext)e.Parameter;
             ViewModel = new SettingsViewModel(
                 _context.Model, _context.StartAtSignIn, _context.Updates, _context.Version, _context.Notifications);
+            foreach (var title in ViewModel.AtLimitTitles)
+            {
+                AtLimitChoices.Items.Add(title);
+            }
+
             Bindings.Update();
             // After the bindings, so a failure's words are in place before Narrator is told of them.
             ViewModel.PropertyChanged += OnViewModelChanged;
@@ -79,7 +84,16 @@ public sealed partial class SettingsPage : Page
     private void OnOpenNotificationSettings(object sender, RoutedEventArgs args) =>
         Context.Open(new Uri(SettingsViewModel.NotificationSettings));
 
-    private void OnAutoSwitchToggled(object sender, RoutedEventArgs args) => ViewModel?.SetAutoSwitch(((ToggleSwitch)sender).IsOn);
+    private void OnAtLimitChosen(object sender, SelectionChangedEventArgs args) =>
+        ViewModel?.ChooseAtLimit(((ComboBox)sender).SelectedIndex);
+
+    private void OnOpenTerms(object sender, RoutedEventArgs args)
+    {
+        if (ViewModel is { } shown)
+        {
+            Context.Open(new Uri(shown.TermsLink));
+        }
+    }
 
     // A cleared box shows the share again once its change has run.
     private void OnShareChanged(NumberBox sender, NumberBoxValueChangedEventArgs args)
