@@ -82,10 +82,10 @@ fn preferences(user: Option<String>) -> Vec<PathBuf> {
         .collect()
 }
 
-// The first Claude Code can read, where it holds a policy.
-fn preferences_taken(ctx: &Context) -> Result<Option<Layer>, String> {
-    for path in preferences(crate::host::user::login_name()) {
-        match ctx.host().managed_plist(&path) {
+// The first of `paths` Claude Code can read, where it holds a policy.
+fn plist_taken(ctx: &Context, paths: &[PathBuf]) -> Result<Option<Layer>, String> {
+    for path in paths {
+        match ctx.host().managed_plist(path) {
             Administered::Set(text) => {
                 return Ok(
                     holds_policy(&text).then(|| administered(path.display().to_string(), &text))
@@ -196,7 +196,7 @@ fn managed_taken(ctx: &Context) -> Result<Vec<Layer>, String> {
     };
     let first = match ctx.os {
         Os::Windows => policy(Hive::Machine)?,
-        Os::MacOs => preferences_taken(ctx)?,
+        Os::MacOs => plist_taken(ctx, &preferences(crate::host::user::login_name()))?,
         Os::Linux => None,
     };
     if let Some(first) = first {
@@ -1092,31 +1092,28 @@ mod managed_tests {
         );
     }
 
-    // The passwd entry's name, as Claude Code's `os.userInfo()` reads it, which Windows' build
-    // has none of.
-    #[cfg(unix)]
+    // Under the name the passwd entry gives, as Claude Code's `os.userInfo()` reads it.
     #[test]
     fn the_persons_managed_preferences_come_before_the_devices() {
         let memory = MemoryHost::new();
-        let Ok([person, device]) =
-            <[PathBuf; 2]>::try_from(preferences(crate::host::user::login_name()))
-        else {
-            panic!("a passwd entry names this user");
-        };
+        let paths = preferences(Some("dana".into()));
+        let [person, device] = [&paths[0], &paths[1]];
+        assert_eq!(
+            person,
+            Path::new("/Library/Managed Preferences/dana/com.anthropic.claudecode.plist")
+        );
         let (ctx, _scratch) = on(Os::MacOs, &memory);
-        let taken = |ctx: &Context| {
-            managed_taken(ctx).map(|layers| layers.into_iter().map(|l| l.name).collect::<Vec<_>>())
-        };
-        memory.administers(&device, &json!({"forceLoginOrgUUID": "org-d"}).to_string());
-        assert_eq!(taken(&ctx), Ok(vec![device.display().to_string()]));
+        let taken = |ctx: &Context| plist_taken(ctx, &paths).map(|plist| plist.map(|l| l.name));
+        memory.administers(device, &json!({"forceLoginOrgUUID": "org-d"}).to_string());
+        assert_eq!(taken(&ctx), Ok(Some(device.display().to_string())));
 
-        memory.administers(&person, &json!({"forceLoginOrgUUID": "org-p"}).to_string());
-        assert_eq!(taken(&ctx), Ok(vec![person.display().to_string()]));
+        memory.administers(person, &json!({"forceLoginOrgUUID": "org-p"}).to_string());
+        assert_eq!(taken(&ctx), Ok(Some(person.display().to_string())));
 
-        memory.administers(&person, "{}");
-        assert_eq!(taken(&ctx), Ok(Vec::new()), "the first read is the one");
+        memory.administers(person, "{}");
+        assert_eq!(taken(&ctx), Ok(None), "the first read is the one");
 
-        memory.administers_unreadably(&person, "holds a date");
+        memory.administers_unreadably(person, "holds a date");
         assert!(taken(&ctx).is_err());
     }
 
@@ -1222,23 +1219,19 @@ mod profile_tests {
         assert_eq!(said(&ctx), ["ANTHROPIC_PROFILE in the environment"]);
     }
 
-    // The file holds a login, so it is looked at for being there and not empty, never read.
-    #[cfg(unix)]
+    // The file holds a login, so it is looked at for being there and not empty, never read:
+    // what it holds, text or not, is Claude Code's to read.
     #[test]
     fn a_profiles_credentials_file_is_never_read() {
-        use std::os::unix::fs::PermissionsExt;
         let scratch = tempfile::tempdir().expect("a scratch home");
         let folder = scratch.path().join(".config").join("anthropic");
         let ctx = on(Os::Linux, scratch.path(), &[("ANTHROPIC_PROFILE", "work")]);
         profile(&folder, "work", "user_oauth");
         signed_in(&folder, "work");
         let credentials = folder.join("credentials").join("work.json");
-        std::fs::set_permissions(&credentials, std::fs::Permissions::from_mode(0o000))
-            .expect("unreadable");
+        std::fs::write(&credentials, b"\xff\xfe not text").expect("written");
         assert_eq!(said(&ctx), ["ANTHROPIC_PROFILE in the environment"]);
 
-        std::fs::set_permissions(&credentials, std::fs::Permissions::from_mode(0o600))
-            .expect("readable");
         std::fs::write(&credentials, "").expect("emptied");
         assert_eq!(said(&ctx), Vec::<String>::new());
     }
