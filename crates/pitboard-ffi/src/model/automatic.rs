@@ -395,10 +395,13 @@ fn the_setting_promises_33_seconds_only_while_no_file_is_behind_the_keychain() {
     let mut machine = Machine::reading(Ok(status(vec![work(40.0), personal()])));
     turned_on(&mut model, &mut machine);
     model.refresh(&mut machine);
-    let note = model.shown().machine.at_limit.note.unwrap_or_default();
-    assert!(
-        note.contains("Sessions already running follow within about 33 seconds."),
-        "{note}"
+    assert_eq!(
+        model.shown().machine.at_limit.note.as_deref(),
+        Some(
+            "Pitboard switches Claude Code once a limit of the account in use reaches 95%, never \
+             back by itself, and notifies you of Codex. Sessions already running follow within \
+             about 33 seconds."
+        )
     );
 
     machine.answer = Ok(super::testing::warned(

@@ -698,15 +698,12 @@ pub(crate) fn part_still_running(os: Os, app: &str, again: &str) -> String {
 // What daily renewal does, under its switch, and that a parked app login never is renewed.
 pub(crate) fn renewal_about(os: Os, in_its_app: bool) -> String {
     let scheduler = match os {
-        Os::MacOs => "your Mac’s own scheduler",
-        Os::Linux => "this computer’s own scheduler",
-        Os::Windows => "your PC’s own scheduler",
+        Os::MacOs => "Your Mac’s own scheduler",
+        Os::Linux => "This computer’s own scheduler",
+        Os::Windows => "Your PC’s own scheduler",
     };
     let about = format!(
-        "A parked login is renewed whenever Pitboard runs, and otherwise not, so one you leave \
-         alone for weeks expires and needs a browser sign-in. Daily renewal hands that to \
-         {scheduler}. It renews your parked logins and does nothing else: it never switches \
-         account and never asks for usage."
+        "{scheduler} renews your parked logins once a day, so one you leave alone does not expire."
     );
     if in_its_app {
         format!("{about} A parked Claude Desktop login is never renewed.")

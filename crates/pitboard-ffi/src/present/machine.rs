@@ -301,10 +301,8 @@ fn warm(seen: &Seen) -> WarmShown {
         .unwrap_or_else(|| range.to_string()),
         accounts,
         standing,
-        note: "Pitboard starts the five-hour period of each account turned on as soon as the last \
-               one resets, within these hours, while the app is open, so it resets as early as it \
-               can. Claude Code sends one short request with that account's own login. Pitboard \
-               warms up Claude Code accounts only, and none with a limit used up."
+        note: "Pitboard starts each account’s five-hour period as soon as the last one resets, \
+               within these hours, while the app is open."
             .into(),
         enabled: overview.is_some(),
         terms: terms(),
@@ -344,14 +342,12 @@ fn at_limit(seen: &Seen) -> AtLimitShown {
     let note = match choice {
         AtLimit::Nothing => None,
         AtLimit::Notify => Some(format!(
-            "Pitboard notifies you once for each limit of the account in use that reaches {at}%, \
-             while the app is open, with a Switch button where another account has room."
+            "Pitboard notifies you once a limit of the account in use reaches {at}%, while the app \
+             is open."
         )),
         AtLimit::Switch => Some(format!(
-            "Pitboard switches Claude Code to another of your accounts with room below {at}% in \
-             every limit, once a limit of the one in use reaches {at}%, while the app is open. \
-             {follows} It never switches back by itself. It notifies you of Codex instead: a \
-             running codex keeps its account until restarted."
+            "Pitboard switches Claude Code once a limit of the account in use reaches {at}%, never \
+             back by itself, and notifies you of Codex. {follows}"
         )),
     };
     let switching = choice == AtLimit::Switch;
@@ -859,10 +855,8 @@ mod tests {
         let claude_code_alone = about(vec![account(Some("work")).signed_in().build()]);
         assert_eq!(
             claude_code_alone,
-            "A parked login is renewed whenever Pitboard runs, and otherwise not, so one you \
-             leave alone for weeks expires and needs a browser sign-in. Daily renewal hands \
-             that to your Mac’s own scheduler. It renews your parked logins and does nothing \
-             else: it never switches account and never asks for usage."
+            "Your Mac’s own scheduler renews your parked logins once a day, so one you leave \
+             alone does not expire."
         );
         assert_eq!(
             about(vec![
@@ -906,12 +900,10 @@ mod tests {
             assert_eq!(windows, present_on(Os::MacOs, &state, 0, &Utc).machine.warm);
             assert!(windows.enabled, "{on}");
             assert_eq!(windows.standing.as_deref(), said, "{on}");
-            assert!(
-                windows
-                    .note
-                    .starts_with("Pitboard starts the five-hour period"),
-                "{}",
-                windows.note
+            assert_eq!(
+                windows.note,
+                "Pitboard starts each account’s five-hour period as soon as the last one resets, \
+                 within these hours, while the app is open."
             );
         }
     }

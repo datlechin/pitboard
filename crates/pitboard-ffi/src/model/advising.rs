@@ -758,6 +758,12 @@ fn the_settings_offer_three_choices_and_the_terms_beside_switching() {
         "Notify me"
     );
     assert_eq!(shown.at_limit.at_label, "When a limit reaches 95%");
+    assert_eq!(
+        shown.at_limit.note.as_deref(),
+        Some(
+            "Pitboard notifies you once a limit of the account in use reaches 95%, while the app is open."
+        )
+    );
     assert!(shown.at_limit.share_enabled);
     assert_eq!(shown.at_limit.terms, None);
     assert_eq!(

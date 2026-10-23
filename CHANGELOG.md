@@ -67,6 +67,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The app's **Switched to work** notice with nothing under its title goes once open Claude Code
   sessions have followed the switch.
 - The Windows app's icon tooltip lists each account in use with its limits.
+- The app's **Settings** say what switching, warm-up and daily renewal do in one or two
+  sentences.
 
 ### Removed
 

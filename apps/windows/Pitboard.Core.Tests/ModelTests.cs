@@ -238,7 +238,7 @@ public sealed class ModelTests
             Assert.AreEqual("Not read yet", first.UpdatedMenu);
             Assert.IsNull(first.Machine.Schedule.Schedule);
             Assert.IsFalse(first.Machine.Schedule.On);
-            Assert.StartsWith("A parked login is renewed whenever Pitboard runs", first.Machine.Schedule.About);
+            Assert.Contains("renews your parked logins once a day", first.Machine.Schedule.About);
             Assert.IsEmpty(first.Machine.Checks.Lines);
             Assert.StartsWith("Checking ", first.Machine.Checks.Waiting!);
             Assert.AreEqual(OperatingSystem.IsWindows() ? "No activity" : "No Activity", first.Machine.Activity.Empty?.Title);
