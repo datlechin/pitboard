@@ -93,6 +93,9 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   account it left has used its share, as `pitboard watch` says it, where they said had used.
 - `pitboard watch` says that no other account has room as it says every other reason it is not
   switching, after `Pitboard is not switching:`, as the app says it.
+- The app and `pitboard use` say in one sentence, naming the account, why putting its login in
+  place of a Claude Code login Anthropic refuses for good loses nothing, and `pitboard use`
+  asks `Replace it?`.
 
 ### Removed
 

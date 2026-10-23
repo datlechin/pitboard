@@ -784,7 +784,7 @@ fn desktop_named(f: &mut fmt::Formatter<'_>, named: &Stored, last: &Stored) -> f
         f,
         "{}. Open Claude, check which account it shows, quit it with Command-Q, then run \
          `pitboard enroll desktop/<label>` under that account's name.",
-        crate::words::desktop_named(named, last)
+        crate::words::desktop_named(named, last, |stored| stored.said("nobody"))
     )
 }
 

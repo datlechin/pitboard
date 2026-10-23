@@ -1120,24 +1120,23 @@ pub fn given_up(given_up: &crate::switch::GivenUp, name: &str, way_on: &str) -> 
 }
 
 // Claude's settings name `named` since Pitboard last read `last` in use: no service is asked.
-pub(crate) fn desktop_named(
+// `said` names an account as the front end does.
+pub fn desktop_named(
     named: &crate::service::Stored,
     last: &crate::service::Stored,
+    said: impl Fn(&crate::service::Stored) -> String,
 ) -> String {
     use crate::service::Stored;
     let since = match last {
         Stored::Account(_) | Stored::Unenrolled(_) => format!(
             "since Pitboard last read {} in use, so Claude may hold another login",
-            last.said("nobody")
+            said(last)
         ),
         Stored::Nothing | Stored::Unknown => {
             "since Pitboard last read Claude signed out, so somebody may have signed in".into()
         }
     };
-    format!(
-        "Claude's settings have named {} {since}",
-        named.said("nobody")
-    )
+    format!("Claude's settings have named {} {since}", said(named))
 }
 
 // By the date the session cookie carries, hedged: claude.ai may end it sooner or keep it.
@@ -1251,23 +1250,18 @@ pub(crate) fn named_but_not_found(os: Os, email: &str) -> String {
     )
 }
 
-/// Why putting another login in place of `tool`'s login in use loses nothing, where its
-/// service refuses that login's refresh token for good.
-pub fn replacing(tool: crate::provider::ProviderId, detail: &str) -> String {
+// `name` is the account as the front end says it.
+pub fn replacing(tool: crate::provider::ProviderId, name: &str, detail: &str) -> String {
     format!(
-        "{} no longer accepts {}'s login in use ({detail}), so putting another login in its \
+        "{} no longer accepts {}'s login in use ({detail}), so putting {name}'s login in its \
          place loses nothing.",
         tool.service(),
         tool.name()
     )
 }
 
-/// What `pitboard use` asks before it puts `label`'s login in place of that one.
 pub fn replace_question(tool: crate::provider::ProviderId, label: &str, detail: &str) -> String {
-    format!(
-        "{}\nPut {label}'s login in its place? [y/N] ",
-        replacing(tool, detail)
-    )
+    format!("{}\nReplace it? [y/N] ", replacing(tool, label, detail))
 }
 
 // What `adopt` says of the Claude Desktop logins it set aside, each account as typed.
@@ -2265,6 +2259,27 @@ mod tests {
                 "{sentence}"
             );
         }
+    }
+
+    #[test]
+    fn a_login_refused_for_good_is_replaced_by_the_account_named() {
+        use crate::provider::ProviderId;
+        let refused = crate::error::Error::LiveLoginRefused {
+            tool: ProviderId::Claude,
+            label: "work".into(),
+            detail: "it was revoked".into(),
+        };
+        assert_eq!(
+            refused.to_string(),
+            "Anthropic no longer accepts Claude Code's login in use (it was revoked), so putting \
+             `work`'s login in its place loses nothing. Run `pitboard use work --yes` to \
+             replace it."
+        );
+        assert_eq!(
+            replace_question(ProviderId::Claude, "work", "it was revoked"),
+            "Anthropic no longer accepts Claude Code's login in use (it was revoked), so putting \
+             work's login in its place loses nothing.\nReplace it? [y/N] "
+        );
     }
 
     // Said by `repair`, which goes on past the move, so never that nothing has changed.

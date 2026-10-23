@@ -3605,7 +3605,11 @@ fn judge_desktop_login(
         Some(crate::in_use::Doubt::NamedMoved) => warn(
             "desktop_login",
             name,
-            words::desktop_named(&Stored::of(state, tool, known.own_record.as_ref()), &who),
+            words::desktop_named(
+                &Stored::of(state, tool, known.own_record.as_ref()),
+                &who,
+                |stored| stored.said("nobody"),
+            ),
             enroll,
         ),
         _ if facts.signed_out => warn(

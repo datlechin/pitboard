@@ -1327,11 +1327,10 @@ fn identity_unverifiable(
     }
 }
 
-/// [`Error::LiveLoginRefused`]'s words.
 fn live_login_refused(tool: ProviderId, label: &str, detail: &str) -> String {
     format!(
-        "{} Run `pitboard use {label} --yes` to put `{label}`'s login there.",
-        crate::words::replacing(tool, detail)
+        "{} Run `pitboard use {label} --yes` to replace it.",
+        crate::words::replacing(tool, &format!("`{label}`"), detail)
     )
 }
 

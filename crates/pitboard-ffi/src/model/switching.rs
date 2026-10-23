@@ -2012,8 +2012,8 @@ fn a_claude_desktop_warning_starts_no_read_that_asks() {
     assert_eq!(model.count(any_read), reads, "no service is asked about it");
 }
 
-const REFUSED_FOR_GOOD: &str = "Anthropic no longer accepts the login Claude Code is using (its login has expired and \
-     cannot be renewed). Putting work’s login in its place loses nothing.";
+const REFUSED_FOR_GOOD: &str = "Anthropic no longer accepts Claude Code's login in use (its login has expired and \
+     cannot be renewed), so putting work's login in its place loses nothing.";
 
 /// A switch from a login Anthropic refuses for good asks, instead of failing, and moves
 /// nothing until the answer comes.

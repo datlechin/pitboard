@@ -1078,13 +1078,7 @@ pub(crate) fn in_app_refusal(os: Os, error: &Error) -> Option<String> {
             tool,
             label,
             detail,
-        } => format!(
-            "{} no longer accepts the login {} is using ({detail}). Putting {}’s login in its \
-             place loses nothing.",
-            tool.service(),
-            tool.name(),
-            bare(label)
-        ),
+        } => pitboard_core::words::replacing(*tool, &bare(label), detail),
         Error::IdentityUnverifiable {
             tool,
             login: Unidentified::Parked { label },
@@ -1139,18 +1133,11 @@ pub(crate) fn in_app_warning(os: Os, warning: &CoreWarning) -> Option<String> {
         "Open {app}, check which account it shows, quit it, then choose Add the Account {app} \
          Shows."
     );
-    let named = |named: &Stored, last: &Stored| match last {
-        Stored::Account(_) | Stored::Unenrolled(_) => format!(
-            "{app}’s settings have named {} since Pitboard last read {} in use, so {app} may hold \
-             another login. {add_what_it_shows}",
-            stored(named),
-            stored(last)
-        ),
-        Stored::Nothing | Stored::Unknown => format!(
-            "{app}’s settings have named {} since Pitboard last read {app} signed out, so \
-             somebody may have signed in. {add_what_it_shows}",
-            stored(named)
-        ),
+    let named = |named: &Stored, last: &Stored| {
+        format!(
+            "{}. {add_what_it_shows}",
+            pitboard_core::words::desktop_named(named, last, stored)
+        )
     };
     Some(match warning {
         CoreWarning::InUseUnconfirmed {
@@ -2188,9 +2175,26 @@ mod tests {
         assert_eq!(
             in_app_refusal(Os::MacOs, &refused).as_deref(),
             Some(
-                "Anthropic no longer accepts the login Claude Code is using (its login has \
-                 expired and cannot be renewed). Putting work’s login in its place loses \
-                 nothing."
+                "Anthropic no longer accepts Claude Code's login in use (its login has expired \
+                 and cannot be renewed), so putting work's login in its place loses nothing."
+            )
+        );
+    }
+
+    #[test]
+    fn claudes_settings_naming_another_account_are_said_as_the_command_line_says_them() {
+        let unconfirmed = CoreWarning::InUseUnconfirmed {
+            tool: ProviderId::Desktop,
+            last: Stored::Account("desktop/work".into()),
+            named: Stored::Unenrolled(String::new()),
+            asked: false,
+        };
+        assert_eq!(
+            in_app_warning(Os::MacOs, &unconfirmed).as_deref(),
+            Some(
+                "Claude's settings have named an account you haven’t added since Pitboard last \
+                 read work in use, so Claude may hold another login. Open Claude, check which \
+                 account it shows, quit it, then choose Add the Account Claude Shows."
             )
         );
     }
