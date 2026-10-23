@@ -961,6 +961,20 @@ pub(crate) fn mixed_way_out(label: &str) -> String {
     )
 }
 
+// Claude Code's only such setting is a managed one.
+pub(crate) fn restricted_way_out(tool: crate::provider::ProviderId) -> &'static str {
+    use crate::provider::ProviderId;
+    match tool {
+        ProviderId::Claude => {
+            "Switch to an account of an organisation the setting names; only whoever manages \
+             this computer can change it."
+        }
+        ProviderId::Codex | ProviderId::Desktop => {
+            "Switch to an account the setting allows, or change the setting."
+        }
+    }
+}
+
 pub(crate) fn move_settled(
     label: &str,
     half: crate::state::Half,
