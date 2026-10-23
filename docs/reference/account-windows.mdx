@@ -4,7 +4,7 @@ sidebarTitle: "Account windows"
 description: "Look up how account windows open pages, sign in, download and keep data, and which shared links Pitboard refuses."
 ---
 
-The app opens account windows on macOS and Windows, and only the macOS app takes pages from the share sheet. Linux has no app. [Use each account's site](/guides/account-windows) says how to open one, sign in and sign out.
+The app opens account windows on macOS and Windows, and Linux has no app. [Use each account's site](/guides/account-windows) says how to open one, sign in and sign out.
 
 Each enrolled Claude Code account has one window on claude.ai, and each enrolled Codex account one on chatgpt.com. A Claude Desktop account has none, and neither does a login nobody enrolled.
 
@@ -12,27 +12,11 @@ Each enrolled Claude Code account has one window on claude.ai, and each enrolled
 
 Opening an open window brings it to the front. A window opens at the last page of its site it showed, other than a sign-in page, or else at `https://claude.ai/` or `https://chatgpt.com/`. It closes once a read of the accounts no longer lists its account.
 
-The title is the account's label. When the other site has an account with the same label, the title adds the site: **work (claude.ai)**. On macOS, the subtitle is the page's title, or the site's name. On Windows, the page's title comes first, then a hyphen and the label.
+The title is the account's label. When the other site has an account with the same label, the title adds the site: **work (claude.ai)**.
 
-<Tabs>
-  <Tab title="macOS">
-    | Action | Toolbar | Menu |
-    | --- | --- | --- |
-    | Previous or next page | **Back**, **Forward** or a two-finger swipe | **Go** > **Back** (Command-Left Bracket), **Forward** (Command-Right Bracket) |
-    | Reload | **Reload**, which **Stop** replaces while a page loads | **View** > **Reload Page** (Command-R) |
-    | Zoom | A pinch | **View** > **Zoom In** (Command-Plus), **Zoom Out** (Command-Minus), **Actual Size** (Command-0) |
-    | Find | None | **Edit** > **Find** > **Find** (Command-F), **Find Next** (Command-G), **Find Previous** (Shift-Command-G), **Use Selection for Find** (Command-E) |
+On macOS, zoom steps from 50% to 300%, as in Safari, and resets when the window closes. The page's shortcut menu has no **Download Linked File**, **Download Image** or **Download Video**: WebKit would cancel those downloads.
 
-    Zoom steps from 50% to 300%, as in Safari, and resets when the window closes. **Actual Size** also undoes a pinch. The find bar searches when you press Return.
-
-    The page's shortcut menu has no **Download Linked File**, **Download Image** or **Download Video**: WebKit would cancel those downloads.
-  </Tab>
-  <Tab title="Windows">
-    The toolbar holds **Back**, **Forward** and **Reload**, which **Stop** replaces while a page loads. **Downloads** joins them once the window has a download. The menu behind the three dots at the toolbar's end holds **Remove website data**.
-
-    WebView2 serves the page's own keys, find bar and zoom, as Microsoft Edge does.
-  </Tab>
-</Tabs>
+On Windows, WebView2 serves the page's own keys, find bar and zoom, as Microsoft Edge does. **Downloads** joins the toolbar once the window has a download.
 
 ## Pages and links
 
@@ -77,7 +61,7 @@ A failed download's partial file is deleted. A download goes on after its window
 
 | System | A second `report.pdf` is saved as | **Downloads** in the toolbar |
 | --- | --- | --- |
-| macOS | `report 2.pdf`, then `report 3.pdf` | Lists the downloads newest first. **Cancel** stops one and deletes what it wrote. **Show in Finder** shows a finished file, and **Clear** takes the ended ones off. |
+| macOS | `report 2.pdf`, then `report 3.pdf` | Lists the downloads newest first. **Cancel** deletes what a download wrote. |
 | Windows | `report (1).pdf`, then `report (2).pdf` | Opens WebView2's own list |
 
 On Windows, a window closed during a download comes back when you open the account's window again, or when **Exit** asks.
