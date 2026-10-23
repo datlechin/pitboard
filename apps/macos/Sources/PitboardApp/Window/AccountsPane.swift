@@ -44,7 +44,8 @@ struct AccountsPane: View {
             // Command-Delete in a sheet's text field deletes to the start of the line.
             .focusedSceneValue(
                 \.account,
-                model.sheet == nil ? selection.flatMap(model.item).map(command(for:)) : nil)
+                model.sheet == nil ? selection.flatMap(model.item).map(command(for:)) : nil
+            )
             .task { model.send(.paneShown(pane: .accounts)) }
             .alert(
                 asking?.question.title ?? "",
