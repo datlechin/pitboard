@@ -2059,13 +2059,20 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
                `ANTHROPIC_ORGANIZATION_ID` both set are a federation of their own. Without \
                those, it takes the profile `active_config` names, or `default`, where its mode is \
                `oidc_federation`; a `user_oauth` one comes after a claude.ai login. Each variable \
-               is trimmed, and read from the process's environment",
+               and `ANTHROPIC_CONFIG_DIR` is trimmed, and read from the process's environment, \
+               which a session sets from the managed sources' and the person's settings' `env` as \
+               it starts: the highest that sets one wins, a number or a boolean as its text, any \
+               other value dropped",
         read_from: "the profile precedence, the profile's mode and credentials file readers, the \
                     active profile reader, and the token source check that takes a profile after \
                     `apiKeyHelper`, in the darwin-arm64, linux-x64, win32-x64 and win32-arm64 \
-                    builds of 2.1.309, read as bytes on 2026-10-23",
+                    builds of 2.1.309, read as bytes on 2026-10-23; the settings `env` a session \
+                    applies to its environment at start, before it looks for a profile, and the \
+                    filters that drop a name from it, of which only a project's names one of these \
+                    four, `ANTHROPIC_CONFIG_DIR`, read in the same builds on 2026-10-24",
         verified_against: "2.1.309",
-        depends: "settings::Profiles and settings::overrides, so doctor's auth_source check, a \
+        depends: "settings::Profiles and settings::overrides, which read each variable from the \
+                  settings' `env` before the environment, so doctor's auth_source check, a \
                   switch's auth_overridden warning and the automatic switch name the profile. \
                   They take a credentials file that is there and not empty for one that holds a \
                   login, and never read it",

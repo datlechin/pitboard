@@ -334,12 +334,16 @@ fn layered(ctx: &Context, settings: &Path) -> Vec<Override> {
 const FEDERATION: &str = "oidc_federation";
 const OAUTH: &str = "user_oauth";
 
-// Where Claude Code finds its Anthropic profiles, and which one the environment names.
+const CONFIG_DIR: &str = "ANTHROPIC_CONFIG_DIR";
+const NAMED: &str = "ANTHROPIC_PROFILE";
+const PAIR: [&str; 2] = ["ANTHROPIC_FEDERATION_RULE_ID", "ANTHROPIC_ORGANIZATION_ID"];
+
+// What this process was started with of the variables that choose an Anthropic profile.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub(crate) struct Profiles {
-    folder: Option<PathBuf>,
-    named: Option<String>,
-    federated: bool,
+    started: Vec<(&'static str, String)>,
+    // The profile folder while `ANTHROPIC_CONFIG_DIR` names none.
+    fallback: Option<PathBuf>,
 }
 
 impl Profiles {
@@ -349,21 +353,58 @@ impl Profiles {
         let under = |name, path: &[&str]| {
             set(name).map(|dir| path.iter().fold(PathBuf::from(dir), |p, part| p.join(part)))
         };
-        let folder = set("ANTHROPIC_CONFIG_DIR")
-            .map(PathBuf::from)
-            .or_else(|| match env.os() {
+        Profiles {
+            started: [CONFIG_DIR, NAMED, PAIR[0], PAIR[1]]
+                .into_iter()
+                .filter_map(|name| Some((name, set(name)?.to_owned())))
+                .collect(),
+            fallback: match env.os() {
                 Os::Windows => under("APPDATA", &["Anthropic"])
                     .or_else(|| under("USERPROFILE", &["AppData", "Roaming", "Anthropic"])),
                 Os::MacOs | Os::Linux => under("XDG_CONFIG_HOME", &["anthropic"])
                     .or_else(|| under("HOME", &[".config", "anthropic"])),
-            });
-        Profiles {
-            folder,
-            named: set("ANTHROPIC_PROFILE").map(str::to_owned),
-            federated: set("ANTHROPIC_FEDERATION_RULE_ID").is_some()
-                && set("ANTHROPIC_ORGANIZATION_ID").is_some(),
+            },
         }
     }
+
+    fn started(&self, name: &str) -> Option<&str> {
+        self.started
+            .iter()
+            .find_map(|(set, value)| (*set == name).then_some(value.as_str()))
+    }
+}
+
+// What a session takes for `name`, and where from: Claude Code applies the highest settings `env`
+// that sets it over the environment it starts with, a number or a boolean as its text, and drops
+// any other value there. Trimmed, and an empty one unset.
+fn taken(ctx: &Context, layers: &[(Layer, bool)], name: &str) -> Option<(String, Override)> {
+    let set = layers.iter().find_map(|(layer, _)| {
+        let text = match setting(ctx.os, layer, name)? {
+            Value::String(text) => text,
+            Value::Number(number) => number.to_string(),
+            Value::Bool(flag) => flag.to_string(),
+            _ => return None,
+        };
+        Some((
+            text,
+            Override {
+                layer: layer.name.clone(),
+                key: format!("env.{name}"),
+            },
+        ))
+    });
+    let (value, from) = set.or_else(|| {
+        let started = ctx.anthropic.started(name)?;
+        Some((
+            started.to_owned(),
+            Override {
+                layer: "the environment".into(),
+                key: name.into(),
+            },
+        ))
+    })?;
+    let value = value.trim();
+    (!value.is_empty()).then(|| (value.to_owned(), from))
 }
 
 fn profile_file(folder: &Path, name: &str) -> PathBuf {
@@ -395,37 +436,44 @@ fn mode(folder: &Path, name: &str) -> Option<String> {
 // The profile a session takes before the stored login: the one `ANTHROPIC_PROFILE` names, else
 // the federation both variables set, else the active profile where it federates. Claude Code
 // takes a claude.ai login before an active profile that signs in with OAuth.
-fn profile(ctx: &Context) -> Option<Override> {
-    let Profiles {
-        folder,
-        named,
-        federated,
-    } = &ctx.anthropic;
-    let environment = |key: &str| Override {
-        layer: "the environment".into(),
-        key: key.into(),
+fn profile(ctx: &Context) -> Vec<Override> {
+    let layers = env_layers(ctx).unwrap_or_default();
+    let folder = taken(ctx, &layers, CONFIG_DIR)
+        .map(|(dir, _)| PathBuf::from(dir))
+        .or_else(|| ctx.anthropic.fallback.clone());
+    if let Some((name, from)) = taken(ctx, &layers, NAMED) {
+        return folder
+            .and_then(|folder| mode(&folder, &name))
+            .filter(|mode| [FEDERATION, OAUTH].contains(&mode.as_str()))
+            .map(|_| from)
+            .into_iter()
+            .collect();
+    }
+    if let [Some((_, rule)), Some((_, organisation))] = PAIR.map(|name| taken(ctx, &layers, name)) {
+        return if rule.layer == organisation.layer {
+            vec![Override {
+                layer: rule.layer,
+                key: format!("{} and {}", rule.key, organisation.key),
+            }]
+        } else {
+            vec![rule, organisation]
+        };
+    }
+    let Some(folder) = folder else {
+        return Vec::new();
     };
-    if let Some(name) = named {
-        let mode = mode(folder.as_deref()?, name)?;
-        return [FEDERATION, OAUTH]
-            .contains(&mode.as_str())
-            .then(|| environment("ANTHROPIC_PROFILE"));
-    }
-    if *federated {
-        return Some(environment(
-            "ANTHROPIC_FEDERATION_RULE_ID and ANTHROPIC_ORGANIZATION_ID",
-        ));
-    }
-    let folder = folder.as_deref()?;
     let active = std::fs::read_to_string(folder.join("active_config"))
         .ok()
         .map(|name| name.trim().to_owned())
         .filter(|name| !name.is_empty())
         .unwrap_or_else(|| "default".into());
-    (mode(folder, &active)? == FEDERATION).then(|| Override {
-        layer: profile_file(folder, &active).display().to_string(),
-        key: format!("the `{FEDERATION}` profile `{active}`"),
-    })
+    (mode(&folder, &active).as_deref() == Some(FEDERATION))
+        .then(|| Override {
+            layer: profile_file(&folder, &active).display().to_string(),
+            key: format!("the `{FEDERATION}` profile `{active}`"),
+        })
+        .into_iter()
+        .collect()
 }
 
 // Each managed source a session takes that sets `forceLoginOrgUUID`, with the organisations it
@@ -530,25 +578,31 @@ pub(crate) struct EnvSetting {
 }
 
 // Highest first: the managed sources a session takes, then the person's own settings.json, which
-// Claude Code assigns before them (`windows_backend_choice`). A name in any case, as Windows
-// takes one. Err names a managed source Pitboard cannot read that may be taken.
-pub(crate) fn env_settings(ctx: &Context, name: &str) -> Result<Vec<EnvSetting>, String> {
+// Claude Code assigns before them (`windows_backend_choice`), each with whether it is managed.
+// Err names a managed source Pitboard cannot read that may be taken.
+fn env_layers(ctx: &Context) -> Result<Vec<(Layer, bool)>, String> {
     let managed = managed_taken(ctx)?.into_iter().map(|layer| (layer, true));
     let own = own(&claude::config_dir(ctx).join("settings.json")).map(|layer| (layer, false));
-    Ok(managed
-        .chain(own)
+    Ok(managed.chain(own).collect())
+}
+
+// A layer's `env` value for a variable: a name in any case on Windows, as it takes one.
+fn setting(os: Os, layer: &Layer, name: &str) -> Option<Value> {
+    let json = serde_json::from_str::<Value>(&layer.text).ok()?;
+    json.get("env")?
+        .as_object()?
+        .iter()
+        .find(|(key, _)| *key == name || os == Os::Windows && key.eq_ignore_ascii_case(name))
+        .map(|(_, value)| value.clone())
+}
+
+pub(crate) fn env_settings(ctx: &Context, name: &str) -> Result<Vec<EnvSetting>, String> {
+    Ok(env_layers(ctx)?
+        .into_iter()
         .filter_map(|(layer, managed)| {
-            let json = serde_json::from_str::<Value>(&layer.text).ok()?;
-            let value = json
-                .get("env")?
-                .as_object()?
-                .iter()
-                .find(|(key, _)| key.eq_ignore_ascii_case(name))?
-                .1
-                .clone();
             Some(EnvSetting {
+                value: setting(ctx.os, &layer, name)?,
                 layer: layer.name,
-                value,
                 managed,
             })
         })
@@ -1261,6 +1315,94 @@ mod profile_tests {
                 &[pair[0], ("ANTHROPIC_ORGANIZATION_ID", " ")]
             )),
             Vec::<String>::new()
+        );
+    }
+
+    fn own_settings(scratch: &Path, env: Value) -> PathBuf {
+        let path = scratch.join(".claude").join("settings.json");
+        std::fs::create_dir_all(path.parent().expect("its folder")).expect("a folder");
+        std::fs::write(&path, json!({ "env": env }).to_string()).expect("written");
+        path
+    }
+
+    // Claude Code 2.1.309 applies a settings file's `env` over the environment it starts with
+    // before it looks for a profile (anthropic_profiles).
+    #[test]
+    fn a_profile_a_settings_file_names_is_taken_over_the_environments() {
+        let scratch = tempfile::tempdir().expect("a scratch home");
+        let folder = scratch.path().join(".config").join("anthropic");
+        let ctx = on(Os::Linux, scratch.path(), &[("ANTHROPIC_PROFILE", "home")]);
+        profile(&folder, "home", "user_oauth");
+        profile(&folder, "work", "oidc_federation");
+        let settings = own_settings(scratch.path(), json!({"ANTHROPIC_PROFILE": " work "}));
+        assert_eq!(
+            said(&ctx),
+            [format!("env.ANTHROPIC_PROFILE in {}", settings.display())]
+        );
+
+        own_settings(scratch.path(), json!({"anthropic_profile": "work"}));
+        assert_eq!(
+            said(&ctx),
+            Vec::<String>::new(),
+            "another variable off Windows"
+        );
+
+        own_settings(scratch.path(), json!({"ANTHROPIC_PROFILE": ""}));
+        let default = profile(&folder, "default", "oidc_federation");
+        assert_eq!(
+            said(&ctx),
+            [format!(
+                "the `oidc_federation` profile `default` in {}",
+                default.display()
+            )],
+            "an empty one unsets the environment's"
+        );
+    }
+
+    #[test]
+    fn a_federation_a_settings_file_sets_overrides_the_login() {
+        let scratch = tempfile::tempdir().expect("a scratch home");
+        let both = json!({"ANTHROPIC_FEDERATION_RULE_ID": "rule", "ANTHROPIC_ORGANIZATION_ID": 7});
+        let settings = own_settings(scratch.path(), both);
+        let ctx = on(Os::MacOs, scratch.path(), &[]);
+        assert_eq!(
+            said(&ctx),
+            [format!(
+                "env.ANTHROPIC_FEDERATION_RULE_ID and env.ANTHROPIC_ORGANIZATION_ID in {}",
+                settings.display()
+            )]
+        );
+
+        own_settings(scratch.path(), json!({"ANTHROPIC_ORGANIZATION_ID": "org"}));
+        let ctx = on(
+            Os::MacOs,
+            scratch.path(),
+            &[("ANTHROPIC_FEDERATION_RULE_ID", "rule")],
+        );
+        assert_eq!(
+            said(&ctx),
+            [
+                "ANTHROPIC_FEDERATION_RULE_ID in the environment".to_string(),
+                format!("env.ANTHROPIC_ORGANIZATION_ID in {}", settings.display()),
+            ]
+        );
+    }
+
+    #[test]
+    fn the_profile_folder_a_settings_file_names_is_looked_in() {
+        let scratch = tempfile::tempdir().expect("a scratch home");
+        let elsewhere = scratch.path().join("elsewhere");
+        own_settings(
+            scratch.path(),
+            json!({"ANTHROPIC_CONFIG_DIR": elsewhere.to_string_lossy()}),
+        );
+        let path = profile(&elsewhere, "default", "oidc_federation");
+        assert_eq!(
+            said(&on(Os::Linux, scratch.path(), &[])),
+            [format!(
+                "the `oidc_federation` profile `default` in {}",
+                path.display()
+            )]
         );
     }
 
