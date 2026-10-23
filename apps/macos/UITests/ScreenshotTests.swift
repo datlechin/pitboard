@@ -12,12 +12,8 @@ final class ScreenshotTests: FixtureTestCase {
         app.openWindow()
         let window = app.windows["main"]
         XCTAssertTrue(window.waitForExistence(timeout: 5))
-        // The pictures show the accounts: opening at login, then what happens at a limit.
-        for tip in ["Open Pitboard at login", "Switch before a limit runs out"] {
-            XCTAssertTrue(app.staticTexts[tip].waitForExistence(timeout: 5), tip)
-            app.buttons["Not Now"].click()
-            XCTAssertTrue(app.staticTexts[tip].waitForNonExistence(timeout: 5), tip)
-        }
+        // The pictures show the accounts.
+        app.putTheTipsAway()
 
         // The menu is see-through, so it is shown over this window, not over the Mac's screen.
         app.openMenu()

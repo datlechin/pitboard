@@ -52,6 +52,15 @@ extension XCUIApplication {
         XCTAssertTrue(windows.firstMatch.waitForExistence(timeout: 5))
     }
 
+    // The tips past a second account: opening at login, then what happens at a limit.
+    func putTheTipsAway() {
+        for tip in ["Open Pitboard at login", "Switch before a limit runs out"] {
+            XCTAssertTrue(staticTexts[tip].waitForExistence(timeout: 5), tip)
+            buttons["Not Now"].click()
+            XCTAssertTrue(staticTexts[tip].waitForNonExistence(timeout: 5), tip)
+        }
+    }
+
     func openSettings() {
         openMenu()
         menuItem("Settings…").click()

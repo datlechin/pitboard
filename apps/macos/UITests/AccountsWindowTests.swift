@@ -221,6 +221,8 @@ final class AccountsWindowTests: FixtureTestCase {
     func testUsingACodexAccountSaysSessionsKeepTheOldOne() {
         let app = launch(.twoTools)
         app.openWindow()
+        // With a tip above them, spare is scrolled to and the notice goes out of sight.
+        app.putTheTipsAway()
         let spare = app.accountRow("codex/spare")
         XCTAssertTrue(spare.waitForExistence(timeout: 5))
         // Named with its tool, since Claude Code could have a `spare` too.
