@@ -469,7 +469,7 @@ On Linux, your user's systemd runs the service from your first sign-in to your l
 
 Where `watch` ends on an error or a crash, macOS and Linux start the service again a minute later. On Windows, it starts again at your next sign-in, or with `pitboard watch install`.
 
-After you update Pitboard, the service runs the update from your next sign-in, or at once after `pitboard watch install`. On Windows, Scoop and WinGet cannot update a `pitboard.exe` the service is running: `scoop update` skips it, and `winget upgrade` fails. Run `pitboard watch uninstall` before you update, and `pitboard watch install` after.
+After you update Pitboard, the service runs the updated `pitboard` from your next sign-in, or at once after `pitboard watch install`. On Windows, Scoop and WinGet cannot update a `pitboard.exe` the service is running: `scoop update` skips it, and `winget upgrade` fails. Run `pitboard watch uninstall` before you update, and `pitboard watch install` after.
 
 `install` follows the rules of [`schedule install`](/reference/maintenance-commands#schedule):
 
