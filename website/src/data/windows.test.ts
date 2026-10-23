@@ -75,7 +75,7 @@ test("an account's tooltip in the icon's menu is the line the menu bar app shows
   assert.ok(views("IconMenuFlyout.cs").includes("ToolTipService.SetToolTip(item, detail);"));
   assert.ok(
     present("accounts.rs").includes(
-      "summary: in_place_of_limits.unwrap_or_else(|| limits_said(seen, account)),",
+      "in_place_of_limits(seen, account).unwrap_or_else(|| limits_said(seen, account))",
     ),
   );
   const [work] = iconMenu("before", false)
@@ -100,11 +100,15 @@ test("a site with several accounts' windows is a submenu of their labels", () =>
   for (const host of ["claude.ai", "chatgpt.com"]) assert.ok(named.includes(`host: "${host}"`));
 });
 
-test("the icon's tooltip names Pitboard, the account the menu bar would and its tool", () => {
-  assert.ok(
-    present("accounts.rs").includes('format!("Pitboard, {name_and_usage}, {}", tool.name)'),
+test("the icon's tooltip names Pitboard, then each account in use with its tool and its menu line", () => {
+  const source = present("accounts.rs");
+  assert.ok(source.includes('let mut tip = vec!["Pitboard".to_owned()];'));
+  assert.ok(source.includes('format!("{}: {}", seen.name_of(account), summary(seen, account))'));
+  assert.ok(present("words.rs").includes('format!("{label} ({tool})")'));
+  assert.equal(
+    trayTip("after"),
+    "Pitboard\nwork (Claude Code): 5-hour 12%, weekly 40%\nmain (Codex): 5-hour 18%, weekly 7%",
   );
-  assert.equal(trayTip("after"), "Pitboard, work 40%, Claude Code");
 });
 
 test("the window and its panes are named as MainWindow.xaml names them", () => {

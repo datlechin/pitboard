@@ -1,6 +1,7 @@
-# Writes Pitboard.App/Pitboard.ico and the share package's logos in Pitboard.Share/Assets from
-# the drawings beside it: python3 make-ico.py, with rsvg-convert and Pillow. Each size comes
-# from the grid it is drawn on, or the nearest.
+# Writes Pitboard.App/Pitboard.ico, the notification area's icons in Pitboard.App/Tray and the
+# share package's logos in Pitboard.Share/Assets from the drawings beside it: python3
+# make-ico.py, with rsvg-convert and Pillow. Each size comes from the grid it is drawn on, or the
+# nearest.
 import io
 import struct
 import subprocess
@@ -54,13 +55,23 @@ def frame(image):
     return header + colour + mask
 
 
-frames = [(size, frame(rendered(size, drawing))) for size, drawing in DRAWN.items()]
-offset = 6 + 16 * len(frames)
-directory = struct.pack("<HHH", 0, 1, len(frames))
-for size, data in frames:
-    directory += struct.pack("<BBBBHHII", size % 256, size % 256, 0, 0, 1, 32, len(data), offset)
-    offset += len(data)
-(HERE.parent / "Pitboard.App" / "Pitboard.ico").write_bytes(directory + b"".join(data for _, data in frames))
+def write_ico(path, drawn):
+    frames = [(size, frame(rendered(size, drawing))) for size, drawing in drawn.items()]
+    offset = 6 + 16 * len(frames)
+    directory = struct.pack("<HHH", 0, 1, len(frames))
+    for size, data in frames:
+        directory += struct.pack("<BBBBHHII", size % 256, size % 256, 0, 0, 1, 32, len(data), offset)
+        offset += len(data)
+    path.write_bytes(directory + b"".join(data for _, data in frames))
+
+
+write_ico(HERE.parent / "Pitboard.App" / "Pitboard.ico", DRAWN)
+
+# One for each step a limit's colour changes at, at the sizes the notification area draws: its
+# lit row is as long as what is left, in a neutral tone.
+for level in ("Plenty", "Low", "Out"):
+    drawn = {size: f"tray-{level.lower()}-{24 if size == 24 else 16}.svg" for size in (16, 20, 24, 32)}
+    write_ico(HERE.parent / "Pitboard.App" / "Tray" / f"{level}.ico", drawn)
 
 # Unqualified files: a sparse package has no resources.pri to pick a scale or target size by.
 LOGOS = {"StoreLogo.png": 50, "Square44x44Logo.png": 44, "Square150x150Logo.png": 150}

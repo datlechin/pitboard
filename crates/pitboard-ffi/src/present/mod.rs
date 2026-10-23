@@ -64,21 +64,22 @@ use crate::{Account, Tool, UsageLevel};
 use pitboard_core::host::{OS, Os};
 use pitboard_core::provider::ProviderId;
 
-/// What the menu bar item says beside its mark, in each of the forms an app's setting can
-/// choose: the name and the figure, the figure alone, or nothing beside the mark. Not called
-/// `MenuBar`, which WinUI 3 has a control of, so that a C# file using both namespaces would
-/// find the name ambiguous.
+// Not `MenuBar`, which WinUI 3 has a control of: a C# file using both namespaces would find it
+// ambiguous.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct MenuBarText {
-    /// "work 42%": the account the bar is about and its headline limit, a name past twelve
-    /// characters cut to eleven and an ellipsis. Empty before anything is known and while
-    /// nobody is signed in.
+    // "work 42%", a name past twelve characters cut to eleven and an ellipsis; empty while
+    // nobody is signed in
     pub name_and_usage: String,
-    /// "42%", or empty until a figure is measured.
+    // "42%", empty until measured
     pub usage: String,
-    /// What VoiceOver says of the item, whatever it shows: "Pitboard, work 42%", and the
-    /// tool too once there is more than one, "Pitboard, work 80%, Codex".
+    // "Pitboard, work 80%, Codex, needs attention", whatever the bar shows
     pub spoken: String,
+    pub level: Option<UsageLevel>,
+    // the menu opens on something to look at
+    pub attention: bool,
+    // Windows' notification area tooltip: "Pitboard", then a line for each account in use
+    pub tip: String,
 }
 
 /// One tool's accounts, under its name: one section, unheaded, while every account shown is
@@ -710,6 +711,7 @@ pub(crate) fn present_on(os: Os, state: &State, now: i64, local: &dyn LocalTime)
     let seen = Seen::new(state, now, local, os);
     let footing = setup::footing(&seen);
     let notices = notices::notices(&seen, &footing);
+    let menu_notices = notices::menu_notices(&seen, &footing, &notices);
     Snapshot {
         revision: 0,
         now,
@@ -732,10 +734,10 @@ pub(crate) fn present_on(os: Os, state: &State, now: i64, local: &dyn LocalTime)
         signing_in: state.shown_sign_in(),
         sheet: state.sheet.clone(),
         sheet_failure: state.sheet_failure.clone(),
-        menu_bar: accounts::menu_bar(&seen),
+        menu_bar: accounts::menu_bar(&seen, &menu_notices),
         sections: accounts::sections(&seen),
         shows_tools: seen.shows_tools(),
-        menu_notices: notices::menu_notices(&seen, &footing, &notices),
+        menu_notices,
         notices,
         setup: setup::step(&seen, &footing),
         accounts_shown: setup::accounts_shown(&seen, &footing),

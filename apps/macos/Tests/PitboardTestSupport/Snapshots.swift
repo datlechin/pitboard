@@ -46,7 +46,10 @@ package func snapshot(
         abandoned: nil, failure: nil,
         windowRequest: WindowRequest(serial: 0, pane: nil), signingIn: nil, sheet: nil,
         sheetFailure: nil,
-        menuBar: MenuBarText(nameAndUsage: "", usage: "", spoken: "Pitboard"), sections: [],
+        menuBar: MenuBarText(
+            nameAndUsage: "", usage: "", spoken: "Pitboard", level: nil, attention: false,
+            tip: "Pitboard"),
+        sections: [],
         showsTools: false, notices: [],
         menuNotices: MenuNotices(install: nil, switches: [], others: nil), footing: .ready,
         setup: nil, accountsShown: .reading(title: "Reading accounts…"),

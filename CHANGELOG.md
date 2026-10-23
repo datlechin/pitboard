@@ -32,6 +32,9 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The macOS app's **Settings** says when Pitboard's notifications are turned off, with **Open
   Notification Settings**.
 - The app's **Name This Account** starts with a name from the account's email address.
+- The macOS menu bar mark has a dot while the menu opens on something that needs attention.
+- The Windows app's icon shows how much of its limit the account in use has left, and Windows'
+  warning symbol while its menu opens on something that needs attention.
 
 ### Changed
 
@@ -56,6 +59,7 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   switches Codex.
 - The app's **Switched to work** notice with nothing under its title goes once open Claude Code
   sessions have followed the switch.
+- The Windows app's icon tooltip lists each account in use with its limits.
 
 ### Fixed
 

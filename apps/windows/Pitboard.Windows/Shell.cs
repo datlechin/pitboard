@@ -1,3 +1,4 @@
+using Pitboard.Core;
 using Windows.Win32;
 using Windows.Win32.Foundation;
 using Windows.Win32.Graphics.Gdi;
@@ -55,6 +56,102 @@ public static class Shell
     }
 
     public static void DestroyIcon(nint icon) => PInvoke.DestroyIcon((HICON)icon);
+
+    // Tray holds a drawing for each level beside Pitboard.exe, which ../Icon/make-ico.py writes.
+    public static unsafe nint NotificationIcon(int size, IconLook look)
+    {
+        var drawn = Path.Combine(AppContext.BaseDirectory, "Tray", $"{look.Level ?? UsageLevel.Plenty}.ico");
+        HANDLE loaded;
+        fixed (char* file = drawn)
+        {
+            loaded = PInvoke.LoadImage(
+                HINSTANCE.Null, file, GDI_IMAGE_TYPE.IMAGE_ICON, size, size, IMAGE_FLAGS.LR_LOADFROMFILE);
+        }
+
+        var icon = loaded.IsNull ? AppIcon(size) : (nint)loaded.Value;
+        if (!look.Attention || Warned(icon, size) is not { } warned)
+        {
+            return icon;
+        }
+
+        DestroyIcon(icon);
+        return warned;
+    }
+
+    // Windows' own warning icon over the bottom right, as Microsoft's notification area guidance overlays a status.
+    private static unsafe nint? Warned(nint icon, int size)
+    {
+        var stock = new SHSTOCKICONINFO { cbSize = (uint)sizeof(SHSTOCKICONINFO) };
+        if (PInvoke.SHGetStockIconInfo(SHSTOCKICONID.SIID_WARNING, SHGSI_FLAGS.SHGSI_ICONLOCATION, ref stock).Failed)
+        {
+            return null;
+        }
+
+        var side = size * 5 / 8;
+        HICON warning;
+        HRESULT extracted;
+        fixed (char* file = stock.szPath.ToString())
+        {
+            extracted = PInvoke.SHDefExtractIcon(file, stock.iIcon, 0, &warning, null, (uint)side);
+        }
+
+        // S_FALSE where the file has no such icon.
+        if (extracted.Value != 0)
+        {
+            return null;
+        }
+
+        var header = new BITMAPINFO
+        {
+            bmiHeader = new BITMAPINFOHEADER
+            {
+                biSize = (uint)sizeof(BITMAPINFOHEADER),
+                biWidth = size,
+                biHeight = -size,
+                biPlanes = 1,
+                biBitCount = 32,
+            },
+        };
+        void* bits;
+        var color = PInvoke.CreateDIBSection(HDC.Null, &header, DIB_USAGE.DIB_RGB_COLORS, &bits, HANDLE.Null, 0);
+        var mask = PInvoke.CreateBitmap(size, size, 1, 1, null);
+        var drawing = PInvoke.CreateCompatibleDC(HDC.Null);
+        try
+        {
+            var before = PInvoke.SelectObject(drawing, color);
+            PInvoke.DrawIconEx(drawing, 0, 0, (HICON)icon, size, size, 0, HBRUSH.Null, DI_FLAGS.DI_NORMAL);
+            PInvoke.DrawIconEx(drawing, size - side, size - side, warning, side, side, 0, HBRUSH.Null, DI_FLAGS.DI_NORMAL);
+            PInvoke.SelectObject(drawing, before);
+            Straighten(new Span<uint>(bits, size * size));
+            var made = new ICONINFO { fIcon = true, hbmColor = color, hbmMask = mask };
+            var warned = PInvoke.CreateIconIndirect(&made);
+            return warned.IsNull ? null : (nint)warned.Value;
+        }
+        finally
+        {
+            PInvoke.DeleteDC(drawing);
+            PInvoke.DeleteObject(color);
+            PInvoke.DeleteObject(mask);
+            PInvoke.DestroyIcon(warning);
+        }
+    }
+
+    // DrawIconEx blends into the bitmap premultiplied, and an icon's pixels are straight.
+    private static void Straighten(Span<uint> pixels)
+    {
+        foreach (ref var pixel in pixels)
+        {
+            var alpha = pixel >> 24;
+            if (alpha is 0 or 255)
+            {
+                continue;
+            }
+
+            var blended = pixel;
+            uint Channel(int shift) => Math.Min(255, (((blended >> shift) & 0xFF) * 255 + alpha / 2) / alpha) << shift;
+            pixel = (alpha << 24) | Channel(16) | Channel(8) | Channel(0);
+        }
+    }
 
     // At the primary display's scale, where the notification area is: GetSystemMetrics answers at the session's first one.
     public static int NotificationIconSize()

@@ -108,7 +108,9 @@ public sealed class ModelTests
             LastSwitches: [], Abandoned: null, Failure: null,
             WindowRequest: new WindowRequest(Serial: 0, Pane: null),
             SigningIn: null, Sheet: null, SheetFailure: null,
-            MenuBar: new MenuBarText(NameAndUsage: "work 42%", Usage: "42%", Spoken: "Pitboard, work 42%"),
+            MenuBar: new MenuBarText(
+                NameAndUsage: "work 42%", Usage: "42%", Spoken: "Pitboard, work 42%", Level: UsageLevel.Plenty, Attention: false,
+                Tip: "Pitboard\nwork: 5-hour 42%"),
             Sections: [], ShowsTools: false, Notices: [],
             MenuNotices: new MenuNotices(Install: null, Switches: [], Others: null),
             Footing: new Footing.OnlyOne(Provider: "claude", Label: "work"), Setup: null,

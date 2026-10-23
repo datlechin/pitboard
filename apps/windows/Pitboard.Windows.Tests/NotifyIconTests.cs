@@ -97,10 +97,11 @@ public sealed class NotifyIconTests
         Assert.AreEqual((nint)0xdef0, area.Sent[^1].Icon.Image);
     }
 
+    // Narrator reads the tooltip of an icon in the notification area, every line of it.
     [TestMethod]
-    public void TheTipIsWhatNarratorSays()
+    public void AShortTipIsKeptWhole()
     {
-        Assert.AreEqual("Pitboard, work 42%, Codex", NotifyIcon.Tip("Pitboard, work 42%, Codex"));
+        Assert.AreEqual("Pitboard\nwork: 5-hour 42%\njob (Codex): 5-hour 71%", NotifyIcon.Tip("Pitboard\nwork: 5-hour 42%\njob (Codex): 5-hour 71%"));
     }
 
     [TestMethod]

@@ -5,7 +5,7 @@
 use super::words;
 use super::{
     AccountItem, AccountSection, ItemAction, ItemOffer, LimitPace, LimitRow, MenuBarText,
-    PaceStanding, Question, Seen, WindowOffer,
+    MenuNotices, PaceStanding, Question, Seen, WindowOffer,
 };
 use crate::account_windows::{forget_message_on, windows_of_account};
 use crate::model::{Intent, Sheet};
@@ -112,26 +112,43 @@ pub(crate) fn bar_title(accounts: &[Account], tools: &[Tool], usage_only: bool) 
     }
 }
 
-pub(crate) fn menu_bar(seen: &Seen) -> MenuBarText {
+pub(crate) fn menu_bar(seen: &Seen, notices: &MenuNotices) -> MenuBarText {
     let accounts = seen.accounts();
     let name_and_usage = bar_title(accounts, &seen.tools, false);
-    // Once more than one tool is shown it names the tool too: the bar follows whichever
-    // account is closest to running out, and two tools can each have a `work`.
-    let spoken = if name_and_usage.is_empty() {
-        "Pitboard".to_owned()
-    } else {
-        match titled(accounts, &seen.tools)
+    let titled = titled(accounts, &seen.tools);
+    let attention =
+        notices.install.is_some() || !notices.switches.is_empty() || notices.others.is_some();
+    let mut spoken = vec!["Pitboard".to_owned()];
+    if !name_and_usage.is_empty() {
+        spoken.push(name_and_usage.clone());
+        // The bar follows whichever account is closest to running out, and two tools can each
+        // have a `work`.
+        if let Some(tool) = titled
             .filter(|_| seen.shows_tools())
             .and_then(|account| seen.tool(&account.provider))
         {
-            Some(tool) => format!("Pitboard, {name_and_usage}, {}", tool.name),
-            None => format!("Pitboard, {name_and_usage}"),
+            spoken.push(tool.name.clone());
         }
-    };
+    }
+    if attention {
+        spoken.push("needs attention".into());
+    }
+    let mut tip = vec!["Pitboard".to_owned()];
+    tip.extend(
+        accounts
+            .iter()
+            .filter(|account| account.signed_in)
+            .map(|account| format!("{}: {}", seen.name_of(account), summary(seen, account))),
+    );
     MenuBarText {
         usage: bar_title(accounts, &seen.tools, true),
         name_and_usage,
-        spoken,
+        spoken: spoken.join(", "),
+        level: titled
+            .and_then(|account| headline(account.usage.as_ref().map_or(&[], |u| &u.windows)))
+            .map(|limit| crate::usage_level(limit.percent)),
+        attention,
+        tip: tip.join("\n"),
     }
 }
 
@@ -223,7 +240,7 @@ pub(crate) fn item(seen: &Seen, account: &Account) -> AccountItem {
         let windows = account.usage.as_ref().map_or(&[][..], |u| &u.windows);
         words::capitalised(&said::runs_out(&scoped_name(&windows[limit]), in_seconds))
     });
-    let in_place_of_limits = in_place_of_limits(account, switching, needs_sign_in);
+    let in_place_of_limits = in_place_of_limits(seen, account);
     let figure = headline(account.usage.as_ref().map_or(&[], |usage| &usage.windows))
         .filter(|_| in_place_of_limits.is_none())
         .map(|limit| words::figure(limit.percent));
@@ -243,7 +260,7 @@ pub(crate) fn item(seen: &Seen, account: &Account) -> AccountItem {
         id: account.id.clone(),
         provider: account.provider.clone(),
         qualified: account.qualified.clone(),
-        summary: in_place_of_limits.unwrap_or_else(|| limits_said(seen, account)),
+        summary: summary(seen, account),
         title,
         email: account.email.clone(),
         plan: account.plan.clone(),
@@ -551,8 +568,14 @@ fn login_unread(account: &Account) -> bool {
     !account.signed_in && account.stale.as_deref() == Some("login_unreadable")
 }
 
-fn in_place_of_limits(account: &Account, switching: bool, needs_sign_in: bool) -> Option<String> {
-    if switching {
+// The line under an account in the menu: its limits, or what stands in their way.
+fn summary(seen: &Seen, account: &Account) -> String {
+    in_place_of_limits(seen, account).unwrap_or_else(|| limits_said(seen, account))
+}
+
+fn in_place_of_limits(seen: &Seen, account: &Account) -> Option<String> {
+    if account.qualified.is_some() && account.qualified.as_deref() == seen.state.switch_under_way()
+    {
         return Some("Switching…".into());
     }
     if account.unplaced || login_unread(account) {
@@ -566,7 +589,7 @@ fn in_place_of_limits(account: &Account, switching: bool, needs_sign_in: bool) -
     if account.label.is_none() {
         return Some("Not named yet".into());
     }
-    if needs_sign_in {
+    if needs_sign_in(account) {
         return Some("Needs signing in again".into());
     }
     let windows = account.usage.as_ref().map_or(&[][..], |u| &u.windows);
@@ -942,6 +965,118 @@ mod tests {
             None
         );
         assert_eq!(titled(&[], &both_tools()), None);
+    }
+
+    fn bar(accounts: Vec<Account>, warnings: Vec<crate::Warning>) -> MenuBarText {
+        let state = read(status(accounts, warnings), both_tools());
+        present_on(Os::Windows, &state, 0, &Utc).menu_bar
+    }
+
+    /// The step of the limit the bar names, which an icon can show where the bar has no
+    /// words: none before anything is measured, and none with nobody signed in.
+    #[test]
+    fn the_menu_bar_says_the_step_of_the_limit_it_names() {
+        let level = |percent: f64| {
+            bar(
+                vec![
+                    account(Some("work"))
+                        .signed_in()
+                        .limits(vec![window("session", percent)])
+                        .build(),
+                ],
+                Vec::new(),
+            )
+            .level
+        };
+        assert_eq!(level(12.0), Some(crate::UsageLevel::Plenty));
+        assert_eq!(level(75.0), Some(crate::UsageLevel::Low));
+        assert_eq!(level(96.0), Some(crate::UsageLevel::Out));
+        assert_eq!(
+            bar(vec![account(Some("work")).signed_in().build()], Vec::new()).level,
+            None
+        );
+        assert_eq!(
+            bar(
+                vec![
+                    account(Some("work"))
+                        .limits(vec![window("session", 96.0)])
+                        .build()
+                ],
+                Vec::new()
+            )
+            .level,
+            None
+        );
+    }
+
+    /// The bar is flagged while the menu opens on something to look at, and says so aloud.
+    #[test]
+    fn the_menu_bar_is_flagged_while_the_menu_has_something_to_look_at() {
+        let work = || {
+            account(Some("work"))
+                .signed_in()
+                .limits(vec![window("session", 42.0)])
+                .build()
+        };
+        let calm = bar(vec![work()], Vec::new());
+        assert!(!calm.attention);
+        assert_eq!(calm.spoken, "Pitboard, work 42%");
+        let warned = bar(
+            vec![work()],
+            vec![crate::Warning {
+                code: "keychain_locked".into(),
+                message: "The keychain is locked.".into(),
+                account: None,
+                held: None,
+                provider: None,
+            }],
+        );
+        assert!(warned.attention);
+        assert_eq!(warned.spoken, "Pitboard, work 42%, needs attention");
+
+        let state = read(status(Vec::new(), Vec::new()), Vec::new());
+        let bare = present_on(Os::Windows, &state, 0, &Utc).menu_bar;
+        assert!(bare.attention, "no tool here");
+        assert_eq!(bare.spoken, "Pitboard, needs attention");
+    }
+
+    /// Windows' notification area has a tooltip and no title: it lists each account in use,
+    /// with its tool beside another tool's, and its limits as the menu says them.
+    #[test]
+    fn the_notification_areas_tip_lists_each_account_in_use() {
+        let tip = bar(
+            vec![
+                account(Some("work"))
+                    .signed_in()
+                    .limits(vec![window("session", 12.0), window("weekly_all", 64.4)])
+                    .build(),
+                account(Some("spare"))
+                    .limits(vec![window("session", 3.0)])
+                    .build(),
+                account(Some("job"))
+                    .of("codex")
+                    .signed_in()
+                    .limits(vec![window("five_hour", 71.0).length(18_000)])
+                    .build(),
+            ],
+            Vec::new(),
+        )
+        .tip;
+        assert_eq!(
+            tip,
+            "Pitboard\nwork (Claude Code): 5-hour 12%, weekly 64%\njob (Codex): 5-hour 71%"
+        );
+        let one = bar(
+            vec![
+                account(Some("work"))
+                    .signed_in()
+                    .limits(vec![window("session", 12.0)])
+                    .build(),
+            ],
+            Vec::new(),
+        );
+        assert_eq!(one.tip, "Pitboard\nwork: 5-hour 12%");
+        assert_eq!(bar(Vec::new(), Vec::new()).tip, "Pitboard");
     }
 
     /// Sections come in the order the tools are listed, each once, whatever order the rows

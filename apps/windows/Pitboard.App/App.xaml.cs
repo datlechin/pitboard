@@ -20,6 +20,7 @@ public partial class App : Application, IIconTargets
     private AppModel? _model;
     private StartAtSignIn? _startAtSignIn;
     private HiddenWindow? _hidden;
+    private IconImage? _image;
     private NotifyIcon? _icon;
     private IconCommands? _commands;
     private Lifetime? _lifetime;
@@ -59,7 +60,8 @@ public partial class App : Application, IIconTargets
         Shell.RestartAfterUpdate(_start.Identity.Build);
         _startAtSignIn = StartAtSignIn.For(_start, Program.Exe);
         model.PropertyChanged += OnModelChanged;
-        var image = new IconImage(Shell.NotificationIconSize, Shell.AppIcon, Shell.DestroyIcon);
+        var image = new IconImage(Shell.NotificationIconSize, Shell.NotificationIcon, Shell.DestroyIcon);
+        _image = image;
         _hidden = new HiddenWindow(
             sessionEnding: () => _lifetime?.EndSession(),
             closing: () => _lifetime?.End(),
@@ -67,7 +69,7 @@ public partial class App : Application, IIconTargets
             taskbarCreated: () => _icon?.Readd(),
             displayChanged: () => image.Follow(shown => _icon?.Redraw(shown)));
         _icon = new NotifyIcon(new ShellNotificationArea(), _hidden.Handle, image.Handle, _start.Identity.IconGuid);
-        _icon.Show(model.MenuBar.Spoken);
+        ShowBar(model.MenuBar);
         var accountWindows = new AccountWindows(model, Web(), _hidden.Handle);
         _accountWindows = accountWindows;
         accountWindows.Follow(model.AccountWindows);
@@ -171,12 +173,19 @@ public partial class App : Application, IIconTargets
                 Follow(_model.WindowRequest);
                 break;
             case nameof(AppModel.MenuBar):
-                _icon?.Show(_model.MenuBar.Spoken);
+                ShowBar(_model.MenuBar);
                 break;
             case nameof(AppModel.AccountWindows):
                 _accountWindows?.Follow(_model.AccountWindows);
                 break;
         }
+    }
+
+    // The notification area has no title beside its icon, so the icon and its tooltip carry the glance.
+    private void ShowBar(MenuBarText bar)
+    {
+        _image?.Show(new IconLook(bar.Level, bar.Attention), shown => _icon?.Redraw(shown));
+        _icon?.Show(bar.Tip);
     }
 
     void IIconTargets.ShowMenu(IReadOnlyList<IconMenuEntry> entries, IconEvent.Menu at, Action opened, Action<IconCommand> chosen)

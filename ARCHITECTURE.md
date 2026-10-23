@@ -703,7 +703,8 @@ window loads its site, and whatever the site's pages load, as a browser would.
     folder, the AppUserModelID, the app's icon and the refusal's message box. `NotifyIcon`
     keeps the icon in the notification area through `INotificationArea`, which
     `ShellNotificationArea` sends to `Shell_NotifyIconW` and tests replace, at the size
-    `IconImage` loads it at for the primary display's scale, and `IconMenu`
+    `IconImage` loads it at for the primary display's scale and in the look the menu bar's
+    level and attention give it, and `IconMenu`
     lists what the icon's menu offers, in the macOS menu's order. `WindowsNotifications`
     posts the model's notifications through `IAppNotifications`, which
     `SystemAppNotifications` sends to `AppNotificationManager` and tests replace, and refuses
@@ -4756,6 +4757,18 @@ Microsoft's documentation.
   is destroyed (`IconImageTests`, `NotifyIconTests.ANewImageModifiesTheIconAddedAlready`,
   `HiddenWindowTests.AChangeOfTheDisplaysReachesTheApp`). Which of the three a scale change
   sends a hidden window, and how the icon looks after one, are measured by hand.
+- Microsoft's notification area guidance (`winenv-notification`) asks for icon variations to
+  show changes in quantities, overlays to show a status, and no swaths of pure red, yellow or
+  green in a base icon; the icon shows no title, where the macOS menu bar item shows the
+  figure. So the model's `MenuBarText` carries the step of the limit the bar names and
+  whether the menu opens on something to look at, and its tooltip as a line for each account
+  in use. `Tray/Plenty.ico`, `Low.ico` and `Out.ico`, drawn in `apps/windows/Icon` at 16,
+  20, 24 and 32 px, light the mark's row in a neutral tone as long as what is left, and
+  attention draws the shell's stock `SIID_WARNING` over the bottom right at five eighths of
+  the icon. `DrawIconEx` blends into a 32-bit DIB premultiplied, and an icon's pixels are
+  straight, so `Shell.NotificationIcon` straightens them before `CreateIconIndirect`
+  (`IconImageTests.AttentionPutsTheStandardWarningOverTheBottomRight`, which compares the
+  icon's top third with the plain one's at 20 px, where its edges are partly covered).
 - Microsoft's app icon guidance (updated 14 July and 5 August 2026) asks for a transparent
   icon drawn straight on, half of it at 3:1 against light and dark backgrounds, at 16, 24,
   32, 48 and 256 px at least, and the notification area draws it at 16 px at 100% up to 64
