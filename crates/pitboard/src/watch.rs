@@ -455,7 +455,7 @@ impl WarmTold {
                     reports.push(Report::done(
                         "watch",
                         json!({ "event": "warm_up_halted", "reason": halt.code() }),
-                        stamp(&format!("{}\n", crate::warm::halted_line(halt))),
+                        stamp(&format!("{}\n", words::warming_halted(halt))),
                     ));
                 }
                 return reports;

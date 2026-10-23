@@ -280,10 +280,7 @@ fn warm(seen: &Seen) -> WarmShown {
             .filter(|_| state.warm.any_on())
             .and_then(|overview| {
                 if let Some(halt) = &overview.halted {
-                    return Some(format!(
-                        "Pitboard is not warming up accounts: {}.",
-                        pitboard_core::words::not_warming(halt)
-                    ));
+                    return Some(pitboard_core::words::warming_halted(halt));
                 }
                 if let Some(failed) = &state.warm.failed {
                     return Some(format!("The last warm-up came to nothing: {failed}"));

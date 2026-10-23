@@ -247,6 +247,11 @@ pub fn not_warming(why: &crate::duty::warm::Halt) -> String {
     }
 }
 
+/// That Pitboard warms up no account on this machine for now, and why.
+pub fn warming_halted(why: &crate::duty::warm::Halt) -> String {
+    format!("Pitboard is not warming up accounts: {}.", not_warming(why))
+}
+
 /// Why a warm-up started nothing, as a clause.
 pub(crate) fn warm_failed(why: &crate::duty::warm::Failure) -> String {
     use crate::duty::warm::Failure;
