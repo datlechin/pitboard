@@ -10,7 +10,7 @@ use super::worlds::{Folder, Launched, World, make, out_of_reach};
 use crate::model::testing::{Posted, StandInApps};
 use crate::model::{
     AppControl, Intent, LocalTime, ModelListener, NotificationButton, Notifications, Pane,
-    PitboardModel, PlatformError, QuitQuestion, RunOutNotice, Sheet, Snapshot,
+    PitboardModel, PlatformError, QuitQuestion, RunOutNotice, Sheet, Snapshot, Tip,
 };
 use crate::present::testing::Utc;
 use crate::present::words::titled;
@@ -1660,34 +1660,34 @@ fn a_machine_without_claude_code_says_so_first() {
     model.shutdown();
 }
 
-/// A machine nobody is signed in on offers an account, as AccountsWindowTests.swift's
-/// testAnEmptyMachineOffersAnAccount reads it, and only the first launch ever opens the
-/// window by itself, as its testTheFirstLaunchOpensTheWindow reads it.
+/// A machine nobody is signed in on, with Codex installed, offers to use Pitboard with it, and
+/// once that is declined, an account, as AccountsWindowTests.swift's
+/// testAnEmptyMachineOffersAnAccount reads it. Only the first launch ever opens the window by
+/// itself, as its testTheFirstLaunchOpensTheWindow reads it.
 #[test]
 fn a_machine_nobody_is_signed_in_on_offers_an_account() {
     for world in [World::Empty, World::FirstLaunch] {
         let launched = made(world);
         let (model, told) = started(&launched);
-        let shown = told.until("the accounts read", read_in);
-        match world {
-            World::NoClaudeCode => {
-                assert_eq!(shown.footing, Footing::NoClaudeCode);
-                assert_eq!(
-                    shown
-                        .menu_notices
-                        .install
-                        .as_ref()
-                        .map(|item| item.title.as_str()),
-                    Some("Claude Code isn’t installed")
-                );
-            }
-            _ => assert!(
-                matches!(&shown.accounts_shown, AccountsShown::NoAccounts { title, .. } if *title == titled(OS, "No Accounts", "No accounts")),
-                "{}: {:?}",
-                world.name(),
-                shown.accounts_shown
-            ),
-        }
+        let shown = told.until("the Codex tip", |snapshot| {
+            read_in(snapshot) && snapshot.footing == Footing::CodexUnused
+        });
+        assert_eq!(
+            shown.accounts_shown,
+            AccountsShown::List,
+            "{}",
+            world.name()
+        );
+        model.send(Intent::DeclineTip { tip: Tip::UseCodex });
+        let declined = told.until("the Codex tip put away", |snapshot| {
+            snapshot.footing == Footing::NoOneSignedIn
+        });
+        assert!(
+            matches!(&declined.accounts_shown, AccountsShown::NoAccounts { title, .. } if *title == titled(OS, "No Accounts", "No accounts")),
+            "{}: {:?}",
+            world.name(),
+            declined.accounts_shown
+        );
         // The window is asked for once the preferences say the app has never been seen, and
         // they are read on a lane of their own, so the accounts can be read first: in 2 of
         // 800 copies of this test run 16 at a time on Linux, firstLaunch's had not yet asked.

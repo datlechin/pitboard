@@ -30,7 +30,7 @@ pub(crate) fn footing(seen: &Seen) -> Footing {
         // was signed out from elsewhere, not a machine that needs setting up.
         return if !accounts.is_empty() {
             Footing::Ready
-        } else if codex && !found(seen, ProviderId::Claude) {
+        } else if codex {
             Footing::CodexUnused
         } else {
             Footing::NoOneSignedIn

@@ -39,7 +39,7 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   happens when a limit reaches 95%, each with **Not Now**.
 - The app offers **Use Pitboard with Codex** while Codex is installed and no Codex account is
   enrolled, and names the account Codex is signed in to once you choose it, where a machine with
-  only Codex said **No Accounts**.
+  Claude Code signed in to nothing said **No Accounts**.
 - The Windows app's tip to start when you sign in says where Windows puts its icon, with a link
   to Taskbar settings.
 - The macOS app's **Settings** take the share a limit is reached at in a field beside its

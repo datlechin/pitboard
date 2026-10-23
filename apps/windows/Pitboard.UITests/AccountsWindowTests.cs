@@ -211,11 +211,14 @@ public sealed class AccountsWindowTests
         Assert.IsTrue(launched.Gone(found => found.ByName("Put away…")), "the file is still said to be there");
     }
 
+    // With Codex installed, after the tip to use Pitboard with it.
     [TestMethod]
     public void AnEmptyMachineOffersAnAccount()
     {
         using var launched = Launched.Start(Builds.Debug, fixture: "empty");
         launched.OpenWindow();
+        launched.Named("Use Pitboard with Codex");
+        launched.Invoke("Not now");
 
         launched.Named("No accounts");
         launched.Invoke("Add account…");
@@ -282,6 +285,6 @@ public sealed class AccountsWindowTests
 
         launched.Window("Pitboard");
 
-        launched.Named("No accounts");
+        launched.Named("Use Pitboard with Codex");
     }
 }

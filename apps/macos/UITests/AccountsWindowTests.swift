@@ -271,10 +271,13 @@ final class AccountsWindowTests: FixtureTestCase {
         XCTAssertTrue(app.accountRow("claude/work").waitForExistence(timeout: 5))
     }
 
+    /// With Codex installed, after the tip to use Pitboard with it.
     @MainActor
     func testAnEmptyMachineOffersAnAccount() {
         let app = launch(.empty)
         app.openWindow()
+        XCTAssertTrue(app.staticTexts["Use Pitboard with Codex"].waitForExistence(timeout: 5))
+        app.buttons["Not Now"].click()
         XCTAssertTrue(app.staticTexts["No Accounts"].waitForExistence(timeout: 5))
         app.buttons["Add Account…"].click()
         XCTAssertTrue(app.textFields["sheet.name"].waitForExistence(timeout: 5))
@@ -325,6 +328,6 @@ final class AccountsWindowTests: FixtureTestCase {
     @MainActor
     func testTheFirstLaunchOpensTheWindow() {
         let app = launch(.firstLaunch)
-        XCTAssertTrue(app.staticTexts["No Accounts"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["Use Pitboard with Codex"].waitForExistence(timeout: 10))
     }
 }

@@ -802,8 +802,8 @@ mod tests {
     #[test]
     fn windows_says_its_controls_in_sentence_case() {
         use crate::model::Sheet;
-        use crate::present::testing::{both_tools, read, status};
-        let mut state = read(status(Vec::new(), Vec::new()), both_tools());
+        use crate::present::testing::{claude_code, read, status};
+        let mut state = read(status(Vec::new(), Vec::new()), vec![claude_code()]);
         state.sheet = Some(Sheet::Add { provider: None });
         let words = |os| {
             let shown = present_on(os, &state, MIDDAY, &Utc);
