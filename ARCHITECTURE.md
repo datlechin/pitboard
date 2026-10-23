@@ -2880,6 +2880,18 @@ Tasks:
   0x80070091 while the second's task is in it, and succeeds once it is gone (RF-E1 and
   RF-E1c, run 38922866517).
 - The job user's task in either folder runs, with last result 0.
+- A fresh standard user's `pitboard watch install` registers `\Pitboard\Watch <SID>`. Task
+  Scheduler reads its trigger's and principal's user back as that user's name, the logon type
+  as an interactive token at least privilege, and the time limit as `PT0S`. With no signed-in
+  session its `Run` succeeds and starts nothing: the last result stays 0x00041303 and no
+  `pitboard.exe` runs. Installing again at 90% and `watch uninstall` succeed, and the
+  uninstall takes `\Pitboard\` with the task. The home keeps `audit.log` and `state.lock`
+  (RF-E6, run 40030964166).
+- The job user's tasks shaped as the watch service's start their program within 0.4 s of
+  `Run`. At 150 s the run with a `PT0S` limit is under way, and Task Scheduler has ended the
+  one with `PT1M` and its program, last result 0x00041306. `Stop` ends the `PT0S` run and its
+  program within 1.2 s, with the same result, and succeeds again with no run under way
+  (RF-E6, run 40030964166).
 
 Processes and jobs:
 
@@ -3165,6 +3177,7 @@ Daily renewal:
 Windows facts Pitboard stands on that Microsoft documents and nothing has measured yet, read
 on 15 and 16 October 2026. W27 took out the rows [The session machine](#the-session-machine)
 measured on 18 October 2026, and those CI and the runner facts measured by 20 October 2026.
+RF-E6 took out two of the watch service's on 23 October 2026 (run 40030964166).
 
 | Fact | Source | Why not measured |
 |---|---|---|
@@ -3173,9 +3186,7 @@ measured on 18 October 2026, and those CI and the runner facts measured by 20 Oc
 | WTS lists another session's processes to Administrators only | [WTSEnumerateProcessesExW](https://learn.microsoft.com/en-us/windows/win32/api/wtsapi32/nf-wtsapi32-wtsenumerateprocessesexw) | No row looked at another user's process in another session. A standard user's listing held session 0's processes. |
 | `longPathAware` in a manifest lifts nothing where `LongPathsEnabled` is 0 or absent, as on a PC no policy or installer changed | [Maximum path length limitation](https://learn.microsoft.com/en-us/windows/win32/fileio/maximum-file-path-limitation) | Both images set it to 1, where the manifest lifts the limit (RF-T8, runs 39310064516 and 39320680285), and AGENTS.md does not let runner-facts.ps1 change it. |
 | `StartWhenAvailable` runs, about 10 minutes later, a start missed while the PC slept or was off | [StartWhenAvailable](https://learn.microsoft.com/en-us/windows/win32/taskschd/tasksettings-startwhenavailable) | A runner never sleeps through a trigger. Task Scheduler took no missed start of the renewal's daily trigger begun before the task was registered, or passed while it was disabled: none of four tasks, two with the setting, ran within 21 to 29 minutes, each `0x00041303` with no missed run counted (RF-T8, runs 39310064516 and 39320680285). |
-| A `LogonTrigger` whose `UserId` is the person's SID starts the task at their sign-in, for the watch service | [LogonTrigger.UserId](https://learn.microsoft.com/en-us/windows/win32/taskschd/logontrigger-userid) | No run of `windows-facts.yml` has registered the watch service's task yet. |
-| `ExecutionTimeLimit` of `PT0S` lets the watch service's task run with no limit | [TaskSettings.ExecutionTimeLimit](https://learn.microsoft.com/en-us/windows/win32/taskschd/tasksettings-executiontimelimit) | As above. |
-| `IRegisteredTask::Run` starts the task at once, and `Stop` ends its run under way | [IRegisteredTask](https://learn.microsoft.com/en-us/windows/win32/api/taskschd/nn-taskschd-iregisteredtask) | As above. |
+| A `LogonTrigger` whose `UserId` is the person's SID starts the task at their sign-in, for the watch service | [LogonTrigger.UserId](https://learn.microsoft.com/en-us/windows/win32/taskschd/logontrigger-userid) | No runner signs in. RF-E6 registered the watch service's task, and it never started (run 40030964166). |
 | Restart Manager asks a console program, such as the `bin\pitboard.exe` the watch service runs, to end by `CTRL_C_EVENT`, and an MSI replaces a file it cannot free at the next restart. `/passive` then restarts Windows unasked; `/norestart`, which the update feed passes, never does | [Guidelines for Applications](https://learn.microsoft.com/en-us/windows/win32/rstmgr/guidelines-for-applications), [Standard Installer command-line options](https://learn.microsoft.com/en-us/windows/win32/msi/standard-installer-command-line-options) (updated 29 April 2025, read on 23 October 2026) | No runner updates Pitboard while the watch service runs. The next session's update should run with the service installed. |
 | WSL 2's processes run in a utility VM | [Comparing WSL versions](https://learn.microsoft.com/en-us/windows/wsl/compare-versions) | No runner has WSL. |
 | Each subkey of `HKCU\Software\Microsoft\Windows\CurrentVersion\Lxss` is a distribution WSL holds for the account, named by its `DistributionName` | [How to manage WSL disk space](https://learn.microsoft.com/en-us/windows/wsl/disk-space) | No runner has WSL. |
