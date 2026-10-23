@@ -16,11 +16,13 @@ The two work together. Pitboard switches the login of the folder that `CLAUDE_CO
 
 ## Other account switchers
 
-[claude-swap](https://github.com/realiti4/claude-swap) 0.28.0 switches Claude Code. You add an account by signing in to it with Claude Code, then running `cswap add`. It can also run an account in one terminal only, choose the account by folder and switch by itself by one of several strategies.
+[claude-swap](https://github.com/realiti4/claude-swap) 0.28.0 switches Claude Code. You add an account by signing in to it with Claude Code, then running `cswap add`. It can also run an account in one terminal only, choose the account by folder and switch by itself by one of several strategies. `cswap list` and its macOS menu bar app show every account's five-hour and weekly usage.
 
-[codex-auth](https://github.com/Loongphy/codex-auth) 0.3.1 switches Codex. `codex-auth login` runs `codex login`, then keeps a copy of the login in Codex's home. Codex takes a switch at its next start, as it does with Pitboard.
+[codex-auth](https://github.com/Loongphy/codex-auth) 0.3.1 switches Codex. `codex-auth login` runs `codex login`, then keeps a copy of the login in Codex's home. Codex takes a switch at its next start, as it does with Pitboard. `codex-auth list` shows each stored account's usage.
 
-Pitboard adds an account through the tool's own sign-in in a private folder, so the account in use stays signed in. It switches Claude Code, Codex and, on macOS, Claude Desktop.
+Pitboard adds an account through the tool's own sign-in in a private folder, so the account in use stays signed in. It switches Claude Code, Codex and, on macOS, Claude Desktop. It [switches Claude Code by itself](/guides/automatic-switching) before a limit runs out, and [warms up](/guides/warm-up) the accounts you choose.
+
+Both other switchers export and import their logins. Pitboard does neither: [each machine signs in to each account itself](/concepts/limits#rules).
 
 Two switchers on one tool each write the login it reads, and each keeps copies the other cannot see. Keep one per tool: [Move from another switcher](/install/from-another-switcher) says how.
 
@@ -28,7 +30,7 @@ Two switchers on one tool each write the login it reads, and each keeps copies t
 
 ## Usage monitors
 
-Claude Code's [`/usage`](https://code.claude.com/docs/en/commands) shows the plan limits of the account a session is signed in to. Codex's `/usage` shows that account's usage, as read in Codex 0.164.0.
+Claude Code's [`/usage`](https://code.claude.com/docs/en/commands) shows the plan limits of the account a session is signed in to, as read in Claude Code 2.1.309. Codex's `/usage` shows that account's usage, as read in Codex 0.164.0.
 
 [CodexBar](https://github.com/steipete/CodexBar) 0.80.0 shows the limits of many tools in the macOS menu bar. It switches Codex between accounts it keeps in a `CODEX_HOME` each. With its claude-swap source turned on, it shows and switches several Claude Code accounts through claude-swap.
 
