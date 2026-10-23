@@ -175,6 +175,20 @@ fn each_tool_keeps_what_its_own_last_switch_said() {
     );
 }
 
+// The core types the account with its tool where another tool has one of that name.
+#[test]
+fn a_switch_to_a_name_two_tools_share_outlives_the_read_after_it() {
+    let mut model = Hand::new();
+    let mut machine = Machine::reading(Ok(status(vec![
+        claude("work", true, 0.0),
+        claude("personal", false, 0.0),
+        codex_account("work", true),
+    ])));
+    machine.switched = switched("claude", "personal", "claude/work", Vec::new());
+    switch(&mut model, &mut machine, "claude/work");
+    assert_eq!(tos(&model), ["claude/work"]);
+}
+
 /// Whatever else writes the account index leaves the sessions a switch described as they
 /// were: a read that renews a lapsed parked login, a scheduled renewal, an enrolment. Only a
 /// switch made somewhere else, which leaves another account signed in, puts it away.

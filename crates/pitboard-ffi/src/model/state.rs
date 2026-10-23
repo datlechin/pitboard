@@ -3572,7 +3572,7 @@ impl State {
                     && account
                         .qualified
                         .as_deref()
-                        .is_some_and(|qualified| Key::parse(qualified).typed() == last.to)
+                        .is_some_and(|qualified| Key::parse(qualified) == Key::parse(&last.to))
             })
         });
     }

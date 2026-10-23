@@ -162,6 +162,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   refuses it, where it said nobody was signed in.
 - The app names an account whose name from Pitboard 0.1 holds a slash, such as `team/a`, by its
   whole name, as the command line does, where it said only what came after the slash.
+- The app keeps what a switch said, its countdown and its warnings, past the read after it when
+  another tool has an account of the same name, where that read put it away.
 
 ## [1.0.0-beta.5] - 2026-10-23
 
