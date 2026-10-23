@@ -31,6 +31,21 @@ public sealed class AccountMenuTests
         Assert.IsFalse(((MenuFlyoutItem)menu.Items[1]).IsEnabled, "a sign-in held back");
     }
 
+    // The keys AccountKeys takes on the row, shown beside the items that do the same.
+    [UITestMethod]
+    public void TheMenuShowsTheRowsKeys()
+    {
+        var item = Items.Account("claude", "spare") with { Offers = [Use, Rename], Forget = Items.Forget("claude/spare") };
+
+        var shown = AccountMenu.For(item, (_, _) => { }).Items.OfType<MenuFlyoutItem>()
+            .ToDictionary(entry => entry.Text, entry => entry.KeyboardAcceleratorTextOverride);
+
+        Assert.AreEqual("F2", shown["Rename…"]);
+        Assert.AreEqual("Ctrl+C", shown["Copy email address"]);
+        Assert.AreEqual("Del", shown["Forget…"]);
+        Assert.AreEqual("", shown["Use spare"]);
+    }
+
     [UITestMethod]
     public void TheAccountInUseOffersNoForget()
     {

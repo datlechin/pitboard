@@ -26,6 +26,14 @@ public sealed class AccountKeysTests
         Assert.AreEqual((forget.Confirm, forget.Intent), AccountKeys.Pressed(VirtualKey.Delete, Spare()));
     }
 
+    [TestMethod]
+    public void CtrlCCopiesTheEmailAddressAsItsMenuDoes()
+    {
+        Assert.AreEqual("spare@example.com", AccountKeys.Copied(VirtualKey.C, control: true, Spare()));
+        Assert.IsNull(AccountKeys.Copied(VirtualKey.C, control: false, Spare()));
+        Assert.IsNull(AccountKeys.Copied(VirtualKey.C, control: true, Spare() with { Email = "" }));
+    }
+
     // Windows' rename key, for the Rename… the row's menu offers.
     [TestMethod]
     public void F2RenamesTheAccountAsItsMenuDoes()

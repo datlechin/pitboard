@@ -30,7 +30,7 @@ public static class AccountMenu
         if (item.Email.Length > 0)
         {
             Separate(menu);
-            var copy = new MenuFlyoutItem { Text = "Copy email address" };
+            var copy = new MenuFlyoutItem { Text = "Copy email address", KeyboardAcceleratorTextOverride = "Ctrl+C" };
             copy.Click += (_, _) =>
             {
                 var package = new DataPackage();
@@ -43,7 +43,9 @@ public static class AccountMenu
         if (item.Forget is { } forget)
         {
             Separate(menu);
-            menu.Items.Add(Entry(forget, ask));
+            var entry = Entry(forget, ask);
+            entry.KeyboardAcceleratorTextOverride = "Del";
+            menu.Items.Add(entry);
         }
 
         return menu;
@@ -51,7 +53,12 @@ public static class AccountMenu
 
     private static MenuFlyoutItem Entry(ItemOffer offer, Action<Question?, Intent> ask)
     {
-        var entry = new MenuFlyoutItem { Text = offer.Title, IsEnabled = offer.Enabled };
+        var entry = new MenuFlyoutItem
+        {
+            Text = offer.Title,
+            IsEnabled = offer.Enabled,
+            KeyboardAcceleratorTextOverride = AccountKeys.Renames(offer) ? "F2" : "",
+        };
         entry.Click += (_, _) => ask(offer.Confirm, offer.Intent);
         return entry;
     }

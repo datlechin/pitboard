@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
@@ -8,6 +9,8 @@ using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Navigation;
 using Pitboard.Core;
 using Pitboard.Windows;
+using Windows.System;
+using Windows.UI.Core;
 
 namespace Pitboard.Views;
 
@@ -203,7 +206,13 @@ public sealed partial class AccountsPage : Page
             return;
         }
 
-        if (AccountKeys.Pressed(args.Key, shown.Item) is var (confirm, intent))
+        var control = InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Control).HasFlag(CoreVirtualKeyStates.Down);
+        if (AccountKeys.Copied(args.Key, control, shown.Item) is { } email)
+        {
+            args.Handled = true;
+            Context.Copy(email);
+        }
+        else if (AccountKeys.Pressed(args.Key, shown.Item) is var (confirm, intent))
         {
             args.Handled = true;
             Ask(confirm, intent);

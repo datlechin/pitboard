@@ -48,6 +48,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The macOS app has an **Account** menu with what an account's shortcut menu offers, for the
   account selected, and **Forget** on Command-Delete.
 - The macOS app's **Edit** > **Copy** copies the email address of the account selected.
+- The Windows app copies an account's email address with Ctrl+C on its row, and its shortcut
+  menu shows F2, Del and Ctrl+C beside the items they do.
 
 ### Changed
 
