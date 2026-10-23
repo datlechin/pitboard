@@ -465,6 +465,8 @@ Watching work: 62% of its 5-hour limit, as of 14:00.
 
 The service starts at each sign-in and runs `watch` at the share `install` was given. Its first line ends `` Stop it with `pitboard watch uninstall`. `` in place of `Stop with Ctrl-C.` On macOS, its lines go to `~/Library/Logs/Pitboard/watch.log`, and on Linux to your user's journal. On Windows, nothing keeps them. [`pitboard log`](/reference/maintenance-commands#log) records each switch and warm-up either way. [Watch service](/reference/files#watch-service) lists where each system keeps it.
 
+On Linux, your user's systemd runs the service from your first sign-in to your last sign-out. To keep it running with nobody signed in, as on a server, run `loginctl enable-linger`, as loginctl(1) says.
+
 Where `watch` ends on an error or a crash, macOS and Linux start the service again a minute later. On Windows, it starts again at your next sign-in, or with `pitboard watch install`.
 
 After you update Pitboard, the service runs the update from your next sign-in, or at once after `pitboard watch install`. On Windows, Scoop and WinGet cannot update a `pitboard.exe` the service is running: `scoop update` skips it, and `winget upgrade` fails. Run `pitboard watch uninstall` before you update, and `pitboard watch install` after.

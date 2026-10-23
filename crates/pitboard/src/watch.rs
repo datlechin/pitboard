@@ -94,9 +94,15 @@ pub(crate) fn service(pitboard: &Pitboard, what: &WatchCommand) -> Report {
                     format!(
                         "Pitboard watches Claude Code in the background from now on, and at each \
                          sign-in. It switches once a limit of the account in use reaches {}%, \
-                         and warms up the accounts `pitboard warm on` turned on.\n{location}\n\n\
+                         and warms up the accounts `pitboard warm on` turned on.\n{}{location}\n\n\
                          {}\n",
                         threshold.percent(),
+                        if cfg!(target_os = "linux") {
+                            "Your user's systemd runs it while you are signed in. To keep it \
+                             running when you are not, run `loginctl enable-linger`.\n"
+                        } else {
+                            ""
+                        },
                         words::IS_THIS_ALLOWED
                     ),
                 ),
@@ -765,6 +771,15 @@ mod tests {
             installed
                 .human
                 .ends_with(&format!("\n\n{}\n", words::IS_THIS_ALLOWED)),
+            "{}",
+            installed.human
+        );
+        assert_eq!(
+            installed.human.contains(
+                "Your user's systemd runs it while you are signed in. To keep it running when \
+                 you are not, run `loginctl enable-linger`.\n"
+            ),
+            cfg!(target_os = "linux"),
             "{}",
             installed.human
         );
