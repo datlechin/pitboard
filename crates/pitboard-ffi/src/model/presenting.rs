@@ -2954,6 +2954,48 @@ fn each_sheet_says_what_it_is_for() {
     assert!(!rename.saving);
 }
 
+/// Name This Account starts on a name from the email address: the domain's first label for a
+/// work address, and the part before any `+` for one at a mail service. A name another
+/// account of the tool already has is passed over for the other, and with both taken the
+/// field starts empty. An account of another tool takes no name from this one's.
+#[test]
+fn name_this_account_starts_on_a_name_from_the_email() {
+    let named = |taken: Vec<Account>, provider: &str, email: &str| {
+        let (mut model, _) = reading(taken);
+        model.send(present_sheet(Sheet::Name {
+            provider: provider.into(),
+            email: email.into(),
+        }));
+        model.shown().sheet_text.expect("the sheet").name
+    };
+    assert_eq!(named(Vec::new(), "claude", "dana@acme.io"), "acme");
+    assert_eq!(named(Vec::new(), "claude", "dana@eng.acme.io"), "eng");
+    assert_eq!(
+        named(Vec::new(), "codex", "Dana.Lee+pitboard@Gmail.com"),
+        "dana.lee"
+    );
+    assert_eq!(named(Vec::new(), "claude", "dana@icloud.com"), "dana");
+    let acme = || account(Some("acme")).signed_in().build();
+    assert_eq!(named(vec![acme()], "claude", "dana@acme.io"), "dana");
+    assert_eq!(
+        named(
+            vec![acme(), account(Some("dana")).build()],
+            "claude",
+            "dana@acme.io"
+        ),
+        ""
+    );
+    assert_eq!(
+        named(
+            vec![account(Some("acme")).of("codex").signed_in().build()],
+            "claude",
+            "dana@acme.io"
+        ),
+        "acme"
+    );
+    assert_eq!(named(Vec::new(), "claude", ""), "");
+}
+
 /// Each sheet's default button says what pressing it does: a sheet that signs in says Sign
 /// In, one that names a login signed in now says Save, and a rename says Rename.
 ///

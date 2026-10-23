@@ -31,6 +31,7 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The app's **Settings** link **Is this allowed?** beside switching automatically and warm-up.
 - The macOS app's **Settings** says when Pitboard's notifications are turned off, with **Open
   Notification Settings**.
+- The app's **Name This Account** starts with a name from the account's email address.
 
 ### Changed
 

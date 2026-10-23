@@ -220,8 +220,7 @@ final class AccountsWindowTests: FixtureTestCase {
         app.buttons["Name…"].firstMatch.click()
         let name = app.textFields["sheet.name"]
         XCTAssertTrue(name.waitForExistence(timeout: 5))
-        name.click()
-        name.typeText("work")
+        XCTAssertEqual(name.value as? String, "work", "the name dana@work.example suggests")
         app.buttons["Save"].click()
         XCTAssertTrue(app.accountRow("claude/work").waitForExistence(timeout: 5))
     }

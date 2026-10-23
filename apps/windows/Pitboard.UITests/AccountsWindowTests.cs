@@ -190,7 +190,7 @@ public sealed class AccountsWindowTests
 
         launched.Named("Give this account a name");
         launched.Invoke("Name…");
-        Launched.Type(launched.Field("sheet.name"), "work");
+        Assert.AreEqual("work", launched.Field("sheet.name").Text, "the name dana@work.example suggests");
         launched.Invoke("Save");
 
         launched.Row("claude/work");
