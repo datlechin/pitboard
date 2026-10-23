@@ -42,6 +42,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   only Codex said **No Accounts**.
 - The Windows app's tip to start when you sign in says where Windows puts its icon, with a link
   to Taskbar settings.
+- The macOS app's **Settings** take the share a limit is reached at in a field beside its
+  stepper.
 
 ### Changed
 

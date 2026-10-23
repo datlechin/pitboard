@@ -3,23 +3,35 @@ import SwiftUI
 
 struct LimitsSettings: View {
     let model: AppModel
+    @ScaledMetric(relativeTo: .body) private var shareWidth: CGFloat = 44
+
+    nonisolated static func share(_ typed: Int, of atLimit: AtLimitShown) -> UInt8 {
+        UInt8(min(max(typed, Int(atLimit.lowest)), Int(atLimit.highest)))
+    }
 
     var body: some View {
         let atLimit = model.machine.atLimit
         let warm = model.machine.warm
+        let share = Binding(
+            get: { Int(atLimit.at) },
+            set: {
+                model.send(.setAtLimit(choice: atLimit.choice, at: Self.share($0, of: atLimit)))
+            })
         Form {
             Section {
                 // Read as the sentence it is: when a limit reaches the share, do what is chosen.
                 LabeledContent(atLimit.atLabel) {
                     HStack {
+                        // The HIG pairs a stepper with a field where large changes are likely.
+                        TextField(atLimit.shareLabel, value: share, format: .number)
+                            .labelsHidden()
+                            .textFieldStyle(.roundedBorder)
+                            .multilineTextAlignment(.trailing)
+                            .frame(width: shareWidth)
+                            .disabled(!atLimit.shareEnabled)
+                            .accessibilityIdentifier("settings.atLimitShareField")
                         Stepper(
-                            atLimit.shareLabel,
-                            value: Binding(
-                                get: { Int(atLimit.at) },
-                                set: {
-                                    model.send(
-                                        .setAtLimit(choice: atLimit.choice, at: UInt8($0)))
-                                }),
+                            atLimit.shareLabel, value: share,
                             in: Int(atLimit.lowest)...Int(atLimit.highest)
                         )
                         .labelsHidden()

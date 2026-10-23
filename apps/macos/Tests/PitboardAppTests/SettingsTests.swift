@@ -186,6 +186,16 @@ private func settingsHeight(_ tab: SettingsView.Tab, warming: Int = 0) -> CGFloa
         SettingsView.Tab.allCases.allSatisfy { SettingsView.Tab(rawValue: $0.rawValue) == $0 })
 }
 
+// MARK: - The share a limit is reached at
+
+// Typed past either end, the share is taken at that end, where the stepper stops.
+@Test func aShareTypedIsKeptWithinTheStepsRange() {
+    let atLimit = snapshot(0).machine.atLimit
+    #expect(LimitsSettings.share(80, of: atLimit) == 80)
+    #expect(LimitsSettings.share(10, of: atLimit) == 50)
+    #expect(LimitsSettings.share(120, of: atLimit) == 99)
+}
+
 // MARK: - Linking the command line
 
 /// Once the link is made the model is asked to look for the `pitboard` a terminal runs

@@ -91,6 +91,12 @@ final class PanesAndSettingsTests: FixtureTestCase {
         raise.click()
         XCTAssertTrue(says(app, "When a limit reaches 96%").waitForExistence(timeout: 5))
 
+        let typed = app.textFields["settings.atLimitShareField"]
+        XCTAssertTrue(typed.exists, "a field beside the stepper")
+        typed.doubleClick()
+        typed.typeText("80\r")
+        XCTAssertTrue(says(app, "When a limit reaches 80%").waitForExistence(timeout: 5))
+
         choice.click()
         choice.menuItems["Do Nothing"].click()
         XCTAssertTrue(choice.wait(until: "value == 'Do Nothing'", timeout: 5))
