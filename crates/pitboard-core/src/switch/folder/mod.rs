@@ -27,6 +27,7 @@ use crate::provider::Adoption;
 use crate::provider::folder::{AppSettings, Folder};
 use crate::service::{Permit, Warning};
 use crate::state::{self, Key, ParkKind, SetAside, State, new_id};
+pub(crate) use moves::unread_parts;
 use std::path::Path;
 use verdict::{Named, Unsure, Verdict, look};
 

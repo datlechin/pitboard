@@ -457,15 +457,7 @@ fn desktop_facts(ctx: &Context, state: &State) -> Option<DesktopFacts> {
         facts.known = Some(known);
         facts.signed_out = signed_out.is_some();
         facts.settings = Some(settings.map(|read| (read.sidecar, read.file.is_some())));
-        facts.unread = std::fs::read_dir(root)
-            .into_iter()
-            .flatten()
-            .flatten()
-            .map(|entry| entry.file_name())
-            .filter(|name| app.classify(name) == crate::provider::folder::Class::Unread)
-            .map(|name| name.to_string_lossy().into_owned())
-            .collect();
-        facts.unread.sort();
+        facts.unread = switch::folder::unread_parts(app, root).unwrap_or_default();
     }
     Some(facts)
 }
@@ -3236,25 +3228,33 @@ fn judge_desktop(
         });
         if facts.present {
             let name = "Claude data folder layout";
-            checks.push(if facts.unread.is_empty() {
-                ok(
+            checks.push(match facts.unread.as_slice() {
+                [] => ok(
                     "desktop_layout",
                     name,
-                    "every entry is one Pitboard has read",
-                )
-            } else {
-                let names = facts.unread.iter().map(|n| format!("`{n}`")).collect();
-                warn(
+                    "each part of the account's data is one Pitboard moves",
+                ),
+                [part] => warn(
                     "desktop_layout",
                     name,
                     format!(
-                        "holds {}, which this Pitboard has not read",
-                        words::listed(names)
+                        "holds `{part}`, a part of the account's data this Pitboard has not read"
+                    ),
+                    "Pitboard starts no move of a Claude Desktop login while it is there. Update \
+                     Pitboard, or report it at https://github.com/datlechin/pitboard/issues if no \
+                     release reads it yet.",
+                ),
+                parts => warn(
+                    "desktop_layout",
+                    name,
+                    format!(
+                        "holds {}, parts of the account's data this Pitboard has not read",
+                        words::listed(parts.iter().map(|part| format!("`{part}`")).collect())
                     ),
                     "Pitboard starts no move of a Claude Desktop login while they are there. \
                      Update Pitboard, or report them at \
                      https://github.com/datlechin/pitboard/issues if no release reads them yet.",
-                )
+                ),
             });
         }
     }
@@ -4090,7 +4090,7 @@ mod tests {
         );
         assert!(checks.iter().all(|c| !c.code.contains("dormant")));
 
-        facts.unread = vec!["Network".into(), "Partitions".into()];
+        facts.unread = vec!["CdmStorage.db-wal".into(), "Cookies-wal".into()];
         facts.settings = Some(Err(Unread::Unknown {
             what: "has a settings file, `config.json`, that is not valid JSON".into(),
             then: crate::error::Then::CopyAside,
@@ -4103,7 +4103,9 @@ mod tests {
             said(&checks, "desktop_layout"),
             [(
                 Level::Warn,
-                "holds `Network` and `Partitions`, which this Pitboard has not read".into()
+                "holds `CdmStorage.db-wal` and `Cookies-wal`, parts of the account's data this \
+                 Pitboard has not read"
+                    .into()
             )]
         );
         let settings = checks

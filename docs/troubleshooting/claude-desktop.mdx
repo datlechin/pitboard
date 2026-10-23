@@ -34,13 +34,12 @@ After a switch to a Claude Desktop account, Claude shows its sign-in page: the p
 
 Quit Claude, then [sign in to the account again](/guides/claude-desktop#sign-in-again), so Pitboard records the new login.
 
-## The data folder holds an entry Pitboard has not read
+## Account data in a form Pitboard has not read
 
 `pitboard doctor` warns on its `Claude data folder layout` line, and Pitboard starts no Claude Desktop move, refusing with `login_folder_unknown`:
 
 ```text
-error: Claude's data folder holds `Network`, which this Pitboard has not read, so Pitboard moves no Claude Desktop login. Update Pitboard, or report it at https://github.com/datlechin/pitboard/issues if no release reads it yet. Nothing has changed.
+error: Claude's data folder holds `Cookies-wal`, a part of the account's data this Pitboard has not read, so Pitboard moves no Claude Desktop login. Update Pitboard, or report it at https://github.com/datlechin/pitboard/issues if no release reads it yet. Nothing has changed.
 ```
 
-A build of Claude made an entry Pitboard has no record of, so Pitboard cannot tell whether it belongs to the account. [Update Pitboard](/install#update-pitboard). If no release reads it yet, [report a problem](/troubleshooting#report-a-problem) with the name. Claude Code and Codex switches go ahead.
-
+A build of Claude keeps part of a store Pitboard moves where Pitboard has no record of it, so a move would split the store. [Update Pitboard](/install#update-pitboard). If no release reads it yet, [report a problem](/troubleshooting#report-a-problem) with the name. Claude Code and Codex switches go ahead.

@@ -3,19 +3,7 @@ use crate::host::Listed;
 use crate::provider::{ProviderError, ProviderId};
 use serde_json::value::RawValue;
 use std::collections::BTreeMap;
-use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Class {
-    // moves with the account
-    Account,
-    Stays,
-    // a temporary that never moves and never stops a move
-    Passing,
-    // not read: stops the start of a move
-    Unread,
-}
 
 pub(crate) struct SignedIn {
     // the fingerprint of the session as stored
@@ -216,7 +204,9 @@ pub(crate) trait Folder: Send + Sync + std::fmt::Debug {
     // the keys among `keys` that a Log out empties
     fn caches(&self) -> &'static [&'static str];
     fn naming_key(&self) -> &'static str;
-    fn classify(&self, name: &OsStr) -> Class;
+    // whether a name, by its path from the root, is a part of an item's store that no item
+    // names: a move would split it from the store
+    fn unread_part(&self, path: &str) -> bool;
     fn settings(&self, root: &Path) -> Result<AppSettings, Unread>;
     // `read` is the settings as just read: a file changed since is refused, not written over.
     fn write_settings(

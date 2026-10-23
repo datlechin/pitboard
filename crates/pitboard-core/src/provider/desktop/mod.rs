@@ -8,11 +8,10 @@ mod settings;
 use crate::context::Context;
 use crate::holder::{AppId, Holder, Location, Noun, Remedy};
 use crate::host::Listed;
-use crate::provider::folder::{AppSettings, Class, Folder, Keys, SignedIn, Unfit, Unread};
+use crate::provider::folder::{AppSettings, Folder, Keys, SignedIn, Unfit, Unread};
 use crate::provider::{ProviderError, ProviderId};
 use crate::service::Permit;
 use serde_json::value::RawValue;
-use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
 pub(crate) const BUNDLE_ID: &str = "com.anthropic.claudefordesktop";
@@ -93,8 +92,8 @@ impl Folder for Desktop {
         NAMING_KEY
     }
 
-    fn classify(&self, name: &OsStr) -> Class {
-        layout::classify(name)
+    fn unread_part(&self, path: &str) -> bool {
+        layout::unread_part(path)
     }
 
     fn settings(&self, root: &Path) -> Result<AppSettings, Unread> {

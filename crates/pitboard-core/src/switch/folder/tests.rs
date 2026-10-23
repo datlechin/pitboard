@@ -1728,9 +1728,10 @@ fn a_login_is_never_moved_over_anything() {
     windows,
     ignore = "Claude Desktop is macOS only: Windows refuses its folder calls"
 )]
-fn an_entry_pitboard_has_not_read_stops_the_start_of_a_move_and_not_its_recovery() {
+fn a_part_of_the_accounts_data_pitboard_has_not_read_stops_the_start_of_a_move_and_not_its_recovery()
+ {
     let m = desktop_pair("row-21");
-    std::fs::create_dir(data(&m).join("Network")).expect("an entry not read");
+    std::fs::create_dir(data(&m).join("Network")).expect("the jar's other place");
     recover(&m).expect("swept");
     let before = snapshot(&m);
     let stopped = refused(&m, "home");
@@ -1756,6 +1757,50 @@ fn an_entry_pitboard_has_not_read_stops_the_start_of_a_move_and_not_its_recovery
     assert!(park_of(&m, "work").is_some());
     hold(&m, "recovered beside an entry not read");
     rested(&m, "recovered beside an entry not read");
+}
+
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Claude Desktop is macOS only: Windows refuses its folder calls"
+)]
+fn a_name_pitboard_does_not_move_stays_where_claude_keeps_it() {
+    let m = desktop_pair("names-stay");
+    let geometry = br#"{"width":1200,"height":800,"x":0,"y":25,"isMaximized":false}"#;
+    std::fs::write(data(&m).join("design"), geometry).expect("Claude Design's window");
+    // Issue 271's: an earlier Chromium's store, which Chromium 152 no longer opens.
+    for name in ["SharedStorage", "SharedStorage-wal", "SharedStorage-shm"] {
+        std::fs::write(data(&m).join(name), name).expect("a store nothing reads");
+    }
+    std::fs::create_dir(data(&m).join("one-shot-cwd")).expect("a folder of Claude 3's");
+    std::fs::write(data(&m).join("session-popouts.json.tmp"), b"").expect("a write cut short");
+    let elsewhere = data(&m).join("IndexedDB/https_www.example.com_0.indexeddb.leveldb");
+    std::fs::create_dir_all(&elsewhere).expect("another site's store");
+    for label in ["home", "work"] {
+        assert!(
+            matches!(used(&m, label).0, Outcome::Switched { .. }),
+            "{label}"
+        );
+        assert_eq!(in_use(&m).as_deref(), Some(label));
+        assert_eq!(
+            std::fs::read(data(&m).join("design")).expect("still there"),
+            geometry
+        );
+        for name in ["SharedStorage", "SharedStorage-wal", "SharedStorage-shm"] {
+            assert_eq!(
+                std::fs::read(data(&m).join(name)).expect(name),
+                name.as_bytes()
+            );
+        }
+        assert!(data(&m).join("one-shot-cwd").is_dir(), "{label}");
+        assert!(
+            data(&m).join("session-popouts.json.tmp").is_file(),
+            "{label}"
+        );
+        assert!(elsewhere.is_dir(), "{label}");
+    }
+    hold(&m, "names that stay");
+    rested(&m, "names that stay");
 }
 
 #[test]

@@ -17,6 +17,9 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Pitboard adds and switches Claude Desktop accounts with Claude 3.1623.0 and later, and
+  leaves the names it does not move where Claude keeps them, such as `SharedStorage` and
+  `design`, instead of refusing each name it has not read.
 - Pitboard adds and switches Claude Desktop accounts again with Claude 2.42304.0, whose data
   folder holds names earlier builds did not make, such as `GPUPersistentCache`.
 

@@ -110,41 +110,43 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
         absent: &[],
     },
     Assumption {
-        name: "desktop_first_level_entries",
-        fact: "The data folder's first level holds the names `desktop::layout` lists, each the \
-               account's, staying or passing: those a listing under 2.7032.0 held, the items \
-               E2 moved, `Claude Extensions`, `Claude Extensions Settings` and \
-               `extensions-installations.json`, which 2.7032.0's code makes for installed \
-               extensions, and the names 2.42304.0 makes, which the entries after this one \
-               say. A name 2.42304.0 makes only on Windows, only in a third-party \
-               deployment's `Claude-3p` or only under a home starting `//` is unread.",
-        read_from: "A listing of a data folder under 2.7032.0, names only, 11 October 2026; the \
-                    contributor's experiment E2, 4 October 2026; the three extension names read \
-                    in `app.asar`, 11 October 2026, `P` @965893",
-        verified_against: READ_FROM_THE_ARCHIVE,
-        depends: "`Desktop::classify`: a name it does not classify stops the start of a move",
+        name: "desktop_names_stay",
+        fact: "Claude keeps every name in its data folder across another account's sign-in but \
+               those `desktop_cleared_for_another_account` names. 2.42304.0, 3.1623.0 and \
+               3.6556.2 run the same seventeen named resets on that change, while each build \
+               makes names of its own there, such as `design`, Claude Design's window, from \
+               3.1623.0.",
+        read_from: "This repository's static read of 2.42304.0's `app.asar`, 19 October 2026, \
+                    `N` @2937198 to @2942600, and of 3.1623.0's and 3.6556.2's, 23 October \
+                    2026, `Q` @3095967 to @3098442, each reset compared by its name and body; \
+                    `design` at `Q` @4911399",
+        verified_against: READ_FROM_CLAUDE_3,
+        depends: "`Desktop::unread_part`: a switch carries `Desktop::items` and leaves every \
+                  other name where Claude keeps it",
         probe: &[
-            "config.json.journal",
-            "Claude Extensions Settings",
-            "extensions-installations.json",
+            "project-upload-folder-grants",
+            "handoff-invalidate",
+            "sp-section-prompts",
         ],
         absent: &[],
     },
     Assumption {
-        name: "desktop_gpu_caches",
-        fact: "From Electron 44.4.4, Claude keeps Chromium's GPU caches `ShaderCache`, \
-               `GrShaderCache`, `GraphiteDawnCache` and `GPUPersistentCache` in its data \
-               folder, beside `GPUCache`. They hold compiled shaders, nothing of an account.",
-        read_from: "Electron's pull request 54161, released in 44.4.4, which gives \
-                    `ElectronBrowserClient` the four folders under `sessionData`; Chromium's \
-                    `GpuProcessHost` and `PersistentCacheSandboxedFileFactory` for what \
-                    `GPUPersistentCache` holds; the four names side by side in 2.42304.0's \
-                    `Electron Framework`, Electron 44.7.2 on Chromium 152.0.7977.149, 19 \
-                    October 2026, and neither `GraphiteDawnCache` nor `GPUPersistentCache` in \
-                    2.7032.0's, Electron 44.4.3; a person's report of a data folder holding \
-                    `GPUPersistentCache`, 19 October 2026",
-        verified_against: READ_FROM_THE_NEWER_BUNDLE,
-        depends: "`Desktop::classify` gives each `Stays`",
+        name: "desktop_store_parts",
+        fact: "SQLite keeps a database's `-journal`, `-wal` and `-shm` beside it, and Claude's \
+               stores keep a `.journal`, each named for the file and part of it. Chromium names \
+               claude.ai's IndexedDB stores for its origin, `https_claude.ai_0`. Electron keeps \
+               the jar at the data folder's first level, and in `Network` once Chromium moves \
+               its network service's files, which on macOS it does only under the \
+               `TriggerNetworkDataMigration` feature.",
+        read_from: "SQLite's \"Temporary Files Used By SQLite\"; 2.42304.0's `app.asar`, 19 \
+                    October 2026, `N` @493566, for the stores' journals; the items E2 moved, \
+                    for the IndexedDB stores; Electron v44.9.0's and v44.9.3's \
+                    `shell/browser/net/network_context_service.cc`, \
+                    `ShouldTriggerNetworkDataMigration`, the versions 3.1623.0 and 3.6556.2 run, \
+                    23 October 2026",
+        verified_against: READ_FROM_CLAUDE_3,
+        depends: "`Desktop::unread_part`: such a part that no item names stops the start of a \
+                  move, since the move would split it from its store",
         probe: &[],
         absent: &[],
     },
@@ -205,168 +207,6 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
         verified_against: READ_FROM_THE_NEWER_BUNDLE,
         depends: "`Desktop::items` carries both with the login",
         probe: &["session-popouts.json", "migrateLegacySessions"],
-        absent: &[],
-    },
-    Assumption {
-        name: "desktop_kept_apart",
-        fact: "These keep each account apart by account, organisation or session in their \
-               path or content, and Claude reads only the signed-in account's part: \
-               `ccd-environment-config.json`, `ccd-session-presets.json`, `asides`, \
-               `side-session-notes`, `remote-bash-outputs`, `scratch-workspaces`, \
-               `preview-last-frames`, `framebuffer-ledgers`, `cowork-managed`, \
-               `cowork-deletion-outbox.jsonl`, `cowork-session-seed`, \
-               `cowork-plugin-oauth.json`, `cowork-plugin-env.json`, `scheduled-task-grants`, \
-               `library-submissions`, `memory-migration-state.json`, \
-               `dispatch-footprint-census.json`, `document-baselines`, `pending-uploads`, \
-               `vm_bundles`, `bridge-state.json`, `previous-profile-additions.json`, \
-               `sibling-import.json`, `usage-metrics`, `space-memory-copy`, \
-               `mcp-user-tool-toggles.json`, `ant-device-key-generation.json` and \
-               `remote-control-state.json`. `ccd-environment-config.json`'s `envVars` serve \
-               every account, and Claude never clears them for another.",
-        read_from: "This repository's static read of 2.42304.0's `app.asar`, 19 October 2026: \
-                    `N` @3743629, @6005826, @4554610, @3739638, @5446651, @2268288, \
-                    @2276083, @6115854, @6113648, @2276378, @2276218, @2271799, @4295224, \
-                    @5927072, @2276466, @5085491, @885409, @5225869; `CFJssAFf` @1485875, \
-                    @954302; `B5tintml` @56085; `CyQG_Vsp` @4417, @1668; `CbUcxwJo` @2072; \
-                    `CB6cNSrW` @43374, @49048; `B0P5MJ9m` @2769; `DX8d9Lyh` @4990; \
-                    `CziVBdux` @23645",
-        verified_against: READ_FROM_THE_NEWER_BUNDLE,
-        depends: "`Desktop::classify` gives each `Stays`",
-        probe: &[
-            "cowork-deletion-outbox.jsonl",
-            "memory-migration-state.json",
-            "remote-control-state.json",
-        ],
-        absent: &[],
-    },
-    Assumption {
-        name: "desktop_machine_entries",
-        fact: "These hold the machine's or the app's own, nothing of an account: \
-               `ccd-ids.json`, `claude-code-spare`, `claude-code-vm`, `claude-ssh-remote`, \
-               `git-shadow`, `ssh`, `ssh-cli-cache`, `ssh_configs.json`, \
-               `ssh_worktree_locations.json`, `ssh-launch-preconnect.json`, \
-               `ssh-remote-server-state.json`, `ssh-remembered-passwords.json`, \
-               `terminal-scrollback`, `terminal-shell-integration`, `worktree-dep-seed`, \
-               `buddy-state.json`, `buddy-tokens.json`, `cowork-file-preview`, \
-               `cowork-spawn-settings`, `document-exports`, `rpm`, \
-               `edr-integration-runs.json`, `uv-runtime`, `office-addin`, `import-bundles`, \
-               `claude-ai-import-downloads`, `sibling-import-declined.json`, \
-               `claude-plugins`, `marketplace-plugin-assets`, `dxt-staging`, \
-               `ext-icon-probe`, `builtin-mcp-incidents.json`, `custom3p-mcp-schemas.json`, \
-               `developer_settings.json`, `sim-recordings`, \
-               `simulator-airplane-mode-avds.json`, `simulator-builds`, `simulator-logs` and \
-               `renderer-logs-truncated`.",
-        read_from: "This repository's static read of 2.42304.0's `app.asar`, 19 October 2026: \
-                    `N` @3958739, @5207790, @2272047, @4554682, @2275468, @5378573, @2098204, \
-                    @6702504, @2066229, @6301437, @1048361, @903773, @4106891, @4006983; \
-                    `CFJssAFf` @1380938, @1710193, @1473249, @1473355, @340803; `D3PzLoAh` \
-                    @3537, @130818, @321965; `COQg5Ybh` @1395; `BDxF0-vT` @20948; `BAdej_RQ` \
-                    @20677; `8In6ZgxD` @747; `CB6cNSrW` @58770; `KUCXi3wG` @13429; \
-                    `DX8d9Lyh` @9359; `DWqQqGfx` @1591; `Dfm-x7jC` @189590, @53302; \
-                    `DNj5BlDu` @125446; `xqxtf5CS` @16206. That the remote server's tokens in \
-                    `ssh-remote-server-state.json` name no account was not read",
-        verified_against: READ_FROM_THE_NEWER_BUNDLE,
-        depends: "`Desktop::classify` gives each `Stays`",
-        probe: &[
-            "claude-code-spare",
-            "terminal-scrollback",
-            "worktree-dep-seed",
-        ],
-        absent: &[],
-    },
-    Assumption {
-        name: "desktop_chromium_entries",
-        fact: "Chromium also keeps `DIPS-wal`, `Trust Tokens-journal`, `shared_proto_db`, \
-               `VideoDecodeStats`, `WebrtcVideoStats` and `Custom Dictionary.txt` with its \
-               `.backup` in the data folder, and React's developer tools \
-               `extensions`, `Local Extension Settings`, `Sync Extension Settings` and \
-               `Managed Extension Settings` where `REACT_PROFILE` is set. None holds a \
-               site's data.",
-        read_from: "Chromium 152.0.7977.149's and Electron v44.7.2's source, the versions \
-                    2.42304.0's framework names, 19 October 2026; the spellchecker's Learn \
-                    Spelling at `N` @4108346",
-        verified_against: READ_FROM_THE_NEWER_BUNDLE,
-        depends: "`Desktop::classify` gives each `Stays`",
-        probe: &[],
-        absent: &[],
-    },
-    Assumption {
-        name: "desktop_stores",
-        fact: "Claude's settings stores `config.json`, `git-worktrees.json`, \
-               `buddy-state.json`, `buddy-tokens.json`, `ssh-launch-preconnect.json`, \
-               `ssh-remote-server-state.json`, `ssh-remembered-passwords.json`, \
-               `ccd-environment-config.json`, `ccd-session-presets.json`, \
-               `cowork-enabled-cli-ops.json`, `cowork-plugin-env.json`, \
-               `cowork-plugin-oauth.json`, `custom3p-builtin-mcp.json` and \
-               `custom3p-mcp-schemas.json` each keep `<file>.journal` beside them, and write \
-               through `<file>.tmp-`, ten digits and six lower-case hex digits. Its other two \
-               writers leave `<file>.tmp`, or `.<file>.<pid>.` with one to six base-36 digits \
-               and `.tmp`, only when a write is cut short.",
-        read_from: "This repository's static read of 2.42304.0's `app.asar`, 19 October 2026: \
-                    `N` @493566, @498782, @494536, @501958, @331455, @264439, @519217",
-        verified_against: READ_FROM_THE_NEWER_BUNDLE,
-        depends: "`Desktop::classify` gives a journal its store's class, and passes the \
-                  temporaries beside any name it classifies",
-        probe: &[],
-        absent: &[],
-    },
-    Assumption {
-        name: "desktop_temporaries",
-        fact: "`stealth-relaunch` and `update-attempt` are read and deleted at the next \
-               launch, `databases` is deleted unread, `claude-ai-import-staging-remotePull` \
-               and `-localZip` are emptied before each import, and `dxt-install-`, \
-               `dxt-stage-`, `dxt-unpacked-`, `.cowork-managed-migrating-` and \
-               `WebStorage-doomed-` folders, with six letters or digits after, are removed \
-               once used. `git-worktrees.json.corrupt-<digits>`, \
-               `memory-migration-state.json.corrupt-<digits>-<8 hex>` and \
-               `cowork-deletion-outbox.jsonl.unreadable-<digits>` are never read back.",
-        read_from: "This repository's static read of 2.42304.0's `app.asar`, 19 October 2026: \
-                    `N` @2997188, @3282355, @2985543, @4402334, @6702567, @6709208, \
-                    @4497060, @4492740, @2259344; `CQ8UMgm-` @1287; `BAdej_RQ` @94282; \
-                    `CbUcxwJo` @6749; `CyQG_Vsp` @5976. Chromium 152.0.7977.149's \
-                    `storage_partition_impl_map.cc` for `databases`, and \
-                    `storage/browser/quota/storage_directory.cc` for `WebStorage-doomed-`",
-        verified_against: READ_FROM_THE_NEWER_BUNDLE,
-        depends: "`Desktop::classify` gives each `Passing`",
-        probe: &["stealth-relaunch", "update-attempt"],
-        absent: &[],
-    },
-    Assumption {
-        name: "desktop_kept_by_account",
-        fact: "`claude-code-sessions/<account>/<org>` and `local-agent-mode-sessions/<account>/\
-               <org>` carry the account in their path, `spaces-present` is keyed by eight hex \
-               digits of it, `fcache` is dropped for another organisation, and \
-               `cowork-enabled-cli-ops.json` carries its owner, so each stays in the data \
-               folder.",
-        read_from: "This repository's static read of `app.asar`, 11 October 2026, `M` @5333662, \
-                    @2776214, @2758122, @2209405, @5647316",
-        verified_against: READ_FROM_THE_ARCHIVE,
-        depends: "`Desktop::classify` gives each `Stays`",
-        probe: &[
-            "claude-code-sessions",
-            "local-agent-mode-sessions",
-            "spaces-present",
-            "ownerAccountId",
-        ],
-        absent: &[],
-    },
-    Assumption {
-        name: "desktop_chromium_temporary",
-        fact: "Chromium writes a file through a temporary beside it named `.<base bundle \
-               id>.<file>.XXXXXX`, and Electron makes Claude's base bundle id its \
-               `ElectronTeamID` and bundle id: `.Q6L2SF6YDW.com.anthropic.claudefordesktop.\
-               <file>.` and six letters or digits.",
-        read_from: "Electron v44.4.3's `shell/app/electron_main_delegate_mac.mm` \
-                    (`SetUpBundleOverrides`) and Chromium 152.0.7977.130's \
-                    `base/files/file_util_posix.cc` (`FormatTemporaryFileName`) and \
-                    `base/files/important_file_writer.cc`, the versions 2.7032.0's framework \
-                    names; `ElectronTeamID` and `CFBundleIdentifier` from \
-                    `/Applications/Claude.app/Contents/Info.plist` of 2.7032.0, 13 October \
-                    2026. No listing has held one",
-        verified_against: READ_FROM_THE_ARCHIVE,
-        depends: "`Desktop::classify` passes such a name where `<file>` stays; any other \
-                  temporary of Chromium's is unread and stops the start of a move",
-        probe: &[],
         absent: &[],
     },
     Assumption {
@@ -620,21 +460,14 @@ pub(crate) const PER_SYSTEM: &[PerSystem] = &[
     on_a_mac("desktop_third_party_folder", READ_FROM_THE_ARCHIVE),
     on_a_mac("desktop_account_items", VERIFIED_AGAINST),
     on_a_mac("desktop_account_keys", VERIFIED_AGAINST),
-    on_a_mac("desktop_first_level_entries", READ_FROM_THE_ARCHIVE),
-    on_a_mac("desktop_gpu_caches", READ_FROM_THE_NEWER_BUNDLE),
+    on_a_mac("desktop_names_stay", READ_FROM_CLAUDE_3),
+    on_a_mac("desktop_store_parts", READ_FROM_CLAUDE_3),
     on_a_mac(
         "desktop_cleared_for_another_account",
         READ_FROM_THE_NEWER_BUNDLE,
     ),
     on_a_mac("desktop_site_stores", READ_FROM_THE_NEWER_BUNDLE),
     on_a_mac("desktop_account_files", READ_FROM_THE_NEWER_BUNDLE),
-    on_a_mac("desktop_kept_apart", READ_FROM_THE_NEWER_BUNDLE),
-    on_a_mac("desktop_machine_entries", READ_FROM_THE_NEWER_BUNDLE),
-    on_a_mac("desktop_chromium_entries", READ_FROM_THE_NEWER_BUNDLE),
-    on_a_mac("desktop_stores", READ_FROM_THE_NEWER_BUNDLE),
-    on_a_mac("desktop_temporaries", READ_FROM_THE_NEWER_BUNDLE),
-    on_a_mac("desktop_kept_by_account", READ_FROM_THE_ARCHIVE),
-    on_a_mac("desktop_chromium_temporary", READ_FROM_THE_ARCHIVE),
     on_a_mac("desktop_cookie_jar", VERIFIED_AGAINST),
     on_a_mac("desktop_cookie_host_hash", READ_FROM_THE_ARCHIVE),
     on_a_mac("desktop_session_cookie_names", READ_FROM_THE_ARCHIVE),
