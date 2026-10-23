@@ -43,16 +43,7 @@ pub struct GivenUp {
 
 impl std::fmt::Display for GivenUp {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let enroll = Key::new(self.tool, "<label>").typed();
-        f.write_str(&crate::words::given_up(
-            self,
-            &format!("`{}`", Key::new(self.tool, &self.label).typed()),
-            &format!(
-                "run `pitboard enroll {enroll}` for the account {app} shows, or `pitboard use \
-                 {enroll}` where {app} is signed out.",
-                app = self.tool.program()
-            ),
-        ))
+        f.write_str(&crate::words::given_up_on_the_command_line(self))
     }
 }
 

@@ -1119,6 +1119,20 @@ pub fn given_up(given_up: &crate::switch::GivenUp, name: &str, way_on: &str) -> 
     said
 }
 
+pub(crate) fn given_up_on_the_command_line(given_up: &crate::switch::GivenUp) -> String {
+    use crate::state::Key;
+    let enroll = Key::new(given_up.tool, "<label>").typed();
+    self::given_up(
+        given_up,
+        &format!("`{}`", Key::new(given_up.tool, &given_up.label).typed()),
+        &format!(
+            "run `pitboard enroll {enroll}` for the account {app} shows, or `pitboard use \
+             {enroll}` where {app} is signed out.",
+            app = given_up.tool.program()
+        ),
+    )
+}
+
 // Claude's settings name `named` since Pitboard last read `last` in use: no service is asked.
 // `said` names an account as the front end does.
 pub fn desktop_named(
