@@ -56,12 +56,15 @@ fn reading(warm: Overview) -> Machine {
     machine
 }
 
-fn came_to_nothing() -> Refusal {
-    refusal(
-        "warm_up_not_started",
-        "`personal` was not warmed up: the request was answered, and Anthropic still has no \
-         period running.",
-        Vec::new(),
+fn came_to_nothing() -> (String, Refusal) {
+    (
+        "personal/warm_up_not_started".into(),
+        refusal(
+            "warm_up_not_started",
+            "`personal` was not warmed up: the request was answered, and Anthropic still has no \
+             period running.",
+            Vec::new(),
+        ),
     )
 }
 
@@ -146,9 +149,7 @@ fn a_warm_up_by_itself_that_came_to_nothing_is_notified_once_and_waits() {
     assert_eq!(
         machine.posted,
         [RunOutNotice {
-            id: "warm-failed/warm_up_not_started/`personal` was not warmed up: the request was \
-                 answered, and Anthropic still has no period running."
-                .into(),
+            id: "warm-failed/personal/warm_up_not_started".into(),
             title: "Pitboard could not warm up an account".into(),
             subtitle: None,
             body: "`personal` was not warmed up: the request was answered, and Anthropic \
@@ -192,6 +193,31 @@ fn a_warm_up_by_itself_that_came_to_nothing_is_notified_once_and_waits() {
             .is_some_and(|said| said.starts_with("The last warm-up came to nothing")),
         "a period started ends what was said"
     );
+}
+
+/// Claude Code's run fails in words of its own each time: one by itself that failed again for
+/// that account is not notified again, as `pitboard watch` says it once.
+#[test]
+fn a_failure_in_other_words_is_notified_once() {
+    let failed = |said: &str| {
+        (
+            "personal/warm_up_failed".to_owned(),
+            refusal(
+                "warm_up_failed",
+                &format!("`personal` was not warmed up: Claude Code failed ({said})."),
+                Vec::new(),
+            ),
+        )
+    };
+    let mut machine = reading(overview(true, Standing::Due));
+    machine.warming = Err(failed("request 7f3a timed out"));
+    let mut model = started(&mut machine);
+    machine.warming = Err(failed("request 91c0 timed out"));
+    model.later(Duration::from_secs(60));
+    model.tick();
+    model.run(&mut machine);
+    assert_eq!(machine.warmed.len(), 2);
+    assert_eq!(machine.posted.len(), 1);
 }
 
 /// Asked for now, it warms that account up, and what went wrong is said in the window, as

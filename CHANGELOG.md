@@ -136,6 +136,9 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   bars.
 - The app counts a limit whose reset time has passed as back, as the command line does, and no
   longer calls it used up, notifies you of it or offers a switch away from it.
+- The app notifies you once of a warm-up that came to nothing for an account and reason, as
+  `pitboard watch` says it once, where a run of Claude Code that failed in other words was
+  notified again.
 
 ## [1.0.0-beta.5] - 2026-10-23
 

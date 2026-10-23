@@ -317,6 +317,18 @@ fn mended_by_waiting(error: &Error) -> bool {
     }
 }
 
+/// What tells a warm-up that came to nothing apart from another, for every front end that
+/// says each once: the account and the code, where it is of an account, and not its words,
+/// which carry Claude Code's own and can differ on every run. Otherwise the code and the words.
+pub fn told_apart(error: &Error) -> String {
+    match error {
+        Error::WarmUpFailed { label, .. } | Error::WarmUpNotDue { label, .. } => {
+            format!("{label}/{}", error.code())
+        }
+        error => format!("{}/{error}", error.code()),
+    }
+}
+
 /// Why `label` is not warmed up when somebody asked for it now.
 fn not_due(label: String, hold: &warm::Hold, now: i64) -> Error {
     Error::WarmUpNotDue {
@@ -415,6 +427,27 @@ mod tests {
     use crate::error::Error;
     use crate::service::{Permit, Pitboard};
     use crate::state;
+
+    #[test]
+    fn a_failure_is_told_apart_by_its_account_and_code_and_not_its_words() {
+        let failed = |label: &str, why| Error::WarmUpFailed {
+            label: label.into(),
+            why,
+        };
+        let said = |words: &str| warm::Failure::Failed(words.into());
+        assert_eq!(
+            super::told_apart(&failed("work", said("request 7f3a timed out"))),
+            super::told_apart(&failed("work", said("request 91c0 timed out")))
+        );
+        assert_ne!(
+            super::told_apart(&failed("work", said("a"))),
+            super::told_apart(&failed("home", said("a")))
+        );
+        assert_ne!(
+            super::told_apart(&failed("work", said("a"))),
+            super::told_apart(&failed("work", warm::Failure::TimedOut))
+        );
+    }
 
     #[test]
     fn a_claude_code_account_is_turned_on_and_off_and_each_is_recorded() {

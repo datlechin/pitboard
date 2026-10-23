@@ -65,6 +65,23 @@ impl From<service::Failed> for PitboardError {
     }
 }
 
+/// A warm-up that came to nothing, and what tells it apart from another, as the core tells it
+/// for every front end (`switch::warm::told_apart`).
+#[derive(Debug)]
+pub(crate) struct WarmRefused {
+    pub(crate) told_apart: String,
+    pub(crate) error: PitboardError,
+}
+
+impl From<service::Failed> for WarmRefused {
+    fn from(failed: service::Failed) -> Self {
+        WarmRefused {
+            told_apart: switch::warm::told_apart(&failed.error),
+            error: failed.into(),
+        }
+    }
+}
+
 fn warnings(found: &[service::Warning]) -> Vec<Warning> {
     found
         .iter()
@@ -977,13 +994,13 @@ impl AppCore {
 
     /// Warms up the first account turned on that is due, as the core decides: looking at its
     /// files first, so where none is due it takes no lock and says where each one stands.
-    pub(crate) fn warm_up(&self) -> Result<WarmUp, PitboardError> {
-        changed(self.core().core.warm_up(), |warmed, _| warmed)
+    pub(crate) fn warm_up(&self) -> Result<WarmUp, WarmRefused> {
+        Ok(self.core().core.warm_up()?.value)
     }
 
     /// Warms up the account `qualified` names now, whatever the span of the day.
-    pub(crate) fn warm_now(&self, qualified: &str) -> Result<WarmUp, PitboardError> {
-        changed(self.core().core.warm_now(qualified), |warmed, _| warmed)
+    pub(crate) fn warm_now(&self, qualified: &str) -> Result<WarmUp, WarmRefused> {
+        Ok(self.core().core.warm_now(qualified)?.value)
     }
 
     /// Warms up the account `qualified` names from now on, or stops.

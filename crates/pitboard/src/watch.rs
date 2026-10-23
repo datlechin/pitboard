@@ -19,7 +19,7 @@ use pitboard_core::duty::warm::{Overview, Standing};
 use pitboard_core::error::{self, Error};
 use pitboard_core::provider::ProviderId;
 use pitboard_core::service::{Changing, Done, Failed, Pitboard};
-use pitboard_core::switch::warm::WarmUp;
+use pitboard_core::switch::warm::{WarmUp, told_apart};
 use pitboard_core::usage::Window;
 use pitboard_core::words;
 use serde_json::{Value, json};
@@ -419,14 +419,7 @@ impl WarmTold {
         let done = match outcome {
             Ok(done) => done,
             Err(failed) => {
-                let key = match &failed.error {
-                    Error::WarmUpFailed { label, .. } | Error::WarmUpNotDue { label, .. } => {
-                        format!("{label}/{}", failed.error.code())
-                    }
-                    // Its words name the account, where it is of one.
-                    error => format!("{}/{error}", error.code()),
-                };
-                return if self.errors.insert(key) {
+                return if self.errors.insert(told_apart(&failed.error)) {
                     vec![Report::refused("watch", failed)]
                 } else {
                     Vec::new()

@@ -78,7 +78,7 @@ pub use account_windows::{
 mod launch;
 pub(crate) use launch::{
     Adoption, AppCore, AutoLooked, AutoSwitched, Change, Check, Enrolled, EnrolledAs, GaveUp,
-    Holding, OwnCommandLine, PitboardError, Remedy, SignInSession, Switch, Switched,
+    Holding, OwnCommandLine, PitboardError, Remedy, SignInSession, Switch, Switched, WarmRefused,
 };
 // What a test or a fixture makes the app's core of, in place of the environment.
 #[cfg(any(test, feature = "fixture"))]

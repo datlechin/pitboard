@@ -712,11 +712,11 @@ pub(crate) fn auto_refused_notice(code: &str, message: &str) -> RunOutNotice {
     )
 }
 
-/// A warm-up Pitboard tried by itself that started no period, in the core's words, which name
-/// the account, so one account's does not replace another's.
-pub(crate) fn warm_failed_notice(code: &str, message: &str) -> RunOutNotice {
+/// A warm-up Pitboard tried by itself that started no period, in the core's words. Identified
+/// by what tells it apart, `told_apart`, so one account's does not replace another's.
+pub(crate) fn warm_failed_notice(told_apart: &str, message: &str) -> RunOutNotice {
     posted(
-        format!("warm-failed/{code}/{message}"),
+        format!("warm-failed/{told_apart}"),
         "Pitboard could not warm up an account".into(),
         message.into(),
         &Clicked::Limits,

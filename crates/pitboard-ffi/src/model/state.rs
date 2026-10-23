@@ -48,7 +48,7 @@ use crate::present::{Clicked, UNUSABLE};
 use crate::{
     Abandoned, Account, Adoption, AutoLooked, AutoSwitched, Change, Check, Enrolled, EnrolledAs,
     FoundCommandLine, GaveUp, OwnCommandLine, PitboardError, Schedule, Status, Switch, Switched,
-    Tool, Usage, Warning,
+    Tool, Usage, WarmRefused, Warning,
 };
 use pitboard_core::duty::autoswitch::Threshold;
 use pitboard_core::duty::cadence::{DECIDE_EVERY_SECONDS, Refusals};
@@ -411,7 +411,7 @@ pub(crate) enum Answer {
     /// for now.
     WarmedUp {
         asked: Option<String>,
-        done: Result<WarmUp, PitboardError>,
+        done: Result<WarmUp, WarmRefused>,
     },
     /// A change to which accounts are warmed up, or when, with each one's warm-up after it.
     WarmSet {
@@ -592,7 +592,7 @@ pub(crate) struct Warming {
     pub(crate) running: Option<Option<String>>,
     /// Warm-ups by itself refused in a row, and the wait after them.
     refusals: Refusals,
-    /// Each failure notified, by its code and words, until a warm-up starts a period.
+    /// Each failure notified, as the core tells one apart, until a warm-up starts a period.
     told: BTreeSet<String>,
     /// What the last warm-up by itself that came to nothing said, until the core next says
     /// where each account stands.
@@ -2427,7 +2427,7 @@ impl State {
     fn warmed_up(
         &mut self,
         asked: Option<String>,
-        done: Result<WarmUp, PitboardError>,
+        done: Result<WarmUp, WarmRefused>,
         now: Now,
         jobs: &mut Vec<Job>,
     ) {
@@ -2450,16 +2450,16 @@ impl State {
                 self.warm.failed = None;
                 self.warm_later(now);
             }
-            Err(error) => {
-                let PitboardError::Failed { code, message, .. } = &error;
+            Err(WarmRefused { told_apart, error }) => {
+                let PitboardError::Failed { message, .. } = &error;
                 match asked {
                     Some(qualified) => self.present(Refused::of(could_not_warm(&qualified), error)),
                     None => {
                         self.warm.failed = Some(message.clone());
                         self.warm.refusals.refused(now.running);
-                        if self.warm.told.insert(format!("{code}/{message}")) {
+                        if self.warm.told.insert(told_apart.clone()) {
                             jobs.push(Job::Post {
-                                notice: crate::present::warm_failed_notice(code, message),
+                                notice: crate::present::warm_failed_notice(&told_apart, message),
                             });
                         }
                     }

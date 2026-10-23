@@ -12,7 +12,7 @@ use crate::account_windows::records::{self, Entry, Records};
 use crate::{
     Account, Adoption, AppCore, AutoLooked, AutoSwitched, Change, Check, Enrolled, EnrolledAs,
     FoundCommandLine, GaveUp, Holding, Level, Limit, Made, OwnCommandLine, PitboardError, Remedy,
-    Schedule, Source, Status, Switch, Switched, Tool, Usage, Warning,
+    Schedule, Source, Status, Switch, Switched, Tool, Usage, WarmRefused, Warning,
 };
 use pitboard_core::context::Context;
 use pitboard_core::provider::ProviderId;
@@ -467,6 +467,13 @@ pub(super) fn refusal(code: &str, message: &str, warnings: Vec<Warning>) -> Refu
     }
 }
 
+fn warm_refused((told_apart, refused): (String, Refusal)) -> WarmRefused {
+    WarmRefused {
+        told_apart,
+        error: refused.error(),
+    }
+}
+
 /// The percentage the first window of the account at `index` shows.
 pub(super) fn percent(snapshot: &Snapshot, index: usize) -> Option<f64> {
     let usage = snapshot
@@ -614,8 +621,9 @@ pub(super) struct Machine {
     /// could not be read where `warm_refused` says.
     pub warm: Option<pitboard_core::duty::warm::Overview>,
     pub warm_refused: Option<Refusal>,
-    /// What a warm-up gives, by itself or asked for now.
-    pub warming: Result<pitboard_core::switch::warm::WarmUp, Refusal>,
+    /// What a warm-up gives, by itself or asked for now: what came of it, or what tells its
+    /// refusal apart, as the core tells it, and the refusal.
+    pub warming: Result<pitboard_core::switch::warm::WarmUp, (String, Refusal)>,
     /// Every warm-up asked for, in order: `None` for one by itself, or the account asked
     /// for now.
     pub warmed: Vec<Option<String>>,
@@ -775,7 +783,7 @@ impl Machine {
             },
             Job::WarmUp => {
                 self.warmed.push(None);
-                let mut done = self.warming.clone().map_err(|refused| refused.error());
+                let mut done = self.warming.clone().map_err(warm_refused);
                 // As the core's: where nothing is due it says what its files say.
                 if let Ok(pitboard_core::switch::warm::WarmUp::Stands(standing)) = &mut done
                     && let Some(warm) = &self.warm
@@ -797,7 +805,7 @@ impl Machine {
                 self.warmed.push(Some(qualified.clone()));
                 Answer::WarmedUp {
                     asked: Some(qualified),
-                    done: self.warming.clone().map_err(|refused| refused.error()),
+                    done: self.warming.clone().map_err(warm_refused),
                 }
             }
             Job::SetWarm { qualified, on } => {
