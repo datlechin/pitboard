@@ -359,6 +359,12 @@ export function windowsRelease(latest: Release, betas: Iterable<Release>): Relea
   return newest;
 }
 
+export function windowsAhead(windows: Release, latest: Release): string | null {
+  return windows.version === latest.version
+    ? null
+    : `Until 1.0.0, Windows gets betas, and macOS and Linux get ${latest.version}.`;
+}
+
 // From 1.0.0 the release workflow refuses an unsigned rc or full release, and signs a beta once
 // WINDOWS_SIGNER is set, from the version WINDOWS_SIGNED_FROM names.
 export function windowsSigned(release: Release, signedFrom: string | null): boolean {
