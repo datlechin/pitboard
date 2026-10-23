@@ -3201,6 +3201,9 @@ fn name_this_account_starts_on_a_name_from_the_email() {
         "dana.lee"
     );
     assert_eq!(named(Vec::new(), "claude", "dana@icloud.com"), "dana");
+    for abroad in ["dana@yahoo.co.uk", "dana@hotmail.fr", "dana@web.de"] {
+        assert_eq!(named(Vec::new(), "claude", abroad), "dana", "{abroad}");
+    }
     let acme = || account(Some("acme")).signed_in().build();
     assert_eq!(named(vec![acme()], "claude", "dana@acme.io"), "dana");
     assert_eq!(

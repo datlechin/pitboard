@@ -328,32 +328,33 @@ pub(crate) fn sheet_text(seen: &Seen) -> Option<SheetText> {
     Some(text)
 }
 
-// Anyone can have an address at one of these, so the domain says nothing of whose account it is.
+// Anyone can have an address at one of these, in any country, so the domain says nothing of
+// whose account it is.
 const MAIL_SERVICES: &[&str] = &[
-    "163.com",
-    "aol.com",
-    "fastmail.com",
-    "gmail.com",
-    "gmx.com",
-    "gmx.de",
-    "googlemail.com",
-    "hey.com",
-    "hotmail.com",
-    "icloud.com",
-    "live.com",
-    "mac.com",
-    "mail.ru",
-    "me.com",
-    "msn.com",
-    "naver.com",
-    "outlook.com",
-    "pm.me",
-    "proton.me",
-    "protonmail.com",
-    "qq.com",
-    "yahoo.com",
-    "yandex.ru",
-    "zoho.com",
+    "163",
+    "aol",
+    "fastmail",
+    "gmail",
+    "gmx",
+    "googlemail",
+    "hey",
+    "hotmail",
+    "icloud",
+    "live",
+    "mac",
+    "mail",
+    "me",
+    "msn",
+    "naver",
+    "outlook",
+    "pm",
+    "proton",
+    "protonmail",
+    "qq",
+    "web",
+    "yahoo",
+    "yandex",
+    "zoho",
 ];
 
 fn suggested_name(seen: &Seen, provider: &str, email: &str) -> String {
@@ -363,7 +364,7 @@ fn suggested_name(seen: &Seen, provider: &str, email: &str) -> String {
     };
     let mailbox = local.split('+').next().unwrap_or_default();
     let company = domain.split('.').next().unwrap_or_default();
-    let candidates = if MAIL_SERVICES.contains(&domain) {
+    let candidates = if MAIL_SERVICES.contains(&company) {
         vec![mailbox]
     } else {
         vec![company, mailbox]
