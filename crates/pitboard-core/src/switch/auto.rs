@@ -229,6 +229,7 @@ fn over_the_account_switched_to(error: &Error) -> bool {
                 | Error::ParkedLoginBelongsElsewhere { .. }
                 | Error::ParkedCredentialMissing { .. }
                 | Error::ParkedCredentialCorrupt { .. }
+                | Error::LoginRestricted { .. }
         ),
     }
 }
@@ -1079,6 +1080,42 @@ mod tests {
         assert_eq!(to, "other");
         assert_eq!(live_refresh(&m).as_deref(), Some("other-refresh"));
         hold(&m, "after passing one account over");
+    }
+
+    // Each attempt at the account with the most room would be refused again until the limit's
+    // attempts ran out, and the one the pin allows never tried.
+    #[test]
+    fn an_account_the_organisation_pin_leaves_out_is_passed_over_for_the_next() {
+        let (m, clock) = nearly_out("auto-pinned", 96.0);
+        let parked = park::reserve(&m.ctx, Permit::for_a_test(), "other").expect("a name");
+        let parked = park::store_at(
+            &m.ctx,
+            Permit::for_a_test(),
+            provider::document(ProviderId::Claude),
+            &parked,
+            &harness::oauth("other-refresh", 30),
+        )
+        .expect("parked");
+        let mut state = state::load(&m.ctx).expect("state");
+        state
+            .accounts
+            .push(harness::account("other", "other", Some(parked)));
+        state::save(&m.ctx, Permit::for_a_test(), &state).expect("saved");
+        m.api.owned_by("access-other-refresh", owner("other"));
+        measured(&m, "other", 40.0, 40.0);
+        m.mem.administers(
+            &crate::settings::managed_dir(m.ctx.os).join("managed-settings.json"),
+            &serde_json::json!({"forceLoginOrgUUID": ["org-here", "org-other"]}).to_string(),
+        );
+
+        let failed = auto(&m).expect_err("a login the pin leaves out is not a switch");
+        assert_eq!(failed.error.code(), "login_restricted");
+        clock.advance(RETRY_SECONDS);
+        let Auto::Switched { to, .. } = auto(&m).expect("a switch").value else {
+            panic!("a switch to the other account");
+        };
+        assert_eq!(to, "other");
+        assert_eq!(live_refresh(&m).as_deref(), Some("other-refresh"));
     }
 
     /// An account on hold, whose parked login Anthropic will not renew, is passed over for the
