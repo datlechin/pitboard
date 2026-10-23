@@ -1662,10 +1662,7 @@ fn would_strand(label: Option<&str>, set_aside: &[PathBuf]) -> String {
                 [_] => "holds a Claude Desktop login",
                 _ => "hold Claude Desktop logins",
             };
-            let folders = set_aside
-                .iter()
-                .map(|path| path.display().to_string())
-                .collect();
+            let folders = set_aside.iter().map(|path| path.display().to_string());
             format!(
                 "No Claude Desktop account is in use, and {} {held} Pitboard set aside, {every} \
                  Run `pitboard enroll desktop/<label> --sign-in` to sign in to an account you \

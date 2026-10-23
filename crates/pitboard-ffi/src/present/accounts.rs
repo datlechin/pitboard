@@ -101,7 +101,7 @@ pub(crate) fn bar_title(accounts: &[Account], tools: &[Tool], usage_only: bool) 
         return String::new();
     };
     let percent = headline(account.usage.as_ref().map_or(&[], |usage| &usage.windows))
-        .map(|limit| words::figure(limit.percent));
+        .map(|limit| said::figure(limit.percent));
     if usage_only {
         return percent.unwrap_or_default();
     }
@@ -242,12 +242,12 @@ pub(crate) fn item(seen: &Seen, account: &Account) -> AccountItem {
     };
     let pace = runs_out_first(account, seen.now).map(|(limit, in_seconds)| {
         let windows = account.usage.as_ref().map_or(&[][..], |u| &u.windows);
-        words::capitalised(&said::runs_out(&scoped_name(&windows[limit]), in_seconds))
+        said::capitalised(&said::runs_out(&scoped_name(&windows[limit]), in_seconds))
     });
     let in_place_of_limits = in_place_of_limits(seen, account);
     let figure = headline(account.usage.as_ref().map_or(&[], |usage| &usage.windows))
         .filter(|_| in_place_of_limits.is_none())
-        .map(|limit| words::figure(limit.percent));
+        .map(|limit| said::figure(limit.percent));
     let menu_title =
         words::named_in_menu(seen.os, &title, account.plan.as_deref(), figure.as_deref());
     let mut spoken = vec![spoken_name.clone()];
@@ -412,7 +412,7 @@ fn warm_note(seen: &Seen, account: &Account) -> Option<String> {
     }
     let standing = choice.standing.as_ref()?;
     let clock = |at| seen.clock(at);
-    Some(words::capitalised(&pitboard_core::words::warm_standing(
+    Some(said::capitalised(&pitboard_core::words::warm_standing(
         standing, &clock,
     )))
 }
@@ -591,7 +591,7 @@ fn limits_said(seen: &Seen, account: &Account) -> String {
     let windows = account.usage.as_ref().map_or(&[][..], |u| &u.windows);
     // The limit that runs out first, said beside its own figure, where there is one.
     let first = runs_out_first(account, seen.now);
-    let said: Vec<String> = windows
+    let limits: Vec<String> = windows
         .iter()
         .enumerate()
         .map(|(at, limit)| {
@@ -602,14 +602,14 @@ fn limits_said(seen: &Seen, account: &Account) -> String {
                 (true, None, _) => format!("{scoped} used up"),
                 (false, _, Some((first, in_seconds))) if first == at => format!(
                     "{scoped} {} ({})",
-                    words::figure(limit.percent),
+                    said::figure(limit.percent),
                     words::runs_out_in(in_seconds)
                 ),
-                (false, _, _) => format!("{scoped} {}", words::figure(limit.percent)),
+                (false, _, _) => format!("{scoped} {}", said::figure(limit.percent)),
             }
         })
         .collect();
-    words::capitalised(&said.join(", "))
+    said::capitalised(&limits.join(", "))
 }
 
 /// One limit as a row of its account's bars, from a reading taken at `read_at`, as of `now`.
@@ -619,7 +619,7 @@ pub(crate) fn limit_row(limit: &Limit, read_at: i64, now: i64) -> LimitRow {
     LimitRow {
         short: said::limit_column(&limit.kind, limit.length_seconds, limit.scope.as_deref()),
         percent: limit.percent,
-        figure: words::figure(limit.percent),
+        figure: said::figure(limit.percent),
         level: crate::usage_level(limit.percent),
         resets: limit
             .resets_at

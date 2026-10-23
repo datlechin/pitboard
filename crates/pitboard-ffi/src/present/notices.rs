@@ -600,7 +600,7 @@ pub(crate) fn at_limit_notice(heads_up: &HeadsUp, now: i64) -> RunOutNotice {
     };
     let body = match (&heads_up.instead, limit.resets_at) {
         (Some((instead, left, _)), _) => words::room_left(instead, *left),
-        (None, Some(at)) => format!("{}.", capitalised(&said::resets(at, now))),
+        (None, Some(at)) => format!("{}.", said::capitalised(&said::resets(at, now))),
         (None, None) => String::new(),
     };
     RunOutNotice {
@@ -644,7 +644,11 @@ pub(crate) fn auto_skipped_notice(key: &str, from: &str, used: &str, why: &str) 
     posted(
         format!("auto-{key}"),
         "Claude Code was not switched".into(),
-        format!("{}. {}.", said::has_used(from, used), capitalised(why)),
+        format!(
+            "{}. {}.",
+            said::has_used(from, used),
+            said::capitalised(why)
+        ),
         &Clicked::Limits,
     )
 }
@@ -655,7 +659,7 @@ pub(crate) fn auto_not_watching_notice(key: &str, why: &str) -> RunOutNotice {
     posted(
         format!("auto-{key}"),
         "Pitboard is not switching Claude Code".into(),
-        format!("{}.", capitalised(why)),
+        format!("{}.", said::capitalised(why)),
         &Clicked::Limits,
     )
 }
@@ -720,13 +724,6 @@ pub(crate) fn warm_failed_notice(told_apart: &str, message: &str) -> RunOutNotic
         message.into(),
         &Clicked::Limits,
     )
-}
-
-fn capitalised(text: &str) -> String {
-    let mut chars = text.chars();
-    chars.next().map_or_else(String::new, |first| {
-        first.to_uppercase().chain(chars).collect()
-    })
 }
 
 /// What the menu says of the notices: advice and an add left halfway as items that act on

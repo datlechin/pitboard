@@ -12,14 +12,10 @@
 use crate::doctor::{Level, renewal_due};
 use crate::host::{Os, WINDOWS_FLOOR, token};
 use crate::schedule::Job;
+use crate::time::{DAY, HOUR, MINUTE, WEEK};
 use crate::usage::pace::{Pace, Standing};
 use crate::usage::whole;
 use std::fmt::Write as _;
-
-const MINUTE: i64 = 60;
-const HOUR: i64 = 60 * MINUTE;
-const DAY: i64 = 24 * HOUR;
-const WEEK: i64 = 7 * DAY;
 
 /// A length of time to the precision a person reads: "6d 4h", "2h 05m", "47m", "<1m".
 ///
@@ -86,11 +82,16 @@ pub fn limit_name(kind: &str, length_seconds: Option<i64>) -> String {
     }
 }
 
+/// A share of a limit as every front end draws it: "64%", a half rounded up.
+pub fn figure(percent: f64) -> String {
+    format!("{}%", whole(percent))
+}
+
 /// How much of a limit an account has used, in a sentence about an automatic switch:
 /// "96% of its 5-hour limit", or "97% of its weekly Opus limit" for one limit of a model.
 pub fn share_of_limit(limit: &crate::usage::Window) -> String {
     let name = scoped_limit_name(&limit.kind, limit.length_seconds, limit.scope.as_deref());
-    format!("{}% of its {name} limit", whole(limit.percent))
+    format!("{} of its {name} limit", figure(limit.percent))
 }
 
 /// How much of a limit `account` has used, as every sentence about a limit at the share starts:
@@ -473,7 +474,7 @@ fn dropped_keys(os: Os, keys: &[String], gone: bool) -> Option<String> {
         0 => return None,
         n => n == 1,
     };
-    let names = listed(keys.iter().map(|key| format!("`{key}`")).collect());
+    let names = listed(keys.iter().map(|key| format!("`{key}`")));
     let (holds, goes) = match (gone, one) {
         (false, true) => ("holds", "goes"),
         (false, false) => ("holds", "go"),
@@ -1071,15 +1072,9 @@ pub fn given_up(given_up: &crate::switch::GivenUp, name: &str, way_on: &str) -> 
         );
     }
     if given_up.left.is_empty() {
-        let _ = write!(said, " {}", crate::holder::capitalised(way_on));
+        let _ = write!(said, " {}", capitalised(way_on));
     } else {
-        let left = listed(
-            given_up
-                .left
-                .iter()
-                .map(|item| format!("`{item}`"))
-                .collect(),
-        );
+        let left = listed(given_up.left.iter().map(|item| format!("`{item}`")));
         let stay = if given_up.left.len() == 1 {
             "stays"
         } else {
@@ -1247,7 +1242,7 @@ pub fn replace_question(tool: crate::provider::ProviderId, label: &str, detail: 
 
 // What `adopt` says of the Claude Desktop logins it set aside, each account as typed.
 pub fn adopted_folders(labels: &[String]) -> String {
-    let named = listed(labels.iter().map(|label| format!("`{label}`")).collect());
+    let named = listed(labels.iter().map(|label| format!("`{label}`")));
     format!(
         "Pitboard set aside the parked Claude Desktop logins of {named}. They were parked on \
          another Mac, and Claude cannot read them here where its key differs. `pitboard \
@@ -1398,22 +1393,27 @@ pub(crate) fn listed_values<T: AsRef<str>>(values: &[T]) -> String {
     if values.is_empty() {
         return "an empty list".into();
     }
-    listed(
-        values
-            .iter()
-            .map(|value| format!("`{}`", value.as_ref()))
-            .collect(),
-    )
+    listed(values.iter().map(|value| format!("`{}`", value.as_ref())))
+}
+
+/// `text` with its first letter a capital, to begin a sentence with: "5-hour" stays "5-hour"
+/// and "weekly" becomes "Weekly".
+pub fn capitalised(text: &str) -> String {
+    let mut chars = text.chars();
+    chars.next().map_or_else(String::new, |first| {
+        first.to_uppercase().chain(chars).collect()
+    })
 }
 
 /// Things one after another, as a sentence lists them: "a", "a and b", "a, b and c".
-pub fn listed(mut items: Vec<String>) -> String {
-    match items.len() {
-        0 => String::new(),
-        1 => items.remove(0),
-        _ => {
-            let last = items.pop().unwrap_or_default();
-            format!("{} and {last}", items.join(", "))
+pub fn listed<T: AsRef<str>>(items: impl IntoIterator<Item = T>) -> String {
+    let items: Vec<T> = items.into_iter().collect();
+    match items.as_slice() {
+        [] => String::new(),
+        [one] => one.as_ref().to_owned(),
+        [rest @ .., last] => {
+            let rest: Vec<&str> = rest.iter().map(AsRef::as_ref).collect();
+            format!("{} and {}", rest.join(", "), last.as_ref())
         }
     }
 }
@@ -1421,6 +1421,15 @@ pub fn listed(mut items: Vec<String>) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_figure_is_rounded_to_the_nearest_whole_percent() {
+        assert_eq!(figure(64.4), "64%");
+        assert_eq!(figure(64.5), "65%");
+        assert_eq!(figure(0.4), "0%");
+        assert_eq!(figure(100.0), "100%");
+        assert_eq!(figure(130.2), "130%");
+    }
 
     // The file sits behind the keychain on macOS and behind Credential Manager on Windows, which
     // a sign-in over SSH with a key cannot reach.

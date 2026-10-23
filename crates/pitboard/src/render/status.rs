@@ -6,7 +6,7 @@ use pitboard_core::provider::ProviderId;
 use pitboard_core::state::Key;
 use pitboard_core::status::{Report, Row, Stale};
 use pitboard_core::usage::pace::Lasts;
-use pitboard_core::usage::{Snapshot, Source, Window, whole};
+use pitboard_core::usage::{Snapshot, Source, Window};
 use pitboard_core::{time, words};
 use serde_json::{Value, json};
 
@@ -277,7 +277,10 @@ pub(crate) fn human(report: &Report) -> String {
                     "    {}  {}  {}  {after}\n",
                     pad(&window_name(w), name_width),
                     ui::bar(w.percent, pace.as_ref(), 10),
-                    paint(ui::level(w.percent), format!("{:>3}%", whole(w.percent))),
+                    paint(
+                        ui::level(w.percent),
+                        format!("{:>4}", words::figure(w.percent))
+                    ),
                 ));
             }
             // The answer to the question the whole tool exists for, where there is one: for

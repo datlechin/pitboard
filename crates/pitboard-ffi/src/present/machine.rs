@@ -262,13 +262,19 @@ fn warm(seen: &Seen) -> WarmShown {
                         .and_then(|account| account.plan.clone()),
                     on: choice.on,
                     standing: choice.standing.as_ref().map(|standing| {
-                        words::capitalised(&pitboard_core::words::warm_standing(standing, &clock))
+                        pitboard_core::words::capitalised(&pitboard_core::words::warm_standing(
+                            standing, &clock,
+                        ))
                     }),
                 })
                 .collect()
         })
         .unwrap_or_default();
-    let unreadable = state.warm.unreadable.as_deref().map(words::capitalised);
+    let unreadable = state
+        .warm
+        .unreadable
+        .as_deref()
+        .map(pitboard_core::words::capitalised);
     let standing = unreadable.or_else(|| {
         overview
             .filter(|_| state.warm.any_on())

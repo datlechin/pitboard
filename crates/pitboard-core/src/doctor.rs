@@ -1042,7 +1042,7 @@ fn judge_windows_settings(facts: &Facts) -> Vec<Check> {
     if let [first, rest @ ..] = facts.pitboards.as_slice()
         && !rest.is_empty()
     {
-        let rest = rest.iter().map(|copy| copy.display().to_string()).collect();
+        let rest = rest.iter().map(|copy| copy.display().to_string());
         checks.push(Check {
             advice: "A shell runs the first, so updating another changes nothing there. Uninstall \
                      the copies you do not use."
@@ -2475,7 +2475,7 @@ fn judge_network(network: &NetworkFact) -> Check {
         many => (
             Some(format!(
                 "{} hold no proxy's address Pitboard can read, so they are passed over",
-                words::listed(many.iter().map(|n| (*n).to_string()).collect())
+                words::listed(many.iter())
             )),
             "Set each to a proxy's address, such as http://proxy.example.com:8080, or unset them.",
         ),
@@ -2721,7 +2721,7 @@ fn judge_schedule(facts: &Facts) -> Option<Check> {
         return Some(ok("schedule", "renewal schedule", runs));
     };
     if !task.drifted.is_empty() {
-        let drifted = task.drifted.iter().map(drift).collect();
+        let drifted = task.drifted.iter().map(drift);
         return Some(warn(
             "schedule",
             "renewal schedule",
@@ -3184,8 +3184,7 @@ fn judge_codex(
             .map(|(count, prefix)| match count {
                 1 => format!("1 {prefix} item"),
                 many => format!("{many} {prefix} items"),
-            })
-            .collect();
+            });
         checks.push(Check {
             advice: "Codex keeps its login there where a setting Pitboard does not read, such as \
                      an enterprise's cloud configuration in a session of `codex`, chooses \
@@ -3381,7 +3380,7 @@ fn judge_desktop(
                     name,
                     format!(
                         "holds {}, parts of the account's data this Pitboard has not read",
-                        words::listed(parts.iter().map(|part| format!("`{part}`")).collect())
+                        words::listed(parts.iter().map(|part| format!("`{part}`")))
                     ),
                     "Pitboard starts no move of a Claude Desktop login while they are there. \
                      Update Pitboard, or report them at \
@@ -3545,7 +3544,7 @@ fn judge_desktop(
             held => format!(
                 "{n} in {parks_dir}, {} holding a login: {}",
                 held.len(),
-                words::listed(held.iter().map(|aside| said(aside)).collect())
+                words::listed(held.iter().map(|aside| said(aside)))
             ),
         };
         if !rest.is_empty() {

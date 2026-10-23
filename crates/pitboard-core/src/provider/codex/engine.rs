@@ -444,7 +444,7 @@ impl Provider for Codex {
         let claims = jwt::claims(document["tokens"]["id_token"].as_str()?)?;
         Some(jwt::claim(&claims, &[OPENAI, "chatgpt_plan_type"])?.trim())
             .filter(|kind| !kind.is_empty())
-            .map(crate::holder::capitalised)
+            .map(crate::words::capitalised)
     }
 
     /// One account per file, so an account's share is the whole of it.

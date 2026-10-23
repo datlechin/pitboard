@@ -57,7 +57,7 @@ test("the menu heads each tool's accounts with its name, and names each account 
   const words = present("words.rs");
   assert.ok(words.includes("said.extend(plan);"));
   assert.ok(words.includes("if matches!(os, Os::Windows) {\n        said.extend(figure);"));
-  assert.ok(present("accounts.rs").includes(".map(|limit| words::figure(limit.percent));"));
+  assert.ok(present("accounts.rs").includes(".map(|limit| said::figure(limit.percent));"));
   for (const e of menu(false)) {
     if ("heading" in e) assert.ok(headings.has(e.heading), e.heading);
     if ("account" in e) assert.match(e.account, /^\w+ · (Max 20x|Pro|Plus) · \d+%$/);

@@ -135,7 +135,7 @@ pub(crate) fn plan(document: &Value) -> Option<String> {
     let oauth = oauth_in(document);
     let named = Some(oauth.get("subscriptionType")?.as_str()?.trim())
         .filter(|kind| !kind.is_empty())
-        .map(crate::holder::capitalised)?;
+        .map(crate::words::capitalised)?;
     let multiple = oauth
         .get("rateLimitTier")
         .and_then(Value::as_str)

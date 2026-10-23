@@ -14,6 +14,7 @@
 use crate::context::Context;
 use crate::host::{OS, Process};
 use crate::provider::ProviderId;
+use crate::words::capitalised;
 use std::path::Path;
 
 /// One kind of process that holds a tool's login.
@@ -249,7 +250,7 @@ impl Holding {
 
 /// Everything running, as one noun phrase: "2 `codex` sessions and the ChatGPT app".
 pub(crate) fn described(holding: &[Holding]) -> String {
-    crate::words::listed(holding.iter().map(Holding::phrase).collect())
+    crate::words::listed(holding.iter().map(Holding::phrase))
 }
 
 /// The same, with the pids of each: "2 `codex` sessions (pid 41, 42)".
@@ -257,8 +258,7 @@ pub(crate) fn described_with_pids(holding: &[Holding]) -> String {
     crate::words::listed(
         holding
             .iter()
-            .map(|h| format!("{} (pid {})", h.phrase(), some_of(&h.pids)))
-            .collect(),
+            .map(|h| format!("{} (pid {})", h.phrase(), some_of(&h.pids))),
     )
 }
 
@@ -284,14 +284,6 @@ pub(crate) fn remedies(holding: &[Holding], purpose: &str) -> String {
                 .join("; ")
         ),
     }
-}
-
-/// `text` with its first letter a capital, to begin a sentence with.
-pub(crate) fn capitalised(text: &str) -> String {
-    let mut chars = text.chars();
-    chars.next().map_or_else(String::new, |first| {
-        first.to_uppercase().chain(chars).collect()
-    })
 }
 
 /// A few pids and how many more, because somebody with twenty sessions open needs to know

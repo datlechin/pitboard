@@ -1083,7 +1083,7 @@ fn assemble(
                 .plans
                 .get(id)
                 .cloned()
-                .unwrap_or_else(|| account.plan.as_deref().map(crate::holder::capitalised));
+                .unwrap_or_else(|| account.plan.as_deref().map(crate::words::capitalised));
             Row {
                 provider: which,
                 label: Some(account.label.clone()),

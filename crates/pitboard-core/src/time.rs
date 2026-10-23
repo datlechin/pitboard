@@ -10,6 +10,12 @@
 use jiff::Timestamp;
 use jiff::tz::TimeZone;
 
+// Seconds in each, as every front end counts a span.
+pub const MINUTE: i64 = 60;
+pub const HOUR: i64 = 60 * MINUTE;
+pub const DAY: i64 = 24 * HOUR;
+pub const WEEK: i64 = 7 * DAY;
+
 /// What Pitboard reads the time from.
 #[doc(hidden)]
 pub trait Clock: Send + Sync + std::fmt::Debug {

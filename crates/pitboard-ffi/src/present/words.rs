@@ -13,25 +13,11 @@ use pitboard_core::label::Unusable;
 use pitboard_core::provider::ProviderId;
 use pitboard_core::service::{Stored, Warning as CoreWarning};
 use pitboard_core::state::SetAside;
+use pitboard_core::time::{DAY, HOUR, MINUTE};
 use pitboard_core::usage::pace::{Pace, Standing};
 use pitboard_core::usage::whole;
+use pitboard_core::words::{capitalised, figure, listed};
 use unicode_segmentation::UnicodeSegmentation;
-
-const MINUTE: i64 = 60;
-const HOUR: i64 = 60 * MINUTE;
-const DAY: i64 = 24 * HOUR;
-
-/// "5-hour" stays "5-hour" and "weekly" becomes "Weekly": a phrase that starts a line starts
-/// with a capital, and nothing else about it changes. Swift's `Character.uppercased`, which
-/// the app's `capitalizedFirst` used, maps a letter as Rust's `char::to_uppercase` does, "ß"
-/// to "SS" among them, and leaves the marks after it where they were.
-pub(crate) fn capitalised(phrase: &str) -> String {
-    let mut chars = phrase.chars();
-    match chars.next() {
-        Some(first) => first.to_uppercase().chain(chars).collect(),
-        None => String::new(),
-    }
-}
 
 /// A button's, a menu item's or a heading's words as each system writes them: title case
 /// on macOS, as Apple's guidelines have it, and sentence case on Windows, which Microsoft's
@@ -61,12 +47,6 @@ pub(crate) fn bar_name(label: &str) -> String {
     let mut cut: String = label.graphemes(true).take(11).collect();
     cut.push('…');
     cut
-}
-
-/// A figure as a bar or a line says it, as the command line draws it and the automatic
-/// switch judges it.
-pub(crate) fn figure(percent: f64) -> String {
-    format!("{}%", whole(percent))
 }
 
 /// `numerator / denominator` rounded to the nearest whole, a half to the even one, as
@@ -1064,18 +1044,6 @@ pub(crate) fn in_app_refusal(os: Os, error: &Error) -> Option<String> {
     })
 }
 
-// Without `pitboard_sites::listed`'s serial comma, as the documentation writes a list.
-pub(crate) fn listed(items: &[impl AsRef<str>]) -> String {
-    match items {
-        [] => String::new(),
-        [one] => one.as_ref().to_owned(),
-        [rest @ .., last] => {
-            let rest: Vec<&str> = rest.iter().map(AsRef::as_ref).collect();
-            format!("{} and {}", rest.join(", "), last.as_ref())
-        }
-    }
-}
-
 // Its notice offers to sign in again, so the words name no command.
 fn replaced(tool: ProviderId, label: &str, now: &Stored) -> String {
     let label = bare(label);
@@ -1756,16 +1724,6 @@ mod tests {
             let cut = kept.map_or_else(|| label.clone(), |kept| cut_after(scalars, kept));
             assert_eq!(bar_name(&label), cut, "{label:?}");
         }
-    }
-
-    /// The figure is a whole percentage, rounded the way a person rounds: a half goes up.
-    #[test]
-    fn a_figure_is_rounded_to_the_nearest_whole_percent() {
-        assert_eq!(figure(64.4), "64%");
-        assert_eq!(figure(64.5), "65%");
-        assert_eq!(figure(0.4), "0%");
-        assert_eq!(figure(100.0), "100%");
-        assert_eq!(figure(130.2), "130%");
     }
 
     /// A warning is named in the menu by a heading from its code, each its own, and a code

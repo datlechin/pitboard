@@ -6,13 +6,14 @@ use crate::context::Context;
 use crate::doctor::{self, Diagnosis};
 use crate::duty::autoswitch::{Auto, Look, Threshold};
 use crate::error::{Error, Result};
-use crate::holder::{self, capitalised};
+use crate::holder;
 use crate::host::{Elevation, Floor, Os};
 use crate::in_use::{self, Doubt, InUse, Known};
 use crate::provider::{Held, LoginKind, Provider, ProviderId};
 use crate::state::{self, Account, Key};
 use crate::switch::{self, Enrolled, Outcome, Recovered, Renewal, Settled, SignIn};
 use crate::usage::readings;
+use crate::words::capitalised;
 use crate::{audit, schedule, status, statusline};
 use std::fmt;
 
