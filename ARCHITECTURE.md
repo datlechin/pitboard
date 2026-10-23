@@ -419,7 +419,7 @@ window loads its site, and whatever the site's pages load, as a browser would.
     whose each login is has been recorded, so an account whose only login a sign-in outside
     Pitboard replaced reads `login_replaced` from that read on. A row whose parked login its
     service refused (`login_refused`) is not switchable (`Row::switchable`), which
-    `pitboard status`, the automatic switch and the app all go by. The usage of a login nobody
+    `pitboard status` and the app go by. The usage of a login nobody
     could name is not asked, and the account the record names stands in for it. Offline rows
     (`gather_offline`) take the account in use from `in_use::known`, an account nobody
     enrolled included, which gets its row as it does online. `Pitboard::standing` says what

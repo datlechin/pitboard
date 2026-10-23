@@ -246,8 +246,7 @@ impl Row {
         }
     }
 
-    /// Whether `pitboard use` would switch to it now. A parked login its service refused is
-    /// kept, and a switch to it would fail: it needs signing in again.
+    // A parked login its service refused would fail a switch: it needs signing in again.
     pub fn switchable(&self, now: i64) -> bool {
         !self.signed_in
             && self.stale != Some(Stale::LoginRefused)
@@ -1519,8 +1518,6 @@ mod tests {
         assert!(personal.switchable(NOW));
     }
 
-    /// A parked login its service refused needs signing in again: a switch to it would fail,
-    /// so neither `pitboard use` nor the automatic switch offers it, as the app does not.
     #[test]
     fn a_parked_login_its_service_refused_cannot_be_switched_to() {
         let s = state(&["work", "personal"]);
