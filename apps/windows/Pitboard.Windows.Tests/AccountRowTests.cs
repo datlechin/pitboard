@@ -12,8 +12,11 @@ namespace Pitboard.Windows.Tests;
 [TestClass]
 public sealed class AccountRowTests
 {
+    private static AccountRow Row(AccountItem item, Action<Intent>? send = null, double width = double.NaN) =>
+        new() { Width = width, Account = new ShownAccount(item, send ?? (_ => { })) };
+
     private static Task<AccountRow> Shown(AccountItem item, Action<Intent>? send = null, double width = double.NaN) =>
-        Views.Shown(new AccountRow { Width = width, Account = new ShownAccount(item, send ?? (_ => { })) });
+        Views.Shown(Row(item, send, width));
 
     private static Rect Bounds(FrameworkElement element, UIElement within) =>
         element.TransformToVisual(within).TransformBounds(new Rect(0, 0, element.ActualWidth, element.ActualHeight));
@@ -59,8 +62,10 @@ public sealed class AccountRowTests
     {
         var over = Items.Limit(42, PaceStanding.Over);
         over = over with { Pace = over.Pace! with { Said = "27% over pace" } };
-        var paced = await Shown(Items.Account("claude", "work") with { Limits = [over] }, width: 600);
-        var even = await Shown(Items.Account("claude", "spare") with { Limits = [Items.Limit(42)] }, width: 600);
+        var paced = Row(Items.Account("claude", "work") with { Limits = [over] });
+        var even = Row(Items.Account("claude", "spare") with { Limits = [Items.Limit(42)] });
+        // Together, as the list shows them: shown apart, the first row's bar read 80, its MinWidth, once out of the window.
+        await Views.Shown(new StackPanel { Width = 600, Children = { paced, even } });
 
         Assert.AreEqual(
             Views.Visible<ProgressBar>(paced).Single().ActualWidth, Views.Visible<ProgressBar>(even).Single().ActualWidth, 0.5);
