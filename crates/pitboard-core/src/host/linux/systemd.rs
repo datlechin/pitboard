@@ -155,11 +155,16 @@ impl Scheduler for Systemd {
         if !installed_by.is_file() {
             return Ok(false);
         }
-        let _ = self.control.run(
+        let stopped = self.control.run(
             permit,
             SYSTEMCTL,
             &["--user", "disable", "--now", Self::installed_by(job)],
         );
+        // A watch service left running writes in the Pitboard directory `pitboard uninstall`
+        // removes next.
+        if job == Job::Watch {
+            stopped?;
+        }
         service::remove(permit, &installed_by)?;
         service::remove(permit, &Self::units(ctx).join(Self::service(job)))?;
         let _ = self.control.run(permit, SYSTEMCTL, &RELOAD);
@@ -515,6 +520,167 @@ mod tests {
             !systemd.started_this_process(Job::Renew, None),
             "what systemd passes is not read"
         );
+        let _ = std::fs::remove_dir_all(&home);
+    }
+
+    // systemd as a test asks it: each call written down, and the next one carrying the word a
+    // test names refused.
+    #[derive(Debug, Default)]
+    struct Asked {
+        refusing: std::sync::Mutex<Option<&'static str>>,
+        calls: std::sync::Mutex<Vec<String>>,
+    }
+
+    impl Asked {
+        fn refuse(&self, word: &'static str) {
+            *self
+                .refusing
+                .lock()
+                .expect("a poisoned test is a failed test") = Some(word);
+        }
+
+        fn taken(&self) -> Vec<String> {
+            std::mem::take(&mut self.calls.lock().expect("a poisoned test is a failed test"))
+        }
+    }
+
+    impl Control for Asked {
+        fn run(&self, _: Permit, _program: &str, args: &[&str]) -> Result<()> {
+            let call = args.join(" ");
+            self.calls
+                .lock()
+                .expect("a poisoned test is a failed test")
+                .push(call.clone());
+            let mut refusing = self
+                .refusing
+                .lock()
+                .expect("a poisoned test is a failed test");
+            if refusing.is_some_and(|word| args.contains(&word)) {
+                *refusing = None;
+                return Err(crate::error::Error::ScheduleRefused {
+                    detail: format!("systemctl refused {call} in a test"),
+                });
+            }
+            Ok(())
+        }
+    }
+
+    fn scratch_home(name: &str) -> (PathBuf, Context) {
+        let home = std::env::temp_dir().join(format!(
+            "pitboard-systemd-{name}-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let _ = std::fs::remove_dir_all(&home);
+        std::fs::create_dir_all(&home).expect("a scratch home");
+        let ctx = Context::new(home.clone()).with_memory_stores(MemoryHost::new());
+        (home, ctx)
+    }
+
+    // Enabled but not running, a new service would start at the next sign-in all the same; one
+    // before is restarted as it was.
+    #[test]
+    fn a_watch_service_systemd_will_not_restart_is_taken_away_or_put_back() {
+        let (home, ctx) = scratch_home("restart");
+        let asked = Arc::new(Asked::default());
+        let systemd = Systemd::new(asked.clone());
+        let program = Path::new("/usr/local/bin/pitboard");
+        let at = |percent: &str| vec!["--at".to_string(), percent.to_string()];
+        let reload = "--user daemon-reload".to_string();
+        let enable = format!("--user enable {WATCH}");
+        let restart = format!("--user restart {WATCH}");
+
+        asked.refuse("restart");
+        let refused = systemd
+            .put(
+                &ctx,
+                Permit::for_a_test(),
+                Job::Watch,
+                program,
+                &at("90"),
+                &[],
+            )
+            .expect_err("refused");
+        assert_eq!(refused.code(), "schedule_refused");
+        assert!(!systemd.installed(&ctx, Job::Watch));
+        assert_eq!(
+            asked.taken(),
+            [
+                reload.clone(),
+                enable.clone(),
+                restart.clone(),
+                format!("--user disable {WATCH}"),
+                reload.clone()
+            ]
+        );
+
+        systemd
+            .put(
+                &ctx,
+                Permit::for_a_test(),
+                Job::Watch,
+                program,
+                &at("90"),
+                &[],
+            )
+            .expect("installed");
+        asked.taken();
+        asked.refuse("restart");
+        systemd
+            .put(
+                &ctx,
+                Permit::for_a_test(),
+                Job::Watch,
+                program,
+                &at("70"),
+                &[],
+            )
+            .expect_err("refused");
+        assert_eq!(systemd.options(&ctx, Job::Watch), at("90"));
+        assert_eq!(
+            asked.taken(),
+            [
+                reload.clone(),
+                enable.clone(),
+                restart.clone(),
+                reload,
+                enable,
+                restart
+            ]
+        );
+        let _ = std::fs::remove_dir_all(&home);
+    }
+
+    // A watch service left running would write the Pitboard directory again once `pitboard
+    // uninstall` removed it; renewal's units go whatever systemd says.
+    #[test]
+    fn a_watch_service_systemd_will_not_stop_stays_installed() {
+        let (home, ctx) = scratch_home("stop");
+        let asked = Arc::new(Asked::default());
+        let systemd = Systemd::new(asked.clone());
+        let program = Path::new("/usr/local/bin/pitboard");
+        for job in [Job::Renew, Job::Watch] {
+            systemd
+                .put(&ctx, Permit::for_a_test(), job, program, &[], &[])
+                .expect("installed");
+        }
+
+        asked.refuse("disable");
+        let refused = systemd
+            .remove(&ctx, Permit::for_a_test(), Job::Watch)
+            .expect_err("still running");
+        assert_eq!(refused.code(), "schedule_refused");
+        assert!(systemd.installed(&ctx, Job::Watch));
+        assert!(Systemd::units(&ctx).join(WATCH).is_file());
+
+        asked.refuse("disable");
+        assert!(
+            systemd
+                .remove(&ctx, Permit::for_a_test(), Job::Renew)
+                .expect("taken away")
+        );
+        assert!(!systemd.installed(&ctx, Job::Renew));
+        assert!(!Systemd::units(&ctx).join(SERVICE).exists());
         let _ = std::fs::remove_dir_all(&home);
     }
 
