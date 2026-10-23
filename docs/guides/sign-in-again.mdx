@@ -6,7 +6,7 @@ description: "Replace a parked login that expired, went missing or was refused, 
 
 Signing in again to a Claude Code or Codex account runs the tool's own sign-in in your browser, as adding an account does. The account keeps its label and its account window.
 
-A Claude Desktop account signs in again inside Claude, on macOS. [Use Pitboard with Claude Desktop](/guides/claude-desktop#sign-in-again) has the steps.
+A Claude Desktop account signs in again inside Claude, as [Use Pitboard with Claude Desktop](/guides/claude-desktop#sign-in-again) shows.
 
 ## Signs that an account needs it
 
@@ -16,7 +16,7 @@ A Claude Desktop account signs in again inside Claude, on macOS. [Use Pitboard w
 - `nothing parked`
 - `login replaced outside Pitboard`
 
-In the app, Pitboard's menu marks the account **Needs signing in again**, its row in the Pitboard window has a **Sign In Again** button, and a notification **work needs signing in again** offers the same button once. On Windows, the menu gives that line as the account's tooltip, and the button is **Sign in again**. [Account status](/reference/account-status) says what each means.
+In the app, Pitboard's menu marks the account **Needs signing in again**, and its row in the Pitboard window and a notification offer **Sign In Again**. [Account status](/reference/account-status) says what each means.
 
 A switch to such an account moves nothing and names the same command:
 
@@ -69,13 +69,7 @@ pitboard enroll work --sign-in
 Opening Claude Code's sign-in. Sign in as me@company.com; the account in use now stays signed in.
 ```
 
-After the sign-in, Pitboard prints:
-
-```text
-Renewed work (me@company.com): its parked login is a fresh one.
-```
-
-If you sign in as another account, Pitboard keeps nothing from that sign-in:
+After the sign-in, it prints `Renewed work (me@company.com): its parked login is a fresh one.` If you sign in as another account, Pitboard keeps nothing from that sign-in:
 
 ```text
 error: `work` already refers to me@company.com. Choose a different label.
@@ -102,13 +96,6 @@ Pitboard replaces the login in use only once it has identified it. When it canno
 - The login in use cannot be read or found.
 - A Claude Code login changed since Pitboard last identified it, and Anthropic no longer accepts it or does not answer.
 
-[How Pitboard knows whose login it is](/concepts/identity) says when Pitboard asks Anthropic. If `work` is the account Pitboard last recorded in use, it also warns:
-
-```text
-Renewed work (me@company.com): its parked login is a fresh one.
-warning: Claude Code goes on with the login it has: Pitboard could not tell whose it is (its login has expired and cannot be renewed), so it parked the new login for `work` rather than write over that one. If that login no longer works, run `claude` and sign in to `work` there.
-```
-
-In the app, the notice is titled **The new login was parked, not put in use**.
+[How Pitboard knows whose login it is](/concepts/identity) says when Pitboard asks Anthropic. If `work` is the account Pitboard last recorded in use, it also warns with `sign_in_parked_not_in_use`, which says what to do if the tool's login no longer works. In the app, the notice is titled **The new login was parked, not put in use**.
 
 To keep parked logins from expiring, see [Keep parked logins alive](/guides/renewal).

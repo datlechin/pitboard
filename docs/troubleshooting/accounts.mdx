@@ -4,15 +4,13 @@ sidebarTitle: "Accounts and usage"
 description: "Fix a tool on another account than Pitboard shows, a login store Pitboard cannot read, old usage numbers and a tool Pitboard cannot find."
 ---
 
-[Troubleshooting](/troubleshooting) covers Claude Code over SSH and how to report a problem. [Fix Pitboard refusing every change](/troubleshooting/refused-changes) covers runs as root or as administrator, and [Fix daily renewal and starting at sign-in](/troubleshooting/renewal) covers the schedule.
-
 ## Claude Code shows another account than Pitboard
 
 `/status` in Claude Code shows the account its config names. Pitboard shows the account whose login is stored, which requests use. A sign-in, or a session started on another login, can write another account into the config: see [How Pitboard knows whose login it is](/concepts/identity).
 
 Pitboard warns with the cause, such as `config_names_another` or `in_use_unconfirmed`, and [Warning codes](/reference/errors#warning-codes) gives each fix.
 
-After a switch, an open session keeps the old account and its `/usage` for up to about 33 seconds. While a login file sits behind the keychain, or on Windows behind Credential Manager, it keeps them until its next renewal: see [Claude Code over SSH uses another account](/troubleshooting#claude-code-over-ssh-uses-another-account).
+After a switch, an open session keeps the old account for up to about 33 seconds, or until its next renewal while a login file sits behind the store: see [Claude Code over SSH uses another account](/troubleshooting#claude-code-over-ssh-uses-another-account).
 
 ## Claude Code or Codex inside WSL keeps its account
 
@@ -26,7 +24,7 @@ Where macOS cannot ask for your password, as over SSH, a locked keychain stops P
 error: the credential store could not be read: the keychain is locked and cannot ask to be unlocked from here; unlock it with `security unlock-keychain`, or run Pitboard from a desktop session
 ```
 
-Unlock it, then run the command again. Meanwhile `pitboard doctor` marks each parked login `not read: the keychain is locked`. Those parked logins need no sign-in.
+Unlock it, then run the command again. Meanwhile `pitboard doctor` marks each parked login `not read: the keychain is locked`, and none needs a sign-in.
 
 ## Windows says Credential Manager cannot be reached
 
@@ -64,7 +62,7 @@ The command line looks for `claude` and `codex` on your `PATH`, and says:
 error: `claude` is not on this machine, and Pitboard signs in with Claude Code's own sign-in. Install Claude Code, or point Pitboard at it.
 ```
 
-The app's dialog for adding an account says Pitboard cannot find Claude Code or the Codex CLI, links how to install it, and dims the sign-in.
+The app's **Add Account** dialog says so too, and links how to install the tool.
 
 Install the tool. For Codex, install OpenAI's Codex CLI: Pitboard does not use the copy inside the ChatGPT app. If the tool is installed, add its folder to your `PATH`, or set `PITBOARD_CLAUDE` or `PITBOARD_CODEX` to its path.
 
@@ -85,4 +83,4 @@ Install the tool. For Codex, install OpenAI's Codex CLI: Pitboard does not use t
   </Tab>
 </Tabs>
 
-The app looks again each time the dialog opens and each time its window comes to the front, so return to the dialog after you install.
+The app looks again each time the dialog opens and each time its window comes to the front.

@@ -35,14 +35,9 @@ Where nothing was signed in, the first line names the tool instead: `Switched Cl
 
 ## What Pitboard checks first
 
-Pitboard moves nothing until the account you switch to has a parked login, and the tool passes its own checks:
+Pitboard moves nothing until the account has a parked login and the tool is signed in to an enrolled account, or to nothing. For Claude Code and Codex, Anthropic or OpenAI first confirms over the network that the parked login works and is that account's. A Claude Desktop switch needs Claude closed instead.
 
-| Tool | Before a switch |
-| --- | --- |
-| Claude Code, Codex | Anthropic or OpenAI confirms over the network that the parked login works and is that account's. The tool is signed in to an enrolled account, or to nothing. |
-| Claude Desktop | Claude is closed, as [Switch accounts](/guides/claude-desktop#switch-accounts) shows, and signed in to an enrolled account or signed out. Pitboard asks no service. |
-
-An expired or refused parked login needs a [sign-in again](/guides/sign-in-again). [Error and warning codes](/reference/errors) lists every code. `pitboard use` with the account in use moves no login: it only corrects Claude Code's config when that names another account.
+An expired or refused parked login needs a [sign-in again](/guides/sign-in-again). [Error and warning codes](/reference/errors) lists every refusal. `pitboard use` with the account in use moves no login: it only corrects Claude Code's config when that names another account.
 
 ## Replace a login Anthropic refuses
 

@@ -10,18 +10,15 @@ A Claude Desktop login is claude.ai's session cookie in `Cookies`, the site's st
 
 ## What Pitboard does not do for Claude Desktop
 
-Pitboard reads no usage for a Claude Desktop account and asks claude.ai nothing.
-
-- Pitboard never switches Claude Desktop by itself: it has no usage to decide from.
+- Pitboard reads no usage for a Claude Desktop account, so it never switches Claude Desktop by itself.
 - Pitboard never renews a parked Claude Desktop login. It shows when the sign-in may lapse, from the date the session cookie carries. That date is a guess: claude.ai may end the sign-in sooner or keep it longer.
 - A parked login that no longer works opens Claude signed out. [Sign in again](/guides/claude-desktop#sign-in-again) mends it.
-- A Claude Desktop account has no [account window](/guides/account-windows). Those belong to Claude Code and Codex accounts.
 
 ## Claude Desktop logins
 
 Pitboard asks claude.ai nothing and decrypts nothing, so no service tells it whose a login is. It knows a login by an 8-byte fingerprint of its session cookie as stored. As measured in Claude 2.19675.0, that stored value stays the same across a quit and an open.
 
-Pitboard records the fingerprint when you enrol the account and when it puts the account in use. It reads the cookie only during a change, with Claude closed. A read opens only Claude's settings, `config.json` and `config.json.journal`, and says who is in use as Pitboard last read it, with when.
+Pitboard records the fingerprint when you enrol the account and when it puts the account in use, and reads the cookie only during a change, with Claude closed. A read opens only `config.json` and `config.json.journal`, and says who was in use at Pitboard's last read of Claude, and when that was.
 
 Claude can replace an account's session cookie while it stays signed in, as seen once in 2.19675.0 on 5 October 2026. So Pitboard takes a session cookie it has not seen as the account Claude names in one case: `config.json` names the account Pitboard last read in use, that account holds no parked login, and neither token cache is emptied. A switch then parks that login under that account and warns `login_taken_as_named`. Nothing is deleted on Claude's word.
 
@@ -33,9 +30,7 @@ Not known: how often Claude replaces its own login. Not known either: whether qu
 
 Pitboard renames these files into a folder of its own and back, and never copies a file. A rename cannot leave a file half written, so each is whole in one of two places: Claude's data folder, or one folder under `~/.pitboard/parks`. `state.json` names both places before the first rename. Pitboard moves the keys by rewriting `config.json`, and keeps them in that folder while the account is parked.
 
-As measured in Claude 2.19675.0, Claude writes its cookie store, its settings and the site's storage as it quits. Pitboard moves them only while Claude is closed. It reads the list of processes before it starts, again before it records the move, and after its last write. Any program inside Claude, or inside the data folder, counts as Claude open. [Claude Desktop files](/reference/files#claude-desktop-files) says how Pitboard tells Claude, and gives the exceptions.
-
-While it moves them, Pitboard holds a lock on the data folder, so another Pitboard directory changes nothing there.
+As measured in Claude 2.19675.0, Claude writes its cookie store, its settings and the site's storage as it quits. Pitboard moves them only while Claude is closed. It reads the list of processes before it starts, again before it records the move, and after its last write, and holds a lock on the data folder throughout, so another Pitboard directory changes nothing there. Any program inside Claude, or inside the data folder, counts as Claude open. [Claude Desktop files](/reference/files#claude-desktop-files) says how Pitboard tells Claude, and gives the exceptions.
 
 A switch parks one account, which leaves Claude signed out, then puts the other in. Pitboard records each half as done before the next begins. Adding an account parks the account in use and stops there: you sign in inside Claude, and Pitboard enrols that account once Claude quits. Neither signs anything out at claude.ai.
 

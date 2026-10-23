@@ -4,13 +4,13 @@ sidebarTitle: "Codex"
 description: "Add Codex accounts and restart what runs Codex after a switch."
 ---
 
-Until you enrol a Codex account, Pitboard lists nothing about OpenAI's Codex CLI, not even the account Codex is signed in to. It asks OpenAI nothing either. In the app, the tip **Use Pitboard with Codex** offers to enrol one.
+Until you enrol a Codex account, Pitboard lists nothing about OpenAI's Codex CLI, not even the account Codex is signed in to, and asks OpenAI nothing.
 
 ## Add Codex accounts
 
 Add each one as [Add another account](/guides/accounts#add-another-account) shows: in the app, choose **Codex** under **Tool** and enter the name alone, and on the command line, start the label with `codex/`.
 
-In the app, start with **Add Codex Account** in the tip **Use Pitboard with Codex**. Pitboard reads which account Codex is signed in to only then, and opens **Name This Account** for it, or **Add Account** set to Codex where Codex is signed in to none. On the command line, `pitboard enroll codex/personal` enrols the account Codex is signed in to at once.
+In the app, start with **Add Codex Account** in the tip **Use Pitboard with Codex**. Pitboard reads which account Codex is signed in to only then, and offers to name it. On the command line, `pitboard enroll codex/personal` enrols that account at once.
 
 Adding an account runs `codex login` from OpenAI's Codex CLI, not the copy inside the ChatGPT app. If the dialog says Pitboard cannot find the Codex CLI, see [Pitboard cannot find a tool](/troubleshooting/accounts#pitboard-cannot-find-a-tool).
 
@@ -46,8 +46,8 @@ In the app, a Codex switch while the ChatGPT app is open asks first, then quits 
 
 ## How Codex accounts differ
 
-- Pitboard never switches Codex by itself. [Switch before an account runs out](/guides/automatic-switching) is for Claude Code only.
+- Pitboard never switches Codex by itself.
 - Pitboard identifies a Codex login from the login itself, without asking OpenAI. See [How Pitboard knows whose login it is](/concepts/identity).
-- A switch still asks OpenAI whether the parked login works, by reading that account's usage. The read spends none of its limits: see [Where the numbers come from](/concepts/usage#where-the-numbers-come-from).
+- A switch asks OpenAI whether the parked login works by [reading that account's usage](/concepts/usage#where-the-numbers-come-from), which spends none of its limits.
 - A parked Codex login shows `ready` with no `good for` time, because Codex states no lifetime for its login (read in 0.154.0).
 - On macOS, Pitboard passes every parked Codex login to `security` as an argument: see [Large logins on macOS](/security#large-logins-on-macos).
