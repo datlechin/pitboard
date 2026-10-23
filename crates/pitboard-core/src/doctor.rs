@@ -182,6 +182,8 @@ pub(crate) struct ProxyFact {
     /// does not exempt fails before anything is sent, and one to a host it exempts goes out
     /// directly.
     pub(crate) socks: bool,
+    // Whether a request to a host Pitboard calls fails, as `Proxies::refuses_some` says.
+    pub(crate) fails: bool,
     /// `NO_PROXY` or `no_proxy`, whichever is read, where either is set.
     pub(crate) exempting: Option<&'static str>,
     /// The hosts Pitboard calls that it exempts, which Pitboard reaches directly.
@@ -642,6 +644,7 @@ fn network_fact(proxies: &crate::proxy::Proxies) -> NetworkFact {
                 server: proxies.server().unwrap_or_default(),
                 on_loopback: proxies.on_loopback(),
                 socks: proxies.socks(),
+                fails: proxies.refuses_some(),
                 exempting: proxies.exempting(),
                 exempt: proxies.exempt_hosts(),
             }),
@@ -2483,7 +2486,7 @@ fn judge_network(network: &NetworkFact) -> Check {
             Some(passed) => warn("network", NAME, format!("direct: {passed}"), set_right),
         };
     };
-    let fails = requests_fail(proxy);
+    let fails = proxy.fails;
     let mut detail = if !proxy.socks {
         format!("through {}, from {}", proxy.address, proxy.variable)
     } else {
@@ -2524,13 +2527,6 @@ fn judge_network(network: &NetworkFact) -> Check {
         None => ok("network", NAME, detail),
         Some(_) => warn("network", NAME, detail, set_right),
     }
-}
-
-/// Whether each request through `proxy` to a host Pitboard calls that the variable exempting
-/// hosts does not name fails: whether it is a SOCKS proxy, which Pitboard does not use yet,
-/// and any host Pitboard calls is not exempt from it.
-fn requests_fail(proxy: &ProxyFact) -> bool {
-    proxy.socks && proxy.exempt.len() < crate::proxy::called().len()
 }
 
 /// What the variable exempting hosts does with the hosts Pitboard calls, where one is set:
@@ -2886,7 +2882,7 @@ fn judge_schedule_proxy(facts: &Facts) -> Option<Check> {
     // Installed again from here, the schedule would be given a SOCKS proxy that fails its
     // requests, so the variable is to be changed first.
     let advice = match &facts.network.proxy {
-        Some(proxy) if requests_fail(proxy) => format!(
+        Some(proxy) if proxy.fails => format!(
             "The schedule's runs are given the proxy variables it was installed with. \
              Installed again from here, they would be given this run's SOCKS proxy, which \
              Pitboard does not use yet, and their requests would fail. Set {} to an HTTP \
@@ -6237,6 +6233,7 @@ mod tests {
             address: "socks5h://127.0.0.1:1080".into(),
             server: "127.0.0.1:1080".into(),
             socks: true,
+            fails: true,
             ..on_loopback()
         };
         f.network = by(socks());
@@ -6265,6 +6262,7 @@ mod tests {
             ]
             .map(String::from)
             .to_vec(),
+            fails: false,
             ..socks()
         });
         let checks = evaluate(&f);
@@ -6422,6 +6420,7 @@ mod tests {
             server: "proxy.example.com:3128".into(),
             on_loopback: false,
             socks: false,
+            fails: false,
             exempting,
             exempt: exempt.iter().map(|host| (*host).to_string()).collect(),
         }
