@@ -509,10 +509,10 @@ window loads its site, and whatever the site's pages load, as a browser would.
     of a model; and `windows_records_key`, its records' key. `Pitboard.exe --unregister`
     calls `unschedule_app`, which takes the renewal task away where it runs the command line
     beside the app. The snapshot carries what an app shows of the tools, a sign-in, the
-    command line a terminal runs, a limit and its pace, a parked login, a renewal run and
-    doctor's checks, made by `present/` and the model's lanes, so no free function says it
-    again. The helpers `present/` makes it with here, `tools`, `usage_level`, `renewal_note`
-    and `doctor_summary`, are the crate's own.
+    command line a terminal runs, a limit and its pace, a parked login and doctor's checks,
+    made by `present/` and the model's lanes, so no free function says it again. The
+    helpers `present/` makes it with here, `tools`, `usage_level` and `doctor_summary`, are
+    the crate's own.
   - `launch.rs` is the core the model's lanes call, `AppCore`, which nothing exports. It is
     made from the `AppLaunch` the app was started with, read as `AppContext::discover`
     reads it, the first time a lane needs it, and made once more a while after a login
@@ -552,9 +552,10 @@ window loads its site, and whatever the site's pages load, as a browser would.
     `windows.rs` the account windows' bookkeeping; `lanes.rs` runs what it
     decides, on a lane of reads, which reads the schedule, doctor's checks and the log too
     and asks the core's look whether to switch Claude Code by itself, a lane of changes, one
-    at a time, which also repairs and changes the schedule and renews, a lane that lists
-    processes and asks the app's `AppControl` about other apps, a lane that asks what is
-    installed and looks for the `pitboard` a terminal runs, a thread of its own for each
+    at a time, which also repairs and changes the schedule, a lane that lists processes and
+    asks the app's `AppControl` about other apps, a lane that asks what is installed, reads
+    whose login a tool stores once somebody asks (`Job::ReadSignedIn`) and looks for the
+    `pitboard` a terminal runs, a thread of its own for each
     sign-in, a lane that types a code back to one or stops it, a lane that reads and writes
     what the model keeps, in Pitboard's directory and the windows' records in the app's own,
     and one that posts through the app's `Notifications`, and tells the listener on a thread
@@ -572,10 +573,10 @@ window loads its site, and whatever the site's pages load, as a browser would.
     is chosen, asking the core's look after every read and every 30 seconds and saying under
     the setting what it came to, warms up the accounts turned on on a lane of its own,
     asking after every read and every 30 seconds, with every read's `Overview` of them, or
-    why it cannot be read, and a
-    notification once for the words of a warm-up by itself that came to nothing, keeps the
-    app's own preferences, and keeps the daily renewal schedule, renews now, makes doctor's
-    checks, reads the activity log and finds the `pitboard` a terminal runs. It keeps the
+    why it cannot be read, and a notification once for the words of a warm-up by itself
+    that came to nothing, keeps the app's own preferences, and keeps the daily renewal
+    schedule, makes doctor's checks, reads the activity log and finds the `pitboard` a
+    terminal runs. It keeps the
     account windows' books too: which store is whose and each window's last page, which
     windows close and which stores go after a read, the link waiting for an account, with
     the wait before it can be opened, and the downloads. Its tests are files of their own
@@ -588,7 +589,8 @@ window loads its site, and whatever the site's pages load, as a browser would.
     the moment, and builds every sentence and row the menu bar, the menu and the window
     show, so a view decides nothing. `accounts.rs` is the menu bar's words and the
     accounts' sections and rows, with their limits and what each one's own menu offers,
-    `notices.rs` the notices, their order and what the menu says of them, `setup.rs` the
+    dimmed where it cannot be chosen now, which a shortcut menu leaves out, and the macOS
+    Account menu's items while no account is selected, `notices.rs` the notices, their order and what the menu says of them, `setup.rs` the
     footing, the step it asks for and what stands in for an empty list (a tool nothing is
     enrolled of is read only once its step is taken up, `Intent::NameSignedIn`), `sheets.rs` the
     sheets with their default buttons' words, the quit question and a failure's alert, with
@@ -733,7 +735,8 @@ window loads its site, and whatever the site's pages load, as a browser would.
     on there, and a link opens `ms-settings:startupapps`. The settings read it again at each
     visit and as `MainWindow` is activated while they show. Each read and change is said to
     the model as `Intent::OpensAtLogin`, on where Settings turned it off too, for its setup
-    tip, whose button `AccountsPage` turns into a change of its own. `SettingsViewModel` is what the settings page shows and sends,
+    tip, whose button `AccountsPage` turns into a change of its own, or into Settings where
+    Windows refuses it. `SettingsViewModel` is what the settings page shows and sends,
     beyond the model's words its own, each warm-up account a `WarmAccountRow`, and
     `Versions` the app's own version. `AccountsViewModel`, `ActivityViewModel` and `MachineViewModel` are what
     the accounts, activity and This PC pages bind to, told part by part as `AppModel` tells
@@ -861,10 +864,15 @@ window loads its site, and whatever the site's pages load, as a browser would.
     UserDefaults held before `app.json` and `windows.json`, once.
   - `PitboardApp/System/MacPlatform.swift` is what the model asks of macOS:
     `MacAppControl` (`NSRunningApplication` and `NSWorkspace`), `MacNotifications`
-    (Notification Center, a category for each button `notification_buttons` names, and
-    permission asked at the first post), `NotificationsAllowed` (whether macOS turned them
-    off, for the settings) and `MacLocalTime` (the person's locale, calendar and 12 or 24
-    hours).
+    (Notification Center, a category for each button `notification_buttons` names, brought
+    forward by the system where it opens a window, and permission asked at the first post),
+    `NotificationsAllowed` (whether macOS turned them off, for the settings) and
+    `MacLocalTime` (the person's locale, calendar and 12 or 24 hours). The settings' **Open
+    Notification Settings** opens
+    `x-apple.systempreferences:com.apple.Notifications-Settings.extension?id=` and the app's
+    bundle identifier, which Apple does not document. Read on macOS 27.0.1 (26A434): that
+    extension takes the scheme (`allowsXAppleSystemPreferencesURLScheme`) and reveals an app
+    by its bundle identifier; nobody has opened the URL to see it land on Pitboard's page.
     `LoginItem.swift` is opening at login (`SMAppService`) and `CommandLineTool.swift`
     linking the command line with an administrator's password, which stay the app's own.
     The model is told what macOS says of the login item, `Intent::OpensAtLogin`, at launch,
@@ -4767,11 +4775,13 @@ Microsoft's documentation.
   show changes in quantities, overlays to show a status, and no swaths of pure red, yellow or
   green in a base icon; the icon shows no title, where the macOS menu bar item shows the
   figure. So the model's `MenuBarText` carries the step of the limit the bar names and
-  whether the menu opens on something to look at, and its tooltip as a line for each account
-  in use. `Tray/Plenty.ico`, `Low.ico` and `Out.ico`, drawn in `apps/windows/Icon` at 16,
-  20, 24 and 32 px, light the mark's row in a neutral tone as long as what is left, and
-  attention draws the shell's stock `SIID_WARNING` over the bottom right at five eighths of
-  the icon. `DrawIconEx` blends into a 32-bit DIB premultiplied, and an icon's pixels are
+  whether the menu opens on something to look at, and its tooltip as whether it does, which
+  Narrator reads with the icon, then a line for each account in use. `Tray/Plenty.ico`,
+  `Low.ico` and `Out.ico`, drawn in `apps/windows/Icon` at 16, 20, 24, 32, 40 and 48 px, the
+  sizes `NotificationIconSize` gives up to 300%, light the mark's row in a neutral tone as
+  long as what is left, `None.ico` lights none before a reading, and attention draws the
+  shell's stock `SIID_WARNING` over the bottom right at five eighths of the icon.
+  `DrawIconEx` blends into a 32-bit DIB premultiplied, and an icon's pixels are
   straight, so `Shell.NotificationIcon` straightens them before `CreateIconIndirect`
   (`IconImageTests.AttentionPutsTheStandardWarningOverTheBottomRight`, which compares the
   icon's top third with the plain one's at 20 px, where its edges are partly covered).
