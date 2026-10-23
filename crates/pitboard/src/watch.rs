@@ -14,7 +14,9 @@
 use crate::{Report, emit, followed, located, ui};
 use clap::Subcommand;
 use pitboard_core::duty::autoswitch::{Auto, Blind, Look, Skip, Threshold};
-use pitboard_core::duty::cadence::{DECIDE_EVERY_SECONDS, Refusals};
+use pitboard_core::duty::cadence::{
+    DECIDE_EVERY_SECONDS, LOOK_EVERY_SECONDS, READ_EVERY_SECONDS, Refusals,
+};
 use pitboard_core::duty::warm::{Overview, Standing};
 use pitboard_core::error::{self, Error};
 use pitboard_core::provider::ProviderId;
@@ -26,14 +28,6 @@ use serde_json::{Value, json};
 use std::collections::{HashMap, HashSet};
 use std::process::ExitCode;
 use std::time::Duration;
-
-/// How often it looks at when the accounts and their readings were last written: as often as
-/// the app looks. A look reads two files' times and nothing else.
-const LOOK_EVERY: Duration = Duration::from_secs(2);
-
-/// How often it asks the services about every account: as often as the app reads them. Each
-/// account is asked only as often as its budget allows whichever front end asks.
-const READ_EVERY: i64 = 300;
 
 /// The share `watch` and its service switch at.
 #[derive(clap::Args)]
@@ -226,7 +220,7 @@ pub(crate) fn run(
     let (mut read_at, mut decided_at, mut seen) = (None::<i64>, 0, None);
     loop {
         let now = epoch();
-        if read_at.is_none_or(|at| now - at >= READ_EVERY || now < at) {
+        if read_at.is_none_or(|at| now - at >= READ_EVERY_SECONDS || now < at) {
             // What a read could not learn stays as it was measured, which the next decision
             // reads: nothing to say about it here.
             let _ = pitboard.status(false);
@@ -271,7 +265,7 @@ pub(crate) fn run(
                 }
             }
         }
-        std::thread::sleep(LOOK_EVERY);
+        std::thread::sleep(Duration::from_secs(LOOK_EVERY_SECONDS.unsigned_abs()));
     }
 }
 

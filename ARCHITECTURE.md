@@ -253,13 +253,15 @@ window loads its site, and whatever the site's pages load, as a browser would.
     (`switch::folder::read`). `Provider::own_record` reads Claude Code's config for that
     doubt and for the words that say it, never for whose a login is.
   - `duty/`: what every front end that acts by itself shares, whatever it does. `cadence.rs`
-    is how often it decides with nothing written (`DECIDE_EVERY_SECONDS`, 30), how long
-    something that came to nothing waits before it is tried again (`retry_after`, 60 seconds
-    doubling to 15 minutes), how many attempts are made at one thing (`ATTEMPTS`), and
-    `Refusals`, a front end's refusals in a row and their wait, on its own clock. `ledger.rs`
-    is `Tries`, the attempts and the reasons said about one thing, and how a duty's record
-    is read and written, only under `state.lock`. `mod.rs` holds `Look`, what a duty's look
-    at its files came to. The automatic switch and the warm-up are its duties.
+    is how often it looks at its files (`LOOK_EVERY_SECONDS`, 2), reads every account
+    (`READ_EVERY_SECONDS`, 300) and decides with nothing written (`DECIDE_EVERY_SECONDS`,
+    30), how long something that came to nothing waits before it is tried again
+    (`retry_after`, 60 seconds doubling to 15 minutes), how many attempts are made at one
+    thing (`ATTEMPTS`), and `Refusals`, a front end's refusals in a row and their wait, on
+    its own clock. `ledger.rs` is `Tries`, the attempts and the reasons said about one
+    thing, and how a duty's record is read and written, only under `state.lock`. `mod.rs`
+    holds `Look`, what a duty's look at its files came to. The automatic switch and the
+    warm-up are its duties.
   - `duty/warm/`: warming up an account, starting its five-hour period as soon as the last one
     resets, for the Claude Code accounts somebody turned it on for. `mod.rs` holds the
     setting, `warm.json`: the accounts turned on, by id, and `Range`, the span of each day,

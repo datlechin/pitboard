@@ -51,7 +51,9 @@ use crate::{
     Tool, Usage, WarmRefused, Warning,
 };
 use pitboard_core::duty::autoswitch::Threshold;
-use pitboard_core::duty::cadence::{DECIDE_EVERY_SECONDS, Refusals};
+use pitboard_core::duty::cadence::{
+    DECIDE_EVERY_SECONDS, LOOK_EVERY_SECONDS, READ_EVERY_SECONDS, Refusals,
+};
 use pitboard_core::duty::warm::Overview;
 use pitboard_core::label::SEPARATOR;
 use pitboard_core::provider::{self, ProviderId, SignsIn};
@@ -63,13 +65,7 @@ use std::time::Duration;
 /// How often the model does what it does by itself, and how long it waits for an app.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct Cadence {
-    /// How often it looks whether anything on this machine has changed: one look at when
-    /// Pitboard's account index and its usage readings were last written, which costs no
-    /// network and no keychain. Before it, a switch typed in a terminal left the menu bar
-    /// naming the account the person had just stopped using for as long as five minutes.
     pub(crate) look_every: Duration,
-    /// How often it reads every account by itself. Usage is asked of each tool's service
-    /// for every account, so it is asked sparingly.
     pub(crate) read_every: Duration,
     /// How often, with switching Claude Code by itself on, it asks the core's look though
     /// nothing was written: an account put in use stops settling, and the wait after a
@@ -98,8 +94,8 @@ pub(crate) struct Cadence {
 impl Cadence {
     /// The app's, as the Swift model kept it.
     pub(crate) const APP: Cadence = Cadence {
-        look_every: Duration::from_secs(2),
-        read_every: Duration::from_secs(300),
+        look_every: Duration::from_secs(LOOK_EVERY_SECONDS.unsigned_abs()),
+        read_every: Duration::from_secs(READ_EVERY_SECONDS.unsigned_abs()),
         decide_every: Duration::from_secs(DECIDE_EVERY_SECONDS.unsigned_abs()),
         stale_after: Duration::from_secs(60),
         quit_within: Duration::from_secs(30),
