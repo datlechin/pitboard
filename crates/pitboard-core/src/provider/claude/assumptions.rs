@@ -134,7 +134,12 @@ pub(crate) const PER_SYSTEM: &[PerSystem] = &[
         windows: Read("2.1.300"),
     },
     everywhere("logout_skips_the_lock", VERIFIED_AGAINST),
-    everywhere("account_scoped_keys", VERIFIED_AGAINST),
+    PerSystem {
+        name: "account_scoped_keys",
+        macos: Read("2.1.303"),
+        linux: Read("2.1.303"),
+        windows: Read("2.1.303"),
+    },
     PerSystem {
         name: "credential_cache",
         macos: Read("2.1.278"),
@@ -604,17 +609,24 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
     Assumption {
         name: "account_scoped_keys",
         fact: "signing in again deletes claudeAiOauth, organizationUuid, trustedDeviceToken, \
-               enterpriseGateway and designOauth, and `/logout` clears the whole document but \
-               writes back `coworkRemoteDevice`, so those five belong to the account",
-        read_from: "the re-login prune and the logout path",
-        verified_against: VERIFIED_AGAINST,
-        depends: "switch::ACCOUNT_SCOPED, and what a park holds",
+               trustedDeviceEnrolledAfterRefusalAtMs, enterpriseGateway, designOauth and \
+               cloudSessionsOauth, and `/logout` clears the whole document but writes back \
+               `coworkRemoteDevice`, so those seven belong to the account. 2.1.296 deleted \
+               five, without trustedDeviceEnrolledAfterRefusalAtMs and cloudSessionsOauth",
+        read_from: "the re-login prune and the logout path, which also revokes \
+                    cloudSessionsOauth's refresh token, in the darwin-arm64, linux-x64, \
+                    win32-x64 and win32-arm64 builds of 2.1.303, read as bytes on 2026-10-20; \
+                    the win32-x64 builds of 2.1.300 to 2.1.302 prune the same seven",
+        verified_against: "2.1.303",
+        depends: "document::ACCOUNT_SCOPED, and what a park holds",
         probe: &[
             "claudeAiOauth",
             "organizationUuid",
             "trustedDeviceToken",
+            "trustedDeviceEnrolledAfterRefusalAtMs",
             "enterpriseGateway",
             "designOauth",
+            "cloudSessionsOauth",
         ],
         absent: &[],
     },

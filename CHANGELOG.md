@@ -7,6 +7,11 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security
+
+- A switch parks Claude Code's `cloudSessionsOauth` and `trustedDeviceEnrolledAfterRefusalAtMs`
+  with the outgoing account's login, and no longer leaves them for the incoming account.
+
 ## [0.15.0] - 2026-10-17
 
 ### Added

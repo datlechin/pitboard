@@ -10,16 +10,14 @@ use super::api;
 use crate::store;
 use serde_json::{Value, json};
 
-/// Keys that belong to the account rather than to the machine. Claude Code deletes all of
-/// them along with the login on logout, so leaving one behind would hand the incoming
-/// account the outgoing account's device token or its second OAuth block. Measured in
-/// 2.1.278: `delete i.claudeAiOauth, delete i.organizationUuid, delete i.trustedDeviceToken,
-/// delete i.enterpriseGateway, delete i.designOauth`.
-pub(crate) const ACCOUNT_SCOPED: [&str; 4] = [
+// Claude Code's sign-in prunes these with `claudeAiOauth` (account_scoped_keys).
+pub(crate) const ACCOUNT_SCOPED: [&str; 6] = [
     "organizationUuid",
     "trustedDeviceToken",
+    "trustedDeviceEnrolledAfterRefusalAtMs",
     "enterpriseGateway",
     "designOauth",
+    "cloudSessionsOauth",
 ];
 
 /// The account's whole slice of a credential document: `claudeAiOauth` and whatever else of
@@ -162,6 +160,8 @@ mod tests {
             "trustedDeviceToken": "device-of-a",
             "enterpriseGateway": {"url": "https://gateway.example"},
             "designOauth": {"refreshToken": "design-of-a"},
+            "trustedDeviceEnrolledAfterRefusalAtMs": 1_760_000_000_000_i64,
+            "cloudSessionsOauth": {"refreshToken": "cloud-of-a"},
             "mcpOAuth": {"a-server": "token"},
             "somethingOfThisMachine": true,
         });
@@ -173,6 +173,8 @@ mod tests {
                 "trustedDeviceToken": "device-of-a",
                 "enterpriseGateway": {"url": "https://gateway.example"},
                 "designOauth": {"refreshToken": "design-of-a"},
+                "trustedDeviceEnrolledAfterRefusalAtMs": 1_760_000_000_000_i64,
+                "cloudSessionsOauth": {"refreshToken": "cloud-of-a"},
             }),
             "everything the account owns, and nothing the machine or another server owns"
         );
@@ -235,12 +237,22 @@ mod tests {
             "trustedDeviceToken": "device-of-a",
             "enterpriseGateway": {"url": "https://gateway.example"},
             "designOauth": {"refreshToken": "design-of-a"},
+            "trustedDeviceEnrolledAfterRefusalAtMs": 1_760_000_000_000_i64,
+            "cloudSessionsOauth": {"refreshToken": "cloud-of-a"},
             "somethingOfThisMachine": true,
         });
         let after = splice(&before, &json!({"refreshToken": "new"})).expect("spliced");
         assert_eq!(after["claudeAiOauth"]["refreshToken"], "new");
         assert_eq!(after["somethingOfThisMachine"], true);
-        for key in ACCOUNT_SCOPED {
+        // What 2.1.303's sign-in prunes beside `claudeAiOauth` (account_scoped_keys).
+        for key in [
+            "organizationUuid",
+            "trustedDeviceToken",
+            "trustedDeviceEnrolledAfterRefusalAtMs",
+            "enterpriseGateway",
+            "designOauth",
+            "cloudSessionsOauth",
+        ] {
             assert!(after.get(key).is_none(), "{key} was left behind");
         }
     }
