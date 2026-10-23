@@ -11,7 +11,7 @@ pitboard doctor
 
 Do not switch accounts while any check shows `✗`, broken. [`doctor`](/reference/maintenance-commands#doctor) lists every check and mark.
 
-`pitboard log` lists the last 20 changes and how each ended; `-n 50` lists 50. In the app, the Pitboard window's **This Mac** pane makes the same checks, and **Activity** shows the log. On Windows, the pane is **This PC**.
+`pitboard log` lists the last changes and how each ended. In the app, the Pitboard window's **This Mac** pane, or **This PC** on Windows, makes the same checks, and **Activity** shows the log.
 
 [Error and warning codes](/reference/errors) gives the cause and fix of each code a message names. These pages cover the rest:
 
@@ -46,19 +46,13 @@ When `stow` deletes nothing, its message says why, and [`stow`](/reference/recov
 
 ## An account reads `login replaced outside Pitboard`
 
-The only login of the account in use ended outside Pitboard. Pitboard held no copy, so that login is gone, and every read warns with `login_replaced`.
-
-| Tool | What ended it |
-| --- | --- |
-| Claude Code | A sign-in outside Pitboard, such as `/login`, wrote over it. |
-| Codex | A sign-in outside Pitboard, such as `codex login`, wrote over it. |
-| Claude Desktop | A sign-in outside Pitboard replaced it, or the account was signed out in Claude, which ends its login at claude.ai. |
+The only login of the account in use ended outside Pitboard: a sign-in such as `/login` or `codex login` wrote over it, or the account was signed out in Claude, which ends its login at claude.ai. Pitboard held no copy, so that login is gone, and every read warns with `login_replaced`.
 
 [Sign in to the account again](/guides/sign-in-again), or [forget it](/guides/accounts#forget-an-account). Either stops the warning. To add another account without ending the login in use, follow [Add another account](/guides/accounts#add-another-account).
 
 ## Smart App Control blocks Pitboard
 
-On Windows, Smart App Control blocks unsigned apps that Microsoft's cloud service cannot vouch for. It cannot allow a single app, as Microsoft's [What is Smart App Control](https://support.microsoft.com/en-us/topic/what-is-smart-app-control-285ea03d-fa88-4d56-882e-6698afdb7003) says.
+On Windows, Smart App Control blocks unsigned apps that Microsoft's cloud service cannot vouch for, and cannot allow a single app, as Microsoft's [What is Smart App Control](https://support.microsoft.com/en-us/topic/what-is-smart-app-control-285ea03d-fa88-4d56-882e-6698afdb7003) says.
 
 With Smart App Control on, Windows opened Pitboard's unsigned installer and command line with no prompt, measured on 18 October 2026 on Windows 11 build 26300. Whether Smart App Control lets the app start has not been measured. The app loads `WinSparkle.dll`, which stays unsigned in signed releases too, as the [code signing policy](/install/code-signing-policy) says.
 
