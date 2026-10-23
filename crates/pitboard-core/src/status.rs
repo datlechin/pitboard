@@ -1137,15 +1137,10 @@ fn assemble(
             });
             continue;
         }
-        // A login that could not be read, was read and is not one account's, or whose account
-        // could not be told, and that nothing pins on any account. Said, rather than left
-        // out, because leaving it out reads as nobody being signed in; but only for the tool a
-        // bare label means and for a tool somebody uses through Pitboard, so a machine that
-        // has never enrolled a Codex account sees nothing about Codex at all.
-        let used =
-            which == crate::label::DEFAULT || state.accounts.iter().any(|a| a.provider() == which);
+        // A login nothing pins on an account is said, since leaving it out reads as nobody
+        // signed in.
         let untold = matches!(live.signed_in, Some(Err(_)));
-        if (live.out_of_reach || untold) && used {
+        if (live.out_of_reach || untold) && shown(state, which) {
             rows.push(Row {
                 provider: which,
                 label: None,

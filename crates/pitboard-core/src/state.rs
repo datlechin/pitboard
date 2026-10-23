@@ -911,28 +911,10 @@ fn file(ctx: &Context) -> PathBuf {
     home::dir(ctx).join("state.json")
 }
 
-/// When Pitboard's account index last changed, in epoch milliseconds, or 0 when there is
-/// none.
-///
-/// Three front ends run on one machine and none of them could tell when another had
-/// changed anything. A switch typed in a terminal left the menu bar naming the account the
-/// person had just stopped using, for as long as five minutes, with a button offering a
-/// switch that had already happened.
-///
-/// This is the cheapest true answer there is: one stat of one file. It is deliberately the
-/// account index alone and not the whole directory. The status line writes usage readings
-/// after a message in any open session, and those say nothing about who is signed in: a
-/// front end follows them with `readings::changed_at`, and takes only the numbers.
-/// Milliseconds rather than seconds, as there: a switch made in the second of the last write
-/// a front end saw would otherwise go unseen.
+// One stat of the account index alone: the readings the status line writes after every
+// message say nothing of who is signed in, and a front end follows them apart.
 pub(crate) fn changed_at(ctx: &Context) -> i64 {
-    std::fs::metadata(file(ctx))
-        .and_then(|m| m.modified())
-        .ok()
-        .and_then(|at| at.duration_since(std::time::UNIX_EPOCH).ok())
-        .map_or(0, |since| {
-            i64::try_from(since.as_millis()).unwrap_or(i64::MAX)
-        })
+    crate::time::changed_at(&file(ctx))
 }
 
 pub(crate) fn load(ctx: &Context) -> Result<State> {

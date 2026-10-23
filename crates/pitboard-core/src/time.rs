@@ -96,6 +96,18 @@ impl Clock for FixedClock {
     }
 }
 
+/// When the file at `path` last changed, in epoch milliseconds, or 0 where it is not there.
+/// Milliseconds, since the second of two changes within one second would otherwise go unseen.
+pub(crate) fn changed_at(path: &std::path::Path) -> i64 {
+    std::fs::metadata(path)
+        .and_then(|m| m.modified())
+        .ok()
+        .and_then(|at| at.duration_since(std::time::UNIX_EPOCH).ok())
+        .map_or(0, |since| {
+            i64::try_from(since.as_millis()).unwrap_or(i64::MAX)
+        })
+}
+
 /// An RFC 3339 instant such as `2026-09-20T22:20:00.095287+00:00`, as epoch seconds. `None`
 /// for anything else, including a time without an offset, which names no instant.
 pub fn parse(text: &str) -> Option<i64> {
