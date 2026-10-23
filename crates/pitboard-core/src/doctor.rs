@@ -17,6 +17,7 @@ use crate::provider::claude::paths as claude;
 use crate::provider::claude::slot;
 use crate::provider::codex::paths as codex;
 use crate::provider::{LoginKind, ProviderId};
+use crate::schedule::Fault;
 use crate::service::Stored;
 use crate::state::{Key, Park, State};
 use crate::{home, park, store, switch, words};
@@ -2730,24 +2731,27 @@ fn judge_schedule(facts: &Facts) -> Option<Check> {
             again,
         ));
     };
-    if !schedule.program_found {
-        return Some(fail(
-            "schedule",
-            "renewal schedule",
-            format!("runs {}, which is not there any more", program.display()),
-            again,
-        ));
-    }
-    if crate::schedule::an_apps_own_program(program) {
-        return Some(fail(
-            "schedule",
-            "renewal schedule",
-            format!(
-                "runs {}, which is the app itself and not a command line",
-                program.display()
-            ),
-            again,
-        ));
+    match crate::schedule::fault(program, schedule.program_found) {
+        Some(Fault::Gone) => {
+            return Some(fail(
+                "schedule",
+                "renewal schedule",
+                format!("runs {}, which is not there any more", program.display()),
+                again,
+            ));
+        }
+        Some(Fault::TheApp) => {
+            return Some(fail(
+                "schedule",
+                "renewal schedule",
+                format!(
+                    "runs {}, which is the app itself and not a command line",
+                    program.display()
+                ),
+                again,
+            ));
+        }
+        None => {}
     }
     let runs = format!("daily  ·  runs {}", program.display());
     let Some(task) = &schedule.task else {

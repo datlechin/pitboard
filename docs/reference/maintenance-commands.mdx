@@ -147,7 +147,7 @@ The log is `audit.log` in Pitboard's directory, and holds no email address. Past
 | `recover` | Pitboard finishes or undoes an interrupted switch before another change. | The label the switch was to | `interrupted_switch_finished` or `interrupted_switch_undone` |
 | `reclaim` | A parked login is given back to its account. | The label | `ok` |
 | `reclaim` | A parked login is discarded. | The parked login's name, which holds an account id | `discarded` |
-| `schedule` | Daily renewal is turned on or off, or the app repairs a schedule that ran the app itself. | `install`, `uninstall` or `repair` | `ok` |
+| `schedule` | Daily renewal is turned on or off, or the app repairs a schedule that ran the app itself or a `pitboard` that is gone. | `install`, `uninstall` or `repair` | `ok` |
 | `watch-service` | The watch service is installed or taken away. | `install` or `uninstall` | `ok` |
 | `warm-up` | A warm-up runs, by itself or with `warm now` or **Warm Up Now**. | The label | `ok`, or a code from [Warm-up](/reference/errors#warm-up) |
 | `warm-on`, `warm-off` | An account is turned on or off for warm-ups. | The label | `ok` |

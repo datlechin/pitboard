@@ -1259,8 +1259,10 @@ window loads its site, and whatever the site's pages load, as a browser would.
   run not yet made or under way is a warning that names `pitboard renew`. A changed setting
   is a warning whose fix is turning daily renewal off and on again, which writes the task as
   Pitboard writes it; nothing rewrites it unasked, since the change may be the person's. The
-  app's start-up repair (`schedule::repair`) points a task at the command line inside the app
-  only where the Pitboard it runs is gone and its settings are as Pitboard wrote them. The
+  app's start-up repair (`schedule::repair`) points a schedule at the command line inside the
+  app where doctor fails it (`schedule::fault`): the Pitboard it runs is gone, on every
+  system, or it runs an app's own program. A task whose settings changed in Task Scheduler is
+  left as it is. The
   MSI's full uninstall, through `Pitboard.exe --unregister`, takes each task away, renewal's
   and the watch service's (`schedule::uninstall_for_app`), only where it runs the
   `bin\pitboard.exe` beside that `Pitboard.exe`, whatever its settings, since the removal

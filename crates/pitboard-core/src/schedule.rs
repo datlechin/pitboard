@@ -366,10 +366,28 @@ pub(crate) fn repair(ctx: &Context, permit: Permit) -> Result<bool> {
 // A task whose settings were changed in Task Scheduler stays as it is: the change may be the
 // person's, and doctor names the way back.
 fn broken(ctx: &Context, program: &Path) -> bool {
-    match task(ctx, Job::Renew) {
-        Some(task) if !task.drifted.is_empty() => false,
-        Some(_) => an_apps_own_program(program) || !program.is_file(),
-        None => an_apps_own_program(program),
+    let drifted = task(ctx, Job::Renew).is_some_and(|task| !task.drifted.is_empty());
+    !drifted && fault(program, program.is_file()).is_some()
+}
+
+/// What stops the renewal schedule from renewing anything, on any system.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Fault {
+    /// The Pitboard it runs is gone from its path, so the system fails to start it every day.
+    Gone,
+    /// It runs an app's own program, which renews nothing ([`an_apps_own_program`]).
+    TheApp,
+}
+
+/// What stops a schedule that runs `program`, `found` or not, from renewing anything, where
+/// something does: doctor's judgement and the app's repair alike.
+pub(crate) fn fault(program: &Path, found: bool) -> Option<Fault> {
+    if !found {
+        Some(Fault::Gone)
+    } else if an_apps_own_program(program) {
+        Some(Fault::TheApp)
+    } else {
+        None
     }
 }
 
@@ -828,6 +846,35 @@ mod tests {
             "a command line that is gone once the app quits"
         );
         assert_eq!(installed_program(&ctx), Some(app));
+    }
+
+    /// A schedule whose Pitboard is gone fails every day on every system, as doctor says, and
+    /// the app points it at its own command line, as it points a Windows task.
+    #[test]
+    fn a_schedule_whose_pitboard_is_gone_is_pointed_at_the_apps_command_line() {
+        let home = Scratch::new();
+        std::fs::create_dir_all(home.ctx().default_pitboard_home()).expect("a Pitboard home");
+        let brew = home.path().join("homebrew/bin/pitboard");
+        let bundled = home
+            .path()
+            .join("Applications/Pitboard.app/Contents/Helpers/pitboard");
+        a_program_at(&brew);
+        a_program_at(&bundled);
+        let ctx = home.ctx();
+        install(
+            &ctx.clone().with_schedule_program(brew.clone()),
+            Permit::for_a_test(),
+        )
+        .expect("installed from Homebrew's pitboard");
+        let the_app = ctx.clone().with_schedule_program(bundled.clone());
+        assert!(
+            !repair(&the_app, Permit::for_a_test()).expect("nothing to do"),
+            "a Pitboard that is there"
+        );
+
+        std::fs::remove_file(&brew).expect("Homebrew's pitboard uninstalled");
+        assert!(repair(&the_app, Permit::for_a_test()).expect("repaired"));
+        assert_eq!(installed_program(&ctx), Some(bundled));
     }
 
     /// A process some other job started is not the schedule's own run, and repairs the way

@@ -146,6 +146,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `pitboard doctor` says how long the Claude Code login in use has left as it says a parked
   login's, says when it has expired, and no longer warns that a login whose expiry is not known
   expires soon.
+- The macOS app points a daily renewal schedule whose `pitboard` is gone at its own command line
+  as it starts, as the Windows app does.
 
 ## [1.0.0-beta.5] - 2026-10-23
 
