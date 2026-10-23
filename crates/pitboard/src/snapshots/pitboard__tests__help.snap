@@ -146,8 +146,7 @@ Options:
 == pitboard watch
 Switch Claude Code before the account in use runs out, and warm up accounts
 
-Usage: pitboard watch [OPTIONS]
-       pitboard watch <COMMAND>
+Usage: pitboard watch [OPTIONS] [COMMAND]
 
 Commands:
   install    Have this computer's own service manager run `pitboard watch` from now on and at each
