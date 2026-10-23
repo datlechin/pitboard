@@ -136,13 +136,14 @@ public sealed class ModelTests
         CommandLine: new CommandLineShown(
             Found: null, InTerminal: null, UpdateNote: null, OffersLink: false, CannotLink: null),
         AtLimit: new AtLimitShown(
+            Title: "Before an account runs out",
             Choice: AtLimit.Notify,
             Choices: AtLimitChoices,
             At: 95, Lowest: 50, Highest: 99, Enabled: true, ShareEnabled: true, AtLabel: "When a limit reaches 95%",
             ShareLabel: "Share of a limit", Note: null, Standing: null, Terms: null),
         Warm: new WarmShown(
-            From: 360, To: 1320, RangeLabel: "06:00 to 22:00", Accounts: [], Standing: null, Note: "",
-            Enabled: false, Terms: Terms));
+            Title: "Warm up limits", From: 360, To: 1320, RangeLabel: "06:00 to 22:00", Accounts: [],
+            NoneEnrolled: "No Claude Code account is enrolled yet.", Standing: null, Note: "", Enabled: false, Terms: Terms));
 
     // One array, so two snapshots made here are equal.
     private static readonly AtLimitChoice[] AtLimitChoices =

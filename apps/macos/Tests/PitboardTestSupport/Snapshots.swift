@@ -68,7 +68,7 @@ package func snapshot(
                 found: nil, inTerminal: nil, updateNote: nil, offersLink: false,
                 cannotLink: nil),
             atLimit: AtLimitShown(
-                choice: .notify,
+                title: "Before an account runs out", choice: .notify,
                 choices: [
                     AtLimitChoice(choice: .nothing, title: "Do Nothing"),
                     AtLimitChoice(choice: .notify, title: "Notify Me"),
@@ -77,7 +77,9 @@ package func snapshot(
                 atLabel: "When a limit reaches 95%", shareLabel: "Share of a limit", note: nil,
                 standing: nil, terms: nil),
             warm: WarmShown(
-                from: 360, to: 1320, rangeLabel: "06:00 to 22:00", accounts: warming,
+                title: "Warm up limits", from: 360, to: 1320, rangeLabel: "06:00 to 22:00",
+                accounts: warming,
+                noneEnrolled: warming.isEmpty ? "No Claude Code account is enrolled yet." : nil,
                 standing: nil, note: "", enabled: false,
                 terms: TermsShown(
                     sentence: "Anthropic's terms may cover automatic switching and warm-ups.",

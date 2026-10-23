@@ -1,4 +1,5 @@
 import AppKit
+import PitboardKit
 import SwiftUI
 
 struct GeneralSettings: View {
@@ -74,12 +75,7 @@ struct GeneralSettings: View {
                     LabeledContent("Version", value: AppVersion.named())
                 } footer: {
                     // Without this, a build with no update key would look broken.
-                    Text(
-                        "This copy of Pitboard can’t update itself: it was built from source "
-                            + "and carries no update key. A copy from a release keeps itself up "
-                            + "to date."
-                    )
-                    .footnote()
+                    Text(noUpdateKey()).footnote()
                 }
             }
         }

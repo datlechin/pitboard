@@ -15,7 +15,6 @@ public sealed partial class SettingsPage : Page
     public SettingsPage()
     {
         InitializeComponent();
-        NoWarmAccount.Header = SettingsViewModel.NoWarmAccount;
         About.Description = SettingsViewModel.Copyright;
         foreach (var link in SettingsViewModel.Links)
         {

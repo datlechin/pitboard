@@ -1,3 +1,5 @@
+using Pitboard.Core;
+
 namespace Pitboard.Windows;
 
 // The updater, as the macOS app's Updates: one that cannot update says why and offers nothing.
@@ -28,12 +30,8 @@ public interface IUpdates
     void Shutdown();
 }
 
-public sealed class NoUpdates(string refusal = NoUpdates.NoKey) : IUpdates
+public sealed class NoUpdates(string? refusal = null) : IUpdates
 {
-    public const string NoKey =
-        "This copy of Pitboard can’t update itself: it was built from source and carries no update key. "
-        + "A copy from a release keeps itself up to date.";
-
     public const string BadKey =
         "This copy of Pitboard can’t update itself: the update key it was built with is not a valid key. "
         + "Install a later version by hand.";
@@ -49,7 +47,7 @@ public sealed class NoUpdates(string refusal = NoUpdates.NoKey) : IUpdates
 
     public bool Available => false;
 
-    public string? Refusal => refusal;
+    public string? Refusal => refusal ?? PitboardFfiMethods.NoUpdateKey();
 
     public bool Beta => false;
 

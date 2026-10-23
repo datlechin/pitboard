@@ -666,6 +666,11 @@ pub(crate) fn cannot_link(os: Os) -> String {
     }
 }
 
+// Said in place of the update settings by a copy built from source, on both systems.
+pub(crate) const NO_UPDATE_KEY: &str = "This copy of Pitboard can’t update itself: it was built \
+                                        from source and carries no update key. A copy from a \
+                                        release keeps itself up to date.";
+
 /// What stands in for doctor's checks before there are any: "Checking this Mac…".
 pub(crate) fn checking(os: Os) -> String {
     format!("Checking {}…", this_machine(os))

@@ -173,6 +173,11 @@ pub fn pitboard_directory(environment: HashMap<String, String>) -> String {
     environment.pitboard_home().to_string_lossy().into_owned()
 }
 
+#[uniffi::export]
+pub fn no_update_key() -> String {
+    present::words::NO_UPDATE_KEY.into()
+}
+
 // macOS shows a notification's buttons from categories registered at launch, by their titles.
 #[uniffi::export]
 pub fn notification_buttons() -> Vec<String> {

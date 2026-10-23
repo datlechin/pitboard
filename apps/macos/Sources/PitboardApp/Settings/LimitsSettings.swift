@@ -59,7 +59,7 @@ struct LimitsSettings: View {
                         .accessibilityIdentifier("settings.autoSwitchStanding")
                 }
             } header: {
-                Text("Before an account runs out")
+                Text(atLimit.title)
             } footer: {
                 VStack(alignment: .leading, spacing: 4) {
                     if let note = atLimit.note { Text(note).footnote() }
@@ -84,8 +84,8 @@ struct LimitsSettings: View {
                     displayedComponents: .hourAndMinute
                 )
                 .accessibilityIdentifier("settings.warmTo")
-                if warm.accounts.isEmpty {
-                    Text("No Claude Code account is enrolled yet.").explanatory()
+                if let none = warm.noneEnrolled {
+                    Text(none).explanatory()
                 }
                 ForEach(warm.accounts, id: \.qualified) { account in
                     Toggle(
@@ -106,7 +106,7 @@ struct LimitsSettings: View {
                         .accessibilityIdentifier("settings.warmStanding")
                 }
             } header: {
-                Text("Warm up limits")
+                Text(warm.title)
             } footer: {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(warm.note).footnote()

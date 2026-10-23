@@ -36,6 +36,7 @@ pub struct MachineShown {
 /// account with whether it is warmed up, what comes next, and what is said under them.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct WarmShown {
+    pub title: String,
     /// The span, in minutes of the day, which `Intent::SetWarmRange` takes back: `to` up to
     /// 24 hours, and a `from` later than it runs past midnight.
     pub from: u16,
@@ -45,6 +46,8 @@ pub struct WarmShown {
     pub range_label: String,
     /// Each Claude Code account enrolled under a name, in the order they were enrolled.
     pub accounts: Vec<WarmAccountShown>,
+    // in place of `accounts` while there are none
+    pub none_enrolled: Option<String>,
     /// What comes next, once anything is turned on: the next warm-up, or why none is made.
     pub standing: Option<String>,
     /// What is said under them: what a warm-up does and what it never does.
@@ -72,6 +75,8 @@ pub struct WarmAccountShown {
 // What the app does once a limit of the account in use reaches a share, as the settings show it.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct AtLimitShown {
+    // over the choice, where a system heads it
+    pub title: String,
     pub choice: AtLimit,
     pub choices: Vec<AtLimitChoice>,
     // a whole percentage, which `Intent::SetAtLimit` takes back
@@ -293,6 +298,10 @@ fn warm(seen: &Seen) -> WarmShown {
             })
     });
     WarmShown {
+        title: "Warm up limits".into(),
+        none_enrolled: accounts
+            .is_empty()
+            .then(|| "No Claude Code account is enrolled yet.".into()),
         from: range.from(),
         to: range.to(),
         range_label: words::warm_hours(range.from(), range.to(), |minutes| {
@@ -352,6 +361,7 @@ fn at_limit(seen: &Seen) -> AtLimitShown {
     };
     let switching = choice == AtLimit::Switch;
     AtLimitShown {
+        title: "Before an account runs out".into(),
         choice,
         choices: [
             (AtLimit::Nothing, "Do Nothing", "Do nothing"),
@@ -644,6 +654,19 @@ mod tests {
     }
 
     #[test]
+    fn warm_up_says_so_while_no_claude_code_account_is_enrolled() {
+        let state = read(status(Vec::new(), Vec::new()), vec![claude_code()]);
+        assert_eq!(
+            present_on(Os::Windows, &state, 0, &Utc)
+                .machine
+                .warm
+                .none_enrolled
+                .as_deref(),
+            Some("No Claude Code account is enrolled yet.")
+        );
+    }
+
+    #[test]
     fn a_range_of_the_whole_day_is_all_day() {
         assert_eq!(hours(0, 24 * 60, &Twelve), "All day");
         assert_eq!(hours(0, 24 * 60, &Unreadable), "All day");
@@ -899,6 +922,7 @@ mod tests {
             let windows = present_on(Os::Windows, &state, 0, &Utc).machine.warm;
             assert_eq!(windows, present_on(Os::MacOs, &state, 0, &Utc).machine.warm);
             assert!(windows.enabled, "{on}");
+            assert_eq!(windows.none_enrolled, None);
             assert_eq!(windows.standing.as_deref(), said, "{on}");
             assert_eq!(
                 windows.note,

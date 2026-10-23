@@ -13,14 +13,14 @@ public sealed class SettingsViewModelTests
     };
 
     private static readonly WarmShown TwoWarmed = new(
-        From: 360, To: 24 * 60, RangeLabel: "6:00 AM to midnight",
+        Title: "Warm up limits", From: 360, To: 24 * 60, RangeLabel: "6:00 AM to midnight",
         Accounts:
         [
             new WarmAccountShown("claude/personal", "personal", "Max", On: true, Standing: "Warms up again at 22:50"),
             new WarmAccountShown("claude/work", "work", Plan: null, On: false, Standing: null),
         ],
-        Standing: "Next warm-up: personal at 22:50.", Note: "Pitboard warms up Claude Code accounts only.", Enabled: true,
-        Terms: Snapshots.Terms);
+        NoneEnrolled: null, Standing: "Next warm-up: personal at 22:50.", Note: "Pitboard warms up Claude Code accounts only.",
+        Enabled: true, Terms: Snapshots.Terms);
 
     private static Snapshot With(ulong revision, Func<MachineShown, MachineShown> change)
     {
@@ -53,9 +53,9 @@ public sealed class SettingsViewModelTests
     [TestMethod]
     public void ABuildThatCannotUpdateSaysSoAndABetaSaysHowItGetsTheNext()
     {
-        Assert.AreEqual(NoUpdates.NoKey, SettingsViewModel.UpdatesNotes(new NoUpdates(), "0.0.0").Single());
+        Assert.AreEqual(PitboardFfiMethods.NoUpdateKey(), SettingsViewModel.UpdatesNotes(new NoUpdates(), "0.0.0").Single());
         CollectionAssert.AreEqual(
-            new[] { NoUpdates.NoKey, SettingsViewModel.BetaNote },
+            new[] { PitboardFfiMethods.NoUpdateKey(), SettingsViewModel.BetaNote },
             SettingsViewModel.UpdatesNotes(new NoUpdates(), "1.0.0-beta.1"));
         Assert.IsEmpty(SettingsViewModel.UpdatesNotes(new StandInUpdates(), "1.0.0"));
         Assert.AreEqual(NoUpdates.BadKey, SettingsViewModel.UpdatesNotes(new NoUpdates(NoUpdates.BadKey), "1.0.0").Single());

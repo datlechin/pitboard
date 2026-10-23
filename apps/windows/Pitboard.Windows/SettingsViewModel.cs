@@ -23,8 +23,6 @@ public sealed partial class SettingsViewModel : INotifyPropertyChanged
 
     public const string Copyright = "Copyright 2026 the Pitboard authors";
 
-    public const string NoWarmAccount = "No Claude Code account is enrolled yet.";
-
     private const int MinutesInADay = 24 * 60;
 
     public static readonly SettingsLink[] Links =
@@ -137,7 +135,11 @@ public sealed partial class SettingsViewModel : INotifyPropertyChanged
 
     public ObservableCollection<WarmAccountRow> WarmAccounts { get; } = [];
 
-    public bool NoWarmAccounts => Warm.Accounts.Length == 0;
+    public string WarmTitle => Warm.Title;
+
+    public bool NoWarmAccounts => Warm.NoneEnrolled is not null;
+
+    public string NoWarmAccount => Warm.NoneEnrolled ?? "";
 
     public string WarmNote => Warm.Note;
 

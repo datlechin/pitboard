@@ -149,7 +149,7 @@
           </toolkit:SettingsExpander.Items>
         </toolkit:SettingsExpander>
         <toolkit:SettingsExpander
-            Header="Warm up limits"
+            Header="{x:Bind ViewModel.WarmTitle, Mode=OneWay}"
             ItemsSource="{x:Bind ViewModel.WarmAccounts}"
             AutomationProperties.AutomationId="settings.warm">
           <toolkit:SettingsExpander.Description>
@@ -202,7 +202,7 @@
           <toolkit:SettingsExpander.ItemsFooter>
             <StackPanel>
               <toolkit:SettingsCard
-                  x:Name="NoWarmAccount"
+                  Header="{x:Bind ViewModel.NoWarmAccount, Mode=OneWay}"
                   Style="{StaticResource DefaultSettingsExpanderItemStyle}"
                   Visibility="{x:Bind ViewModel.NoWarmAccounts, Mode=OneWay}" />
               <toolkit:SettingsCard

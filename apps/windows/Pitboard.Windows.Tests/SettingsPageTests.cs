@@ -18,14 +18,14 @@ public sealed class SettingsPageTests
     private const string Watching = "Pitboard watches work: 42% used at 09:00.";
 
     private static readonly WarmShown TwoWarmed = new(
-        From: 360, To: 24 * 60, RangeLabel: "6:00 AM to midnight",
+        Title: "Warm up limits", From: 360, To: 24 * 60, RangeLabel: "6:00 AM to midnight",
         Accounts:
         [
             new WarmAccountShown("claude/personal", "personal", "Max", On: true, Standing: "Warms up again at 22:50"),
             new WarmAccountShown("claude/work", "work", Plan: null, On: false, Standing: null),
         ],
-        Standing: "Next warm-up: personal at 22:50.", Note: "Pitboard warms up Claude Code accounts only.", Enabled: true,
-        Terms: Snapshots.Terms);
+        NoneEnrolled: null, Standing: "Next warm-up: personal at 22:50.", Note: "Pitboard warms up Claude Code accounts only.",
+        Enabled: true, Terms: Snapshots.Terms);
 
     private static Snapshot With(ulong revision, Func<MachineShown, MachineShown> change)
     {

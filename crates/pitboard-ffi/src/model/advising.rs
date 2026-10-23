@@ -757,6 +757,8 @@ fn the_settings_offer_three_choices_and_the_terms_beside_switching() {
         model.on_windows().machine.at_limit.choices[1].title,
         "Notify me"
     );
+    assert_eq!(shown.at_limit.title, "Before an account runs out");
+    assert_eq!(shown.warm.title, "Warm up limits");
     assert_eq!(shown.at_limit.at_label, "When a limit reaches 95%");
     assert_eq!(
         shown.at_limit.note.as_deref(),
