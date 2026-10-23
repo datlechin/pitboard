@@ -1253,7 +1253,7 @@ fn not_given_up(os: Os, tool: ProviderId, label: &str, why: &Error) -> String {
         "use any {} account: Pitboard settles the move first",
         tool.name()
     );
-    let because = pitboard_core::words::not_given_up_because(why);
+    let because = pitboard_core::words::not_given_up_because(why, label);
     let then = match why {
         Error::AppOpen { still, .. } if still.is_empty() => format!("Quit {app}, then {settles}."),
         Error::AppOpen { .. } => pitboard_core::words::wait_for_still(os, &settles),
@@ -1264,6 +1264,7 @@ fn not_given_up(os: Os, tool: ProviderId, label: &str, why: &Error) -> String {
             "Open {app}, check which account it shows, quit it, then {}",
             add_what_it_shows(app)
         ),
+        Error::Store(_) if because.is_some() => pitboard_core::words::readable_first(&settles),
         _ if because.is_some() => format!("To try again, {settles}."),
         _ => format!("Quit {app}, then {settles}."),
     };
@@ -2249,9 +2250,8 @@ mod tests {
         }
     }
 
-    /// A park it could not look at is said as the core says it, where the app gave no reason.
     #[test]
-    fn a_move_not_given_up_over_a_park_it_could_not_look_at_says_why() {
+    fn a_move_not_given_up_over_a_park_it_could_not_look_at_says_why_and_how_out() {
         let why = pitboard_core::testing::park_unread(
             "desktop/work",
             std::path::Path::new("/Users/me/.pitboard/parks/a1"),
@@ -2267,10 +2267,10 @@ mod tests {
                 },
             )
             .expect("the app's words"),
-            "Pitboard didn’t give up the interrupted move of work’s login, because \
-             desktop/work's parked login at /Users/me/.pitboard/parks/a1 could not be looked at \
-             (permission denied). To try again, use any Claude Desktop account: Pitboard settles \
-             the move first."
+            "Pitboard didn’t give up the interrupted move of work’s login, because work's \
+             parked login at /Users/me/.pitboard/parks/a1 could not be looked at (permission \
+             denied). Make that path, and each folder it is in, readable to you, then use any \
+             Claude Desktop account: Pitboard settles the move first."
         );
     }
 

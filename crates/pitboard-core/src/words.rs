@@ -887,20 +887,19 @@ pub(crate) fn move_waiting(label: &str) -> String {
     )
 }
 
-/// Why an interrupted move of a Claude Desktop login was not given up, as a clause that
-/// follows "because", where there is one to give. Each front end adds its own way out.
-pub fn not_given_up_because(why: &crate::error::Error) -> Option<String> {
+// A clause after "because", where there is one. `name` is the account as the front end says it.
+pub fn not_given_up_because(why: &crate::error::Error, name: &str) -> Option<String> {
     match why {
         crate::error::Error::MoveMixed { places, .. } => Some(format!(
             "giving it up would leave parts of it beside another login in Claude's folder: {}",
             places.join(", ")
         )),
-        other => left_because(other),
+        other => left_because(other, name),
     }
 }
 
 // Why a waiting move was left as it was, for a refusal `abandon` and `repair` both meet.
-fn left_because(why: &crate::error::Error) -> Option<String> {
+fn left_because(why: &crate::error::Error, name: &str) -> Option<String> {
     use crate::error::Error;
     Some(match why {
         Error::AppOpen { app, still } if still.is_empty() => format!("{app} is open"),
@@ -916,8 +915,10 @@ fn left_because(why: &crate::error::Error) -> Option<String> {
             tool.program()
         ),
         Error::AppOpenedMidway { app, .. } => format!("{app} was opened meanwhile"),
-        // A park Pitboard could not look at, as `store::folder::unread` says it.
-        Error::Store(crate::store::Error::Unreadable(detail)) => detail.clone(),
+        Error::Store(crate::store::Error::ParkUnread { path, why, .. }) => format!(
+            "{name}'s parked login at {} could not be looked at ({why})",
+            path.display()
+        ),
         _ => return None,
     })
 }
@@ -939,17 +940,20 @@ fn left_way_out(why: &crate::error::Error, command: &str) -> String {
         Error::AppOpenedMidway { app, .. } => {
             format!("Nothing is lost. Quit {app} with Command-Q, then {again}.")
         }
-        Error::Store(_) => {
-            format!("Make that path, and each folder it is in, readable to you, then {again}.")
-        }
+        Error::Store(_) => readable_first(&again),
         _ => format!("Run `{command}` again."),
     }
+}
+
+// The way out of a park Pitboard could not look at, before `then`.
+pub fn readable_first(then: &str) -> String {
+    format!("Make that path, and each folder it is in, readable to you, then {then}.")
 }
 
 // After `abandon` gave up a switch, so never that nothing has changed.
 pub(crate) fn move_not_given_up(label: &str, why: &crate::error::Error) -> String {
     use crate::error::Error;
-    let because = not_given_up_because(why);
+    let because = not_given_up_because(why, &format!("`{label}`"));
     let then = match (why, &because) {
         (Error::MoveMixed { .. }, _) => mixed_way_out(label),
         (why, Some(_)) => left_way_out(why, "pitboard abandon"),
@@ -972,7 +976,7 @@ pub(crate) fn move_not_given_up(label: &str, why: &crate::error::Error) -> Strin
 // For `repair`, which goes on past the move, so never that nothing has changed.
 pub(crate) fn move_not_settled(label: &str, why: &crate::error::Error) -> String {
     use crate::error::Error;
-    let (because, then) = match (left_because(why), why) {
+    let (because, then) = match (left_because(why, &format!("`{label}`")), why) {
         (Some(because), _) => (because, left_way_out(why, "pitboard repair")),
         (None, Error::RecoveryUndetermined { detail, .. }) => (
             format!("it cannot tell where it stopped ({detail})"),
@@ -2313,7 +2317,7 @@ mod tests {
                 what: "does not exist yet".into(),
                 then: Then::OpenAndQuit,
             },
-            Error::Store(crate::store::Error::Unreadable("denied".into())),
+            crate::store::folder::unread("desktop/work", std::path::Path::new("/p"), "denied"),
         ] {
             let sentence = said(why);
             assert!(sentence.contains(", because "), "{sentence}");
