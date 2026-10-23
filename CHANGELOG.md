@@ -72,6 +72,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   switching where it switched before.
 - Under **Switch Automatically**, the app notifies you of Codex at the share, since it never
   switches Codex.
+- Under **Switch Automatically**, the app's notifications about Claude Code say only what
+  switching came to, without the one at 100% that offered **Switch**.
 - The app's **Switched to work** notice with nothing under its title goes once open Claude Code
   sessions have followed the switch.
 - The Windows app's icon tooltip lists each account in use with its limits.
