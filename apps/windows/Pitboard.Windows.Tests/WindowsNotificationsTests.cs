@@ -16,9 +16,9 @@ public sealed class WindowsNotificationsTests
         Id: "claude/personal/session/-1800018000", Title: "personal has no 5-hour limit left", Subtitle: "Claude Code",
         Body: "work has 58% of its own left.", Clicked: "accounts", Button: new NotificationButton("Switch", "switch/claude/work"));
 
-    // A warm-up by itself that came to nothing, whose id carries its message (crates/pitboard-ffi/src/model/warming.rs).
+    // A warm-up by itself that came to nothing, by its account and code (crates/pitboard-ffi/src/model/warming.rs).
     private static readonly RunOutNotice WarmFailed = new(
-        Id: "warm-failed/warm_up_not_started/`personal` was not warmed up: the request was answered, and Anthropic still has no period running.",
+        Id: "warm-failed/personal/warm_up_not_started",
         Title: "Pitboard could not warm up an account", Subtitle: null,
         Body: "`personal` was not warmed up: the request was answered, and Anthropic still has no period running.",
         Clicked: "limits", Button: null);
@@ -56,12 +56,14 @@ public sealed class WindowsNotificationsTests
     [TestMethod]
     public void ALongIdGivesATagOfSixtyFourCharacters()
     {
-        var tag = WindowsNotifications.Tag(WarmFailed.Id);
+        // A warm-up failure of no account, whose id carries the core's words.
+        const string id = "warm-failed/warm_up_in_progress/another Pitboard is warming up an account. Try again in a minute.";
+        var tag = WindowsNotifications.Tag(id);
 
-        Assert.IsGreaterThan(64, WarmFailed.Id.Length);
+        Assert.IsGreaterThan(64, id.Length);
         Assert.AreEqual(64, tag.Length);
         Assert.IsTrue(tag.All(char.IsAsciiHexDigitLower), tag);
-        Assert.AreEqual(tag, WindowsNotifications.Tag(WarmFailed.Id), "the same notice replaces itself");
+        Assert.AreEqual(tag, WindowsNotifications.Tag(id), "the same notice replaces itself");
         Assert.AreNotEqual(tag, WindowsNotifications.Tag(RunOut.Id));
     }
 
