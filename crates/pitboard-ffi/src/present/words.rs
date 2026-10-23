@@ -5,6 +5,7 @@
 //! What the command line says too is not here but there, and called from here: a limit's
 //! names, a reset, a pace, a parked login's life.
 
+use crate::model::Sheet;
 use crate::model::state::in_its_app;
 use crate::{Level, Warning};
 use pitboard_core::error::{Cause, Error, LoginDoubt, Then, Unidentified};
@@ -18,6 +19,62 @@ use pitboard_core::usage::pace::{Pace, Standing};
 use pitboard_core::usage::whole;
 use pitboard_core::words::{capitalised, figure, listed};
 use unicode_segmentation::UnicodeSegmentation;
+
+pub(crate) const NOT_KNOWN_HOW_IT_WENT: &str =
+    "Pitboard stopped before it could say how this went. Refresh to see where things stand.";
+
+pub(crate) fn could_not_switch(qualified: &str) -> String {
+    format!("Couldn’t switch to {}", Key::parse(qualified).label)
+}
+
+pub(crate) const COULD_NOT_GIVE_UP: &str = "Couldn’t give up on the interrupted switch";
+
+pub(crate) fn could_not_sign_in(name: &str) -> String {
+    format!("Couldn’t sign in to {name}")
+}
+
+pub(crate) fn could_not_forget(qualified: &str) -> String {
+    format!("Couldn’t forget {}", Key::parse(qualified).label)
+}
+
+pub(crate) fn could_not_rename(label: &str) -> String {
+    format!("Couldn’t rename {label}")
+}
+
+pub(crate) const COULD_NOT_UPDATE_CONFIG: &str = "Couldn’t update Claude Code’s config";
+
+pub(crate) const COULD_NOT_TELL_WHOSE: &str = "Couldn’t tell whose login it is";
+
+pub(crate) const COULD_NOT_STOW: &str = "Couldn’t put the login away";
+
+pub(crate) const COULD_NOT_CHANGE_WARM: &str = "Couldn’t change which accounts are warmed up";
+
+pub(crate) fn could_not_warm(qualified: &str) -> String {
+    format!("Couldn’t warm up {}", Key::parse(qualified).label)
+}
+
+pub(crate) const COULD_NOT_NAME: &str = "Couldn’t name this account";
+
+// A sign-in that put the new login of `name` in use: `again` where it was enrolled already.
+pub(crate) fn signed_in_now(name: &str, again: bool, app: Option<&str>) -> String {
+    match (again, app) {
+        (true, None) => format!("Signed in to {name} again. Its new login is the one in use now."),
+        (false, None) => {
+            format!("Enrolled {name}, the account signed in now. Its new login is the one in use.")
+        }
+        (true, Some(app)) => format!("Signed in to {name} again. {app} is signed in to it now."),
+        (false, Some(app)) => format!("Added {name}, the account {app} is signed in to now."),
+    }
+}
+
+// What recording the account an app shows from `from` failed under.
+pub(crate) fn could_not_enrol(from: Option<&Sheet>, name: &str) -> String {
+    match from {
+        Some(Sheet::Add { .. }) => format!("Couldn’t add {name}"),
+        Some(Sheet::SignInAgain { .. }) => could_not_sign_in(name),
+        _ => COULD_NOT_NAME.into(),
+    }
+}
 
 /// A button's, a menu item's or a heading's words as each system writes them: title case
 /// on macOS, as Apple's guidelines have it, and sentence case on Windows, which Microsoft's

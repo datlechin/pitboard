@@ -44,6 +44,11 @@ use super::windows::Windows;
 use super::{AtLimit, Failure, Intent, LastSwitch, Pane, QuitQuestion, ReadFailure, RestartNeeded};
 use super::{RunOutNotice, RunningSignIn, Sheet, Tip, WindowRequest};
 use crate::account_windows::records::{Entry, Loaded};
+use crate::present::words::{
+    COULD_NOT_CHANGE_WARM, COULD_NOT_GIVE_UP, COULD_NOT_NAME, COULD_NOT_STOW, COULD_NOT_TELL_WHOSE,
+    COULD_NOT_UPDATE_CONFIG, NOT_KNOWN_HOW_IT_WENT, could_not_enrol, could_not_forget,
+    could_not_rename, could_not_sign_in, could_not_switch, could_not_warm, signed_in_now,
+};
 use crate::present::{Clicked, UNUSABLE};
 use crate::{
     Abandoned, Account, Adoption, AutoLooked, AutoSwitched, Change, Check, Enrolled, EnrolledAs,
@@ -666,75 +671,10 @@ impl Refused {
     fn lost(title: String) -> Refused {
         Refused {
             title,
-            message: "Pitboard stopped before it could say how this went. Refresh to see \
-                      where things stand."
-                .into(),
+            message: NOT_KNOWN_HOW_IT_WENT.into(),
             code: None,
             warnings: Vec::new(),
         }
-    }
-}
-
-/// "Couldn’t switch to personal", for the account `qualified` names.
-fn could_not_switch(qualified: &str) -> String {
-    format!("Couldn’t switch to {}", Key::parse(qualified).label)
-}
-
-const COULD_NOT_GIVE_UP: &str = "Couldn’t give up on the interrupted switch";
-
-/// "Couldn’t sign in to work", for a sign-in of the account to be called `name`.
-fn could_not_sign_in(name: &str) -> String {
-    format!("Couldn’t sign in to {name}")
-}
-
-/// "Couldn’t forget work", for the account `qualified` names.
-fn could_not_forget(qualified: &str) -> String {
-    format!("Couldn’t forget {}", Key::parse(qualified).label)
-}
-
-/// "Couldn’t rename work", for the account `label`.
-fn could_not_rename(label: &str) -> String {
-    format!("Couldn’t rename {label}")
-}
-
-const COULD_NOT_UPDATE_CONFIG: &str = "Couldn’t update Claude Code’s config";
-
-const COULD_NOT_TELL_WHOSE: &str = "Couldn’t tell whose login it is";
-
-const COULD_NOT_STOW: &str = "Couldn’t put the login away";
-
-const COULD_NOT_CHANGE_WARM: &str = "Couldn’t change which accounts are warmed up";
-
-/// "Couldn’t warm up work", for the account `qualified` names.
-fn could_not_warm(qualified: &str) -> String {
-    format!("Couldn’t warm up {}", Key::parse(qualified).label)
-}
-
-const COULD_NOT_NAME: &str = "Couldn’t name this account";
-
-/// What a sign-in that put the new login of the account `name` in use says it did: signed in
-/// to `again` where the account was enrolled already, and enrolled by it where it was not.
-fn signed_in_now(name: &str, again: bool, app: Option<&str>) -> String {
-    match (again, app) {
-        (true, None) => format!("Signed in to {name} again. Its new login is the one in use now."),
-        (false, None) => {
-            format!("Enrolled {name}, the account signed in now. Its new login is the one in use.")
-        }
-        (true, Some(app)) => format!("Signed in to {name} again. {app} is signed in to it now."),
-        (false, Some(app)) => format!("Added {name}, the account {app} is signed in to now."),
-    }
-}
-
-fn could_not_add(name: &str) -> String {
-    format!("Couldn’t add {name}")
-}
-
-// What recording the account an app shows from `from` failed under.
-fn could_not_enrol(from: Option<&Sheet>, name: &str) -> String {
-    match from {
-        Some(Sheet::Add { .. }) => could_not_add(name),
-        Some(Sheet::SignInAgain { .. }) => could_not_sign_in(name),
-        _ => COULD_NOT_NAME.into(),
     }
 }
 
