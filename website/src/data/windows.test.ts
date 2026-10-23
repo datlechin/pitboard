@@ -152,7 +152,9 @@ test("the notice after a switch says what notices.rs and NoticeBar.xaml.cs put t
 
 test("an account's notes are the core's, with when it warms up last", () => {
   const said = core("words.rs");
-  assert.ok(said.includes('"{limit} limit runs out in {} at this pace",'));
+  assert.ok(
+    said.includes('Some(left) => format!("{limit} limit runs out in {left} at this pace"),'),
+  );
   assert.ok(said.includes('days => format!("Parked login good for {days} more days"),'));
   assert.ok(said.includes('format!("warms up again at {}", moment(*next))'));
   assert.ok(present("accounts.rs").includes("warm_note: warm_note(seen, account),"));

@@ -140,10 +140,9 @@ pub(crate) fn spoken_limit(
 /// When a limit runs out at its pace, beside its figure in the menu: "runs out in 20h
 /// 18m", and under a minute "about to run out", as `pitboard status` says it.
 pub(crate) fn runs_out_in(in_seconds: i64) -> String {
-    if in_seconds < MINUTE {
-        "about to run out".into()
-    } else {
-        format!("runs out in {}", pitboard_core::words::span(in_seconds))
+    match pitboard_core::words::time_to_run_out(in_seconds) {
+        Some(left) => format!("runs out in {left}"),
+        None => "about to run out".into(),
     }
 }
 
@@ -156,13 +155,12 @@ pub(crate) fn pace_help(pace: &Pace) -> String {
         figure(pace.expected)
     );
     match pace.standing {
-        Standing::Over { runs_out_in } if runs_out_in < MINUTE => {
-            format!("{even} At this pace it is about to run out.")
+        Standing::Over { runs_out_in } => {
+            match pitboard_core::words::time_to_run_out(runs_out_in) {
+                Some(left) => format!("{even} At this pace it runs out in {left}."),
+                None => format!("{even} At this pace it is about to run out."),
+            }
         }
-        Standing::Over { runs_out_in } => format!(
-            "{even} At this pace it runs out in {}.",
-            pitboard_core::words::span(runs_out_in)
-        ),
         Standing::Under | Standing::Even => even,
     }
 }

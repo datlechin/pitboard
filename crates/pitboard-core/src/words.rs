@@ -608,17 +608,18 @@ pub fn scoped_limit_name(kind: &str, length_seconds: Option<i64>, scope: Option<
     }
 }
 
+/// How long a limit has at its pace before it runs out, as [`span`] says it, or nothing under
+/// a minute, where it is about to run out, which reads more plainly than "<1m".
+pub fn time_to_run_out(in_seconds: i64) -> Option<String> {
+    (in_seconds >= MINUTE).then(|| span(in_seconds))
+}
+
 /// The limit of an account that runs out first at its pace, named as a sentence names it:
-/// "weekly limit runs out in 19h 05m at this pace". Under a minute it is "about to run
-/// out", which reads more plainly than "<1m".
+/// "weekly limit runs out in 19h 05m at this pace".
 pub fn runs_out(limit: &str, in_seconds: i64) -> String {
-    if in_seconds < MINUTE {
-        format!("{limit} limit is about to run out")
-    } else {
-        format!(
-            "{limit} limit runs out in {} at this pace",
-            span(in_seconds)
-        )
+    match time_to_run_out(in_seconds) {
+        Some(left) => format!("{limit} limit runs out in {left} at this pace"),
+        None => format!("{limit} limit is about to run out"),
     }
 }
 
