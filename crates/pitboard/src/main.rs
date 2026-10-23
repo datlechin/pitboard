@@ -119,7 +119,7 @@ enum Command {
     Enroll {
         #[arg(value_parser = label_to_enroll, help = LABEL_TO_ENROLL)]
         label: String,
-        /// Sign in through the tool's own sign-in, without signing out of the account in use
+        /// Sign in to another account first, through the tool's own sign-in
         #[arg(long)]
         sign_in: bool,
     },

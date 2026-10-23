@@ -100,7 +100,7 @@ Options:
           Print JSON instead of text
 
       --sign-in
-          Sign in through the tool's own sign-in, without signing out of the account in use
+          Sign in to another account first, through the tool's own sign-in
 
   -h, --help
           Print help
