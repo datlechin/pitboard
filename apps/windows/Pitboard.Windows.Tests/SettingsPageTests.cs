@@ -17,6 +17,8 @@ public sealed class SettingsPageTests
 {
     private const string Watching = "Pitboard watches work: 42% used at 09:00.";
 
+    private static readonly string[] Sections = ["General", "Limits", "Advanced", "About"];
+
     private static readonly WarmShown TwoWarmed = new(
         Title: "Warm up limits", From: 360, To: 24 * 60, RangeLabel: "6:00 AM to midnight",
         Accounts:
@@ -68,8 +70,7 @@ public sealed class SettingsPageTests
         var heading = (Style)Application.Current.Resources["SettingsSectionHeaderTextBlockStyle"];
 
         CollectionAssert.AreEqual(
-            new[] { "General", "Limits", "Advanced", "About" },
-            Views.Visible<TextBlock>(page).Where(text => text.Style == heading).Select(text => text.Text).ToArray());
+            Sections, Views.Visible<TextBlock>(page).Where(text => text.Style == heading).Select(text => text.Text).ToArray());
     }
 
     [UITestMethod]

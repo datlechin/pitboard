@@ -12,6 +12,8 @@ public sealed class SettingsViewModelTests
         Terms = Snapshots.Terms,
     };
 
+    private static readonly string[] AtLimitChoices = ["Do nothing", "Notify me", "Switch automatically"];
+
     private static readonly WarmShown TwoWarmed = new(
         Title: "Warm up limits", From: 360, To: 24 * 60, RangeLabel: "6:00 AM to midnight",
         Accounts:
@@ -185,7 +187,7 @@ public sealed class SettingsViewModelTests
         var (shown, _, app) = Over(With(1, machine => machine with { AtLimit = Switching }));
 
         Assert.AreEqual("When a limit reaches 95%", shown.AtLimitLabel);
-        CollectionAssert.AreEqual(new[] { "Do nothing", "Notify me", "Switch automatically" }, shown.AtLimitTitles);
+        CollectionAssert.AreEqual(AtLimitChoices, shown.AtLimitTitles);
         Assert.AreEqual(2, shown.AtLimitIndex);
         Assert.AreEqual("Share of a limit", shown.ShareTitle);
         Assert.AreEqual("From 50% to 99%", shown.ShareRange);
