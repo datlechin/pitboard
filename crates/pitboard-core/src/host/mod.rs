@@ -338,6 +338,11 @@ fn drive_absolute(path: &str) -> bool {
     matches!(path.as_bytes(), [drive, b':', b'\\' | b'/', ..] if drive.is_ascii_alphabetic())
 }
 
+// A full path as Windows takes one, on any system: from a drive's root, or a share's.
+pub(crate) fn windows_absolute(path: &str) -> bool {
+    drive_absolute(path) || path.starts_with(r"\\")
+}
+
 // Claude Desktop's on Windows, which no test reads (AGENTS.md). Its `Claude-3p` there is named
 // by analogy with macOS's, unmeasured: a guard may refuse more than is there.
 #[cfg(any(test, feature = "test-support"))]

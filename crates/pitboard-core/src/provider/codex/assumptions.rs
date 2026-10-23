@@ -203,7 +203,7 @@ pub(crate) const PER_SYSTEM: &[PerSystem] = &[
         name: "codex_windows_store_layers",
         macos: NotRead("macOS's layers are codex_store_layers'"),
         linux: NotRead("Linux's layers are codex_store_layers'"),
-        windows: Read(WINDOWS_VERIFIED_AGAINST),
+        windows: Read("0.164.0"),
     },
     PerSystem {
         name: "codex_managed_preferences",
@@ -813,7 +813,11 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
                enterprise's cloud config, `%CODEX_HOME%\\config.toml`, a profile's file, a \
                trusted project's `.codex\\config.toml`, and `-c`. `requirements.toml` in the \
                same folder pins it over every layer, and cloud requirements may not set it. \
-               There are no managed preferences and no registry layer, and Codex skips a \
+               Where the policy value `RequirementsPath` of \
+               `HKLM\\SOFTWARE\\Policies\\OpenAI\\Codex`, 64-bit view, can be read, Codex reads \
+               its requirements from the file it names instead, a leading `~` its profile \
+               folder, and does not start where that is no full path. There are no managed \
+               preferences and no registry layer of configuration, and Codex skips a \
                `managed_config.toml` in its home with a warning at startup. \
                `secret_auth_storage` is read from the same layers and is on by default, so \
                `keyring` and `auto` keep the login in the secret store unless a layer turns it \
@@ -827,15 +831,22 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
                     LOCAL_ONLY_AUTH_REQUIREMENTS and strip_cloud_auth_requirements in \
                     codex-rs/config/src/requirements_layers/layer.rs, and the \
                     SecretAuthStorage feature's `cfg!(windows)` default in \
-                    codex-rs/features/src/lib.rs, at tag rust-v0.163.0, read on 2026-10-16. \
-                    probe_windows_system_config_namespace only counts who owns the folder for \
+                    codex-rs/features/src/lib.rs, at tag rust-v0.163.0, read on 2026-10-16, and \
+                    again at tag rust-v0.164.0 on 2026-10-24 with \
+                    windows_system_requirements_toml_file, new there, and \
+                    AbsolutePathBuf::from_absolute_path_checked in \
+                    codex-rs/utils/absolute-path. probe_windows_system_config_namespace only \
+                    counts who owns the folder for \
                     telemetry. The win32-x64 and win32-arm64 builds hold the folder, the \
-                    warning and the fallback's message, and neither holds `/etc/codex`",
-        verified_against: "0.163.0",
-        depends: "provider::codex::layers on Windows, and so every read and write of the \
-                  live Codex login there and every refusal of a store",
+                    policy's key and value, the warning and the fallback's message, and neither \
+                    holds `/etc/codex`",
+        verified_against: "0.164.0",
+        depends: "provider::codex::layers on Windows, which reads the requirements from the \
+                  file the policy names, and so every read and write of the live Codex login \
+                  there and every refusal of a store",
         probe: &[
             "OpenAI\\Codex",
+            r"SOFTWARE\Policies\OpenAI\Codex",
             "managed_config.toml is no longer supported on Windows",
             "Failed to resolve ProgramData known folder",
             "cli_auth_credentials_store",

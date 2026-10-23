@@ -100,6 +100,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- On Windows, Pitboard reads Codex's requirements from the file the policy `RequirementsPath` in
+  `HKLM\SOFTWARE\Policies\OpenAI\Codex` names, as Codex 0.164.0 does, before it switches Codex.
 - Pitboard renews a parked Codex login at the issuer and as the client Codex 0.164.0 records in
   it, instead of always as Codex's own client.
 - Pitboard takes no numbers from an OpenAI usage answer that names another account than the
