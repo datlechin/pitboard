@@ -1,5 +1,5 @@
 ---
-// The top of the Limits pane, in LimitsSettings.swift's words; each height cuts the window 8 points below its first group.
+// The top of the Limits pane, in the words machine.rs gives LimitsSettings.swift; each height cuts the window 8 points below its first group.
 import Lights from "./Lights.astro";
 import Switch from "./Switch.astro";
 import { clock } from "../../../data/world.ts";
@@ -11,11 +11,10 @@ const { show } = Astro.props;
 const tabs = [
   ["general", "General", "sf-gear"],
   ["limits", "Limits", "sf-gauge"],
-  ["renewal", "Renewal", "sf-cal"],
-  ["commandLine", "Command Line", "sf-term"],
-  ["updates", "Updates", "sf-down"],
+  ["advanced", "Advanced", "sf-gear2"],
 ];
-const heights = { switch: "h-257", warm: "h-336" } as const;
+const heights = { switch: "h-221", warm: "h-336" } as const;
+const choice = "Switch Automatically";
 const group = "rounded-u-8 bg-mac-window-bg shadow-mac-group *:not-first:inset-shadow-mac-window-t";
 const row = "flex min-h-36 items-center gap-12 px-10 py-6";
 const label = "min-w-0 flex-1";
@@ -57,12 +56,18 @@ const stepper = [
           <p class={head}>Before an account runs out</p>
           <div class={group}>
             <div class={row}>
-              <span class={label}>Switch Claude Code automatically</span>
-              <Switch on />
-            </div>
-            <div class={row}>
-              <span class={label}>Switch when a limit reaches 95%</span>
-              <span class:list={[control, ...stepper]}></span>
+              <span class={label}>When a limit reaches 95%</span>
+              <span class="flex items-center gap-6">
+                <span
+                  class="w-44 rounded-u-5 bg-mac-window-bg px-4 text-right tabular-nums shadow-mac-control"
+                  >95</span
+                >
+                <span class:list={[control, ...stepper]}></span>
+                <span
+                  class:list={[control, "flex items-center gap-2 py-1 pr-2 pl-8 whitespace-nowrap"]}
+                  >{choice}<svg class="size-14 shrink-0"><use href="#sf-updown"></use></svg></span
+                >
+              </span>
             </div>
             <div class={row}>
               <span class:list={[small, "pb-2"]}

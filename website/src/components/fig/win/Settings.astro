@@ -1,6 +1,7 @@
 ---
-// SettingsPage.xaml scrolled to Limits: Switch Claude Code automatically, open on its threshold, or
-// Warm up limits, open on its hours and accounts.
+// SettingsPage.xaml scrolled to Limits: When a limit reaches, open on its share, or Warm up limits,
+// open on its hours and accounts.
+import ComboBox from "./ComboBox.astro";
 import NumberBox from "./NumberBox.astro";
 import TimePicker from "./TimePicker.astro";
 import Toggle from "./Toggle.astro";
@@ -26,11 +27,13 @@ const item = "flex items-center gap-16 bg-win-card-2 py-8 pr-44 pl-58 inset-shad
       <>
         <div class={header}>
           <span class="min-w-0 flex-1">
-            <span class="block">{page.autoSwitch.header}</span>
-            <span class:list={["block", caption]}>{page.autoSwitch.standing}</span>
-            <span class:list={["block", caption]}>{page.autoSwitch.note}</span>
+            <span class="block">{page.atLimit.header}</span>
+            <span class:list={["block", caption]}>{page.atLimit.standing}</span>
+            <span class:list={["block", caption]}>{page.atLimit.note}</span>
+            <span class:list={["block", caption]}>{page.atLimit.terms}</span>
+            <span class:list={["block", caption, "text-win-accent-text"]}>{page.atLimit.link}</span>
           </span>
-          <Toggle on={page.autoSwitch.on} />
+          <ComboBox value={page.atLimit.choice} />
           <span class="flex size-32 shrink-0 items-center justify-center rounded-u-4"
             ><svg class="size-12"><use href="#fl-chevron-up"></use></svg></span
           >

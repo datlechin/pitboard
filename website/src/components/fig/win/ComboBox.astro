@@ -1,0 +1,14 @@
+---
+// WinUI's ComboBox closed on its choice, at least 200 pixels wide as SettingsPage.xaml sets it.
+interface Props {
+  value: string;
+}
+const { value } = Astro.props;
+---
+
+<span
+  class="flex h-32 min-w-200 items-center justify-between gap-8 rounded-u-4 bg-win-control pr-11 pl-11 text-u-14/20 whitespace-nowrap shadow-win-control"
+>
+  {value}
+  <svg class="size-12 shrink-0 text-win-text-2"><use href="#fl-chevron-down"></use></svg>
+</span>
