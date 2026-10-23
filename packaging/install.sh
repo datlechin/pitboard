@@ -24,14 +24,27 @@ check_arguments() {
   fi
 }
 
-# On Linux root may act in a home it owns, as on a machine whose only user is root.
+# Each path, or the folder it would be made in, is root's.
+roots_own() {
+  for place in "$@"; do
+    while [ ! -e "$place" ]; do
+      place=${place%/*}
+      place=${place:-/}
+    done
+    owned=$(find -H "$place" -prune -user 0 2>/dev/null) || owned=
+    if [ -z "$owned" ]; then
+      return 1
+    fi
+  done
+}
+
+# On Linux root may act where it owns each folder, as on a machine whose only user is root.
 check_user() {
   uid=$(id -u)
   if [ "$system" = Linux ]; then
-    rooted=$(find -H "${home:-/}" -prune -user 0 2>/dev/null) || rooted=
-    if [ -n "${SUDO_UID:-}" ] || { [ "$uid" = 0 ] && [ -z "$rooted" ]; }; then
-      fail "Pitboard changes nothing when it runs with sudo or as root in another user's home," \
-        "so this installs nothing. Run it as yourself."
+    if [ -n "${SUDO_UID:-}" ] || { [ "$uid" = 0 ] && ! roots_own "${home:-/}" "$bin" "$share"; }; then
+      fail "Pitboard changes nothing when it runs with sudo or as root in a folder another user" \
+        "owns, so this installs nothing. Run it as yourself."
     fi
   elif [ "$uid" = 0 ] || [ -n "${SUDO_UID:-}" ]; then
     fail "Pitboard changes nothing when it runs as root or with sudo, so this installs nothing." \

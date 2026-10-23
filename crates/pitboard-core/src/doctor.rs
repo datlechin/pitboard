@@ -951,9 +951,9 @@ fn running_codex(ctx: &Context) -> Option<Vec<crate::holder::Holding>> {
     crate::holder::find(ctx, ProviderId::Codex, program, holders)
 }
 
-/// The check that fails where this process runs as root or under sudo, or elevated on
-/// Windows, or nobody could tell whether it does, since then Pitboard changes nothing: `None`
-/// where it runs as the person themselves.
+/// The check that fails where the host says this process is not the person themselves
+/// ([`crate::host::Host::elevation`]), or nobody could tell whether it is, since then Pitboard
+/// changes nothing: `None` where it runs as the person themselves.
 fn elevated(
     os: Os,
     elevation: crate::host::Elevation,

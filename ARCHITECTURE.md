@@ -1144,8 +1144,12 @@ window loads its site, and whatever the site's pages load, as a browser would.
 - Pitboard changes nothing where it runs as root or under sudo, or elevated on Windows, or
   where the host cannot say whether it does: a file it wrote would be root's or the
   administrators', and a keychain item might be, where the person's own runs might not read
-  or replace it. On Linux root changes things in a home root owns, as on a machine whose only
-  user is root, and is refused in another user's home or where the home's owner cannot be
+  or replace it. On Linux root changes things where root owns every place a change writes in
+  (`home::written`: the home, Pitboard's directory, Claude Code's config folder, its
+  `.claude.json` and its login's folder, and Codex's home, each at its nearest folder there
+  is), as on a machine whose only user is root. It is refused where another user owns one, as
+  after `su -m`, which keeps the caller's `HOME`, plain `su`, which keeps their `CODEX_HOME`
+  and the others, or a container given the caller's `~/.claude`, and where an owner cannot be
   read. On Windows `TokenElevation` decides, `TokenElevationType` says which words
   (Run as administrator, or an account whose every program runs elevated, which no terminal
   of it changes), a token of LocalSystem, LocalService or NetworkService is elevated

@@ -48,8 +48,9 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Pitboard warns with `auth_overridden`, and the automatic switch holds back, while
   `CLAUDE_CODE_USE_MANTLE`, an Anthropic profile or managed settings that require the Cloud
   gateway make Claude Code sign in another way.
-- On Linux, Pitboard and its install script work as root in a home root owns, as on a server
-  whose only user is root, and refuse only under `sudo` or as root in another user's home.
+- On Linux, Pitboard and its install script work as root where root owns every folder they write
+  in, as on a server whose only user is root, and refuse only under `sudo` or as root in a folder
+  another user owns.
 - `pitboard --help` wraps to the terminal, lists the commands in the order you use them and
   ends with three examples.
 - Where a login file behind the keychain or Credential Manager keeps running Claude Code

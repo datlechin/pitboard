@@ -81,7 +81,7 @@ One risk is known. A session on an account no reading holds, such as an unenroll
 
 A session's numbers only move a limit the account's last answer from Anthropic gave. Once that limit resets, they start its next period. Pitboard records only limits that moved since the session's last run. An idle session passes the same numbers again, which can predate an answer that lowered a percentage.
 
-Where Pitboard may change nothing, as root, under `sudo`, elevated on Windows or on a Windows older than Windows 11 24H2, it writes nothing.
+Where a change fails with [`elevated`](/reference/errors#root-sudo-and-administrator) or [`system_too_old`](/reference/errors#windows), it writes nothing.
 
 It exits 0 whatever its input. When a home variable is empty or not a full path, it prints no line and exits 1 with [`home_not_absolute`](/reference/errors#the-pitboard-directory).
 

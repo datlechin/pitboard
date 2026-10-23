@@ -1221,7 +1221,7 @@ pub(crate) fn elevated(os: Os, why: Option<&'static str>) -> ChangesNothing {
         None => format!("Pitboard cannot tell whether it runs {cannot_tell}"),
     };
     let refused = match os {
-        Os::Linux => "with sudo or as root in another user's home",
+        Os::Linux => "with sudo or as root in a folder another user owns",
         Os::MacOs | Os::Windows => "as root or with sudo",
     };
     match os {
@@ -1718,15 +1718,16 @@ mod tests {
         }
     }
 
-    // On Linux root may act in its own home, so only sudo and another user's home refuse.
+    // On Linux root may act where it owns every folder Pitboard writes, so only sudo and a
+    // folder another user owns refuse.
     #[test]
     fn root_and_sudo_are_told_to_run_it_as_themselves() {
         for (os, whys, refused) in [
             (Os::MacOs, ["as root", "with sudo"], "as root or with sudo"),
             (
                 Os::Linux,
-                ["as root in another user's home", "with sudo"],
-                "with sudo or as root in another user's home",
+                ["as root in a folder another user owns", "with sudo"],
+                "with sudo or as root in a folder another user owns",
             ),
         ] {
             for why in whys {

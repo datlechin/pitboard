@@ -47,7 +47,7 @@ ROOT_REFUSAL = (
     "Run it as yourself."
 )
 LINUX_ROOT_REFUSAL = (
-    "Pitboard changes nothing when it runs with sudo or as root in another user's home, "
+    "Pitboard changes nothing when it runs with sudo or as root in a folder another user owns, "
     "so this installs nothing. Run it as yourself."
 )
 WINDOWS = (
@@ -649,21 +649,26 @@ class InstallScript(unittest.TestCase):
             case = self.case()
             self.assertInstalled(case, case.run(GOOD.script, shell, env={"SUDO_UID": ""}))
 
-    # As on a machine whose only user is root; `su` without `-` keeps the caller's HOME.
-    def test_on_linux_root_installs_in_its_own_home_and_not_in_another_users(self):
+    # As on a machine whose only user is root. `su -m` keeps the caller's HOME, and plain `su`
+    # the caller's PITBOARD_INSTALL_DIR.
+    def test_on_linux_root_installs_only_into_folders_root_owns(self):
         for shell in self.each_shell():
-            case = self.case()
-            bindir = case.home / ".local" / "bin"
-            result = case.run(
-                GOOD.script,
-                shell,
-                uid="0",
-                env={"HOME": "/", "PITBOARD_INSTALL_DIR": str(bindir)},
+            if os.geteuid() == 0:
+                case = self.case()
+                self.assertInstalled(case, case.run(GOOD.script, shell, uid="0"))
+                continue
+            # Root's own folders pass, and this run, not root, cannot write there.
+            absent = "/pitboard-test-absent/bin"
+            result = self.case().run(
+                GOOD.script, shell, uid="0", env={"HOME": "/", "PITBOARD_INSTALL_DIR": absent}
             )
-            self.assertInstalled(case, result)
-            if os.geteuid() != 0:
-                result = self.case().run(GOOD.script, shell, uid="0")
-                self.assertRefused(result, LINUX_ROOT_REFUSAL)
+            self.assertNothingInstalled(result, CANNOT_WRITE.format(absent))
+            case = self.case()
+            theirs = str(case.home / ".local" / "bin")
+            for env in ({}, {"HOME": "/", "PITBOARD_INSTALL_DIR": theirs}):
+                with self.subTest(env=env):
+                    result = case.run(GOOD.script, shell, uid="0", env=env)
+                    self.assertRefused(result, LINUX_ROOT_REFUSAL)
 
     def test_an_argument_is_refused(self):
         for shell in self.each_shell():
