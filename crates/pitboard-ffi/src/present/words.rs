@@ -616,19 +616,6 @@ pub(crate) fn no_activity(os: Os) -> (String, &'static str) {
     )
 }
 
-/// What Renew Now is beside before it has been pressed: what it does.
-pub(crate) const RENEWS_WHAT_IS_DUE: &str = "Renew every parked login that is due.";
-
-/// How often the schedule runs, from how many seconds apart its runs are: "Every day", and
-/// otherwise in whole hours, as the Swift settings said it.
-pub(crate) fn runs_every(seconds: u32) -> String {
-    if seconds == 86_400 {
-        "Every day".into()
-    } else {
-        format!("Every {} hours", seconds / 3600)
-    }
-}
-
 /// Said under the switch where the machine has no scheduler Pitboard writes to: "This Mac has
 /// no scheduler Pitboard knows how to write to."
 pub(crate) fn no_scheduler(os: Os) -> String {
@@ -2140,12 +2127,8 @@ mod tests {
         }
     }
 
-    /// How often the schedule runs, as the settings said it: daily, and otherwise in hours;
-    /// and when the checks shown were made.
     #[test]
-    fn the_schedule_says_how_often_it_runs() {
-        assert_eq!(runs_every(86_400), "Every day");
-        assert_eq!(runs_every(43_200), "Every 12 hours");
+    fn the_checks_say_when_they_were_made() {
         assert_eq!(checked_at("14:05"), "Checked at 14:05");
     }
 

@@ -329,18 +329,6 @@ pub(crate) struct Enrolled {
     pub(crate) warnings: Vec<Warning>,
 }
 
-/// What renewing every due parked login came to, one for each. A snapshot says what the run
-/// did in one sentence, `renewal_note`.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct Renewed {
-    /// As a person types it: bare for Claude Code, `codex/work` for Codex.
-    pub(crate) label: String,
-    /// Which tool's login it is.
-    pub(crate) provider: String,
-    /// `renewed`, `renewal_deferred`, `parked_login_refused`, or the code of a failure.
-    pub(crate) outcome: String,
-}
-
 /// One of doctor's checks. A snapshot shows each as a `CheckLine`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Check {
@@ -1136,22 +1124,6 @@ impl AppCore {
                 outcome: e.outcome,
             })
             .collect()
-    }
-
-    /// Renew every parked login that is due, and nothing else. Refused, as every change is,
-    /// where this process may change nothing.
-    pub(crate) fn renew(&self) -> Result<Vec<Renewed>, PitboardError> {
-        Ok(self
-            .core()
-            .core
-            .renew()?
-            .into_iter()
-            .map(|(key, outcome)| Renewed {
-                label: key.typed(),
-                provider: key.provider.code().into(),
-                outcome: outcome.code().to_string(),
-            })
-            .collect())
     }
 
     /// The proof the one gate every change passes hands out, where this process may change

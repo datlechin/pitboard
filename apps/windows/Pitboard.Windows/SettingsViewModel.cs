@@ -10,8 +10,6 @@ public sealed record SettingsLink(string Title, string Url);
 // model says, so a control set to the model's value sends nothing.
 public sealed partial class SettingsViewModel : INotifyPropertyChanged
 {
-    public const string SignInNote = "Settings > Apps > Startup can turn it off too.";
-
     public const string TurnedOffNote = "Turned off in Settings > Apps > Startup, where you can turn it on again.";
 
     // Settings > Apps > Startup and System > Notifications, by the URIs Microsoft's "Launch the Windows Settings app" lists.
@@ -22,10 +20,6 @@ public sealed partial class SettingsViewModel : INotifyPropertyChanged
     public const string BetaNote = "A beta updates itself to 1.0.0 once that is out. Install a later beta by hand.";
 
     public const string NewTerminals = "Pitboard’s installer puts pitboard on your PATH, which terminals opened after it ran see.";
-
-    public const string WhatItDoes =
-        "The command line does everything the app does, and more: pitboard status in a script, and pitboard repair "
-        + "for a parked login Pitboard’s records have lost track of.";
 
     public const string Copyright = "Copyright 2026 the Pitboard authors";
 
@@ -74,7 +68,9 @@ public sealed partial class SettingsViewModel : INotifyPropertyChanged
 
     public bool CanStartAtSignIn => _start.Refusal is null && !_start.TurnedOff;
 
-    public string StartupNote => _start.Refusal ?? (_start.TurnedOff ? TurnedOffNote : SignInNote);
+    public string StartupNote => _start.Refusal ?? (_start.TurnedOff ? TurnedOffNote : "");
+
+    public bool HasStartupNote => StartupNote.Length > 0;
 
     public string? StartupFailed => _start.Failed;
 
@@ -149,25 +145,13 @@ public sealed partial class SettingsViewModel : INotifyPropertyChanged
 
     public bool CanRenewDaily => Schedule.Enabled;
 
-    public string RenewalAbout => Machine.Renewal.About;
+    public string RenewalAbout => Schedule.About;
 
     public string ScheduleNote => Schedule.Note ?? "";
 
     public bool HasScheduleNote => Schedule.Note is not null;
 
     public string? ScheduleFailed => Schedule.Failed;
-
-    public bool HasRuns => Schedule.Runs is not null;
-
-    public string Runs => Schedule.Runs ?? "";
-
-    public bool HasScheduledIn => Schedule.ScheduledIn is not null;
-
-    public string ScheduledIn => Schedule.ScheduledIn ?? "";
-
-    public string RenewalNote => Machine.Renewal.Note;
-
-    public bool CanRenewNow => !Machine.Renewal.Renewing;
 
     public bool LookingForCommandLine => CommandLine.InTerminal is null;
 
@@ -302,8 +286,6 @@ public sealed partial class SettingsViewModel : INotifyPropertyChanged
             _model.Send(new Intent.SetSchedule(on));
         }
     }
-
-    public void RenewNow() => _model.Send(new Intent.RenewNow());
 
     public void SetChecksAutomatically(bool on)
     {

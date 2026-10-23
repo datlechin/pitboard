@@ -117,7 +117,7 @@ public sealed class SettingsViewModelTests
         {
             AtLimit = Switching,
             Warm = TwoWarmed,
-            Schedule = machine.Schedule with { On = true, Runs = "Every day" },
+            Schedule = machine.Schedule with { On = true },
         }));
 
         shown.ChooseAtLimit(2);
@@ -144,7 +144,6 @@ public sealed class SettingsViewModelTests
         shown.SetWarmTo(new TimeSpan(21, 0, 0));
         shown.SetWarm("claude/work", true);
         shown.SetRenewsDaily(true);
-        shown.RenewNow();
 
         CollectionAssert.AreEqual(
             new Intent[]
@@ -155,7 +154,6 @@ public sealed class SettingsViewModelTests
                 new Intent.SetWarmRange(360, 1260),
                 new Intent.SetWarm("claude/work", true),
                 new Intent.SetSchedule(true),
-                new Intent.RenewNow(),
             },
             model.Sent.ToArray());
     }

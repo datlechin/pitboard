@@ -128,10 +128,7 @@ public sealed class ModelTests
 
     private static MachineShown Unread() => new(
         Schedule: new ScheduleShown(
-            Schedule: null, On: false, Changing: false, Enabled: true, Runs: null, ScheduledIn: null, Note: null,
-            Failed: null),
-        Renewal: new RenewalShown(
-            Renewing: false, Note: "Renew every parked login that is due.",
+            Schedule: null, On: false, Changing: false, Enabled: true, Note: null, Failed: null,
             About: "A parked login is renewed whenever Pitboard runs, and otherwise not."),
         Checks: new ChecksShown(Lines: [], Summary: null, Level: Level.Ok, Checking: false, Checked: null, Waiting: "Checking this Mac…"),
         Activity: new ActivityShown(
@@ -241,7 +238,7 @@ public sealed class ModelTests
             Assert.AreEqual("Not read yet", first.UpdatedMenu);
             Assert.IsNull(first.Machine.Schedule.Schedule);
             Assert.IsFalse(first.Machine.Schedule.On);
-            Assert.AreEqual("Renew every parked login that is due.", first.Machine.Renewal.Note);
+            Assert.StartsWith("A parked login is renewed whenever Pitboard runs", first.Machine.Schedule.About);
             Assert.IsEmpty(first.Machine.Checks.Lines);
             Assert.StartsWith("Checking ", first.Machine.Checks.Waiting!);
             Assert.AreEqual(OperatingSystem.IsWindows() ? "No activity" : "No Activity", first.Machine.Activity.Empty?.Title);
@@ -645,8 +642,7 @@ public sealed class ModelTests
         Intent[] intents =
         [
             new Intent.PaneShown(Pane: Pane.Machine), new Intent.PaneShown(Pane: Pane.Activity),
-            new Intent.ReadSchedule(), new Intent.SetSchedule(On: true), new Intent.RenewNow(),
-            new Intent.LookForCommandLine(),
+            new Intent.ReadSchedule(), new Intent.SetSchedule(On: true), new Intent.LookForCommandLine(),
         ];
 
         Assert.AreEqual<Intent>(new Intent.PaneShown(Pane.Machine), intents[0]);
@@ -655,7 +651,6 @@ public sealed class ModelTests
         Assert.IsTrue(intents.OfType<Intent.SetSchedule>().Single().On);
         Assert.AreNotEqual<Intent>(new Intent.SetSchedule(false), intents[3]);
         Assert.AreEqual(1, intents.OfType<Intent.ReadSchedule>().Count());
-        Assert.AreEqual(1, intents.OfType<Intent.RenewNow>().Count());
         Assert.AreEqual(1, intents.OfType<Intent.LookForCommandLine>().Count());
     }
 
@@ -673,9 +668,7 @@ public sealed class ModelTests
         {
             Schedule = new ScheduleShown(
                 Schedule: new Schedule.Installed(Path: plist, EverySeconds: 86_400), On: true, Changing: false,
-                Enabled: true, Runs: "Every day", ScheduledIn: plist, Note: null, Failed: null),
-            Renewal = new RenewalShown(
-                Renewing: false, Note: "Renewed one.",
+                Enabled: true, Note: null, Failed: null,
                 About: "A parked login is renewed whenever Pitboard runs, and otherwise not."),
             Checks = new ChecksShown(
                 Lines: [keychain], Summary: "1 broken: do not switch accounts until fixed.", Level: Level.Fail,
@@ -691,7 +684,6 @@ public sealed class ModelTests
 
         Assert.AreEqual(plist, ((Schedule.Installed)snapshot.Machine.Schedule.Schedule!).Path);
         Assert.AreEqual(86_400U, ((Schedule.Installed)snapshot.Machine.Schedule.Schedule!).EverySeconds);
-        Assert.AreEqual("Renewed one.", snapshot.Machine.Renewal.Note);
         Assert.AreEqual(Level.Fail, snapshot.Machine.Checks.Lines[0].Level);
         Assert.AreEqual("Failed", snapshot.Machine.Checks.Lines[0].SpokenLevel);
         Assert.AreEqual(0UL, snapshot.Machine.Checks.Lines[0].Id);

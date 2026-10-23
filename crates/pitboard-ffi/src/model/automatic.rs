@@ -881,27 +881,28 @@ fn not_while_another_switch_is_under_way() {
     assert_eq!(model.count(auto_switch), 0);
 }
 
-/// Nor while another change this app made is under way, such as a renewal waiting on the
-/// network: the switch would wait behind it on the lane of changes, and hold every switch
-/// somebody asks for meanwhile. It is asked for at the next look once that change is over.
+// The switch would wait behind the other on the lane of changes, holding every switch asked for.
 #[test]
 fn not_while_another_change_is_under_way() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(vec![work(90.0), personal()])));
+    let spare = account(Some("spare")).build();
+    let mut machine = Machine::reading(Ok(status(vec![work(90.0), personal(), spare])));
     turned_on(&mut model, &mut machine);
     model.refresh(&mut machine);
-    model.send(Intent::RenewNow);
+    model.send(Intent::Forget {
+        qualified: "claude/spare".into(),
+    });
     machine.answer = Ok(status(vec![work(97.0), personal()]));
     machine.look = Ok(AutoLooked::Act);
     model.send(Intent::Refresh { asked: false });
-    model.run_but(&mut machine, |job| matches!(job, Job::Renew));
+    model.run_but(&mut machine, |job| matches!(job, Job::Forget { .. }));
     assert_eq!(model.count(auto_switch), 0);
 
     model.run(&mut machine);
     assert_eq!(
         model.count(auto_switch),
         1,
-        "once the renewal and the read after it are over"
+        "once the forget and the read after it are over"
     );
 }
 

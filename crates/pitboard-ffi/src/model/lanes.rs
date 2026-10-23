@@ -70,8 +70,8 @@ impl Job {
     pub(crate) fn lane(&self) -> Lane {
         match self {
             // The schedule, doctor and the log are read where the Swift service read them, on
-            // its queue of reads, and changes to the schedule and renewals are made on its
-            // queue of changes, one at a time with every other.
+            // its queue of reads, and changes to the schedule are made on its queue of changes,
+            // one at a time with every other.
             Job::Read { .. }
             | Job::ReadOffline { .. }
             | Job::Look
@@ -92,8 +92,7 @@ impl Job {
             | Job::RepairSchedule
             | Job::SetSchedule { .. }
             | Job::SetWarm { .. }
-            | Job::SetWarmRange { .. }
-            | Job::Renew => Lane::Changes,
+            | Job::SetWarmRange { .. } => Lane::Changes,
             Job::WarmUp | Job::WarmNow { .. } => Lane::Warm,
             Job::Holding { .. } | Job::Quit { .. } | Job::Open { .. } => Lane::Processes,
             // Where the login shell's `PATH` is asked, as the Swift service asked it for
@@ -762,9 +761,6 @@ impl Worker {
                     own,
                 }
             }
-            Job::Renew => Answer::Renewed {
-                renewals: core.renew(),
-            },
             Job::Check => Answer::Checked {
                 checks: core.doctor(self.local_time.as_ref()),
             },
@@ -1530,11 +1526,7 @@ mod tests {
         ] {
             assert_eq!(job.lane(), Lane::Reads, "{job:?}");
         }
-        for job in [
-            Job::RepairSchedule,
-            Job::SetSchedule { on: true },
-            Job::Renew,
-        ] {
+        for job in [Job::RepairSchedule, Job::SetSchedule { on: true }] {
             assert_eq!(job.lane(), Lane::Changes, "{job:?}");
         }
         assert_eq!(Job::FindCommandLine.lane(), Lane::Discovery);

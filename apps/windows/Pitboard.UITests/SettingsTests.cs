@@ -131,10 +131,10 @@ public sealed class SettingsTests
         using var launched = Launched.Start(Builds.Debug, fixture: "oneTool");
         OpenSettings(launched);
 
-        Control(launched, "settings.renewDaily").Patterns.Toggle.Pattern.Toggle();
-        launched.Named("Every day");
-        launched.Invoke("Renew now");
-        launched.Named("Renewed one.");
+        var renew = Control(launched, "settings.renewDaily");
+        renew.Patterns.Toggle.Pattern.Toggle();
+        Assert.IsTrue(Becomes(renew, ToggleState.On));
+        Assert.IsTrue(launched.Gone(found => found.ByName("Renew now")), "the app renews as it reads");
     }
 
     // The fixture puts no pitboard where a terminal looks, and the installer, not the app, puts one on the PATH.

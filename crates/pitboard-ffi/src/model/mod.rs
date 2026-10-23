@@ -24,7 +24,7 @@
 //! switch to once the one in use has run out, notifying it through the app's
 //! `Notifications` once for each reset, across launches. It also keeps what is about this
 //! machine rather than its accounts: the daily renewal schedule, repaired once a launch,
-//! renewing now, doctor's checks, the activity log and the `pitboard` a terminal would run.
+//! doctor's checks, the activity log and the `pitboard` a terminal would run.
 //! And it keeps the account windows' books, in `windows.rs`: which store is whose and the
 //! page each window was last on, kept in a file of the app's own, which windows close and
 //! which stores go after a read, the link waiting for an account and the downloads.
@@ -357,10 +357,6 @@ pub enum Intent {
     /// **Warm Up Now**. One warm-up at a time: asked for while one is under way, it does
     /// nothing. What goes wrong is said in the window.
     WarmNow { qualified: String },
-    /// Renew every parked login that is due, now, then read the accounts again once, asking
-    /// every service, to show what it renewed. Never switches, and asks for no usage beyond
-    /// that read. Asked for while a renewal is under way, it does nothing.
-    RenewNow,
     /// Look for the `pitboard` a terminal would run, as the settings do when they show it, and
     /// as an app does once it has linked its own onto the `PATH`.
     LookForCommandLine,
@@ -668,8 +664,8 @@ pub struct Snapshot {
     /// The alert for `failure`, while there is one to say.
     pub failure_alert: Option<AlertText>,
     /// What the settings and the window's other panes show of this machine rather than its
-    /// accounts: daily renewal, Renew Now, doctor's checks, the activity log and the command
-    /// line a terminal runs.
+    /// accounts: daily renewal, doctor's checks, the activity log and the command line a
+    /// terminal runs.
     pub machine: MachineShown,
     /// The account windows: which accounts have one, the windows open and what each loads,
     /// the windows to close and the stores to delete, the link waiting for an account, and

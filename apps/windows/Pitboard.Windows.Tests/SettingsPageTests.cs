@@ -35,8 +35,8 @@ public sealed class SettingsPageTests
 
     private static Task<SettingsPage> Shown(
         AppModel model, StartAtSignIn? start = null, IUpdates? updates = null, string version = "0.0.0", Action<Uri>? open = null,
-        Action<string>? copy = null, Func<NotificationsBlocked?>? notifications = null) =>
-        Views.Navigated<SettingsPage>(Views.Context(model, start, updates, version, open, copy: copy, notifications: notifications));
+        Func<NotificationsBlocked?>? notifications = null) =>
+        Views.Navigated<SettingsPage>(Views.Context(model, start, updates, version, open, notifications: notifications));
 
     private static bool Shows(SettingsPage page, string automationId) =>
         Views.Visible<TextBlock>(page).Any(text => AutomationProperties.GetAutomationId(text) == automationId);
@@ -79,7 +79,7 @@ public sealed class SettingsPageTests
         var toggle = Views.Element<ToggleSwitch>(page, "settings.startAtSignIn");
 
         Assert.IsFalse(toggle.IsOn);
-        Assert.Contains(SettingsViewModel.SignInNote, Views.Texts(page));
+        Assert.DoesNotContain("Settings > Apps > Startup can turn it off too.", Views.Texts(page));
 
         toggle.IsOn = true;
         Assert.IsTrue(start.On);
@@ -122,7 +122,6 @@ public sealed class SettingsPageTests
 
         Assert.IsFalse(Views.Element<ToggleSwitch>(page, "settings.startAtSignIn").IsEnabled);
         Assert.Contains("A Debug build never starts when you sign in to Windows.", Views.Texts(page));
-        Assert.DoesNotContain(SettingsViewModel.SignInNote, Views.Texts(page));
     }
 
     [UITestMethod]
@@ -220,7 +219,7 @@ public sealed class SettingsPageTests
         {
             AtLimit = machine.AtLimit with { Choice = AtLimit.Switch, At = 90, AtLabel = "When a limit reaches 90%" },
             Warm = TwoWarmed with { From = 420, To = 1260 },
-            Schedule = machine.Schedule with { On = true, Runs = "Every day" },
+            Schedule = machine.Schedule with { On = true },
         }));
         // The expander's repeater makes a card for each account on its next layout.
         await Views.Until(
@@ -305,46 +304,38 @@ public sealed class SettingsPageTests
         }
     }
 
+    // The app renews due logins as it reads them, and pitboard schedule status says where the task is.
     [UITestMethod]
-    public async Task RenewalSaysHowOftenAndWhereAndRenewsNow()
+    public async Task RenewalIsTheSwitchAlone()
     {
         const string task = @"\Pitboard\Renew S-1-5-21-1004";
         var model = new StandInModel(With(1, machine => machine with
         {
-            Schedule = new ScheduleShown(
-                Schedule: new Schedule.Installed(task, 86_400), On: true, Changing: false, Enabled: true, Runs: "Every day",
-                ScheduledIn: task, Note: null, Failed: null),
+            Schedule = machine.Schedule with { Schedule = new Schedule.Installed(task, 86_400), On = true },
         }));
         var page = await Shown(new AppModel(model));
         var texts = Views.Texts(page);
 
-        Assert.Contains("Every day", texts);
-        Assert.Contains(task, texts);
+        Assert.DoesNotContain("Every day", texts);
+        Assert.DoesNotContain(task, texts);
+        Assert.IsFalse(Views.Visible<Button>(page).Any(button => button.Content is "Renew now" or "Copy"));
         Assert.IsTrue(Views.Element<ToggleSwitch>(page, "settings.renewDaily").IsOn);
-
-        Views.Press(Views.Button(page, "Renew now"));
-        Assert.Contains(new Intent.RenewNow(), model.Sent);
 
         Views.Element<ToggleSwitch>(page, "settings.renewDaily").IsOn = false;
         Assert.Contains(new Intent.SetSchedule(false), model.Sent);
     }
 
     [UITestMethod]
-    public async Task RenewalWithNoSchedulerSaysWhyAndHoldsRenewNowWhileItRuns()
+    public async Task RenewalWithNoSchedulerSaysWhy()
     {
         const string none = "This PC has no scheduler Pitboard knows how to write to.";
         var page = await Shown(new AppModel(new StandInModel(With(1, machine => machine with
         {
             Schedule = machine.Schedule with { Schedule = new Schedule.Unsupported(), Enabled = false, Note = none },
-            Renewal = machine.Renewal with { Renewing = true },
         }))));
-        var texts = Views.Texts(page);
 
-        Assert.Contains(none, texts);
-        Assert.DoesNotContain("Runs", texts);
-        Assert.DoesNotContain("Scheduled in", texts);
+        Assert.Contains(none, Views.Texts(page));
         Assert.IsFalse(Views.Element<ToggleSwitch>(page, "settings.renewDaily").IsEnabled);
-        Assert.IsFalse(Views.Button(page, "Renew now").IsEnabled);
     }
 
     // The installer owns the PATH entry, so the section offers no link even where the model would.
@@ -571,26 +562,6 @@ public sealed class SettingsPageTests
         var critical = ((SolidColorBrush)Application.Current.Resources["SystemFillColorCriticalBrush"]).Color;
         Assert.AreSame(Card(toggle), Card(failed));
         Assert.AreEqual(critical, ((SolidColorBrush)failed.Foreground).Color);
-    }
-
-    [UITestMethod]
-    public async Task TheScheduledInPathIsCopied()
-    {
-        const string task = @"\Pitboard\Renew S-1-5-21-1004";
-        var copied = new List<string>();
-        var page = await Shown(
-            new AppModel(new StandInModel(With(1, machine => machine with
-            {
-                Schedule = new ScheduleShown(
-                    Schedule: new Schedule.Installed(task, 86_400), On: true, Changing: false, Enabled: true, Runs: "Every day",
-                    ScheduledIn: task, Note: null, Failed: null),
-            }))),
-            copy: copied.Add);
-
-        Views.Press(Views.Element<Button>(page, "settings.copyScheduledIn"));
-
-        Assert.AreEqual(task, copied.Single());
-        Assert.IsTrue(Said(page, task).IsTextSelectionEnabled);
     }
 
     // A Debug build's own off would be said in the docs' pictures, so only a Release build's refusal is said.

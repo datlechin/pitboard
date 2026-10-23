@@ -39,7 +39,7 @@
         <toolkit:SettingsCard Header="Start when you sign in to Windows">
           <toolkit:SettingsCard.Description>
             <StackPanel>
-              <TextBlock Text="{x:Bind ViewModel.StartupNote, Mode=OneWay}" />
+              <TextBlock Text="{x:Bind ViewModel.StartupNote, Mode=OneWay}" Visibility="{x:Bind ViewModel.HasStartupNote, Mode=OneWay}" />
               <TextBlock
                   x:Name="StartupFailed"
                   Style="{StaticResource CriticalCaptionTextBlockStyle}"
@@ -216,28 +216,6 @@
               AutomationProperties.Name="Renew parked logins daily"
               Toggled="OnRenewDailyToggled" />
         </toolkit:SettingsCard>
-        <toolkit:SettingsCard Header="Runs" Visibility="{x:Bind ViewModel.HasRuns, Mode=OneWay}">
-          <TextBlock Text="{x:Bind ViewModel.Runs, Mode=OneWay}" Style="{StaticResource SecondaryTextBlockStyle}" />
-        </toolkit:SettingsCard>
-        <!-- As Settings > System > About copies its specifications: a Copy button, and the text selectable. -->
-        <toolkit:SettingsCard Header="Scheduled in" Visibility="{x:Bind ViewModel.HasScheduledIn, Mode=OneWay}">
-          <toolkit:SettingsCard.Description>
-            <TextBlock Text="{x:Bind ViewModel.ScheduledIn, Mode=OneWay}" IsTextSelectionEnabled="True" />
-          </toolkit:SettingsCard.Description>
-          <Button
-              Content="Copy"
-              AutomationProperties.AutomationId="settings.copyScheduledIn"
-              AutomationProperties.Name="Copy where renewal is scheduled"
-              Click="OnCopyScheduledIn" />
-        </toolkit:SettingsCard>
-        <toolkit:SettingsCard Header="{x:Bind ViewModel.RenewalNote, Mode=OneWay}">
-          <Button
-              MinWidth="120"
-              Content="Renew now"
-              IsEnabled="{x:Bind ViewModel.CanRenewNow, Mode=OneWay}"
-              AutomationProperties.AutomationId="settings.renewNow"
-              Click="OnRenewNow" />
-        </toolkit:SettingsCard>
 
         <TextBlock Style="{StaticResource SettingsSectionHeaderTextBlockStyle}" Text="Command line" />
         <!-- No button: the installer puts the command line on the PATH, and takes it off again. -->
@@ -246,7 +224,6 @@
             <StackPanel>
               <TextBlock Text="{x:Bind ViewModel.UpdateNote, Mode=OneWay}" Visibility="{x:Bind ViewModel.HasUpdateNote, Mode=OneWay}" />
               <TextBlock Text="{x:Bind ViewModel.TerminalNote, Mode=OneWay}" Visibility="{x:Bind ViewModel.HasTerminalNote, Mode=OneWay}" />
-              <TextBlock x:Name="WhatItDoes" />
             </StackPanel>
           </toolkit:SettingsCard.Description>
           <Grid>

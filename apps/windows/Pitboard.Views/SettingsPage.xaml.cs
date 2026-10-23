@@ -16,7 +16,6 @@ public sealed partial class SettingsPage : Page
     {
         InitializeComponent();
         NoWarmAccount.Header = SettingsViewModel.NoWarmAccount;
-        WhatItDoes.Text = SettingsViewModel.WhatItDoes;
         About.Description = SettingsViewModel.Copyright;
         foreach (var link in SettingsViewModel.Links)
         {
@@ -130,16 +129,6 @@ public sealed partial class SettingsPage : Page
     }
 
     private void OnRenewDailyToggled(object sender, RoutedEventArgs args) => ViewModel?.SetRenewsDaily(((ToggleSwitch)sender).IsOn);
-
-    private void OnCopyScheduledIn(object sender, RoutedEventArgs args)
-    {
-        if (ViewModel is { HasScheduledIn: true } shown)
-        {
-            Context.Copy(shown.ScheduledIn);
-        }
-    }
-
-    private void OnRenewNow(object sender, RoutedEventArgs args) => ViewModel?.RenewNow();
 
     private void OnAutomaticChecksToggled(object sender, RoutedEventArgs args) =>
         ViewModel?.SetChecksAutomatically(((ToggleSwitch)sender).IsOn);

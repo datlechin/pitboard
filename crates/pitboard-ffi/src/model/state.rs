@@ -47,8 +47,8 @@ use crate::account_windows::records::{Entry, Loaded};
 use crate::present::{Clicked, UNUSABLE};
 use crate::{
     Abandoned, Account, Adoption, AutoLooked, AutoSwitched, Change, Check, Enrolled, EnrolledAs,
-    FoundCommandLine, GaveUp, OwnCommandLine, PitboardError, Renewed, Schedule, Status, Switch,
-    Switched, Tool, Usage, Warning,
+    FoundCommandLine, GaveUp, OwnCommandLine, PitboardError, Schedule, Status, Switch, Switched,
+    Tool, Usage, Warning,
 };
 use pitboard_core::duty::autoswitch::Threshold;
 use pitboard_core::duty::cadence::{DECIDE_EVERY_SECONDS, Refusals};
@@ -263,8 +263,6 @@ pub(crate) enum Job {
     /// on is not asked of the scheduler where this copy of the app has no command line a
     /// schedule would keep reaching.
     SetSchedule { on: bool },
-    /// Renew every parked login that is due.
-    Renew,
     /// Make every check `pitboard doctor` makes.
     Check,
     /// Read the newest `limit` changes Pitboard made.
@@ -288,8 +286,6 @@ pub(crate) struct Ticket {
     /// What the change it is the read after warned of, by its number in `said_after_read`,
     /// which is said once it has landed.
     saying: Option<u64>,
-    /// Whether it is the read after a renewal, whose landing ends the renewal.
-    after_renewal: bool,
     /// Whether it is the read after a change of this app's own to the account index other
     /// than a switch, whose landing ends that change's hold on the index.
     after_change: bool,
@@ -539,10 +535,6 @@ pub(crate) enum Answer {
         own: OwnCommandLine,
         outcome: Scheduled,
     },
-    /// What renewing every parked login that was due came to, or why it was refused.
-    Renewed {
-        renewals: Result<Vec<Renewed>, PitboardError>,
-    },
     /// Doctor's checks, or `None` where this build makes none.
     Checked {
         checks: Option<Vec<Check>>,
@@ -643,8 +635,6 @@ struct Asked {
     /// What the change that asked warned of, by its number in `said_after_read`, which is
     /// said once this read lands.
     saying: Option<u64>,
-    /// Whether a renewal asked, which is over once this read is.
-    after_renewal: bool,
     /// Whether a change of this app's own to the account index asked, other than a switch,
     /// which holds the index until this read is over.
     after_change: bool,
@@ -1513,13 +1503,6 @@ impl State {
             Intent::SetSchedule { on } => {
                 if self.machine.schedule(on) {
                     jobs.push(Job::SetSchedule { on });
-                }
-            }
-            // Its button holds back while one runs, as the Swift settings' did.
-            Intent::RenewNow => {
-                if !self.machine.renewing {
-                    self.machine.renewing = true;
-                    self.change(Job::Renew, jobs);
                 }
             }
             Intent::LookForCommandLine => jobs.push(Job::FindCommandLine),
@@ -2507,7 +2490,6 @@ impl State {
             timed: asked.timed,
             after_switch: asked.after_switch,
             saying: asked.saying,
-            after_renewal: asked.after_renewal,
             after_change: asked.after_change,
         };
         if let Some(at) = self.updated_ms
@@ -2546,9 +2528,6 @@ impl State {
         }
         if ticket.after_change {
             self.change_over();
-        }
-        if ticket.after_renewal {
-            self.machine.renewing = false;
         }
         if let Some(number) = ticket.saying
             && let Some(at) = self
@@ -2754,10 +2733,6 @@ impl State {
                     jobs.push(Job::ReadSchedule { after_change: true });
                 }
             }
-            Answer::Renewed { renewals } => {
-                self.machine.renewals = Some(renewals);
-                self.read_after_renewal(now, jobs);
-            }
             Answer::Checked { checks } => self.machine.checked(checks, now.epoch()),
             Answer::Logged { changes } => self.machine.logged(changes),
             Answer::CommandLineFound { found, own } => {
@@ -2869,28 +2844,10 @@ impl State {
                 }
                 // What it did is not known: the schedule is read back to show where it is.
                 Job::SetSchedule { .. } => jobs.push(Job::ReadSchedule { after_change: true }),
-                // What it renewed is not known, and is not said; the accounts are read all
-                // the same, to show where things stand.
-                Job::Renew => self.read_after_renewal(now, jobs),
                 Job::Check => self.machine.checked(None, now.epoch()),
                 Job::ReadLog { .. } | Job::FindCommandLine => {}
             },
         }
-    }
-
-    /// The read after a renewal, asking every service, as MachineModel.swift's `renewed` had
-    /// the accounts read as somebody asking: the renewal is over once it is.
-    fn read_after_renewal(&mut self, now: Now, jobs: &mut Vec<Job>) {
-        self.refresh(
-            Asked {
-                fresh: true,
-                after_renewal: true,
-                after_change: true,
-                ..Asked::default()
-            },
-            now,
-            jobs,
-        );
     }
 
     /// The tool of the sign-in `id` has started, or could not be. `Err(None)` is a start

@@ -25,6 +25,8 @@ final class PanesAndSettingsTests: FixtureTestCase {
         XCTAssertTrue(app.staticTexts["One thing is worth looking at."].exists)
     }
 
+    /// The app renews due logins as it reads them, and `pitboard schedule status` says where
+    /// the job is, so the pane holds the switch alone.
     @MainActor
     func testDailyRenewal() {
         let app = launch(.oneTool)
@@ -33,9 +35,9 @@ final class PanesAndSettingsTests: FixtureTestCase {
         let renew = app.control("settings.renewDaily")
         XCTAssertTrue(renew.waitForExistence(timeout: 5))
         renew.click()
-        XCTAssertTrue(app.text("Every day").waitForExistence(timeout: 5))
-        app.buttons["Renew Now"].click()
-        XCTAssertTrue(app.text("Renewed one.").waitForExistence(timeout: 5))
+        XCTAssertTrue(renew.wait(until: "value == 1", timeout: 5))
+        XCTAssertFalse(app.text("Every day").exists)
+        XCTAssertFalse(app.buttons["Renew Now"].exists)
     }
 
     /// Opening at login turns on and off without registering the test build.

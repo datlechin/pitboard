@@ -7,8 +7,7 @@ import UserNotifications
 
 @testable import PitboardApp
 
-// Daily renewal, Renew Now and which `pitboard` a terminal runs are the model's, tested in
-// `pitboard-ffi`.
+// Daily renewal and which `pitboard` a terminal runs are the model's, tested in `pitboard-ffi`.
 
 /// Answers the way macOS can: a registration may wait for approval or be refused, and the
 /// person may change it in System Settings while the app is running.

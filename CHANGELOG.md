@@ -72,6 +72,9 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - The app's account menu no longer offers **Warm Up Automatically**: **Settings** > **Limits**
   turns each account's warm-up on and off.
+- The app's **Settings** no longer show **Renew Now**, **Runs** or **Scheduled in**: the app
+  renews parked logins as it reads usage, and `pitboard renew` and `pitboard schedule status`
+  keep both.
 
 ### Fixed
 

@@ -1,8 +1,8 @@
 //! What the settings and the window's other panes show of this machine rather than its
 //! accounts, as SettingsView.swift, MachinePane.swift and ActivityPane.swift said it from
-//! MachineModel.swift: daily renewal and why it cannot be turned on, Renew Now and what it
-//! did, doctor's checks with the line over them, every change Pitboard made, and the
-//! `pitboard` a terminal runs and how it is kept up to date.
+//! MachineModel.swift: daily renewal and why it cannot be turned on, doctor's checks with the
+//! line over them, every change Pitboard made, and the `pitboard` a terminal runs and how it
+//! is kept up to date.
 //!
 //! What only labels a control, such as "Renew parked logins daily", "Check Again" or "In your
 //! terminal", and what is about the app's own system, such as opening at login or linking the
@@ -21,8 +21,6 @@ use pitboard_core::duty::autoswitch::Threshold;
 pub struct MachineShown {
     /// Daily renewal, the settings' switch and what is said around it.
     pub schedule: ScheduleShown,
-    /// Renew Now, and what the last renewal did.
-    pub renewal: RenewalShown,
     /// Doctor's checks, as the window's machine pane shows them.
     pub checks: ChecksShown,
     /// Every change Pitboard made, as the window's activity pane lists them.
@@ -126,27 +124,12 @@ pub struct ScheduleShown {
     /// drops a second press, and not to turn renewal on where this copy of the app cannot.
     /// Turning it off always can, which is how a schedule that cannot work goes.
     pub enabled: bool,
-    /// How often it runs, while the scheduler has it: "Every day".
-    pub runs: Option<String>,
-    /// Where the scheduler keeps it, while it has it.
-    pub scheduled_in: Option<String>,
     /// Said under the switch while the scheduler does not have it: that this machine has no
     /// scheduler Pitboard writes to, or why this copy cannot schedule renewal.
     pub note: Option<String>,
     /// Why the last change could not be made, until the next is asked for, where `note` does
     /// not say it already.
     pub failed: Option<String>,
-}
-
-/// Renew Now, as the settings show it.
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
-pub struct RenewalShown {
-    /// A renewal is under way, from the moment it is asked for until the accounts have been
-    /// read again after it: the button holds back.
-    pub renewing: bool,
-    /// What the button is beside: what it does, until it has been pressed, and then what the
-    /// last renewal did, in the words `pitboard renew` says it in.
-    pub note: String,
     // what daily renewal does, under its switch
     pub about: String,
 }
@@ -252,7 +235,6 @@ pub struct CommandLineShown {
 pub(crate) fn machine(seen: &Seen) -> MachineShown {
     MachineShown {
         schedule: schedule(seen),
-        renewal: renewal(seen),
         checks: checks(seen),
         activity: activity(seen),
         command_line: command_line(seen),
@@ -475,17 +457,10 @@ fn schedule(seen: &Seen) -> ScheduleShown {
         .own
         .filter(|own| !own.lasting())
         .map(|own| words::cannot_schedule(seen.os, own.temporary));
-    let (runs, scheduled_in, note) = match &machine.schedule {
-        Some(Schedule::Installed {
-            path,
-            every_seconds,
-        }) => (
-            Some(words::runs_every(*every_seconds)),
-            Some(path.clone()),
-            None,
-        ),
-        Some(Schedule::Unsupported) => (None, None, Some(words::no_scheduler(seen.os))),
-        Some(Schedule::Absent) | None => (None, None, cannot.clone()),
+    let note = match &machine.schedule {
+        Some(Schedule::Installed { .. }) => None,
+        Some(Schedule::Unsupported) => Some(words::no_scheduler(seen.os)),
+        Some(Schedule::Absent) | None => cannot.clone(),
     };
     // Said once: a refusal the note under the switch says already is not said again.
     let failed = machine
@@ -503,25 +478,8 @@ fn schedule(seen: &Seen) -> ScheduleShown {
         on: machine.scheduling.unwrap_or(renews_daily),
         changing: machine.scheduling.is_some(),
         enabled: machine.scheduling.is_none() && (renews_daily || cannot.is_none()),
-        runs,
-        scheduled_in,
         note,
         failed,
-    }
-}
-
-/// Renew Now, and what the last renewal did, in `pitboard renew`'s words, or why it was
-/// refused, in the core's: a run that renewed nothing because it was refused does not read
-/// as one where nothing was due.
-fn renewal(seen: &Seen) -> RenewalShown {
-    let machine = &seen.state.machine;
-    RenewalShown {
-        renewing: machine.renewing,
-        note: match &machine.renewals {
-            None => words::RENEWS_WHAT_IS_DUE.to_owned(),
-            Some(Ok(renewals)) => crate::renewal_note(renewals),
-            Some(Err(refused)) => refused.to_string(),
-        },
         about: words::renewal_about(
             seen.os,
             seen.accounts()
@@ -893,7 +851,10 @@ mod tests {
                 status(accounts, Vec::new()),
                 vec![claude_code(), claude_desktop()],
             );
-            present_on(Os::MacOs, &state, 0, &Utc).machine.renewal.about
+            present_on(Os::MacOs, &state, 0, &Utc)
+                .machine
+                .schedule
+                .about
         };
         let claude_code_alone = about(vec![account(Some("work")).signed_in().build()]);
         assert_eq!(

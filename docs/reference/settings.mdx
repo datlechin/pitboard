@@ -28,7 +28,7 @@ If macOS refuses the change, its reason shows under the setting.
 
 ### Start when you sign in to Windows
 
-On Windows, turned on, it writes the value `Pitboard` in your account's `Run` key, which starts Pitboard without its window when you sign in. Under it, the card reads **Settings > Apps > Startup can turn it off too.**
+On Windows, turned on, it writes the value `Pitboard` in your account's `Run` key, which starts Pitboard without its window when you sign in.
 
 Where Windows' own **Startup** settings turned Pitboard off, the switch is dimmed and reads **Turned off in Settings > Apps > Startup, where you can turn it on again.** **Open Startup settings** under it opens that page. Pitboard reads the setting again each time Settings opens, and as you come back to the Pitboard window while it shows Settings.
 
@@ -128,19 +128,13 @@ On Windows, the line sits under **Warm up limits** and its hours, and shows whil
 
 ## Renewal
 
-| Control | System | Default |
-| --- | --- | --- |
-| **Renew parked logins daily** | macOS, Windows | Off |
-| **Renew Now** | macOS | A button |
-| **Renew now** | Windows | A button |
-
-A note says what daily renewal does. Once a Claude Desktop account is enrolled on macOS, the note ends **A parked Claude Desktop login is never renewed.**
+A note under **Renew parked logins daily**, off by default, says what daily renewal does. Once a Claude Desktop account is enrolled on macOS, the note ends **A parked Claude Desktop login is never renewed.**
 
 ### Renew parked logins daily
 
 It has the system's scheduler run `pitboard renew` once a day, with the command line that came with the app. That run renews due parked logins and nothing else. [Keep parked logins alive](/guides/renewal) says why.
 
-The setting is on whenever the scheduler has the job, including one `pitboard schedule install` made. It then shows **Runs** as **Every day**, and **Scheduled in** with where the job is, as [Renewal schedule](/reference/files#renewal-schedule) names it. On Windows, **Copy** beside it copies the task's path. A change that fails says why under the setting.
+The setting is on whenever the scheduler has the job, including one `pitboard schedule install` made. `pitboard schedule status` says where the job is, as [Renewal schedule](/reference/files#renewal-schedule) names it. A change that fails says why under the setting.
 
 You can always turn it off. You cannot turn it on in these cases:
 
@@ -150,12 +144,6 @@ You can always turn it off. You cannot turn it on in these cases:
 | No command line that can run came with the app, as in a build run from Xcode or from its build folder | macOS, Windows | Dimmed, with **This copy of Pitboard has no command line inside it to run on a schedule.** |
 | `PITBOARD_HOME` names a directory other than [the default one](/reference/files#the-pitboard-directory) | macOS, Windows | A refusal under the setting: the schedule renews only the parked logins in the default directory. |
 
-### Renew Now
-
-Renews due parked logins, as `pitboard renew` does, then asks for usage again.
-
-Beside the button, **Renew every parked login that is due.** gives way to the result: the line `pitboard renew` prints, or why Pitboard refused. [`renew`](/reference/maintenance-commands#renew) lists the lines.
-
 ## Command line
 
 **In your terminal** shows the path of the `pitboard` a terminal would run, or **Not installed**. A note under it says how that `pitboard` updates:
@@ -164,8 +152,6 @@ Beside the button, **Renew every parked login that is due.** gives way to the re
 | --- | --- |
 | The one that came with the app, directly or through a link | **The one inside this app, so it updates with the app.** |
 | Any other | **Installed apart from this app, so update it the way you installed it.** |
-
-A note at the foot of the section points to [`status`](/reference/account-commands#status) for scripts and [`repair`](/reference/recovery-commands#repair).
 
 <Tabs>
   <Tab title="macOS">

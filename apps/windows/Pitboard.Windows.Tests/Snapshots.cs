@@ -45,10 +45,7 @@ internal static class Snapshots
 
     private static MachineShown Unread() => new(
         Schedule: new ScheduleShown(
-            Schedule: null, On: false, Changing: false, Enabled: true, Runs: null, ScheduledIn: null, Note: null,
-            Failed: null),
-        Renewal: new RenewalShown(
-            Renewing: false, Note: "Renew every parked login that is due.",
+            Schedule: null, On: false, Changing: false, Enabled: true, Note: null, Failed: null,
             About: "A parked login is renewed whenever Pitboard runs, and otherwise not."),
         Checks: new ChecksShown(Lines: [], Summary: null, Level: Level.Ok, Checking: false, Checked: null, Waiting: "Checking this PC…"),
         Activity: new ActivityShown(

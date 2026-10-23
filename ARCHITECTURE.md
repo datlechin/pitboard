@@ -595,7 +595,7 @@ window loads its site, and whatever the site's pages load, as a browser would.
     `check_name`, the rule a sheet's default button and the model both save by, which says
     why what is typed cannot be a name,
     `machine.rs` what the settings and the window's other panes show of this machine, daily
-    renewal, Renew Now, doctor's checks, the activity log and the command line,
+    renewal, doctor's checks, the activity log and the command line,
     `windows.rs` the account windows, what a window says until it can show its page, what
     the **Open Link** window says, and the question asked before quitting stops the
     downloads an app has under way, and `words.rs` the sentences both apps say and the
@@ -1480,8 +1480,8 @@ window loads its site, and whatever the site's pages load, as a browser would.
   file on the lanes, with the schedule, a change to it, the repair and the command line
   found, never as a snapshot is made. A schedule an older app wrote, or on Windows a task
   whose Pitboard is gone, is repaired once a launch, as the model starts, and read again only
-  where it was. Renew Now runs one renewal at a time, and is over once the read after it,
-  asking every service, is. Doctor's checks and the activity log are read each time their
+  where it was. The app has no Renew Now: its reads renew parked logins, and `pitboard renew`
+  renews what is due. Doctor's checks and the activity log are read each time their
   pane is shown, the checks counted while they run, as reads are. Opening at login and
   linking the command line onto the `PATH` with an administrator's password are each app's
   own, and once an app has linked it, it sends `Intent::LookForCommandLine` for the model to
@@ -5053,11 +5053,9 @@ Measured on 6 October 2026 on macOS 27.0, with `pitboard-ffi` built for
     where the Swift fixture said 45.
   - Doctor's checks are the core's: none is called "Keychain", and none warns of a schedule
     that is not there, which was the Swift fixture's one thing worth looking at. oneTool's
-    one thing is the world's own instead: personal's parked login lapses in two days, so
-    that Renew Now renews it, where the Swift fixture's lasted eleven. Renew Now finds a
-    parked login due that the read before it left alone only while its refresh token lapses
-    within three days, and that is when doctor warns of it, since both ask
-    `doctor::renewal_due`. So oneTool says "One thing is worth looking at." as before, of
+    one thing is the world's own instead: personal's parked login lapses in two days, where
+    the Swift fixture's lasted eleven, and doctor warns of a parked login whose refresh token
+    lapses within three days. So oneTool says "One thing is worth looking at." as before, of
     personal's parked login rather than of daily renewal. stuck has doctor's "interrupted
     switch" worth looking at besides, so it says "2 things are worth looking at.".
   - A read lists the account in use first, and the read of what is known lists only

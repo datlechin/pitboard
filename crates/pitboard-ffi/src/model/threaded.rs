@@ -1777,9 +1777,13 @@ fn the_machine_is_kept_over_the_real_core() {
     model.send(Intent::SetSchedule { on: true });
     let on = last_where(&told, "daily renewal on", |last| {
         let schedule = &last.machine.schedule;
-        schedule.on && !schedule.changing && schedule.scheduled_in.is_some()
+        schedule.on
+            && !schedule.changing
+            && matches!(schedule.schedule, Some(Schedule::Installed { .. }))
     });
-    let job = on.machine.schedule.scheduled_in.clone().expect("where");
+    let Some(Schedule::Installed { path: job, .. }) = on.machine.schedule.schedule.clone() else {
+        unreachable!("waited for")
+    };
     let kept = match OS {
         Os::MacOs | Os::Linux => std::path::PathBuf::from(&job),
         // The task as the pretend Task Scheduler keeps it.
@@ -1793,17 +1797,6 @@ fn the_machine_is_kept_over_the_real_core() {
         "written in the scratch home: {job}"
     );
     assert!(kept.is_file());
-    assert_eq!(on.machine.schedule.runs.as_deref(), Some("Every day"));
-
-    // Waited for by what the renewal says: the listener is told only the newest snapshot
-    // waiting, so one saying it is under way can go untold.
-    model.send(Intent::RenewNow);
-    let renewed = last_where(&told, "the renewal and the read after it", |last| {
-        !last.machine.renewal.renewing
-            && !last.reading
-            && last.machine.renewal.note == "No parked login was due."
-    });
-    assert_eq!(renewed.machine.renewal.note, "No parked login was due.");
 
     model.send(Intent::PaneShown {
         pane: Pane::Activity,

@@ -36,19 +36,8 @@ struct CommandLineSettings: View {
                     Text(failed).explanatory()
                 }
             } footer: {
-                VStack(alignment: .leading, spacing: Design.rowSpacing) {
-                    if let note = shown.updateNote {
-                        Text(note).footnote()
-                    }
-                    // One literal, so its code spans are drawn as code.
-                    Text(
-                        """
-                        The command line does everything the app does, and more: \
-                        `pitboard status` in a script, and `pitboard repair` for a parked \
-                        login Pitboard’s records have lost track of.
-                        """
-                    )
-                    .footnote()
+                if let note = shown.updateNote {
+                    Text(note).footnote()
                 }
             }
         }

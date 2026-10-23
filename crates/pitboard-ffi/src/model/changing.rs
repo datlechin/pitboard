@@ -549,14 +549,6 @@ fn however_a_change_ends_it_gives_the_index_back_to_the_poll() {
                 model.give(Answer::Lost(over));
             }),
         ),
-        (
-            "a renewal whose read fails",
-            Box::new(move |model, machine| {
-                machine.answer = Err(refusal("unreachable", "could not be reached", Vec::new()));
-                model.send(Intent::RenewNow);
-                model.run(machine);
-            }),
-        ),
     ];
     for (case, change) in cases {
         let mut model = Hand::new();

@@ -40,8 +40,8 @@ pub(crate) mod testing;
 
 pub use machine::{
     ActivityLine, ActivityShown, AtLimitChoice, AtLimitShown, CheckLine, ChecksShown,
-    CommandLineShown, EmptyList, MachineShown, RenewalShown, ScheduleShown, TermsShown,
-    WarmAccountShown, WarmShown,
+    CommandLineShown, EmptyList, MachineShown, ScheduleShown, TermsShown, WarmAccountShown,
+    WarmShown,
 };
 pub use sheets::check_name;
 pub use windows::{

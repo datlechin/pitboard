@@ -1826,20 +1826,14 @@ fn activity_lists_every_switch_above_every_enrolment() {
     model.shutdown();
 }
 
-/// Daily renewal turns on, says how often it runs, and Renew Now renews the one parked login
-/// that is due, as PanesAndSettingsTests.swift's testDailyRenewal reads it.
+// As PanesAndSettingsTests.swift's testDailyRenewal reads it.
 #[test]
-fn daily_renewal_turns_on_and_renew_now_says_what_it_did() {
+fn daily_renewal_turns_on() {
     let launched = made(World::OneTool);
     let (model, told) = started(&launched);
     model.send(Intent::SetSchedule { on: true });
-    let on = told.until("the schedule on", |snapshot| {
+    told.until("the schedule on", |snapshot| {
         snapshot.machine.schedule.on && !snapshot.machine.schedule.changing
-    });
-    assert_eq!(on.machine.schedule.runs.as_deref(), Some("Every day"));
-    model.send(Intent::RenewNow);
-    told.until("the renewal said", |snapshot| {
-        snapshot.machine.renewal.note == "Renewed one." && !snapshot.machine.renewal.renewing
     });
     model.shutdown();
 }
@@ -2319,10 +2313,8 @@ fn an_interrupted_switch_is_offered_a_way_out_as_the_app_starts() {
 /// check called "Keychain" and warned that daily renewal was off, which made "One thing is
 /// worth looking at.". The core has no check called "Keychain", and says nothing of a
 /// schedule that is not there. oneTool's one thing is personal's parked login instead, which
-/// is the world's own doing: it lasts two days more, so that Renew Now renews it, where the
-/// Swift fixture's lasted eleven. Renew Now finds a parked login due that the read before it
-/// left alone only while its refresh token lapses within three days, which is when doctor
-/// warns of it, since both ask `doctor::renewal_due`.
+/// is the world's own doing: it lasts two days more, where the Swift fixture's lasted eleven,
+/// and doctor warns of a parked login whose refresh token lapses within three days.
 ///
 /// So in PR 10 that test reads what the core's doctor says: the sentence is the same, of
 /// personal's parked login rather than of daily renewal, and it waits for one of the core's
