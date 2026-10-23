@@ -3182,7 +3182,7 @@ fn judge_desktop(
                     "desktop_data_folder",
                     folder,
                     format!("{shown} {unfit}"),
-                    "Pitboard moves no Claude Desktop login beside a third-party deployment.",
+                    "Pitboard moves no Claude Desktop login for a third-party deployment.",
                 ),
                 Some(unfit @ Unfit::ResetWaits) => fail(
                     "desktop_data_folder",
@@ -4146,9 +4146,9 @@ mod tests {
             ),
             (
                 Unfit::ThirdParty("Claude-3p"),
-                "/Users/dana/Library/Application Support/Claude has a `Claude-3p` folder beside \
-                 it, which a third-party deployment of Claude uses",
-                "Pitboard moves no Claude Desktop login beside a third-party deployment.",
+                "/Users/dana/Library/Application Support/Claude is not the one Claude runs \
+                 from: it runs as a third-party deployment, from `Claude-3p` beside it",
+                "Pitboard moves no Claude Desktop login for a third-party deployment.",
             ),
             (
                 Unfit::ResetWaits,

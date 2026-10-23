@@ -1643,8 +1643,9 @@ window loads its site, and whatever the site's pages load, as a browser would.
   just answered for that login, or a fingerprint ties it to an earlier answer. A Claude
   Desktop record is written only by a change of Claude Desktop, which reads the folder with
   Claude closed.
-- A read of Claude Desktop opens `config.json` and `config.json.journal` and nothing else
-  of Claude's, and none of it while no Claude Desktop account is enrolled. It lists no
+- A read of Claude Desktop opens `config.json` and `config.json.journal`, and
+  `Claude-3p/claude_desktop_config.json` where `Claude-3p/config.json` is there, and nothing
+  else of Claude's, and none of it while no Claude Desktop account is enrolled. It lists no
   process, records nothing, and says the record with when a change last read the login
   (`read_at`).
 - Claude Code's config is a sign that something signed in, and the words of a warning, never
@@ -1818,7 +1819,9 @@ window loads its site, and whatever the site's pages load, as a browser would.
 - Pitboard and a browser meet at the Share extension, which hands the app the one link the
   browser shares, as a Pitboard link. Pitboard reads nothing a browser keeps.
 - Pitboard and Claude meet at Claude's data folder. Pitboard reads `config.json`,
-  `config.json.journal` and the names of the folder's first-level entries. From `Cookies` it
+  `config.json.journal` and the names of the folder's first-level entries and of
+  `IndexedDB`'s. Beside it, it looks for `Claude-3p/config.json`, and where that is there
+  reads `deploymentMode` in `Claude-3p/claude_desktop_config.json`. From `Cookies` it
   reads the store's versions in `meta`. It reads the host, name, path, expiry and stored
   value of every cookie for `claude.ai` or `.claude.ai`, and of any cookie with a session
   cookie's name. It keeps only the `sessionKey`'s expiry and an 8-byte fingerprint of its
@@ -3559,7 +3562,11 @@ here gives its build.
 - Claude keeps its data in `Library/Application Support/Claude` under the home the passwd
   entry names, and a packaged build deletes `CLAUDE_USER_DATA_DIR` from its environment
   (2.7032.0).
-- A third-party deployment keeps its data in `Claude-3p` beside it (2.7032.0).
+- Claude runs from `Claude-3p` beside it, and keeps its settings there, once its managed
+  configuration turns on a third-party deployment. Picking claude.ai in its chooser writes
+  `deploymentMode` `1p` there, and Claude runs from `Claude` again. A `Claude-3p` can hold
+  only `claude_desktop_config.json`, as an earlier build left it on a Mac with no deployment
+  (3.6556.2, 23 October 2026; issue 271).
 - `Cookies`, `Cookies-journal`, `Local Storage`, `Session Storage`, the two
   `IndexedDB/https_claude.ai_0.indexeddb` stores, `WebStorage` and `File System`, with
   `config.json`'s `oauth:tokenCache`, `oauth:tokenCacheV2` and `lastKnownAccountUuid`, move

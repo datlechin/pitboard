@@ -1119,9 +1119,12 @@ fn a_data_folder_pitboard_moves_no_login_in_refuses_every_change() {
     refuses(
         "third-party",
         &|m| {
-            std::fs::create_dir_all(m.ctx_home().join("claude/data-3p")).expect("a folder beside");
+            let beside = m.ctx_home().join("claude/data-3p");
+            std::fs::create_dir_all(&beside).expect("a folder beside");
+            std::fs::write(beside.join("config.json"), b"{}").expect("Claude's settings there");
         },
-        "has a `Claude-3p` folder beside it, which a third-party deployment of Claude uses",
+        "is not the one Claude runs from: it runs as a third-party deployment, from `Claude-3p` \
+         beside it",
     );
     refuses(
         "reset",
@@ -1757,6 +1760,26 @@ fn a_part_of_the_accounts_data_pitboard_has_not_read_stops_the_start_of_a_move_a
     assert!(park_of(&m, "work").is_some());
     hold(&m, "recovered beside an entry not read");
     rested(&m, "recovered beside an entry not read");
+}
+
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Claude Desktop is macOS only: Windows refuses its folder calls"
+)]
+fn a_claude_3p_folder_claude_does_not_run_from_stops_no_switch() {
+    let m = desktop_pair("third-party-not-run");
+    let beside = m.ctx_home().join("claude/data-3p");
+    std::fs::create_dir_all(&beside).expect("a folder beside");
+    let left = br#"{"enterpriseConfig": {}, "_cfprefsMigrated": true}"#;
+    let config = beside.join("claude_desktop_config.json");
+    std::fs::write(&config, left).expect("an earlier build's");
+    assert!(matches!(used(&m, "home").0, Outcome::Switched { .. }));
+    std::fs::write(beside.join("config.json"), b"{}").expect("Claude ran from it once");
+    std::fs::write(&config, br#"{"deploymentMode": "1p"}"#).expect("claude.ai picked since");
+    assert!(matches!(used(&m, "work").0, Outcome::Switched { .. }));
+    hold(&m, "beside a `Claude-3p` Claude does not run from");
+    rested(&m, "beside a `Claude-3p` Claude does not run from");
 }
 
 #[test]

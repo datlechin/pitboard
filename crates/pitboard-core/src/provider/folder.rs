@@ -163,7 +163,7 @@ pub(crate) enum Unread {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Unfit {
     Link,
-    // the folder a third-party deployment of the app keeps beside it, by name
+    // the app runs from the folder a third-party deployment keeps beside it, by name
     ThirdParty(&'static str),
     // the app deletes what the folder holds the next time it opens
     ResetWaits,
@@ -188,7 +188,8 @@ impl std::fmt::Display for Unfit {
             ),
             Unfit::ThirdParty(name) => write!(
                 f,
-                "has a `{name}` folder beside it, which a third-party deployment of Claude uses"
+                "is not the one Claude runs from: it runs as a third-party deployment, from \
+                 `{name}` beside it"
             ),
         }
     }

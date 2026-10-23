@@ -69,13 +69,27 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
     },
     Assumption {
         name: "desktop_third_party_folder",
-        fact: "With a third-party deployment, Claude keeps its data in the data folder's name \
-               with `-3p` after it, `Claude-3p`.",
+        fact: "Claude runs from `Claude-3p`, the data folder's name with `-3p` after it, and keeps \
+               its settings there, once its managed configuration turns on a third-party \
+               deployment. The person can then pick claude.ai in its chooser, which writes \
+               `deploymentMode` `1p` in `Claude-3p/claude_desktop_config.json`, and Claude runs \
+               from `Claude` again, unless the configuration turns claude.ai sign-in off. A \
+               `Claude-3p` can hold that file alone with no deployment, as an earlier build \
+               left it.",
         read_from: "This repository's static read of `app.asar`, 11 October 2026, `P` @965537, \
-                    @1030355",
-        verified_against: READ_FROM_THE_ARCHIVE,
-        depends: "`Folder::refuses` refuses a root with `Claude-3p` beside it",
-        probe: &["[custom-3p] userData mkdir failed"],
+                    @1030355; of 3.6556.2's, 23 October 2026, `R` @877849 to @878100 for the \
+                    chooser, @975562 for the data folder, `Q` @544813 for the settings; a \
+                    person's report of a `Claude-3p` holding only that file, on a Mac with no \
+                    deployment, issue 271, 21 October 2026",
+        verified_against: READ_FROM_CLAUDE_3,
+        depends: "`Folder::refuses` refuses a root whose `Claude-3p` holds `config.json`, unless \
+                  its `claude_desktop_config.json` names `deploymentMode` `1p`; a configuration \
+                  that turns claude.ai sign-in off is not read, since no account then signs in \
+                  to switch",
+        probe: &[
+            "[custom-3p] userData mkdir failed",
+            "[custom-3p] deploymentMode written",
+        ],
         absent: &[],
     },
     Assumption {
@@ -457,7 +471,7 @@ pub(crate) const PER_SYSTEM: &[PerSystem] = &[
     on_a_mac("desktop_app", VERIFIED_AGAINST),
     on_a_mac("desktop_native_host_is_chromes", VERIFIED_AGAINST),
     on_a_mac("desktop_data_folder", READ_FROM_THE_ARCHIVE),
-    on_a_mac("desktop_third_party_folder", READ_FROM_THE_ARCHIVE),
+    on_a_mac("desktop_third_party_folder", READ_FROM_CLAUDE_3),
     on_a_mac("desktop_account_items", VERIFIED_AGAINST),
     on_a_mac("desktop_account_keys", VERIFIED_AGAINST),
     on_a_mac("desktop_names_stay", READ_FROM_CLAUDE_3),

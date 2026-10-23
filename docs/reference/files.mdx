@@ -158,6 +158,8 @@ As measured in Claude 2.19675.0, eight items and three keys of `config.json` hol
 
 As read in 2.7032.0, `claude-code-sessions` and `local-agent-mode-sessions` keep each account's sessions in a folder named for the account.
 
+Beside the data folder, Pitboard looks for `Claude-3p/config.json`. As read in 3.6556.2, it is there once Claude has run as a third-party deployment, and Claude runs from `Claude-3p` until `deploymentMode` in `Claude-3p/claude_desktop_config.json` names `1p`. Pitboard reads that key, and moves no login while `Claude-3p/config.json` is there and the key does not name `1p`.
+
 During a change, Pitboard holds an advisory lock on the data folder itself. It deletes nothing of Claude's there. For `pitboard doctor`, it reads Claude's build from `/Applications/Claude.app`.
 
 Pitboard reads the list of processes to tell whether Claude is open:
