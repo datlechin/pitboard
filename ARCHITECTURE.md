@@ -448,8 +448,11 @@ window loads its site, and whatever the site's pages load, as a browser would.
     when it runs out, a parked login's life, a renewal run, doctor's summary, and what is
     left in a file behind the keychain, or Credential Manager on Windows, and what putting it
     away does and did (`left_lines`, `stowed_lines`, `nothing_left`, each in the words of the
-    system it is given), which `pitboard stow` and the app's sheet both say. It
-    also holds `usage_level`, the steps at which a limit's colour changes. A thing said both
+    system it is given), which `pitboard stow` and the app's sheet both say, and what
+    becomes of running sessions after a switch (`after_a_switch`). It also holds
+    `usage_level`, the steps at which a limit's colour changes, and the helpers every front
+    end writes with, `capitalised`, `listed` and `figure`; `time.rs` holds the units of a
+    span, and `state::Key::parse` reads back the name `Key::typed` writes. A thing said both
     in a column and in a sentence has a function for each form. The command line calls these
     functions directly, and so does `pitboard-ffi`'s `present/` as it makes the snapshot,
     which carries what an app shows of them. The bindings export none of them. Clock times
