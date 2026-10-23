@@ -140,7 +140,8 @@ public sealed class ModelTests
             Title: "Before an account runs out",
             Choice: AtLimit.Notify,
             Choices: AtLimitChoices,
-            At: 95, Lowest: 50, Highest: 99, Enabled: true, ShareEnabled: true, AtLabel: "When a limit reaches 95%",
+            At: 95, Lowest: 50, Highest: 99, Enabled: true, ShareEnabled: true, Heading: "When a limit reaches",
+            AtLabel: "When a limit reaches 95%",
             ShareLabel: "Share of a limit", Note: null, Standing: null, Terms: null),
         Warm: new WarmShown(
             Title: "Warm up limits", From: 360, To: 1320, RangeLabel: "06:00 to 22:00", Accounts: [],

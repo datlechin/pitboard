@@ -82,6 +82,8 @@ public sealed partial class SettingsViewModel : INotifyPropertyChanged
     public bool OffersNotificationSettings => _blocked?.InSettings == true;
 
     // The choice's name, which says the share; its card's header stays put.
+    public string AtLimitHeading => AtLimit.Heading;
+
     public string AtLimitLabel => AtLimit.AtLabel;
 
     public string[] AtLimitTitles => [.. AtLimit.Choices.Select(choice => choice.Title)];

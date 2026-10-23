@@ -103,7 +103,7 @@
         </toolkit:SettingsCard>
 
         <TextBlock Style="{StaticResource SettingsSectionHeaderTextBlockStyle}" Text="Limits" />
-        <toolkit:SettingsExpander Header="When a limit reaches" AutomationProperties.AutomationId="settings.atLimitGroup">
+        <toolkit:SettingsExpander Header="{x:Bind ViewModel.AtLimitHeading, Mode=OneWay}" AutomationProperties.AutomationId="settings.atLimitGroup">
           <toolkit:SettingsExpander.Description>
             <StackPanel>
               <TextBlock

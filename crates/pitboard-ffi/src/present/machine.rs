@@ -86,7 +86,9 @@ pub struct AtLimitShown {
     pub enabled: bool,
     // and while something happens at the share
     pub share_enabled: bool,
-    // "When a limit reaches 95%"
+    // "When a limit reaches", beside the field that shows the share
+    pub heading: String,
+    // "When a limit reaches 95%", the choice's name for VoiceOver and Narrator
     pub at_label: String,
     // the control that sets the share
     pub share_label: String,
@@ -319,6 +321,8 @@ fn terms() -> TermsShown {
 
 // How soon running sessions follow is promised only while the last read found no file behind
 // the store.
+const AT_LIMIT: &str = "When a limit reaches";
+
 fn at_limit(seen: &Seen) -> AtLimitShown {
     let state = seen.state;
     let at = state.preferences.threshold().percent();
@@ -374,7 +378,8 @@ fn at_limit(seen: &Seen) -> AtLimitShown {
         highest: Threshold::HIGHEST,
         enabled: state.preferences_have_been_read(),
         share_enabled: state.preferences_have_been_read() && choice != AtLimit::Nothing,
-        at_label: format!("When a limit reaches {at}%"),
+        heading: AT_LIMIT.into(),
+        at_label: format!("{AT_LIMIT} {at}%"),
         share_label: "Share of a limit".into(),
         note,
         standing: state

@@ -180,12 +180,13 @@ public sealed class SettingsViewModelTests
         CollectionAssert.AreEqual(new Intent[] { new Intent.ReadSchedule(), new Intent.LookForCommandLine() }, model.Sent.ToArray());
     }
 
-    // The choice is named by the share it is made at; the share's card keeps its header.
+    // The choice is named by the share it is made at, under a heading without it; the share's card keeps its header.
     [TestMethod]
     public void TheChoiceIsNamedByItsShareAndTheShareItsRange()
     {
         var (shown, _, app) = Over(With(1, machine => machine with { AtLimit = Switching }));
 
+        Assert.AreEqual("When a limit reaches", shown.AtLimitHeading);
         Assert.AreEqual("When a limit reaches 95%", shown.AtLimitLabel);
         CollectionAssert.AreEqual(AtLimitChoices, shown.AtLimitTitles);
         Assert.AreEqual(2, shown.AtLimitIndex);

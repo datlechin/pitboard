@@ -76,7 +76,8 @@ package func snapshot(
                     AtLimitChoice(choice: .notify, title: "Notify Me"),
                     AtLimitChoice(choice: .switch, title: "Switch Automatically"),
                 ], at: 95, lowest: 50, highest: 99, enabled: true, shareEnabled: true,
-                atLabel: "When a limit reaches 95%", shareLabel: "Share of a limit", note: nil,
+                heading: "When a limit reaches", atLabel: "When a limit reaches 95%",
+                shareLabel: "Share of a limit", note: nil,
                 standing: nil, terms: nil),
             warm: WarmShown(
                 title: "Warm up limits", from: 360, to: 1320, rangeLabel: "06:00 to 22:00",

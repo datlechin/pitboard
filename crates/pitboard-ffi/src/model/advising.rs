@@ -781,6 +781,8 @@ fn the_settings_offer_three_choices_and_the_terms_beside_switching() {
     );
     assert_eq!(shown.at_limit.title, "Before an account runs out");
     assert_eq!(shown.warm.title, "Warm up limits");
+    // The field beside the heading shows the share, and the choice is named with it.
+    assert_eq!(shown.at_limit.heading, "When a limit reaches");
     assert_eq!(shown.at_limit.at_label, "When a limit reaches 95%");
     assert_eq!(
         shown.at_limit.note.as_deref(),

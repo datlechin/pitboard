@@ -176,6 +176,7 @@ public sealed class SettingsPageTests
         CollectionAssert.AreEqual(new object[] { "Do nothing", "Notify me", "Switch automatically" }, choice.Items.ToArray());
         Assert.AreEqual(1, choice.SelectedIndex, "a fresh install notifies");
         Assert.AreEqual("When a limit reaches 95%", AutomationProperties.GetName(choice));
+        Assert.AreEqual("When a limit reaches", Views.Element<SettingsExpander>(page, "settings.atLimitGroup").Header);
         Assert.IsTrue(share.IsEnabled);
         Assert.IsFalse(Shows(page, "settings.autoSwitchStanding"), "nothing said while it does not switch");
 

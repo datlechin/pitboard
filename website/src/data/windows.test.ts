@@ -175,8 +175,9 @@ test("Settings says what SettingsPage.xaml, SettingsViewModel.cs and machine.rs 
   const xaml = views("SettingsPage.xaml");
   assert.ok(xaml.includes(`Text="${s.title}"`));
   assert.ok(xaml.includes(`Text="${s.section}"`));
-  assert.ok(xaml.includes(`<toolkit:SettingsExpander Header="${s.atLimit.header}"`));
+  assert.ok(xaml.includes('<toolkit:SettingsExpander Header="{x:Bind ViewModel.AtLimitHeading, Mode=OneWay}"'));
   const machine = joined(present("machine.rs"));
+  assert.ok(machine.includes(`const AT_LIMIT: &str = "${s.atLimit.header}";`));
   assert.ok(machine.includes(`"${s.atLimit.choice}",`));
   assert.ok(machine.includes(`share_label: "${s.share.header}".into(),`));
   assert.ok(

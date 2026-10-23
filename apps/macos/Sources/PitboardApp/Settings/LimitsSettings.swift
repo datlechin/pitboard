@@ -3,7 +3,7 @@ import SwiftUI
 
 struct LimitsSettings: View {
     let model: AppModel
-    @ScaledMetric(relativeTo: .body) private var shareWidth: CGFloat = 44
+    @ScaledMetric(relativeTo: .body) private var shareWidth: CGFloat = 56
 
     nonisolated static func share(_ typed: Int, of atLimit: AtLimitShown) -> UInt8 {
         UInt8(min(max(typed, Int(atLimit.lowest)), Int(atLimit.highest)))
@@ -20,10 +20,10 @@ struct LimitsSettings: View {
         Form {
             Section {
                 // Read as the sentence it is: when a limit reaches the share, do what is chosen.
-                LabeledContent(atLimit.atLabel) {
+                LabeledContent(atLimit.heading) {
                     HStack {
                         // The HIG pairs a stepper with a field where large changes are likely.
-                        TextField(atLimit.shareLabel, value: share, format: .number)
+                        TextField(atLimit.shareLabel, value: share, format: .percent)
                             .labelsHidden()
                             .textFieldStyle(.roundedBorder)
                             .multilineTextAlignment(.trailing)
