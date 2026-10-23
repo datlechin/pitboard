@@ -27,6 +27,7 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Security
 
+- Pitboard's HTTPS uses rustls-webpki 0.103.16, which fixes RUSTSEC-2026-0382.
 - A switch parks Claude Code's `cloudSessionsOauth` and `trustedDeviceEnrolledAfterRefusalAtMs`
   with the outgoing account's login, and no longer leaves them for the incoming account.
 
