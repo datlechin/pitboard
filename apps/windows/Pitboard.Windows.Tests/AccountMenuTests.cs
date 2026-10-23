@@ -16,6 +16,7 @@ public sealed class AccountMenuTests
     private static string[] Said(MenuFlyout menu) =>
         [.. menu.Items.Select(entry => entry is MenuFlyoutItem item ? item.Text : "-")];
 
+    // Microsoft's menu guidance removes a context menu's items that do not apply now, as the HIG does.
     [UITestMethod]
     public void TheMenuOffersWhatTheModelOffersThenCopyingThenForgetting()
     {
@@ -27,8 +28,7 @@ public sealed class AccountMenuTests
 
         var menu = AccountMenu.For(item, (_, _) => { });
 
-        Assert.AreEqual("Use spare, Sign in again…, Rename…, -, Copy email address, -, Forget…", string.Join(", ", Said(menu)));
-        Assert.IsFalse(((MenuFlyoutItem)menu.Items[1]).IsEnabled, "a sign-in held back");
+        Assert.AreEqual("Use spare, Rename…, -, Copy email address, -, Forget…", string.Join(", ", Said(menu)));
     }
 
     // The keys AccountKeys takes on the row, shown beside the items that do the same.
@@ -49,9 +49,13 @@ public sealed class AccountMenuTests
     [UITestMethod]
     public void TheAccountInUseOffersNoForget()
     {
-        var item = Items.Account("claude", "work", inUse: true) with { Offers = [Rename], Forget = null };
+        var item = Items.Account("claude", "work", inUse: true) with
+        {
+            Offers = [Use with { Enabled = false }, Rename],
+            Forget = Items.Forget("claude/work") with { Enabled = false },
+        };
 
-        Assert.DoesNotContain("Forget…", Said(AccountMenu.For(item, (_, _) => { })));
+        Assert.AreEqual("Rename…, -, Copy email address", string.Join(", ", Said(AccountMenu.For(item, (_, _) => { }))));
     }
 
     [UITestMethod]

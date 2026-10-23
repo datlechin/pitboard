@@ -7,13 +7,14 @@ using Windows.ApplicationModel.DataTransfer;
 namespace Pitboard.Views;
 
 // An account's context menu, in the macOS order: its offers, its windows, copying its address, then forgetting it.
+// Microsoft's menu guidance leaves out what does not apply now, where the model dims it for the macOS menu bar.
 public static class AccountMenu
 {
     public static MenuFlyout For(
         AccountItem item, Action<Question?, Intent> ask, Action<WindowAccount>? open = null, IReadOnlyCollection<string>? held = null)
     {
         var menu = new MenuFlyout();
-        foreach (var offer in item.Offers)
+        foreach (var offer in item.Offers.Where(offer => offer.Enabled))
         {
             menu.Items.Add(Entry(offer, ask));
         }
@@ -40,7 +41,7 @@ public static class AccountMenu
             menu.Items.Add(copy);
         }
 
-        if (item.Forget is { } forget)
+        if (item.Forget is { Enabled: true } forget)
         {
             Separate(menu);
             var entry = Entry(forget, ask);
@@ -56,7 +57,6 @@ public static class AccountMenu
         var entry = new MenuFlyoutItem
         {
             Text = offer.Title,
-            IsEnabled = offer.Enabled,
             KeyboardAcceleratorTextOverride = AccountKeys.Renames(offer) ? "F2" : "",
         };
         entry.Click += (_, _) => ask(offer.Confirm, offer.Intent);
