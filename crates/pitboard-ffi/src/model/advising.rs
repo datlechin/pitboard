@@ -685,9 +685,7 @@ fn a_limit_at_the_share_is_notified_once_before_it_runs_out() {
     assert_eq!(switches_to(&model), ["claude/personal"]);
 }
 
-/// A limit whose reset has passed is back, as the core judges it, before a reading says so:
-/// nothing is posted of it at the share or once it ran out, and no switch away from it is
-/// offered.
+// Back as the core judges it, before a reading says so.
 #[test]
 fn a_limit_past_its_reset_is_neither_notified_nor_advised_on() {
     for percent in [96.0, 100.0] {

@@ -82,7 +82,6 @@ pub fn limit_name(kind: &str, length_seconds: Option<i64>) -> String {
     }
 }
 
-/// A share of a limit as every front end draws it: "64%", a half rounded up.
 pub fn figure(percent: f64) -> String {
     format!("{}%", whole(percent))
 }
@@ -94,19 +93,15 @@ pub fn share_of_limit(limit: &crate::usage::Window) -> String {
     format!("{} of its {name} limit", figure(limit.percent))
 }
 
-/// How much of a limit `account` has used, as every sentence about a limit at the share starts:
-/// "work has used 96% of its 5-hour limit". `used` is [`share_of_limit`].
 pub fn has_used(account: &str, used: &str) -> String {
     format!("{account} has used {used}")
 }
 
-/// An attempt to switch away from `from` came to nothing a moment ago, and the next is made at
-/// `until`, written as each front end writes a clock time.
+// Clock times come as each front end writes them.
 pub fn auto_waiting(from: &str, used: &str, until: &str) -> String {
     format!("{}. Pitboard tries again at {until}.", has_used(from, used))
 }
 
-/// Claude Code was switched by itself from `from` to `to`.
 pub fn auto_switched(from: &str, to: &str, used: &str) -> String {
     format!(
         "Switched Claude Code from {from} to {to}: {}.",
@@ -114,8 +109,7 @@ pub fn auto_switched(from: &str, to: &str, used: &str) -> String {
     )
 }
 
-/// Pitboard does not switch away from a limit of `from` at the share, for `why`, a clause from
-/// [`not_switching`], and decides again at `until` where it waits to.
+// `why` is a clause from `not_switching`.
 pub fn auto_skipped(from: &str, used: &str, why: &str, until: Option<&str>) -> String {
     let mut said = format!(
         "{}. Pitboard is not switching: {why}.",
@@ -127,8 +121,7 @@ pub fn auto_skipped(from: &str, used: &str, why: &str, until: Option<&str>) -> S
     said
 }
 
-/// Pitboard cannot judge whether to switch Claude Code, for `why`, a clause from
-/// [`not_watching`], and asks again at `until` where it waits to.
+// `why` is a clause from `not_watching`.
 pub fn auto_not_watching(why: &str, until: Option<&str>) -> String {
     let mut said = format!("Pitboard is not switching Claude Code: {why}.");
     if let Some(until) = until {
@@ -247,7 +240,6 @@ pub fn not_warming(why: &crate::duty::warm::Halt) -> String {
     }
 }
 
-/// That Pitboard warms up no account on this machine for now, and why.
 pub fn warming_halted(why: &crate::duty::warm::Halt) -> String {
     format!("Pitboard is not warming up accounts: {}.", not_warming(why))
 }
@@ -330,8 +322,7 @@ pub fn kept_until_renewed() -> &'static str {
      started again"
 }
 
-/// What becomes of `sessions` already running once a switch is made, as a sentence with no
-/// full stop: "Claude Code sessions already running follow within 33 seconds".
+// No full stop: "Claude Code sessions already running follow within 33 seconds".
 pub fn after_a_switch(adoption: &crate::provider::Adoption, sessions: &str) -> String {
     use crate::provider::Adoption;
     match adoption {
@@ -608,8 +599,7 @@ pub fn scoped_limit_name(kind: &str, length_seconds: Option<i64>, scope: Option<
     }
 }
 
-/// How long a limit has at its pace before it runs out, as [`span`] says it, or nothing under
-/// a minute, where it is about to run out, which reads more plainly than "<1m".
+// Nothing under a minute: "about to run out" reads more plainly than "<1m".
 pub fn time_to_run_out(in_seconds: i64) -> Option<String> {
     (in_seconds >= MINUTE).then(|| span(in_seconds))
 }
@@ -1085,9 +1075,7 @@ pub(crate) fn item_gone(label: &str, item: &str) -> String {
     )
 }
 
-/// What giving up a Claude Desktop move did and what is left to do, as every front end says
-/// it: `name` is the account as the front end names one, and `way_on`, a clause, its way to
-/// the account Claude shows.
+// `name` as the front end names the account; `way_on` its way to the account Claude shows.
 pub fn given_up(given_up: &crate::switch::GivenUp, name: &str, way_on: &str) -> String {
     let app = given_up.tool.program();
     let mut said = format!(
@@ -1434,8 +1422,7 @@ pub(crate) fn listed_values<T: AsRef<str>>(values: &[T]) -> String {
     listed(values.iter().map(|value| format!("`{}`", value.as_ref())))
 }
 
-/// `text` with its first letter a capital, to begin a sentence with: "5-hour" stays "5-hour"
-/// and "weekly" becomes "Weekly".
+// "5-hour" stays "5-hour" and "weekly" becomes "Weekly".
 pub fn capitalised(text: &str) -> String {
     let mut chars = text.chars();
     chars.next().map_or_else(String::new, |first| {

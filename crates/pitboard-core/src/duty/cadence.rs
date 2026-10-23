@@ -19,12 +19,10 @@ pub(crate) const RETRY_MOST_SECONDS: i64 = 900;
 /// to be done.
 pub(crate) const ATTEMPTS: u32 = 3;
 
-/// How often a front end looks at when Pitboard's account index and its usage readings were
-/// last written, which costs no network and no keychain.
+// When the index and the readings were last written: no network and no keychain.
 pub const LOOK_EVERY_SECONDS: i64 = 2;
 
-/// How often a front end asks the services about every account by itself. Each account is
-/// asked only as often as its budget allows whichever front end asks.
+// Each account is still asked only as often as its budget allows.
 pub const READ_EVERY_SECONDS: i64 = 300;
 
 /// How often a front end that acts by itself decides though nothing was written: an account

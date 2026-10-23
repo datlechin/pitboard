@@ -2278,7 +2278,6 @@ mod tests {
         );
     }
 
-    /// The summary is the command line's, with the app's way on and no backticks.
     #[test]
     fn a_move_given_up_is_summed_up_as_the_command_line_sums_it_up() {
         let given_up = pitboard_core::switch::GivenUp {

@@ -5470,9 +5470,7 @@ mod tests {
         );
     }
 
-    /// The login in use is judged by when its refresh token expires as a parked one is, and
-    /// said in the same words: due within `RENEW_WITHIN`, and expired once that has passed. One
-    /// that gives no date has none to say, which is no warning.
+    // One that gives no date is no warning.
     #[test]
     fn the_login_in_use_is_judged_by_when_its_refresh_token_expires_as_a_park_is() {
         let credential = |f: &mut Facts, expires: Option<i64>| {

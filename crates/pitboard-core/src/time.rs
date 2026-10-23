@@ -102,8 +102,7 @@ impl Clock for FixedClock {
     }
 }
 
-/// When the file at `path` last changed, in epoch milliseconds, or 0 where it is not there.
-/// Milliseconds, since the second of two changes within one second would otherwise go unseen.
+// Milliseconds: a second change within one second would otherwise go unseen.
 pub(crate) fn changed_at(path: &std::path::Path) -> i64 {
     std::fs::metadata(path)
         .and_then(|m| m.modified())

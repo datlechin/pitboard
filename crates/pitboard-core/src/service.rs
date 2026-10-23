@@ -170,8 +170,7 @@ pub enum Warning {
     /// `last`'s, as a sign-in leaves it and as another process starting on another login
     /// can: another login may be stored. Said by a read that could not ask whose it is.
     /// `asked` is false for a record brought forward from an earlier Pitboard, whose `last`
-    /// is the account it last switched to, which the service never named, whatever the tool's
-    /// own record names.
+    /// is the account it last switched to, which the service never named.
     InUseUnconfirmed {
         tool: ProviderId,
         last: Stored,
@@ -757,9 +756,6 @@ fn replaced(state: &state::State) -> Vec<Warning> {
         .collect()
 }
 
-/// What `known` says of a tool whose own record is apart from its login: that the account
-/// in use is unconfirmed ([`Known::unconfirmed`]), or that the tool's own record names
-/// another account than the login stored.
 fn in_doubt(state: &state::State, tool: ProviderId, known: &Known) -> Option<Warning> {
     let named = Stored::of(state, tool, known.own_record.as_ref());
     if let Some(doubt) = known.unconfirmed() {
@@ -3463,11 +3459,7 @@ mod tests {
         assert_eq!(m.api.calls(), 0);
     }
 
-    /// The same record where the config names that account, as on nearly every machine
-    /// updated from 0.9.0 until its first read that asks: still not confirmed, as doctor says.
-    /// Another switcher can write the keychain alone, and a process started on another login
-    /// can write that login's account into the config (`config_identity_is_the_last_writers`),
-    /// and a record never asked about has no login to tell the one stored by.
+    // As on nearly every machine updated from 0.9.0 until its first read that asks.
     #[test]
     fn an_offline_read_of_a_record_never_asked_about_is_not_confirmed_where_the_config_agrees() {
         let m = machine("offline-never-asked-agrees");

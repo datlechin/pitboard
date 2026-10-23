@@ -151,7 +151,6 @@ pub enum Unusable {
     Separator,
 }
 
-/// What a name that is empty or not one word is refused with.
 pub const ONE_WORD: &str = "a label must be one word, such as `personal` or `work`";
 
 // A new account's name within its tool, by the rules docs/reference/commands.mdx lists.

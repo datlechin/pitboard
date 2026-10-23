@@ -228,8 +228,7 @@ impl Backend {
     }
 }
 
-/// Why Pitboard follows Codex into no store but the file, as a sentence with no full stop.
-/// `codex_keychain_stores_are_its_own` and `codex_windows_stores` in the register.
+// The register's `codex_keychain_stores_are_its_own` and `codex_windows_stores`.
 pub(crate) fn file_store_only(os: Os) -> &'static str {
     match os {
         Os::MacOs | Os::Linux => {

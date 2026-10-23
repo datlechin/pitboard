@@ -129,7 +129,6 @@ pub mod testing {
         crate::context::variables()
     }
 
-    /// What a change meets where a park Pitboard could not look at stands in its way.
     pub fn park_unread(label: &str, path: &std::path::Path, why: &str) -> crate::error::Error {
         crate::store::folder::unread(label, path, why)
     }

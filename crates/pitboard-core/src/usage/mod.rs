@@ -89,14 +89,11 @@ impl Window {
         }
     }
 
-    /// Whether this limit is used up as of `now`: at the service's 100 as read, not the 100%
-    /// a share just under it is drawn at, and until its reset. What every front end says
-    /// "used up" and "ran out" by.
+    // At the service's 100 as read, not the 100% a share just under it is drawn at.
     pub fn used_up(&self, now: i64) -> bool {
         self.used(now) >= 100.0
     }
 
-    /// Whether this limit has reached `share` as of `now`, as it is drawn, until its reset.
     pub fn reached(&self, share: u8, now: i64) -> bool {
         reached(self.used(now), share)
     }
@@ -131,8 +128,8 @@ pub(crate) fn limit_name(kind: &str) -> &str {
 }
 
 /// A percentage as every front end draws it and the automatic switch judges it: a whole
-/// one, a half rounded up, so a limit drawn at 95% is at 95%. Whether a limit is used up is
-/// not judged by it: that is [`Window::used_up`].
+/// one, a half rounded up, so a limit drawn at 95% is at 95%. Whether the account in use
+/// has run out of a limit is not judged by it: that is the service's 100, as read.
 pub fn whole(percent: f64) -> i64 {
     percent.round() as i64
 }

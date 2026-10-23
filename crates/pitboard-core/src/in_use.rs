@@ -98,12 +98,7 @@ impl Known {
         self.last.as_ref()?.owner.as_ref()
     }
 
-    /// Why a reader that asks nobody cannot take what was last established as the account in
-    /// use, where something was established: it was never checked against the store, whatever
-    /// the tool's own record names, or that record has moved since. A record never checked has
-    /// no login to tell the one stored by, another switcher can write the store alone, and a
-    /// process started on another login can write that login's account into Claude Code's
-    /// config (the register's `config_identity_is_the_last_writers`).
+    // Never checked, whatever the config names: `config_identity_is_the_last_writers`.
     pub(crate) fn unconfirmed(&self) -> Option<Doubt> {
         self.last.as_ref()?;
         self.doubt

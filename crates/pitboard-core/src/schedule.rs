@@ -370,17 +370,15 @@ fn broken(ctx: &Context, program: &Path) -> bool {
     !drifted && fault(program, program.is_file()).is_some()
 }
 
-/// What stops the renewal schedule from renewing anything, on any system.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Fault {
-    /// The Pitboard it runs is gone from its path, so the system fails to start it every day.
+    // The system fails to start it every day.
     Gone,
-    /// It runs an app's own program, which renews nothing ([`an_apps_own_program`]).
+    // An app's own program renews nothing.
     TheApp,
 }
 
-/// What stops a schedule that runs `program`, `found` or not, from renewing anything, where
-/// something does: doctor's judgement and the app's repair alike.
+// Doctor's judgement and the app's repair alike.
 pub(crate) fn fault(program: &Path, found: bool) -> Option<Fault> {
     if !found {
         Some(Fault::Gone)
@@ -848,8 +846,6 @@ mod tests {
         assert_eq!(installed_program(&ctx), Some(app));
     }
 
-    /// A schedule whose Pitboard is gone fails every day on every system, as doctor says, and
-    /// the app points it at its own command line, as it points a Windows task.
     #[test]
     fn a_schedule_whose_pitboard_is_gone_is_pointed_at_the_apps_command_line() {
         let home = Scratch::new();
