@@ -700,7 +700,7 @@ mod tests {
             Platform::Windows,
             &sorted,
         );
-        assert_eq!(report["verified_against"], "0.163.0");
+        assert_eq!(report["verified_against"], "0.164.0");
         assert!(
             report["pending_here"]
                 .as_array()
