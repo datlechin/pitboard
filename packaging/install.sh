@@ -200,7 +200,7 @@ path_hint() {
   say "  $line"
 }
 
-# zsh's own fpath holds no folder under the home.
+# zsh's own fpath holds no folder under the home, and holds prefixes such as /usr/local's.
 zsh_hint() {
   say "zsh loads the completions once ~/.zshrc has these lines." \
     "Where it runs compinit already, add only the first, before it:"
@@ -278,9 +278,9 @@ main() {
     say "Your shell runs $found first. Remove that copy, or put $bin before it on PATH."
   fi
   login=${SHELL:-}
-  if [ "${login##*/}" = zsh ]; then
-    zsh_hint
-  fi
+  case ${login##*/}:$share in
+    zsh:"$home"/*) zsh_hint ;;
+  esac
   if [ "$system" = Darwin ]; then
     app_note /Applications/Pitboard.app "$home/Applications/Pitboard.app"
   fi

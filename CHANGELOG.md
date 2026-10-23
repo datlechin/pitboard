@@ -20,8 +20,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `pitboard doctor` reports the watch service, and `pitboard uninstall` stops and removes it.
 - `pitboard watch --help` and `pitboard watch install` say that Anthropic's terms may cover
   automatic switching and warm-ups, and link to what they say.
-- The install script ends with the command to run next and, where your login shell is zsh, the
-  lines that make zsh load Pitboard's completions.
+- The install script ends with the command to run next and, where your login shell is zsh and
+  it installs into your home, the lines that make zsh load Pitboard's completions.
 
 ### Changed
 

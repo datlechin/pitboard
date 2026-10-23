@@ -979,6 +979,23 @@ class InstallScript(unittest.TestCase):
                         hint = ZSH_HINT.format(f"$HOME/{prefix}/share")
                         self.assertEqual(hint in result.out, told, result.out)
                         self.assertEqual("fpath" in result.out, told, result.out)
+                # zsh's own fpath holds a prefix's site-functions outside the home, such as
+                # /usr/local's.
+                with self.subTest(login=login, prefix="outside the home"):
+                    if seen_by(shell, "SHELL", login) != login:
+                        self.skipTest(f"{shell[0]} changes SHELL={login!r} before the script runs")
+                    case = self.case()
+                    usr = case.dir / "usr"
+                    usr.mkdir()
+                    result = case.run(
+                        GOOD.script,
+                        shell,
+                        env={"SHELL": login, "PITBOARD_INSTALL_DIR": str(usr / "local" / "bin")},
+                        allowed=(usr,),
+                    )
+                    self.assertEqual(result.rc, 0, result.err)
+                    self.assertTrue((usr / "local" / "share" / "zsh" / "site-functions").is_dir())
+                    self.assertNotIn("fpath", result.out)
 
     def test_it_ends_with_the_command_to_run_next(self):
         for shell in self.each_shell():
