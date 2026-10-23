@@ -46,6 +46,17 @@ final class MenuBarTests: FixtureTestCase {
         XCTAssertTrue(app.textFields["sheet.name"].exists)
     }
 
+    // Command-0 is Actual Size, as in Safari.
+    @MainActor
+    func testCommandZeroDoesNotOpenPitboard() {
+        let app = launch(.oneTool)
+        app.openMenu()
+        XCTAssertTrue(app.menuItem("Open Pitboard").waitForExistence(timeout: 5))
+        app.typeKey("0", modifierFlags: .command)
+        XCTAssertFalse(app.windows.firstMatch.waitForExistence(timeout: 2))
+        app.typeKey(.escape, modifierFlags: [])
+    }
+
     @MainActor
     func testSettingsOpens() {
         let app = launch(.oneTool)

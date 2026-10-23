@@ -45,6 +45,9 @@ public struct PitboardScenes: Scene {
             // The standard item shows a beta's CFBundleShortVersionString, its X.Y.Z alone.
             CommandGroup(replacing: .appInfo) {
                 Button("About Pitboard") { AppVersion.showAboutPanel() }
+                if updates.available {
+                    Button("Check for Updates…") { updates.check() }
+                }
             }
             // Nothing here makes a document: what is new here is an account, from any pane.
             CommandGroup(replacing: .newItem) {

@@ -44,6 +44,7 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   to Taskbar settings.
 - The macOS app's **Settings** take the share a limit is reached at in a field beside its
   stepper.
+- The macOS app's **Pitboard** menu offers **Check for Updates** while a window is open.
 
 ### Changed
 
@@ -71,6 +72,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The Windows app's icon tooltip lists each account in use with its limits.
 - The app's **Settings** say what switching, warm-up and daily renewal do in one or two
   sentences.
+- **Open Pitboard** in the macOS app's menu no longer takes Command-0, which is **Actual Size**
+  for an account's window.
 - The macOS app's **Settings** has three panes, **General**, **Limits** and **Advanced**, and
   the Windows app's **Settings** the same three sections before **About**.
 
