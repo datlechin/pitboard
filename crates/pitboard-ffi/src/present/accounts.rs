@@ -272,7 +272,7 @@ pub(crate) fn item(seen: &Seen, account: &Account) -> AccountItem {
         switching,
         offers: offers(seen.os, account, action.as_ref(), busy)
             .into_iter()
-            .chain(warm_offers(seen, account))
+            .chain(warm_offer(seen, account))
             .collect(),
         warm_note: warm_note(seen, account),
         windows: windows_of_account(account, seen.accounts())
@@ -305,21 +305,13 @@ pub(crate) fn item(seen: &Seen, account: &Account) -> AccountItem {
     }
 }
 
-/// What an account's own menu offers to do to it, above its windows: its own action where
-/// that switches to it or names it, and then, for an account Pitboard has a name for and can
-/// place, signing in to it again and renaming it. Signing in again is offered here for every
-/// such account, so not a second time as the account's own action, and is held back while a
-/// sign-in runs, as the action is; nothing else is held back, here or by a switch under way.
-///
-/// AccountsPane.swift's shortcut menu as it was at c1be7c3: its `offeredInItsMenu`, and the
-/// items it worded and sent from `renamable` and `busy`.
+// Signing in again is offered here for every named account, so never as its own action too.
 fn offers(os: Os, account: &Account, action: Option<&ItemAction>, busy: bool) -> Vec<ItemOffer> {
     let offer = |title: String, intent: Intent, enabled: bool| ItemOffer {
         title,
         intent,
         enabled,
         confirm: None,
-        checked: None,
     };
     let own = action.and_then(|action| {
         let title = match &action.intent {
@@ -377,42 +369,24 @@ fn warm_choice<'a>(
         .find(|choice| choice.qualified == qualified)
 }
 
-/// What an account's own menu offers of warming it up, after everything else it offers:
-/// **Warm Up Now**, which can be chosen while its five-hour period is not running and nothing
-/// holds a warm-up back, and none is under way; and **Warm Up Automatically**, checked while
-/// it is turned on.
-fn warm_offers(seen: &Seen, account: &Account) -> Vec<ItemOffer> {
-    let Some(choice) = warm_choice(seen, account) else {
-        return Vec::new();
-    };
+// Turning warm-ups on and off is Settings' alone, where the hours and every account show.
+fn warm_offer(seen: &Seen, account: &Account) -> Option<ItemOffer> {
+    let choice = warm_choice(seen, account)?;
     let warm = &seen.state.warm;
     let halted = warm
         .overview
         .as_ref()
         .is_some_and(|overview| overview.halted.is_some());
-    vec![
-        ItemOffer {
-            title: words::titled(seen.os, "Warm Up Now", "Warm up now"),
-            intent: Intent::WarmNow {
-                qualified: choice.qualified.clone(),
-            },
-            enabled: !halted
-                && warm.running.is_none()
-                && choice.now == pitboard_core::duty::warm::Standing::Due,
-            confirm: None,
-            checked: None,
+    Some(ItemOffer {
+        title: words::titled(seen.os, "Warm Up Now", "Warm up now"),
+        intent: Intent::WarmNow {
+            qualified: choice.qualified.clone(),
         },
-        ItemOffer {
-            title: words::titled(seen.os, "Warm Up Automatically", "Warm up automatically"),
-            intent: Intent::SetWarm {
-                qualified: choice.qualified.clone(),
-                on: !choice.on,
-            },
-            enabled: true,
-            confirm: None,
-            checked: Some(choice.on),
-        },
-    ]
+        enabled: !halted
+            && warm.running.is_none()
+            && choice.now == pitboard_core::duty::warm::Standing::Due,
+        confirm: None,
+    })
 }
 
 /// Where an account turned on for warm-ups stands, as the line under it says: "Warms up again
@@ -444,7 +418,6 @@ fn forget(seen: &Seen, account: &Account, spoken_name: &str) -> Option<ItemOffer
         .as_ref()
         .filter(|_| account.label.is_some() && !account.signed_in)?;
     Some(ItemOffer {
-        checked: None,
         title: "Forget…".into(),
         intent: Intent::Forget {
             qualified: qualified.clone(),

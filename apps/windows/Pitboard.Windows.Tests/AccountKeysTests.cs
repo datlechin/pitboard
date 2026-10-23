@@ -7,8 +7,7 @@ namespace Pitboard.Windows.Tests;
 public sealed class AccountKeysTests
 {
     private static readonly ItemOffer Rename = new(
-        Title: "Rename…", Intent: new Intent.PresentSheet(new Sheet.Rename("claude", "spare")), Enabled: true, Confirm: null,
-        Checked: null);
+        Title: "Rename…", Intent: new Intent.PresentSheet(new Sheet.Rename("claude", "spare")), Enabled: true, Confirm: null);
 
     private static AccountItem Spare(params ItemOffer[] offers) =>
         Items.Account("claude", "spare") with { Offers = offers, Forget = Items.Forget("claude/spare") };

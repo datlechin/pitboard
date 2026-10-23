@@ -49,12 +49,9 @@ public static class AccountMenu
         return menu;
     }
 
-    // A check mark beside it, as a menu shows a setting that is on.
     private static MenuFlyoutItem Entry(ItemOffer offer, Action<Question?, Intent> ask)
     {
-        MenuFlyoutItem entry = offer.Checked is { } on ? new ToggleMenuFlyoutItem { IsChecked = on } : new MenuFlyoutItem();
-        entry.Text = offer.Title;
-        entry.IsEnabled = offer.Enabled;
+        var entry = new MenuFlyoutItem { Text = offer.Title, IsEnabled = offer.Enabled };
         entry.Click += (_, _) => ask(offer.Confirm, offer.Intent);
         return entry;
     }

@@ -68,6 +68,11 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   sessions have followed the switch.
 - The Windows app's icon tooltip lists each account in use with its limits.
 
+### Removed
+
+- The app's account menu no longer offers **Warm Up Automatically**: **Settings** > **Limits**
+  turns each account's warm-up on and off.
+
 ### Fixed
 
 - Pitboard renews a parked Codex login at the issuer and as the client Codex 0.164.0 records in

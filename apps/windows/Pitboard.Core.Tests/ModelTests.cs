@@ -579,17 +579,17 @@ public sealed class ModelTests
             ParkedNote: "Parked login good for 3 more days", WarmNote: null, Help: null, Limits: [limit],
             Offers:
             [
-                new ItemOffer(Title: "Use spare", Intent: use.Intent, Enabled: true, Confirm: null, Checked: null),
+                new ItemOffer(Title: "Use spare", Intent: use.Intent, Enabled: true, Confirm: null),
                 new ItemOffer(
                     Title: "Sign In Again…", Intent: new Intent.PresentSheet(new Sheet.SignInAgain("codex", "spare")),
-                    Enabled: false, Confirm: null, Checked: null),
+                    Enabled: false, Confirm: null),
                 new ItemOffer(
                     Title: "Rename…", Intent: new Intent.PresentSheet(new Sheet.Rename("codex", "spare")),
-                    Enabled: true, Confirm: null, Checked: null),
+                    Enabled: true, Confirm: null),
             ],
             Windows: [new WindowOffer(Title: "Open chatgpt.com", Window: window)],
             Forget: new ItemOffer(
-                Title: "Forget…", Intent: new Intent.Forget("codex/spare"), Enabled: true, Checked: null,
+                Title: "Forget…", Intent: new Intent.Forget("codex/spare"), Enabled: true,
                 Confirm: new Question(
                     Title: "Forget “spare (Codex)”?",
                     Message: "Pitboard deletes the login it parked for this account.", Confirm: "Forget")));

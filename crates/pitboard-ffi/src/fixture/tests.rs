@@ -2053,24 +2053,13 @@ fn accounts_are_renamed_and_forgotten_as_the_window_offers() {
     let titles = |titles: &[&str]| titles.iter().map(|&title| title.to_owned()).collect();
     let again = titled(OS, "Sign In Again…", "Sign in again…");
     let now = titled(OS, "Warm Up Now", "Warm up now");
-    let automatically = titled(OS, "Warm Up Automatically", "Warm up automatically");
     assert_eq!(
         menus,
         [
-            (
-                "work".into(),
-                titles(&[&again, "Rename…", &now, &automatically])
-            ),
+            ("work".into(), titles(&[&again, "Rename…", &now])),
             (
                 "personal".into(),
-                titles(&[
-                    "Use personal",
-                    &again,
-                    "Rename…",
-                    &now,
-                    &automatically,
-                    "Forget…"
-                ])
+                titles(&["Use personal", &again, "Rename…", &now, "Forget…"])
             ),
         ]
     );

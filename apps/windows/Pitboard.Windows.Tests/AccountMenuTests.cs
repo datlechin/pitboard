@@ -9,9 +9,9 @@ namespace Pitboard.Windows.Tests;
 [TestClass]
 public sealed class AccountMenuTests
 {
-    private static readonly ItemOffer Use = new("Use spare", new Intent.SwitchTo("claude/spare"), true, null, null);
-    private static readonly ItemOffer SignInAgain = new("Sign in again…", new Intent.PresentSheet(new Sheet.SignInAgain("claude", "spare")), false, null, null);
-    private static readonly ItemOffer Rename = new("Rename…", new Intent.PresentSheet(new Sheet.Rename("claude", "spare")), true, null, null);
+    private static readonly ItemOffer Use = new("Use spare", new Intent.SwitchTo("claude/spare"), true, null);
+    private static readonly ItemOffer SignInAgain = new("Sign in again…", new Intent.PresentSheet(new Sheet.SignInAgain("claude", "spare")), false, null);
+    private static readonly ItemOffer Rename = new("Rename…", new Intent.PresentSheet(new Sheet.Rename("claude", "spare")), true, null);
 
     private static string[] Said(MenuFlyout menu) =>
         [.. menu.Items.Select(entry => entry is MenuFlyoutItem item ? item.Text : "-")];
@@ -29,16 +29,6 @@ public sealed class AccountMenuTests
 
         Assert.AreEqual("Use spare, Sign in again…, Rename…, -, Copy email address, -, Forget…", string.Join(", ", Said(menu)));
         Assert.IsFalse(((MenuFlyoutItem)menu.Items[1]).IsEnabled, "a sign-in held back");
-    }
-
-    [UITestMethod]
-    public void AnOfferThatIsOnShowsACheckMark()
-    {
-        var warm = new ItemOffer("Warm up automatically", new Intent.SwitchTo("claude/spare"), true, null, Checked: true);
-
-        var menu = AccountMenu.For(Items.Account("claude", "spare") with { Offers = [warm] }, (_, _) => { });
-
-        Assert.IsTrue(((ToggleMenuFlyoutItem)menu.Items[0]).IsChecked);
     }
 
     [UITestMethod]

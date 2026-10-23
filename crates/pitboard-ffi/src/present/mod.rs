@@ -169,21 +169,14 @@ pub struct ItemAction {
     pub intent: Intent,
 }
 
-/// Something an account's own menu offers to do to it.
+// Something an account's own menu offers to do to it.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct ItemOffer {
-    /// What its item says: "Use work", "Name…", "Sign In Again…", "Rename…", "Forget…".
     pub title: String,
-    /// What to send, once any question has been answered.
+    // sent once any question has been answered
     pub intent: Intent,
-    /// Whether it can be chosen now. One held back is shown all the same, and cannot be
-    /// chosen.
     pub enabled: bool,
-    /// The question asked first, where there is one.
     pub confirm: Option<Question>,
-    /// Whether it shows a check mark, for an item that turns something on and off; `None`
-    /// for one that does something once.
-    pub checked: Option<bool>,
 }
 
 /// One of an account's windows, as its own menu offers to open it. Opening a window is the

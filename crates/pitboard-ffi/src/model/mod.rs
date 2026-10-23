@@ -348,10 +348,7 @@ pub enum Intent {
     /// Reads whose login the tool stores, which nothing reads before: Name This Account for it,
     /// or Add Account set to the tool where it stores none.
     NameSignedIn { provider: String },
-    /// Warm up the account `qualified` names from now on, or stop: its own menu's **Warm Up
-    /// Automatically**, or its row under the settings' warm-up. Kept by the core in Pitboard's
-    /// directory, which the command line reads too. Turned on, an account due is warmed up at
-    /// once.
+    /// Turned on, an account due is warmed up at once.
     SetWarm { qualified: String, on: bool },
     /// Warm up accounts only from `from` to `to`, in minutes of the day, `to` up to 24 hours;
     /// a `from` later than `to` runs past midnight.
