@@ -43,12 +43,10 @@ public sealed class SettingsPageTests
     private static bool Shows(SettingsPage page, string automationId) =>
         Views.Visible<TextBlock>(page).Any(text => AutomationProperties.GetAutomationId(text) == automationId);
 
-    // Scrolled to first, as a person does: on CI's smaller screens the repeater makes no row below the view at once.
+    // The expander's repeater makes its rows over more than one layout, so a test waits on the last row it needs.
     private static async Task Expand(SettingsPage page, string automationId, string inside)
     {
-        var expander = Views.Element<SettingsExpander>(page, automationId);
-        expander.StartBringIntoView(new BringIntoViewOptions { VerticalAlignmentRatio = 0, AnimationDesired = false });
-        expander.IsExpanded = true;
+        Views.Element<SettingsExpander>(page, automationId).IsExpanded = true;
         await Views.Until(() => Views.Texts(page).Contains(inside), $"{automationId} did not open on '{inside}'");
     }
 
@@ -274,7 +272,7 @@ public sealed class SettingsPageTests
         var page = await Shown(new AppModel(model));
 
         Assert.IsTrue(Shows(page, "settings.warmStanding"), "what comes next shows while it is closed");
-        await Expand(page, "settings.warm", "personal · Max");
+        await Expand(page, "settings.warm", "work");
 
         var texts = Views.Texts(page);
         Assert.Contains("Warms up again at 22:50", texts);
@@ -522,7 +520,7 @@ public sealed class SettingsPageTests
     {
         var page = await Shown(
             new AppModel(new StandInModel(With(1, machine => machine with { Warm = TwoWarmed }))), updates: new StandInUpdates());
-        await Expand(page, "settings.warm", "personal · Max");
+        await Expand(page, "settings.warm", "work");
 
         var toggles = Views.Visible<ToggleSwitch>(page).ToArray();
         Assert.HasCount(5, toggles, "start at sign-in, two warm-ups, daily renewal and automatic checks");
