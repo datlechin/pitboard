@@ -891,8 +891,9 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
                holding a comma, or a value of another kind, stops it from starting. As the TUI \
                starts, a ChatGPT login that the forced two leave out, by its method or its ID \
                token's `chatgpt_account_id`, is signed out of in every store and deleted, with \
-               no revoke. A login the requirements leave out, by its `tokens.account_id` \
-               first, is left unused. A trusted project's config and an enterprise's cloud \
+               no revoke. Every Codex leaves unused a login that the forced workspaces or the \
+               requirements leave out, by its `tokens.account_id` first, and then by that \
+               claim. A trusted project's config and an enterprise's cloud \
                configuration can set the forced two as well, and are not read, as for the store",
         read_from: "enforce_login_restrictions_with_agent_identity_authapi_base_url, \
                     logout_with_message, logout_all_stores, AuthConfig and \

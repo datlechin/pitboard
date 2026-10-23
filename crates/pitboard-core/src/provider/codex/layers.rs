@@ -767,13 +767,19 @@ impl Restrictions {
                 listed_values(&methods.iter().map(|m| m.word()).collect::<Vec<_>>())
             ));
         }
-        if let Some((layer, ids)) = &self.allowed_workspaces
-            && let Some(outside) = of(ids, stored.or(claimed))
-        {
-            return Some(format!(
-                "{} sets `{ALLOWED_WORKSPACES}` to {outside}, {unused}",
-                self.place(*layer)
-            ));
+        // Its AuthManager holds `tokens.account_id`, else the claim, to what either names.
+        for (key, set) in [
+            (FORCED_WORKSPACES, &self.workspaces),
+            (ALLOWED_WORKSPACES, &self.allowed_workspaces),
+        ] {
+            if let Some((layer, ids)) = set
+                && let Some(outside) = of(ids, stored.or(claimed))
+            {
+                return Some(format!(
+                    "{} sets `{key}` to {outside}, {unused}",
+                    self.place(*layer)
+                ));
+            }
         }
         None
     }
@@ -1837,6 +1843,14 @@ mod tests {
             one.refuses(None, Some("a"))
                 .is_some_and(|said| said.contains("this login is of no workspace")),
             "the ID token's workspace is the one held to it"
+        );
+        assert_eq!(
+            one.refuses(Some("a"), Some("b")).as_deref(),
+            Some(
+                "/Users/someone/.codex/config.toml sets `forced_chatgpt_workspace_id` to `a`, and \
+                 this login is of `b`, so Codex does not use it"
+            ),
+            "and its AuthManager holds `tokens.account_id` to it"
         );
 
         let two = restricted(
