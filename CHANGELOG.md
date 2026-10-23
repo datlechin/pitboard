@@ -96,6 +96,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The app and `pitboard use` say in one sentence, naming the account, why putting its login in
   place of a Claude Code login Anthropic refuses for good loses nothing, and `pitboard use`
   asks `Replace it?`.
+- `pitboard doctor` says why Pitboard leaves a Codex keychain store alone, and that Claude Code's
+  config names somebody no store holds, in the words a refused switch uses.
 
 ### Removed
 
