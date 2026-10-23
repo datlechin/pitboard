@@ -140,7 +140,13 @@ pub(crate) fn service(pitboard: &Pitboard, what: &WatchCommand) -> Report {
                 ),
                 Installed::Unsupported => (
                     json!({ "installed": false, "supported": false }),
-                    "This computer has no scheduler Pitboard knows how to write.\n".to_string(),
+                    format!(
+                        "{}\n",
+                        words::no_scheduler(
+                            pitboard_core::host::OS,
+                            pitboard_core::schedule::Job::Watch
+                        )
+                    ),
                 ),
             };
             Report::done("watch", data, human)

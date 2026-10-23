@@ -5,7 +5,7 @@ use pitboard_core::context::Context;
 use pitboard_core::doctor;
 use pitboard_core::error::Error;
 use pitboard_core::provider::{Adoption, SignsIn};
-use pitboard_core::schedule::Location;
+use pitboard_core::schedule::{Job, Location};
 use pitboard_core::service::{Changing, Done, Failed, Pitboard, Warning};
 use pitboard_core::switch::{Enrolled, Outcome, Renewal};
 use serde_json::{Value, json};
@@ -914,7 +914,10 @@ fn schedule(pitboard: &Pitboard, what: &ScheduleCommand) -> Report {
         ),
         Installed::Unsupported => (
             json!({"installed": false, "supported": false}),
-            "This computer has no scheduler Pitboard knows how to write.\n".to_string(),
+            format!(
+                "{}\n",
+                pitboard_core::words::no_scheduler(pitboard_core::host::OS, Job::Renew)
+            ),
         ),
     };
     match what {
@@ -1970,6 +1973,31 @@ mod tests {
                 .to_string();
             assert!(!help.contains("scheduled"), "{help}");
         }
+    }
+
+    // The refusal to install says the same.
+    #[test]
+    fn with_no_scheduler_both_status_commands_say_why_in_the_cores_words() {
+        use pitboard_core::testing::MemoryHost;
+        let scratch = tempfile::tempdir().expect("a scratch home");
+        let host = MemoryHost::new();
+        host.without_a_scheduler();
+        let pitboard =
+            Pitboard::new(Context::new(scratch.path().to_path_buf()).with_memory_stores(host));
+        let why = |job| {
+            format!(
+                "{}\n",
+                pitboard_core::words::no_scheduler(pitboard_core::host::OS, job)
+            )
+        };
+        assert_eq!(
+            schedule(&pitboard, &ScheduleCommand::Status).human,
+            why(Job::Renew)
+        );
+        assert_eq!(
+            watch::service(&pitboard, &watch::WatchCommand::Status).human,
+            why(Job::Watch)
+        );
     }
 
     // A file under `path`, as before; Task Scheduler's task under `task`, with no `path`.
