@@ -43,9 +43,12 @@ public sealed class SettingsPageTests
     private static bool Shows(SettingsPage page, string automationId) =>
         Views.Visible<TextBlock>(page).Any(text => AutomationProperties.GetAutomationId(text) == automationId);
 
+    // Scrolled to first, as a person does: on CI's smaller screens the repeater makes no row below the view at once.
     private static async Task Expand(SettingsPage page, string automationId, string inside)
     {
-        Views.Element<SettingsExpander>(page, automationId).IsExpanded = true;
+        var expander = Views.Element<SettingsExpander>(page, automationId);
+        expander.StartBringIntoView(new BringIntoViewOptions { VerticalAlignmentRatio = 0, AnimationDesired = false });
+        expander.IsExpanded = true;
         await Views.Until(() => Views.Texts(page).Contains(inside), $"{automationId} did not open on '{inside}'");
     }
 
