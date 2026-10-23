@@ -160,17 +160,17 @@ pub(crate) fn service(pitboard: &Pitboard, what: &WatchCommand) -> Report {
     }
 }
 
-/// Decides once from the usage Pitboard last measured, and says what it came to. Nobody is
-/// asked for usage; a decision under the lock may ask Anthropic whose login Claude Code has
-/// stored, as a switch does.
 pub(crate) fn terms() -> String {
     format!(
         "{}: {}",
         words::TERMS_MAY_COVER_THIS,
-        words::IS_THIS_ALLOWED
+        words::IS_THIS_ALLOWED_URL
     )
 }
 
+/// Decides once from the usage Pitboard last measured, and says what it came to. Nobody is
+/// asked for usage; a decision under the lock may ask Anthropic whose login Claude Code has
+/// stored, as a switch does.
 pub(crate) fn once(pitboard: &Pitboard, threshold: Threshold) -> Report {
     said(pitboard.auto_switch(threshold), threshold, false)
 }

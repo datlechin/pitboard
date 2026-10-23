@@ -322,7 +322,7 @@ fn terms() -> TermsShown {
     TermsShown {
         sentence: format!("{}.", pitboard_core::words::TERMS_MAY_COVER_THIS),
         link_title: "Is this allowed?".into(),
-        link: pitboard_core::words::IS_THIS_ALLOWED.into(),
+        link: pitboard_core::words::IS_THIS_ALLOWED_URL.into(),
     }
 }
 
