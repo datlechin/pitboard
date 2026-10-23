@@ -130,7 +130,11 @@ public sealed class IconImageTests
                 var before = Pixels(plain);
                 var after = Pixels(flagged);
                 Assert.AreEqual(size, after.Length);
-                Assert.AreEqual(0xFFu, after[size - 2][size - 2] >> 24, $"the warning at {size}");
+                // Not one pixel: the stock icon's edges are smoothed, its corner to 245 of 255 at 16 px.
+                Assert.IsTrue(
+                    Enumerable.Range(size / 2, size / 2).Any(
+                        y => Enumerable.Range(size / 2, size / 2).Any(x => before[y][x] >> 24 == 0 && after[y][x] >> 24 == 0xFF)),
+                    $"the warning at {size}");
                 for (var y = 0; y < size / 3; y++)
                 {
                     for (var x = 0; x < size; x++)
