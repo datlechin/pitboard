@@ -235,8 +235,16 @@ fn advice_offers_what_can_still_be_used_after_every_read() {
     ]));
     model.refresh(&mut machine);
     assert!(model.state.advice.is_empty(), "extra has run out too");
-    assert_eq!(model.state.told.len(), 1, "told once, when work ran out");
-    assert_eq!(machine.posted.len(), 1);
+    let posted: Vec<&str> = machine
+        .posted
+        .iter()
+        .map(|notice| notice.id.as_str())
+        .collect();
+    assert_eq!(
+        posted,
+        ["claude/work/session/-7200", "unusable/claude:side"],
+        "told once, when work ran out, and once that side needs signing in again"
+    );
 }
 
 /// A switch puts away the advice about its own tool, which is about the account it has just

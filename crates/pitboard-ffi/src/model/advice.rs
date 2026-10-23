@@ -12,8 +12,8 @@ use std::collections::BTreeMap;
 /// at 100% of any has nothing left to offer.
 const FULL: u8 = 100;
 
-/// What has been told about, by `Advice::key`: the reset of the limit last told, in epoch
-/// seconds, or 0 where none was known. Kept in Pitboard's directory between launches.
+// Kept across launches: each limit told by `Advice::key`, at its reset or 0, and each parked
+// login told unusable, by its account under `unusable/`, at 0.
 pub(crate) type Told = BTreeMap<String, i64>;
 
 /// An account in use has run out of a limit, and another account of the same tool has room
@@ -66,7 +66,7 @@ fn spare(
     let in_use = current.usage.as_ref().map(windows_of).unwrap_or_default();
     let (spare, room) = usage::preferred(
         mine.iter()
-            .filter(|account| account.switchable && account.qualified.is_some())
+            .filter(|account| crate::present::usable(account) && account.qualified.is_some())
             .filter_map(|account| {
                 let theirs = account.usage.as_ref()?;
                 let room = usage::room(

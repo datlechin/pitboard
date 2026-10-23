@@ -173,11 +173,7 @@ pub(crate) fn item(seen: &Seen, account: &Account) -> AccountItem {
     let switching_for = state.switch_under_way();
     let busy = state.sign_in_under_way();
     let in_use = account.signed_in;
-    let needs_sign_in = !account.unplaced
-        && account.label.is_some()
-        && !account.signed_in
-        && !account.switchable
-        && !login_unread(account);
+    let needs_sign_in = needs_sign_in(account);
     let switching = account.qualified.is_some() && account.qualified.as_deref() == switching_for;
     let title = if account.unplaced {
         match account.stale.as_deref() {
@@ -200,7 +196,7 @@ pub(crate) fn item(seen: &Seen, account: &Account) -> AccountItem {
         busy,
         &spoken_name,
     );
-    let problem = if account.unplaced || (!account.switchable && !account.signed_in) {
+    let problem = if account.unplaced || (!usable(account) && !account.signed_in) {
         account.stale_explanation.clone()
     } else {
         None
@@ -475,7 +471,7 @@ fn action(
     if account.signed_in {
         return None;
     }
-    if account.switchable
+    if usable(account)
         && let Some(qualified) = &account.qualified
     {
         return Some(ItemAction {
@@ -534,6 +530,19 @@ fn runs_out_first(account: &Account, now: i64) -> Option<(usize, i64)> {
             .enumerate()
             .map(|(place, limit)| (place, pace_of(limit, read_at, now))),
     )
+}
+
+// A refused login is parked all the same, and a switch to it would fail.
+pub(crate) fn usable(account: &Account) -> bool {
+    account.switchable && account.stale.as_deref() != Some("login_refused")
+}
+
+pub(crate) fn needs_sign_in(account: &Account) -> bool {
+    !account.unplaced
+        && account.label.is_some()
+        && !account.signed_in
+        && !usable(account)
+        && !login_unread(account)
 }
 
 /// An account not in use whose login may be the one in use that could not be read, which no

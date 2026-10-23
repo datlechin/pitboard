@@ -24,6 +24,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   lines that make zsh load Pitboard's completions.
 - The app's notification that a login was replaced outside Pitboard, and its notice in the
   window, offer **Sign In Again**.
+- The app posts a notification once for each account whose parked login can no longer be used,
+  with **Sign In Again**.
 
 ### Changed
 
@@ -69,6 +71,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   schedule runs.
 - On Windows, `pitboard doctor` says where Codex keeps its home among Codex's checks, instead
   of under a second Codex heading above Pitboard's own.
+- The app marks an account whose parked login Anthropic or OpenAI refused **Needs signing in
+  again** and offers **Sign In Again**, in place of a switch to a login that no longer works.
 
 ## [1.0.0-beta.5] - 2026-10-23
 

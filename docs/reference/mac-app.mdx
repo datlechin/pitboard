@@ -342,13 +342,14 @@ Opening Pitboard from Finder or Spotlight with no window open opens the Pitboard
 | **Pitboard is not switching Claude Code** | When Pitboard cannot decide whether to switch. Once for each reason and what it names. | A reason from [When it decides nothing](/reference/automatic-switching#when-it-decides-nothing) | None | Opens **Settings** on **Limits** |
 | **Pitboard could not switch Claude Code** | When an automatic switch fails. Once for each kind of error. | The error | None | Opens **Settings** on **Limits** |
 | **Pitboard could not warm up an account** | When a warm-up the app made by itself came to nothing. Once for each error until a warm-up starts a period. | The error | None | Opens **Settings** on **Limits** |
+| **work needs signing in again** | When a read finds that an enrolled account's parked login can no longer be used: it expired, its service refused it, or none is parked. Once for each account until it can be used again, even across restarts. | **Its parked login can no longer be used, so Pitboard can't switch to it.** | **Sign In Again**, which opens **Sign In to work Again** | Opens **Accounts** |
 | **A login was replaced outside Pitboard** | When a read finds that an account's only login ended outside Pitboard. A sign-in such as `/login` in Claude Code replaced it, or the account was signed out in Claude. Once for each account while reads find it, and once more after the app reopens. | The warning's message, which says what ended the login, as [Warning codes](/reference/errors#warning-codes) gives it | **Sign In Again**, which opens **Sign In to work Again** | Opens **Accounts** |
 
 While a login file sits behind the keychain, the second sentence of **Switched Claude Code to personal** reads **Sessions already running keep the account they are on until their login is next renewed, or until they are started again:** and names the file.
 
 The three that hold back or fail come only while **Switch Claude Code automatically** is on. They can come again after the app next switches. A notification starts its reason with a capital letter and ends it with a full stop.
 
-Only the run-out notification can have a subtitle. A button does not bring Pitboard forward unless it needs to ask something. Notifications play no sound and set no badge. macOS asks whether to allow them the first time the app posts one.
+Only **work has no 5-hour limit left** and **work needs signing in again** can have a subtitle. A button does not bring Pitboard forward unless it needs to ask something. Notifications play no sound and set no badge. macOS asks whether to allow them the first time the app posts one.
 
 ## Keyboard shortcuts
 
@@ -370,7 +371,7 @@ Once more than one tool has accounts, these strings name the tool:
 | --- | --- | --- |
 | Menu and **Accounts** pane | One list of accounts | A heading for each tool: Claude Code, then Codex, then Claude Desktop |
 | Run-out notice | **work has no 5-hour limit left** | **Claude Code: work has no 5-hour limit left** |
-| Run-out notification | No subtitle | The subtitle **Claude Code** or **Codex** |
+| Run-out and sign-in notifications | No subtitle | The subtitle **Claude Code** or **Codex** |
 | Switch notice | **Switched to work** | **Switched Codex to work** |
 | Its countdown | **Sessions already open follow in** | **Claude Code sessions already open follow in** |
 | New-login notice | **work has a new login** | **work in Codex has a new login** |

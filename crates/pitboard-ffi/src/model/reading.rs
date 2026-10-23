@@ -3,6 +3,7 @@
 //! through `State::apply` by hand. Where a Swift test also checked what is said about a
 //! read, which comes with the model's wording, the rest of it is kept here.
 
+use super::advice::Told;
 use super::state::{Answer, Job};
 use super::switching::switch;
 use super::testing::{
@@ -371,6 +372,114 @@ fn a_login_replaced_outside_is_posted_once_whatever_is_stored_since() {
             "warning/login_replaced/claude:home",
             both[1].message.as_str()
         )]
+    );
+}
+
+/// `label`, parked, its login no longer one Pitboard can switch to.
+fn expired(label: &str) -> Account {
+    Account {
+        switchable: false,
+        ..claude(label, false, 0.0)
+    }
+}
+
+/// A parked login that stops being usable is posted once for its account, with a button that
+/// signs in to it again: not again while it stays so, and again once it was usable between.
+#[test]
+fn a_parked_login_that_stops_being_usable_is_posted_once() {
+    let mut model = Hand::new();
+    let mut machine = Machine::reading(Ok(status(vec![
+        claude("home", true, 5.0),
+        claude("work", false, 0.0),
+    ])));
+    model.refresh(&mut machine);
+    assert!(machine.posted.is_empty());
+
+    machine.answer = Ok(status(vec![claude("home", true, 5.0), expired("work")]));
+    model.refresh(&mut machine);
+    assert_eq!(
+        machine.posted,
+        [RunOutNotice {
+            id: "unusable/claude:work".into(),
+            title: "work needs signing in again".into(),
+            subtitle: None,
+            body: "Its parked login can no longer be used, so Pitboard can’t switch to it.".into(),
+            clicked: "accounts".into(),
+            button: Some(NotificationButton {
+                title: titled("Sign In Again", "Sign in again"),
+                clicked: "sign-in-again/claude/work".into(),
+            }),
+        }]
+    );
+    assert_eq!(
+        machine.kept.last(),
+        Some(&Told::from([("unusable/claude:work".to_owned(), 0)]))
+    );
+    model.refresh(&mut machine);
+    assert_eq!(machine.posted.len(), 1, "once while it stands");
+
+    machine.answer = Ok(status(vec![
+        claude("home", true, 5.0),
+        claude("work", false, 0.0),
+    ]));
+    model.refresh(&mut machine);
+    assert_eq!(machine.kept.last(), Some(&Told::new()), "usable again");
+    machine.answer = Ok(status(vec![claude("home", true, 5.0), expired("work")]));
+    model.refresh(&mut machine);
+    assert_eq!(machine.posted.len(), 2, "and posted again once it stops");
+}
+
+/// What was posted before a relaunch is not posted again after it.
+#[test]
+fn a_parked_login_posted_before_a_relaunch_is_not_posted_again() {
+    let mut model = Hand::new();
+    let mut machine =
+        Machine::reading(Ok(status(vec![claude("home", true, 5.0), expired("work")])));
+    machine.told_before = Told::from([("unusable/claude:work".to_owned(), 0)]);
+    model.send(Intent::Start);
+    model.run(&mut machine);
+    assert!(machine.posted.is_empty());
+}
+
+/// A parked login its service refused is as unusable as an expired one: its row offers to
+/// sign in again in place of a switch that would fail, and it is posted the same way. One
+/// replaced outside Pitboard has a notice of its own.
+#[test]
+fn a_refused_parked_login_needs_signing_in_again() {
+    let refused = Account {
+        stale: Some("login_refused".into()),
+        stale_explanation: Some("Its parked login is no longer accepted; sign in again".into()),
+        ..claude("work", false, 0.0)
+    };
+    let replaced_away = Account {
+        stale: Some("login_replaced".into()),
+        ..expired("side")
+    };
+    let mut model = Hand::new();
+    let mut machine = Machine::reading(Ok(warned(
+        vec![claude("home", true, 5.0), refused, replaced_away],
+        vec![replaced("side", "home")],
+    )));
+    model.refresh(&mut machine);
+    let row = model.shown().sections[0].accounts[1].clone();
+    assert!(row.needs_sign_in);
+    assert_eq!(
+        row.action.map(|action| action.intent),
+        Some(Intent::PresentSheet {
+            sheet: Sheet::SignInAgain {
+                provider: "claude".into(),
+                label: "work".into(),
+            },
+        })
+    );
+    let posted: Vec<&str> = machine
+        .posted
+        .iter()
+        .map(|notice| notice.id.as_str())
+        .collect();
+    assert_eq!(
+        posted,
+        ["warning/login_replaced/claude:side", "unusable/claude:work"]
     );
 }
 

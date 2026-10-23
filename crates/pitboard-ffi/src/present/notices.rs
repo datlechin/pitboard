@@ -11,7 +11,7 @@ use crate::model::advice::Advice;
 use crate::model::state::{in_its_app, split};
 use crate::model::{Intent, LastSwitch, Pane, Sheet};
 use crate::model::{NotificationButton, RunOutNotice};
-use crate::{Adoption, Held, Warning};
+use crate::{Account, Adoption, Held, Warning};
 use pitboard_core::host::{OS, Os};
 use pitboard_core::provider::ProviderId;
 use pitboard_core::words as said;
@@ -504,6 +504,7 @@ pub(crate) enum Clicked {
 const SWITCH: &str = "switch/";
 const SIGN_IN_AGAIN: &str = "sign-in-again/";
 const LIMITS: &str = "limits";
+pub(crate) const UNUSABLE: &str = "unusable/";
 
 impl Clicked {
     pub(crate) fn argument(&self) -> String {
@@ -646,6 +647,26 @@ pub(crate) fn standing_notice(warning: &Warning, again: Option<&str>) -> RunOutN
             warning_id(warning),
             words::warning_heading(OS, warning).into(),
             warning.message.clone(),
+            &Clicked::Accounts,
+        )
+    }
+}
+
+// Titled as its row is marked.
+pub(crate) fn unusable_notice(account: &Account, tool: Option<String>) -> RunOutNotice {
+    let label = account.label.as_deref().unwrap_or_default();
+    RunOutNotice {
+        subtitle: tool,
+        button: account.qualified.as_ref().and_then(|qualified| {
+            button(
+                sign_in_again_button(OS),
+                &Clicked::SignInAgain(qualified.clone()),
+            )
+        }),
+        ..posted(
+            format!("{UNUSABLE}{}", account.id),
+            format!("{label} needs signing in again"),
+            "Its parked login can no longer be used, so Pitboard can’t switch to it.".into(),
             &Clicked::Accounts,
         )
     }

@@ -44,7 +44,7 @@ use super::windows::Windows;
 use super::{Failure, Intent, LastSwitch, Pane, QuitQuestion, ReadFailure, RestartNeeded};
 use super::{RunOutNotice, RunningSignIn, Sheet, WindowRequest};
 use crate::account_windows::records::{Entry, Loaded};
-use crate::present::Clicked;
+use crate::present::{Clicked, UNUSABLE};
 use crate::{
     Abandoned, Account, Adoption, AutoLooked, AutoSwitched, Change, Check, Enrolled, EnrolledAs,
     FoundCommandLine, GaveUp, OwnCommandLine, PitboardError, Renewed, Schedule, Status, Switch,
@@ -2101,6 +2101,7 @@ impl State {
                 notice: crate::present::run_out_notice(advice),
             });
         }
+        kept |= self.tell_unusable(read, jobs);
         if kept {
             jobs.push(Job::KeepTold {
                 told: self.told.clone(),
@@ -2116,6 +2117,41 @@ impl State {
             .filter_map(|provider| standing.iter().find(|a| &a.provider == provider))
             .cloned()
             .collect();
+    }
+
+    // Kept with what was told, so it is posted once for each account across launches, until
+    // its login can be used again. One replaced outside Pitboard has a notice of its own.
+    fn tell_unusable(&mut self, read: &Status, jobs: &mut Vec<Job>) -> bool {
+        let unusable: BTreeMap<String, &Account> = read
+            .accounts
+            .iter()
+            .filter(|account| {
+                crate::present::needs_sign_in(account)
+                    && account.stale.as_deref() != Some("login_replaced")
+            })
+            .map(|account| (format!("{UNUSABLE}{}", account.id), account))
+            .collect();
+        let before = self.told.len();
+        self.told
+            .retain(|key, _| !key.starts_with(UNUSABLE) || unusable.contains_key(key));
+        let mut kept = self.told.len() != before;
+        let several = read
+            .accounts
+            .iter()
+            .any(|account| read.accounts[0].provider != account.provider);
+        for (key, account) in unusable {
+            if self.told.insert(key, 0).is_none() {
+                kept = true;
+                let tool = several.then(|| {
+                    ProviderId::parse(&account.provider)
+                        .map_or_else(|| account.provider.clone(), |tool| tool.name().into())
+                });
+                jobs.push(Job::Post {
+                    notice: crate::present::unusable_notice(account, tool),
+                });
+            }
+        }
+        kept
     }
 
     /// The settings' switch for switching Claude Code by itself, with its share. Taken only

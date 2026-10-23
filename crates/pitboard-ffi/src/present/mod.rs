@@ -49,10 +49,10 @@ pub use windows::{
     downloads_quit_question,
 };
 
-pub(crate) use accounts::in_order;
+pub(crate) use accounts::{in_order, needs_sign_in, usable};
 pub(crate) use notices::{
-    Clicked, auto_not_watching_notice, auto_refused_notice, auto_skipped_notice,
-    auto_switched_notice, notification_buttons, run_out_notice, standing_notice,
+    Clicked, UNUSABLE, auto_not_watching_notice, auto_refused_notice, auto_skipped_notice,
+    auto_switched_notice, notification_buttons, run_out_notice, standing_notice, unusable_notice,
     warm_failed_notice,
 };
 
