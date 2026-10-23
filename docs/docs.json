@@ -37,6 +37,7 @@
           "install",
           "install/script",
           "install/other-ways",
+          "install/from-another-switcher",
           "install/verify",
           "install/code-signing-policy",
           "install/upgrade-from-0-3-0",
@@ -83,6 +84,7 @@
           "concepts/usage",
           "security",
           "concepts/account-windows",
+          "concepts/several-accounts",
           "concepts/limits"
         ]
       },

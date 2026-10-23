@@ -1,0 +1,37 @@
+---
+title: "Pitboard and other ways to use several accounts"
+sidebarTitle: "Other ways to use several accounts"
+description: "How switching a tool's login compares with a config folder per account, other switchers and usage monitors."
+---
+
+Pitboard switches the login in each tool's own folder, so your history, settings and projects stay while the account changes. Each other tool here is described from its own documentation or source, as read on 24 October 2026.
+
+## A config folder per account
+
+Anthropic's [Authentication](https://code.claude.com/docs/en/authentication#log-in-with-multiple-accounts) page gives each account a Claude Code folder of its own, chosen with `CLAUDE_CONFIG_DIR`, such as through an alias `claude-work`. Each folder has "its own settings, session history, and claude.ai login or API key".
+
+Two folders run two accounts at once, in two terminals. Pitboard has one account in use per tool, and open Claude Code sessions follow a switch. With Pitboard, every account works with the same history and settings, and Pitboard reads each account's usage.
+
+The two work together. Pitboard switches the login of the folder that `CLAUDE_CONFIG_DIR` names in its own environment, or of `~/.claude` where it is unset. It leaves the logins of other folders alone.
+
+## Other account switchers
+
+[claude-swap](https://github.com/realiti4/claude-swap) 0.28.0 switches Claude Code. You add an account by signing in to it with Claude Code, then running `cswap add`. It can also run an account in one terminal only, choose the account by folder and switch by itself by one of several strategies.
+
+[codex-auth](https://github.com/Loongphy/codex-auth) 0.3.1 switches Codex. `codex-auth login` runs `codex login`, then keeps a copy of the login in Codex's home. Codex takes a switch at its next start, as it does with Pitboard.
+
+Pitboard adds an account through the tool's own sign-in in a private folder, so the account in use stays signed in. It switches Claude Code, Codex and, on macOS, Claude Desktop.
+
+Two switchers on one tool each write the login it reads, and each keeps copies the other cannot see. Keep one per tool: [Move from another switcher](/install/from-another-switcher) says how.
+
+[CC Switch](https://github.com/farion1231/cc-switch) switches Claude Code, Codex and other tools between API providers, and holds several ChatGPT accounts for Codex. Its maintainer wrote in [issue 1105](https://github.com/farion1231/cc-switch/issues/1105) that several Claude subscriptions are not covered yet, and [issue 1928](https://github.com/farion1231/cc-switch/issues/1928), which asks for them, is open.
+
+## Usage monitors
+
+Claude Code's [`/usage`](https://code.claude.com/docs/en/commands) shows the plan limits of the account a session is signed in to. Codex's `/usage` shows that account's usage, as read in Codex 0.164.0.
+
+[CodexBar](https://github.com/steipete/CodexBar) 0.80.0 shows the limits of many tools in the macOS menu bar. It switches Codex between accounts it keeps in a `CODEX_HOME` each. With its claude-swap source turned on, it shows and switches several Claude Code accounts through claude-swap.
+
+[ccusage](https://github.com/ccusage/ccusage) 20.0.42 reports tokens and costs from the session logs on your machine, by day, by session or by Claude's five-hour period.
+
+Pitboard reads the limits of every enrolled Claude Code and Codex account from Anthropic and OpenAI, the account in use and the parked ones alike. [How usage is read](/concepts/usage) says how.

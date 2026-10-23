@@ -1,0 +1,30 @@
+---
+title: "Move from another switcher"
+sidebarTitle: "From another switcher"
+description: "Stop another account switcher, remove the logins it keeps, then add each account to Pitboard."
+---
+
+Use one switcher per tool: two each write the login the tool reads, so each replaces a login the other expects. Pitboard reads no other switcher's logins, so every account but the one in use needs a sign-in.
+
+<Steps>
+  <Step title="Stop the other switcher">
+    Quit it, and stop whatever runs it by itself. For claude-swap, stop each `cswap auto`, remove any scheduled `cswap auto --once` and run `cswap menubar --uninstall-service` if its menu bar app starts at login.
+  </Step>
+  <Step title="Remove the logins it keeps">
+    Use the switcher's own command:
+
+    ```sh
+    cswap purge              # claude-swap
+    codex-auth remove --all  # codex-auth
+    ```
+
+    As read in claude-swap 0.28.0, `cswap purge` leaves the login in use in place. As read in codex-auth 0.3.1, `codex-auth remove --all` also deletes Codex's `auth.json` where it holds a login codex-auth kept. Codex is then signed out.
+
+    Remove them before you enrol: otherwise `codex-auth remove --all` deletes the login of the account you enrolled.
+  </Step>
+  <Step title="Add each account to Pitboard">
+    Follow [Add and manage accounts](/guides/accounts): add the account the tool is signed in to, then every other account with a sign-in. Where the tool is signed out, add every account with a sign-in, then [switch](/guides/switch) to one.
+  </Step>
+</Steps>
+
+[Pitboard and other ways to use several accounts](/concepts/several-accounts) compares Pitboard with these switchers.
