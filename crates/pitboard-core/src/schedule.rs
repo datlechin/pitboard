@@ -35,6 +35,7 @@ use std::path::{Path, PathBuf};
 pub(crate) const EVERY_SECONDS: u32 = 86_400;
 // How long both systems wait to start a watch service that failed again. systemd's default
 // of 100 ms would meet its start limit, five starts in 10 seconds, and give up.
+#[cfg(unix)]
 pub(crate) const RESTART_AFTER_SECONDS: u32 = 60;
 
 /// A job Pitboard hands the system's own scheduler.
