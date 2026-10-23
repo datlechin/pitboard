@@ -265,9 +265,16 @@ pub(crate) fn notices(seen: &Seen, footing: &Footing) -> Vec<PanelNotice> {
             vec![switch_action(seen, &advice.switch_to, &advice.instead)],
         ));
     }
-    for last in &state.last_switches {
-        said.push(of_last_switch(seen, last));
-    }
+    // Once its countdown is over a bare one says no more than the row's In Use.
+    said.extend(
+        (state.last_switches.iter())
+            .map(|last| of_last_switch(seen, last))
+            .filter(|notice| {
+                notice.severity != Severity::Info
+                    || !notice.lines.is_empty()
+                    || notice.until.is_some()
+            }),
+    );
     said.extend(awaiting(seen));
     // What a switch's notice says already, which is only what the read does not repeat: a
     // warning both carry is the read's to say, and leaving it out of both said it nowhere.

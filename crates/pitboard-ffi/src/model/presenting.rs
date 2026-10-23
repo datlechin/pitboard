@@ -1458,8 +1458,8 @@ fn a_machine_without_claude_code_is_not_told_its_read_failed() {
 }
 
 /// Sessions of a tool that follows a switch by itself pick it up within a moment, and the
-/// notice counts down to it. Once that moment has passed a countdown would count to
-/// something already over, so there is none. Dismissing the notice puts it away.
+/// notice counts down to it. Once that moment has passed, the notice has nothing left to say
+/// that the row's In Use does not, so it goes. Dismissing it puts it away before then.
 ///
 /// PresentationTests.swift's aSwitchCountsDownOnlyUntilOpenSessionsHaveFollowed.
 #[test]
@@ -1472,27 +1472,35 @@ fn a_switch_counts_down_only_until_open_sessions_have_followed() {
     switch(&mut model, &mut machine, "claude/work");
     let follows = NOON + 33;
 
-    let followed = notice(
-        "switch/claude",
-        Severity::Info,
-        "Switched to work",
-        &[],
-        vec![dismiss(Intent::DismissSwitch {
-            provider: "claude".into(),
-        })],
-    );
     let counting = PanelNotice {
         until: Some(follows),
         until_label: Some("Sessions already open follow in".into()),
-        ..followed.clone()
+        ..notice(
+            "switch/claude",
+            Severity::Info,
+            "Switched to work",
+            &[],
+            vec![dismiss(Intent::DismissSwitch {
+                provider: "claude".into(),
+            })],
+        )
     };
     model.later(Duration::from_secs(23));
-    assert_eq!(model.shown().notices, [counting]);
+    assert_eq!(model.shown().notices, std::slice::from_ref(&counting));
     model.later(Duration::from_secs(10));
-    assert_eq!(model.shown().notices, std::slice::from_ref(&followed));
-    model.later(Duration::from_secs(60));
-    assert_eq!(model.shown().notices, [followed]);
+    assert!(
+        model.shown().notices.is_empty(),
+        "{:?}",
+        model.shown().notices
+    );
+    assert_eq!(
+        model.shown().last_switches.len(),
+        1,
+        "the switch is still kept"
+    );
 
+    switch(&mut model, &mut machine, "claude/work");
+    assert_eq!(ids(&model.shown()), ["switch/claude"]);
     model.send(Intent::DismissSwitch {
         provider: "claude".into(),
     });
@@ -1554,24 +1562,12 @@ fn a_switch_that_sessions_take_at_renewal_counts_down_nothing() {
     let shown = model.shown();
     assert_eq!(shown.last_switches[0].follows_at, None);
     assert_eq!(shown.last_switches[0].restart, None);
-    let [switched, left_behind] = shown.notices.as_slice() else {
-        panic!("{:?}", shown.notices);
+    let [left_behind] = shown.notices.as_slice() else {
+        panic!("no bare switch notice beside it: {:?}", shown.notices);
     };
-    assert_eq!(
-        *switched,
-        notice(
-            "switch/claude",
-            Severity::Info,
-            "Switched to work",
-            &[],
-            vec![dismiss(Intent::DismissSwitch {
-                provider: "claude".into(),
-            })],
-        )
-    );
     assert_eq!(left_behind.severity, Severity::Warning);
     assert_eq!(
-        [model.on_a_mac(), model.on_windows()].map(|shown| shown.notices[1].title.clone()),
+        [model.on_a_mac(), model.on_windows()].map(|shown| shown.notices[0].title.clone()),
         [
             "A login file is left behind the keychain",
             "A login file is left behind Credential Manager"
