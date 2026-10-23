@@ -1107,8 +1107,11 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
         verified_against: "2.1.309",
         depends: "in_use::known, which takes the config naming another account than when \
                   Anthropic last named the login stored as a sign that something signed in, \
-                  never as whose the login is; and every reader of the account in use, which \
-                  takes it from that record and not from the config",
+                  never as whose the login is; in_use::Known::unconfirmed, which doctor's \
+                  in_use check and status's in_use_unconfirmed go by, and which keeps a record \
+                  never checked against the store unconfirmed whatever the config names; and \
+                  every reader of the account in use, which takes it from that record and not \
+                  from the config",
         probe: &["profileFetchedAt:Date.now()", "organization_uuid!=null)"],
         absent: &[],
     },
