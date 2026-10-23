@@ -331,7 +331,7 @@ fn used_up(reading: &Snapshot, now: i64) -> Option<Window> {
     reading
         .windows
         .iter()
-        .filter(|window| window.scope.is_none() && window.used(now) >= 100.0)
+        .filter(|window| window.scope.is_none() && window.used_up(now))
         .max_by_key(|window| window.resets_at.unwrap_or(i64::MAX))
         .cloned()
 }

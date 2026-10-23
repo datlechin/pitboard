@@ -84,15 +84,6 @@ impl Threshold {
     pub const fn percent(self) -> u8 {
         self.0
     }
-
-    /// Whether a limit `percent` used has reached the share as it is drawn.
-    pub(crate) fn reached(self, percent: f64) -> bool {
-        usage::reached(percent, self.0)
-    }
-
-    fn reached_by(self, window: &Window, now: i64) -> bool {
-        self.reached(window.used(now))
-    }
 }
 
 impl Default for Threshold {
@@ -382,7 +373,7 @@ pub(crate) fn decide(
     let mut reached: Vec<&Window> = reading
         .windows
         .iter()
-        .filter(|window| threshold.reached_by(window, now))
+        .filter(|window| window.reached(threshold.percent(), now))
         .collect();
     reached.sort_by(|a, b| fuller(a, b, now));
     let Some(&furthest) = reached.first() else {

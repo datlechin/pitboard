@@ -89,6 +89,18 @@ impl Window {
         }
     }
 
+    /// Whether this limit is used up as of `now`: at the service's 100 as read, not the 100%
+    /// a share just under it is drawn at, and until its reset. What every front end says
+    /// "used up" and "ran out" by.
+    pub fn used_up(&self, now: i64) -> bool {
+        self.used(now) >= 100.0
+    }
+
+    /// Whether this limit has reached `share` as of `now`, as it is drawn, until its reset.
+    pub fn reached(&self, share: u8, now: i64) -> bool {
+        reached(self.used(now), share)
+    }
+
     /// Whether `other` measures the same limit, whichever name its source gave it.
     pub(crate) fn same_limit(&self, other: &Window) -> bool {
         limit_name(&self.kind) == limit_name(&other.kind) && self.scope == other.scope
@@ -119,8 +131,8 @@ pub(crate) fn limit_name(kind: &str) -> &str {
 }
 
 /// A percentage as every front end draws it and the automatic switch judges it: a whole
-/// one, a half rounded up, so a limit drawn at 95% is at 95%. Whether the account in use
-/// has run out of a limit is not judged by it: that is the service's 100, as read.
+/// one, a half rounded up, so a limit drawn at 95% is at 95%. Whether a limit is used up is
+/// not judged by it: that is [`Window::used_up`].
 pub fn whole(percent: f64) -> i64 {
     percent.round() as i64
 }
@@ -502,6 +514,25 @@ mod tests {
 
     const NOW: i64 = 1_789_935_000;
     const HOUR: i64 = 3_600;
+
+    #[test]
+    fn a_limit_is_used_up_at_the_services_100_until_it_resets() {
+        assert!(measured("session", 100.0, Some(NOW + HOUR)).used_up(NOW));
+        assert!(measured("session", 104.0, None).used_up(NOW));
+        assert!(
+            !measured("session", 99.6, Some(NOW + HOUR)).used_up(NOW),
+            "drawn at 100%, and still answered"
+        );
+        assert!(!measured("session", 100.0, Some(NOW)).used_up(NOW));
+        assert!(!measured("session", 100.0, Some(NOW - 60)).used_up(NOW));
+    }
+
+    #[test]
+    fn a_limit_reaches_a_share_as_drawn_until_it_resets() {
+        assert!(measured("session", 94.5, Some(NOW + HOUR)).reached(95, NOW));
+        assert!(!measured("session", 94.4, Some(NOW + HOUR)).reached(95, NOW));
+        assert!(!measured("session", 97.0, Some(NOW - 60)).reached(95, NOW));
+    }
 
     fn measured(kind: &str, percent: f64, resets_at: Option<i64>) -> Window {
         Window {

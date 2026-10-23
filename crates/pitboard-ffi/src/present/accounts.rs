@@ -601,22 +601,16 @@ fn limits_said(seen: &Seen, account: &Account) -> String {
         .enumerate()
         .map(|(at, limit)| {
             let scoped = scoped_name(limit);
-            match limit.resets_at {
-                Some(back) if limit.percent >= 100.0 => {
-                    if back > seen.now {
-                        format!("{scoped} used up until {}", seen.clock(back))
-                    } else {
-                        format!("{scoped} used up")
-                    }
-                }
-                _ => match first {
-                    Some((first, in_seconds)) if first == at => format!(
-                        "{scoped} {} ({})",
-                        words::figure(limit.percent),
-                        words::runs_out_in(in_seconds)
-                    ),
-                    _ => format!("{scoped} {}", words::figure(limit.percent)),
-                },
+            let used_up = crate::model::advice::window(limit).used_up(seen.now);
+            match (used_up, limit.resets_at, first) {
+                (true, Some(back), _) => format!("{scoped} used up until {}", seen.clock(back)),
+                (true, None, _) => format!("{scoped} used up"),
+                (false, _, Some((first, in_seconds))) if first == at => format!(
+                    "{scoped} {} ({})",
+                    words::figure(limit.percent),
+                    words::runs_out_in(in_seconds)
+                ),
+                (false, _, _) => format!("{scoped} {}", words::figure(limit.percent)),
             }
         })
         .collect();

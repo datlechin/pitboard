@@ -587,7 +587,7 @@ fn sign_in_again_button(os: Os) -> String {
 // and the reset, so one limit is one notification however far it goes.
 pub(crate) fn at_limit_notice(heads_up: &HeadsUp, now: i64) -> RunOutNotice {
     let limit = &heads_up.window;
-    let title = if limit.percent >= 100.0 {
+    let title = if crate::model::advice::window(limit).used_up(now) {
         words::ran_out(
             &heads_up.ran,
             &said::limit_name(&limit.kind, limit.length_seconds),

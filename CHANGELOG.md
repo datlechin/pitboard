@@ -134,6 +134,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   again** and offers **Sign In Again**, in place of a switch to a login that no longer works.
 - The app lines up the usage bars of every account, where a row that said no pace had wider
   bars.
+- The app counts a limit whose reset time has passed as back, as the command line does, and no
+  longer calls it used up, notifies you of it or offers a switch away from it.
 
 ## [1.0.0-beta.5] - 2026-10-23
 
