@@ -448,8 +448,10 @@ window loads its site, and whatever the site's pages load, as a browser would.
     when it runs out, a parked login's life, a renewal run, doctor's summary, and what is
     left in a file behind the keychain, or Credential Manager on Windows, and what putting it
     away does and did (`left_lines`, `stowed_lines`, `nothing_left`, each in the words of the
-    system it is given), which `pitboard stow` and the app's sheet both say, and what
-    becomes of running sessions after a switch (`after_a_switch`). It also holds
+    system it is given), which `pitboard stow` and the app's sheet both say, what becomes
+    of running sessions after a switch (`after_a_switch`), why replacing a login refused for
+    good loses nothing (`replacing`) and that Claude's settings name another account
+    (`desktop_named`), each taking the account as the front end names it. It also holds
     `usage_level`, the steps at which a limit's colour changes, and the helpers every front
     end writes with, `capitalised`, `listed` and `figure`; `time.rs` holds the units of a
     span, and `state::Key::parse` reads back the name `Key::typed` writes. A thing said both
@@ -1850,8 +1852,9 @@ window loads its site, and whatever the site's pages load, as a browser would.
   it refuses. Where it has already given up or settled something, it says the move as
   `move_not_given_up` instead, since the refusal's "nothing has changed" would be false.
   Why it was not given up is the core's clause in both front ends
-  (`words::not_given_up_because`), each adding its own way out, and the summary of a move
-  given up is `words::given_up` in both, each with its own way on.
+  (`words::not_given_up_because`), each naming the account its own way and adding its own way
+  out but for a park Pitboard could not look at (`words::readable_first`), and the summary of
+  a move given up is `words::given_up` in both, each with its own way on.
 - `adopt` drops each waiting move and awaited sign-in, since they were about the other
   computer's Claude. Each folder a dropped move names that no account holds is kept aside
   as `another_machine`.
