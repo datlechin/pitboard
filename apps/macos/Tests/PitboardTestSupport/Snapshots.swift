@@ -57,7 +57,8 @@ package func snapshot(
         signingInText: nil, stowText: nil, quitConfirmation: nil, failureAlert: nil,
         machine: MachineShown(
             schedule: ScheduleShown(
-                schedule: nil, on: false, changing: false, enabled: true, note: nil, failed: nil,
+                schedule: nil, on: false, changing: false, enabled: true, note: nil,
+                failed: nil,
                 about: ""),
             checks: ChecksShown(
                 lines: [], summary: nil, level: .ok, checking: false, checked: nil,

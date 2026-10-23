@@ -74,6 +74,33 @@
             </StackPanel>
           </toolkit:SettingsCard.Description>
         </toolkit:SettingsCard>
+        <toolkit:SettingsCard Header="Check for updates automatically" Visibility="{x:Bind ViewModel.UpdatesAvailable, Mode=OneWay}">
+          <ToggleSwitch
+              IsOn="{x:Bind ViewModel.ChecksAutomatically, Mode=OneWay}"
+              AutomationProperties.AutomationId="settings.checkAutomatically"
+              AutomationProperties.Name="Check for updates automatically"
+              Toggled="OnAutomaticChecksToggled" />
+        </toolkit:SettingsCard>
+        <toolkit:SettingsCard Header="Check for updates">
+          <toolkit:SettingsCard.Description>
+            <StackPanel>
+              <TextBlock Text="{x:Bind ViewModel.UpdatesState, Mode=OneWay}" />
+              <ItemsControl ItemsSource="{x:Bind ViewModel.UpdatesNoteLines, Mode=OneWay}" IsTabStop="False">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="x:String">
+                    <TextBlock Text="{x:Bind}" TextWrapping="Wrap" />
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+          </toolkit:SettingsCard.Description>
+          <Button
+              MinWidth="120"
+              Content="Check now"
+              IsEnabled="{x:Bind ViewModel.UpdatesAvailable, Mode=OneWay}"
+              AutomationProperties.AutomationId="settings.checkNow"
+              Click="OnCheckNow" />
+        </toolkit:SettingsCard>
 
         <TextBlock Style="{StaticResource SettingsSectionHeaderTextBlockStyle}" Text="Limits" />
         <toolkit:SettingsExpander Header="When a limit reaches" AutomationProperties.AutomationId="settings.atLimitGroup">
@@ -194,7 +221,7 @@
           </toolkit:SettingsExpander.ItemsFooter>
         </toolkit:SettingsExpander>
 
-        <TextBlock Style="{StaticResource SettingsSectionHeaderTextBlockStyle}" Text="Renewal" />
+        <TextBlock Style="{StaticResource SettingsSectionHeaderTextBlockStyle}" Text="Advanced" />
         <toolkit:SettingsCard Header="Renew parked logins daily">
           <toolkit:SettingsCard.Description>
             <StackPanel>
@@ -216,8 +243,6 @@
               AutomationProperties.Name="Renew parked logins daily"
               Toggled="OnRenewDailyToggled" />
         </toolkit:SettingsCard>
-
-        <TextBlock Style="{StaticResource SettingsSectionHeaderTextBlockStyle}" Text="Command line" />
         <!-- No button: the installer puts the command line on the PATH, and takes it off again. -->
         <toolkit:SettingsCard Header="In your terminal" ContentAlignment="Vertical" HorizontalContentAlignment="Left">
           <toolkit:SettingsCard.Description>
@@ -240,35 +265,6 @@
                 Visibility="{x:Bind ViewModel.LookingForCommandLine, Mode=OneWay}"
                 AutomationProperties.Name="Looking for pitboard" />
           </Grid>
-        </toolkit:SettingsCard>
-
-        <TextBlock Style="{StaticResource SettingsSectionHeaderTextBlockStyle}" Text="Updates" />
-        <toolkit:SettingsCard Header="Check for updates automatically" Visibility="{x:Bind ViewModel.UpdatesAvailable, Mode=OneWay}">
-          <ToggleSwitch
-              IsOn="{x:Bind ViewModel.ChecksAutomatically, Mode=OneWay}"
-              AutomationProperties.AutomationId="settings.checkAutomatically"
-              AutomationProperties.Name="Check for updates automatically"
-              Toggled="OnAutomaticChecksToggled" />
-        </toolkit:SettingsCard>
-        <toolkit:SettingsCard Header="Check for updates">
-          <toolkit:SettingsCard.Description>
-            <StackPanel>
-              <TextBlock Text="{x:Bind ViewModel.UpdatesState, Mode=OneWay}" />
-              <ItemsControl ItemsSource="{x:Bind ViewModel.UpdatesNoteLines, Mode=OneWay}" IsTabStop="False">
-                <ItemsControl.ItemTemplate>
-                  <DataTemplate x:DataType="x:String">
-                    <TextBlock Text="{x:Bind}" TextWrapping="Wrap" />
-                  </DataTemplate>
-                </ItemsControl.ItemTemplate>
-              </ItemsControl>
-            </StackPanel>
-          </toolkit:SettingsCard.Description>
-          <Button
-              MinWidth="120"
-              Content="Check now"
-              IsEnabled="{x:Bind ViewModel.UpdatesAvailable, Mode=OneWay}"
-              AutomationProperties.AutomationId="settings.checkNow"
-              Click="OnCheckNow" />
         </toolkit:SettingsCard>
 
         <TextBlock Style="{StaticResource SettingsSectionHeaderTextBlockStyle}" Text="About" />

@@ -149,7 +149,7 @@ public sealed class SettingsTests
         Assert.IsTrue(launched.Gone(found => found.ByName("Install Command Line Tool…")), "the section offers a button");
     }
 
-    // A Debug build carries no update key, and the Updates section says so.
+    // A Debug build carries no update key, and General says so.
     [TestMethod]
     public void UpdatesSayWhenTheBuildCannotUpdate()
     {

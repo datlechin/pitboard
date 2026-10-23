@@ -60,6 +60,18 @@ public sealed class SettingsPageTests
         Views.Visible<TextBlock>(page).SingleOrDefault(shown => shown.Text == text)
         ?? throw new AssertFailedException($"'{text}' is not among: {string.Join(", ", Views.Texts(page))}");
 
+    // The macOS Settings' three panes, then About.
+    [UITestMethod]
+    public async Task ThePageHasTheSectionsOfTheMacOSPanes()
+    {
+        var page = await Shown(new AppModel(new StandInModel(Snapshots.Read(1))));
+        var heading = (Style)Application.Current.Resources["SettingsSectionHeaderTextBlockStyle"];
+
+        CollectionAssert.AreEqual(
+            new[] { "General", "Limits", "Advanced", "About" },
+            Views.Visible<TextBlock>(page).Where(text => text.Style == heading).Select(text => text.Text).ToArray());
+    }
+
     [UITestMethod]
     public async Task ShowingThePageReadsTheScheduleAndLooksForTheCommandLine()
     {

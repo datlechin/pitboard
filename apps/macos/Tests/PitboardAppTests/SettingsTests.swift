@@ -174,10 +174,16 @@ private func settingsHeight(_ tab: SettingsView.Tab, warming: Int = 0) -> CGFloa
     }
 }
 
-@Test func aPaneKeptByAnEarlierVersionStillOpens() {
+// Renewal and Command Line went to Advanced, and Updates to General.
+@Test func aPaneKeptByAnEarlierVersionOpensThePaneThatHoldsItNow() {
+    #expect(SettingsView.Tab.allCases == [.general, .limits, .advanced])
     #expect(SettingsView.Tab(rawValue: "general") == .general)
-    #expect(SettingsView.Tab(rawValue: "commandLine") == .commandLine)
-    #expect(SettingsView.Tab(rawValue: "updates") == .updates)
+    #expect(SettingsView.Tab(rawValue: "limits") == .limits)
+    #expect(SettingsView.Tab(rawValue: "renewal") == .advanced)
+    #expect(SettingsView.Tab(rawValue: "commandLine") == .advanced)
+    #expect(SettingsView.Tab(rawValue: "updates") == .general)
+    #expect(
+        SettingsView.Tab.allCases.allSatisfy { SettingsView.Tab(rawValue: $0.rawValue) == $0 })
 }
 
 // MARK: - Linking the command line

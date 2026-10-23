@@ -25,13 +25,12 @@ final class PanesAndSettingsTests: FixtureTestCase {
         XCTAssertTrue(app.staticTexts["One thing is worth looking at."].exists)
     }
 
-    /// The app renews due logins as it reads them, and `pitboard schedule status` says where
-    /// the job is, so the pane holds the switch alone.
+    // The app renews as it reads, and `pitboard schedule status` says where the job is.
     @MainActor
     func testDailyRenewal() {
         let app = launch(.oneTool)
         app.openSettings()
-        app.toolbars.buttons["Renewal"].click()
+        app.toolbars.buttons["Advanced"].click()
         let renew = app.control("settings.renewDaily")
         XCTAssertTrue(renew.waitForExistence(timeout: 5))
         renew.click()
@@ -52,6 +51,17 @@ final class PanesAndSettingsTests: FixtureTestCase {
         XCTAssertTrue(toggle.wait(until: "value == 1", timeout: 5))
         toggle.click()
         XCTAssertTrue(toggle.wait(until: "value == 0", timeout: 5))
+    }
+
+    @MainActor
+    func testSettingsHaveThreePanes() {
+        let app = launch(.oneTool)
+        app.openSettings()
+        let panes = app.windows["General"].toolbars.buttons
+        XCTAssertEqual(panes.count, 3)
+        for pane in ["General", "Limits", "Advanced"] {
+            XCTAssertTrue(panes[pane].exists, pane)
+        }
     }
 
     /// The model answers a change after the click, so each read after one waits.
@@ -120,13 +130,12 @@ final class PanesAndSettingsTests: FixtureTestCase {
         return app.descendants(matching: .any).matching(named).firstMatch
     }
 
-    /// The fixture has no Pitboard of its own, so the tab offers to link the one inside the
-    /// app.
+    // The fixture has no pitboard of its own, so the pane offers the one inside the app.
     @MainActor
     func testInstallingTheCommandLine() {
         let app = launch(.oneTool)
         app.openSettings()
-        app.toolbars.buttons["Command Line"].click()
+        app.toolbars.buttons["Advanced"].click()
         let install = app.buttons["Install Command Line Tool…"]
         XCTAssertTrue(install.waitForExistence(timeout: 5))
         install.click()
@@ -134,12 +143,12 @@ final class PanesAndSettingsTests: FixtureTestCase {
         XCTAssertTrue(app.text("ENDSWITH", "/bin/pitboard").waitForExistence(timeout: 5))
     }
 
-    /// A debug build carries no update key, and the Updates tab says so.
+    // A debug build carries no update key.
     @MainActor
     func testUpdatesSayWhenTheBuildCannotUpdate() {
         let app = launch(.oneTool)
         app.openSettings()
-        app.toolbars.buttons["Updates"].click()
+        app.toolbars.buttons["General"].click()
         let prefix = "This copy of Pitboard can"
         let note = app.staticTexts.matching(
             NSPredicate(format: "value BEGINSWITH %@ OR label BEGINSWITH %@", prefix, prefix)

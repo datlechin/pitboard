@@ -107,7 +107,7 @@ enum Symbol {
     static let terminal = "terminal"
     static let general = "gearshape"
     static let limits = "gauge.open.with.lines.needle.33percent"
-    static let renewal = "calendar.badge.clock"
+    static let advanced = "gearshape.2"
     static let site = "globe"
     /// Back and forward in a window, which mirror for a language read right to left.
     static let back = "chevron.backward"
