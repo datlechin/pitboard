@@ -1501,31 +1501,23 @@ pub(crate) fn evaluate_with(facts: &Facts, moment: &dyn Fn(i64, i64) -> String) 
             "a store Pitboard does not read yet",
             "Treat this as unknown, never as empty.",
         ),
-        // The one wrong diagnosis in this file. If Claude Code's config names somebody as
-        // signed in, "nothing is signed in" is not an observation, it is Pitboard looking
-        // in the wrong place, and it is the failure that would follow Claude Code moving
-        // where it keeps a login.
-        Ok(store::Backend::Absent) if facts.config_account.is_some() => fail(
-            "credential_store",
-            "credential store",
-            format!(
-                "Claude Code's config says {} is signed in, and no store Pitboard reads \
-                 holds that login",
-                facts
-                    .config_account
-                    .as_ref()
-                    .map(|i| i.email.as_str())
-                    .unwrap_or("somebody")
+        // As a switch refuses with `live_credential_elsewhere`: what would follow Claude Code
+        // moving where it keeps a login.
+        Ok(store::Backend::Absent) => match &facts.config_account {
+            Some(named) => fail(
+                "credential_store",
+                "credential store",
+                words::named_but_not_found(facts.os, &named.email),
+                "Pitboard will not write a login where nobody reads it. Check for a Pitboard \
+                 update; if there is none, this is worth reporting.",
             ),
-            "Pitboard will not write a login where nobody reads it. Check for a Pitboard \
-             update; if there is none, this is worth reporting.",
-        ),
-        Ok(store::Backend::Absent) => warn(
-            "credential_store",
-            "credential store",
-            "no credential in any backend",
-            "Nothing is signed in for this slot.",
-        ),
+            None => warn(
+                "credential_store",
+                "credential store",
+                "no credential in any backend",
+                "Nothing is signed in for this slot.",
+            ),
+        },
         Err(e) => fail(
             "credential_store",
             "credential store",

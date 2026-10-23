@@ -1214,6 +1214,18 @@ pub fn forget_question(tool: Option<crate::provider::ProviderId>, label: &str) -
     }
 }
 
+// Claude Code's config names `email` as signed in and no store Pitboard reads on `os` holds a
+// login: Pitboard is looking in the wrong place.
+pub(crate) fn named_but_not_found(os: Os, email: &str) -> String {
+    let places = match os {
+        Os::MacOs | Os::Linux => "in the keychain or in the file it also reads",
+        Os::Windows => "in .credentials.json or in Credential Manager",
+    };
+    format!(
+        "Claude Code's config says {email} is signed in, but Pitboard cannot find that login {places}"
+    )
+}
+
 /// Why putting another login in place of `tool`'s login in use loses nothing, where its
 /// service refuses that login's refresh token for good.
 pub fn replacing(tool: crate::provider::ProviderId, detail: &str) -> String {
