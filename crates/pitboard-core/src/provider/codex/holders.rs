@@ -54,8 +54,8 @@ pub(crate) const HOLDERS: &[Holder] = &[
         remedy: restart_the_app_server(OS),
     },
     // From 0.164.0, where an older Codex left a daemon's launch state, the app server runs from
-    // the standalone package's `current`. On Linux its path resolves to a release, as a terminal
-    // session's does, and it reads as a session.
+    // the standalone package's `current`. It reads as a session where its path is a release's,
+    // as a terminal session's is: on Linux, which resolves it, and once its updater restarts it.
     Holder {
         kind: "app_server_daemon",
         noun: Noun::One("Codex's background app server"),
