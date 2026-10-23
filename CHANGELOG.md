@@ -13,6 +13,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the model's name, as they show Claude Code's.
 - `pitboard doctor`, **This Mac** and **This PC** name each Codex setting that limits which logins
   Codex keeps, such as `forced_chatgpt_workspace_id`, and the accounts it rules out.
+- `pitboard doctor`, **This Mac** and **This PC** name a managed `forceLoginOrgUUID` of Claude
+  Code's, and the accounts whose organisation it leaves out.
 - A Codex switch on Linux names the ChatGPT app among what still runs Codex, and says to quit it
   and open it again.
 - `pitboard watch install` has the system's own service manager run `pitboard watch` from each

@@ -281,7 +281,7 @@ Digests differ from one report to the next. Both reports write a proxy's user na
 | `Codex` | Pitboard finds `codex`, Codex's directory, `~/.codex` or `CODEX_HOME`, exists, or a Codex account is enrolled |
 | `Claude Desktop` | A Claude Desktop account is enrolled, or a folder is set aside |
 
-When another tool's checks appear and Claude Code is absent, `doctor` leaves out `config_file`, `identity`, `in_use`, `slot`, `credential_size`, `credential_store`, `credential`, `fallback_login`, `storage_v5`, `claude_daemon`, `claude_version`, `status_line` and `auth_source`. Claude Code is absent when it has no config file, no `claude` program and no stored login, and no Claude Code account is enrolled.
+When another tool's checks appear and Claude Code is absent, `doctor` leaves out `config_file`, `identity`, `in_use`, `slot`, `credential_size`, `credential_store`, `credential`, `fallback_login`, `storage_v5`, `claude_daemon`, `claude_version`, `status_line`, `auth_source` and `login_restrictions`. Claude Code is absent when it has no config file, no `claude` program and no stored login, and no Claude Code account is enrolled.
 
 Some Codex levels depend on whether a Codex account is enrolled:
 
@@ -335,6 +335,7 @@ On macOS, Claude Desktop's checks read the folders in `~/.pitboard/parks`, open 
   | `claude_version` | `Claude Code build` | The installed Claude Code version, and the build of it for this system that Pitboard's facts were read from. Always `ok`. |
   | `status_line` | `status line` | Windows only. The shell Claude Code runs its status line in, Git Bash, PowerShell 7 or Windows PowerShell, and the `pitboard` it finds there. Warns when Claude Code's status line runs `pitboard` and that shell finds none. |
   | `auth_source` | `what a session authenticates with` | Warns when Claude Code uses something other than its stored login, such as `ANTHROPIC_API_KEY` or `apiKeyHelper`. |
+  | `login_restrictions` | `login restrictions` | Only when managed settings set `forceLoginOrgUUID`. Names each and where it is set. Warns when it leaves out an enrolled account's organisation, which Pitboard then does not put in use. |
   | `asking` | `asking Anthropic` | Warns while Pitboard waits to ask about usage, after a service asked for less traffic or could not be reached. The name lists the services asked. |
   | `network` | `network` | Direct, or which proxy and which variable named it. Warns for a variable holding no proxy address Pitboard can read. Warns for a SOCKS proxy, which Pitboard does not use, where `NO_PROXY` leaves a host it calls. |
   | `dormant_account` | `account <label>` | Only for a Claude Code account not switched to for 30 days or more. An account enrolled with `--sign-in` and never switched to gets none. Always warns. |

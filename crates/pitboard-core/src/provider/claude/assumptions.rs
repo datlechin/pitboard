@@ -2127,7 +2127,8 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
                   takes, the profile's plist on macOS (macos_managed_preferences) among them, and \
                   Claude's Provider::refuses, so a switch and a \
                   sign-in that would replace the login in use refuse with `login_restricted` an \
-                  account of an organisation no managed source names",
+                  account of an organisation no managed source names, and doctor's \
+                  login_restrictions names the setting and those accounts",
         probe: &[
             "Organization UUID to require for OAuth login. Accepts a single UUID string or an \
              array of UUIDs (any one is permitted).",
