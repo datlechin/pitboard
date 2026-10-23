@@ -1,6 +1,7 @@
 //! What the model knows of this machine rather than its accounts, as MachineModel.swift held
-//! it: the daily renewal schedule and the one change to it under way, doctor's checks, what Pitboard has changed, and the `pitboard` a terminal would
-//! run. `State` takes each intent and answer about them, and `present` says them.
+//! it: the daily renewal schedule and the one change to it under way, doctor's checks, what
+//! Pitboard has changed, and the `pitboard` a terminal would run. `State` takes each intent
+//! and answer about them, and `present` says them.
 //!
 //! Opening at login and linking the command line onto the `PATH` with an administrator's
 //! password are the app's own, as its system's: once it has linked it, the app sends

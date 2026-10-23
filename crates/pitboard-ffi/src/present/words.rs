@@ -1076,7 +1076,7 @@ pub(crate) fn listed(items: &[impl AsRef<str>]) -> String {
     }
 }
 
-// A login replaced outside Pitboard, which its notice offers to sign in to again, in place of a command.
+// Its notice offers to sign in again, so the words name no command.
 fn replaced(tool: ProviderId, label: &str, now: &Stored) -> String {
     let label = bare(label);
     let name = tool.name();

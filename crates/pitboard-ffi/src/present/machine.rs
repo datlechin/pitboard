@@ -37,22 +37,21 @@ pub struct MachineShown {
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct WarmShown {
     pub title: String,
-    /// The span, in minutes of the day, which `Intent::SetWarmRange` takes back: `to` up to
-    /// 24 hours, and a `from` later than it runs past midnight.
+    // minutes of the day, as `Intent::SetWarmRange` takes them; a `from` past `to` runs past
+    // midnight
     pub from: u16,
     pub to: u16,
-    /// The span in words, on the person's clock: "6:00 AM to 10:00 PM", "6:00 AM to
-    /// midnight", "All day".
+    // "6:00 AM to 10:00 PM", "6:00 AM to midnight", "All day", on the person's clock
     pub range_label: String,
-    /// Each Claude Code account enrolled under a name, in the order they were enrolled.
+    // each Claude Code account enrolled under a name, in the order they were enrolled
     pub accounts: Vec<WarmAccountShown>,
     // in place of `accounts` while there are none
     pub none_enrolled: Option<String>,
-    /// What comes next, once anything is turned on: the next warm-up, or why none is made.
+    // the next warm-up, or why none is made, once anything is turned on
     pub standing: Option<String>,
-    /// What is said under them: what a warm-up does and what it never does.
+    // what a warm-up does and what it never does
     pub note: String,
-    /// Whether anything here can be changed: once the core has said what it is.
+    // once the core has said what it is
     pub enabled: bool,
     pub terms: TermsShown,
 }
@@ -115,25 +114,17 @@ pub struct TermsShown {
 /// Daily renewal, as the settings show it.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct ScheduleShown {
-    /// The schedule as the core last read it, `None` before it has been read.
+    // as the core last read it
     pub schedule: Option<Schedule>,
-    /// Whether the switch shows daily renewal as on: while a change is under way, what was
-    /// asked for, rather than snapping back until the scheduler answers; and otherwise
-    /// whether the scheduler has it. A machine with no scheduler Pitboard writes to, or one
-    /// whose schedule has not been read yet, has it off.
+    // what was asked for while a change is under way, so the switch does not snap back
     pub on: bool,
-    /// A change is under way, from the moment it is asked for until the schedule has been
-    /// read back after it.
+    // from the moment it is asked for until the schedule is read back after it
     pub changing: bool,
-    /// Whether the switch can be pressed: not while a change is under way, when the model
-    /// drops a second press, and not to turn renewal on where this copy of the app cannot.
-    /// Turning it off always can, which is how a schedule that cannot work goes.
+    // turning renewal off always can, which is how a schedule that cannot work goes
     pub enabled: bool,
-    /// Said under the switch while the scheduler does not have it: that this machine has no
-    /// scheduler Pitboard writes to, or why this copy cannot schedule renewal.
+    // while the scheduler does not have it: none here, or why this copy cannot schedule
     pub note: Option<String>,
-    /// Why the last change could not be made, until the next is asked for, where `note` does
-    /// not say it already.
+    // why the last change failed, until the next, where `note` does not say it
     pub failed: Option<String>,
     // what daily renewal does, under its switch
     pub about: String,
