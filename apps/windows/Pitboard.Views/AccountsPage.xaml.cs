@@ -131,12 +131,16 @@ public sealed partial class AccountsPage : Page
         }
     }
 
-    // Starting at sign-in is Windows': the app turns it on, and says what Windows has.
+    // Starting at sign-in is Windows': the app turns it on, and says what Windows has. A refusal is said in Settings.
     private void Choose(Intent intent)
     {
         if (intent is Intent.OpensAtLogin opens)
         {
             Context.StartAtSignIn.Set(opens.On);
+            if (Context.StartAtSignIn.Failed is not null)
+            {
+                Context.ShowSettings();
+            }
         }
         else
         {

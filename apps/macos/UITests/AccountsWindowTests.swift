@@ -353,6 +353,17 @@ final class AccountsWindowTests: FixtureTestCase {
         XCTAssertTrue(activity.waitForNonExistence(timeout: 5))
     }
 
+    /// macOS can refuse the login item, which Settings says under General, so the tip opens
+    /// it there rather than seeming to do nothing.
+    @MainActor
+    func testOpenAtLoginMacOSRefusesOpensTheSettings() {
+        let app = launch(.twoTools, environment: ["PITBOARD_FIXTURE_LOGIN_ITEM_REFUSES": "1"])
+        app.openWindow()
+        XCTAssertTrue(app.staticTexts["Open Pitboard at login"].waitForExistence(timeout: 5))
+        app.buttons["Open at Login"].click()
+        XCTAssertTrue(app.windows["General"].waitForExistence(timeout: 5))
+    }
+
     @MainActor
     func testTheFirstLaunchOpensTheWindow() {
         let app = launch(.firstLaunch)

@@ -30,8 +30,9 @@ class FixtureTestCase: XCTestCase {
     /// The app, started into `fixture`: nothing it does reaches the keychain, the network,
     /// launchd, the login items or an administrator's password.
     @MainActor
-    func launch(_ fixture: Fixture) -> XCUIApplication {
+    func launch(_ fixture: Fixture, environment: [String: String] = [:]) -> XCUIApplication {
         let app = XCUIApplication()
+        app.launchEnvironment = environment
         app.launchEnvironment["PITBOARD_FIXTURE"] = fixture.rawValue
         app.launch()
         return app

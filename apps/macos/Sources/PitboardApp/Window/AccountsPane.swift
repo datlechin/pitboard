@@ -10,6 +10,8 @@ struct AccountsPane: View {
     /// once it is answered.
     @State private var asking: Asking?
     @Environment(\.openWindow) private var openWindow
+    @Environment(\.openSettings) private var openSettings
+    @AppStorage(DefaultsKey.settingsTab) private var settingsTab = SettingsView.Tab.general
 
     var body: some View {
         content
@@ -107,9 +109,14 @@ struct AccountsPane: View {
             }
             if let step = model.setup {
                 SetupTip(step: step, footing: model.footing) { intent in
-                    // The login item is macOS's: the app turns it on, and says what macOS has.
+                    // The login item is macOS's: the app turns it on, and says what macOS has,
+                    // and why it refused, in General.
                     if case .opensAtLogin(let on) = intent {
                         openAtLogin.set(on)
+                        if openAtLogin.failed != nil {
+                            settingsTab = .general
+                            openSettings()
+                        }
                     } else {
                         model.send(intent)
                     }

@@ -49,6 +49,7 @@ public sealed partial class MainWindow : Window
         {
             OpenWindow = openWindow,
             Notifications = notifications ?? (() => null),
+            ShowSettings = () => Select(null),
         };
         // A dialog needs the window's XamlRoot, which its content has once loaded.
         Navigation.Loaded += (_, _) =>

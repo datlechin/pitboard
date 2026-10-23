@@ -9,6 +9,8 @@
     /// in a world that is not real, and only a library built with `--fixture` has them.
     enum Fixture {
         static let variable = "PITBOARD_FIXTURE"
+        // Set, macOS refuses the fixture's login item, as it can refuse an app's own.
+        static let loginItemRefuses = "PITBOARD_FIXTURE_LOGIN_ITEM_REFUSES"
 
         /// The defaults a fixture keeps the app's view preferences in, emptied at every launch
         /// so each test starts from the same place and nothing reaches the real app's. The
@@ -54,7 +56,7 @@
             return Dependencies(
                 model: model,
                 defaults: defaults,
-                loginItem: FixtureLoginItem(),
+                loginItem: FixtureLoginItem(refuses: environment[loginItemRefuses] != nil),
                 notificationStatus: { nil },
                 commandLineTool: commandLineTool(in: folder),
                 web: .fixture(folder: folder),
@@ -82,7 +84,17 @@
     @MainActor
     final class FixtureLoginItem: LoginItem {
         private(set) var state: LoginItemState = .disabled
-        func register() throws { state = .enabled }
+        private let refuses: Bool
+
+        init(refuses: Bool) {
+            self.refuses = refuses
+        }
+
+        func register() throws {
+            if refuses { throw CocoaError(.featureUnsupported) }
+            state = .enabled
+        }
+
         func unregister() throws { state = .disabled }
         func openSystemSettings() {}
     }
