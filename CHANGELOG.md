@@ -63,6 +63,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   schedule runs.
 - On Windows, `pitboard doctor` says where Codex keeps its home among Codex's checks, instead
   of under a second Codex heading above Pitboard's own.
+- On Windows, an update of the app leaves a file in use to be replaced at your next restart,
+  instead of restarting Windows by itself.
 
 ## [1.0.0-beta.5] - 2026-10-23
 
