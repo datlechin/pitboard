@@ -1,4 +1,5 @@
 import AppKit
+import Observation
 import PitboardKit
 // Its types are not marked Sendable, though Notification Center is meant to be asked from
 // any thread, as the model asks it from a thread of its own.
@@ -142,6 +143,12 @@ final class MacNotifications: NSObject, Notifications, UNUserNotificationCenterD
         }
     }
 
+    // Nil where nothing is posted.
+    func authorization() async -> UNAuthorizationStatus? {
+        guard let centre else { return nil }
+        return await centre.notificationSettings().authorizationStatus
+    }
+
     func userNotificationCenter(
         _ centre: UNUserNotificationCenter, didReceive response: UNNotificationResponse
     ) async {
@@ -151,6 +158,33 @@ final class MacNotifications: NSObject, Notifications, UNUserNotificationCenterD
                 in: response.notification.request.content.userInfo)
         else { return }
         await MainActor.run { onClick?(argument) }
+    }
+}
+
+// Read on each visit and on activation: notifications are turned on in System Settings.
+@MainActor
+@Observable
+final class NotificationsAllowed {
+    @ObservationIgnored private let status: @MainActor () async -> UNAuthorizationStatus?
+    private(set) var off = false
+
+    init(status: @escaping @MainActor () async -> UNAuthorizationStatus?) {
+        self.status = status
+    }
+
+    func read() async {
+        off = await status() == .denied
+    }
+
+    func openSystemSettings() {
+        let id = Bundle.main.bundleIdentifier ?? ""
+        guard
+            let settings = URL(
+                string:
+                    "x-apple.systempreferences:com.apple.Notifications-Settings.extension?id=\(id)"
+            )
+        else { return }
+        NSWorkspace.shared.open(settings)
     }
 }
 

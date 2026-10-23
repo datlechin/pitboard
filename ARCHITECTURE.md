@@ -858,8 +858,9 @@ window loads its site, and whatever the site's pages load, as a browser would.
   - `PitboardApp/System/MacPlatform.swift` is what the model asks of macOS:
     `MacAppControl` (`NSRunningApplication` and `NSWorkspace`), `MacNotifications`
     (Notification Center, a category for each button `notification_buttons` names, and
-    permission asked at the first post) and `MacLocalTime` (the person's locale, calendar and
-    12 or 24 hours).
+    permission asked at the first post), `NotificationsAllowed` (whether macOS turned them
+    off, for the settings) and `MacLocalTime` (the person's locale, calendar and 12 or 24
+    hours).
     `LoginItem.swift` is opening at login (`SMAppService`) and `CommandLineTool.swift`
     linking the command line with an administrator's password, which stay the app's own.
   - `PitboardApp/MenuBar`, `Window`, `Sheets`, `Settings` and `Design` are the views. They

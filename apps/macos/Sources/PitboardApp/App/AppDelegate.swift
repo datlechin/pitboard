@@ -10,6 +10,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     let model: AppModel
     let windows: AccountWindows
     let openAtLogin: OpenAtLogin
+    let notificationsAllowed: NotificationsAllowed
     let commandLineLink: CommandLineLink
     let windowRequests = WindowRequests()
     let defaults: UserDefaults
@@ -23,6 +24,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         windows = AccountWindows(
             model: model, environment: dependencies.web, presence: .live())
         openAtLogin = OpenAtLogin(dependencies.loginItem)
+        notificationsAllowed = NotificationsAllowed(status: dependencies.notificationStatus)
         commandLineLink = CommandLineLink(dependencies.commandLineTool, model: model)
         quitting = dependencies.quitting
         super.init()

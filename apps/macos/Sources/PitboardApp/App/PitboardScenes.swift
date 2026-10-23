@@ -8,6 +8,7 @@ public struct PitboardScenes: Scene {
     let windows: AccountWindows
     let requests: WindowRequests
     let openAtLogin: OpenAtLogin
+    let notificationsAllowed: NotificationsAllowed
     let commandLineLink: CommandLineLink
     let defaults: UserDefaults
     let updates: any Updates
@@ -17,6 +18,7 @@ public struct PitboardScenes: Scene {
         windows = delegate.windows
         requests = delegate.windowRequests
         openAtLogin = delegate.openAtLogin
+        notificationsAllowed = delegate.notificationsAllowed
         commandLineLink = delegate.commandLineLink
         defaults = delegate.defaults
         self.updates = updates
@@ -71,7 +73,8 @@ public struct PitboardScenes: Scene {
 
         Settings {
             SettingsView(
-                model: model, openAtLogin: openAtLogin, commandLineLink: commandLineLink,
+                model: model, openAtLogin: openAtLogin, notifications: notificationsAllowed,
+                commandLineLink: commandLineLink,
                 presence: windows.presence, updates: updates
             )
         }

@@ -3,6 +3,7 @@ import PitboardKit
 import PitboardTestSupport
 import SwiftUI
 import Testing
+import UserNotifications
 
 @testable import PitboardApp
 
@@ -97,6 +98,34 @@ private final class ScriptedLoginItem: LoginItem {
     #expect(openAtLogin.state == .disabled)
 }
 
+// MARK: - Notifications turned off
+
+/// What macOS has is read on each visit and as the app comes forward, since the person turns
+/// notifications on and off in System Settings. Only a refusal is said: not asked yet, or a
+/// build that posts nothing, is nothing to say.
+@MainActor
+private final class Authorization {
+    var status: UNAuthorizationStatus? = .denied
+}
+
+@MainActor
+@Test func notificationsTurnedOffAreSaidUntilTurnedOnAgain() async {
+    let macOS = Authorization()
+    let notifications = NotificationsAllowed(status: { macOS.status })
+    #expect(!notifications.off, "not before it is read")
+
+    await notifications.read()
+    #expect(notifications.off)
+    for allowed in [UNAuthorizationStatus.authorized, .provisional, .notDetermined] {
+        macOS.status = allowed
+        await notifications.read()
+        #expect(!notifications.off, "\(allowed)")
+    }
+    macOS.status = nil
+    await notifications.read()
+    #expect(!notifications.off)
+}
+
 // MARK: - Fitting the screen
 
 @MainActor
@@ -110,6 +139,7 @@ private func settingsHeight(_ tab: SettingsView.Tab, warming: Int = 0) -> CGFloa
     let model = AppModel(model: StandInModel(snapshot(0, warming: accounts)))
     let settings = SettingsView(
         model: model, openAtLogin: OpenAtLogin(ScriptedLoginItem()),
+        notifications: NotificationsAllowed(status: { nil }),
         commandLineLink: CommandLineLink(
             CommandLineTool(helper: nil, link: "/nowhere/pitboard", execute: { _ in nil }),
             model: model),

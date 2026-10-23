@@ -1,6 +1,7 @@
 import Foundation
 import PitboardKit
 import PitboardLinkTarget
+import UserNotifications
 
 /// Gathered in one value so a launch decides once which world the app runs in. A UI test
 /// launches the debug build into a fixture, where the model is a fixture's, over the real
@@ -11,6 +12,7 @@ struct Dependencies {
     let model: AppModel
     let defaults: UserDefaults
     let loginItem: any LoginItem
+    let notificationStatus: @MainActor () async -> UNAuthorizationStatus?
     let commandLineTool: CommandLineTool
     let web: WebEnvironment
     /// What is done as the app quits, once the model has stopped.
@@ -45,6 +47,7 @@ struct Dependencies {
             model: model,
             defaults: defaults,
             loginItem: MainAppLoginItem(),
+            notificationStatus: { await notifications.authorization() },
             commandLineTool: CommandLineTool(bundle: bundle),
             web: .live(),
             quitting: {

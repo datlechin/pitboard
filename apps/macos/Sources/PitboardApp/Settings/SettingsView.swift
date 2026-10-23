@@ -4,6 +4,7 @@ import SwiftUI
 struct SettingsView: View {
     let model: AppModel
     let openAtLogin: OpenAtLogin
+    let notifications: NotificationsAllowed
     let commandLineLink: CommandLineLink
     let presence: AppPresence
     let updates: any Updates
@@ -25,7 +26,7 @@ struct SettingsView: View {
 
     var body: some View {
         TabView(selection: $tab) {
-            GeneralSettings(openAtLogin: openAtLogin)
+            GeneralSettings(openAtLogin: openAtLogin, notifications: notifications)
                 .tabItem { Label("General", systemImage: Symbol.general) }
                 .tag(Tab.general)
             LimitsSettings(model: model)

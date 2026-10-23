@@ -55,6 +55,7 @@
                 model: model,
                 defaults: defaults,
                 loginItem: FixtureLoginItem(),
+                notificationStatus: { nil },
                 commandLineTool: commandLineTool(in: folder),
                 web: .fixture(folder: folder),
                 quitting: {})
