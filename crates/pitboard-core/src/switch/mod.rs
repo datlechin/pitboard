@@ -329,7 +329,7 @@ fn purge(ctx: &Context, permit: Permit, state: &mut State) -> usize {
 /// Makes Pitboard runs exclusive of each other. A kernel lock, unlike the directory lock
 /// Claude Code's protocol requires around its own writes: the operating system releases it
 /// when a process ends, so there is no staleness rule for two runs to both satisfy.
-fn exclusive(ctx: &Context, permit: Permit) -> Result<std::fs::File> {
+pub(crate) fn exclusive(ctx: &Context, permit: Permit) -> Result<std::fs::File> {
     let (file, path) = lock_file(ctx, permit)?;
     file.lock()
         .map_err(|source| Error::HomeUnwritable { path, source })?;

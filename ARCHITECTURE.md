@@ -1218,7 +1218,9 @@ window loads its site, and whatever the site's pages load, as a browser would.
   is given the installing Pitboard's proxy variables, in `watch.env` on Windows, and the gate
   refuses it where Pitboard may change nothing. `uninstall` stops and removes it before the
   schedule, since it writes in the directory as it runs, and `doctor` reports it as
-  `watch_service`. The app may be switching too: a switch is decided again under the lock
+  `watch_service`. Its run is ended only while Pitboard's lock is held, so never in the middle
+  of a renewal or a switch; a removal of renewal's task leaves its run to finish. On Linux, a
+  watch service systemd will not stop stays installed and says why. The app may be switching too: a switch is decided again under the lock
   (`switch::auto`), and `tests/watch.rs` has four processes decide from one reading and make
   one switch.
 - On Windows `doctor` also reads what Task Scheduler keeps of the task (`Scheduler::task`):

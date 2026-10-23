@@ -174,7 +174,7 @@ fn remove_job(ctx: &Context, permit: Permit, job: Job) -> Result<bool> {
     }
     let removed = match job {
         Job::Renew => schedule::uninstall(ctx, permit),
-        Job::Watch => crate::watch_service::uninstall(ctx, permit),
+        Job::Watch => crate::watch_service::taken_away(ctx, permit),
     };
     match removed {
         Err(Error::ScheduleUnsupported { .. }) => Ok(false),
