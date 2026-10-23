@@ -1104,7 +1104,7 @@ mod tests {
         m.api.owned_by("access-other-refresh", owner("other"));
         measured(&m, "other", 40.0, 40.0);
         m.mem.administers(
-            &crate::settings::managed_dir(m.ctx.os).join("managed-settings.json"),
+            crate::settings::managed_dir(m.ctx.os).join("managed-settings.json"),
             &serde_json::json!({"forceLoginOrgUUID": ["org-here", "org-other"]}).to_string(),
         );
 
