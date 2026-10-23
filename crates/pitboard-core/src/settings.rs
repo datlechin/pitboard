@@ -1050,8 +1050,10 @@ mod managed_tests {
     #[test]
     fn macos_managed_preferences_are_taken_over_the_folder_unless_they_merge() {
         let memory = MemoryHost::new();
-        let plist = PathBuf::from("/Library/Managed Preferences/com.anthropic.claudecode.plist");
-        let file = PathBuf::from("/Library/Application Support/ClaudeCode/managed-settings.json");
+        let plist =
+            PathBuf::from("/Library/Managed Preferences").join("com.anthropic.claudecode.plist");
+        let file =
+            PathBuf::from("/Library/Application Support/ClaudeCode").join("managed-settings.json");
         let pins = |ctx: &Context| -> Vec<String> {
             organisation_pins(ctx)
                 .into_iter()
