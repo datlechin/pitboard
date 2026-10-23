@@ -284,7 +284,6 @@ fn gateway_in(layer: &Layer) -> Vec<Override> {
         .collect()
 }
 
-// Managed settings, then the `settings.json` given.
 fn layered(ctx: &Context, settings: &Path) -> Vec<Override> {
     managed(ctx)
         .iter()

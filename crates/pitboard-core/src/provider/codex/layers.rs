@@ -825,7 +825,6 @@ impl Restrictions {
     }
 }
 
-// The restrictions this machine's Codex keeps to, read for the home `ctx` names.
 pub(crate) fn restrictions_of(ctx: &Context, own: &Path) -> Restrictions {
     let system = system_dir_of(ctx);
     restrictions(crate::host::OS, &system, own, &|layer| {
