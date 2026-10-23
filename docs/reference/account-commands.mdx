@@ -246,6 +246,8 @@ For a Claude Code or Codex account, the app deletes its window data, sign-in inc
 
 `forget` refuses the account in use with `cannot_forget_active_account`. Where Pitboard cannot identify the login in use, it also refuses the account last in use, or one with no parked login, with the code of what stopped it, such as `identity_unverifiable` or `app_open`.
 
+While a Claude Desktop move waits, `forget` refuses every Claude Desktop account with the code that stops settling the move, such as `app_open` or `recovery_undetermined`.
+
 At a terminal, without `--yes` or `--json`, `forget` asks on standard error:
 
 | Account | Question |
