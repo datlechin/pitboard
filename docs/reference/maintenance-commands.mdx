@@ -183,13 +183,7 @@ While the Pitboard app is open, `pitboard uninstall` refuses with `pitboard_open
 3. Deletes every parked login this Pitboard wrote, and every folder set aside in `~/.pitboard/parks`.
 4. Deletes Pitboard's directory, once every parked login and folder set aside is gone.
 
-Step 1 refuses with:
-
-| Code | When |
-| --- | --- |
-| `app_open` | Claude is open. |
-| `uninstall_would_strand` | Claude is signed out, so deleting the parked and set-aside logins would leave no Claude Desktop login. |
-| Another code in [Claude Desktop](/reference/errors#claude-desktop) | Pitboard cannot settle the move, or cannot identify the login Claude holds. |
+Step 1 stops with a code from [Claude Desktop](/reference/errors#claude-desktop), such as `app_open` or `uninstall_would_strand`.
 
 The login each tool is using stays. On macOS, so do parked logins that `pitboard repair` gave back and this Pitboard did not write. The keychain is shared, so another Pitboard may own them.
 

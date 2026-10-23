@@ -45,20 +45,7 @@ From its last reading of the file until the file is gone, `stow` holds the locks
 
 On macOS, parking a login too large for the keychain's standard input warns `written_on_the_command_line`. See [Large logins on macOS](/security#large-logins-on-macos).
 
-These errors stop it:
-
-| Error | When |
-| --- | --- |
-| `left_login_not_enrolled` | The login is of an account not enrolled here. The message names it and says how to enrol it |
-| `confirmation_needed` | `stow` cannot ask, and `--yes` is not given. Exit status 2 |
-| `left_login_changed` | The file changed or went after `stow` read it |
-| `stored_login_changed` | The file was going because of the login Claude Code has stored, and a sign-in replaced that login meanwhile |
-| `left_login_unidentified` | Pitboard could not identify or renew the login with Anthropic. A [cause code](/reference/errors#cause-codes) says why |
-| `credential_store_locked` | The keychain is locked, or Credential Manager cannot be reached, as over SSH with a key |
-| `credential_store_unreadable` | Pitboard cannot read the file, the keychain or Credential Manager |
-| `custom_oauth_endpoint` | `CLAUDE_CODE_CUSTOM_OAUTH_URL` is set, as [Custom OAuth endpoint](/reference/environment-variables#custom-oauth-endpoint) describes. Exit status 3 |
-
-None of them deletes the file. Once `stow` begins putting the file away, an error ends with how far it got:
+`stow` stops with a code from [Claude Code and Codex files](/reference/errors#claude-code-and-codex-files), [Credential stores and locks](/reference/errors#credential-stores-and-locks) or [Command output](/reference/errors#command-output), such as `left_login_not_enrolled`. None of them deletes the file. Once `stow` begins putting the file away, an error ends with how far it got:
 
 - `Pitboard changed nothing.`
 - `Pitboard deleted nothing, having renewed the login in the file and written it back there.`
