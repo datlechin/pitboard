@@ -4,12 +4,16 @@
 //! is due, and what a warm-up runs, are the core's own and have their own tests.
 
 use super::state::{Answer, Job};
-use super::testing::{Hand, Machine, Refusal, refusal, status, titled};
+use super::testing::{Hand, Machine, Refusal, World, refusal, status, titled};
 use super::{Intent, RunOutNotice};
-use crate::Account;
 use crate::present::testing::{LimitExt, account, window};
-use pitboard_core::duty::warm::{Choice, Halt, Overview, Range, Standing};
-use pitboard_core::switch::warm::WarmUp;
+use crate::{Account, PitboardError};
+use pitboard_core::duty::warm::{Choice, Failure, Halt, Overview, Range, Standing};
+use pitboard_core::error::Error;
+use pitboard_core::switch::warm::{Apart, WarmUp, told_apart};
+use pitboard_core::testing::{Ran, Started, WarmScript};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
 /// Two hours after the moment the hand's clock starts at, 10:00 in UTC on the same day.
@@ -56,9 +60,12 @@ fn reading(warm: Overview) -> Machine {
     machine
 }
 
-fn came_to_nothing() -> (String, Refusal) {
+fn came_to_nothing() -> (Apart, Refusal) {
     (
-        "personal/warm_up_not_started".into(),
+        told_apart(&Error::WarmUpFailed {
+            label: "personal".into(),
+            why: Failure::NotStarted,
+        }),
         refusal(
             "warm_up_not_started",
             "`personal` was not warmed up: the request was answered, and Anthropic still has no \
@@ -195,28 +202,80 @@ fn a_warm_up_by_itself_that_came_to_nothing_is_notified_once_and_waits() {
     );
 }
 
-/// Claude Code's run fails in words of its own each time: one by itself that failed again for
-/// that account is not notified again, as `pitboard watch` says it once.
+// Claude Code's run, failing in words of its own each time, as a request id in them does.
+#[derive(Debug, Default)]
+struct FailsInOtherWords(AtomicUsize);
+
+impl WarmScript for FailsInOtherWords {
+    fn run(&self, _: &Started) -> Ran {
+        let run = self.0.fetch_add(1, Ordering::SeqCst);
+        Ran {
+            exit: Some(1),
+            stdout: format!(
+                r#"{{"type":"result","is_error":true,"result":"request {run} timed out"}}"#
+            ),
+            timed_out: false,
+        }
+    }
+}
+
 #[test]
 fn a_failure_in_other_words_is_notified_once() {
-    let failed = |said: &str| {
-        (
-            "personal/warm_up_failed".to_owned(),
-            refusal(
-                "warm_up_failed",
-                &format!("`personal` was not warmed up: Claude Code failed ({said})."),
-                Vec::new(),
-            ),
-        )
+    let mut world = World::new("warm-other-words");
+    world.enrolled("work", "work", 10.0);
+    world.parked("personal", "personal", 0.0);
+    world.resting("personal");
+    world.elsewhere().status(true).expect("a read");
+    world.warming_by(Arc::new(FailsInOtherWords::default()));
+    let core = world.core();
+    let refused = || {
+        let refused = core
+            .warm_now("claude/personal")
+            .expect_err("came to nothing");
+        let PitboardError::Failed {
+            code,
+            message,
+            warnings,
+        } = refused.error;
+        (refused.told_apart, refusal(&code, &message, warnings))
     };
+    let (first, second) = (refused(), refused());
+    assert_ne!(first.1.message, second.1.message);
+
     let mut machine = reading(overview(true, Standing::Due));
-    machine.warming = Err(failed("request 7f3a timed out"));
+    machine.warming = Err(first);
     let mut model = started(&mut machine);
-    machine.warming = Err(failed("request 91c0 timed out"));
+    machine.warming = Err(second);
     model.later(Duration::from_secs(60));
     model.tick();
     model.run(&mut machine);
     assert_eq!(machine.warmed.len(), 2);
+    let posted: Vec<&str> = machine
+        .posted
+        .iter()
+        .map(|notice| notice.id.as_str())
+        .collect();
+    assert_eq!(posted, ["warm-failed/personal/warm_up_failed"]);
+}
+
+// As `pitboard watch` keeps it: another account warming up says nothing of this one.
+#[test]
+fn a_failure_is_not_notified_again_after_another_account_warms_up() {
+    let mut machine = reading(overview(true, Standing::Due));
+    machine.warming = Err(came_to_nothing());
+    let mut model = started(&mut machine);
+    machine.warming = Ok(WarmUp::Started {
+        account: "work".into(),
+        until: Some(UNTIL),
+    });
+    model.later(Duration::from_secs(60));
+    model.tick();
+    model.run(&mut machine);
+    machine.warming = Err(came_to_nothing());
+    model.later(Duration::from_secs(60));
+    model.tick();
+    model.run(&mut machine);
+    assert_eq!(machine.warmed.len(), 4, "and once more as work warmed up");
     assert_eq!(machine.posted.len(), 1);
 }
 

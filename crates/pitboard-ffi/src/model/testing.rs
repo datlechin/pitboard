@@ -18,6 +18,7 @@ use pitboard_core::context::Context;
 use pitboard_core::provider::ProviderId;
 use pitboard_core::service;
 use pitboard_core::state::Key;
+use pitboard_core::switch::warm::Apart;
 use pitboard_core::switch::{Left, Stowed};
 use pitboard_core::testing::desktop::{self, FakeClaude, JarAs};
 use pitboard_core::testing::{MemoryHost, ScriptedApi, live_service, stand_in, unsigned_token};
@@ -469,7 +470,7 @@ pub(super) fn refusal(code: &str, message: &str, warnings: Vec<Warning>) -> Refu
     }
 }
 
-fn warm_refused((told_apart, refused): (String, Refusal)) -> WarmRefused {
+fn warm_refused((told_apart, refused): (Apart, Refusal)) -> WarmRefused {
     WarmRefused {
         told_apart,
         error: refused.error(),
@@ -623,9 +624,7 @@ pub(super) struct Machine {
     /// could not be read where `warm_refused` says.
     pub warm: Option<pitboard_core::duty::warm::Overview>,
     pub warm_refused: Option<Refusal>,
-    /// What a warm-up gives, by itself or asked for now: what came of it, or what tells its
-    /// refusal apart, as the core tells it, and the refusal.
-    pub warming: Result<pitboard_core::switch::warm::WarmUp, (String, Refusal)>,
+    pub warming: Result<pitboard_core::switch::warm::WarmUp, (Apart, Refusal)>,
     /// Every warm-up asked for, in order: `None` for one by itself, or the account asked
     /// for now.
     pub warmed: Vec<Option<String>>,
@@ -1409,6 +1408,33 @@ impl World {
             cores: Some(cores),
             cores_gone,
         }
+    }
+
+    pub(super) fn warming_by(&mut self, script: Arc<dyn pitboard_core::testing::WarmScript>) {
+        self.ctx = self.ctx.clone().with_warm_script(script);
+    }
+
+    // As Anthropic answers the next read of `who`: no five-hour period running.
+    pub(super) fn resting(&self, who: &str) {
+        let now = epoch_now();
+        self.api.using(
+            &format!("access-{who}"),
+            pitboard_core::usage::Snapshot {
+                windows: vec![pitboard_core::usage::Window {
+                    kind: "session".into(),
+                    scope: None,
+                    percent: 0.0,
+                    resets_at: None,
+                    is_active: true,
+                    severity: None,
+                    length_seconds: Some(18_000),
+                }],
+                observed_at: Some(now),
+                answered_at: Some(now),
+                lists_every_limit: true,
+                source: pitboard_core::usage::Source::Live,
+            },
+        );
     }
 
     // Claude Code's program taken away, as on a machine where it was never installed.

@@ -494,9 +494,9 @@ window loads its site, and whatever the site's pages load, as a browser would.
   (`Pitboard::warm_up`, which looks at the files first), with a refusal row of its own, and
   says each warm-up, each reason an account is held back once until it warms up, and why
   nothing is warmed up here once until that ends. A warm-up that came to nothing is said once
-  until that account warms up, told apart as the app tells it (`switch::warm::told_apart`):
-  by the account and the code, never by Claude Code's words. No warm-up error ends it. `warm.rs` is
-  `pitboard warm`. `build/versioninfo.rs` is the Windows version resource SignPath asks of
+  until that account warms up, by the rule the app keeps too (`switch::warm::Told`): told
+  apart by the account and the code, never by Claude Code's words. No warm-up error ends it.
+  `warm.rs` is `pitboard warm`. `build/versioninfo.rs` is the Windows version resource SignPath asks of
   what it signs: ProductName `Pitboard`, CompanyName `Pitboard` and the crate's version, and
   `pitboard.exe`'s manifest. The build scripts of `pitboard-ffi` and `pitboard-share-ffi`
   include it by `#[path]` and link the resource into their DLLs, compiled by the Windows
@@ -584,8 +584,8 @@ window loads its site, and whatever the site's pages load, as a browser would.
     is chosen, asking the core's look after every read and every 30 seconds and saying under
     the setting what it came to, warms up the accounts turned on on a lane of its own,
     asking after every read and every 30 seconds, with every read's `Overview` of them, or
-    why it cannot be read, and a notification once for the words of a warm-up by itself
-    that came to nothing, keeps the app's own preferences, and keeps the daily renewal
+    why it cannot be read, and a notification of a warm-up by itself that came to nothing,
+    once until that account warms up (`switch::warm::Told`), keeps the app's own preferences, and keeps the daily renewal
     schedule, makes doctor's checks, reads the activity log and finds the `pitboard` a
     terminal runs. It keeps the
     account windows' books too: which store is whose and each window's last page, which
@@ -4920,8 +4920,8 @@ Microsoft's documentation.
   before the app ends, so a later click starts it again, and says the manager needs the
   Singleton package; the self-contained deployment guide (updated 2 October 2026) says app
   notifications do not, and has an API that may be missing checked with `IsSupported`.
-  `ToastNotification.Tag` (updated 23 August 2026) holds 64 characters, and a warm-up's
-  notice id carries its message, so the tag is the id's SHA-256 in hex. The app notification
+  `ToastNotification.Tag` (updated 23 August 2026) holds 64 characters, and the notice id of
+  a warm-up failure of no account carries its message, so the tag is the id's SHA-256 in hex. The app notification
   content guidance (updated 17 July 2026) gives a notification three text elements at most,
   the first its title, and keeps attribution text for a source; the UX guidance (updated 21
   April 2026) has a click on a notification open its context. So a notification says its

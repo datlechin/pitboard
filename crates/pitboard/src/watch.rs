@@ -403,7 +403,7 @@ fn warms_any(overview: &Overview) -> bool {
 struct WarmTold {
     by_account: HashMap<String, HashSet<String>>,
     halted: Option<String>,
-    errors: HashSet<String>,
+    errors: pitboard_core::switch::warm::Told,
 }
 
 impl WarmTold {
@@ -413,7 +413,7 @@ impl WarmTold {
         let done = match outcome {
             Ok(done) => done,
             Err(failed) => {
-                return if self.errors.insert(told_apart(&failed.error)) {
+                return if self.errors.untold(&told_apart(&failed.error)) {
                     vec![Report::refused("watch", failed)]
                 } else {
                     Vec::new()
@@ -423,8 +423,7 @@ impl WarmTold {
         match done.value {
             WarmUp::Started { account, until } => {
                 self.by_account.remove(&account);
-                self.errors
-                    .retain(|key| !key.starts_with(&format!("{account}/")));
+                self.errors.warmed(&account);
                 let line = crate::warm::warmed_line(&account, until);
                 vec![Report::done(
                     "watch",

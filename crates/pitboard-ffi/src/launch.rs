@@ -65,11 +65,9 @@ impl From<service::Failed> for PitboardError {
     }
 }
 
-/// A warm-up that came to nothing, and what tells it apart from another, as the core tells it
-/// for every front end (`switch::warm::told_apart`).
 #[derive(Debug)]
 pub(crate) struct WarmRefused {
-    pub(crate) told_apart: String,
+    pub(crate) told_apart: switch::warm::Apart,
     pub(crate) error: PitboardError,
 }
 

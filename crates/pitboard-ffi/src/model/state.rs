@@ -594,8 +594,7 @@ pub(crate) struct Warming {
     pub(crate) running: Option<Option<String>>,
     /// Warm-ups by itself refused in a row, and the wait after them.
     refusals: Refusals,
-    /// Each failure notified, as the core tells one apart, until a warm-up starts a period.
-    told: BTreeSet<String>,
+    told: pitboard_core::switch::warm::Told,
     /// What the last warm-up by itself that came to nothing said, until the core next says
     /// where each account stands.
     pub(crate) failed: Option<String>,
@@ -2338,10 +2337,10 @@ impl State {
     ) {
         self.warm.running = None;
         match done {
-            Ok(WarmUp::Started { .. }) => {
+            Ok(WarmUp::Started { account, .. }) => {
                 self.warm.refusals.ended();
                 self.warm.failed = None;
-                self.warm.told.clear();
+                self.warm.told.warmed(&account);
                 self.warm_tick(now, jobs);
             }
             Ok(WarmUp::Stands(overview)) => {
@@ -2362,9 +2361,12 @@ impl State {
                     None => {
                         self.warm.failed = Some(message.clone());
                         self.warm.refusals.refused(now.running);
-                        if self.warm.told.insert(told_apart.clone()) {
+                        if self.warm.told.untold(&told_apart) {
                             jobs.push(Job::Post {
-                                notice: crate::present::warm_failed_notice(&told_apart, message),
+                                notice: crate::present::warm_failed_notice(
+                                    &told_apart.key,
+                                    message,
+                                ),
                             });
                         }
                     }

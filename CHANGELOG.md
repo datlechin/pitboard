@@ -145,9 +145,9 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   bars.
 - The app counts a limit whose reset time has passed as back, as the command line does, and no
   longer calls it used up, notifies you of it or offers a switch away from it.
-- The app notifies you once of a warm-up that came to nothing for an account and reason, as
-  `pitboard watch` says it once, where a run of Claude Code that failed in other words was
-  notified again.
+- The app notifies you of a warm-up that came to nothing once for each account and reason until
+  that account warms up, as `pitboard watch` says it, where a run of Claude Code that failed in
+  other words, or another account warming up, had it notified again.
 - The app says why it could not give up an interrupted Claude Desktop move whose parked login it
   could not look at, as the command line does.
 - `pitboard doctor` says how long the Claude Code login in use has left as it says a parked
