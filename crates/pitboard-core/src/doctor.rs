@@ -8070,6 +8070,7 @@ mod tests {
             &[at(4321, "codex"), at(99, "codex")],
             holders,
             "codex",
+            &[],
         ));
         let checks = codex_checks(&codex);
         let running = check(&checks, "codex_running");
@@ -8092,7 +8093,7 @@ mod tests {
         );
 
         let many: Vec<Process> = (1..=23).map(|pid| at(pid, "codex")).collect();
-        codex.running = Some(classify(&many, holders, "codex"));
+        codex.running = Some(classify(&many, holders, "codex", &[]));
         let detail = check(&codex_checks(&codex), "codex_running").detail.clone();
         assert!(detail.starts_with("23 `codex` sessions"), "{detail}");
         assert!(detail.contains("1, 2, 3 and 20 more"), "{detail}");
@@ -8105,6 +8106,7 @@ mod tests {
             )],
             holders,
             "codex",
+            &[],
         ));
         let checks = codex_checks(&codex);
         let app = check(&checks, "codex_running");

@@ -108,9 +108,9 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Codex login it asked about.
 - Pitboard keeps a parked Codex login that OpenAI refuses to renew as another client than its
   own, and says why, instead of dropping it.
-- On macOS, a Codex switch names Codex's background app server where it runs from the standalone
-  package an older Codex left, and says to restart it, instead of counting it as a `codex`
-  session.
+- A Codex switch names Codex's background app server where it runs from the standalone package
+  an older Codex left, by the process ID Codex records for it, and says to restart it, instead of
+  counting it as a `codex` session.
 - Pitboard warns with `auth_overridden`, and the automatic switch holds back, while
   `CLAUDE_CODE_USE_MANTLE`, an Anthropic profile, named in the environment or in the `env` of
   Claude Code's settings, or managed settings that require the Cloud gateway make Claude Code

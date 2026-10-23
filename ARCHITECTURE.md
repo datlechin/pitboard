@@ -3831,14 +3831,13 @@ real `auth.json` that build wrote. The register is `provider/codex/assumptions.r
   - No editor with the Codex extension was running there. Its place, a folder named
     `openai.chatgpt-<version>`, is the extension's packaged layout, not measured.
 - Read again in the source at tag `rust-v0.164.0` on 23 October 2026, whose four builds pass
-  pitboard-conformance: every fact of the CLI's but the Windows ones, which keep their 0.162.1
-  and 0.163.0 readings. `codex_app_server_daemon` moved: where `packages/app-server-daemon`
-  has no `current` and an older Codex left a daemon's pid file or log, the daemon runs from
-  `packages/standalone/current`. A second `app_server_daemon` holder takes those directories,
-  `holder::Location::WithinEach`. On Linux the path resolves to a release, as a standalone
-  install's sessions do, so such a daemon reads as a session there. One the daemon's updater
-  starts again runs from the release itself (`resolved_managed_codex_bin`), and reads as a
-  session on macOS too.
+  pitboard-conformance: every fact of the CLI's, and the Windows ones on 24 October 2026.
+  `codex_app_server_daemon` moved: where `packages/app-server-daemon` has no `current` and an
+  older Codex left a daemon's pid file or log, the daemon's package is `packages/standalone`.
+  Codex starts it from the release that package's `current` resolves to (`pid_start.rs`
+  canonicalises the path), where a standalone install's sessions run. So a second
+  `app_server_daemon` holder, `holder::Location::Recorded`, takes the pids Codex records for
+  the daemon and its updater in `$CODEX_HOME/app-server-daemon`.
 - Read on 23 October 2026 from the amd64 `.deb` of ChatGPT for Linux 26.1016.61520, as bytes
   and never run (`codex_linux_app`): it installs to `/usr/lib/chatgpt` and runs its own
   `resources/codex` as `codex app-server` with the app's environment. So a folder named

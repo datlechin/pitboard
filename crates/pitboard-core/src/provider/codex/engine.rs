@@ -420,6 +420,10 @@ impl Provider for Codex {
         }
     }
 
+    fn recorded(&self, ctx: &Context) -> Vec<u32> {
+        super::holders::recorded(ctx)
+    }
+
     /// A park may never be a copy.
     ///
     /// `codex login` and `codex logout` both revoke the stored refresh token at OpenAI

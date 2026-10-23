@@ -477,25 +477,32 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
         name: "codex_app_server_daemon",
         fact: "codex can run on its own as a background app server, a child of launchd that \
                terminal sessions can share, and `codex app-server daemon restart` starts it \
-               again. It runs from `$CODEX_HOME/packages/app-server-daemon`, \
-               `releases/<version>/bin/codex` through the link `current`. Where that has no \
-               `current` and an older Codex left a daemon's pid file or log in \
-               `$CODEX_HOME/app-server-daemon`, it runs from `packages/standalone/current` \
-               instead, the package a standalone install's terminal sessions run from. The \
-               daemon its updater starts in place of one runs from the release `current` \
-               resolves to, `packages/standalone/releases/<version>/bin/codex` there, a \
-               terminal session's path",
+               again. Its package is `$CODEX_HOME/packages/app-server-daemon`, or, where that \
+               has no `current` and an older Codex left a daemon's pid file or log in \
+               `$CODEX_HOME/app-server-daemon`, `packages/standalone`, the package a \
+               standalone install's terminal sessions run from. Codex starts it from the \
+               release the package's `current` resolves to, `releases/<version>/bin/codex`, so \
+               in the standalone package it runs where a terminal session does. It records \
+               itself and its updater as `{\"pid\": ...}` in `$CODEX_HOME/app-server-daemon`: \
+               `daemon.pid` and `daemon-updater.pid` for its own package, `app-server.pid` and \
+               `app-server-updater.pid` for the standalone one",
         read_from: "the process list of 0.159.3 on 2026-10-01 and the daemon subcommands of the \
                     codex it ran; package_root, managed_codex_bin and \
                     resolved_managed_codex_bin in \
                     codex-rs/app-server-daemon/src/managed_install.rs, the update loop's \
                     restart in update_loop.rs and try_restart_if_running in lib.rs, at tag \
-                    rust-v0.164.0, read on 2026-10-23",
+                    rust-v0.164.0, read on 2026-10-23; the start in backend/pid_start.rs, which \
+                    starts the path canonicalised, the pid files' names in lib.rs and their \
+                    record in backend/pid.rs, at the same tag, read on 2026-10-24",
         verified_against: "0.164.0",
-        depends: "provider::codex::holders's two app_server_daemon kinds. A daemon in the \
-                  standalone package that its updater started again reads as a session on \
-                  every system, and on Linux every such daemon does",
-        probe: &["app-server daemon restart"],
+        depends: "provider::codex::holders's two app_server_daemon kinds, one by its package's \
+                  folder and one by the pid Codex records, so one in the standalone package is \
+                  not taken for a session",
+        probe: &[
+            "app-server daemon restart",
+            "app-server-updater.pid",
+            "daemon-updater.pid",
+        ],
         absent: &[],
     },
     Assumption {
@@ -505,7 +512,8 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
                `releases\\<version>-<target>`, where `current` is a junction Codex itself \
                points. Codex starts it with `CREATE_NO_WINDOW | DETACHED_PROCESS | \
                CREATE_BREAKAWAY_FROM_JOB`, out of the starting terminal's job, refuses to from \
-               an elevated terminal, and `codex app-server daemon restart` starts it again",
+               an elevated terminal, and `codex app-server daemon restart` starts it again. It \
+               records its pid as codex_app_server_daemon says",
         read_from: "package_root and managed_codex_bin in \
                     codex-rs/app-server-daemon/src/managed_install.rs, select_release in \
                     prepare_install_windows.rs, the Windows start in backend/pid_start.rs, which \
@@ -514,7 +522,7 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
                     tag rust-v0.164.0 on 2026-10-24, which adds `CREATE_NO_WINDOW`; the \
                     win32-x64 and win32-arm64 builds hold their messages",
         verified_against: "0.164.0",
-        depends: "provider::codex::holders's app_server_daemon on Windows",
+        depends: "provider::codex::holders's two app_server_daemon kinds on Windows",
         probe: &[
             "app-server daemon restart",
             "failed to create managed daemon junction after native creation was denied",
