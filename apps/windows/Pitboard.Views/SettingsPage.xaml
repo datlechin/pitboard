@@ -102,7 +102,7 @@
               Click="OnCheckNow" />
         </toolkit:SettingsCard>
 
-        <TextBlock Style="{StaticResource SettingsSectionHeaderTextBlockStyle}" Text="Limits" />
+        <TextBlock x:Name="LimitsHeader" Style="{StaticResource SettingsSectionHeaderTextBlockStyle}" Text="Limits" />
         <toolkit:SettingsExpander Header="{x:Bind ViewModel.AtLimitHeading, Mode=OneWay}" AutomationProperties.AutomationId="settings.atLimitGroup">
           <toolkit:SettingsExpander.Description>
             <StackPanel>

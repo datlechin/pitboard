@@ -24,21 +24,22 @@ public sealed class WindowRequestsTests
         var requests = new WindowRequests();
         var notice = new WindowRequest(1, Pane.Accounts);
 
-        Assert.AreEqual(Pane.Accounts, requests.PaneFor(notice, Pane.Machine));
-        Assert.AreEqual(Pane.Activity, requests.PaneFor(notice, Pane.Activity), "answered already");
-        Assert.AreEqual(Pane.Activity, requests.PaneFor(new WindowRequest(2, null), Pane.Activity));
-        Assert.AreEqual(Pane.Machine, requests.PaneFor(new WindowRequest(3, Pane.Machine), Pane.Activity));
-        Assert.IsNull(requests.PaneFor(new WindowRequest(3, null), null), "the settings page");
+        Assert.AreEqual(Pane.Accounts, requests.PaneFor(notice, Pane.Machine).Pane);
+        Assert.AreEqual(Pane.Activity, requests.PaneFor(notice, Pane.Activity).Pane, "answered already");
+        Assert.AreEqual(Pane.Activity, requests.PaneFor(new WindowRequest(2, null), Pane.Activity).Pane);
+        Assert.AreEqual(Pane.Machine, requests.PaneFor(new WindowRequest(3, Pane.Machine), Pane.Activity).Pane);
+        Assert.IsNull(requests.PaneFor(new WindowRequest(3, null), null).Pane, "the settings page");
     }
 
-    // What switching or warming up by itself came to is said beside its setting.
+    // What switching or warming up by itself came to is said beside its setting, under Limits.
     [TestMethod]
-    public void ARequestForTheSettingsShowsTheSettingsPage()
+    public void ARequestForTheSettingsShowsTheSettingsPageOnItsLimits()
     {
         var requests = new WindowRequests();
         var settings = new WindowRequest(1, null, Settings: true);
 
-        Assert.IsNull(requests.PaneFor(settings, Pane.Accounts));
-        Assert.AreEqual(Pane.Accounts, requests.PaneFor(settings, Pane.Accounts), "answered already");
+        Assert.AreEqual((null, true), requests.PaneFor(settings, Pane.Accounts));
+        Assert.AreEqual((Pane.Accounts, false), requests.PaneFor(settings, Pane.Accounts), "answered already");
+        Assert.AreEqual((null, false), requests.PaneFor(new WindowRequest(2, null), null), "the settings page as it was left");
     }
 }

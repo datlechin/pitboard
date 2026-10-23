@@ -54,6 +54,27 @@ public sealed partial class SettingsPage : Page
         ViewModel.Shown();
     }
 
+    // The page keeps where it was scrolled to, and a notice about a limit opens it on that setting.
+    public void ShowLimits()
+    {
+        if (IsLoaded)
+        {
+            BringLimitsIntoView();
+            return;
+        }
+
+        RoutedEventHandler? once = null;
+        once = (_, _) =>
+        {
+            Loaded -= once;
+            BringLimitsIntoView();
+        };
+        Loaded += once;
+    }
+
+    private void BringLimitsIntoView() =>
+        LimitsHeader.StartBringIntoView(new BringIntoViewOptions { VerticalAlignmentRatio = 0, AnimationDesired = false });
+
     private void OnViewModelChanged(object? sender, PropertyChangedEventArgs args)
     {
         Announce(StartupFailed, ViewModel!.StartupFailed);

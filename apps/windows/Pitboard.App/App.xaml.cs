@@ -228,7 +228,15 @@ public partial class App : Application, IIconTargets
             ShowWindow();
         }
 
-        _window?.Select(_requests.PaneFor(request, _window.Selected));
+        if (_window is { } window)
+        {
+            var (pane, limits) = _requests.PaneFor(request, window.Selected);
+            window.Select(pane);
+            if (limits)
+            {
+                window.ShowLimits();
+            }
+        }
     }
 
     private void ShowWindow()

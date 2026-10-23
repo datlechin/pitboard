@@ -62,6 +62,23 @@ public sealed class SettingsPageTests
         Views.Visible<TextBlock>(page).SingleOrDefault(shown => shown.Text == text)
         ?? throw new AssertFailedException($"'{text}' is not among: {string.Join(", ", Views.Texts(page))}");
 
+    // A notice about a limit, or the tip about one, opens the page on Limits, wherever it was scrolled to.
+    [UITestMethod]
+    public async Task ShowingTheLimitsBringsTheirSectionToTheTop()
+    {
+        var page = await Shown(new AppModel(new StandInModel(Snapshots.Read(1))));
+        page.Height = 300;
+        page.UpdateLayout();
+        var scroller = Views.Descendants(page).OfType<ScrollViewer>().First();
+        var limits = Said(page, "Limits");
+
+        page.ShowLimits();
+
+        await Views.Until(
+            () => scroller.VerticalOffset > 0 && Bounds(limits, scroller).Top is > -1 and < 60,
+            () => $"Limits at {Bounds(limits, scroller).Top}, scrolled {scroller.VerticalOffset}");
+    }
+
     // The macOS Settings' three panes, then About.
     [UITestMethod]
     public async Task ThePageHasTheSectionsOfTheMacOSPanes()
