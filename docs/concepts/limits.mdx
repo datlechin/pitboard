@@ -58,7 +58,7 @@ A claude.ai [account window](/concepts/account-windows) signs in on claude.ai's 
 - A Claude Code account of an organisation that a managed `forceLoginOrgUUID` leaves out. Claude Code refuses its login, and Pitboard refuses to switch to it with `login_restricted`.
 - Codex signed in with an API key rather than ChatGPT.
 - A Codex account that `forced_login_method`, `forced_chatgpt_workspace_id`, `allowed_login_methods` or `allowed_chatgpt_workspaces` rules out. Codex signs out of its login or leaves it unused, and Pitboard refuses with `login_restricted`. [Codex settings rule out an account](/troubleshooting/codex#codex-settings-rule-out-an-account) says what to change.
-- Codex keeping its login anywhere but its file store, `auth.json`: in a keychain, in Credential Manager, in its encrypted `secrets` store or in memory. [Before you enrol a Codex account](/guides/codex#before-you-enrol-a-codex-account) shows how to check.
+- Codex keeping its login anywhere but its file store, `auth.json`: in a keychain, in Credential Manager, in its encrypted `secrets` store or in memory. [Codex keeps its login outside its file store](/troubleshooting/codex#codex-keeps-its-login-outside-its-file-store) says what to change.
 - Claude Desktop on Windows and Linux.
 - A third-party deployment of Claude, which runs from `Claude-3p`, as read in Claude 3.6556.2, and Claude's own account switcher, as read in 2.7032.0. Pitboard moves no login while Claude's cookie store holds two sessions of one name.
 - Changes from a sign-in over SSH with a key on Windows, which reaches no Credential Manager and may not reach the key that seals Pitboard's parked logins. [When the store cannot be reached](/concepts/identity#when-the-store-cannot-be-reached) says what Pitboard does.
