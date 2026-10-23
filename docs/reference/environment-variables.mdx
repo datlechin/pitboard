@@ -12,7 +12,7 @@ A variable that names a folder must hold a full path: [`home_not_absolute`](/ref
 | Variable | Systems | Read by | Effect |
 | --- | --- | --- | --- |
 | `HOME` | macOS, Linux | Both | Your home, the `~` in every path of [Files](/reference/files). Unset, your account's home. Where it names another folder than your account's own, Pitboard leaves Claude Desktop alone: see [Claude Desktop files](/reference/files#claude-desktop-files). |
-| `USERPROFILE` | Windows | Both | Your home, as `HOME` is elsewhere. Pitboard's directory and Claude Code's files are found from it. Unset, your account's profile folder. |
+| `USERPROFILE` | Windows | Both | Your home, as `HOME` is elsewhere. Pitboard's directory and Claude Code's files are found from it. Unset, your account's profile folder. The app looks for `claude` and `codex` in `scoop\shims` there. |
 | `PITBOARD_HOME` | All | Both | [Pitboard's directory](/reference/files#the-pitboard-directory), in place of `~/.pitboard`, or `%USERPROFILE%\AppData\Local\Pitboard` on Windows. Daily renewal renews the default directory whatever this says. |
 | `PITBOARD_NO_ARGV` | macOS | Both | `1`: Pitboard never writes a login on `security`'s argument line. See [Large logins on macOS](/security#large-logins-on-macos). On Windows it changes nothing, and `pitboard doctor` warns while it is set. |
 | `PITBOARD_API_BASE` | All | Both | For Pitboard's tests. An `http` URL on a loopback IP address gets Pitboard's requests. |
@@ -22,7 +22,7 @@ A variable that names a folder must hold a full path: [`home_not_absolute`](/ref
 | `CLAUDE_CODE_FORCE_WINDOWS_CREDMAN` | Windows | Both | `1`: Claude Code keeps its login in Credential Manager, with `.credentials.json` behind it, as [Use Pitboard with Claude Code](/guides/claude-code#before-you-add-a-claude-code-account) says. Read from the environment and from the `env` of Claude Code's settings. |
 | `CLAUDE_CODE_GIT_BASH_PATH` | Windows | Both | The Git Bash that Claude Code runs its status line in, which `pitboard doctor`'s `status line` check names. |
 | `USER` | macOS | Both | The keychain account of Claude Code's item and of parked logins. Unset or empty, your login name. With a character other than letters, digits, `.`, `_` and `-`, `claude-code-user`. |
-| `USERNAME` | Windows | Command line | Your user name, which `pitboard doctor --json` hides. |
+| `USERNAME` | Windows | Both | Your user name, which `pitboard doctor --json` hides. |
 | `CLAUDE_CODE_CUSTOM_OAUTH_URL` | All | Both | Not empty: Pitboard does not act on Claude Code. See [Custom OAuth endpoint](#custom-oauth-endpoint). |
 | `ANTHROPIC_API_KEY` and nine more | All | Both | Not empty: Claude Code ignores the login Pitboard switches. See [Variables that override the login](#variables-that-override-the-login). |
 | `ANTHROPIC_PROFILE`, `ANTHROPIC_FEDERATION_RULE_ID`, `ANTHROPIC_ORGANIZATION_ID` | All | Both | Can make Claude Code sign in with an Anthropic profile, not the login Pitboard switches. See [Anthropic profiles](#anthropic-profiles). |
@@ -40,6 +40,7 @@ A variable that names a folder must hold a full path: [`home_not_absolute`](/ref
 | `PATH` | All | Both | Where `claude` and `codex` are looked for, in directories named from the root. On macOS, the app asks your login shell for its `PATH` instead, and on Windows it reads the `PATH` your account and the machine set: see [Pitboard cannot find a tool](/troubleshooting/accounts#pitboard-cannot-find-a-tool). |
 | `SHELL` | macOS | App | The login shell the app asks for its `PATH`. Unset or empty, your account's shell. |
 | `NO_COLOR` | All | Command line | Not empty: no colour in the output. For the status line, see [`statusline`](/reference/integration-commands#statusline). |
+| `CLICOLOR_FORCE` | All | Command line | Not empty: colour in the output to a file or a pipe too, as [Output](/reference/commands#output) says. `NO_COLOR` wins. |
 | `XPC_SERVICE_NAME` | macOS | Command line | Set by launchd. `com.datlechin.pitboard.renew` marks a run of daily renewal. |
 | `WSL_DISTRO_NAME` | Linux | Command line | Set by WSL, even empty, as Codex 0.163.0 reads it. `pitboard doctor` says it runs inside WSL, as its `wsl` check. |
 | `ALL_PROXY`, `HTTPS_PROXY`, `HTTP_PROXY`, `NO_PROXY`, each also in lower case | All | Both | The proxy for Pitboard's requests. See [Proxies](#proxies). |
