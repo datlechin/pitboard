@@ -1353,6 +1353,19 @@ impl Pitboard {
             .map_err(|error| self.not_started(permit, typed, error))
     }
 
+    // Asks nobody: None for a login that does not say whose it is, as Claude Code's does not.
+    pub fn signed_in_email(&self, which: ProviderId) -> Option<String> {
+        let LoginKind::Document(tool) = crate::provider::of(which) else {
+            return None;
+        };
+        if !tool.identifies_by_itself() {
+            return None;
+        }
+        let credential = tool.read_live(&self.ctx).ok()??;
+        let owner = tool.identify(&self.ctx, &credential).ok()?;
+        Some(owner.email).filter(|email| !email.is_empty())
+    }
+
     // The tools a sign-in could start here now, by the rule `ready_to_sign_in` keeps.
     pub fn installed(&self) -> Vec<ProviderId> {
         crate::provider::installed_among(&self.ctx, crate::host::proc::can_run)
@@ -2005,6 +2018,34 @@ mod tests {
     use std::sync::Arc;
 
     type Make = fn(&str) -> Machine;
+
+    // Codex's login says whose it is, so reading it asks nobody; Claude Code's does not say.
+    #[test]
+    fn whose_login_a_tool_stores_is_read_from_the_login_alone() {
+        let m = codex_machine("signed-in-email");
+        let pitboard = Pitboard::new(m.ctx.clone());
+        let calls = m.api.calls();
+        assert_eq!(
+            pitboard.signed_in_email(ProviderId::Codex).as_deref(),
+            Some("here@example.com")
+        );
+        assert_eq!(m.api.calls(), calls, "nobody was asked");
+        assert_eq!(pitboard.signed_in_email(ProviderId::Claude), None);
+        assert_eq!(pitboard.signed_in_email(ProviderId::Desktop), None);
+
+        m.sign_in(&serde_json::json!({"auth_mode": "apikey", "OPENAI_API_KEY": "sk-test"}));
+        assert_eq!(
+            pitboard.signed_in_email(ProviderId::Codex),
+            None,
+            "no account's"
+        );
+        m.fault_live(crate::store::memory::Fault::Unreadable("locked".into()));
+        assert_eq!(
+            pitboard.signed_in_email(ProviderId::Codex),
+            None,
+            "unreadable"
+        );
+    }
 
     /// A name is refused the same way whichever tool it is for.
     const MACHINES: [(&str, Make); 2] = [("claude", machine), ("codex", codex_machine)];

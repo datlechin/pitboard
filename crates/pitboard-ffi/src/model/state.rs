@@ -159,6 +159,8 @@ pub(crate) enum Job {
     /// Which tools' programs were found. Its own lane, so it never waits behind a read on
     /// the network, and a read can wait for it.
     AskInstalled,
+    /// Whose login `provider`'s tool stores, from the login alone.
+    ReadSignedIn { provider: String },
     /// Whether a running app holds the login of the tool `qualified` is of, which the core
     /// answers from the process list and the app from what is running.
     Holding { qualified: String, then: After },
@@ -377,6 +379,10 @@ pub(crate) enum Answer {
         changed: i64,
         /// When the usage readings were last written, in epoch milliseconds.
         measured: i64,
+    },
+    SignedIn {
+        provider: String,
+        email: Option<String>,
     },
     Installed {
         tools: Vec<Tool>,
@@ -1371,6 +1377,7 @@ impl State {
             }
             Intent::OpensAtLogin { on } => self.opens_at_login = Some(on),
             Intent::ShowLimits => self.show_settings(),
+            Intent::NameSignedIn { provider } => jobs.push(Job::ReadSignedIn { provider }),
             Intent::SetWarm { qualified, on } => jobs.push(Job::SetWarm { qualified, on }),
             Intent::SetWarmRange { from, to } => jobs.push(Job::SetWarmRange { from, to }),
             Intent::WarmNow { qualified } => {
@@ -2585,6 +2592,15 @@ impl State {
             Answer::WarmedUp { asked, done } => self.warmed_up(asked, done, now, jobs),
             Answer::WarmSet { done } => self.warm_set(done, now, jobs),
             Answer::Looked { changed, measured } => self.looked(changed, measured, now, jobs),
+            Answer::SignedIn { provider, email } => {
+                let sheet = match email {
+                    Some(email) => Sheet::Name { provider, email },
+                    None => Sheet::Add {
+                        provider: Some(provider),
+                    },
+                };
+                self.present_sheet(sheet, jobs);
+            }
             Answer::Installed { mut tools } => {
                 let gone = self.gone_since_asked.take();
                 if let Some(gone) = &gone {
@@ -2753,6 +2769,13 @@ impl State {
                 Job::ReadOffline { why } => self.known(why, None, now, jobs),
                 Job::Look => self.look_over(now),
                 Job::AskInstalled => self.installed_over(now, jobs),
+                // The tool's own sign-in names the account in its place.
+                Job::ReadSignedIn { provider } => self.present_sheet(
+                    Sheet::Add {
+                        provider: Some(provider),
+                    },
+                    jobs,
+                ),
                 // As the Swift model took a holding it could not read: nothing holds it.
                 Job::Holding { qualified, then } => self.held(qualified, None, then, jobs),
                 // Nothing is switched under an app nobody saw go.

@@ -492,6 +492,8 @@ pub(super) struct Machine {
     pub readings: i64,
     /// The tools whose program the app found.
     pub found: Vec<Tool>,
+    // whose login each tool stores, as the login says it
+    pub stored_email: Option<String>,
     /// What a switch gives.
     pub switched: Result<Switched, Refusal>,
     /// Every account switched to, as the model named it.
@@ -642,6 +644,7 @@ impl Machine {
             changed: 0,
             readings: 0,
             found: vec![claude_code()],
+            stored_email: None,
             switched: already_active("work", Vec::new()),
             switched_to: Vec::new(),
             replaced_with: Vec::new(),
@@ -830,6 +833,10 @@ impl Machine {
             },
             Job::AskInstalled => Answer::Installed {
                 tools: self.found.clone(),
+            },
+            Job::ReadSignedIn { provider } => Answer::SignedIn {
+                provider,
+                email: self.stored_email.clone(),
             },
             // What holds the login, and quitting an app, by the lanes' own rules over what
             // the test says runs, with no time given to quit: an app quits when asked, or

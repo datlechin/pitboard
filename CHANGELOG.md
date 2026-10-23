@@ -37,6 +37,9 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   warning symbol while its menu opens on something that needs attention.
 - The app's setup tips go on past a second account: opening Pitboard at login, then what
   happens when a limit reaches 95%, each with **Not Now**.
+- The app offers **Use Pitboard with Codex** while Codex is installed and no Codex account is
+  enrolled, and names the account Codex is signed in to once you choose it, where a machine with
+  only Codex said **No Accounts**.
 - The Windows app's tip to start when you sign in says where Windows puts its icon, with a link
   to Taskbar settings.
 

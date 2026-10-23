@@ -1783,7 +1783,9 @@ fn one_account_is_offered_a_second_until_not_now() {
     model.send(Intent::DeclineSecondAccount {
         provider: "claude".into(),
     });
-    told.until("the nudge put away", |snapshot| snapshot.setup.is_none());
+    told.until("the next tip, for Codex", |snapshot| {
+        snapshot.setup.as_ref().map(|step| step.title.as_str()) == Some("Use Pitboard with Codex")
+    });
     let started = Instant::now();
     while !launched
         .core

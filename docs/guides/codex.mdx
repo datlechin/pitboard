@@ -4,7 +4,7 @@ sidebarTitle: "Codex"
 description: "Check what Codex needs before you enrol an account, add Codex accounts and restart Codex after a switch."
 ---
 
-Until you enrol a Codex account, Pitboard lists nothing about OpenAI's Codex CLI, not even the account Codex is signed in to. It asks OpenAI nothing either.
+Until you enrol a Codex account, Pitboard lists nothing about OpenAI's Codex CLI, not even the account Codex is signed in to. It asks OpenAI nothing either. In the app, the tip **Use Pitboard with Codex** offers to enrol one.
 
 ## Before you enrol a Codex account
 
@@ -20,7 +20,7 @@ In the Codex section, `Codex login store` reads `file`, and `Codex login` reads 
 
 Add each one as [Add another account](/guides/accounts#add-another-account) shows: in the app, choose **Codex** under **Tool** and enter the name alone, and on the command line, start the label with `codex/`.
 
-In the app, add your first Codex account that way. Then name the one Codex is signed in to as in [Add the account you are signed in to](/guides/accounts#add-the-account-you-are-signed-in-to). On the command line, `pitboard enroll codex/personal` enrols that one at once.
+In the app, start with **Add Codex Account** in the tip **Use Pitboard with Codex**. Pitboard reads which account Codex is signed in to only then, and opens **Name This Account** for it, or **Add Account** set to Codex where Codex is signed in to none. On the command line, `pitboard enroll codex/personal` enrols the account Codex is signed in to at once.
 
 Adding an account runs `codex login` from OpenAI's Codex CLI, not the copy inside the ChatGPT app. If the dialog says Pitboard cannot find the Codex CLI, see [Pitboard cannot find a tool](/troubleshooting/accounts#pitboard-cannot-find-a-tool).
 

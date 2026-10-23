@@ -5,6 +5,7 @@
 //! `State::apply` by hand and read as `present` makes it, its clock times in UTC.
 
 use super::signing::{add, adding_in_claude, signs_in, travel};
+use super::state::{Answer, Job};
 use super::switching::switch;
 use super::testing::{
     CHATGPT, Hand, Machine, StandInApps, awaiting, chatgpt_holding, claude_code, codex,
@@ -2489,7 +2490,7 @@ fn a_tool_found_or_signed_in_is_not_a_machine_without_one() {
     let mut codex_only = Machine::reading(Ok(status(Vec::new())));
     codex_only.found = vec![codex()];
     found.refresh(&mut codex_only);
-    assert_eq!(found.shown().footing, Footing::NoOneSignedIn);
+    assert_eq!(found.shown().footing, Footing::CodexUnused);
 
     let mut unfound = Hand::new();
     let mut signed_in = Machine::reading(Ok(status(vec![
@@ -2661,6 +2662,127 @@ fn two_accounts_are_asked_what_happens_at_a_limit() {
         codex_pair,
         Footing::Ready,
         "only Claude Code switches by itself"
+    );
+}
+
+/// The model at noon, having read `accounts` on a machine where Claude Code and Codex were
+/// found.
+fn reading_with_codex(accounts: Vec<Account>) -> (Hand, Machine) {
+    let mut model = at_noon();
+    let mut machine = Machine::reading(Ok(status(accounts)));
+    machine.found = vec![claude_code(), codex()];
+    model.refresh(&mut machine);
+    (model, machine)
+}
+
+/// Codex found with nothing of it enrolled is a tool Pitboard reads nothing of, so it cannot
+/// say whether Codex is signed in. It offers to use Pitboard with it after Claude Code's own
+/// steps, and on a machine without Claude Code in place of No Accounts, which said nobody was
+/// signed in while Codex was.
+#[test]
+fn codex_found_with_nothing_of_it_enrolled_is_offered() {
+    let (model, _) = reading_with_codex(vec![
+        account(Some("work")).signed_in().build(),
+        account(Some("personal")).build(),
+    ]);
+    let shown = model.on_a_mac();
+    assert_eq!(shown.footing, Footing::CodexUnused);
+    assert_eq!(
+        shown.setup,
+        Some(SetupStep {
+            title: "Use Pitboard with Codex".into(),
+            detail: "Codex is installed. Pitboard reads nothing of it until you add the account \
+                     it’s signed in to."
+                .into(),
+            actions: vec![
+                Choice {
+                    title: "Add Codex Account…".into(),
+                    intent: Intent::NameSignedIn {
+                        provider: "codex".into()
+                    },
+                    enabled: true,
+                },
+                Choice {
+                    title: "Not Now".into(),
+                    intent: Intent::DeclineTip { tip: Tip::UseCodex },
+                    enabled: true,
+                },
+            ],
+            link: None,
+        })
+    );
+
+    let (alone, _) = {
+        let mut model = at_noon();
+        let mut machine = Machine::reading(Ok(status(Vec::new())));
+        machine.found = vec![codex()];
+        model.refresh(&mut machine);
+        (model, machine)
+    };
+    assert_eq!(alone.shown().footing, Footing::CodexUnused);
+    assert_eq!(alone.shown().accounts_shown, AccountsShown::List);
+    let (both, _) = reading_with_codex(Vec::new());
+    assert_eq!(
+        both.shown().footing,
+        Footing::NoOneSignedIn,
+        "Claude Code first"
+    );
+
+    let (enrolled, _) = reading_with_codex(vec![
+        account(Some("work")).signed_in().build(),
+        account(Some("personal")).build(),
+        account(Some("job")).of("codex").signed_in().build(),
+        account(Some("side")).of("codex").build(),
+    ]);
+    assert_eq!(enrolled.shown().footing, Footing::AtLimitUnchosen);
+}
+
+/// Asked to use Pitboard with Codex, the model reads whose login Codex stores, and not before:
+/// Name This Account for it, or Add Account set to Codex where nobody is signed in to it.
+#[test]
+fn using_codex_names_the_login_it_stores_read_only_once_asked() {
+    let (mut model, _) = reading_with_codex(vec![account(Some("work")).signed_in().build()]);
+    assert!(
+        !model
+            .asked
+            .iter()
+            .any(|job| matches!(job, Job::ReadSignedIn { .. })),
+        "nothing read of Codex before the click"
+    );
+    let codex = || Intent::NameSignedIn {
+        provider: "codex".into(),
+    };
+    assert_eq!(
+        model.send(codex()),
+        [Job::ReadSignedIn {
+            provider: "codex".into()
+        }]
+    );
+    model.give(Answer::SignedIn {
+        provider: "codex".into(),
+        email: Some("dana@acme.io".into()),
+    });
+    let shown = model.shown();
+    assert_eq!(
+        shown.sheet,
+        Some(Sheet::Name {
+            provider: "codex".into(),
+            email: "dana@acme.io".into()
+        })
+    );
+    assert_eq!(shown.sheet_text.expect("the sheet").name, "acme");
+
+    model.send(Intent::CloseSheet);
+    model.send(codex());
+    model.give(Answer::SignedIn {
+        provider: "codex".into(),
+        email: None,
+    });
+    assert_eq!(
+        model.shown().sheet,
+        Some(Sheet::Add {
+            provider: Some("codex".into())
+        })
     );
 }
 
@@ -3155,10 +3277,10 @@ fn a_sign_in_under_way_says_what_to_do_in_the_browser() {
         provider: "claude".into(),
         name: "travel".into(),
     });
-    let [super::state::Job::SignIn { id, .. }] = jobs[..] else {
+    let [Job::SignIn { id, .. }] = jobs[..] else {
         panic!("a sign-in: {jobs:?}");
     };
-    model.give(super::state::Answer::SignInStarted {
+    model.give(Answer::SignInStarted {
         id,
         started: Ok(()),
         put_back: None,
@@ -3181,7 +3303,7 @@ fn a_sign_in_under_way_says_what_to_do_in_the_browser() {
     );
     assert_eq!(text.refused, None);
 
-    model.give(super::state::Answer::SignInSaid {
+    model.give(Answer::SignInSaid {
         id,
         text: "Paste code here if prompted > ".into(),
         step: None,
@@ -3189,7 +3311,7 @@ fn a_sign_in_under_way_says_what_to_do_in_the_browser() {
     model.send(Intent::PasteCode {
         code: "half".into(),
     });
-    model.give(super::state::Answer::SignInSaid {
+    model.give(Answer::SignInSaid {
         id,
         text: "Invalid code. Please make sure the full code was copied.\n".into(),
         step: None,
@@ -3409,12 +3531,7 @@ fn what_depends_on_the_time_is_made_again_every_minute() {
     assert!(due <= model.now.running + Duration::from_secs(60));
 
     model.later(Duration::from_secs(60));
-    assert!(
-        model
-            .tick()
-            .iter()
-            .all(|job| matches!(job, super::state::Job::Look))
-    );
+    assert!(model.tick().iter().all(|job| matches!(job, Job::Look)));
     assert_eq!(resets(&model), "resets in 2h 04m");
     assert!(
         model.state.next_due().expect("a timer") <= model.now.running + Duration::from_secs(60),

@@ -24,13 +24,16 @@ pub(crate) fn footing(seen: &Seen) -> Footing {
     if accounts.is_empty() && seen.state.installed.as_ref().is_some_and(Vec::is_empty) {
         return Footing::NoClaudeCode;
     }
+    let codex = codex_unused(seen);
     if !accounts.iter().any(|account| account.signed_in) {
         // Enrolled accounts with nobody signed in is a machine mid-switch or one whose login
         // was signed out from elsewhere, not a machine that needs setting up.
-        return if accounts.is_empty() {
-            Footing::NoOneSignedIn
-        } else {
+        return if !accounts.is_empty() {
             Footing::Ready
+        } else if codex && !found(seen, ProviderId::Claude) {
+            Footing::CodexUnused
+        } else {
+            Footing::NoOneSignedIn
         };
     }
     if let Some(login) = seen.unnamed().next() {
@@ -65,6 +68,9 @@ pub(crate) fn footing(seen: &Seen) -> Footing {
             };
         }
     }
+    if codex {
+        return Footing::CodexUnused;
+    }
     let preferences = &seen.state.preferences;
     if seen.state.opens_at_login == Some(false) && !preferences.declined(Tip::OpenAtLogin) {
         return Footing::NotOpenedAtLogin;
@@ -77,6 +83,21 @@ pub(crate) fn footing(seen: &Seen) -> Footing {
         return Footing::AtLimitUnchosen;
     }
     Footing::Ready
+}
+
+fn found(seen: &Seen, tool: ProviderId) -> bool {
+    (seen.state.installed.as_ref())
+        .is_some_and(|found| found.iter().any(|here| here.code == tool.code()))
+}
+
+// Whose login Codex stores is read only once the tip is taken up.
+fn codex_unused(seen: &Seen) -> bool {
+    let codex = ProviderId::Codex.code();
+    !seen.state.reading_preferences()
+        && !seen.state.preferences.declined(Tip::UseCodex)
+        && found(seen, ProviderId::Codex)
+        && !(seen.accounts().iter())
+            .any(|account| account.provider == codex && account.label.is_some())
 }
 
 /// The one next thing to do on a machine that is not set up yet. Somebody who opens the app
@@ -152,6 +173,23 @@ pub(crate) fn step(seen: &Seen, footing: &Footing) -> Option<SetupStep> {
                 link: None,
             })
         }
+        Footing::CodexUnused => Some(SetupStep {
+            title: "Use Pitboard with Codex".into(),
+            detail: "Codex is installed. Pitboard reads nothing of it until you add the account \
+                     it’s signed in to."
+                .into(),
+            actions: vec![
+                Choice {
+                    title: words::titled(seen.os, "Add Codex Account…", "Add Codex account…"),
+                    intent: Intent::NameSignedIn {
+                        provider: ProviderId::Codex.code().into(),
+                    },
+                    enabled: true,
+                },
+                not_now(seen, Tip::UseCodex),
+            ],
+            link: None,
+        }),
         Footing::NotOpenedAtLogin => Some(SetupStep {
             title: match seen.os {
                 Os::Windows => "Start when you sign in to Windows",

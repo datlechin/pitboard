@@ -908,6 +908,12 @@ impl AppCore {
             .collect()
     }
 
+    // Asked only once somebody asks to use Pitboard with a tool nothing is enrolled of.
+    pub(crate) fn signed_in_email(&self, provider: &str) -> Option<String> {
+        let which = ProviderId::parse(provider)?;
+        self.readable().ok()?.core.signed_in_email(which)
+    }
+
     /// Every account of every tool and what it has left, each asked of its own service.
     /// Parked logins whose access has lapsed are renewed first.
     ///

@@ -16,6 +16,7 @@ const SWITCH: &str = "switch";
 
 fn tip_code(tip: Tip) -> &'static str {
     match tip {
+        Tip::UseCodex => "use_codex",
         Tip::OpenAtLogin => "open_at_login",
         Tip::AtLimit => "at_limit",
     }

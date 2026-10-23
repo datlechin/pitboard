@@ -98,7 +98,7 @@ impl Job {
             Job::Holding { .. } | Job::Quit { .. } | Job::Open { .. } => Lane::Processes,
             // Where the login shell's `PATH` is asked, as the Swift service asked it for
             // `searchPath`, apart from every queue of its own.
-            Job::AskInstalled | Job::FindCommandLine => Lane::Discovery,
+            Job::AskInstalled | Job::FindCommandLine | Job::ReadSignedIn { .. } => Lane::Discovery,
             Job::SignIn { .. } | Job::SignInOver { .. } => Lane::SignIn,
             Job::PasteCode { .. } | Job::StopSignIn { .. } => Lane::SignInCalls,
             Job::LoadKept
@@ -556,6 +556,10 @@ impl Worker {
             },
             Job::AskInstalled => Answer::Installed {
                 tools: core.installed(),
+            },
+            Job::ReadSignedIn { provider } => Answer::SignedIn {
+                email: core.signed_in_email(&provider),
+                provider,
             },
             Job::Holding { qualified, then } => {
                 let holdings = core.holding(split(&qualified).0);

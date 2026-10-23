@@ -354,6 +354,8 @@ pub enum Footing {
     Unnamed { provider: String, email: String },
     /// A tool has one account, so there is nothing yet to switch to in it.
     OnlyOne { provider: String, label: String },
+    /// Codex is installed and nothing of it is enrolled, so nothing of it is read.
+    CodexUnused,
     /// The app's system says it does not open the app at login, where nothing it does runs.
     NotOpenedAtLogin,
     /// Claude Code has two accounts, and nobody chose what happens once a limit reaches the

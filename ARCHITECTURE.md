@@ -589,7 +589,8 @@ window loads its site, and whatever the site's pages load, as a browser would.
     show, so a view decides nothing. `accounts.rs` is the menu bar's words and the
     accounts' sections and rows, with their limits and what each one's own menu offers,
     `notices.rs` the notices, their order and what the menu says of them, `setup.rs` the
-    footing, the step it asks for and what stands in for an empty list, `sheets.rs` the
+    footing, the step it asks for and what stands in for an empty list (a tool nothing is
+    enrolled of is read only once its step is taken up, `Intent::NameSignedIn`), `sheets.rs` the
     sheets with their default buttons' words, the quit question and a failure's alert, with
     `check_name`, the rule a sheet's default button and the model both save by, which says
     why what is typed cannot be a name,
