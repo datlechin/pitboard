@@ -2020,12 +2020,26 @@ fn judge_credential(facts: &Facts) -> Check {
                 .and_then(Value::as_str)
                 .map(store::fingerprint)
                 .unwrap_or_else(|| "none".into());
-            let days = oauth
-                .get("refreshTokenExpiresAt")
-                .and_then(Value::as_i64)
-                .map_or(-1, |ms| (ms / 1000 - facts.now) / 86_400);
-            let detail = format!("refresh {fingerprint}  ·  {days} days left  ·  keys {keys:?}");
-            if days < 3 {
+            let Some(at) = crate::provider::claude_code()
+                .expiry(doc)
+                .refresh_expires_at
+            else {
+                return ok(
+                    "credential",
+                    "credential",
+                    format!("refresh {fingerprint}  ·  keys {keys:?}"),
+                );
+            };
+            let life = words::parked_life_column(at, facts.now);
+            let detail = format!("refresh {fingerprint}  ·  {life}  ·  keys {keys:?}");
+            if at <= facts.now {
+                warn(
+                    "credential",
+                    "credential",
+                    detail,
+                    "This login has expired: sign in to Claude Code again.",
+                )
+            } else if renewal_due(at, facts.now) {
                 warn(
                     "credential",
                     "credential",
@@ -5483,14 +5497,43 @@ mod tests {
         );
     }
 
+    /// The login in use is judged by when its refresh token expires as a parked one is, and
+    /// said in the same words: due within `RENEW_WITHIN`, and expired once that has passed. One
+    /// that gives no date has none to say, which is no warning.
     #[test]
-    fn a_login_about_to_expire_is_flagged() {
+    fn the_login_in_use_is_judged_by_when_its_refresh_token_expires_as_a_park_is() {
+        let credential = |f: &mut Facts, expires: Option<i64>| {
+            let mut oauth = json!({"refreshToken": "r"});
+            if let Some(at) = expires {
+                oauth["refreshTokenExpiresAt"] = json!(at * 1000);
+            }
+            f.credential = Ok(Some(json!({ "claudeAiOauth": oauth })));
+            let checks = evaluate(f);
+            let said = check(&checks, "credential");
+            (said.level, said.detail.clone(), said.advice.clone())
+        };
         let mut f = facts();
-        f.credential = Ok(Some(json!({"claudeAiOauth": {
-            "refreshToken": "r",
-            "refreshTokenExpiresAt": (f.now + 86_400) * 1000
-        }})));
-        assert_eq!(check(&evaluate(&f), "credential").level, Level::Warn);
+        let now = f.now;
+        let (level, detail, _) = credential(&mut f, Some(now + RENEW_WITHIN));
+        assert_eq!(level, Level::Ok);
+        assert!(detail.contains("  ·  good for 3d 0h  ·  "), "{detail}");
+        let (level, detail, advice) = credential(&mut f, Some(now + RENEW_WITHIN - 1));
+        assert_eq!(level, Level::Warn);
+        assert!(detail.contains("  ·  expires in 2d 23h  ·  "), "{detail}");
+        assert_eq!(
+            advice,
+            "This login expires soon and will need signing in again."
+        );
+        let (level, detail, advice) = credential(&mut f, Some(now - 60));
+        assert_eq!(level, Level::Warn);
+        assert!(detail.contains("  ·  expired  ·  "), "{detail}");
+        assert_eq!(
+            advice,
+            "This login has expired: sign in to Claude Code again."
+        );
+        let (level, detail, _) = credential(&mut f, None);
+        assert_eq!(level, Level::Ok);
+        assert!(!detail.contains("days"), "{detail}");
     }
 
     #[test]

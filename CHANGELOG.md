@@ -143,6 +143,9 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   notified again.
 - The app says why it could not give up an interrupted Claude Desktop move whose parked login it
   could not look at, as the command line does.
+- `pitboard doctor` says how long the Claude Code login in use has left as it says a parked
+  login's, says when it has expired, and no longer warns that a login whose expiry is not known
+  expires soon.
 
 ## [1.0.0-beta.5] - 2026-10-23
 
