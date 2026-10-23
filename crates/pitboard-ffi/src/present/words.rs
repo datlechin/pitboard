@@ -1087,8 +1087,8 @@ pub(crate) fn listed(items: &[impl AsRef<str>]) -> String {
     }
 }
 
-// A login replaced outside Pitboard, sent to the row's own button rather than a command.
-fn replaced(os: Os, tool: ProviderId, label: &str, now: &Stored) -> String {
+// A login replaced outside Pitboard, which its notice offers to sign in to again, in place of a command.
+fn replaced(tool: ProviderId, label: &str, now: &Stored) -> String {
     let label = bare(label);
     let name = tool.name();
     let has = match now {
@@ -1102,8 +1102,7 @@ fn replaced(os: Os, tool: ProviderId, label: &str, now: &Stored) -> String {
     };
     format!(
         "{label}’s login was replaced by a sign-in outside Pitboard{has}, and Pitboard holds no \
-         login for {label}. Choose {} on its row.",
-        titled(os, "Sign In Again…", "Sign in again…")
+         login for {label}."
     )
 }
 
@@ -1113,7 +1112,7 @@ pub(crate) fn in_app_warning(os: Os, warning: &CoreWarning) -> Option<String> {
     } = warning
         && !in_its_app(tool.code())
     {
-        return Some(replaced(os, *tool, label, now));
+        return Some(replaced(*tool, label, now));
     }
     let tool = warning.tool().filter(|tool| in_its_app(tool.code()))?;
     let app = tool.program();
@@ -1145,10 +1144,10 @@ pub(crate) fn in_app_warning(os: Os, warning: &CoreWarning) -> Option<String> {
             ..
         } => format!(
             "{} was signed out in {app}, which ends its login at claude.ai, and Pitboard holds \
-             no login for it. Choose Sign In Again… on its row.",
+             no login for it.",
             bare(label)
         ),
-        CoreWarning::LoginReplaced { label, now, .. } => replaced(os, tool, label, now),
+        CoreWarning::LoginReplaced { label, now, .. } => replaced(tool, label, now),
         CoreWarning::TakenAsNamed {
             label,
             recorded: None,
@@ -2327,9 +2326,9 @@ mod tests {
     }
 
     // On the session's PC (2026-10-18) the banner told the app to run `pitboard enroll a
-    // --sign-in` beside the row's own Sign in again… button.
+    // --sign-in` beside the row's own Sign in again… button. Its notice offers that sign-in now.
     #[test]
-    fn a_login_replaced_outside_points_the_app_at_its_rows_button() {
+    fn a_login_replaced_outside_names_no_command_and_no_button() {
         use pitboard_core::state::Key;
         let replaced = |tool: ProviderId, now: Stored| CoreWarning::LoginReplaced {
             tool,
@@ -2348,25 +2347,26 @@ mod tests {
             .as_deref(),
             Some(
                 "a’s login was replaced by a sign-in outside Pitboard: Claude Code now has b’s \
-                 login stored, and Pitboard holds no login for a. Choose Sign in again… on its \
-                 row."
+                 login stored, and Pitboard holds no login for a."
             )
         );
         assert_eq!(
             in_app_warning(Os::MacOs, &replaced(ProviderId::Codex, Stored::Nothing)).as_deref(),
             Some(
                 "a’s login was replaced by a sign-in outside Pitboard: Codex now has no login \
-                 stored, and Pitboard holds no login for a. Choose Sign In Again… on its row."
+                 stored, and Pitboard holds no login for a."
             )
         );
-        for tool in [ProviderId::Claude, ProviderId::Codex] {
+        for tool in [ProviderId::Claude, ProviderId::Codex, ProviderId::Desktop] {
             for now in [
                 Stored::Unenrolled(String::new()),
                 Stored::Unenrolled("x@example.com".into()),
                 Stored::Unknown,
+                Stored::Nothing,
             ] {
                 let said = in_app_warning(Os::Windows, &replaced(tool, now)).expect("the app's");
                 assert!(!said.contains("pitboard "), "{said}");
+                assert!(!said.contains("Sign in again"), "{said}");
             }
         }
     }

@@ -355,7 +355,8 @@ fn a_switch_it_made_is_said_and_taken_as_a_switch_somebody_asked_for() {
             body: "work had used 97% of its 5-hour limit. Sessions already running follow \
                    within 33 seconds."
                 .into(),
-            switch_to: None,
+            clicked: "accounts".into(),
+            button: None,
         }]
     );
     let last = &model.shown().last_switches;
@@ -455,7 +456,8 @@ fn a_reason_it_did_not_switch_is_said_once() {
         "work has used 97% of its 5-hour limit. Claude Code signs in another way, set by \
          apiKeyHelper, so a switch would change nothing its sessions use."
     );
-    assert_eq!(machine.posted[0].switch_to, None);
+    assert_eq!(machine.posted[0].button, None);
+    assert_eq!(machine.posted[0].clicked, "limits");
 
     machine.look = Ok(AutoLooked::Stands(overridden(27_000)));
     model.refresh(&mut machine);
@@ -488,7 +490,8 @@ fn a_reason_it_is_not_watching_is_said_once() {
             title: "Pitboard is not switching Claude Code".into(),
             subtitle: None,
             body: "A switch was interrupted, and the next change you make finishes it.".into(),
-            switch_to: None,
+            clicked: "limits".into(),
+            button: None,
         }]
     );
     assert!(model.state.switch_under_way().is_none());

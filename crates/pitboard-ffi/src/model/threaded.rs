@@ -1569,7 +1569,10 @@ fn a_run_out_is_notified_once_across_a_relaunch() {
     let notice = posted.posted().remove(0);
     assert_eq!(notice.title, "work has no 5-hour limit left");
     assert_eq!(notice.body, "spare has 90% of its own left.");
-    assert_eq!(notice.switch_to.as_deref(), Some("claude/spare"));
+    assert_eq!(
+        notice.button.map(|button| button.clicked).as_deref(),
+        Some("switch/claude/spare")
+    );
     assert_eq!(notice.subtitle, None);
     let kept = world.pitboard_dir().join("told.json");
     eventually("the record of it kept", || {
@@ -1632,7 +1635,7 @@ fn an_account_at_its_share_is_switched_from_by_itself_on_the_real_core() {
         "work had used 97% of its 5-hour limit. Sessions already running follow within 33 \
          seconds."
     );
-    assert_eq!(notice.switch_to, None);
+    assert_eq!(notice.button, None);
     let changes = pitboard_core::audit::read(world.ctx(), 20);
     let automatic: Vec<_> = changes
         .iter()

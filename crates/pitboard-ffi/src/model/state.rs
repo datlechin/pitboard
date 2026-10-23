@@ -44,6 +44,7 @@ use super::windows::Windows;
 use super::{Failure, Intent, LastSwitch, Pane, QuitQuestion, ReadFailure, RestartNeeded};
 use super::{RunOutNotice, RunningSignIn, Sheet, WindowRequest};
 use crate::account_windows::records::{Entry, Loaded};
+use crate::present::Clicked;
 use crate::{
     Abandoned, Account, Adoption, AutoLooked, AutoSwitched, Change, Check, Enrolled, EnrolledAs,
     FoundCommandLine, GaveUp, OwnCommandLine, PitboardError, Renewed, Schedule, Status, Switch,
@@ -1114,6 +1115,7 @@ impl State {
             window: WindowRequest {
                 serial: 0,
                 pane: None,
+                settings: false,
             },
             signing_in: None,
             sign_in_holding: None,
@@ -1405,6 +1407,21 @@ impl State {
                 self.left = None;
             }
             Intent::ShowWindow { pane } => self.show_window(pane),
+            Intent::NotificationClicked { argument } => match Clicked::read(&argument) {
+                Clicked::Accounts => self.show_window(Some(Pane::Accounts)),
+                Clicked::Limits => self.show_settings(),
+                Clicked::Switch(qualified) => {
+                    self.intent(Intent::SwitchTo { qualified }, now, jobs);
+                }
+                Clicked::SignInAgain(qualified) => {
+                    let (provider, label) = split(&qualified);
+                    let sheet = Sheet::SignInAgain {
+                        provider: provider.to_owned(),
+                        label: label.to_owned(),
+                    };
+                    self.present_sheet(sheet, jobs);
+                }
+            },
             Intent::DismissFailure => self.presented = None,
             Intent::DismissSheetFailure => self.sheet_failure = None,
             Intent::LookForTools => {
@@ -3019,7 +3036,7 @@ impl State {
                     .iter()
                     .any(|w| w.code == "recovery_undetermined");
                 self.forget_switches_undone(&read);
-                self.tell_replaced(&read.warnings, jobs);
+                self.tell_replaced(&read, jobs);
                 self.warnings = read.warnings.clone();
                 self.advise(&read, jobs);
                 self.windows.read_enrolled(&read, jobs);
@@ -3069,17 +3086,26 @@ impl State {
     /// posted once for its account while it stands, since nobody may have the window open to
     /// see it: again only once a read no longer says it and a later one does. Its words name
     /// whose login is stored now, which every switch changes, so it is known by its account.
-    fn tell_replaced(&mut self, warnings: &[Warning], jobs: &mut Vec<Job>) {
-        self.replaced_told = self.post_replaced(warnings, jobs);
+    fn tell_replaced(&mut self, read: &Status, jobs: &mut Vec<Job>) {
+        self.replaced_told = self.post_replaced(&read.warnings, &read.accounts, jobs);
     }
 
     // A failed read or a refused change says what it found, and nothing of what it leaves out.
     fn tell_replaced_found(&mut self, warnings: &[Warning], jobs: &mut Vec<Job>) {
-        let found = self.post_replaced(warnings, jobs);
+        let accounts = self
+            .status
+            .as_ref()
+            .map_or(&[][..], |status| &status.accounts);
+        let found = self.post_replaced(warnings, accounts, jobs);
         self.replaced_told.extend(found);
     }
 
-    fn post_replaced(&self, warnings: &[Warning], jobs: &mut Vec<Job>) -> BTreeSet<String> {
+    fn post_replaced(
+        &self,
+        warnings: &[Warning],
+        accounts: &[Account],
+        jobs: &mut Vec<Job>,
+    ) -> BTreeSet<String> {
         let mut replaced = BTreeSet::new();
         for warning in warnings
             .iter()
@@ -3089,8 +3115,12 @@ impl State {
                 continue;
             };
             if replaced.insert(account.to_owned()) && !self.replaced_told.contains(account) {
+                let again = accounts
+                    .iter()
+                    .find(|enrolled| enrolled.id == account)
+                    .and_then(|enrolled| enrolled.qualified.as_deref());
                 jobs.push(Job::Post {
-                    notice: crate::present::standing_notice(warning),
+                    notice: crate::present::standing_notice(warning, again),
                 });
             }
         }
@@ -3994,8 +4024,19 @@ impl State {
 
     /// Asks for the main window, on `pane` when it matters which.
     fn show_window(&mut self, pane: Option<Pane>) {
-        self.window.serial += 1;
-        self.window.pane = pane;
+        self.window = WindowRequest {
+            serial: self.window.serial + 1,
+            pane,
+            settings: false,
+        };
+    }
+
+    fn show_settings(&mut self) {
+        self.window = WindowRequest {
+            serial: self.window.serial + 1,
+            pane: None,
+            settings: true,
+        };
     }
 
     /// A look now, as the timer's would be, for a test that must not wait for the timer.

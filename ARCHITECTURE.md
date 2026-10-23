@@ -540,10 +540,13 @@ window loads its site, and whatever the site's pages load, as a browser would.
   - `model/` is the app model the macOS app shows and the Windows app is to show. An app
     makes a `PitboardModel`, sends it an `Intent` for each thing asked of it, and its
     `ModelListener` is told of each numbered `Snapshot`; its `AppControl` quits and opens
-    other apps, and its `Notifications` posts what has run out and a login replaced outside
-    Pitboard. `state.rs` holds what the model knows and decides what follows each message.
-    What follows an answer to the quit question is `After`, private to the model: a switch,
-    a sign-in inside an app, or recording the account an app is signed in to. `advice.rs`
+    other apps, and its `Notifications` posts what has run out, a login to sign in to again
+    and what switching or warming up by itself came to. Each notice carries the text a click
+    on it, or on its one button, hands back as `Intent::NotificationClicked`, which the model
+    reads as one of four requests and nothing else. `state.rs` holds what the model knows and
+    decides what follows each message. What follows an answer to the quit question is
+    `After`, private to the model: a switch, a sign-in inside an app, or recording the
+    account an app is signed in to. `advice.rs`
     says which account to offer once the one in use has run out, `preferences.rs` what the
     app's own preferences are, `machine.rs` what the model knows of this machine rather than
     its accounts, and `windows.rs` the account windows' bookkeeping; `lanes.rs` runs what it
@@ -704,8 +707,9 @@ window loads its site, and whatever the site's pages load, as a browser would.
     posts the model's notifications through `IAppNotifications`, which
     `SystemAppNotifications` sends to `AppNotificationManager` and tests replace, and refuses
     one Windows did not show by the exception's type and HRESULT alone; only a
-    Release build registers, and a click comes back as the intent the Switch button or the
-    notification itself asks for. Its `Read` is why Windows shows none of them, from the
+    Release build registers, and a click comes back as `Intent::NotificationClicked` with the
+    text the button or the notification itself carries. Its `Read` is why Windows shows none
+    of them, from the
     manager's `Setting` at each settings visit, as a `NotificationsBlocked`. `WindowsApps` is the model's `AppControl`: through
     `PackagedApps` it finds the process of a Store app's package that owns a top-level
     window, asks Restart Manager to end it, never forced, through `IRestartManager`, which
@@ -852,8 +856,9 @@ window loads its site, and whatever the site's pages load, as a browser would.
     UserDefaults held before `app.json` and `windows.json`, once.
   - `PitboardApp/System/MacPlatform.swift` is what the model asks of macOS:
     `MacAppControl` (`NSRunningApplication` and `NSWorkspace`), `MacNotifications`
-    (Notification Center, the category with its Switch button, and permission asked at the
-    first post) and `MacLocalTime` (the person's locale, calendar and 12 or 24 hours).
+    (Notification Center, a category for each button `notification_buttons` names, and
+    permission asked at the first post) and `MacLocalTime` (the person's locale, calendar and
+    12 or 24 hours).
     `LoginItem.swift` is opening at login (`SMAppService`) and `CommandLineTool.swift`
     linking the command line with an administrator's password, which stay the app's own.
   - `PitboardApp/MenuBar`, `Window`, `Sheets`, `Settings` and `Design` are the views. They

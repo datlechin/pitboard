@@ -9,8 +9,8 @@ use super::tools::{CLAUDE_ADDRESS, CLAUDE_REFUSES, CODEX_ADDRESS};
 use super::worlds::{Folder, Launched, World, make, out_of_reach};
 use crate::model::testing::{Posted, StandInApps};
 use crate::model::{
-    AppControl, Intent, LocalTime, ModelListener, Notifications, Pane, PitboardModel,
-    PlatformError, QuitQuestion, RunOutNotice, Sheet, Snapshot,
+    AppControl, Intent, LocalTime, ModelListener, NotificationButton, Notifications, Pane,
+    PitboardModel, PlatformError, QuitQuestion, RunOutNotice, Sheet, Snapshot,
 };
 use crate::present::testing::Utc;
 use crate::present::words::titled;
@@ -2956,7 +2956,11 @@ fn a_run_out_is_posted_through_the_notifications_fixture_in_is_given() {
             title: "personal has no 5-hour limit left".into(),
             subtitle: None,
             body: "work has 58% of its own left.".into(),
-            switch_to: Some("claude/work".into()),
+            clicked: "accounts".into(),
+            button: Some(NotificationButton {
+                title: "Switch".into(),
+                clicked: "switch/claude/work".into(),
+            }),
         }]
     );
     model.shutdown();
@@ -2976,22 +2980,22 @@ fn a_login_replaced_outside_is_posted_through_the_notifications_fixture_in_is_gi
     eventually("posted the login replaced", || !posted.posted().is_empty());
     model.shutdown();
 
-    let said: Vec<(String, String, Option<String>)> = posted
+    let said: Vec<(String, String, Option<NotificationButton>)> = posted
         .posted()
         .into_iter()
-        .map(|notice| (notice.title, notice.body, notice.switch_to))
+        .map(|notice| (notice.title, notice.body, notice.button))
         .collect();
     assert_eq!(
         said,
         [(
             "A login was replaced outside Pitboard".into(),
-            format!(
-                "work’s login was replaced by a sign-in outside Pitboard: Claude Code now has \
-                 personal’s login stored, and Pitboard holds no login for work. Choose {} on \
-                 its row.",
-                titled(OS, "Sign In Again…", "Sign in again…")
-            ),
-            None
+            "work’s login was replaced by a sign-in outside Pitboard: Claude Code now has \
+             personal’s login stored, and Pitboard holds no login for work."
+                .into(),
+            Some(NotificationButton {
+                title: titled(OS, "Sign In Again", "Sign in again"),
+                clicked: "sign-in-again/claude/work".into(),
+            })
         )]
     );
 }

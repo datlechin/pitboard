@@ -9,7 +9,7 @@ use super::switching::switch;
 use super::testing::{
     Hand, Machine, already_active, refusal, status, switched, titled, warned, warning,
 };
-use super::{Intent, RunOutNotice};
+use super::{Intent, NotificationButton, Pane, RunOutNotice, Sheet, WindowRequest};
 use crate::Account;
 use crate::present::testing::{LimitExt, account, window};
 
@@ -289,7 +289,11 @@ fn a_run_out_is_notified_in_the_words_the_window_says_it() {
             title: "work has no 5-hour limit left".into(),
             subtitle: None,
             body: "personal has 90% of its own left.".into(),
-            switch_to: Some("claude/personal".into()),
+            clicked: "accounts".into(),
+            button: Some(NotificationButton {
+                title: "Switch".into(),
+                clicked: "switch/claude/personal".into(),
+            }),
         }]
     );
     let notice = model.shown().notices.remove(0);
@@ -515,4 +519,104 @@ fn updating_the_config_keeps_the_advice_about_the_account_in_use() {
     assert_eq!(machine.configs_updated, ["claude/work"]);
     assert_eq!(switches_to(&model), ["claude/personal"]);
     assert_eq!(machine.posted.len(), 1, "told once");
+}
+
+// What a click on a notification asks for.
+
+/// A run-out's Switch button switches as the window's notice does, and a click on the
+/// notification itself opens the accounts, where that notice is.
+#[test]
+fn a_run_outs_button_switches_and_a_click_on_it_opens_the_accounts() {
+    let mut model = Hand::new();
+    let mut machine = Machine::reading(Ok(status(vec![work(100.0, 7_200), personal()])));
+    model.refresh(&mut machine);
+    let posted = machine.posted[0].clone();
+
+    model.send(Intent::NotificationClicked {
+        argument: posted.clicked,
+    });
+    assert_eq!(
+        model.shown().window_request,
+        WindowRequest {
+            serial: 1,
+            pane: Some(Pane::Accounts),
+            settings: false,
+        }
+    );
+
+    let button = posted.button.expect("a Switch button");
+    assert!(crate::notification_buttons().contains(&button.title));
+    machine.switched = switched("claude", "work", "personal", Vec::new());
+    model.send(Intent::NotificationClicked {
+        argument: button.clicked,
+    });
+    model.run(&mut machine);
+    assert_eq!(machine.switched_to, ["claude/personal"]);
+}
+
+/// A login replaced outside Pitboard is signed in to again from its notification's button,
+/// which puts that account's sheet up over the accounts.
+#[test]
+fn a_sign_in_again_button_puts_up_the_accounts_sheet() {
+    model_clicked("sign-in-again/codex/work", |model| {
+        assert_eq!(
+            model.state.sheet,
+            Some(Sheet::SignInAgain {
+                provider: "codex".into(),
+                label: "work".into(),
+            })
+        );
+        assert_eq!(model.shown().window_request.pane, Some(Pane::Accounts));
+    });
+}
+
+/// What switching or warming up by itself came to is said under its setting, so a click on
+/// its notification opens the settings there.
+#[test]
+fn a_click_on_what_came_of_switching_or_warming_up_by_itself_opens_the_limits() {
+    for notice in [
+        crate::present::auto_refused_notice("refused", "It was refused."),
+        crate::present::warm_failed_notice("warm_up_not_started", "It came to nothing."),
+    ] {
+        model_clicked(&notice.clicked, |model| {
+            assert_eq!(
+                model.shown().window_request,
+                WindowRequest {
+                    serial: 1,
+                    pane: None,
+                    settings: true,
+                }
+            );
+        });
+    }
+}
+
+/// Anything that starts the app can hand it any text: what no notification asks for opens
+/// the accounts, and does nothing else.
+#[test]
+fn a_click_that_asks_for_nothing_a_notification_asks_for_opens_the_accounts() {
+    for argument in ["", "accounts", "forget/claude/work", "switch/", "settings"] {
+        let mut model = Hand::new();
+        let jobs = model.send(Intent::NotificationClicked {
+            argument: argument.into(),
+        });
+        assert!(jobs.is_empty(), "{argument}");
+        assert_eq!(
+            model.shown().window_request,
+            WindowRequest {
+                serial: 1,
+                pane: Some(Pane::Accounts),
+                settings: false,
+            },
+            "{argument}"
+        );
+    }
+}
+
+fn model_clicked(argument: &str, then: impl FnOnce(&Hand)) {
+    let mut model = Hand::new();
+    model.send(Intent::NotificationClicked {
+        argument: argument.into(),
+    });
+    then(&model);
 }

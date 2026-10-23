@@ -38,8 +38,8 @@ struct Dependencies {
                 launch: launch, listener: listener, apps: MacAppControl.live(),
                 notifications: notifications, localTime: MacLocalTime())
         }
-        notifications.onSwitch = { [weak model] qualified in
-            model?.send(.switchTo(qualified: qualified))
+        notifications.onClick = { [weak model] argument in
+            model?.send(.notificationClicked(argument: argument))
         }
         return Dependencies(
             model: model,

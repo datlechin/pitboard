@@ -30,4 +30,15 @@ public sealed class WindowRequestsTests
         Assert.AreEqual(Pane.Machine, requests.PaneFor(new WindowRequest(3, Pane.Machine), Pane.Activity));
         Assert.IsNull(requests.PaneFor(new WindowRequest(3, null), null), "the settings page");
     }
+
+    // What switching or warming up by itself came to is said beside its setting.
+    [TestMethod]
+    public void ARequestForTheSettingsShowsTheSettingsPage()
+    {
+        var requests = new WindowRequests();
+        var settings = new WindowRequest(1, null, Settings: true);
+
+        Assert.IsNull(requests.PaneFor(settings, Pane.Accounts));
+        Assert.AreEqual(Pane.Accounts, requests.PaneFor(settings, Pane.Accounts), "answered already");
+    }
 }

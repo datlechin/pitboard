@@ -968,7 +968,8 @@ mod tests {
             title: "work has no 5-hour limit left".into(),
             subtitle: None,
             body: "spare has 80% of its own left.".into(),
-            switch_to: Some("claude/spare".into()),
+            clicked: "accounts".into(),
+            button: None,
         };
         let answered = |worker: &Worker| match worker.work(Job::Post {
             notice: notice.clone(),

@@ -7,11 +7,12 @@ use super::{
     Footing, MenuEntry, MenuNotices, NoticeAction, PanelNotice, Question, Seen, Severity,
     spoken_severity,
 };
-use crate::model::RunOutNotice;
 use crate::model::advice::Advice;
 use crate::model::state::{in_its_app, split};
 use crate::model::{Intent, LastSwitch, Pane, Sheet};
+use crate::model::{NotificationButton, RunOutNotice};
 use crate::{Adoption, Held, Warning};
+use pitboard_core::host::{OS, Os};
 use pitboard_core::provider::ProviderId;
 use pitboard_core::words as said;
 
@@ -332,12 +333,11 @@ pub(crate) fn notices(seen: &Seen, footing: &Footing) -> Vec<PanelNotice> {
     said
 }
 
-/// What a warning's notice offers to do about it. Claude Code's config naming another account
-/// than the one in use is put right by writing the account in use there, which moves no
-/// login; an account in use that is not enrolled has no name to write. A file left behind the
-/// keychain is put away from a sheet of its own, which says whose its login is first, where
-/// Pitboard can read it: one it cannot read it cannot put away, and the warning says why.
+// Writing the config moves no login; a file Pitboard cannot read it cannot put away either.
 fn warning_actions(seen: &Seen, warning: &Warning) -> Vec<NoticeAction> {
+    if warning.code == "login_replaced" {
+        return sign_in_again_action(seen, warning);
+    }
     if let Some(provider) = warning.provider.as_deref().filter(|tool| in_its_app(tool)) {
         return in_app_actions(seen, provider, &warning.code);
     }
@@ -355,6 +355,26 @@ fn warning_actions(seen: &Seen, warning: &Warning) -> Vec<NoticeAction> {
         }
         _ => Vec::new(),
     }
+}
+
+// The sign-in its row offers, of the account whose login was replaced.
+fn sign_in_again_action(seen: &Seen, warning: &Warning) -> Vec<NoticeAction> {
+    seen.accounts()
+        .iter()
+        .find(|account| Some(account.id.as_str()) == warning.account.as_deref())
+        .and_then(|account| Some((account.provider.clone(), account.label.clone()?)))
+        .map(|(provider, label)| NoticeAction {
+            title: words::titled(seen.os, "Sign In Again…", "Sign in again…"),
+            intent: Intent::PresentSheet {
+                sheet: Sheet::SignInAgain { provider, label },
+            },
+            dismisses: false,
+            switches: false,
+            enabled: !seen.state.sign_in_under_way(),
+            confirm: None,
+        })
+        .into_iter()
+        .collect()
 }
 
 // A move waiting is given up only once a change from this app could not settle it.
@@ -471,6 +491,80 @@ fn of_last_switch(seen: &Seen, last: &LastSwitch) -> PanelNotice {
     }
 }
 
+// What a click on a notification, or on its button, asks for, kept as text with the
+// notification until then, across launches too.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum Clicked {
+    Accounts,
+    Limits,
+    Switch(String),
+    SignInAgain(String),
+}
+
+const SWITCH: &str = "switch/";
+const SIGN_IN_AGAIN: &str = "sign-in-again/";
+const LIMITS: &str = "limits";
+
+impl Clicked {
+    pub(crate) fn argument(&self) -> String {
+        match self {
+            Clicked::Accounts => "accounts".into(),
+            Clicked::Limits => LIMITS.into(),
+            Clicked::Switch(qualified) => format!("{SWITCH}{qualified}"),
+            Clicked::SignInAgain(qualified) => format!("{SIGN_IN_AGAIN}{qualified}"),
+        }
+    }
+
+    // Anything else, such as what an older Pitboard's notification hands back, opens the accounts.
+    pub(crate) fn read(argument: &str) -> Clicked {
+        let named = |prefix: &str| {
+            argument
+                .strip_prefix(prefix)
+                .filter(|qualified| !qualified.is_empty())
+                .map(str::to_owned)
+        };
+        if let Some(qualified) = named(SWITCH) {
+            Clicked::Switch(qualified)
+        } else if let Some(qualified) = named(SIGN_IN_AGAIN) {
+            Clicked::SignInAgain(qualified)
+        } else if argument == LIMITS {
+            Clicked::Limits
+        } else {
+            Clicked::Accounts
+        }
+    }
+}
+
+fn posted(id: String, title: String, body: String, clicked: &Clicked) -> RunOutNotice {
+    RunOutNotice {
+        id,
+        title,
+        subtitle: None,
+        body,
+        clicked: clicked.argument(),
+        button: None,
+    }
+}
+
+fn button(title: String, clicked: &Clicked) -> Option<NotificationButton> {
+    Some(NotificationButton {
+        title,
+        clicked: clicked.argument(),
+    })
+}
+
+pub(crate) fn notification_buttons() -> Vec<String> {
+    vec![switch_button(), sign_in_again_button(OS)]
+}
+
+fn switch_button() -> String {
+    "Switch".into()
+}
+
+fn sign_in_again_button(os: Os) -> String {
+    words::titled(os, "Sign In Again", "Sign in again")
+}
+
 /// The notification that tells somebody an account in use has run out, worded as the window's
 /// notice is: its title the account and the limit, the tool beneath it beside another tool's
 /// accounts, and the account offered with what it has left. Its id names the account, the
@@ -478,15 +572,18 @@ fn of_last_switch(seen: &Seen, last: &LastSwitch) -> PanelNotice {
 pub(crate) fn run_out_notice(advice: &Advice) -> RunOutNotice {
     let limit = said::limit_name(&advice.window.kind, advice.window.length_seconds);
     RunOutNotice {
-        id: format!(
-            "{}-{}",
-            advice.key_of(),
-            advice.window.resets_at.unwrap_or(0)
-        ),
-        title: words::ran_out(&advice.ran, &limit),
         subtitle: advice.tool.clone(),
-        body: words::room_left(&advice.instead, advice.left),
-        switch_to: Some(advice.switch_to.clone()),
+        button: button(switch_button(), &Clicked::Switch(advice.switch_to.clone())),
+        ..posted(
+            format!(
+                "{}-{}",
+                advice.key_of(),
+                advice.window.resets_at.unwrap_or(0)
+            ),
+            words::ran_out(&advice.ran, &limit),
+            words::room_left(&advice.instead, advice.left),
+            &Clicked::Accounts,
+        )
     }
 }
 
@@ -503,73 +600,76 @@ pub(crate) fn auto_switched_notice(
     at: i64,
 ) -> RunOutNotice {
     let follows = adoption.follows();
-    RunOutNotice {
-        id: format!("auto/{from}/{to}/{at}"),
-        title: format!("Switched Claude Code to {to}"),
-        subtitle: None,
-        body: format!("{from} had used {used}. {follows}"),
-        switch_to: None,
-    }
+    posted(
+        format!("auto/{from}/{to}/{at}"),
+        format!("Switched Claude Code to {to}"),
+        format!("{from} had used {used}. {follows}"),
+        &Clicked::Accounts,
+    )
 }
 
 /// Where Pitboard would have switched Claude Code by itself and did not: how much of which
 /// limit, and why, in the core's words. Identified by what tells the reason apart, `key`.
 pub(crate) fn auto_skipped_notice(key: &str, from: &str, used: &str, why: &str) -> RunOutNotice {
-    RunOutNotice {
-        id: format!("auto-{key}"),
-        title: "Claude Code was not switched".into(),
-        subtitle: None,
-        body: format!("{from} has used {used}. {}.", capitalised(why)),
-        switch_to: None,
-    }
+    posted(
+        format!("auto-{key}"),
+        "Claude Code was not switched".into(),
+        format!("{from} has used {used}. {}.", capitalised(why)),
+        &Clicked::Limits,
+    )
 }
 
 /// Where Pitboard cannot judge whether to switch Claude Code by itself: why, in the core's
 /// words. Identified by what tells the reason apart, `key`.
 pub(crate) fn auto_not_watching_notice(key: &str, why: &str) -> RunOutNotice {
-    RunOutNotice {
-        id: format!("auto-{key}"),
-        title: "Pitboard is not switching Claude Code".into(),
-        subtitle: None,
-        body: format!("{}.", capitalised(why)),
-        switch_to: None,
-    }
+    posted(
+        format!("auto-{key}"),
+        "Pitboard is not switching Claude Code".into(),
+        format!("{}.", capitalised(why)),
+        &Clicked::Limits,
+    )
 }
 
 /// A warning that stands until somebody acts, posted once while it does, since nobody may
-/// have the window open: a login replaced outside Pitboard. Titled and identified as its
-/// notice in the window is, and said in the core's words.
-pub(crate) fn standing_notice(warning: &Warning) -> RunOutNotice {
+/// have the window open: a login replaced outside Pitboard, with a button that signs in to
+/// `again`, the account it names, where that is enrolled. Titled and identified as its notice
+/// in the window is, and said in the core's words.
+pub(crate) fn standing_notice(warning: &Warning, again: Option<&str>) -> RunOutNotice {
     RunOutNotice {
-        id: warning_id(warning),
-        title: words::warning_heading(pitboard_core::host::OS, warning).into(),
-        subtitle: None,
-        body: warning.message.clone(),
-        switch_to: None,
+        button: again.and_then(|qualified| {
+            button(
+                sign_in_again_button(OS),
+                &Clicked::SignInAgain(qualified.to_owned()),
+            )
+        }),
+        ..posted(
+            warning_id(warning),
+            words::warning_heading(OS, warning).into(),
+            warning.message.clone(),
+            &Clicked::Accounts,
+        )
     }
 }
 
 /// A switch Pitboard tried by itself and could not make, in the core's words.
 pub(crate) fn auto_refused_notice(code: &str, message: &str) -> RunOutNotice {
-    RunOutNotice {
-        id: format!("auto-refused/{code}"),
-        title: "Pitboard could not switch Claude Code".into(),
-        subtitle: None,
-        body: message.into(),
-        switch_to: None,
-    }
+    posted(
+        format!("auto-refused/{code}"),
+        "Pitboard could not switch Claude Code".into(),
+        message.into(),
+        &Clicked::Limits,
+    )
 }
 
 /// A warm-up Pitboard tried by itself that started no period, in the core's words, which name
 /// the account, so one account's does not replace another's.
 pub(crate) fn warm_failed_notice(code: &str, message: &str) -> RunOutNotice {
-    RunOutNotice {
-        id: format!("warm-failed/{code}/{message}"),
-        title: "Pitboard could not warm up an account".into(),
-        subtitle: None,
-        body: message.into(),
-        switch_to: None,
-    }
+    posted(
+        format!("warm-failed/{code}/{message}"),
+        "Pitboard could not warm up an account".into(),
+        message.into(),
+        &Clicked::Limits,
+    )
 }
 
 fn capitalised(text: &str) -> String {

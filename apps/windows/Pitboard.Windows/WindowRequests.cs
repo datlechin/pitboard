@@ -19,7 +19,7 @@ public sealed class WindowRequests
         return true;
     }
 
-    // Null is the settings page, which no request asks for.
+    // Null is the settings page.
     public Pane? PaneFor(WindowRequest request, Pane? pane)
     {
         if (request.Serial <= _shown)
@@ -28,6 +28,6 @@ public sealed class WindowRequests
         }
 
         _shown = request.Serial;
-        return request.Pane ?? pane;
+        return request.Settings ? null : request.Pane ?? pane;
     }
 }

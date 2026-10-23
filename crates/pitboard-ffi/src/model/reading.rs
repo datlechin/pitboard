@@ -7,9 +7,9 @@ use super::state::{Answer, Job};
 use super::switching::switch;
 use super::testing::{
     Hand, Machine, account, any_read, claude, claude_code, codex, codex_account, fresh_read,
-    installed_ask, offline_read, percent, refusal, status, warned, warning,
+    installed_ask, offline_read, percent, refusal, status, titled, warned, warning,
 };
-use super::{Intent, ReadFailure};
+use super::{Intent, NotificationButton, ReadFailure, RunOutNotice, Sheet};
 use crate::{Account, Warning};
 use std::time::Duration;
 
@@ -255,8 +255,8 @@ fn replaced(who: &str, now: &str) -> Warning {
 
 /// A sign-in outside Pitboard that replaced the only login of an account is said on every
 /// read until it is put right, and posted once while it stands, since nobody may have the
-/// window open: a read that carries it again posts nothing, and one after it went and came
-/// back posts it again.
+/// window open, with a button that signs in to it again: a read that carries it again posts
+/// nothing, and one after it went and came back posts it again.
 #[test]
 fn a_login_replaced_outside_is_posted_once_while_it_stands() {
     let replaced = replaced("work", "home");
@@ -265,24 +265,19 @@ fn a_login_replaced_outside_is_posted_once_while_it_stands() {
     let mut machine = Machine::reading(Ok(warned(accounts(), vec![replaced.clone()])));
 
     model.refresh(&mut machine);
-    let posted: Vec<(&str, &str, Option<&str>)> = machine
-        .posted
-        .iter()
-        .map(|notice| {
-            (
-                notice.title.as_str(),
-                notice.body.as_str(),
-                notice.switch_to.as_deref(),
-            )
-        })
-        .collect();
     assert_eq!(
-        posted,
-        [(
-            "A login was replaced outside Pitboard",
-            replaced.message.as_str(),
-            None
-        )]
+        machine.posted,
+        [RunOutNotice {
+            id: "warning/login_replaced/claude:work".into(),
+            title: "A login was replaced outside Pitboard".into(),
+            subtitle: None,
+            body: replaced.message.clone(),
+            clicked: "accounts".into(),
+            button: Some(NotificationButton {
+                title: titled("Sign In Again", "Sign in again"),
+                clicked: "sign-in-again/claude/work".into(),
+            }),
+        }]
     );
 
     model.send(Intent::Refresh { asked: true });
@@ -296,6 +291,43 @@ fn a_login_replaced_outside_is_posted_once_while_it_stands() {
     model.send(Intent::Refresh { asked: true });
     model.run(&mut machine);
     assert_eq!(machine.posted.len(), 2, "and again once it is back");
+}
+
+/// Its notice in the window offers the sign-in its row offers, and its notification the
+/// same, by a button macOS registered at launch.
+#[test]
+fn a_login_replaced_outside_offers_to_sign_in_again() {
+    let mut model = Hand::new();
+    let mut machine = Machine::reading(Ok(warned(
+        vec![claude("home", true, 5.0), claude("work", false, 0.0)],
+        vec![replaced("work", "home")],
+    )));
+    model.refresh(&mut machine);
+    let notice = model
+        .shown()
+        .notices
+        .into_iter()
+        .find(|notice| notice.id == "warning/login_replaced/claude:work")
+        .expect("its notice");
+    let offered: Vec<(String, Intent)> = notice
+        .actions
+        .into_iter()
+        .map(|action| (action.title, action.intent))
+        .collect();
+    assert_eq!(
+        offered,
+        [(
+            titled("Sign In Again…", "Sign in again…"),
+            Intent::PresentSheet {
+                sheet: Sheet::SignInAgain {
+                    provider: "claude".into(),
+                    label: "work".into(),
+                },
+            }
+        )]
+    );
+    let button = machine.posted[0].button.clone().expect("a button");
+    assert!(crate::notification_buttons().contains(&button.title));
 }
 
 /// What a replaced login's words say Claude Code holds now changes with every switch made

@@ -1096,6 +1096,7 @@ fn a_running_sign_in_keeps_its_sheet() {
         WindowRequest {
             serial: requests + 2,
             pane: Some(Pane::Accounts),
+            settings: false,
         }
     );
 
@@ -1266,6 +1267,7 @@ fn a_sheet_is_put_up_over_the_window() {
         WindowRequest {
             serial: 1,
             pane: Some(Pane::Accounts),
+            settings: false,
         }
     );
 }
@@ -1422,6 +1424,7 @@ fn a_sign_in_that_fails_once_its_sheet_has_gone_says_so_in_the_window() {
         WindowRequest {
             serial: requests + 1,
             pane: None,
+            settings: false,
         }
     );
     assert_eq!((shown.sheet, shown.sheet_failure), (None, None));

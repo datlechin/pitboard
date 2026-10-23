@@ -65,7 +65,8 @@ fn a_failed_switch_says_so_and_changes_nothing() {
         shown.window_request,
         WindowRequest {
             serial: 1,
-            pane: None
+            pane: None,
+            settings: false,
         }
     );
     assert_eq!(shown.switch_under_way, None);
@@ -1054,6 +1055,7 @@ fn one_switch_at_a_time_while_the_app_question_waits() {
         WindowRequest {
             serial: asked + 1,
             pane: Some(Pane::Accounts),
+            settings: false,
         },
         "the question came back to the front"
     );

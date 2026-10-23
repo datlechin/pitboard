@@ -3100,7 +3100,8 @@ fn opening_the_window_by_itself_leaves_the_sheet_up() {
         shown.window_request,
         WindowRequest {
             serial: 2,
-            pane: None
+            pane: None,
+            settings: false,
         }
     );
     assert_eq!(shown.sheet, Some(rename));
@@ -3123,7 +3124,8 @@ fn a_request_for_the_window_can_ask_for_a_pane() {
         model.shown().window_request,
         WindowRequest {
             serial: 1,
-            pane: Some(Pane::Machine)
+            pane: Some(Pane::Machine),
+            settings: false,
         }
     );
     model.send(Intent::ShowWindow {
@@ -3133,7 +3135,8 @@ fn a_request_for_the_window_can_ask_for_a_pane() {
         model.shown().window_request,
         WindowRequest {
             serial: 2,
-            pane: Some(Pane::Accounts)
+            pane: Some(Pane::Accounts),
+            settings: false,
         }
     );
     model.send(Intent::ShowWindow { pane: None });
@@ -3149,7 +3152,8 @@ fn a_request_for_the_window_can_ask_for_a_pane() {
         model.shown().window_request,
         WindowRequest {
             serial: 4,
-            pane: None
+            pane: None,
+            settings: false,
         },
         "an alert is over every pane"
     );

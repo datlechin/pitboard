@@ -41,9 +41,9 @@ pub use sites::{Conjunction, Site, SiteLink, site_names, sites_for};
 mod model;
 pub use model::{
     AppControl, AppLaunch, DownloadEnd, EarlierPreferences, EarlierWindowRecords, Failure, Intent,
-    LastSwitch, LocalTime, ModelListener, Notifications, Pane, PitboardModel, PlatformError,
-    QuitQuestion, ReadFailure, RestartNeeded, RunOutNotice, RunningSignIn, Sheet, Snapshot,
-    WindowRequest, WindowsLaunch,
+    LastSwitch, LocalTime, ModelListener, NotificationButton, Notifications, Pane, PitboardModel,
+    PlatformError, QuitQuestion, ReadFailure, RestartNeeded, RunOutNotice, RunningSignIn, Sheet,
+    Snapshot, WindowRequest, WindowsLaunch,
 };
 
 // The fixtures, which the `fixture` feature compiles; what is exported of them is the same
@@ -171,6 +171,12 @@ pub fn can_run(path: String) -> bool {
 pub fn pitboard_directory(environment: HashMap<String, String>) -> String {
     let environment: Environment = environment.into_iter().collect();
     environment.pitboard_home().to_string_lossy().into_owned()
+}
+
+// macOS shows a notification's buttons from categories registered at launch, by their titles.
+#[uniffi::export]
+pub fn notification_buttons() -> Vec<String> {
+    present::notification_buttons()
 }
 
 // What stops the Windows app before it makes a model, which then shows this alone.

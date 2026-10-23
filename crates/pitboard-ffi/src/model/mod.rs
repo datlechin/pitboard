@@ -275,6 +275,8 @@ pub enum Intent {
     /// Open the main window, on `pane` where it matters which, from the menu, a notification
     /// or anywhere else: `Snapshot::window_request` moves. The sheet up, if any, stays.
     ShowWindow { pane: Option<Pane> },
+    /// Anything that starts the app can hand it any text, so only what a notice asks for is read.
+    NotificationClicked { argument: String },
     /// Somebody has read the failure the window said, and put it away.
     DismissFailure,
     /// The sheet's name or tool changed, so the failure about the last of them goes.
@@ -538,6 +540,9 @@ pub struct WindowRequest {
     pub serial: u64,
     /// The pane the last request wants shown, when it wants one.
     pub pane: Option<Pane>,
+    // the settings, on their limits, in place of the main window
+    #[uniffi(default)]
+    pub settings: bool,
 }
 
 /// Why the last read of the accounts did not answer.
@@ -670,34 +675,32 @@ impl From<uniffi::UnexpectedUniFFICallbackError> for PlatformError {
     }
 }
 
-/// A notification: that an account in use has run out, and which account of the same tool has
-/// room, posted once for each reset of a limit, whether the app was quit and opened again
-/// meanwhile or not; or what came of switching Claude Code by itself, where somebody turned
-/// that on.
+// A notification, posted once for what it says: an account near or past a limit, a login to
+// sign in to again, or what switching or warming up by itself came to.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct RunOutNotice {
-    /// The same for the same run-out, so the system shows it once: the account, the limit
-    /// and its reset.
+    // the same for the same news, so the system shows it once
     pub id: String,
-    /// "work has no 5-hour limit left".
     pub title: String,
-    /// The tool, beside another tool's accounts: "Claude Code".
+    // the tool, beside another tool's accounts
     pub subtitle: Option<String>,
-    /// "spare has 80% of its own left.", or "seat has no such limit."
     pub body: String,
-    /// The account its Switch button switches to, its label with its tool, for
-    /// `Intent::SwitchTo`. `None` for a notification with nothing to switch to, which has no
-    /// button: one saying what Pitboard switched by itself.
-    pub switch_to: Option<String>,
+    // what a click on the notification hands back, as `Intent::NotificationClicked`
+    pub clicked: String,
+    pub button: Option<NotificationButton>,
 }
 
-/// The app's system's notifications. Called on a thread of the model's own, never the app's
-/// main thread, and answers at once: asking for permission, the first time there is
-/// something to say, is the app's to do then, and a refusal is no error, since the window
-/// says the same either way.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct NotificationButton {
+    pub title: String,
+    // what a click on it hands back, as `Intent::NotificationClicked`
+    pub clicked: String,
+}
+
+// The app's system's notifications, called on a thread of the model's own. Asking for
+// permission is the app's, and a refusal is no error: the window says the same either way.
 #[uniffi::export(with_foreign)]
 pub trait Notifications: Send + Sync {
-    /// Posts `notice`, with a button that switches to its `switch_to` where it names one.
     // This Mac and This PC show why it was refused, so the reason names no path or secret.
     fn post(&self, notice: RunOutNotice) -> Result<(), PlatformError>;
 }

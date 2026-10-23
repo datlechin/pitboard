@@ -932,7 +932,7 @@ public sealed class ModelTests
             new(
                 Id: $"claude/personal/session/-{resetsAt.ToString(CultureInfo.InvariantCulture)}",
                 Title: "personal has no 5-hour limit left", Subtitle: null, Body: "work has 58% of its own left.",
-                SwitchTo: "claude/work"),
+                Clicked: "accounts", Button: new NotificationButton("Switch", "switch/claude/work")),
         ];
         CollectionAssert.AreEqual(ranOut, posted);
     }
@@ -949,14 +949,14 @@ public sealed class ModelTests
         var posted = posting.Posted.Until(1, Patience);
         model.Shutdown();
 
-        var again = OperatingSystem.IsWindows() ? "Sign in again…" : "Sign In Again…";
+        var again = OperatingSystem.IsWindows() ? "Sign in again" : "Sign In Again";
         var notice = posted.Single();
         Assert.AreEqual("A login was replaced outside Pitboard", notice.Title);
         Assert.AreEqual(
             "work’s login was replaced by a sign-in outside Pitboard: Claude Code now has personal’s login stored, " +
-            $"and Pitboard holds no login for work. Choose {again} on its row.",
+            "and Pitboard holds no login for work.",
             notice.Body);
-        Assert.IsNull(notice.SwitchTo);
+        Assert.AreEqual(new NotificationButton(again, "sign-in-again/claude/work"), notice.Button);
     }
 
     [TestMethod]

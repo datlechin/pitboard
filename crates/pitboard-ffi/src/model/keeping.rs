@@ -117,7 +117,8 @@ fn the_first_launch_opens_the_window_once() {
         first.shown().window_request,
         WindowRequest {
             serial: 1,
-            pane: None
+            pane: None,
+            settings: false,
         }
     );
     assert!(machine.kept_preferences.last().expect("kept").has_been_seen);

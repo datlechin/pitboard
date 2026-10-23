@@ -22,6 +22,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   automatic switching and warm-ups, and link to what they say.
 - The install script ends with the command to run next and, where your login shell is zsh, the
   lines that make zsh load Pitboard's completions.
+- The app's notification that a login was replaced outside Pitboard, and its notice in the
+  window, offer **Sign In Again**.
 
 ### Changed
 
@@ -34,6 +36,11 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Breaking:** Pitboard refuses with `login_restricted` to switch Claude Code to an account of an
   organisation that a managed `forceLoginOrgUUID` leaves out, since Claude Code would refuse its
   login. Switch to an account of an organisation the setting names.
+- Clicking one of the app's notifications on macOS opens **Accounts**, or **Settings** on
+  **Limits** for what switching or warming up by itself came to, and the Windows app opens the
+  same.
+- The app's **Switch** button on a notification no longer brings Pitboard to the front on
+  macOS.
 
 ### Fixed
 

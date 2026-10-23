@@ -24,7 +24,7 @@ public sealed class WindowsNotifications(Build build, Func<IAppNotifications> sy
 
     public const string IconFile = "Pitboard.ico";
 
-    public const string SwitchArgument = "switch";
+    public const string Argument = "clicked";
 
     private readonly Lock _lock = new();
     private IAppNotifications? _registered;
@@ -165,20 +165,18 @@ public sealed class WindowsNotifications(Build build, Func<IAppNotifications> sy
             builder.AddText(subtitle);
         }
 
-        builder.AddText(notice.Body).SetTag(Tag(notice.Id));
-        if (notice.SwitchTo is { } account)
+        builder.AddText(notice.Body).SetTag(Tag(notice.Id)).AddArgument(Argument, notice.Clicked);
+        if (notice.Button is { } button)
         {
-            builder.AddButton(new AppNotificationButton("Switch").AddArgument(SwitchArgument, account));
+            builder.AddButton(new AppNotificationButton(button.Title).AddArgument(Argument, button.Clicked));
         }
 
         return builder.BuildNotification();
     }
 
-    // A click on the notification itself opens the window on its accounts, the notification's context.
+    // The model reads what a click hands back, from a notification an older Pitboard posted too.
     public static Intent Read(IDictionary<string, string> arguments) =>
-        arguments.TryGetValue(SwitchArgument, out var account)
-            ? new Intent.SwitchTo(account)
-            : new Intent.ShowWindow(Pane.Accounts);
+        new Intent.NotificationClicked(arguments.TryGetValue(Argument, out var clicked) ? clicked : "");
 
     private static bool Refused(Exception error) =>
         error is COMException or ArgumentException or InvalidOperationException or UnauthorizedAccessException or IOException;

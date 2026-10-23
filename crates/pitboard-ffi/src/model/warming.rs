@@ -154,7 +154,8 @@ fn a_warm_up_by_itself_that_came_to_nothing_is_notified_once_and_waits() {
             body: "`personal` was not warmed up: the request was answered, and Anthropic \
                    still has no period running."
                 .into(),
-            switch_to: None,
+            clicked: "limits".into(),
+            button: None,
         }]
     );
     assert!(
