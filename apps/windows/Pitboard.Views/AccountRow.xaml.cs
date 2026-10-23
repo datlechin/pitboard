@@ -127,7 +127,10 @@ public sealed partial class AccountRow : UserControl
             resets.TextAlignment = TextAlignment.Right;
             Place(Unspoken(resets), row, 3);
             var over = limit.Pace?.Standing == PaceStanding.Over;
-            Place(Unspoken(Column(limit.Pace?.Said ?? "", over ? "CriticalCaptionTextBlockStyle" : "SecondaryCaptionTextBlockStyle")), row, 4);
+            var pace = Column(limit.Pace?.Said ?? "", over ? "CriticalCaptionTextBlockStyle" : "SecondaryCaptionTextBlockStyle");
+            // As wide as "27% over pace", so a row with no pace has bars as wide as one with.
+            pace.MinWidth = 96;
+            Place(Unspoken(pace), row, 4);
         }
     }
 

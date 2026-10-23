@@ -119,6 +119,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   of under a second Codex heading above Pitboard's own.
 - The app marks an account whose parked login Anthropic or OpenAI refused **Needs signing in
   again** and offers **Sign In Again**, in place of a switch to a login that no longer works.
+- The app lines up the usage bars of every account, where a row that said no pace had wider
+  bars.
 
 ## [1.0.0-beta.5] - 2026-10-23
 

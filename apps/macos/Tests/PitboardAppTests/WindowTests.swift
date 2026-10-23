@@ -1,5 +1,6 @@
 import AppKit
 import PitboardKit
+import SwiftUI
 import Testing
 
 @testable import PitboardApp
@@ -80,6 +81,19 @@ import Testing
         enabled: true, confirm: nil)
     #expect(AccountMenuItems.shown([rename, now], in: .shortcutMenu) == [rename])
     #expect(AccountMenuItems.shown([rename, now], in: .menuBar) == [rename, now])
+}
+
+// Each row has a grid of its own, so an empty pace column widened its bars past another row's.
+@MainActor
+@Test func theBarsOfTwoRowsLineUpWhetherOrNotAPaceIsSaid() {
+    func width(_ pace: LimitPace?) -> CGFloat {
+        let limit = LimitRow(
+            name: "5-hour", short: "5h", percent: 42, figure: "42%", level: .plenty,
+            resets: "resets in 2h 10m", pace: pace, spoken: "5-hour limit 42% used")
+        return NSHostingView(rootView: UsageBars(limits: [limit])).fittingSize.width
+    }
+    let over = LimitPace(expected: 30, standing: .over, said: "27% over pace", help: "")
+    #expect(width(nil) == width(over))
 }
 
 /// A sheet put up in place of another is told apart from it, so the window puts it up

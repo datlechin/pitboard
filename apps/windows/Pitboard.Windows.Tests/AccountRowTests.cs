@@ -53,6 +53,19 @@ public sealed class AccountRowTests
         Assert.IsFalse(Views.Visible<Button>(row).Any(), "a button on the account in use");
     }
 
+    // Each row has a grid of its own, so an empty pace column widened its bars past another row's.
+    [UITestMethod]
+    public async Task TheBarsOfTwoRowsLineUpWhetherOrNotAPaceIsSaid()
+    {
+        var over = Items.Limit(42, PaceStanding.Over);
+        over = over with { Pace = over.Pace! with { Said = "27% over pace" } };
+        var paced = await Shown(Items.Account("claude", "work") with { Limits = [over] }, width: 600);
+        var even = await Shown(Items.Account("claude", "spare") with { Limits = [Items.Limit(42)] }, width: 600);
+
+        Assert.AreEqual(
+            Views.Visible<ProgressBar>(paced).Single().ActualWidth, Views.Visible<ProgressBar>(even).Single().ActualWidth, 0.5);
+    }
+
     // Narrator reads a limit once, as a sentence, and not the bar and each figure on their own.
     [UITestMethod]
     public async Task ALimitIsSpokenOnce()
