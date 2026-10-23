@@ -50,7 +50,7 @@ pub use windows::{
     downloads_quit_question,
 };
 
-pub(crate) use accounts::{in_order, needs_sign_in, usable};
+pub(crate) use accounts::{in_order, needs_sign_in};
 pub(crate) use notices::{
     Clicked, UNUSABLE, at_limit_notice, auto_not_watching_notice, auto_refused_notice,
     auto_skipped_notice, auto_switched_notice, notification_buttons, standing_notice,

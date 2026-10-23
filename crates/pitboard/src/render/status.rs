@@ -65,6 +65,9 @@ fn standing(row: &Row, now: i64) -> String {
             format!("login replaced outside Pitboard · {sign_in_again}"),
         ),
         None => paint(WARN, format!("nothing parked · {sign_in_again}")),
+        Some(_) if row.stale == Some(Stale::LoginRefused) => {
+            paint(BAD, format!("login refused · {sign_in_again}"))
+        }
         Some(p) if !p.restorable_at(now) => paint(BAD, format!("login expired · {sign_in_again}")),
         Some(p) => match p.refresh_expires_at {
             Some(at) if renewal_due(at, now) => paint(
@@ -676,11 +679,14 @@ mod tests {
         empty.parked = None;
         let mut soon = row(Some("soon"), false);
         soon.parked = Some(parked(NOW + 86_400));
+        let mut refused = row(Some("refused"), false);
+        refused.stale = Some(Stale::LoginRefused);
         let text = plain(&human(&report(vec![
             row(Some("work"), true),
             expired,
             empty,
             soon,
+            refused,
         ])));
         for (label, says) in [
             (
@@ -689,6 +695,10 @@ mod tests {
             ),
             ("empty", "nothing parked · pitboard enroll empty --sign-in"),
             ("soon", "expires in 1d 0h · pitboard enroll soon --sign-in"),
+            (
+                "refused",
+                "login refused · pitboard enroll refused --sign-in",
+            ),
         ] {
             let line = text
                 .lines()

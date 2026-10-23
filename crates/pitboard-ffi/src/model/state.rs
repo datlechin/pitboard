@@ -4136,7 +4136,8 @@ const UNASKED: [&str; 7] = [
 ];
 
 // `read`, where a parked login `shown` says its service refused, and `read` did not ask about
-// again, is still refused. Parked again, it is another login.
+// again, is still refused, and not switchable, as the core says of a refused one. Parked
+// again, it is another login.
 fn refusals_kept(mut read: Status, shown: &Status) -> Status {
     for account in read.accounts.iter_mut().filter(|account| {
         !account.signed_in
@@ -4154,6 +4155,7 @@ fn refusals_kept(mut read: Status, shown: &Status) -> Status {
             account
                 .stale_explanation
                 .clone_from(&refused.stale_explanation);
+            account.switchable = refused.switchable;
         }
     }
     read

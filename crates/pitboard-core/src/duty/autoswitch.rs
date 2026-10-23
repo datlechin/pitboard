@@ -993,6 +993,17 @@ mod tests {
         assert_eq!(plan.limit.kind, "session");
     }
 
+    /// A parked login its service refused would fail a switch, and needs signing in again.
+    #[test]
+    fn a_parked_login_its_service_refused_is_never_switched_to() {
+        let mut refused = spare();
+        refused.stale = Some(crate::status::Stale::LoginRefused);
+        assert_eq!(
+            to(&decided(&[work_at(96.0), refused, other()])),
+            Some("other")
+        );
+    }
+
     /// The share is judged as the app, `pitboard status` and the status line show it: a
     /// limit at 94.5 is drawn at 95%, and is at a share of 95%.
     #[test]

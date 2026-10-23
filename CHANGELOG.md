@@ -152,6 +152,9 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   expires soon.
 - The macOS app points a daily renewal schedule whose `pitboard` is gone at its own command line
   as it starts, as the Windows app does.
+- `pitboard status` says `login refused` and the command that signs in again beside an account
+  whose parked login Anthropic or OpenAI refused, and neither its `--json` nor the automatic
+  switch counts that account as one to switch to, as the app does not.
 
 ## [1.0.0-beta.5] - 2026-10-23
 

@@ -246,9 +246,12 @@ impl Row {
         }
     }
 
-    /// Whether `pitboard use` would switch to it now.
+    /// Whether `pitboard use` would switch to it now. A parked login its service refused is
+    /// kept, and a switch to it would fail: it needs signing in again.
     pub fn switchable(&self, now: i64) -> bool {
-        !self.signed_in && self.parked.as_ref().is_some_and(|p| p.restorable_at(now))
+        !self.signed_in
+            && self.stale != Some(Stale::LoginRefused)
+            && self.parked.as_ref().is_some_and(|p| p.restorable_at(now))
     }
 
     /// The account, the way Pitboard tells accounts apart. `None` for a row nothing has
@@ -1519,6 +1522,34 @@ mod tests {
             .unwrap();
         assert_eq!(personal.usage.as_ref().unwrap().windows[0].percent, 12.0);
         assert!(personal.switchable(NOW));
+    }
+
+    /// A parked login its service refused needs signing in again: a switch to it would fail,
+    /// so neither `pitboard use` nor the automatic switch offers it, as the app does not.
+    #[test]
+    fn a_parked_login_its_service_refused_cannot_be_switched_to() {
+        let s = state(&["work", "personal"]);
+        let f = facts(
+            "work-uuid",
+            Ok(reading(30.0, Source::Live)),
+            &[(
+                "personal-uuid",
+                Err(Stale::of(
+                    &ProviderError::InvalidGrant {
+                        service: "Anthropic",
+                    },
+                    false,
+                )),
+            )],
+        );
+        let rows = assemble(&s, &f, nothing_remembered, NOW);
+        let personal = rows
+            .iter()
+            .find(|r| r.label.as_deref() == Some("personal"))
+            .unwrap();
+        assert_eq!(personal.stale, Some(Stale::LoginRefused));
+        assert!(personal.parked.is_some(), "kept, as the service refused it");
+        assert!(!personal.switchable(NOW));
     }
 
     /// What a read saw wins over the record, even a login that says no plan.

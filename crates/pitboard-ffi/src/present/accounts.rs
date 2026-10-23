@@ -217,7 +217,7 @@ pub(crate) fn item(seen: &Seen, account: &Account) -> AccountItem {
         busy,
         &spoken_name,
     );
-    let problem = if account.unplaced || (!usable(account) && !account.signed_in) {
+    let problem = if account.unplaced || (!account.switchable && !account.signed_in) {
         account.stale_explanation.clone()
     } else {
         None
@@ -481,7 +481,7 @@ fn action(
     if account.signed_in {
         return None;
     }
-    if usable(account)
+    if account.switchable
         && let Some(qualified) = &account.qualified
     {
         return Some(ItemAction {
@@ -542,16 +542,11 @@ fn runs_out_first(account: &Account, now: i64) -> Option<(usize, i64)> {
     )
 }
 
-// A refused login is parked all the same, and a switch to it would fail.
-pub(crate) fn usable(account: &Account) -> bool {
-    account.switchable && account.stale.as_deref() != Some("login_refused")
-}
-
 pub(crate) fn needs_sign_in(account: &Account) -> bool {
     !account.unplaced
         && account.label.is_some()
         && !account.signed_in
-        && !usable(account)
+        && !account.switchable
         && !login_unread(account)
 }
 

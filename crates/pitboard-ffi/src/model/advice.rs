@@ -67,7 +67,7 @@ fn spare(
     let in_use = current.usage.as_ref().map(windows_of).unwrap_or_default();
     let (spare, room) = usage::preferred(
         mine.iter()
-            .filter(|account| crate::present::usable(account) && account.qualified.is_some())
+            .filter(|account| account.switchable && account.qualified.is_some())
             .filter_map(|account| {
                 let theirs = account.usage.as_ref()?;
                 let room = usage::room(
