@@ -76,7 +76,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   switching came to, without the one at 100% that offered **Switch**.
 - The app's **Switched to work** notice with nothing under its title goes once open Claude Code
   sessions have followed the switch.
-- The Windows app's icon tooltip lists each account in use with its limits.
+- The Windows app's icon tooltip lists each account in use with its limits, after **Needs
+  attention** while its menu opens on something to look at.
 - The app's **Settings** say what switching, warm-up and daily renewal do in one or two
   sentences.
 - An account's shortcut menu in the macOS app leaves out **Warm Up Now** and **Sign In Again**

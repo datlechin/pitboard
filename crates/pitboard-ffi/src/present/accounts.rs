@@ -134,6 +134,10 @@ pub(crate) fn menu_bar(seen: &Seen, notices: &MenuNotices) -> MenuBarText {
         spoken.push("needs attention".into());
     }
     let mut tip = vec!["Pitboard".to_owned()];
+    // Before the accounts, which can run past the 127 characters a tooltip holds.
+    if attention {
+        tip.push("Needs attention".into());
+    }
     tip.extend(
         accounts
             .iter()
@@ -1014,7 +1018,8 @@ mod tests {
     }
 
     /// Windows' notification area has a tooltip and no title: it lists each account in use,
-    /// with its tool beside another tool's, and its limits as the menu says them.
+    /// with its tool beside another tool's, and its limits as the menu says them, after whether
+    /// the menu needs attention, which Narrator reads with the icon's name.
     #[test]
     fn the_notification_areas_tip_lists_each_account_in_use() {
         let tip = bar(
@@ -1050,6 +1055,25 @@ mod tests {
         );
         assert_eq!(one.tip, "Pitboard\nwork: 5-hour 12%");
         assert_eq!(bar(Vec::new(), Vec::new()).tip, "Pitboard");
+        let warned = bar(
+            vec![
+                account(Some("work"))
+                    .signed_in()
+                    .limits(vec![window("session", 12.0)])
+                    .build(),
+            ],
+            vec![crate::Warning {
+                code: "keychain_locked".into(),
+                message: "The keychain is locked.".into(),
+                account: None,
+                held: None,
+                provider: None,
+            }],
+        );
+        assert_eq!(warned.tip, "Pitboard\nNeeds attention\nwork: 5-hour 12%");
+        let state = read(status(Vec::new(), Vec::new()), Vec::new());
+        let bare = present_on(Os::Windows, &state, 0, &Utc).menu_bar;
+        assert_eq!(bare.tip, "Pitboard\nNeeds attention", "no tool here");
     }
 
     /// Sections come in the order the tools are listed, each once, whatever order the rows
