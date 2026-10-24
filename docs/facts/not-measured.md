@@ -31,6 +31,17 @@ not measured, and the register cannot hold them, since every fact in it is read 
 - Whether exchanging a parked refresh token, to see whether it still works, revokes the copy
   another machine holds. So `pitboard adopt` drops each login parked in a store, and asks
   Anthropic nothing.
+- Whether a switch stops a Remote Control session. Claude Code's changelog for 2.1.234 says
+  signing the computer in to another claude.ai account or organisation stops one within
+  seconds. Pitboard says nothing about Remote Control.
+- Whether the skills and plugins a session syncs from claude.ai, from 2.1.275, change in an
+  open session after a switch. Pitboard moves the login alone.
+- Whether a renewal's answer names `refresh_token_expires_in`, and so moves the end of a parked
+  login (`refresh_token_end`). Pitboard keeps the date a login has until an answer names one,
+  as Claude Code does, and asks for a sign-in within 3 days of it.
+- The 33 seconds on a build after 2.1.278, and on Linux at all. `credential_cache` is read on
+  both systems and was measured on macOS with 2.1.278 alone: no Linux session with real
+  logins has been run. Pitboard gives 33 seconds on every system.
 
 ## Codex
 
