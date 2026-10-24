@@ -894,15 +894,17 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
     Assumption {
         name: "project_settings_folder",
         fact: "Claude Code takes a project's settings from `.claude/settings.json` in the folder \
-               it starts in, the real path of its working folder, and local settings from \
+               it starts in, its working folder, resolved to its real path on macOS and Windows \
+               and taken as it is on Linux, and local settings from \
                `.claude/settings.local.json` at that folder's git root, or in the folder itself \
                where the root is the home folder or another user's, and always on Windows. \
                `--project-config-root` moves both. The settings every command composes, \
                `claude auth login`'s among them, take both",
         read_from: "the settings sources' files, the project and local folders' resolvers with \
                     the git root's home and owner checks, and the working folder a run starts \
-                    with, the real path of `process.cwd()`, in the darwin-arm64, linux-x64, \
-                    win32-x64 and win32-arm64 builds of 2.1.310, read as bytes on 2026-10-24",
+                    with, `process.cwd()` through `realpathSync` in the darwin-arm64, win32-x64 \
+                    and win32-arm64 builds and as it is in the linux-x64 one, in those four \
+                    builds of 2.1.310, read as bytes on 2026-10-24 and 2026-10-25",
         verified_against: "2.1.310",
         depends: "Claude's Provider::sign_in, which starts `claude auth login` in its private \
                   folder, as Codex's starts `codex login`, so a project's settings in the folder \
@@ -2251,8 +2253,8 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
                   settings::console_pin, so a sign-in under a managed `console` and no managed \
                   gateway, which would make an API key and leave nothing to enrol, refuses with \
                   `sign_in_pinned_to_console` before `claude auth login` starts, and doctor's \
-                  login_restrictions names it. Neither the person's own settings nor a \
-                  project's reach a sign-in in Pitboard's private folder \
+                  login_restrictions names it. The person's own settings and a project's \
+                  `.claude/settings.json` do not reach a sign-in in Pitboard's private folder \
                   (project_settings_folder)",
         probe: &[
             "forceLoginMethod is 'console' in ",
