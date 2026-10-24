@@ -57,9 +57,19 @@ pub(crate) fn chain(ctx: &Context) -> Live {
 /// Claude Code's own look cannot either, and takes for a file that is not there.
 pub(crate) fn behind(ctx: &Context) -> Option<Result<String, Error>> {
     let (live, service) = (chain(ctx), claude::live_service(ctx));
-    let file = store::behind(&live, &service).ok()??;
+    let holder = store::holder(&live, &service).ok()??;
+    behind_holder(&live, holder, &service)
+}
+
+// What [`behind`] reads, with the backend holding the login in use already found in `live`.
+pub(crate) fn behind_holder(
+    live: &Live,
+    holder: &dyn RawStore,
+    service: &str,
+) -> Option<Result<String, Error>> {
+    let file = store::behind_holder(live, holder, service).ok()??;
     // Gone between the look and the read: not there.
-    file.read(&service).transpose()
+    file.read(service).transpose()
 }
 
 /// What `.credentials.json` holds, as a JSON object: an empty one where it holds none, which
@@ -90,7 +100,7 @@ pub(crate) fn login_in(held: &str) -> Option<Value> {
     Some(document_in(held)).filter(holds_a_login)
 }
 
-// The login in the file [`behind`] reads, where it holds one, as the provider and doctor read it.
+// The login in the file [`behind`] reads, where it holds one, as the provider reads it.
 pub(crate) fn login_behind(ctx: &Context) -> Option<Result<Option<Value>, Error>> {
     Some(behind(ctx)?.map(|held| login_in(&held)))
 }

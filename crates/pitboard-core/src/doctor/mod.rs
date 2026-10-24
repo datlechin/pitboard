@@ -223,7 +223,7 @@ pub(crate) fn gather(ctx: &Context) -> Facts {
         network: network::network_fact(&ctx.proxy),
         in_the_app: ctx.caller == "app",
         elevation: ctx.host().elevation(ctx),
-        fallback_login: claude::fallback_login(ctx),
+        fallback_login: found.fallback,
         floor: ctx.host().floor(),
         status_line: (ctx.os == Os::Windows).then(|| StatusLineFact {
             git_bash: claude_paths::git_bash(ctx),

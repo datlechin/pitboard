@@ -353,15 +353,23 @@ fn behind_in<'a>(
     chain: &[&'a dyn RawStore],
     service: &str,
 ) -> Result<Option<&'a dyn RawStore>, Error> {
-    let mut in_use = false;
-    for backend in chain {
-        if !in_use {
-            in_use = backend.contains(service)?;
-        } else if backend.contains(service)? {
-            return Ok(Some(*backend));
-        }
+    match resolve_in(chain, service)? {
+        Some(holder) => after_in(chain, holder, service),
+        None => Ok(None),
     }
-    Ok(None)
+}
+
+// The nearest backend after `holder` in `chain` that holds `service` too, by its own look.
+fn after_in<'a>(
+    chain: &[&'a dyn RawStore],
+    holder: &dyn RawStore,
+    service: &str,
+) -> Result<Option<&'a dyn RawStore>, Error> {
+    let after = chain
+        .iter()
+        .position(|backend| std::ptr::addr_eq(*backend, holder))
+        .map_or(chain.len(), |at| at + 1);
+    resolve_in(&chain[after..], service)
 }
 
 /// The backend after the one holding the login in use that holds something under `service`
@@ -377,6 +385,15 @@ pub(crate) fn behind<'a>(live: &'a Live, service: &str) -> Result<Option<&'a dyn
 /// The backend in `live` holding `service`, the one a read takes it from.
 pub(crate) fn holder<'a>(live: &'a Live, service: &str) -> Result<Option<&'a dyn RawStore>, Error> {
     resolve_in(&live.refs(), service)
+}
+
+/// [`behind`], with the backend holding the login in use, `holder`, already found in `live`.
+pub(crate) fn behind_holder<'a>(
+    live: &'a Live,
+    holder: &dyn RawStore,
+    service: &str,
+) -> Result<Option<&'a dyn RawStore>, Error> {
+    after_in(&live.refs(), holder, service)
 }
 
 /// The backend in `live` of the kind [`Backend::name`] calls `kind`.

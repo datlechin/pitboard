@@ -199,12 +199,13 @@ fn a_login_left_behind_the_keychain_is_found_in_its_file() {
     let service = claude_paths::live_service(&ctx);
     let file = host.file_at(claude_live::credential_file(&ctx));
     let login = |token: &str| json!({"claudeAiOauth": {"refreshToken": token}}).to_string();
+    let fallback_login = || found(&ctx, &service).fallback;
 
     host.live().plant(&service, &login("in use"));
-    assert!(fallback_login(&ctx).is_none());
+    assert!(fallback_login().is_none());
 
     file.plant(&service, &login("left"));
-    let found = fallback_login(&ctx).expect("a login behind the keychain's");
+    let found = fallback_login().expect("a login behind the keychain's");
     assert_eq!(found.path, claude_live::credential_file(&ctx));
     assert_eq!(
         found.fingerprint.expect("readable"),
@@ -212,7 +213,7 @@ fn a_login_left_behind_the_keychain_is_found_in_its_file() {
     );
 
     file.plant(&service, &json!({"mcpOAuth": {}}).to_string());
-    let found = fallback_login(&ctx).expect("what `/logout` leaves is still there");
+    let found = fallback_login().expect("what `/logout` leaves is still there");
     assert_eq!(
         found.fingerprint.expect("readable"),
         None,
@@ -224,7 +225,7 @@ fn a_login_left_behind_the_keychain_is_found_in_its_file() {
         &service,
         Fault::UnreadableContents("permission denied".into()),
     );
-    let found = fallback_login(&ctx).expect("what cannot be read is still there");
+    let found = fallback_login().expect("what cannot be read is still there");
     assert!(
         matches!(found.fingerprint, Err(store::Error::Unreadable(_))),
         "and what it holds is not guessed"
@@ -233,7 +234,7 @@ fn a_login_left_behind_the_keychain_is_found_in_its_file() {
 
     host.live().delete_everything();
     assert!(
-        fallback_login(&ctx).is_none(),
+        fallback_login().is_none(),
         "the file is the login in use when the keychain holds none"
     );
 }
@@ -848,23 +849,27 @@ fn a_stored_login_that_is_not_an_object_leaves_the_account_in_use_as_named() {
     );
 }
 
-// On macOS each read is a `security` call, and a renewal between two makes the facts disagree.
+// On macOS each look and each read is a `security` call, and a renewal between two makes the
+// facts disagree.
 #[test]
-fn claude_codes_login_is_read_once() {
+fn claude_codes_login_is_looked_for_and_read_once() {
     let m = switch::harness::machine("doctor-one-read");
     m.mem.live().takes_on_stdin(4032);
     let before = m.mem.trail().len();
     let facts = gather(&m.ctx);
-    let reads = m.mem.trail()[before..]
-        .iter()
-        .filter(|touch| touch.call == "read" && touch.service == m.service)
-        .count();
-    // A Credential Manager look is a read, so there the looks of found and fallback_login count.
-    let (backend, looks) = match crate::host::OS {
-        Os::Windows => (store::Backend::CredentialManager, 2),
-        Os::MacOs | Os::Linux => (store::Backend::Keychain, 0),
+    let calls = |call: &str| {
+        m.mem.trail()[before..]
+            .iter()
+            .filter(|touch| touch.store == "live" && touch.service == m.service)
+            .filter(|touch| touch.call == call)
+            .count()
     };
-    assert_eq!(reads, 1 + looks);
+    // A Credential Manager look is a read of the item.
+    let (backend, looks_and_reads) = match crate::host::OS {
+        Os::Windows => (store::Backend::CredentialManager, (0, 2)),
+        Os::MacOs | Os::Linux => (store::Backend::Keychain, (1, 1)),
+    };
+    assert_eq!((calls("contains"), calls("read")), looks_and_reads);
     assert!(matches!(facts.backend, Ok(held) if held == backend));
     assert!(matches!(facts.credential, Ok(Some(_))));
     assert!(facts.credential_cost.is_some());

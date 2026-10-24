@@ -38,12 +38,18 @@ pub(super) fn login_pins(ctx: &Context, state: Option<&State>) -> (Vec<String>, 
 }
 
 // Nothing where that cannot be told: an unreadable keychain is `credential_store`'s to say.
-pub(super) fn fallback_login(ctx: &Context) -> Option<FallbackLogin> {
-    let login = claude_live::login_behind(ctx)?;
+fn fallback_login(
+    ctx: &Context,
+    chain: &store::Live,
+    holder: &dyn store::RawStore,
+    service: &str,
+) -> Option<FallbackLogin> {
+    let login = claude_live::behind_holder(chain, holder, service)?;
     Some(FallbackLogin {
         path: claude_live::credential_file(ctx),
-        fingerprint: login.map(|login| {
-            login.map(|document| crate::provider::claude::document::fingerprint_of(&document))
+        fingerprint: login.map(|held| {
+            claude_live::login_in(&held)
+                .map(|document| crate::provider::claude::document::fingerprint_of(&document))
         }),
     })
 }
@@ -55,6 +61,7 @@ pub(super) struct Found {
     pub(super) cost: Option<store::Cost>,
     pub(super) parts: Vec<(String, usize)>,
     pub(super) stored: bool,
+    pub(super) fallback: Option<FallbackLogin>,
 }
 
 pub(super) fn found(ctx: &Context, service: &str) -> Found {
@@ -65,6 +72,10 @@ pub(super) fn found(ctx: &Context, service: &str) -> Found {
         .and_then(|held| held.map_or(Ok(None), |backend| backend.read(service)));
     let credential = raw.clone().and_then(store::parsed);
     Found {
+        fallback: match &holder {
+            Ok(Some(held)) => fallback_login(ctx, &chain, *held, service),
+            _ => None,
+        },
         backend: holder
             .as_ref()
             .map(|held| held.map_or(store::Backend::Absent, |backend| backend.kind()))
