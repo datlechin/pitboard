@@ -1554,11 +1554,17 @@ mod tests {
     #[test]
     fn the_core_is_made_once_when_it_is_first_needed() {
         let asks = Asks::default();
+        let (making, made) = std::sync::mpsc::channel();
+        let (release, released) = std::sync::mpsc::channel::<()>();
+        let released = Mutex::new(released);
         let core = Arc::new(AppCore::asking(
             {
                 let asks = asks.clone();
                 move || {
                     asks.note();
+                    let _ = making.send(());
+                    let _ = released.lock().expect("a test's own lock").recv();
+                    // Nothing shows a call waiting on the core: this widens the race, no more.
                     std::thread::sleep(Duration::from_millis(100));
                     (answering("/answered"), false)
                 }
@@ -1578,16 +1584,28 @@ mod tests {
             0,
             "nor opening an app whose login is a document"
         );
+        let (calling, under_way) = std::sync::mpsc::channel();
         let calls: Vec<_> = (0..3)
             .map(|which| {
-                let core = core.clone();
-                std::thread::spawn(move || match which {
-                    0 => drop(core.installed()),
-                    1 => drop(core.changed_at()),
-                    _ => drop(core.command_line()),
+                let (core, calling) = (core.clone(), calling.clone());
+                std::thread::spawn(move || {
+                    let _ = calling.send(which);
+                    match which {
+                        0 => drop(core.installed()),
+                        1 => drop(core.changed_at()),
+                        _ => drop(core.command_line()),
+                    }
                 })
             })
             .collect();
+        for _ in 0..3 {
+            under_way
+                .recv_timeout(Duration::from_secs(20))
+                .expect("a call under way");
+        }
+        made.recv_timeout(Duration::from_secs(20))
+            .expect("the core being made");
+        drop(release);
         for call in calls {
             call.join().expect("a call that answers");
         }

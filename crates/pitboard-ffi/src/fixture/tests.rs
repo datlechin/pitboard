@@ -559,20 +559,21 @@ fn a_claude_code_sign_in_waits_for_the_code_and_then_parks_the_account() {
     assert_eq!(shown.url.as_deref(), Some(CLAUDE_ADDRESS));
     assert!(shown.wants_code);
 
-    let asked = Instant::now();
-    let pasting = {
+    let (line, said) = std::sync::mpsc::channel();
+    let reading = {
         let session = Arc::clone(&session);
         std::thread::spawn(move || {
-            std::thread::sleep(Duration::from_millis(300));
-            session.paste(CODE)
+            let _ = line.send(session.next_line());
         })
     };
-    assert_eq!(session.next_line(), None);
-    assert!(
-        asked.elapsed() >= Duration::from_millis(300),
+    assert_eq!(
+        said.recv_timeout(Duration::from_millis(300)),
+        Err(std::sync::mpsc::RecvTimeoutError::Timeout),
         "nothing more until the code is typed"
     );
-    pasting.join().expect("the paste").expect("typed back");
+    session.paste(CODE).expect("typed back");
+    assert_eq!(said.recv_timeout(PATIENCE), Ok(None));
+    reading.join().expect("the read");
 
     assert_eq!(
         session.finish().expect("enrolled"),

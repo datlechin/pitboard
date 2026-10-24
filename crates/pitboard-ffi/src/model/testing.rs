@@ -2015,7 +2015,7 @@ impl Drop for World {
 
 /// Asked whether it runs before it has written its process id, the stand-in is waited for,
 /// and not taken for one that has stopped: this process stands in for it here, and writes
-/// its own id the way the stand-in does, whole, a moment after the question.
+/// its own id the way the stand-in does, whole, once the question is still unanswered.
 #[test]
 fn whether_the_stand_in_runs_is_answered_once_it_has_written_its_process_id() {
     let world = World::new("stand-in-pid");
@@ -2026,14 +2026,24 @@ fn whether_the_stand_in_runs_is_answered_once_it_has_written_its_process_id() {
         holding: world.root.path().join("holding"),
     };
     let pid = stand_in.pid.clone();
-    let writing = std::thread::spawn(move || {
-        std::thread::sleep(Duration::from_millis(100));
-        let part = pid.with_extension("pid.part");
-        std::fs::write(&part, format!("{}\n", std::process::id())).expect("written");
-        std::fs::rename(&part, &pid).expect("moved into place");
+    let (answer, answered) = channel();
+    let asking = std::thread::spawn(move || {
+        let _ = answer.send(stand_in.is_running());
     });
-    assert!(stand_in.is_running(), "this process, once its id is there");
-    writing.join().expect("the writer");
+    assert_eq!(
+        answered.recv_timeout(Duration::from_millis(100)),
+        Err(std::sync::mpsc::RecvTimeoutError::Timeout),
+        "no answer before its id is there"
+    );
+    let part = pid.with_extension("pid.part");
+    std::fs::write(&part, format!("{}\n", std::process::id())).expect("written");
+    std::fs::rename(&part, &pid).expect("moved into place");
+    assert_eq!(
+        answered.recv_timeout(Duration::from_secs(20)),
+        Ok(true),
+        "this process, once its id is there"
+    );
+    asking.join().expect("the question");
 }
 
 // The compiled stand-in, which refuses to do anything were it run.

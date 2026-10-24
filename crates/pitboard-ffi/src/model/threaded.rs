@@ -182,19 +182,16 @@ fn last_revision(told: &Told) -> Option<u64> {
 
 /// The model reads the accounts once started, through its lanes over the real core, and
 /// tells its listener each snapshot in order, the last of them the one `snapshot` gives.
-/// Before it is started it shows nothing and asks nothing.
+/// Before it is started it shows nothing, and no timer wakes it, as cadence.rs's
+/// `nothing_runs_by_itself_until_started` shows in the model's own time.
 #[test]
 fn a_started_model_reads_the_accounts_and_tells_its_listener_in_order() {
     let world = World::new("reads");
     world.enrolled("work", "here", 42.0);
-    let asked = world.api.calls();
     let told = Arc::new(Told::default());
     let model = model(&world.core(), &told);
     let first = model.snapshot();
     assert_eq!((first.revision, first.status.as_ref()), (0, None));
-    std::thread::sleep(Duration::from_millis(50));
-    assert_eq!(told.count(), 0, "nothing runs before Start");
-    assert_eq!(world.api.calls(), asked);
 
     model.send(Intent::Start);
     let snapshots = told.until("the account read", shows("work"));
@@ -349,7 +346,7 @@ fn shutdown_stops_the_timers_the_lanes_and_the_listener() {
         .expect("renamed in a terminal");
     world.index_written_later(5);
     model.send(Intent::Refresh { asked: true });
-    std::thread::sleep(Duration::from_millis(100));
+    // Nothing holds the listener but this test any more, so nothing can tell it.
     assert_eq!(told.count(), count, "told nothing after shutdown");
     assert_eq!(labels(&model.snapshot()), ["work"]);
     model.shutdown();

@@ -1387,15 +1387,25 @@ mod tests {
             !sign_ins.stopped_within(Duration::from_millis(50)),
             "one still starting"
         );
-        let ending = {
+        let (answer, answered) = channel();
+        let waiting = {
             let sign_ins = Arc::clone(&sign_ins);
             std::thread::spawn(move || {
-                std::thread::sleep(Duration::from_millis(50));
-                sign_ins.end(2);
+                let _ = answer.send(sign_ins.stopped_within(Duration::from_secs(20)));
             })
         };
-        assert!(sign_ins.stopped_within(Duration::from_secs(20)));
-        ending.join().expect("the thread that ends it");
+        assert_eq!(
+            answered.recv_timeout(Duration::from_millis(50)),
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout),
+            "still waiting for the one starting"
+        );
+        sign_ins.end(2);
+        assert_eq!(
+            answered.recv_timeout(Duration::from_secs(20)),
+            Ok(true),
+            "stopped once it ended"
+        );
+        waiting.join().expect("the thread that waits");
     }
 
     /// A sign-in whose thread the system cannot start comes to nothing, as one whose thread
