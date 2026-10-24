@@ -204,10 +204,10 @@ fn placed(app: &dyn Folder, root: &Path) -> Result<()> {
 // What every step of one move of `app`'s folder at `root` works with. `mac` is this Mac's id as
 // one check read it, written into every manifest the move makes.
 pub(super) struct Move<'a> {
-    pub ctx: &'a Context,
-    pub permit: Permit,
-    pub app: &'static dyn Folder,
-    pub root: &'a Path,
+    ctx: &'a Context,
+    permit: Permit,
+    app: &'static dyn Folder,
+    root: &'a Path,
     mac: String,
 }
 

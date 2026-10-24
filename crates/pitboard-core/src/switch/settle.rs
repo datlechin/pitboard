@@ -107,9 +107,7 @@ pub(crate) fn settle(
     ))
 }
 
-// The refusal the next change would make over an interrupted switch, worked out as `settle`
-// works it out and only read: no lock, no write. A switch under way in another run does not
-// read as stuck, since what it leaves at every step is what the next change could settle.
+// As `settle` works it out, read only: a switch under way in another run does not read as stuck.
 pub(crate) fn stuck(ctx: &Context, state: &State, asking: Asking) -> Option<Error> {
     if !journal::pending(ctx) {
         return None;
