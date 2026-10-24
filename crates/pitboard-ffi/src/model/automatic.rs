@@ -60,7 +60,7 @@ fn switched_work_to_personal() -> Result<AutoSwitched, Refusal> {
     Ok(AutoSwitched::Switched {
         from: "work".into(),
         to: "personal".into(),
-        adoption: Adoption::Follows { within_seconds: 33 },
+        adoption: Adoption::PollingWithin(33),
         warnings: Vec::new(),
         used: "97% of its 5-hour limit".into(),
     })
@@ -308,6 +308,21 @@ fn the_settings_say_why_it_is_not_switching() {
         "Pitboard is not switching Claude Code: whose login Claude Code has stored could not be \
          told (could not reach Anthropic). It asks again at 08:01."
     );
+    assert_eq!(
+        says(
+            &mut model,
+            &mut machine,
+            AutoSwitched::Switched {
+                from: "work".into(),
+                to: "personal".into(),
+                adoption: Adoption::PollingWithin(33),
+                warnings: Vec::new(),
+                used: "97% of its 5-hour limit".into(),
+            }
+        ),
+        "Switched Claude Code from work to personal: work has used 97% of its 5-hour limit.",
+        "as `pitboard watch` says it"
+    );
 
     machine.look = Ok(AutoLooked::Act);
     machine.auto = Err(unwritable());
@@ -355,7 +370,7 @@ fn a_switch_it_made_is_said_and_taken_as_a_switch_somebody_asked_for() {
             id: format!("auto/work/personal/{}", model.now.epoch()),
             title: "Switched Claude Code to personal".into(),
             subtitle: None,
-            body: "work had used 97% of its 5-hour limit. Sessions already running follow \
+            body: "work has used 97% of its 5-hour limit. Sessions already running follow \
                    within 33 seconds."
                 .into(),
             clicked: "accounts".into(),

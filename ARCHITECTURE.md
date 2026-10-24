@@ -253,13 +253,15 @@ window loads its site, and whatever the site's pages load, as a browser would.
     (`switch::folder::read`). `Provider::own_record` reads Claude Code's config for that
     doubt and for the words that say it, never for whose a login is.
   - `duty/`: what every front end that acts by itself shares, whatever it does. `cadence.rs`
-    is how often it decides with nothing written (`DECIDE_EVERY_SECONDS`, 30), how long
-    something that came to nothing waits before it is tried again (`retry_after`, 60 seconds
-    doubling to 15 minutes), how many attempts are made at one thing (`ATTEMPTS`), and
-    `Refusals`, a front end's refusals in a row and their wait, on its own clock. `ledger.rs`
-    is `Tries`, the attempts and the reasons said about one thing, and how a duty's record
-    is read and written, only under `state.lock`. `mod.rs` holds `Look`, what a duty's look
-    at its files came to. The automatic switch and the warm-up are its duties.
+    is how often it looks at its files (`LOOK_EVERY_SECONDS`, 2), reads every account
+    (`READ_EVERY_SECONDS`, 300) and decides with nothing written (`DECIDE_EVERY_SECONDS`,
+    30), how long something that came to nothing waits before it is tried again
+    (`retry_after`, 60 seconds doubling to 15 minutes), how many attempts are made at one
+    thing (`ATTEMPTS`), and `Refusals`, a front end's refusals in a row and their wait, on
+    its own clock. `ledger.rs` is `Tries`, the attempts and the reasons said about one
+    thing, and how a duty's record is read and written, only under `state.lock`. `mod.rs`
+    holds `Look`, what a duty's look at its files came to. The automatic switch and the
+    warm-up are its duties.
   - `duty/warm/`: warming up an account, starting its five-hour period as soon as the last one
     resets, for the Claude Code accounts somebody turned it on for. `mod.rs` holds the
     setting, `warm.json`: the accounts turned on, by id, and `Range`, the span of each day,
@@ -415,13 +417,17 @@ window loads its site, and whatever the site's pages load, as a browser would.
     row has no numbers, since no usage of it is read, and says when a change last read its
     login in use (`read_at`). A read asks first (`ask`), and makes its rows (`report`) once
     whose each login is has been recorded, so an account whose only login a sign-in outside
-    Pitboard replaced reads `login_replaced` from that read on. The usage of a login nobody
+    Pitboard replaced reads `login_replaced` from that read on. A row whose parked login its
+    service refused (`login_refused`) is not switchable (`Row::switchable`), which
+    `pitboard status` and the app go by. The usage of a login nobody
     could name is not asked, and the account the record names stands in for it. Offline rows
     (`gather_offline`) take the account in use from `in_use::known`, an account nobody
     enrolled included, which gets its row as it does online. `Pitboard::standing` says what
-    stands on every read: `login_replaced`, `in_use_unconfirmed` where Claude Code's config
-    has moved since the record was checked and the read could not ask, and
-    `config_names_another` where it names another account than the one in use.
+    stands on every read: `login_replaced`, `in_use_unconfirmed` where the read could not
+    ask and Claude Code's config has moved since the record was checked, or the record was
+    never checked, whatever the config names (`Known::unconfirmed`, which doctor's `in_use`
+    check follows too), and `config_names_another` where it names another account than the
+    one in use.
     `statusline.rs` files what a Claude Code session passed under the account its windows
     prove: the one account whose reading, as Anthropic last answered for it, holds a window
     the session passed and does not rule the session out. A reading rules it out with
@@ -442,8 +448,13 @@ window loads its site, and whatever the site's pages load, as a browser would.
     when it runs out, a parked login's life, a renewal run, doctor's summary, and what is
     left in a file behind the keychain, or Credential Manager on Windows, and what putting it
     away does and did (`left_lines`, `stowed_lines`, `nothing_left`, each in the words of the
-    system it is given), which `pitboard stow` and the app's sheet both say. It
-    also holds `usage_level`, the steps at which a limit's colour changes. A thing said both
+    system it is given), which `pitboard stow` and the app's sheet both say, what becomes
+    of running sessions after a switch (`after_a_switch`), why replacing a login refused for
+    good loses nothing (`replacing`) and that Claude's settings name another account
+    (`desktop_named`), each taking the account as the front end names it. It also holds
+    `usage_level`, the steps at which a limit's colour changes, and the helpers every front
+    end writes with, `capitalised`, `listed` and `figure`; `time.rs` holds the units of a
+    span, and `state::Key::parse` reads back the name `Key::typed` writes. A thing said both
     in a column and in a sentence has a function for each form. The command line calls these
     functions directly, and so does `pitboard-ffi`'s `present/` as it makes the snapshot,
     which carries what an app shows of them. The bindings export none of them. Clock times
@@ -484,8 +495,10 @@ window loads its site, and whatever the site's pages load, as a browser would.
   At each decision it also asks the core to warm up whichever account turned on is due
   (`Pitboard::warm_up`, which looks at the files first), with a refusal row of its own, and
   says each warm-up, each reason an account is held back once until it warms up, and why
-  nothing is warmed up here once until that ends. No warm-up error ends it. `warm.rs` is
-  `pitboard warm`. `build/versioninfo.rs` is the Windows version resource SignPath asks of
+  nothing is warmed up here once until that ends. A warm-up that came to nothing is said once
+  until that account warms up, by the rule the app keeps too (`switch::warm::Told`): told
+  apart by the account and the code, never by Claude Code's words. No warm-up error ends it.
+  `warm.rs` is `pitboard warm`. `build/versioninfo.rs` is the Windows version resource SignPath asks of
   what it signs: ProductName `Pitboard`, CompanyName `Pitboard` and the crate's version, and
   `pitboard.exe`'s manifest. The build scripts of `pitboard-ffi` and `pitboard-share-ffi`
   include it by `#[path]` and link the resource into their DLLs, compiled by the Windows
@@ -573,8 +586,8 @@ window loads its site, and whatever the site's pages load, as a browser would.
     is chosen, asking the core's look after every read and every 30 seconds and saying under
     the setting what it came to, warms up the accounts turned on on a lane of its own,
     asking after every read and every 30 seconds, with every read's `Overview` of them, or
-    why it cannot be read, and a notification once for the words of a warm-up by itself
-    that came to nothing, keeps the app's own preferences, and keeps the daily renewal
+    why it cannot be read, and a notification of a warm-up by itself that came to nothing,
+    once until that account warms up (`switch::warm::Told`), keeps the app's own preferences, and keeps the daily renewal
     schedule, makes doctor's checks, reads the activity log and finds the `pitboard` a
     terminal runs. It keeps the
     account windows' books too: which store is whose and each window's last page, which
@@ -1255,8 +1268,10 @@ window loads its site, and whatever the site's pages load, as a browser would.
   run not yet made or under way is a warning that names `pitboard renew`. A changed setting
   is a warning whose fix is turning daily renewal off and on again, which writes the task as
   Pitboard writes it; nothing rewrites it unasked, since the change may be the person's. The
-  app's start-up repair (`schedule::repair`) points a task at the command line inside the app
-  only where the Pitboard it runs is gone and its settings are as Pitboard wrote them. The
+  app's start-up repair (`schedule::repair`) points a schedule at the command line inside the
+  app where doctor fails it (`schedule::fault`): the Pitboard it runs is gone, on every
+  system, or it runs an app's own program. A task whose settings changed in Task Scheduler is
+  left as it is. The
   MSI's full uninstall, through `Pitboard.exe --unregister`, takes each task away, renewal's
   and the watch service's (`schedule::uninstall_for_app`), only where it runs the
   `bin\pitboard.exe` beside that `Pitboard.exe`, whatever its settings, since the removal
@@ -1836,6 +1851,10 @@ window loads its site, and whatever the site's pages load, as a browser would.
   reading that folder. Where a move cannot be given up and `abandon` has done nothing yet,
   it refuses. Where it has already given up or settled something, it says the move as
   `move_not_given_up` instead, since the refusal's "nothing has changed" would be false.
+  Why it was not given up is the core's clause in both front ends
+  (`words::not_given_up_because`), each naming the account its own way and adding its own way
+  out but for a park Pitboard could not look at (`words::readable_first`), and the summary of
+  a move given up is `words::given_up` in both, each with its own way on.
 - `adopt` drops each waiting move and awaited sign-in, since they were about the other
   computer's Claude. Each folder a dropped move names that no account holds is kept aside
   as `another_machine`.
@@ -1908,7 +1927,9 @@ window loads its site, and whatever the site's pages load, as a browser would.
   late as an answer may give it, so an answer a second later neither forgets a limit
   already left nor says a reason again. What tells one reason, or one wait, from another
   is the core's one rule, `Auto::told_apart`, and every front end says by it, building no
-  key of its own, so the app and `pitboard watch` never tell them apart differently.
+  key of its own, so the app and `pitboard watch` never tell them apart differently. What
+  each says is the core's sentence too (`words::auto_waiting`, `auto_switched`,
+  `auto_skipped`, `auto_not_watching`), given clock times as each writes them.
 - Additive writes become durable before destructive ones. A run that dies midway through a
   Claude Code or Codex switch leaves a spare copy of a login, never a missing one.
 - A Claude Desktop login is never copied, so its move has no spare. Before the first
@@ -4902,8 +4923,8 @@ Microsoft's documentation.
   before the app ends, so a later click starts it again, and says the manager needs the
   Singleton package; the self-contained deployment guide (updated 2 October 2026) says app
   notifications do not, and has an API that may be missing checked with `IsSupported`.
-  `ToastNotification.Tag` (updated 23 August 2026) holds 64 characters, and a warm-up's
-  notice id carries its message, so the tag is the id's SHA-256 in hex. The app notification
+  `ToastNotification.Tag` (updated 23 August 2026) holds 64 characters, and the notice id of
+  a warm-up failure of no account carries its message, so the tag is the id's SHA-256 in hex. The app notification
   content guidance (updated 17 July 2026) gives a notification three text elements at most,
   the first its title, and keeps attribution text for a source; the UX guidance (updated 21
   April 2026) has a click on a notification open its context. So a notification says its

@@ -67,7 +67,7 @@ fn spare(
     let in_use = current.usage.as_ref().map(windows_of).unwrap_or_default();
     let (spare, room) = usage::preferred(
         mine.iter()
-            .filter(|account| crate::present::usable(account) && account.qualified.is_some())
+            .filter(|account| account.switchable && account.qualified.is_some())
             .filter_map(|account| {
                 let theirs = account.usage.as_ref()?;
                 let room = usage::room(
@@ -119,12 +119,12 @@ impl Advice {
             .filter_map(|found| {
                 let ran = found.current.label.as_deref()?;
                 let windows = found.current.usage.iter().flat_map(|usage| &usage.windows);
-                for window in windows.filter(|window| window.percent >= 100.0) {
-                    if told_at_its_reset(told, found.provider, ran, window) {
+                for limit in windows.filter(|limit| window(limit).used_up(status.now)) {
+                    if told_at_its_reset(told, found.provider, ran, limit) {
                         continue;
                     }
                     let Some((instead, left, switch_to)) =
-                        spare(window, found.current, &found.mine, FULL, status.now)
+                        spare(limit, found.current, &found.mine, FULL, status.now)
                     else {
                         continue;
                     };
@@ -132,7 +132,7 @@ impl Advice {
                         provider: found.provider.to_owned(),
                         tool: found.tool,
                         ran: ran.to_owned(),
-                        window: window.clone(),
+                        window: limit.clone(),
                         instead,
                         left,
                         switch_to,
@@ -173,7 +173,7 @@ impl Advice {
                 && account.usage.iter().flat_map(|u| &u.windows).any(|limit| {
                     limit.kind == self.window.kind
                         && limit.scope == self.window.scope
-                        && limit.percent >= 100.0
+                        && window(limit).used_up(status.now)
                         && same_reset(
                             limit.resets_at.unwrap_or(0),
                             self.window.resets_at.unwrap_or(0),
@@ -229,19 +229,19 @@ impl HeadsUp {
             .into_iter()
             .filter_map(|found| {
                 let ran = found.current.label.as_deref()?;
-                let window = found
+                let limit = found
                     .current
                     .usage
                     .iter()
                     .flat_map(|usage| &usage.windows)
-                    .filter(|window| whole(window.percent) >= i64::from(at))
-                    .find(|window| !told_at_its_reset(told, found.provider, ran, window))?;
+                    .filter(|limit| window(limit).reached(at, status.now))
+                    .find(|limit| !told_at_its_reset(told, found.provider, ran, limit))?;
                 Some(HeadsUp {
                     provider: found.provider.to_owned(),
                     tool: found.tool,
                     ran: ran.to_owned(),
-                    window: window.clone(),
-                    instead: spare(window, found.current, &found.mine, at, status.now),
+                    window: limit.clone(),
+                    instead: spare(limit, found.current, &found.mine, at, status.now),
                 })
             })
             .collect()

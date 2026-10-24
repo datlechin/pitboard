@@ -87,6 +87,17 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   for an account's window.
 - The macOS app's **Settings** has three panes, **General**, **Limits** and **Advanced**, and
   the Windows app's **Settings** the same three sections before **About**.
+- A read that asks nobody warns with `in_use_unconfirmed` until Anthropic is first asked after an
+  update from 0.9.0 or earlier, as `pitboard doctor` does, whatever Claude Code's config names.
+- After the app switches Claude Code by itself, its notification and **Settings** say the
+  account it left has used its share, as `pitboard watch` says it, where they said had used.
+- `pitboard watch` says that no other account has room as it says every other reason it is not
+  switching, after `Pitboard is not switching:`, as the app says it.
+- The app and `pitboard use` say in one sentence, naming the account, why putting its login in
+  place of a Claude Code login Anthropic refuses for good loses nothing, and `pitboard use`
+  asks `Replace it?`.
+- `pitboard doctor` says why Pitboard leaves a Codex keychain store alone, and that Claude Code's
+  config names somebody no store holds, in the words a refused switch uses.
 
 ### Removed
 
@@ -134,6 +145,27 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - While the app or `pitboard watch` switches Claude Code by itself, the other waits for that
   switch and says where it went, instead of saying the account in use is tried again in a
   minute.
+- The app counts a limit whose reset time has passed as back, as the command line does, and no
+  longer calls it used up, notifies you of it or offers a switch away from it.
+- The app notifies you of a warm-up that came to nothing once for each account and reason until
+  that account warms up, as `pitboard watch` says it, where a run of Claude Code that failed in
+  other words, or another account warming up, had it notified again.
+- The app says why it could not give up an interrupted Claude Desktop move whose parked login it
+  could not look at, as the command line does.
+- `pitboard doctor` says how long the Claude Code login in use has left as it says a parked
+  login's, says when it has expired, and no longer warns that a login whose expiry is not known
+  expires soon.
+- The macOS app points a daily renewal schedule whose `pitboard` is gone at its own command line
+  as it starts, as the Windows app does.
+- `pitboard status` says `login refused` and the command that signs in again beside an account
+  whose parked login Anthropic or OpenAI refused, and its `--json` does not count that account as
+  one to switch to, as the app does not.
+- `pitboard doctor` fails a stored Claude Code login that is not a JSON object, as a switch
+  refuses it, where it said nobody was signed in.
+- The app names an account whose name from Pitboard 0.1 holds a slash, such as `team/a`, by its
+  whole name, as the command line does, where it said only what came after the slash.
+- The app keeps what a switch said, its countdown and its warnings, past the read after it when
+  another tool has an account of the same name, where that read put it away.
 
 ## [1.0.0-beta.5] - 2026-10-23
 

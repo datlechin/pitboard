@@ -114,10 +114,10 @@ fn named(sid: &str) -> Option<&'static str> {
 }
 
 fn listed(names: &[String]) -> String {
-    match names {
-        [] => "nobody".into(),
-        [one] => one.clone(),
-        [all @ .., last] => format!("{} and {last}", all.join(", ")),
+    if names.is_empty() {
+        "nobody".into()
+    } else {
+        crate::words::listed(names)
     }
 }
 

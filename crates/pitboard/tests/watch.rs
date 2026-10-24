@@ -247,8 +247,8 @@ fn with_no_account_to_go_to_it_says_so_and_nothing_moves() {
     assert_eq!(code, 0, "{err}");
     assert_eq!(
         out,
-        "alpha has used 97% of its 5-hour limit, and no other Claude Code account has room \
-         below 95% in every limit.\n"
+        "alpha has used 97% of its 5-hour limit. Pitboard is not switching: no other Claude \
+         Code account has room below 95% in every limit.\n"
     );
     assert_eq!(env.live()["claudeAiOauth"]["refreshToken"], "refresh-a");
 }

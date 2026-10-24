@@ -251,21 +251,14 @@ impl Command {
     }
 }
 
-/// A label is typed on the command line from then on, so it cannot be empty or hold spaces.
-/// A name somebody is choosing for a new account, optionally saying which tool it is for.
-///
-/// `pitboard enroll codex/personal --sign-in` names both. A bare `personal` means the
-/// default tool, so every command written before there was more than one still means what
-/// it meant.
-/// What `enroll` takes: a new name, or an account's existing one, which a label written by
-/// 0.1.x may hold a slash in. Which of the two it is, the core decides against the state
-/// file, which this parser cannot see; what can be refused here is only what no label ever
-/// was.
+// A new name or an existing one, which a label written by 0.1.x may hold a slash in: the core
+// tells which against the state file.
 fn label_to_enroll(text: &str) -> Result<String, String> {
-    if text.is_empty() || text.chars().any(|c| c.is_whitespace() || c.is_control()) {
-        return Err("a label must be one word, such as `personal` or `work`".into());
+    use pitboard_core::label::{self, Unusable};
+    match label::check(text) {
+        Ok(()) | Err(Unusable::Separator) => Ok(text.to_string()),
+        Err(Unusable::Empty | Unusable::NotOneWord) => Err(label::ONE_WORD.into()),
     }
-    Ok(text.to_string())
 }
 
 fn new_label(text: &str) -> Result<String, String> {
@@ -656,47 +649,33 @@ fn switched_report(switched: Changing<Outcome>) -> Report {
     })
 }
 
-/// What becomes of sessions already running after a switch: within how many seconds they
-/// follow, where they do, said as a sentence and for `--json`.
-///
-/// The tool's own answer, not a constant. A number of seconds is only ever shown for a tool
-/// that really does follow on its own within them, and one whose sessions follow at their
-/// login's next renewal, or that needs restarting, has no number at all rather than a zero
-/// that reads as "at once".
+// A number of seconds only for a tool whose sessions follow by themselves, never a zero that
+// reads as "at once".
 fn followed(
     provider: pitboard_core::provider::ProviderId,
     adoption: &Adoption,
 ) -> (Option<u32>, String, Value) {
+    let said =
+        pitboard_core::words::after_a_switch(adoption, &format!("{} sessions", provider.name()));
     match adoption {
         Adoption::PollingWithin(seconds) => (
             Some(*seconds),
-            format!(
-                "{} sessions already running follow within {seconds} seconds.\n",
-                provider.name()
-            ),
+            format!("{said}.\n"),
             json!({ "follows": "polling", "within_seconds": seconds }),
         ),
         Adoption::AtRenewal { file } => (
             None,
-            format!(
-                "{} sessions already running {}: {} is there. `pitboard stow` puts it away.\n",
-                provider.name(),
-                pitboard_core::words::kept_until_renewed(),
-                file.display()
-            ),
+            format!("{said}. `pitboard stow` puts it away.\n"),
             json!({ "follows": "renewal", "path": file }),
         ),
         Adoption::RestartRequired { program, .. } => (
             None,
-            format!(
-                "Restart any running `{program}` for this to take effect. \
-                 It will not pick the switch up on its own.\n"
-            ),
+            format!("{said}. It will not pick the switch up on its own.\n"),
             json!({ "follows": "restart", "program": program }),
         ),
         Adoption::NextOpen { app } => (
             None,
-            format!("{app} opens signed in to it.\n"),
+            format!("{said}.\n"),
             json!({ "follows": "open", "app": app }),
         ),
     }

@@ -685,6 +685,20 @@ fn a_limit_at_the_share_is_notified_once_before_it_runs_out() {
     assert_eq!(switches_to(&model), ["claude/personal"]);
 }
 
+// Back as the core judges it, before a reading says so.
+#[test]
+fn a_limit_past_its_reset_is_neither_notified_nor_advised_on() {
+    for percent in [96.0, 100.0] {
+        let mut model = Hand::new();
+        let mut read = status(vec![work(percent, 1_800_000_000), personal()]);
+        read.now = 1_800_000_000;
+        let mut machine = Machine::reading(Ok(read));
+        model.refresh(&mut machine);
+        assert!(machine.posted.is_empty(), "{percent}");
+        assert!(switches_to(&model).is_empty(), "{percent}");
+    }
+}
+
 /// With no other account to switch to, it says when the limit resets.
 #[test]
 fn a_limit_at_the_share_with_nowhere_to_go_says_when_it_resets() {

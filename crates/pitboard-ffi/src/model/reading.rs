@@ -454,6 +454,7 @@ fn a_refused_parked_login_needs_signing_in_again() {
     let refused = Account {
         stale: Some("login_refused".into()),
         stale_explanation: Some("Its parked login is no longer accepted; sign in again".into()),
+        switchable: false,
         ..claude("work", false, 0.0)
     };
     let replaced_away = Account {
@@ -493,8 +494,10 @@ fn a_refused_parked_login_needs_signing_in_again() {
 /// refusal is not posted again.
 #[test]
 fn a_refusal_stands_through_reads_that_did_not_ask() {
+    // As the core reads each: a refused login is not one to switch to.
     let parked = |stale: &str| Account {
         stale: Some(stale.into()),
+        switchable: stale != "login_refused",
         ..claude("work", false, 0.0)
     };
     let mut model = Hand::new();

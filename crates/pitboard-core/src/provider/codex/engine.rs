@@ -77,36 +77,26 @@ impl RawStore for InPlace {
     }
 }
 
-// `codex_keychain_stores_are_its_own` and `codex_windows_stores` in the register.
 fn kept_elsewhere(ctx: &Context, store: &layers::Store) -> String {
-    let setting = store.setting();
-    match crate::host::OS {
-        Os::MacOs | Os::Linux => format!(
-            "this machine's Codex keeps its login in the keychain ({setting}). Pitboard handles \
-             Codex's file store, auth.json, and does not read an item Codex created for itself, \
-             because every read would ask you for permission"
+    let kept = match (crate::host::OS, store.backend) {
+        (Os::MacOs | Os::Linux, _) => "in the keychain".into(),
+        (Os::Windows, paths::Backend::Secrets) => format!(
+            "in {}, encrypted with a key it keeps in Credential Manager",
+            paths::home(ctx)
+                .join("secrets")
+                .join("codex_auth.age")
+                .display()
         ),
-        Os::Windows => {
-            let kept = match store.backend {
-                paths::Backend::Secrets => format!(
-                    "in {}, encrypted with a key it keeps in Credential Manager",
-                    paths::home(ctx)
-                        .join("secrets")
-                        .join("codex_auth.age")
-                        .display()
-                ),
-                paths::Backend::Either => {
-                    "in Credential Manager, and in auth.json only where that fails".into()
-                }
-                _ => "in Credential Manager".into(),
-            };
-            format!(
-                "this machine's Codex keeps its login {kept} ({setting}). Pitboard handles \
-                 Codex's file store, auth.json, and does not follow Codex into a store it uses \
-                 only when told to"
-            )
+        (Os::Windows, paths::Backend::Either) => {
+            "in Credential Manager, and in auth.json only where that fails".into()
         }
-    }
+        (Os::Windows, _) => "in Credential Manager".into(),
+    };
+    format!(
+        "this machine's Codex keeps its login {kept} ({}). {}",
+        store.setting(),
+        layers::file_store_only(crate::host::OS)
+    )
 }
 
 impl Provider for Codex {
@@ -454,7 +444,7 @@ impl Provider for Codex {
         let claims = jwt::claims(document["tokens"]["id_token"].as_str()?)?;
         Some(jwt::claim(&claims, &[OPENAI, "chatgpt_plan_type"])?.trim())
             .filter(|kind| !kind.is_empty())
-            .map(crate::holder::capitalised)
+            .map(crate::words::capitalised)
     }
 
     /// One account per file, so an account's share is the whole of it.

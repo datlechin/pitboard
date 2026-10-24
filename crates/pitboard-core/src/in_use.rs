@@ -98,6 +98,13 @@ impl Known {
         self.last.as_ref()?.owner.as_ref()
     }
 
+    // Never checked, whatever the config names: `config_identity_is_the_last_writers`.
+    pub(crate) fn unconfirmed(&self) -> Option<Doubt> {
+        self.last.as_ref()?;
+        self.doubt
+            .filter(|doubt| matches!(doubt, Doubt::NeverEstablished | Doubt::NamedMoved))
+    }
+
     /// The account the tool's own record names in place of the one whose login is stored,
     /// where nothing is in doubt. `/status` in Claude Code shows that one.
     pub(crate) fn named_another(&self, which: ProviderId) -> Option<&Owner> {

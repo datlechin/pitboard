@@ -3,7 +3,6 @@
 use crate::ui::{self, BOLD, DIM, paint};
 use pitboard_core::statusline::{Paces, Share, Shares, StatusLine};
 use pitboard_core::usage::pace::Standing;
-use pitboard_core::usage::whole;
 use pitboard_core::words;
 
 /// A limit's share, and where its pace is said, a triangle for it: rising over pace,
@@ -20,10 +19,7 @@ fn share(share: Share, pace: Option<Standing>) -> Option<String> {
         Some(standing @ Standing::Under) => paint(ui::pace(standing), "▼"),
         Some(Standing::Even) | None => String::new(),
     };
-    Some(format!(
-        "{}{mark}",
-        paint(ui::level(p), format!("{}%", whole(p)))
-    ))
+    Some(format!("{}{mark}", paint(ui::level(p), words::figure(p))))
 }
 
 fn shares(shares: Shares, pace: Paces) -> String {

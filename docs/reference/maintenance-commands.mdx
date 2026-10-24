@@ -147,7 +147,7 @@ The log is `audit.log` in Pitboard's directory, and holds no email address. Past
 | `recover` | Pitboard finishes or undoes an interrupted switch before another change. | The label the switch was to | `interrupted_switch_finished` or `interrupted_switch_undone` |
 | `reclaim` | A parked login is given back to its account. | The label | `ok` |
 | `reclaim` | A parked login is discarded. | The parked login's name, which holds an account id | `discarded` |
-| `schedule` | Daily renewal is turned on or off, or the app repairs a schedule that ran the app itself. | `install`, `uninstall` or `repair` | `ok` |
+| `schedule` | Daily renewal is turned on or off, or the app repairs a schedule that ran the app itself or a `pitboard` that is gone. | `install`, `uninstall` or `repair` | `ok` |
 | `watch-service` | The watch service is installed or taken away. | `install` or `uninstall` | `ok` |
 | `warm-up` | A warm-up runs, by itself or with `warm now` or **Warm Up Now**. | The label | `ok`, or a code from [Warm-up](/reference/errors#warm-up) |
 | `warm-on`, `warm-off` | An account is turned on or off for warm-ups. | The label | `ok` |
@@ -311,7 +311,7 @@ On macOS, Claude Desktop's checks read the folders in `~/.pitboard/parks`, open 
   | `credential_size` | `login size` | For a login in the macOS keychain: warns when it is too large for `security` to read from standard input, and fails then if `PITBOARD_NO_ARGV` is set. See [Large logins on macOS](/security#large-logins-on-macos). For a login in Credential Manager: how many pieces it takes, and fails when it is too large for any. |
   | `no_argv` | `PITBOARD_NO_ARGV` | Windows only, while `PITBOARD_NO_ARGV` is set. Always warns: it changes nothing there. |
   | `credential_store` | `credential store` | Where Claude Code keeps its login. On macOS, a file instead of the keychain warns. On Windows, Credential Manager in a profile that roams warns, and a Claude Code login in Credential Manager that nothing turns on fails. |
-  | `credential` | `credential` | The login's shape and the days its refresh token has left. Warns under 3 days. Fails when the keychain is locked and cannot ask for its password, when Credential Manager cannot be reached, or when its pieces cannot be joined. |
+  | `credential` | `credential` | The login's shape and how long its refresh token has left, as a parked login's. Warns under 3 days and once it has expired. Fails when the keychain is locked and cannot ask for its password, when Credential Manager cannot be reached, or when its pieces cannot be joined. |
   | `fallback_login` | `fallback login` | macOS and Windows, when a login file sits behind the keychain or Credential Manager. Always warns. See [Claude Code over SSH uses another account](/troubleshooting#claude-code-over-ssh-uses-another-account). |
   | `home` | `Pitboard home` | Only you can read Pitboard's directory. Warns otherwise. |
   | `private_on_disk` | `logins on disk` | No file that holds a login can be read by other users: Claude Code's login file and, on Linux and Windows, the parked logins. Fails otherwise, with the `chmod` or `icacls` commands that fix it. |

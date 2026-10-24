@@ -214,6 +214,34 @@ impl Mode {
     }
 }
 
+impl Backend {
+    // Codex has no one word for the last two.
+    pub(crate) fn word(self) -> &'static str {
+        match self {
+            Backend::File => Mode::File.word(),
+            Backend::Keyring => Mode::Keyring.word(),
+            Backend::Either => Mode::Auto.word(),
+            Backend::Ephemeral => Mode::Ephemeral.word(),
+            Backend::Secrets => "secrets",
+            Backend::Unknown => "unknown",
+        }
+    }
+}
+
+// The register's `codex_keychain_stores_are_its_own` and `codex_windows_stores`.
+pub(crate) fn file_store_only(os: Os) -> &'static str {
+    match os {
+        Os::MacOs | Os::Linux => {
+            "Pitboard handles Codex's file store, auth.json, and does not read an item Codex \
+             created for itself, because every read would ask you for permission"
+        }
+        Os::Windows => {
+            "Pitboard handles Codex's file store, auth.json, and does not follow Codex into a \
+             store it uses only when told to"
+        }
+    }
+}
+
 /// Where Codex keeps its login on this machine, and which layer said so.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Store {

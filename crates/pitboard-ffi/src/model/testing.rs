@@ -12,11 +12,13 @@ use crate::account_windows::records::{self, Entry, Records};
 use crate::{
     Account, Adoption, AppCore, AutoLooked, AutoSwitched, Change, Check, Enrolled, EnrolledAs,
     FoundCommandLine, GaveUp, Holding, Level, Limit, Made, OwnCommandLine, PitboardError, Remedy,
-    Schedule, Source, Status, Switch, Switched, Tool, Usage, Warning,
+    Schedule, Source, Status, Switch, Switched, Tool, Usage, WarmRefused, Warning,
 };
 use pitboard_core::context::Context;
 use pitboard_core::provider::ProviderId;
 use pitboard_core::service;
+use pitboard_core::state::Key;
+use pitboard_core::switch::warm::Apart;
 use pitboard_core::switch::{Left, Stowed};
 use pitboard_core::testing::desktop::{self, FakeClaude, JarAs};
 use pitboard_core::testing::{MemoryHost, ScriptedApi, live_service, stand_in, unsigned_token};
@@ -197,11 +199,12 @@ pub(super) fn switched(
     warnings: Vec<Warning>,
 ) -> Result<Switched, Refusal> {
     let adoption = if provider == "codex" {
-        Adoption::Restart {
-            program: "codex".into(),
+        Adoption::RestartRequired {
+            program: "codex",
+            holders: &[],
         }
     } else {
-        Adoption::Follows { within_seconds: 33 }
+        Adoption::PollingWithin(33)
     };
     Ok(Switched {
         outcome: Switch::Switched {
@@ -467,6 +470,13 @@ pub(super) fn refusal(code: &str, message: &str, warnings: Vec<Warning>) -> Refu
     }
 }
 
+fn warm_refused((told_apart, refused): (Apart, Refusal)) -> WarmRefused {
+    WarmRefused {
+        told_apart,
+        error: refused.error(),
+    }
+}
+
 /// The percentage the first window of the account at `index` shows.
 pub(super) fn percent(snapshot: &Snapshot, index: usize) -> Option<f64> {
     let usage = snapshot
@@ -614,8 +624,7 @@ pub(super) struct Machine {
     /// could not be read where `warm_refused` says.
     pub warm: Option<pitboard_core::duty::warm::Overview>,
     pub warm_refused: Option<Refusal>,
-    /// What a warm-up gives, by itself or asked for now.
-    pub warming: Result<pitboard_core::switch::warm::WarmUp, Refusal>,
+    pub warming: Result<pitboard_core::switch::warm::WarmUp, (Apart, Refusal)>,
     /// Every warm-up asked for, in order: `None` for one by itself, or the account asked
     /// for now.
     pub warmed: Vec<Option<String>>,
@@ -775,7 +784,7 @@ impl Machine {
             },
             Job::WarmUp => {
                 self.warmed.push(None);
-                let mut done = self.warming.clone().map_err(|refused| refused.error());
+                let mut done = self.warming.clone().map_err(warm_refused);
                 // As the core's: where nothing is due it says what its files say.
                 if let Ok(pitboard_core::switch::warm::WarmUp::Stands(standing)) = &mut done
                     && let Some(warm) = &self.warm
@@ -797,7 +806,7 @@ impl Machine {
                 self.warmed.push(Some(qualified.clone()));
                 Answer::WarmedUp {
                     asked: Some(qualified),
-                    done: self.warming.clone().map_err(|refused| refused.error()),
+                    done: self.warming.clone().map_err(warm_refused),
                 }
             }
             Job::SetWarm { qualified, on } => {
@@ -837,7 +846,7 @@ impl Machine {
             // the test says runs, with no time given to quit: an app quits when asked, or
             // is still running.
             Job::Holding { qualified, then } => {
-                let provider = super::state::split(&qualified).0;
+                let provider = Key::parse(&qualified).provider.code();
                 let holdings = self.held.get(provider).map_or(&[][..], Vec::as_slice);
                 Answer::Held {
                     question: lanes::holder(holdings, self.apps.as_ref(), &qualified),
@@ -1401,6 +1410,33 @@ impl World {
         }
     }
 
+    pub(super) fn warming_by(&mut self, script: Arc<dyn pitboard_core::testing::WarmScript>) {
+        self.ctx = self.ctx.clone().with_warm_script(script);
+    }
+
+    // As Anthropic answers the next read of `who`: no five-hour period running.
+    pub(super) fn resting(&self, who: &str) {
+        let now = epoch_now();
+        self.api.using(
+            &format!("access-{who}"),
+            pitboard_core::usage::Snapshot {
+                windows: vec![pitboard_core::usage::Window {
+                    kind: "session".into(),
+                    scope: None,
+                    percent: 0.0,
+                    resets_at: None,
+                    is_active: true,
+                    severity: None,
+                    length_seconds: Some(18_000),
+                }],
+                observed_at: Some(now),
+                answered_at: Some(now),
+                lists_every_limit: true,
+                source: pitboard_core::usage::Source::Live,
+            },
+        );
+    }
+
     // Claude Code's program taken away, as on a machine where it was never installed.
     pub(super) fn without_claude_code(&self) {
         std::fs::remove_file(self.root.join("bin").join(program_name("claude")))
@@ -1506,7 +1542,7 @@ impl World {
         desktop::leave_a_move_waiting(
             &self.ctx,
             &self.host,
-            &pitboard_core::state::Key::new(ProviderId::Desktop, "work"),
+            &Key::new(ProviderId::Desktop, "work"),
         );
     }
 

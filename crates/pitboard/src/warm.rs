@@ -5,7 +5,7 @@ use crate::ui::{BOLD, DIM, columns, pad, paint};
 use crate::watch::epoch;
 use crate::{Report, changed};
 use clap::Subcommand;
-use pitboard_core::duty::warm::{self, Halt, Overview, Range, Standing};
+use pitboard_core::duty::warm::{self, Overview, Range, Standing};
 use pitboard_core::service::Pitboard;
 use pitboard_core::switch::warm::WarmUp;
 use pitboard_core::words;
@@ -73,14 +73,6 @@ pub(crate) fn warmed_line(account: &str, until: Option<i64>) -> String {
             "Warmed up {account}. Anthropic has not said yet when its 5-hour period resets."
         ),
     }
-}
-
-/// Why nothing is warmed up on this machine.
-pub(crate) fn halted_line(halt: &Halt) -> String {
-    format!(
-        "Pitboard is not warming up accounts: {}.",
-        words::not_warming(halt)
-    )
 }
 
 fn overview(pitboard: &Pitboard) -> Report {
@@ -153,7 +145,7 @@ fn said(overview: &Overview) -> String {
         }
     }
     if let Some(halt) = &overview.halted {
-        text.push_str(&format!("{}\n", halted_line(halt)));
+        text.push_str(&format!("{}\n", words::warming_halted(halt)));
     } else if !overview.accounts.iter().any(|choice| choice.on) {
         text.push_str("Turn it on for an account with `pitboard warm on <account>`.\n");
     }
@@ -217,7 +209,7 @@ fn range_set(pitboard: &Pitboard, range: Range) -> Report {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use pitboard_core::duty::warm::Choice;
+    use pitboard_core::duty::warm::{Choice, Halt};
 
     fn overview(halted: Option<Halt>, on: bool) -> Overview {
         Overview {

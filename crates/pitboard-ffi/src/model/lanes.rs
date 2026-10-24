@@ -28,7 +28,7 @@
 use super::advice::Told;
 use super::machine::Scheduled;
 use super::preferences::Preferences;
-use super::state::{Answer, Cadence, Job, Msg, QuitOutcome, split};
+use super::state::{Answer, Cadence, Job, Msg, QuitOutcome};
 use super::{
     AppControl, EarlierPreferences, LocalTime, ModelListener, Notifications, QuitQuestion,
     Snapshot, WindowsLaunch,
@@ -36,6 +36,7 @@ use super::{
 use crate::account_windows::records::{self, Records};
 use crate::{AppCore, Holding, Remedy, SignInSession};
 use pitboard_core::app::AppFile;
+use pitboard_core::state::Key;
 use std::collections::HashMap;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::{Path, PathBuf};
@@ -561,7 +562,7 @@ impl Worker {
                 provider,
             },
             Job::Holding { qualified, then } => {
-                let holdings = core.holding(split(&qualified).0);
+                let holdings = core.holding(Key::parse(&qualified).provider.code());
                 Answer::Held {
                     question: holder(&holdings, self.apps.as_ref(), &qualified),
                     qualified,
@@ -574,7 +575,12 @@ impl Worker {
                     &question.app_id,
                     self.quit_within,
                     self.quit_checked_every,
-                    || core.holds_app(split(&question.qualified).0, &question.app_id),
+                    || {
+                        core.holds_app(
+                            Key::parse(&question.qualified).provider.code(),
+                            &question.app_id,
+                        )
+                    },
                     pitboard_core::host::awake,
                 ),
                 question,

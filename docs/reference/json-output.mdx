@@ -190,7 +190,7 @@ Each object in `accounts`:
 | `account_uuid` | string | The account id, empty when Pitboard could not identify the login. Claude Code: the Anthropic account UUID, which one person's accounts in two organisations share. Claude Desktop: the account UUID Claude's settings named. |
 | `organization_uuid` | string or null | The Claude organisation of a Claude Code login. `null` on any other tool's account, and for a login Pitboard could not identify. |
 | `signed_in` | boolean | `true` for the account its tool is using. |
-| `switchable` | boolean | `true` when `pitboard use` can switch to it: it is not in use, and the `refresh_expires_at` of its parked login has not passed. |
+| `switchable` | boolean | `true` when `pitboard use` can switch to it: it is not in use, the `refresh_expires_at` of its parked login has not passed, and its service did not refuse that login (`login_refused`). |
 | `parked` | object or null | The parked login's `parked_at` and its expiries, as the next table lists, or `null` when nothing is parked. |
 | `lasts` | object or null | `seconds` and `why`. For the account in use, until its first limit runs out at its [pace](/concepts/usage#pace) (`why` is `filling`), or else until its first reset (`resets`). For any other account, until its first reset. `null` when no limit has a reset ahead. |
 | `usage` | object or null | The reading: `source`, `observed_at` (when it was taken) and `windows`. `null` when no usage is known. |

@@ -94,6 +94,11 @@ pub(crate) fn login_in(held: &str) -> Option<Value> {
     Some(document_in(held)).filter(holds_a_login)
 }
 
+// The login in the file [`behind`] reads, where it holds one, as the provider and doctor read it.
+pub(crate) fn login_behind(ctx: &Context) -> Option<Result<Option<Value>, Error>> {
+    Some(behind(ctx)?.map(|held| login_in(&held)))
+}
+
 // What a private sign-in left: the keychain item its own hashing names, or the file inside the
 // folder where there is no keychain. On Windows the item its hashing names in Credential Manager,
 // where something turned that store on for it, then the file.

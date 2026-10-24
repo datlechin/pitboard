@@ -60,10 +60,11 @@ pub(crate) fn manifest_file(ctx: &Context, name: &str) -> PathBuf {
 // A park, or anything in it, not looked at: still there, as a vault not read is to the
 // keychain's twin.
 pub(crate) fn unread(label: &str, path: &Path, why: impl std::fmt::Display) -> crate::error::Error {
-    crate::error::Error::Store(super::Error::Unreadable(format!(
-        "`{label}`'s parked login at {} could not be looked at ({why})",
-        path.display()
-    )))
+    crate::error::Error::Store(super::Error::ParkUnread {
+        label: label.to_owned(),
+        path: path.to_path_buf(),
+        why: why.to_string(),
+    })
 }
 
 // `parks`, made private where missing, on the volume `root` is on. Never changes a mode.

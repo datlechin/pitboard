@@ -8,12 +8,13 @@ use super::{
     spoken_severity,
 };
 use crate::model::advice::HeadsUp;
-use crate::model::state::{in_its_app, split};
+use crate::model::state::in_its_app;
 use crate::model::{Intent, LastSwitch, Pane, Sheet};
 use crate::model::{NotificationButton, NotificationButtonKind, RunOutNotice};
 use crate::{Account, Adoption, Held, Warning};
 use pitboard_core::host::{OS, Os};
 use pitboard_core::provider::ProviderId;
+use pitboard_core::state::Key;
 use pitboard_core::words as said;
 
 /// Where a person goes to install Claude Code, the tool a machine without one is told
@@ -92,7 +93,7 @@ fn awaiting(seen: &Seen) -> Vec<PanelNotice> {
         .map(|awaiting| {
             let provider = &awaiting.provider;
             let app = seen.program_of(provider);
-            let put_back = split(&awaiting.put_back).1;
+            let put_back = Key::parse(&awaiting.put_back).label;
             let (title, finish, sheet) = if awaiting.again {
                 (
                     format!("Signing in to {} again isn’t finished", awaiting.label),
@@ -118,7 +119,7 @@ fn awaiting(seen: &Seen) -> Vec<PanelNotice> {
                 format!("awaiting/{provider}"),
                 Severity::Warning,
                 title,
-                words::awaiting_lines(app, &awaiting.label, put_back, awaiting.again),
+                words::awaiting_lines(app, &awaiting.label, &put_back, awaiting.again),
                 vec![
                     NoticeAction {
                         title: finish,
@@ -134,7 +135,7 @@ fn awaiting(seen: &Seen) -> Vec<PanelNotice> {
                             &format!("Put {put_back} Back"),
                             &format!("Put {put_back} back"),
                         ),
-                        ..switch_action(seen, &awaiting.put_back, put_back)
+                        ..switch_action(seen, &awaiting.put_back, &put_back)
                     },
                 ],
             )
@@ -460,7 +461,7 @@ fn update_config_action(seen: &Seen) -> Vec<NoticeAction> {
 /// itself pick it up within a moment, and the notice counts down to it; once that moment has
 /// passed a countdown would count to something already over, so there is none.
 fn of_last_switch(seen: &Seen, last: &LastSwitch) -> PanelNotice {
-    let label = split(&last.to).1;
+    let label = Key::parse(&last.to).label;
     let tool = seen.tool_if_shown(&last.provider);
     let warned = warned_after(seen, last);
     let restart = restart_line(last);
@@ -478,9 +479,9 @@ fn of_last_switch(seen: &Seen, last: &LastSwitch) -> PanelNotice {
         .collect();
     lines.extend(warned.iter().map(|warning| warning.message.clone()));
     let title = if last.said.is_some() {
-        words::has_a_new_login(tool.as_deref(), label)
+        words::has_a_new_login(tool.as_deref(), &label)
     } else {
-        words::switched_to(tool.as_deref(), label)
+        words::switched_to(tool.as_deref(), &label)
     };
     let until = last.follows_at.filter(|at| *at > seen.now);
     PanelNotice {
@@ -587,21 +588,20 @@ fn sign_in_again_button(os: Os) -> String {
 // and the reset, so one limit is one notification however far it goes.
 pub(crate) fn at_limit_notice(heads_up: &HeadsUp, now: i64) -> RunOutNotice {
     let limit = &heads_up.window;
-    let title = if limit.percent >= 100.0 {
+    let title = if crate::model::advice::window(limit).used_up(now) {
         words::ran_out(
             &heads_up.ran,
             &said::limit_name(&limit.kind, limit.length_seconds),
         )
     } else {
-        format!(
-            "{} has used {}",
-            heads_up.ran,
-            said::share_of_limit(&crate::model::advice::window(limit))
+        said::has_used(
+            &heads_up.ran,
+            &said::share_of_limit(&crate::model::advice::window(limit)),
         )
     };
     let body = match (&heads_up.instead, limit.resets_at) {
         (Some((instead, left, _)), _) => words::room_left(instead, *left),
-        (None, Some(at)) => format!("{}.", capitalised(&said::resets(at, now))),
+        (None, Some(at)) => format!("{}.", said::capitalised(&said::resets(at, now))),
         (None, None) => String::new(),
     };
     RunOutNotice {
@@ -619,7 +619,7 @@ pub(crate) fn at_limit_notice(heads_up: &HeadsUp, now: i64) -> RunOutNotice {
 }
 
 /// What Pitboard switched by itself, posted since nobody was there to ask for it: "Switched
-/// Claude Code to home", and "work had used 96% of its 5-hour limit. Sessions already running
+/// Claude Code to home", and "work has used 96% of its 5-hour limit. Sessions already running
 /// follow within 33 seconds.", or, while a file sits behind the keychain, when they do
 /// instead. It has nothing to switch to: the account left has reached the share it was
 /// switched away at.
@@ -630,11 +630,11 @@ pub(crate) fn auto_switched_notice(
     adoption: &Adoption,
     at: i64,
 ) -> RunOutNotice {
-    let follows = adoption.follows();
+    let follows = words::follows(adoption);
     posted(
         format!("auto/{from}/{to}/{at}"),
         format!("Switched Claude Code to {to}"),
-        format!("{from} had used {used}. {follows}"),
+        format!("{}. {follows}", said::has_used(from, used)),
         &Clicked::Accounts,
     )
 }
@@ -645,7 +645,11 @@ pub(crate) fn auto_skipped_notice(key: &str, from: &str, used: &str, why: &str) 
     posted(
         format!("auto-{key}"),
         "Claude Code was not switched".into(),
-        format!("{from} has used {used}. {}.", capitalised(why)),
+        format!(
+            "{}. {}.",
+            said::has_used(from, used),
+            said::capitalised(why)
+        ),
         &Clicked::Limits,
     )
 }
@@ -656,7 +660,7 @@ pub(crate) fn auto_not_watching_notice(key: &str, why: &str) -> RunOutNotice {
     posted(
         format!("auto-{key}"),
         "Pitboard is not switching Claude Code".into(),
-        format!("{}.", capitalised(why)),
+        format!("{}.", said::capitalised(why)),
         &Clicked::Limits,
     )
 }
@@ -712,22 +716,14 @@ pub(crate) fn auto_refused_notice(code: &str, message: &str) -> RunOutNotice {
     )
 }
 
-/// A warm-up Pitboard tried by itself that started no period, in the core's words, which name
-/// the account, so one account's does not replace another's.
-pub(crate) fn warm_failed_notice(code: &str, message: &str) -> RunOutNotice {
+// By what tells it apart, so one account's does not replace another's.
+pub(crate) fn warm_failed_notice(told_apart: &str, message: &str) -> RunOutNotice {
     posted(
-        format!("warm-failed/{code}/{message}"),
+        format!("warm-failed/{told_apart}"),
         "Pitboard could not warm up an account".into(),
         message.into(),
         &Clicked::Limits,
     )
-}
-
-fn capitalised(text: &str) -> String {
-    let mut chars = text.chars();
-    chars.next().map_or_else(String::new, |first| {
-        first.to_uppercase().chain(chars).collect()
-    })
 }
 
 /// What the menu says of the notices: advice and an add left halfway as items that act on

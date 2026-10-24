@@ -6,13 +6,14 @@ use crate::context::Context;
 use crate::doctor::{self, Diagnosis};
 use crate::duty::autoswitch::{Auto, Look, Threshold};
 use crate::error::{Error, Result};
-use crate::holder::{self, capitalised};
+use crate::holder;
 use crate::host::{Elevation, Floor, Os};
 use crate::in_use::{self, Doubt, InUse, Known};
 use crate::provider::{Held, LoginKind, Provider, ProviderId};
-use crate::state::{self, Account, Key, new_id};
+use crate::state::{self, Account, Key};
 use crate::switch::{self, Enrolled, Outcome, Recovered, Renewal, Settled, SignIn};
 use crate::usage::readings;
+use crate::words::capitalised;
 use crate::{audit, schedule, status, statusline};
 use std::fmt;
 
@@ -169,8 +170,7 @@ pub enum Warning {
     /// `last`'s, as a sign-in leaves it and as another process starting on another login
     /// can: another login may be stored. Said by a read that could not ask whose it is.
     /// `asked` is false for a record brought forward from an earlier Pitboard, whose `last`
-    /// is the account it last switched to, which the service never named, and whose own
-    /// record names another account.
+    /// is the account it last switched to, which the service never named.
     InUseUnconfirmed {
         tool: ProviderId,
         last: Stored,
@@ -756,34 +756,15 @@ fn replaced(state: &state::State) -> Vec<Warning> {
         .collect()
 }
 
-/// What `known` says of a tool whose own record is apart from its login: that the record
-/// moved since its service last named the login stored, or names another account than one
-/// the service never named, or that it names another account than that login's.
 fn in_doubt(state: &state::State, tool: ProviderId, known: &Known) -> Option<Warning> {
     let named = Stored::of(state, tool, known.own_record.as_ref());
-    let unconfirmed = |asked| {
-        let last = known.last.as_ref().map_or(Stored::Unknown, |record| {
-            Stored::of(state, tool, record.owner.as_ref())
-        });
-        Some(Warning::InUseUnconfirmed {
+    if let Some(doubt) = known.unconfirmed() {
+        return Some(Warning::InUseUnconfirmed {
             tool,
-            last,
-            named: named.clone(),
-            asked,
-        })
-    };
-    match known.doubt {
-        Some(Doubt::NamedMoved) => return unconfirmed(true),
-        Some(Doubt::NeverEstablished) => {
-            let owner = known.owner()?;
-            let config = known.own_record.as_ref()?;
-            return if new_id(tool, config) == new_id(tool, owner) {
-                None
-            } else {
-                unconfirmed(false)
-            };
-        }
-        Some(Doubt::LoginUnreadable) | None => {}
+            last: Stored::of(state, tool, known.owner()),
+            named,
+            asked: doubt == Doubt::NamedMoved,
+        });
     }
     known
         .named_another(tool)
@@ -799,7 +780,7 @@ fn desktop_named(f: &mut fmt::Formatter<'_>, named: &Stored, last: &Stored) -> f
         f,
         "{}. Open Claude, check which account it shows, quit it with Command-Q, then run \
          `pitboard enroll desktop/<label>` under that account's name.",
-        crate::words::desktop_named(named, last)
+        crate::words::desktop_named(named, last, |stored| stored.said("nobody"))
     )
 }
 
@@ -3478,10 +3459,9 @@ mod tests {
         assert_eq!(m.api.calls(), 0);
     }
 
-    /// The same record where the config names that account, as on nearly every machine
-    /// updated from 0.9.0 until its first read that asks: nothing is said, and nobody is asked.
+    // As on nearly every machine updated from 0.9.0 until its first read that asks.
     #[test]
-    fn an_offline_read_of_a_record_never_asked_about_says_nothing_where_the_config_agrees() {
+    fn an_offline_read_of_a_record_never_asked_about_is_not_confirmed_where_the_config_agrees() {
         let m = machine("offline-never-asked-agrees");
         let mut state = state::load(&m.ctx).expect("state");
         let here = state.get(&m.key("here")).expect("here").owner();
@@ -3502,7 +3482,16 @@ mod tests {
             .expect("a read");
 
         assert_eq!(in_use(&read), ["here"]);
-        assert_eq!(said(&read), []);
+        assert_eq!(
+            said(&read),
+            [(
+                "in_use_unconfirmed",
+                "Claude Code's config names `here`, and Pitboard has not asked Anthropic whose \
+                 login Claude Code has stored since Pitboard was updated, so another login may \
+                 be stored. The account it last switched to is `here`. `pitboard status` asks."
+                    .to_string()
+            )]
+        );
         assert_eq!(m.api.calls(), 0);
     }
 

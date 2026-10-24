@@ -10,10 +10,11 @@ use super::{
 };
 use crate::Tool;
 use crate::account_windows::AlertText;
-use crate::model::state::{After, InAppAdd, Leftover, Recording, in_its_app, split, trimmed};
+use crate::model::state::{After, InAppAdd, Leftover, Recording, in_its_app, trimmed};
 use crate::model::{Failure, Intent, QuitQuestion, ReplaceQuestion, Sheet};
 use pitboard_core::label;
 use pitboard_core::provider::ProviderId;
+use pitboard_core::state::Key;
 use pitboard_core::switch::{Foreseen, WaitStep};
 use pitboard_core::words as said;
 
@@ -156,7 +157,7 @@ fn in_app_form(seen: &Seen, sheet: &Sheet, provider: &str) -> (String, String) {
                 format!(
                     "{app} is signed out so you can sign in to the account you’re adding, and \
                      {} is parked. Sign in to it in {app} and quit {app}, then add it here.",
-                    split(&awaiting.put_back).1
+                    Key::parse(&awaiting.put_back).label
                 ),
                 words::titled(
                     seen.os,
@@ -528,8 +529,8 @@ fn in_app_signing_in_text(seen: &Seen, signing: &crate::model::state::SigningIn)
         undo: put_back.map(|qualified| Choice {
             title: words::titled(
                 seen.os,
-                &format!("Put {} Back", split(qualified).1),
-                &format!("Put {} back", split(qualified).1),
+                &format!("Put {} Back", Key::parse(qualified).label),
+                &format!("Put {} back", Key::parse(qualified).label),
             ),
             intent: Intent::SwitchTo {
                 qualified: qualified.to_owned(),
@@ -543,7 +544,7 @@ fn in_app_signing_in_text(seen: &Seen, signing: &crate::model::state::SigningIn)
 /// What a switch to `qualified` asks before it puts that account's login in place of a login
 /// its tool has in use, which its service refuses for good, for `why`.
 pub(crate) fn replace_question(seen: &Seen, qualified: &str, why: &str) -> ReplaceQuestion {
-    let tool = seen.tool_name(split(qualified).0);
+    let tool = seen.tool_name(Key::parse(qualified).provider.code());
     ReplaceQuestion {
         qualified: qualified.to_owned(),
         question: Question {
@@ -560,7 +561,8 @@ pub(crate) fn replace_question(seen: &Seen, qualified: &str, why: &str) -> Repla
 
 pub(crate) fn quit_confirmation(seen: &Seen, question: &QuitQuestion, then: &After) -> Question {
     let name = &question.name;
-    let (tool, label) = split(&question.qualified);
+    let Key { provider, label } = Key::parse(&question.qualified);
+    let tool = provider.code();
     if !in_its_app(tool) {
         return Question {
             title: format!("Quit {name} to switch?"),

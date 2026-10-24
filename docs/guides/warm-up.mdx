@@ -91,4 +91,4 @@ Pitboard warms up no account at all while one of these holds:
 | A switch was interrupted. | Your next change finishes it, or [`pitboard abandon`](/reference/recovery-commands#abandon) gives up on it. |
 | Claude Code uses [`CLAUDE_CODE_CUSTOM_OAUTH_URL`](/reference/environment-variables). | You unset it. |
 
-The app posts **Pitboard could not warm up an account** once for each reason a warm-up came to nothing. [`pitboard log`](/reference/maintenance-commands#log) records every warm-up as `warm-up`.
+The app posts **Pitboard could not warm up an account** once for each account and reason a warm-up came to nothing. [`pitboard log`](/reference/maintenance-commands#log) records every warm-up as `warm-up`.

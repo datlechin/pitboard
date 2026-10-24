@@ -36,7 +36,7 @@ The two options cannot be given together.
 | A renewal error, such as `renewal_failed` | Claude Code, Codex | Renewing a parked login failed for another reason. | No |
 | `recovery_undetermined` | Claude Code, Codex | An interrupted switch is waiting that the next change cannot finish. | Where Pitboard can tell without asking Anthropic |
 | `login_replaced` | Claude Code, Codex | A sign-in outside Pitboard replaced an account's only login. | Yes |
-| `in_use_unconfirmed` | Claude Code | Claude Code's config has named another account since Anthropic last identified the login stored. | Yes |
+| `in_use_unconfirmed` | Claude Code | Claude Code's config has named another account since Anthropic last identified the login stored, or Anthropic was not asked since an update from 0.9.0 or earlier. | Yes |
 | `config_names_another` | Claude Code | Claude Code's config names another account than the one whose login is stored. | Yes |
 | `fallback_login` | Claude Code | On macOS, `~/.claude/.credentials.json` sits behind the keychain. On Windows, `.credentials.json` sits behind Credential Manager. | No |
 | `login_replaced` | Claude Desktop | The account in use was signed out in Claude, or a sign-in outside Pitboard replaced its login. Pitboard holds no login for it. | Yes |
@@ -419,7 +419,7 @@ On standard output, each line but the first starts with the local time, such as 
 | `Watching Claude Code. Pitboard switches to another of your accounts once a limit of the one in use reaches 95%. Stop with Ctrl-C.` | It starts. With an account turned on for warm-ups, the first sentence ends `, and warms up personal from 06:00 to 22:00.` |
 | `Watching work: 62% of its 5-hour limit, as of 14:00.` | No limit of the account in use has reached the share. The line names its fullest limit that has not reset. While Anthropic holds Pitboard off asking about the account, it ends `Anthropic holds Pitboard off asking again until 15:28.` |
 | `Switched Claude Code from work to personal: work has used 96% of its 5-hour limit. Claude Code sessions already running follow within 33 seconds.` | It switched. The last sentence is the second line `use` prints. |
-| `work has used 97% of its 5-hour limit, and no other Claude Code account has room below 95% in every limit.` | No other account qualifies: `no_room`. |
+| `work has used 97% of its 5-hour limit. Pitboard is not switching: no other Claude Code account has room below 95% in every limit.` | No other account qualifies: `no_room`. |
 | `work has used 96% of its 5-hour limit. Pitboard tries again at 14:03.` | A try came to nothing, and Pitboard waits before the next. |
 | `work has used 96% of its 5-hour limit. Pitboard is not switching: <reason>.` | It stays on the account, for a reason in [When it stays on the account](/reference/automatic-switching#when-it-stays-on-the-account) other than `no_room`. |
 | `Pitboard is not switching Claude Code: <reason>.` | It cannot decide whether to switch, for a reason in [When it decides nothing](/reference/automatic-switching#when-it-decides-nothing). |

@@ -705,35 +705,32 @@ fn limits_are_said_in_one_line_with_only_its_first_letter_capitalised() {
 
 /// A limit that has run out is worth knowing with when it comes back. Later today that is a
 /// clock time, and on another day its weekday too, so a menu left open past midnight is
-/// still right. Once that moment has passed the next reading is what says it came back, and
-/// until then the line says only that it is used up.
+/// still right. Used up is the core's: at the service's 100 as read, until its reset, after
+/// which the line gives the last figure, as `pitboard status` does, until a reading moves it.
 ///
 /// PresentationTests.swift's aUsedUpLimitSaysWhenItComesBack, the clock read in UTC.
 #[test]
 fn a_used_up_limit_says_when_it_comes_back() {
     let today = NOON + 2 * 3600;
     let later = NOON + 2 * 86_400;
-    let spent = |resets: Option<i64>| {
+    let spent = |percent: f64, resets: Option<i64>| {
         described(
             account(Some("work"))
                 .signed_in()
-                .limits(vec![window("session", 100.0).resets(resets)])
+                .limits(vec![window("session", percent).resets(resets)])
                 .build(),
         )
         .summary
     };
-    assert_eq!(spent(Some(today)), "5-hour used up until 14:00");
-    assert_eq!(spent(Some(later)), "5-hour used up until Fri 12:00");
-    assert_eq!(spent(Some(NOON - 60)), "5-hour used up");
+    assert_eq!(spent(100.0, Some(today)), "5-hour used up until 14:00");
+    assert_eq!(spent(100.0, Some(later)), "5-hour used up until Fri 12:00");
+    assert_eq!(spent(100.0, None), "5-hour used up");
+    assert_eq!(spent(100.0, Some(NOON - 60)), "5-hour 100%", "it has reset");
+    assert_eq!(spent(100.0, Some(NOON)), "5-hour 100%", "it resets now");
     assert_eq!(
-        spent(Some(NOON)),
-        "5-hour used up",
-        "coming back now is not coming back later"
-    );
-    assert_eq!(
-        spent(None),
+        spent(99.6, Some(today)),
         "5-hour 100%",
-        "with no reset known there is only the figure"
+        "drawn at 100%, and still answered"
     );
     assert_eq!(
         described(
@@ -1601,7 +1598,7 @@ fn a_switch_that_sessions_take_at_renewal_counts_down_nothing() {
             provider: "claude".into(),
             from: "personal".into(),
             to: "work".into(),
-            adoption: crate::Adoption::Renewal { path: path.into() },
+            adoption: crate::Adoption::AtRenewal { file: path.into() },
         },
         warnings: vec![left.clone()],
     });
@@ -1628,12 +1625,12 @@ fn a_switch_that_sessions_take_at_renewal_counts_down_nothing() {
             "personal",
             "work",
             "96% of its 5-hour limit",
-            &crate::Adoption::Renewal { path: path.into() },
+            &crate::Adoption::AtRenewal { file: path.into() },
             NOON,
         )
         .body,
         format!(
-            "personal had used 96% of its 5-hour limit. Sessions already running keep the \
+            "personal has used 96% of its 5-hour limit. Sessions already running keep the \
              account they are on until their login is next renewed, or until they are started \
              again: {path} is there."
         )
@@ -3619,15 +3616,6 @@ fn the_service_asked_is_named_for_the_tools_shown() {
         "An interrupted switch can’t be finished until Anthropic or OpenAI answers."
     );
     assert!(shown.shows_tools);
-}
-
-/// A label as the core types it, taken apart: bare means Claude Code.
-///
-/// WordingTests.swift's aTypedLabelIsTakenApart.
-#[test]
-fn a_typed_label_is_taken_apart() {
-    assert_eq!(super::state::split("codex/work"), ("codex", "work"));
-    assert_eq!(super::state::split("work"), ("claude", "work"));
 }
 
 // What a sign-in or a recording inside Claude says in its sheet, driven through the model.

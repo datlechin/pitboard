@@ -44,17 +44,25 @@ use super::windows::Windows;
 use super::{AtLimit, Failure, Intent, LastSwitch, Pane, QuitQuestion, ReadFailure, RestartNeeded};
 use super::{RunOutNotice, RunningSignIn, Sheet, Tip, WindowRequest};
 use crate::account_windows::records::{Entry, Loaded};
+use crate::present::words::{
+    COULD_NOT_CHANGE_WARM, COULD_NOT_GIVE_UP, COULD_NOT_NAME, COULD_NOT_STOW, COULD_NOT_TELL_WHOSE,
+    COULD_NOT_UPDATE_CONFIG, NOT_KNOWN_HOW_IT_WENT, could_not_enrol, could_not_forget,
+    could_not_rename, could_not_sign_in, could_not_switch, could_not_warm, signed_in_now,
+};
 use crate::present::{Clicked, UNUSABLE};
 use crate::{
     Abandoned, Account, Adoption, AutoLooked, AutoSwitched, Change, Check, Enrolled, EnrolledAs,
     FoundCommandLine, GaveUp, OwnCommandLine, PitboardError, Schedule, Status, Switch, Switched,
-    Tool, Usage, Warning,
+    Tool, Usage, WarmRefused, Warning,
 };
 use pitboard_core::duty::autoswitch::Threshold;
-use pitboard_core::duty::cadence::{DECIDE_EVERY_SECONDS, Refusals};
+use pitboard_core::duty::cadence::{
+    DECIDE_EVERY_SECONDS, LOOK_EVERY_SECONDS, READ_EVERY_SECONDS, Refusals,
+};
 use pitboard_core::duty::warm::Overview;
 use pitboard_core::label::SEPARATOR;
 use pitboard_core::provider::{self, ProviderId, SignsIn};
+use pitboard_core::state::Key;
 use pitboard_core::switch::warm::WarmUp;
 use pitboard_core::switch::{Foreseen, Left, Stowed, WaitStep};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
@@ -63,13 +71,7 @@ use std::time::Duration;
 /// How often the model does what it does by itself, and how long it waits for an app.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct Cadence {
-    /// How often it looks whether anything on this machine has changed: one look at when
-    /// Pitboard's account index and its usage readings were last written, which costs no
-    /// network and no keychain. Before it, a switch typed in a terminal left the menu bar
-    /// naming the account the person had just stopped using for as long as five minutes.
     pub(crate) look_every: Duration,
-    /// How often it reads every account by itself. Usage is asked of each tool's service
-    /// for every account, so it is asked sparingly.
     pub(crate) read_every: Duration,
     /// How often, with switching Claude Code by itself on, it asks the core's look though
     /// nothing was written: an account put in use stops settling, and the wait after a
@@ -98,8 +100,8 @@ pub(crate) struct Cadence {
 impl Cadence {
     /// The app's, as the Swift model kept it.
     pub(crate) const APP: Cadence = Cadence {
-        look_every: Duration::from_secs(2),
-        read_every: Duration::from_secs(300),
+        look_every: Duration::from_secs(LOOK_EVERY_SECONDS.unsigned_abs()),
+        read_every: Duration::from_secs(READ_EVERY_SECONDS.unsigned_abs()),
         decide_every: Duration::from_secs(DECIDE_EVERY_SECONDS.unsigned_abs()),
         stale_after: Duration::from_secs(60),
         quit_within: Duration::from_secs(30),
@@ -411,7 +413,7 @@ pub(crate) enum Answer {
     /// for now.
     WarmedUp {
         asked: Option<String>,
-        done: Result<WarmUp, PitboardError>,
+        done: Result<WarmUp, WarmRefused>,
     },
     /// A change to which accounts are warmed up, or when, with each one's warm-up after it.
     WarmSet {
@@ -592,8 +594,7 @@ pub(crate) struct Warming {
     pub(crate) running: Option<Option<String>>,
     /// Warm-ups by itself refused in a row, and the wait after them.
     refusals: Refusals,
-    /// Each failure notified, by its code and words, until a warm-up starts a period.
-    told: BTreeSet<String>,
+    told: pitboard_core::switch::warm::Told,
     /// What the last warm-up by itself that came to nothing said, until the core next says
     /// where each account stands.
     pub(crate) failed: Option<String>,
@@ -669,75 +670,10 @@ impl Refused {
     fn lost(title: String) -> Refused {
         Refused {
             title,
-            message: "Pitboard stopped before it could say how this went. Refresh to see \
-                      where things stand."
-                .into(),
+            message: NOT_KNOWN_HOW_IT_WENT.into(),
             code: None,
             warnings: Vec::new(),
         }
-    }
-}
-
-/// "Couldn’t switch to personal", for the account `qualified` names.
-fn could_not_switch(qualified: &str) -> String {
-    format!("Couldn’t switch to {}", split(qualified).1)
-}
-
-const COULD_NOT_GIVE_UP: &str = "Couldn’t give up on the interrupted switch";
-
-/// "Couldn’t sign in to work", for a sign-in of the account to be called `name`.
-fn could_not_sign_in(name: &str) -> String {
-    format!("Couldn’t sign in to {name}")
-}
-
-/// "Couldn’t forget work", for the account `qualified` names.
-fn could_not_forget(qualified: &str) -> String {
-    format!("Couldn’t forget {}", split(qualified).1)
-}
-
-/// "Couldn’t rename work", for the account `label`.
-fn could_not_rename(label: &str) -> String {
-    format!("Couldn’t rename {label}")
-}
-
-const COULD_NOT_UPDATE_CONFIG: &str = "Couldn’t update Claude Code’s config";
-
-const COULD_NOT_TELL_WHOSE: &str = "Couldn’t tell whose login it is";
-
-const COULD_NOT_STOW: &str = "Couldn’t put the login away";
-
-const COULD_NOT_CHANGE_WARM: &str = "Couldn’t change which accounts are warmed up";
-
-/// "Couldn’t warm up work", for the account `qualified` names.
-fn could_not_warm(qualified: &str) -> String {
-    format!("Couldn’t warm up {}", split(qualified).1)
-}
-
-const COULD_NOT_NAME: &str = "Couldn’t name this account";
-
-/// What a sign-in that put the new login of the account `name` in use says it did: signed in
-/// to `again` where the account was enrolled already, and enrolled by it where it was not.
-fn signed_in_now(name: &str, again: bool, app: Option<&str>) -> String {
-    match (again, app) {
-        (true, None) => format!("Signed in to {name} again. Its new login is the one in use now."),
-        (false, None) => {
-            format!("Enrolled {name}, the account signed in now. Its new login is the one in use.")
-        }
-        (true, Some(app)) => format!("Signed in to {name} again. {app} is signed in to it now."),
-        (false, Some(app)) => format!("Added {name}, the account {app} is signed in to now."),
-    }
-}
-
-fn could_not_add(name: &str) -> String {
-    format!("Couldn’t add {name}")
-}
-
-// What recording the account an app shows from `from` failed under.
-fn could_not_enrol(from: Option<&Sheet>, name: &str) -> String {
-    match from {
-        Some(Sheet::Add { .. }) => could_not_add(name),
-        Some(Sheet::SignInAgain { .. }) => could_not_sign_in(name),
-        _ => COULD_NOT_NAME.into(),
     }
 }
 
@@ -751,45 +687,13 @@ pub(crate) fn trimmed(typed: &str) -> &str {
     pitboard_sites::trimmed(typed)
 }
 
-/// The account `name` of `provider`'s tool as the core types it: bare for Claude Code, and
-/// with its tool for any other.
+// The account `name` of `provider`'s tool as the core types it.
 fn typed_as_core(provider: &str, name: &str) -> String {
-    if provider == ProviderId::Claude.code() {
-        name.to_owned()
-    } else {
-        format!("{provider}{SEPARATOR}{name}")
-    }
+    Key::parse(&format!("{provider}{SEPARATOR}{name}")).typed()
 }
 
-/// A label as the core types it, taken apart: `codex/work` is Codex's `work`, and a bare
-/// `work` is Claude Code's, which is what a bare label has always meant.
-/// What `switching` holds while Claude Code is switched by itself, which names no account:
-/// the core chooses which.
+// What `switching` holds while Claude Code is switched by itself: the core chooses the account.
 const AUTOMATICALLY: &str = "claude";
-
-/// An account's name with its tool, as `Account::qualified` gives it, from the name a switch
-/// said it by, which names its tool only where it is not Claude Code or another tool shares
-/// the name.
-fn qualified_claude(said: &str) -> String {
-    let (tool, label) = split(said);
-    format!("{tool}{SEPARATOR}{label}")
-}
-
-pub(crate) fn split(typed: &str) -> (&str, &str) {
-    typed
-        .split_once(SEPARATOR)
-        .unwrap_or((ProviderId::Claude.code(), typed))
-}
-
-/// An account as somebody types it at the command line, which is how the core names the
-/// account a switch went to: bare for Claude Code, and with its tool for any other.
-fn typed(account: &Account) -> Option<&str> {
-    if account.provider == ProviderId::Claude.code() {
-        account.label.as_deref()
-    } else {
-        account.qualified.as_deref()
-    }
-}
 
 /// A rename, as its answer is taken in.
 #[derive(Clone, Copy)]
@@ -1420,10 +1324,10 @@ impl State {
                     self.intent(Intent::SwitchTo { qualified }, now, jobs);
                 }
                 Clicked::SignInAgain(qualified) => {
-                    let (provider, label) = split(&qualified);
+                    let key = Key::parse(&qualified);
                     let sheet = Sheet::SignInAgain {
-                        provider: provider.to_owned(),
-                        label: label.to_owned(),
+                        provider: key.provider.code().to_owned(),
+                        label: key.label,
                     };
                     self.present_sheet(sheet, jobs);
                 }
@@ -1697,7 +1601,7 @@ impl State {
     ) {
         match then {
             After::Switch => {
-                let tool = split(&qualified).0.to_owned();
+                let tool = Key::parse(&qualified).provider.code().to_owned();
                 let kept = self
                     .reopen_after_switch
                     .take_if(|(of, _)| *of == tool)
@@ -1804,7 +1708,7 @@ impl State {
     fn switching_of(&self, tool: &str) -> bool {
         self.switching
             .as_deref()
-            .is_some_and(|switching| split(switching).0 == tool)
+            .is_some_and(|switching| Key::parse(switching).provider.code() == tool)
     }
 
     // A park of `tool` whose thread runs: one not yet asked for is still `signing_in`.
@@ -2298,7 +2202,7 @@ impl State {
                 });
                 self.auto_told.clear();
                 self.auto_refusals.ended();
-                let qualified = qualified_claude(&to);
+                let qualified = Key::parse(&to).qualified();
                 let switched = Switched {
                     outcome: Switch::Switched {
                         provider: ProviderId::Claude.code().into(),
@@ -2427,16 +2331,16 @@ impl State {
     fn warmed_up(
         &mut self,
         asked: Option<String>,
-        done: Result<WarmUp, PitboardError>,
+        done: Result<WarmUp, WarmRefused>,
         now: Now,
         jobs: &mut Vec<Job>,
     ) {
         self.warm.running = None;
         match done {
-            Ok(WarmUp::Started { .. }) => {
+            Ok(WarmUp::Started { account, .. }) => {
                 self.warm.refusals.ended();
                 self.warm.failed = None;
-                self.warm.told.clear();
+                self.warm.told.warmed(&account);
                 self.warm_tick(now, jobs);
             }
             Ok(WarmUp::Stands(overview)) => {
@@ -2450,16 +2354,19 @@ impl State {
                 self.warm.failed = None;
                 self.warm_later(now);
             }
-            Err(error) => {
-                let PitboardError::Failed { code, message, .. } = &error;
+            Err(WarmRefused { told_apart, error }) => {
+                let PitboardError::Failed { message, .. } = &error;
                 match asked {
                     Some(qualified) => self.present(Refused::of(could_not_warm(&qualified), error)),
                     None => {
                         self.warm.failed = Some(message.clone());
                         self.warm.refusals.refused(now.running);
-                        if self.warm.told.insert(format!("{code}/{message}")) {
+                        if self.warm.told.untold(&told_apart) {
                             jobs.push(Job::Post {
-                                notice: crate::present::warm_failed_notice(code, message),
+                                notice: crate::present::warm_failed_notice(
+                                    &told_apart.key,
+                                    message,
+                                ),
                             });
                         }
                     }
@@ -3465,7 +3372,12 @@ impl State {
         }
         // Here, once a switch this quit was for has let go: one asked meanwhile holds it back.
         if let Some(copy) = lingering {
-            self.open_again(split(&qualified).0.to_owned(), copy, false, jobs);
+            self.open_again(
+                Key::parse(&qualified).provider.code().to_owned(),
+                copy,
+                false,
+                jobs,
+            );
         }
     }
 
@@ -3488,7 +3400,7 @@ impl State {
         // Pitboard closed it, so Pitboard opens it, whether or not the switch worked, where its
         // folder is whole: as soon as the switch is made, and not after the read that follows
         // it, which can wait on the network.
-        let tool = split(qualified).0;
+        let tool = Key::parse(qualified).provider.code();
         let kept = self
             .reopen_after_switch
             .take()
@@ -3513,7 +3425,7 @@ impl State {
                     done.outcome,
                     Switch::Switched { .. } | Switch::Installed { .. }
                 ) {
-                    let provider = split(qualified).0;
+                    let provider = Key::parse(qualified).provider.code();
                     self.advice.retain(|advice| advice.provider != provider);
                 }
                 self.said(qualified, done, now);
@@ -3587,7 +3499,7 @@ impl State {
                 if done.warnings.is_empty() {
                     return;
                 }
-                let provider = split(qualified).0;
+                let provider = Key::parse(qualified).provider.code();
                 let mut said = self
                     .last_switches
                     .iter()
@@ -3611,17 +3523,18 @@ impl State {
                 return;
             }
         };
-        let opens = matches!(adoption, Adoption::NextOpen { .. }).then(|| adoption.follows());
+        let opens = matches!(adoption, Adoption::NextOpen { .. })
+            .then(|| crate::present::words::follows(&adoption));
         let (follows_at, restart) = match adoption {
-            Adoption::Follows { within_seconds } => {
+            Adoption::PollingWithin(within_seconds) => {
                 (Some(now.epoch() + i64::from(within_seconds)), None)
             }
-            Adoption::Renewal { .. } | Adoption::NextOpen { .. } => (None, None),
-            Adoption::Restart { program } => (
+            Adoption::AtRenewal { .. } | Adoption::NextOpen { .. } => (None, None),
+            Adoption::RestartRequired { program, .. } => (
                 None,
                 from.map(|from| RestartNeeded {
-                    program,
-                    from: split(&from).1.to_owned(),
+                    program: program.to_owned(),
+                    from: Key::parse(&from).label,
                 }),
             ),
         };
@@ -3658,7 +3571,10 @@ impl State {
             read.accounts.iter().any(|account| {
                 account.provider == last.provider
                     && account.signed_in
-                    && typed(account) == Some(last.to.as_str())
+                    && account
+                        .qualified
+                        .as_deref()
+                        .is_some_and(|qualified| Key::parse(qualified) == Key::parse(&last.to))
             })
         });
     }
@@ -3812,7 +3728,7 @@ impl State {
         now: Now,
         jobs: &mut Vec<Job>,
     ) {
-        let tool = split(qualified).0;
+        let tool = Key::parse(qualified).provider.code();
         match done {
             Ok(()) => {
                 self.changes_seen += 1;
@@ -4136,7 +4052,8 @@ const UNASKED: [&str; 7] = [
 ];
 
 // `read`, where a parked login `shown` says its service refused, and `read` did not ask about
-// again, is still refused. Parked again, it is another login.
+// again, is still refused, and not switchable, as the core says of a refused one. Parked
+// again, it is another login.
 fn refusals_kept(mut read: Status, shown: &Status) -> Status {
     for account in read.accounts.iter_mut().filter(|account| {
         !account.signed_in
@@ -4154,6 +4071,7 @@ fn refusals_kept(mut read: Status, shown: &Status) -> Status {
             account
                 .stale_explanation
                 .clone_from(&refused.stale_explanation);
+            account.switchable = refused.switchable;
         }
     }
     read

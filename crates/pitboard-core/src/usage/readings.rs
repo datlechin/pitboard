@@ -36,19 +36,8 @@ pub(crate) fn load(ctx: &Context) -> HashMap<String, Snapshot> {
         .collect()
 }
 
-/// When the readings last changed, in epoch milliseconds, or 0 when there are none.
-///
-/// For a front end to follow what the others record without asking anyone. Milliseconds
-/// rather than seconds, because sessions record moments apart, and the second of two
-/// changes within one second would otherwise go unseen until the next.
 pub(crate) fn changed_at(ctx: &Context) -> i64 {
-    std::fs::metadata(path(ctx))
-        .and_then(|m| m.modified())
-        .ok()
-        .and_then(|at| at.duration_since(std::time::UNIX_EPOCH).ok())
-        .map_or(0, |since| {
-            i64::try_from(since.as_millis()).unwrap_or(i64::MAX)
-        })
+    crate::time::changed_at(&path(ctx))
 }
 
 /// Drop what was remembered for an account that is no longer enrolled. Nothing here is

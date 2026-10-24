@@ -1327,11 +1327,10 @@ fn identity_unverifiable(
     }
 }
 
-/// [`Error::LiveLoginRefused`]'s words.
 fn live_login_refused(tool: ProviderId, label: &str, detail: &str) -> String {
     format!(
-        "{} Run `pitboard use {label} --yes` to put `{label}`'s login there.",
-        crate::words::replacing(tool, detail)
+        "{} Run `pitboard use {label} --yes` to replace it.",
+        crate::words::replacing(tool, &format!("`{label}`"), detail)
     )
 }
 
@@ -1397,17 +1396,12 @@ fn make_readable(os: Os, tool: ProviderId) -> &'static str {
     }
 }
 
-// Where Claude Code keeps a login on `os`, none of which holds `email`'s.
 fn login_elsewhere(os: Os, email: &str) -> String {
-    let places = match os {
-        Os::MacOs | Os::Linux => "in the keychain or in the file it also reads",
-        Os::Windows => "in .credentials.json or in Credential Manager",
-    };
     format!(
-        "Claude Code's config says {email} is signed in, but Pitboard cannot find that login \
-         {places}. It will not write a login where nobody reads it. This usually means Claude \
-         Code has started keeping logins somewhere Pitboard does not know about yet: check for a \
-         Pitboard update, and report it with `pitboard doctor --json` if there is none."
+        "{}. It will not write a login where nobody reads it. This usually means Claude Code has \
+         started keeping logins somewhere Pitboard does not know about yet: check for a Pitboard \
+         update, and report it with `pitboard doctor --json` if there is none.",
+        crate::words::named_but_not_found(os, email)
     )
 }
 
@@ -1667,10 +1661,7 @@ fn would_strand(label: Option<&str>, set_aside: &[PathBuf]) -> String {
                 [_] => "holds a Claude Desktop login",
                 _ => "hold Claude Desktop logins",
             };
-            let folders = set_aside
-                .iter()
-                .map(|path| path.display().to_string())
-                .collect();
+            let folders = set_aside.iter().map(|path| path.display().to_string());
             format!(
                 "No Claude Desktop account is in use, and {} {held} Pitboard set aside, {every} \
                  Run `pitboard enroll desktop/<label> --sign-in` to sign in to an account you \
