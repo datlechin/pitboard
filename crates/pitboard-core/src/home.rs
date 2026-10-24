@@ -220,6 +220,20 @@ pub(crate) fn check_absolute(ctx: &Context) -> Result<()> {
     }
 }
 
+// On Linux root may change things only where it owns each of these.
+#[cfg(any(target_os = "linux", test))]
+pub(crate) fn written(ctx: &Context) -> Vec<PathBuf> {
+    use crate::provider::{claude, codex};
+    vec![
+        ctx.home().to_path_buf(),
+        dir(ctx),
+        claude::paths::config_dir(ctx),
+        claude::paths::config_file(ctx),
+        PathBuf::from(claude::paths::storage_dir(ctx)),
+        codex::paths::home(ctx),
+    ]
+}
+
 // A sync client would copy a parked login to another machine.
 pub(crate) fn check_location(ctx: &Context, path: &Path) -> Result<()> {
     check_location_with(path, &Syncing::of(ctx))
@@ -306,6 +320,48 @@ mod tests {
             Err(Error::HomeNotAbsolute { variable, path }) => Some((variable, path)),
             Err(other) => panic!("{other}"),
         }
+    }
+
+    // Plain `su` gives root its own HOME and keeps the caller's tool homes, and a container can
+    // be handed the caller's files where root's would be: each is a place a change writes in.
+    #[test]
+    fn a_change_writes_in_the_home_and_in_each_folder_the_environment_names() {
+        let named = |pairs: &[(&str, &str)]| {
+            written(&Context::read(
+                &Environment::on(Os::Linux, pairs.iter().copied()),
+                "cli",
+            ))
+        };
+        assert_eq!(
+            named(&[("HOME", "/nowhere/root")]),
+            [
+                "/nowhere/root",
+                "/nowhere/root/.pitboard",
+                "/nowhere/root/.claude",
+                "/nowhere/root/.claude.json",
+                "/nowhere/root/.claude",
+                "/nowhere/root/.codex",
+            ]
+            .map(PathBuf::from)
+        );
+        assert_eq!(
+            named(&[
+                ("HOME", "/nowhere/root"),
+                ("PITBOARD_HOME", "/nowhere/alice/.pitboard"),
+                ("CLAUDE_CONFIG_DIR", "/nowhere/alice/.claude"),
+                ("CLAUDE_SECURESTORAGE_CONFIG_DIR", "/nowhere/alice/secure"),
+                ("CODEX_HOME", "/nowhere/alice/.codex"),
+            ]),
+            [
+                "/nowhere/root",
+                "/nowhere/alice/.pitboard",
+                "/nowhere/alice/.claude",
+                "/nowhere/alice/.claude/.claude.json",
+                "/nowhere/alice/secure",
+                "/nowhere/alice/.codex",
+            ]
+            .map(PathBuf::from)
+        );
     }
 
     /// The readings an older Pitboard kept to work out a rate from go, and nothing beside

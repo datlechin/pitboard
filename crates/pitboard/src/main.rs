@@ -5,7 +5,7 @@ use pitboard_core::context::Context;
 use pitboard_core::doctor;
 use pitboard_core::error::Error;
 use pitboard_core::provider::{Adoption, SignsIn};
-use pitboard_core::schedule::Location;
+use pitboard_core::schedule::{Job, Location};
 use pitboard_core::service::{Changing, Done, Failed, Pitboard, Warning};
 use pitboard_core::switch::{Enrolled, Outcome, Renewal};
 use serde_json::{Value, json};
@@ -119,7 +119,7 @@ enum Command {
     Enroll {
         #[arg(value_parser = label_to_enroll, help = LABEL_TO_ENROLL)]
         label: String,
-        /// Sign in through the tool's own sign-in, without signing out of the account in use
+        /// Sign in to another account first, through the tool's own sign-in
         #[arg(long)]
         sign_in: bool,
     },
@@ -140,10 +140,7 @@ enum Command {
         yes: bool,
     },
     /// Switch Claude Code before the account in use runs out, and warm up accounts
-    #[command(
-        after_help = pitboard_core::words::IS_THIS_ALLOWED,
-        args_conflicts_with_subcommands = true
-    )]
+    #[command(after_help = pitboard_core::words::IS_THIS_ALLOWED)]
     Watch {
         #[command(flatten)]
         share: watch::Share,
@@ -917,7 +914,10 @@ fn schedule(pitboard: &Pitboard, what: &ScheduleCommand) -> Report {
         ),
         Installed::Unsupported => (
             json!({"installed": false, "supported": false}),
-            "This computer has no scheduler Pitboard knows how to write.\n".to_string(),
+            format!(
+                "{}\n",
+                pitboard_core::words::no_scheduler(pitboard_core::host::OS, Job::Renew)
+            ),
         ),
     };
     match what {
@@ -1276,6 +1276,23 @@ where
     T: Into<std::ffi::OsString> + Clone,
 {
     let mut matches = with_the_jobs_markers(Cli::command()).try_get_matches_from(args)?;
+    // A run's own options beside `watch`'s subcommand, which clap's conflict rule would refuse
+    // the global `--json` beside too.
+    if let Some(("watch", watch)) = matches.subcommand()
+        && let Some((what, _)) = watch.subcommand()
+        && let Some(given) = ["at", "once", "scheduled"]
+            .into_iter()
+            .find(|id| watch.value_source(id) == Some(clap::parser::ValueSource::CommandLine))
+    {
+        let mut cli = with_the_jobs_markers(Cli::command());
+        cli.build();
+        let message = format!("the subcommand '{what}' cannot be used with '--{given}'");
+        let kind = clap::error::ErrorKind::ArgumentConflict;
+        return Err(match cli.find_subcommand_mut("watch") {
+            Some(watch) => watch.error(kind, message),
+            None => cli.error(kind, message),
+        });
+    }
     let marked = matches
         .subcommand()
         .is_some_and(|(_, given)| matches!(given.try_get_one::<bool>("scheduled"), Ok(Some(true))));
@@ -1889,6 +1906,45 @@ mod tests {
         assert!(command_line(["pitboard", "status", "--scheduled"]).is_err());
     }
 
+    // `--json` goes anywhere; what only a run of `watch` takes is refused beside a subcommand,
+    // which reads its own `--at`.
+    #[test]
+    fn watch_takes_json_anywhere_and_its_runs_options_only_without_a_subcommand() {
+        for args in [
+            &["watch", "--json", "install"][..],
+            &["watch", "install", "--json"],
+            &["--json", "watch", "status"],
+            &["watch", "--json", "uninstall"],
+        ] {
+            let cli = command_line(std::iter::once("pitboard").chain(args.iter().copied()))
+                .unwrap_or_else(|e| panic!("{args:?}: {e}"));
+            assert!(cli.json, "{args:?}");
+        }
+        let cli = command_line(["pitboard", "watch", "install", "--at", "80"]).expect("parsed");
+        let Some(Command::Watch {
+            what: Some(watch::WatchCommand::Install { share }),
+            ..
+        }) = cli.command
+        else {
+            panic!("watch install");
+        };
+        assert_eq!(share.threshold().percent(), 80);
+        for args in [
+            &["watch", "--at", "80", "install"][..],
+            &["watch", "--once", "status"],
+            &["watch", "--scheduled", "uninstall"],
+        ] {
+            let refused = command_line(std::iter::once("pitboard").chain(args.iter().copied()))
+                .err()
+                .unwrap_or_else(|| panic!("{args:?} parsed"));
+            assert_eq!(
+                refused.kind(),
+                clap::error::ErrorKind::ArgumentConflict,
+                "{args:?}"
+            );
+        }
+    }
+
     #[test]
     fn the_jobs_markers_are_in_no_help_or_completions() {
         use clap_complete::Shell;
@@ -1917,6 +1973,31 @@ mod tests {
                 .to_string();
             assert!(!help.contains("scheduled"), "{help}");
         }
+    }
+
+    // The refusal to install says the same.
+    #[test]
+    fn with_no_scheduler_both_status_commands_say_why_in_the_cores_words() {
+        use pitboard_core::testing::MemoryHost;
+        let scratch = tempfile::tempdir().expect("a scratch home");
+        let host = MemoryHost::new();
+        host.without_a_scheduler();
+        let pitboard =
+            Pitboard::new(Context::new(scratch.path().to_path_buf()).with_memory_stores(host));
+        let why = |job| {
+            format!(
+                "{}\n",
+                pitboard_core::words::no_scheduler(pitboard_core::host::OS, job)
+            )
+        };
+        assert_eq!(
+            schedule(&pitboard, &ScheduleCommand::Status).human,
+            why(Job::Renew)
+        );
+        assert_eq!(
+            watch::service(&pitboard, &watch::WatchCommand::Status).human,
+            why(Job::Watch)
+        );
     }
 
     // A file under `path`, as before; Task Scheduler's task under `task`, with no `path`.

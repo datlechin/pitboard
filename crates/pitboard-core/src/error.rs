@@ -940,8 +940,8 @@ pub enum Error {
     )]
     SignInSettledElsewhere { label: String },
 
-    /// This process runs as root or under sudo, or elevated on Windows, or the system could
-    /// not say whether it does, so Pitboard changes nothing: the one gate every change passes
+    /// The host says this process is not the person themselves (`Host::elevation`), or could
+    /// not say whether it is, so Pitboard changes nothing: the one gate every change passes
     /// refused it. `why` is how it runs, as the host said it, and `None` where the host could
     /// not say.
     #[error("{}", crate::words::elevated(crate::host::OS, *why).refusal)]

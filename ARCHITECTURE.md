@@ -1144,8 +1144,12 @@ window loads its site, and whatever the site's pages load, as a browser would.
 - Pitboard changes nothing where it runs as root or under sudo, or elevated on Windows, or
   where the host cannot say whether it does: a file it wrote would be root's or the
   administrators', and a keychain item might be, where the person's own runs might not read
-  or replace it. On Linux root changes things in a home root owns, as on a machine whose only
-  user is root, and is refused in another user's home or where the home's owner cannot be
+  or replace it. On Linux root changes things where root owns every place a change writes in
+  (`home::written`: the home, Pitboard's directory, Claude Code's config folder, its
+  `.claude.json` and its login's folder, and Codex's home, each at its nearest folder there
+  is), as on a machine whose only user is root. It is refused where another user owns one, as
+  after `su -m`, which keeps the caller's `HOME`, plain `su`, which keeps their `CODEX_HOME`
+  and the others, or a container given the caller's `~/.claude`, and where an owner cannot be
   read. On Windows `TokenElevation` decides, `TokenElevationType` says which words
   (Run as administrator, or an account whose every program runs elevated, which no terminal
   of it changes), a token of LocalSystem, LocalService or NetworkService is elevated
@@ -1203,18 +1207,24 @@ window loads its site, and whatever the site's pages load, as a browser would.
   proxy: the app's switch would take a terminal's proxy away.
 - The watch service is a second job on the same scheduler (`schedule::Job::Watch`,
   `watch_service.rs`). It runs `pitboard watch --scheduled --at <share>` on every system
-  (`schedule::WATCH_RUN`): a LaunchAgent that runs at load and again only after a crash
-  (`KeepAlive`'s `Crashed`), a systemd user service enabled under `default.target` and started
-  again only `on-abnormal`, or a task `\Pitboard\Watch <SID>` with a `LogonTrigger` for the
-  person's SID and no time limit, which `put` starts at once after ending the run under the
-  definition before. A run that ended itself on an error it cannot mend starts again at the
-  next sign-in, not sooner. Its rules are the schedule's: it serves the default home alone
+  (`schedule::WATCH_RUN`): a LaunchAgent that runs at load and logs to
+  `~/Library/Logs/Pitboard/watch.log`, a systemd user service enabled under `default.target`,
+  or a task `\Pitboard\Watch <SID>` with a `LogonTrigger` for the person's SID and no time
+  limit, which `put` starts at once after ending the run under the definition before. launchd
+  (`KeepAlive`'s `SuccessfulExit` false and `ThrottleInterval`) and systemd (`on-failure`,
+  `RestartSec`) start a run that failed or crashed again a minute later
+  (`schedule::RESTART_AFTER_SECONDS`): a panic exits 101, which neither counts as a crash, and
+  a run an update left behind ends on the state file the update's build wrote, which a start
+  from the job's path mends. A run Task Scheduler started that ended starts again at the next
+  sign-in. Its rules are the schedule's: it serves the default home alone
   (`schedule::serves`, `schedule_not_default_home`), a run of it watches that home whatever
   `PITBOARD_HOME` says (`Context::started_by_the_watch_service`, `schedule::for_its_run`), it
   is given the installing Pitboard's proxy variables, in `watch.env` on Windows, and the gate
   refuses it where Pitboard may change nothing. `uninstall` stops and removes it before the
   schedule, since it writes in the directory as it runs, and `doctor` reports it as
-  `watch_service`. The app may be switching too: a switch is decided again under the lock
+  `watch_service`. Its run is ended only while Pitboard's lock is held, so never in the middle
+  of a renewal or a switch; a removal of renewal's task leaves its run to finish. On Linux, a
+  watch service systemd will not stop stays installed and says why. The app may be switching too: a switch is decided again under the lock
   (`switch::auto`), and `tests/watch.rs` has four processes decide from one reading and make
   one switch.
 - On Windows `doctor` also reads what Task Scheduler keeps of the task (`Scheduler::task`):
@@ -3144,6 +3154,7 @@ measured on 18 October 2026, and those CI and the runner facts measured by 20 Oc
 | A `LogonTrigger` whose `UserId` is the person's SID starts the task at their sign-in, for the watch service | [LogonTrigger.UserId](https://learn.microsoft.com/en-us/windows/win32/taskschd/logontrigger-userid) | No run of `windows-facts.yml` has registered the watch service's task yet. |
 | `ExecutionTimeLimit` of `PT0S` lets the watch service's task run with no limit | [TaskSettings.ExecutionTimeLimit](https://learn.microsoft.com/en-us/windows/win32/taskschd/tasksettings-executiontimelimit) | As above. |
 | `IRegisteredTask::Run` starts the task at once, and `Stop` ends its run under way | [IRegisteredTask](https://learn.microsoft.com/en-us/windows/win32/api/taskschd/nn-taskschd-iregisteredtask) | As above. |
+| Restart Manager asks a console program, such as the `bin\pitboard.exe` the watch service runs, to end by `CTRL_C_EVENT`, and an MSI replaces a file it cannot free at the next restart. `/passive` then restarts Windows unasked; `/norestart`, which the update feed passes, never does | [Guidelines for Applications](https://learn.microsoft.com/en-us/windows/win32/rstmgr/guidelines-for-applications), [Standard Installer command-line options](https://learn.microsoft.com/en-us/windows/win32/msi/standard-installer-command-line-options) (updated 29 April 2025, read on 23 October 2026) | No runner updates Pitboard while the watch service runs. The next session's update should run with the service installed. |
 | WSL 2's processes run in a utility VM | [Comparing WSL versions](https://learn.microsoft.com/en-us/windows/wsl/compare-versions) | No runner has WSL. |
 | Each subkey of `HKCU\Software\Microsoft\Windows\CurrentVersion\Lxss` is a distribution WSL holds for the account, named by its `DistributionName` | [How to manage WSL disk space](https://learn.microsoft.com/en-us/windows/wsl/disk-space) | No runner has WSL. |
 | `EnableLUA` 0 turns Admin Approval Mode off, so every program an administrator starts runs elevated; 1 is the default | [User Account Control settings and configuration](https://learn.microsoft.com/en-us/windows/security/application-security/application-control/user-account-control/settings-and-configuration) | Both images have UAC on (RF-A1). |
