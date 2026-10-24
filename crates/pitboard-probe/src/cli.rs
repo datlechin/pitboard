@@ -300,6 +300,30 @@ pub enum Command {
         #[arg(long)]
         breakaway: bool,
     },
+    /// F3: open a page the probe serves on loopback from a fresh folder, as a sign-in opens
+    /// one, then see which programs run in that folder and whether it can be removed; again
+    /// with the browser running, and once more after the browsers it saw start are ended.
+    BrowserFolder {
+        #[arg(long)]
+        scratch: PathBuf,
+        #[arg(long = "as", value_enum)]
+        opener: Opener,
+        /// How long to wait for the browser to ask for the page.
+        #[arg(long, default_value_t = 60)]
+        wait_seconds: u64,
+        /// With --as codex, a browser to start in place of the http association's program.
+        #[arg(long)]
+        browser: Option<PathBuf>,
+    },
+    #[command(hide = true)]
+    BrowserFolderOpen {
+        #[arg(long)]
+        url: String,
+        #[arg(long = "as", value_enum)]
+        opener: Opener,
+        #[arg(long)]
+        browser: Option<PathBuf>,
+    },
     #[command(hide = true)]
     JobOpenPage {
         #[arg(long)]
@@ -585,6 +609,16 @@ pub enum BrowserOpen {
     Assoc,
 }
 
+// How a sign-in opens its page, as each tool's register reads it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
+pub enum Opener {
+    /// `rundll32 url,OpenURL <address>`, waited for (`windows_browser_open`).
+    Claude,
+    /// The `http` association's command, started with no standard handles and not waited for
+    /// (`codex_windows_browser_open`).
+    Codex,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
 pub enum JobEnd {
     TerminateJob,
@@ -772,6 +806,8 @@ pub fn block_name(command: &Command) -> &'static str {
         Command::JobBrowser { .. } => "job-browser",
         Command::JobLeaf { .. } => "job-leaf",
         Command::JobMid { .. } => "job-mid",
+        Command::BrowserFolder { .. } => "browser-folder",
+        Command::BrowserFolderOpen { .. } => "browser-folder-open",
         Command::JobOpenPage { .. } => "job-open-page",
         Command::Processes { .. } => "processes",
         Command::CredmanNames { .. } => "credman-names",
@@ -1307,6 +1343,66 @@ mod tests {
             }
         ));
         assert!(Cli::try_parse_from(["pitboard-probe", "fd-handover", "--bun", "b"]).is_err());
+    }
+
+    #[test]
+    fn the_folder_block_opens_as_a_tool_names() {
+        let cli = Cli::try_parse_from([
+            "pitboard-probe",
+            "browser-folder",
+            "--scratch",
+            r"C:\s",
+            "--as",
+            "codex",
+        ])
+        .unwrap();
+        assert_eq!(block_name(&cli.command), "browser-folder");
+        assert!(matches!(
+            cli.command,
+            Command::BrowserFolder {
+                opener: Opener::Codex,
+                wait_seconds: 60,
+                ..
+            }
+        ));
+        assert!(
+            Cli::try_parse_from(["pitboard-probe", "browser-folder", "--scratch", r"C:\s"])
+                .is_err()
+        );
+        let cli = Cli::try_parse_from([
+            "pitboard-probe",
+            "browser-folder",
+            "--scratch",
+            r"C:\s",
+            "--as",
+            "codex",
+            "--browser",
+            r"C:\b\chrome.exe",
+        ])
+        .unwrap();
+        assert!(matches!(
+            cli.command,
+            Command::BrowserFolder {
+                browser: Some(_),
+                ..
+            }
+        ));
+        let cli = Cli::try_parse_from([
+            "pitboard-probe",
+            "browser-folder-open",
+            "--url",
+            "http://127.0.0.1:1/cold",
+            "--as",
+            "claude",
+        ])
+        .unwrap();
+        assert!(matches!(
+            cli.command,
+            Command::BrowserFolderOpen {
+                opener: Opener::Claude,
+                ..
+            }
+        ));
     }
 
     #[test]
