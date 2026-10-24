@@ -36,7 +36,7 @@ use crate::provider::ProviderId;
 use crate::sessions::{Limit, Run};
 use crate::state::{Account, State};
 use crate::usage::pace::Standing;
-use crate::usage::{Snapshot, Window};
+use crate::usage::{LimitKind, Snapshot, Window};
 use serde_json::Value;
 use std::collections::{BTreeMap, HashMap};
 
@@ -101,28 +101,23 @@ pub struct StatusLine {
     pub others: Vec<Entry>,
 }
 
-/// What the line calls its two limits, by the names a reading can give each.
-const FIVE_HOUR: &[&str] = &["session", "five_hour"];
-const WEEKLY: &[&str] = &["weekly_all", "seven_day"];
-
-/// The limit among `windows` called one of `kinds`, for every model.
-fn limit<'a>(windows: &'a [Window], kinds: &[&str]) -> Option<&'a Window> {
+fn limit<'a>(windows: &'a [Window], kind: &LimitKind) -> Option<&'a Window> {
     windows
         .iter()
-        .find(|w| w.scope.is_none() && kinds.contains(&w.kind.as_str()))
+        .find(|w| w.scope.is_none() && w.kind == *kind)
 }
 
 /// The five-hour and weekly shares among `windows`, which are every limit the account has
 /// where `every_limit` says so.
 fn shares_of(windows: &[Window], every_limit: bool, now: i64) -> Shares {
-    let share = |kinds| match limit(windows, kinds) {
+    let share = |kind| match limit(windows, &kind) {
         Some(window) => Share::Used(window.used(now)),
         None if every_limit => Share::Absent,
         None => Share::Unread,
     };
     Shares {
-        five_hour: share(FIVE_HOUR),
-        weekly: share(WEEKLY),
+        five_hour: share(LimitKind::Session),
+        weekly: share(LimitKind::WeeklyAll),
     }
 }
 
@@ -133,10 +128,10 @@ fn shares_in(reading: &Snapshot, now: i64) -> Shares {
 
 /// The five-hour and weekly paces among `windows`, as of `at`, when they were read.
 fn paces_of(windows: &[Window], at: i64, now: i64) -> Paces {
-    let pace = |kinds| Some(limit(windows, kinds)?.pace(at, now)?.standing);
+    let pace = |kind| Some(limit(windows, &kind)?.pace(at, now)?.standing);
     Paces {
-        five_hour: pace(FIVE_HOUR),
-        weekly: pace(WEEKLY),
+        five_hour: pace(LimitKind::Session),
+        weekly: pace(LimitKind::WeeklyAll),
     }
 }
 
@@ -284,17 +279,17 @@ fn line(
     }
 }
 
-/// One limit a session passed, as a window under the name Claude Code gives it. A session
-/// says how much is used and when the window resets, and nothing else.
+// A session says how much is used and when the window resets, and nothing else.
 fn window(name: &str, limit: &Limit) -> Window {
+    let kind = LimitKind::from(name);
     Window {
-        kind: name.to_owned(),
+        length_seconds: kind.length(),
+        kind,
         scope: None,
         percent: limit.used_percentage,
         resets_at: limit.resets_at,
         is_active: false,
         severity: None,
-        length_seconds: crate::usage::anthropic_window_length(name),
     }
 }
 
@@ -357,7 +352,7 @@ fn moved_since(run: &Run, before: Option<&Run>) -> Vec<Window> {
 /// is drawn the same way from the files as they are.
 pub(crate) fn read(
     ctx: &Context,
-    permit: Option<crate::service::Permit>,
+    permit: Option<crate::permit::Permit>,
     input: &str,
 ) -> StatusLine {
     let input: Value = serde_json::from_str(input).unwrap_or(Value::Null);
@@ -395,8 +390,8 @@ pub(crate) fn read(
 mod tests {
     use super::*;
     use crate::in_use::InUse;
+    use crate::permit::Permit;
     use crate::provider::Owner;
-    use crate::service::Permit;
     use crate::time::{Clock, FixedClock};
     use crate::usage::{Source, Window};
     use serde_json::json;

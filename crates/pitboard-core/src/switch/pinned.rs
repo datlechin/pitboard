@@ -3,7 +3,7 @@ use super::*;
 use crate::api::scripted::Asked;
 use crate::fault;
 use crate::host::{OS, Os};
-use crate::service::Permit;
+use crate::permit::Permit;
 use crate::store::memory::Touch;
 use std::cell::RefCell;
 use std::collections::BTreeSet;

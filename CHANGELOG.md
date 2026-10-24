@@ -65,6 +65,10 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Breaking:** Pitboard refuses with `login_restricted` to switch Claude Code to an account of an
   organisation that a managed `forceLoginOrgUUID` leaves out, since Claude Code would refuse its
   login. Switch to an account of an organisation the setting names.
+- **Breaking:** `--json` names every five-hour limit `session` and every weekly one `weekly_all`,
+  or `weekly_scoped` for one model's, where it passed on `five_hour` and `seven_day` from Claude
+  Code's status line, Anthropic's answer without `limits` and Codex. Match `kind` against
+  `session` and `weekly_all` where a script matched `five_hour` and `seven_day`.
 - Clicking one of the app's notifications on macOS opens **Accounts**, or **Settings** on
   **Limits** for what switching or warming up by itself came to, and the Windows app opens the
   same.
@@ -177,6 +181,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   unfinished.
 - On Windows, the app, the status line and `pitboard status` no longer show no accounts for a
   moment while another Pitboard run saves its list of accounts.
+- `pitboard doctor` reads the Claude Code login in use once, so its checks of that login agree
+  where Claude Code renews it while they run.
 - The status line no longer waits for the disk after each response, which took it past half a
   second on a busy Windows disk.
 

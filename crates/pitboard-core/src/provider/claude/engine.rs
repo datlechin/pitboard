@@ -9,11 +9,11 @@ use super::api;
 use super::{configfile, document, live, paths as claude};
 use crate::context::Context;
 use crate::host::{OS, Os};
+use crate::permit::Permit;
 use crate::provider::{
     Adoption, Behind, Credential, Expiry, Held, Identity, Isolation, LiveStore, Owner,
     ParkSemantics, Provider, ProviderError, ProviderId, SignInView,
 };
-use crate::service::Permit;
 use crate::switch;
 use crate::usage;
 use serde_json::Value;
@@ -246,12 +246,12 @@ impl Provider for Claude {
         Ok(command)
     }
 
-    fn read_signin(
+    fn login_from_sign_in(
         &self,
         ctx: &Context,
         dir: &std::path::Path,
     ) -> Result<Option<String>, crate::store::Error> {
-        live::read_signin(ctx, dir)
+        live::login_from_sign_in(ctx, dir)
     }
 
     /// The keychain item Claude Code made for the private directory, which outlives the
@@ -406,7 +406,7 @@ mod tests {
             .sign_in(&ctx, Permit::for_a_test(), dir)
             .expect("found");
         assert_eq!(command.get_args().collect::<Vec<_>>(), ["auth", "login"]);
-        // As given: Claude Code hashes the string itself for its slot, as read_signin does.
+        // As given: Claude Code hashes the string itself for its slot, as login_from_sign_in does.
         assert!(
             command
                 .get_envs()

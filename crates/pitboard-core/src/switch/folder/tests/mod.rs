@@ -15,10 +15,11 @@ use super::super::{Outcome, Settled, enroll, forget, repair, settle, switch, upd
 use crate::desktop_testing::{Person, write_stand_in_jar};
 use crate::error::Error;
 use crate::host::Cookie;
+use crate::permit::Permit;
 use crate::provider::ProviderId;
-use crate::service::{Permit, Warning};
 use crate::state::{self, Key, Park, ParkKind, SetAside};
 use crate::store::folder::Manifest;
+use crate::warning::Warning;
 use serde_json::{Map, Value, json};
 use std::collections::HashSet;
 use std::path::PathBuf;

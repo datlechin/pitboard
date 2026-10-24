@@ -4,7 +4,7 @@
 use crate::host::acl::{self, Ace};
 use crate::host::replace::{self, Route};
 use crate::host::{Access, Private};
-use crate::service::Permit;
+use crate::permit::Permit;
 use std::fs::File;
 use std::io;
 use std::os::windows::ffi::OsStrExt;

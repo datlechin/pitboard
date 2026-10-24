@@ -3,7 +3,7 @@
 use crate::context::{Context, Environment};
 use crate::error::{Error, Result};
 use crate::host::Os;
-use crate::host::program::{Lookup, find_among};
+use crate::host::program::{Lookup, find_among, looks_like_a_version, version_where};
 use crate::provider::claude::daemon;
 use crate::provider::claude::slot;
 use serde_json::Value;
@@ -91,7 +91,13 @@ pub(crate) fn installed_version(ctx: &Context) -> Option<String> {
         && let Some(version) = [Some(dir), dir.parent()]
             .into_iter()
             .flatten()
-            .find_map(|dir| version_in_package_json(&dir.join("package.json")))
+            .find_map(|dir| {
+                version_where(
+                    &dir.join("package.json"),
+                    "name",
+                    "@anthropic-ai/claude-code",
+                )
+            })
     {
         return Some(version);
     }
@@ -101,24 +107,6 @@ pub(crate) fn installed_version(ctx: &Context) -> Option<String> {
 // Claude Code's reads `<release>.0` (`windows_version_resource`).
 fn release_of([major, minor, patch, fourth]: [u16; 4]) -> Option<String> {
     (fourth == 0).then(|| format!("{major}.{minor}.{patch}"))
-}
-
-fn looks_like_a_version(name: &str) -> bool {
-    let parts: Vec<&str> = name.split('.').collect();
-    parts.len() == 3
-        && parts
-            .iter()
-            .all(|p| !p.is_empty() && p.bytes().all(|b| b.is_ascii_digit()))
-}
-
-fn version_in_package_json(path: &Path) -> Option<String> {
-    let raw = std::fs::read_to_string(path).ok()?;
-    let json: Value = serde_json::from_str(&raw).ok()?;
-    let name = json.get("name")?.as_str()?;
-    if name != "@anthropic-ai/claude-code" {
-        return None;
-    }
-    Some(json.get("version")?.as_str()?.to_string())
 }
 
 // The Git Bash Claude Code runs a hook and the status line in on Windows, found as it finds one

@@ -8,10 +8,11 @@ use crate::context::Context;
 use crate::error::Then;
 use crate::fault;
 use crate::in_use::InUse;
+use crate::permit::Permit;
 use crate::provider::folder::{AppSettings, Folder, Keys, SignedIn, Unread};
-use crate::service::{Permit, Warning};
 use crate::state::{self, Aside, Awaited, Half, Key, Moving, Park, ParkKind, SetAside, State};
 use crate::store::folder::{self as parks, Manifest};
+use crate::warning::Warning;
 use std::collections::BTreeMap;
 use std::path::Path;
 
@@ -200,31 +201,49 @@ fn placed(app: &dyn Folder, root: &Path) -> Result<()> {
     Ok(())
 }
 
-// This Mac's id as one check read it, written into every manifest that path makes.
-pub(super) struct Mac(String);
+// What every step of one move of `app`'s folder at `root` works with. `mac` is this Mac's id as
+// one check read it, written into every manifest the move makes.
+pub(super) struct Move<'a> {
+    ctx: &'a Context,
+    permit: Permit,
+    app: &'static dyn Folder,
+    root: &'a Path,
+    mac: String,
+}
 
-impl Mac {
+impl<'a> Move<'a> {
     // A manifest that names no Mac could never be put back, so none is written.
-    pub(super) fn here(ctx: &Context) -> Result<Mac> {
-        let id = ctx.this_machine();
-        if id == state::UNKNOWN_MACHINE {
+    pub(super) fn here(
+        ctx: &'a Context,
+        permit: Permit,
+        app: &'static dyn Folder,
+        root: &'a Path,
+    ) -> Result<Move<'a>> {
+        let mac = ctx.this_machine();
+        if mac == state::UNKNOWN_MACHINE {
             return Err(Error::MachineUnknown);
         }
-        Ok(Mac(id))
+        Ok(Move {
+            ctx,
+            permit,
+            app,
+            root,
+            mac,
+        })
     }
 }
 
 // Before anything is reserved or moved. A refusal changes nothing.
-pub(super) fn may_start(
-    ctx: &Context,
+pub(super) fn may_start<'a>(
+    ctx: &'a Context,
     permit: Permit,
-    app: &dyn Folder,
-    root: &Path,
-) -> Result<Mac> {
+    app: &'static dyn Folder,
+    root: &'a Path,
+) -> Result<Move<'a>> {
     layout(app, root)?;
     parks::ready(ctx, permit, root)?;
     placed(app, root)?;
-    Mac::here(ctx)
+    Move::here(ctx, permit, app, root)
 }
 
 pub(super) fn nobody(at: i64) -> InUse {
@@ -284,14 +303,17 @@ fn after_failure(
 
 // The leave of the account in use: the park it holds afterwards, and what to say.
 pub(super) fn leave(
-    ctx: &Context,
-    permit: Permit,
+    mover: &Move<'_>,
     state: &mut State,
-    app: &'static dyn Folder,
-    root: &Path,
     leaving: Leaving<'_>,
-    mac: &Mac,
 ) -> Result<(Park, Vec<Warning>)> {
+    let Move {
+        ctx,
+        permit,
+        app,
+        root,
+        ..
+    } = *mover;
     let tool = app.id();
     let account = enrolled(state, leaving.key)?;
     let label = state.typed(leaving.key);
@@ -328,7 +350,7 @@ pub(super) fn leave(
         login: Some(moving.login.clone()),
         session_expires_at: leaving.session.expires_at,
         parked_at: ctx.now(),
-        machine: mac.0.clone(),
+        machine: mover.mac.clone(),
         items: moving.items.clone(),
         keys: moving.keys.clone(),
         left_in_folder: Vec::new(),
@@ -577,13 +599,8 @@ pub(super) struct Checked {
 }
 
 // The park's own checks, before any record, and for a switch before the leave that precedes it.
-pub(super) fn check_park(
-    ctx: &Context,
-    state: &State,
-    app: &dyn Folder,
-    key: &Key,
-    mac: &Mac,
-) -> Result<Checked> {
+pub(super) fn check_park(mover: &Move<'_>, state: &State, key: &Key) -> Result<Checked> {
+    let Move { ctx, app, .. } = *mover;
     let tool = app.id();
     let account = enrolled(state, key)?;
     let label = state.typed(key);
@@ -629,7 +646,7 @@ pub(super) fn check_park(
             "its record names no Mac, so Pitboard cannot tell whether {name} can read it here"
         )));
     }
-    if manifest.machine != mac.0 {
+    if manifest.machine != mover.mac {
         return Err(corrupt(format!(
             "it was parked on another Mac, and {name} cannot read it here where its key differs"
         )));
@@ -744,17 +761,16 @@ pub(super) fn forget_left(
 }
 
 // An aside's record, written before anything moves into it: what the settings held, kept.
-#[allow(clippy::too_many_arguments)]
 pub(super) fn keep_aside(
-    ctx: &Context,
-    permit: Permit,
-    app: &dyn Folder,
+    mover: &Move<'_>,
     name: &str,
     account: Option<String>,
     items: Vec<String>,
     keys: &Keys,
-    mac: &Mac,
 ) -> Step {
+    let Move {
+        ctx, permit, app, ..
+    } = *mover;
     let manifest = Manifest {
         v: parks::VERSION,
         tool: app.id().code().to_string(),
@@ -763,7 +779,7 @@ pub(super) fn keep_aside(
         login: None,
         session_expires_at: None,
         parked_at: ctx.now(),
-        machine: mac.0.clone(),
+        machine: mover.mac.clone(),
         items,
         keys: keys.digests(),
         left_in_folder: Vec::new(),
@@ -776,20 +792,22 @@ pub(super) fn keep_aside(
 
 // For an account whose park passed `check_park`. `from`: the account the leave before it parked.
 // `noticed`: what `state` holds that changed outside Pitboard, written down once it is saved.
-#[allow(clippy::too_many_arguments)]
 pub(super) fn arrive(
-    ctx: &Context,
-    permit: Permit,
+    mover: &Move<'_>,
     state: &mut State,
-    app: &'static dyn Folder,
-    root: &Path,
     key: &Key,
     checked: Checked,
     leftovers: bool,
     from: Option<String>,
     noticed: &[Noticed],
-    mac: &Mac,
 ) -> Result<Vec<Warning>> {
+    let Move {
+        ctx,
+        permit,
+        app,
+        root,
+        ..
+    } = *mover;
     let tool = app.id();
     let account = enrolled(state, key)?;
     let label = state.typed(key);
@@ -838,16 +856,7 @@ pub(super) fn arrive(
     let forward = || -> Step<Vec<String>> {
         let held = settings(app, root)?.account_keys(app);
         if let Some(aside) = &aside {
-            keep_aside(
-                ctx,
-                permit,
-                app,
-                aside,
-                left.clone(),
-                present(app, root)?,
-                &held,
-                mac,
-            )?;
+            keep_aside(mover, aside, left.clone(), present(app, root)?, &held)?;
             fault::point("arrive.aside_kept");
         }
         if !held.is_empty() {

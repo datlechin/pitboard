@@ -5,11 +5,12 @@ use super::{
 };
 use super::{as_a_dead_runs, data, rested, settled, snapshot, tree, unchanged, whereabouts};
 use crate::desktop_testing::{EMPTIED, write_stand_in_jar};
+use crate::permit::Permit;
 use crate::provider::ProviderId;
-use crate::service::{Permit, Warning};
 use crate::state::{self, SetAside};
 use crate::switch::harness::{HOME, NOW, Rig, STRANGER, WORK, desktop_pair, hold, recover};
 use crate::switch::{Outcome, forget, repair, settle};
+use crate::warning::Warning;
 use serde_json::{Value, json};
 
 #[test]

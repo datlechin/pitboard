@@ -331,8 +331,8 @@ fn a_codex_answer_gives_a_models_limits_and_nothing_of_another_account() {
     assert_eq!(
         windows,
         [
-            ("seven_day".to_owned(), serde_json::Value::Null),
-            ("seven_day".to_owned(), serde_json::json!("codex_other")),
+            ("weekly_all".to_owned(), serde_json::Value::Null),
+            ("weekly_scoped".to_owned(), serde_json::json!("codex_other")),
         ]
     );
 

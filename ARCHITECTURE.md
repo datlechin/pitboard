@@ -94,8 +94,10 @@ window loads its site, and whatever the site's pages load, as a browser would.
     (`host/administered.rs`) and no app installed on the machine. `fs`, `proc` and `user`
     are plain functions for what the system does whoever asks: private files and
     directories, every other change to the disk, whether a process is alive, a program run
-    with a ceiling (`proc::run_within`), the login name, whether this process runs as root,
-    and the `PATH` the person's login shell builds, which `unix/shell.rs` asks for. `fs`
+    with a ceiling (`proc::run_within`, the one way Pitboard waits on `security`, `ps` and
+    `plutil`, which `proc::run_tool` runs a warm-up's tool through), the login name, whether
+    this process runs as root, and the `PATH` the person's login shell builds, which
+    `unix/shell.rs` asks for. `fs`
     creates each private file itself and hands it back open (`create_private`,
     `open_private_append` and `open_private_lock`), so how a file is made private is the
     face's alone. A login kept as files moves through four more:
@@ -200,10 +202,12 @@ window loads its site, and whatever the site's pages load, as a browser would.
     `auto.rs`, enrolling, adopting, renaming, forgetting, renewing, repairing, abandoning,
     uninstalling, and putting away a login Claude Code left in a file behind the keychain or
     Credential Manager in `stow.rs`), and the journal that finishes an interrupted switch of
-    a Claude Code or Codex login (`journal.rs`). `identify.rs` says whose login Claude Code
-    or Codex has stored: the record's owner where the login's refresh token has the
-    fingerprint the record was made for, which asks nobody, and the tool's service otherwise
-    (`whose`). A login whose access token has expired is never asked about with it, and one
+    a Claude Code or Codex login (`journal.rs`), which `settle.rs` settles before each
+    change, gives up on, or reads for the refusal it would make. `identify.rs` says whose
+    login Claude Code or Codex has stored: the record's owner where the login's refresh
+    token has the fingerprint the record was made for, which asks nobody, and the tool's
+    service otherwise (`whose`).
+    A login whose access token has expired is never asked about with it, and one
     the service refuses is not asked about again (`told`): a change renews it first, and so
     does a read, where it takes `state.lock` without waiting and no switch waits to be
     finished (`told_by_a_read`); usage alone renews nothing, and a Codex login names its
@@ -279,7 +283,7 @@ window loads its site, and whatever the site's pages load, as a browser would.
     limit is a fixed cycle. `run.rs` runs the tool's own headless mode in `warm/<tool>/`, made
     afresh for each run and removed after it, with an environment built from nothing but
     `PATH`, the person's name, the proxy and, on Windows, `SystemRoot`, through
-    `host::proc::run_within`: the access token on descriptor 3 through a pipe `dup2`ed in
+    `host::proc::run_tool`: the access token on descriptor 3 through a pipe `dup2`ed in
     `pre_exec`, for at most 120 seconds, its process group stopped past that, and whatever it
     left in the group stopped after it. On
     Windows, which reads no descriptor (`windows_token_handover`), the token goes in
@@ -383,8 +387,12 @@ window loads its site, and whatever the site's pages load, as a browser would.
   - `proxy.rs`: the proxy those requests go through, read from the context's environment by
     the rules ureq 3.4.2 reads a process's with, the refusal of each request a SOCKS proxy
     would have carried (`proxy::Refusal`), what `doctor`'s `network` check says of it, and
-    the variables a renewal schedule installed from that context is given. See
+    the variables a renewal schedule installed from that context is given. It reads Windows'
+    own proxy setting too, which only doctor shows (`system_proxies`). See
     [ureq's proxies](#ureqs-proxies).
+  - `service.rs`: `Pitboard`, each operation run as every front end must run it. It
+    re-exports `Permit` (`permit.rs`, with the gate), `Warning` (`warning.rs`) and `Stored`
+    (`in_use.rs`), so the front ends name them through it.
   - `usage/pace.rs`: how a limit's use compared with an even use across its window when it was
     read: the part of the window gone by then, how far the share used was from it, which
     side of a 5-point margin it was on, and for a limit over pace when it runs out at the
@@ -409,9 +417,13 @@ window loads its site, and whatever the site's pages load, as a browser would.
     an answer gave (`usage::moved`): a higher share in the same window, or the next window
     once the last has reset. They never add a limit or found a reading, since they do not
     say whose they are. A reading's `answered_at` is when its service last answered, absent
-    from one an older Pitboard wrote.
-  - `status.rs`, `doctor.rs`, `statusline.rs` and `schedule.rs` serve the commands of the
-    same names. A row's numbers in `status.rs` are its service's answer folded into the
+    from one an older Pitboard wrote. A limit's kind is a `usage::LimitKind`, read where
+    Anthropic's answer, a session's status line and Codex's answer are read, so `five_hour`
+    and `seven_day` are `session` and `weekly_all` from then on.
+  - `status.rs`, `doctor/`, `statusline.rs` and `schedule.rs` serve the commands of the
+    same names. `doctor/` has a module per concern, each with its facts, its gather and its
+    judges: `mod.rs` makes the checks in the order `pitboard doctor` prints them, and
+    `words.rs` says them. A row's numbers in `status.rs` are its service's answer folded into the
     reading every front end records in `usage.json`, or that reading alone where no answer
     came, and never a tool's own cache (see [Claude Code](#claude-code)). A Claude Desktop
     row has no numbers, since no usage of it is read, and says when a change last read its
@@ -422,7 +434,7 @@ window loads its site, and whatever the site's pages load, as a browser would.
     `pitboard status` and the app go by. The usage of a login nobody
     could name is not asked, and the account the record names stands in for it. Offline rows
     (`gather_offline`) take the account in use from `in_use::known`, an account nobody
-    enrolled included, which gets its row as it does online. `Pitboard::standing` says what
+    enrolled included, which gets its row as it does online. `status::standing` says what
     stands on every read: `login_replaced`, `in_use_unconfirmed` where the read could not
     ask and Claude Code's config has moved since the record was checked, or the record was
     never checked, whatever the config names (`Known::unconfirmed`, which doctor's `in_use`
@@ -1174,7 +1186,7 @@ window loads its site, and whatever the site's pages load, as a browser would.
   reads the tool's login and the copy the switch parked, which on macOS are keychain items;
   with no record there, the check is one look at whether the file is there.
 - `status` and `status_offline` say a Claude Desktop move waiting in `state.json`'s `moving`
-  as `move_waiting` (`Pitboard::standing`), and `doctor` as its `desktop_move` check. A read
+  as `move_waiting` (`status::standing`), and `doctor` as its `desktop_move` check. A read
   opens no jar, so it does not predict what settling the move will do.
 - Pitboard changes nothing where it runs as root or under sudo, or elevated on Windows, or
   where the host cannot say whether it does: a file it wrote would be root's or the
@@ -1192,13 +1204,14 @@ window loads its site, and whatever the site's pages load, as a browser would.
   change anything on a Windows older than 11 24H2, build 26100, which Windows Server 2025
   shares, read as `RtlGetVersion` gives the build and never from the product name; that
   refusal is `system_too_old`, said before how the process runs, since no way of running
-  Pitboard changes the system. One gate, `service::gate`, asks the host's `floor` and
-  `elevation` and hands out a `service::Permit`, a value only it makes,
+  Pitboard changes the system. One gate, `permit::gate`, asks the host's `floor` and
+  `elevation` and hands out a `Permit`, a value only it makes,
   and everything that changes anything takes one as an argument: `atomic`'s writes, every
   function in `host::fs` that makes, moves or removes a file or a directory,
   `RawStore::write` and `delete` (the keychain among the stores), `Scheduler::put` and
   `remove` and the service manager they ask, a tool's sign-in or warm-up run started
-  (`host::proc::run_within`), and the token exchange, `Provider::renew` down to the request.
+  (`Provider::sign_in`, `host::proc::run_tool`), and the token exchange, `Provider::renew`
+  down to the request.
   So a change that skips the gate does not compile, and nothing rotates a refresh token it
   could not then write down. Every change asks the gate before it reads, locks or records
   anything, so a refused one leaves even the audit log as it was. Where the gate refuses,

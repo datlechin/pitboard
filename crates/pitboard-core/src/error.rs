@@ -659,7 +659,7 @@ pub enum Error {
         spelling: Spelling,
         /// What writing it and parking it warned about, which is still true of a change
         /// that failed afterwards. Taken out by the service and reported beside the error.
-        warnings: Vec<crate::service::Warning>,
+        warnings: Vec<crate::warning::Warning>,
     },
 
     #[error(
@@ -776,7 +776,7 @@ pub enum Error {
         partway: Partway,
         /// What parking the login warned about, where it was parked first. Taken out by the
         /// service and reported beside the error.
-        warnings: Vec<crate::service::Warning>,
+        warnings: Vec<crate::warning::Warning>,
         error: Box<Error>,
     },
 
@@ -799,7 +799,7 @@ pub enum Error {
     // A refusal after the change had done what `said` says. The service takes it apart.
     #[error("{error}")]
     SaidFirst {
-        said: Vec<crate::service::Warning>,
+        said: Vec<crate::warning::Warning>,
         error: Box<Error>,
     },
 
@@ -1122,7 +1122,7 @@ impl Error {
 
     /// Warnings a failed change carries in itself, for the caller to report beside it. Only
     /// a failure that happened after something worth warning about was done carries any.
-    pub(crate) fn take_warnings(&mut self) -> Vec<crate::service::Warning> {
+    pub(crate) fn take_warnings(&mut self) -> Vec<crate::warning::Warning> {
         let mut said = self.take_said_first();
         if let Error::SignInNotInstalled { warnings, .. } | Error::StowStopped { warnings, .. } =
             self
@@ -1134,7 +1134,7 @@ impl Error {
 
     // What the change had done before it refused, outermost first. What is left is the refusal
     // itself.
-    pub(crate) fn take_said_first(&mut self) -> Vec<crate::service::Warning> {
+    pub(crate) fn take_said_first(&mut self) -> Vec<crate::warning::Warning> {
         let mut said = Vec::new();
         while let Error::SaidFirst { said: first, error } = self {
             said.append(first);
@@ -1144,7 +1144,7 @@ impl Error {
     }
 
     // This refusal, after a change that had done what `said` says.
-    pub(crate) fn after(self, said: Vec<crate::service::Warning>) -> Error {
+    pub(crate) fn after(self, said: Vec<crate::warning::Warning>) -> Error {
         if said.is_empty() {
             return self;
         }
@@ -1874,7 +1874,7 @@ mod tests {
                 .to_string(),
                 not_installed(true).to_string(),
                 not_installed(false).to_string(),
-                crate::service::Warning::SignInParkedNotInUse {
+                crate::warning::Warning::SignInParkedNotInUse {
                     tool,
                     label: "l".into(),
                     why: "w".into(),
@@ -2363,7 +2363,7 @@ mod tests {
             tool: ProviderId::Desktop,
             label: "desktop/work".into(),
         };
-        let waiting = crate::service::Warning::MoveWaiting {
+        let waiting = crate::warning::Warning::MoveWaiting {
             tool: ProviderId::Desktop,
             label: "desktop/work".into(),
         };
@@ -2374,7 +2374,7 @@ mod tests {
         let said = carried.take_warnings();
         assert_eq!(
             said.iter()
-                .map(crate::service::Warning::code)
+                .map(crate::warning::Warning::code)
                 .collect::<Vec<_>>(),
             ["move_waiting"]
         );

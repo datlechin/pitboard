@@ -3,8 +3,8 @@
 use super::identify::{self, Live};
 use super::{Error, Result, Settled, enrolled, purge};
 use crate::provider::{self, LoginKind};
-use crate::service::Warning;
 use crate::state::{self, Key};
+use crate::warning::Warning;
 
 /// Returns the account's email.
 ///
@@ -88,7 +88,7 @@ mod tests {
     };
     use super::*;
     use crate::in_use::InUse;
-    use crate::service::Permit;
+    use crate::permit::Permit;
 
     /// `here` in a second organisation beside the first, with the login stored, `here`'s,
     /// recorded as Anthropic named it for `recorded`, and Claude Code's config naming `here`

@@ -1,7 +1,7 @@
 // A file replaced whole from a private temporary, in a folder the caller made with its own access.
 
 use crate::host::fs;
-use crate::service::Permit;
+use crate::permit::Permit;
 use std::fs::File;
 use std::io::{self, Write};
 use std::path::Path;

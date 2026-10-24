@@ -52,7 +52,7 @@ pub mod names;
 mod printed;
 
 use crate::context::Context;
-use crate::service::Permit;
+use crate::permit::Permit;
 use crate::usage;
 use serde_json::Value;
 
@@ -617,7 +617,7 @@ pub(crate) trait Provider: Send + Sync + std::fmt::Debug {
     ) -> std::io::Result<std::process::Command>;
 
     /// The login a sign-in left in `dir`, as the tool stored it.
-    fn read_signin(
+    fn login_from_sign_in(
         &self,
         ctx: &Context,
         dir: &std::path::Path,

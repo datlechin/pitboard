@@ -6,12 +6,13 @@ pub(crate) mod budget;
 pub mod pace;
 pub(crate) mod readings;
 
-use crate::time;
+use crate::time::{self, HOUR, WEEK};
 use serde_json::Value;
+use std::fmt;
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Window {
-    pub kind: String,
+    pub kind: LimitKind,
     pub scope: Option<String>,
     pub percent: f64,
     pub resets_at: Option<i64>,
@@ -30,17 +31,69 @@ pub struct Window {
     pub length_seconds: Option<i64>,
 }
 
-/// How long one of Anthropic's windows runs, from its kind.
-///
-/// Anthropic names its windows rather than timing them: `session` and the older
-/// `five_hour` are the five-hour limit, and every `weekly_` kind, like the older
-/// `seven_day`, runs a week. A kind not listed here has no length Pitboard can vouch for.
-pub(crate) fn anthropic_window_length(kind: &str) -> Option<i64> {
-    match kind {
-        "session" | "five_hour" => Some(5 * 3600),
-        "seven_day" => Some(7 * 86_400),
-        weekly if weekly.starts_with("weekly_") => Some(7 * 86_400),
-        _ => None,
+/// A limit by what it is, whichever name its service gave it. Written as Anthropic's name.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[serde(from = "String", into = "String")]
+pub enum LimitKind {
+    /// The five-hour limit.
+    Session,
+    /// The weekly limit of every model.
+    WeeklyAll,
+    /// The weekly limit of one model or surface, which `Window::scope` names.
+    WeeklyScoped,
+    /// Any other, by its service's name.
+    Other(String),
+}
+
+impl LimitKind {
+    pub fn as_str(&self) -> &str {
+        match self {
+            LimitKind::Session => "session",
+            LimitKind::WeeklyAll => "weekly_all",
+            LimitKind::WeeklyScoped => "weekly_scoped",
+            LimitKind::Other(name) => name,
+        }
+    }
+
+    // Anthropic names its windows rather than timing them, and every `weekly_` one runs a week.
+    pub(crate) fn length(&self) -> Option<i64> {
+        match self {
+            LimitKind::Session => Some(5 * HOUR),
+            LimitKind::WeeklyAll | LimitKind::WeeklyScoped => Some(WEEK),
+            LimitKind::Other(name) if name.starts_with("weekly_") => Some(WEEK),
+            LimitKind::Other(_) => None,
+        }
+    }
+}
+
+// Claude Code's status line, Anthropic's answer without `limits` and the readings an older
+// Pitboard kept call the five-hour and weekly limits `five_hour` and `seven_day`.
+impl From<&str> for LimitKind {
+    fn from(name: &str) -> LimitKind {
+        match name {
+            "session" | "five_hour" => LimitKind::Session,
+            "weekly_all" | "seven_day" => LimitKind::WeeklyAll,
+            "weekly_scoped" => LimitKind::WeeklyScoped,
+            other => LimitKind::Other(other.to_owned()),
+        }
+    }
+}
+
+impl From<String> for LimitKind {
+    fn from(name: String) -> LimitKind {
+        LimitKind::from(name.as_str())
+    }
+}
+
+impl From<LimitKind> for String {
+    fn from(kind: LimitKind) -> String {
+        kind.to_string()
+    }
+}
+
+impl fmt::Display for LimitKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
     }
 }
 
@@ -98,9 +151,14 @@ impl Window {
         reached(self.used(now), share)
     }
 
-    /// Whether `other` measures the same limit, whichever name its source gave it.
+    pub(crate) fn length(&self) -> Option<i64> {
+        self.length_seconds
+            .filter(|s| *s > 0)
+            .or_else(|| self.kind.length())
+    }
+
     pub(crate) fn same_limit(&self, other: &Window) -> bool {
-        limit_name(&self.kind) == limit_name(&other.kind) && self.scope == other.scope
+        self.kind == other.kind && self.scope == other.scope
     }
 
     /// Whether `other` is this very window: the same limit, resetting at the same time as
@@ -111,19 +169,6 @@ impl Window {
                 (self.resets_at, other.resets_at),
                 (Some(x), Some(y)) if same_reset(x, y)
             )
-    }
-}
-
-/// A limit by one name. A Claude Code session, and Anthropic's answer when it has no
-/// `limits`, use the older `five_hour` and `seven_day` for the limits `limits` calls
-/// `session` and `weekly_all`. Codex's windows borrow the older names for their lengths,
-/// which is harmless: every Codex reading names its windows the same way, and a model's
-/// are told apart by their scope.
-pub(crate) fn limit_name(kind: &str) -> &str {
-    match kind {
-        "five_hour" => "session",
-        "seven_day" => "weekly_all",
-        other => other,
     }
 }
 
@@ -310,13 +355,13 @@ pub fn room(
         return None;
     }
     let given = |had: &Window| theirs.iter().find(|window| window.same_limit(had));
-    let gives = |kind: &str| {
+    let gives = |kind: LimitKind| {
         theirs
             .iter()
-            .any(|window| window.scope.is_none() && limit_name(&window.kind) == kind)
+            .any(|window| window.scope.is_none() && window.kind == kind)
     };
     if !lists_every_limit {
-        let overall = gives("session") && gives("weekly_all");
+        let overall = gives(LimitKind::Session) && gives(LimitKind::WeeklyAll);
         let unknown = |had: &Window| {
             given(had).is_none() && !(overall && had.scope.is_some() && !had.same_limit(limit))
         };
@@ -332,7 +377,7 @@ pub fn room(
     Some(Room {
         used: given(limit).map(|window| window.used(now)),
         fullest,
-        weekly: !lists_every_limit || gives("weekly_all"),
+        weekly: !lists_every_limit || gives(LimitKind::WeeklyAll),
     })
 }
 
@@ -365,8 +410,10 @@ fn window_from_limit(l: &Value) -> Option<Window> {
             .and_then(Value::as_str)
             .map(str::to_owned)
     };
+    let kind = LimitKind::from(l.get("kind")?.as_str()?);
     Some(Window {
-        kind: l.get("kind")?.as_str()?.to_string(),
+        length_seconds: kind.length(),
+        kind,
         scope: named("model").or_else(|| named("surface")),
         severity: l.get("severity").and_then(Value::as_str).map(str::to_owned),
         percent: percent(l.get("percent")?)?,
@@ -375,16 +422,14 @@ fn window_from_limit(l: &Value) -> Option<Window> {
             .and_then(Value::as_str)
             .and_then(time::parse),
         is_active: l.get("is_active").and_then(Value::as_bool).unwrap_or(false),
-        length_seconds: l
-            .get("kind")
-            .and_then(Value::as_str)
-            .and_then(anthropic_window_length),
     })
 }
 
-fn window_from_named(kind: &str, v: &Value) -> Option<Window> {
+fn window_from_named(name: &str, v: &Value) -> Option<Window> {
+    let kind = LimitKind::from(name);
     Some(Window {
-        kind: kind.to_string(),
+        length_seconds: kind.length(),
+        kind,
         scope: None,
         severity: None,
         percent: percent(v.get("utilization")?)?,
@@ -393,7 +438,6 @@ fn window_from_named(kind: &str, v: &Value) -> Option<Window> {
             .and_then(Value::as_str)
             .and_then(time::parse),
         is_active: false,
-        length_seconds: anthropic_window_length(kind),
     })
 }
 
@@ -462,7 +506,7 @@ mod tests {
         let scoped = s
             .windows
             .iter()
-            .find(|w| w.kind == "weekly_scoped")
+            .find(|w| w.kind == LimitKind::WeeklyScoped)
             .unwrap();
         assert_eq!(scoped.scope.as_deref(), Some("Fable"));
     }
@@ -473,9 +517,26 @@ mod tests {
         answer.as_object_mut().unwrap().remove("limits");
         let s = from_usage_object(&answer, 1789933772);
         assert_eq!(s.windows.len(), 2);
-        assert_eq!(s.windows[0].kind, "five_hour");
+        assert_eq!(s.windows[0].kind, LimitKind::Session);
         assert_eq!(s.windows[0].percent, 62.0);
         assert!(!s.lists_every_limit, "nothing scoped to a model is named");
+    }
+
+    #[test]
+    fn a_limit_kept_under_its_older_name_is_written_under_its_kind() {
+        for (kept, kind, written) in [
+            ("five_hour", LimitKind::Session, "session"),
+            ("seven_day", LimitKind::WeeklyAll, "weekly_all"),
+            ("2_day", LimitKind::Other("2_day".into()), "2_day"),
+        ] {
+            let read: Window = serde_json::from_value(serde_json::json!({
+                "kind": kept, "scope": null, "percent": 40.0, "resets_at": null,
+                "is_active": false
+            }))
+            .unwrap();
+            assert_eq!(read.kind, kind);
+            assert_eq!(serde_json::to_value(&read).unwrap()["kind"], written);
+        }
     }
 
     #[test]
@@ -532,14 +593,15 @@ mod tests {
     }
 
     fn measured(kind: &str, percent: f64, resets_at: Option<i64>) -> Window {
+        let kind = LimitKind::from(kind);
         Window {
-            kind: kind.into(),
+            length_seconds: kind.length(),
+            kind,
             scope: None,
             percent,
             resets_at,
             is_active: true,
             severity: None,
-            length_seconds: anthropic_window_length(kind),
         }
     }
 
@@ -667,8 +729,8 @@ mod tests {
         assert_eq!(
             shares(&reading),
             [
-                ("five_hour", 62.0),
-                ("seven_day", 48.0),
+                ("session", 62.0),
+                ("weekly_all", 48.0),
                 ("weekly_scoped", 100.0)
             ]
         );
@@ -717,11 +779,11 @@ mod tests {
             ..whole.clone()
         };
         let reading = answered(Some(&known), &given, NOW);
-        assert_eq!(shares(&reading), [("five_hour", 30.0), ("seven_day", 45.0)]);
+        assert_eq!(shares(&reading), [("session", 30.0), ("weekly_all", 45.0)]);
         assert!(!reading.lists_every_limit);
         assert_eq!(
             shares(&answered(Some(&known), &whole, NOW)),
-            [("seven_day", 45.0)],
+            [("weekly_all", 45.0)],
             "where the answer lists every limit"
         );
     }
@@ -784,7 +846,7 @@ mod tests {
             )
             .expect("the next window");
             let window = &next.windows[0];
-            assert_eq!(window.kind, "session", "{had:?}");
+            assert_eq!(window.kind, LimitKind::Session, "{had:?}");
             assert_eq!(
                 (window.percent, window.resets_at),
                 (3.0, Some(NOW + 5 * HOUR))

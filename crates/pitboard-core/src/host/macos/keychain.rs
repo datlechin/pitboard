@@ -8,8 +8,8 @@
 //! A write through `security -U` changes only the item's mtime.
 
 use crate::context::Context;
-use crate::host::SECURITY;
-use crate::service::Permit;
+use crate::host::{Input, SECURITY};
+use crate::permit::Permit;
 use crate::store::{Backend, Cost, Error, RawStore};
 use std::process::{Command, Output};
 use std::time::Duration;
@@ -93,7 +93,7 @@ const SECURITY_TIMEOUT: Duration = Duration::from_secs(60);
 fn security(args: &[&str], input: &str) -> std::io::Result<Output> {
     let mut command = Command::new(SECURITY);
     command.args(args);
-    super::helper::output_within(command, input.as_bytes(), SECURITY_TIMEOUT)
+    super::proc::run_within(command, Input::Stdin(input.as_bytes()), SECURITY_TIMEOUT)
 }
 
 /// What a read makes of an answer.

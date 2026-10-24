@@ -16,12 +16,13 @@ use crate::duty::warm::decide::{self, Ledger, Standing};
 use crate::duty::warm::run;
 use crate::duty::warm::{self, Failure, Range};
 use crate::error::Error;
+use crate::park;
+use crate::permit::Permit;
 use crate::provider::ProviderId;
 use crate::provider::{self, claude};
-use crate::service::Permit;
-use crate::service::Warning;
 use crate::state::Key;
-use crate::{park, status};
+use crate::status::{self, Login};
+use crate::warning::Warning;
 use serde_json::Value;
 use std::collections::BTreeSet;
 
@@ -144,7 +145,7 @@ pub(crate) fn warm_up(settled: Settled, target: Target) -> Result<(WarmUp, Vec<W
                 }
                 claude::warm::verdict(&ran)
             })
-            .and_then(|()| started(ctx, permit, &account.id, &handed.login, handed.signed_in));
+            .and_then(|()| started(ctx, permit, &account.id, &handed.login, handed.which));
         if started == Err(Failure::LimitReached) {
             // So what holds it back from now on is the reading's, which says until when.
             let _ = status::ask_one(
@@ -153,7 +154,7 @@ pub(crate) fn warm_up(settled: Settled, target: Target) -> Result<(WarmUp, Vec<W
                 provider::claude_code(),
                 &account.id,
                 &handed.login,
-                handed.signed_in,
+                handed.which,
             );
         }
         started
@@ -175,12 +176,11 @@ pub(crate) fn warm_up(settled: Settled, target: Target) -> Result<(WarmUp, Vec<W
     })
 }
 
-/// What a warm-up's run is handed: its command, with the login it runs on, whether that is the
-/// login Claude Code has stored, and what renewing that login warned of.
+// `warnings`: what renewing the login warned of.
 struct Handed {
     headless: run::Headless,
     login: Value,
-    signed_in: bool,
+    which: Login,
     warnings: Vec<Warning>,
 }
 
@@ -196,7 +196,7 @@ fn hand_over(
     now: i64,
 ) -> Result<Handed> {
     let label = state.typed(key);
-    let (login, signed_in, warnings) = match account.parked.clone() {
+    let (login, which, warnings) = match account.parked.clone() {
         Some(mut held) => {
             if held
                 .access_expires_at
@@ -210,7 +210,7 @@ fn hand_over(
             }
             (
                 park::load(ctx, provider::claude_code(), key, &held)?,
-                false,
+                Login::Parked,
                 Vec::new(),
             )
         }
@@ -221,7 +221,7 @@ fn hand_over(
             match live {
                 identify::Live::Login(login) if account.owned_by(&login.owner) => {
                     let warnings = login.lock_warning(ProviderId::Claude).into_iter().collect();
-                    (login.document, true, warnings)
+                    (login.document, Login::Live, warnings)
                 }
                 _ => return Err(not_due(label, &warm::Hold::NothingParked, now)),
             }
@@ -239,7 +239,7 @@ fn hand_over(
     Ok(Handed {
         headless,
         login,
-        signed_in,
+        which,
         warnings,
     })
 }
@@ -256,12 +256,11 @@ fn started(
     permit: Permit,
     id: &str,
     login: &Value,
-    signed_in: bool,
+    which: Login,
 ) -> std::result::Result<Option<i64>, Failure> {
     for pause in [0, ASKED_AGAIN_AFTER] {
         ctx.clock.pause(pause);
-        let Some(reading) =
-            status::ask_one(ctx, permit, provider::claude_code(), id, login, signed_in)
+        let Some(reading) = status::ask_one(ctx, permit, provider::claude_code(), id, login, which)
         else {
             return Ok(None);
         };
@@ -452,7 +451,8 @@ mod tests {
     use super::super::harness::{audit_lines, codex_account, machine};
     use crate::duty::warm::{self, Range};
     use crate::error::Error;
-    use crate::service::{Permit, Pitboard};
+    use crate::permit::Permit;
+    use crate::service::Pitboard;
     use crate::state;
 
     #[test]
@@ -649,7 +649,8 @@ mod tests {
         use crate::duty::Look;
         use crate::duty::warm::run::{Ran, Started, WarmScript};
         use crate::duty::warm::{Range, Standing};
-        use crate::service::{Permit, Pitboard};
+        use crate::permit::Permit;
+        use crate::service::Pitboard;
         use crate::time::{Clock, FixedClock};
         use crate::usage::{Snapshot, Source, Window};
         use jiff::tz::TimeZone;

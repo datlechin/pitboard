@@ -115,7 +115,8 @@ why the contract moved. They hold each message as `[message]`: its code is the c
 
 A test of what Pitboard does checks codes and fields, and compares a sentence with the
 function that makes it. Each sentence is pinned once, in the tests of the module that makes
-it: `pitboard_core`'s `words.rs` or `error.rs`, or `pitboard-ffi`'s `present/words.rs`.
+it: `pitboard_core`'s `words.rs`, `error.rs` or `doctor/words.rs`, or `pitboard-ffi`'s
+`present/words.rs`.
 
 For a change to the install script, `packaging/install.sh`, another template in `packaging/`,
 or `.github/scripts/fill-template.sh`, which fills them at release time:

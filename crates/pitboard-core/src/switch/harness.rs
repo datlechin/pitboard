@@ -14,11 +14,11 @@
 use super::*;
 use crate::api::scripted::ScriptedApi;
 use crate::context::ScratchMachine;
+use crate::permit::Permit;
 use crate::provider::Owner;
 use crate::provider::ProviderId;
 use crate::provider::claude::api::Renewed;
 use crate::provider::claude::paths as claude;
-use crate::service::Permit;
 
 use crate::host::memory::MemoryHost;
 use crate::state::Account;
@@ -720,7 +720,7 @@ pub(crate) fn window(kind: &str, percent: f64) -> crate::usage::Window {
         resets_at: Some(NOW + 3600),
         is_active: true,
         severity: None,
-        length_seconds: crate::usage::anthropic_window_length(kind),
+        length_seconds: crate::usage::LimitKind::from(kind).length(),
     }
 }
 

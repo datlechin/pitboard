@@ -4,11 +4,12 @@ use super::{
 };
 use super::{data, rested, snapshot, tree, whereabouts};
 use crate::desktop_testing::Person;
+use crate::permit::Permit;
 use crate::provider::ProviderId;
-use crate::service::{Permit, Warning};
 use crate::state::{self, Key, ParkKind, SetAside};
 use crate::switch::harness::{HOME, NOW, Rig, WORK, audit_lines, desktop_pair, hold};
 use crate::switch::{Outcome, settle, switch};
+use crate::warning::Warning;
 use serde_json::{Map, Value, json};
 use std::path::PathBuf;
 

@@ -26,7 +26,7 @@
 use crate::context::Context;
 use crate::error::{Error, Result};
 use crate::host::Scheduler;
-use crate::service::Permit;
+use crate::permit::Permit;
 use std::path::{Path, PathBuf};
 
 /// Once a day. A refresh token's life is measured in weeks and Pitboard starts renewing

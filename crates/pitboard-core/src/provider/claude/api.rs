@@ -7,8 +7,8 @@
 
 use crate::api::{Refusal, agent, retry_after, server_time, test_base};
 use crate::context::Context;
+use crate::permit::Permit;
 use crate::provider::{Owner, ProviderError, ProviderId};
-use crate::service::Permit;
 use crate::usage::{self, Snapshot};
 use serde_json::Value;
 

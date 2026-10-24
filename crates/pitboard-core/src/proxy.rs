@@ -360,6 +360,65 @@ pub(crate) fn called() -> [&'static str; 4] {
     ]
 }
 
+// One entry of `ProxyServer`: `[protocol=][scheme://][user[:password]@]host:port`. Internet
+// Options writes one entry for every protocol, or one a protocol, apart by `;`.
+pub(crate) struct SystemProxy<'a> {
+    pub(crate) protocol: Option<&'a str>,
+    scheme: Option<&'a str>,
+    signed_in: Option<bool>,
+    pub(crate) server: &'a str,
+}
+
+impl SystemProxy<'_> {
+    // As `shown` shows a variable's: `***` for a user name and a password.
+    pub(crate) fn masked(&self) -> String {
+        let protocol = self.protocol.map_or_else(String::new, |p| format!("{p}="));
+        let scheme = self.scheme.map_or_else(String::new, |s| format!("{s}://"));
+        let hidden = match self.signed_in {
+            Some(true) => "***:***@",
+            Some(false) => "***@",
+            None => "",
+        };
+        format!("{protocol}{scheme}{hidden}{}", self.server)
+    }
+}
+
+// Only a protocol Internet Options names, so a user name holding `=` stays hidden.
+const PROTOCOLS: [&str; 4] = ["http", "https", "ftp", "socks"];
+
+pub(crate) fn system_proxies(value: &str) -> Vec<SystemProxy<'_>> {
+    let word = |part: &str| !part.is_empty() && part.bytes().all(|b| b.is_ascii_alphanumeric());
+    value
+        .split(';')
+        .map(str::trim)
+        .filter(|entry| !entry.is_empty())
+        .map(|entry| {
+            let (protocol, rest) = match entry.split_once('=') {
+                Some((protocol, rest))
+                    if PROTOCOLS.iter().any(|p| p.eq_ignore_ascii_case(protocol)) =>
+                {
+                    (Some(protocol), rest)
+                }
+                _ => (None, entry),
+            };
+            let (scheme, rest) = match rest.split_once("://") {
+                Some((scheme, rest)) if word(scheme) => (Some(scheme), rest),
+                _ => (None, rest),
+            };
+            let (signed_in, server) = match rest.rsplit_once('@') {
+                Some((user, server)) => (Some(user.contains(':')), server),
+                None => (None, rest),
+            };
+            SystemProxy {
+                protocol,
+                scheme,
+                signed_in,
+                server,
+            }
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

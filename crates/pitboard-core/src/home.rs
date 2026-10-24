@@ -5,7 +5,7 @@
 use crate::context::Context;
 use crate::error::{Error, Result};
 use crate::host::Os;
-use crate::service::Permit;
+use crate::permit::Permit;
 use std::io;
 use std::path::{Path, PathBuf};
 
@@ -189,7 +189,7 @@ pub(crate) fn ensure(ctx: &Context, permit: Permit) -> io::Result<PathBuf> {
 /// unset to Codex, and an empty `CLAUDE_SECURESTORAGE_CONFIG_DIR` names Claude Code's
 /// default folder.
 ///
-/// The one gate every change passes asks this ([`crate::service::Permit`]), and so does
+/// The one gate every change passes asks this ([`crate::permit::Permit`]), and so does
 /// every read of Pitboard's account list, so nothing is read or written under such a home.
 pub(crate) fn check_absolute(ctx: &Context) -> Result<()> {
     let homes: [(&'static str, Option<&Path>); 5] = [

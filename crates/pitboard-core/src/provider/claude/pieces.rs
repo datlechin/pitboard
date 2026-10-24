@@ -3,7 +3,7 @@
 // with a manifest `#m` naming how many and how long, and `#p` naming how many pieces a write
 // under way may leave. Each is an item of its own, named after the user name.
 
-use crate::service::Permit;
+use crate::permit::Permit;
 use crate::store::Error;
 use base64::prelude::{BASE64_STANDARD, Engine as _};
 

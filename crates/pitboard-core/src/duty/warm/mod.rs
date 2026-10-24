@@ -23,11 +23,12 @@ pub(crate) mod decide;
 pub(crate) mod run;
 
 pub use decide::{Hold, Standing};
+pub use run::Ran;
 
 use crate::context::Context;
 use crate::error::{Error, Result};
+use crate::permit::Permit;
 use crate::provider::ProviderId;
-use crate::service::Permit;
 use crate::state::State;
 use crate::{atomic, home};
 use jiff::Timestamp;

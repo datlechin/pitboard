@@ -158,6 +158,28 @@ pub(crate) fn sign_in_store(ctx: &Context) -> layers::Store {
     layers::of_a_sign_in(ctx, &config_file(ctx))
 }
 
+// Never by running it, and no further than two folders up: names before any file is opened.
+pub(crate) fn installed_version(program: &Path) -> Option<String> {
+    use crate::host::program::{looks_like_a_version, npm_shim_target, version_where};
+    let program = npm_shim_target(program).unwrap_or_else(|| program.to_path_buf());
+    let resolved = std::fs::canonicalize(program).ok()?;
+    let near: Vec<&Path> = resolved.ancestors().skip(1).take(2).collect();
+    near.iter()
+        .find_map(|dir| {
+            dir.file_name()
+                .and_then(|n| n.to_str())
+                .and_then(|name| name.split('-').next())
+                .filter(|leading| looks_like_a_version(leading))
+                .map(str::to_owned)
+        })
+        .or_else(|| {
+            near.iter().find_map(|dir| {
+                version_where(&dir.join("package.json"), "name", "@openai/codex")
+                    .or_else(|| version_where(&dir.join("codex-package.json"), "variant", "codex"))
+            })
+        })
+}
+
 #[cfg(test)]
 #[allow(
     clippy::disallowed_methods,
@@ -356,5 +378,99 @@ mod tests {
             keyring_or(Backend::Keyring),
             "a requirement pins a sign-in's store too"
         );
+    }
+
+    /// Each way Codex is installed, laid out in a scratch directory, and a shim that names
+    /// nothing. Only the two directories above the program are looked at, names first, so a
+    /// standalone install is named without opening any file inside it.
+    #[test]
+    fn a_version_is_read_out_of_each_way_codex_is_installed() {
+        use crate::host::fs::testing;
+
+        let scratch = tempfile::tempdir().expect("a scratch home");
+        let root = scratch.path().to_path_buf();
+        let place = |at: &str| {
+            let path = root.join(at);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(&path, "").unwrap();
+            path
+        };
+
+        let standalone =
+            place("codex/packages/standalone/releases/0.154.0-aarch64-apple-darwin/bin/codex");
+        // A package.json beside it that would say otherwise, to show it is never opened.
+        std::fs::write(
+            standalone.with_file_name("package.json"),
+            r#"{"name": "@openai/codex", "version": "9.9.9"}"#,
+        )
+        .unwrap();
+        let link = root.join("bin/codex");
+        std::fs::create_dir_all(link.parent().unwrap()).unwrap();
+        testing::link(&standalone, &link).expect("a link");
+        assert_eq!(installed_version(&link).as_deref(), Some("0.154.0"));
+
+        let cask = place("Caskroom/codex/0.153.2/codex-aarch64-apple-darwin");
+        assert_eq!(installed_version(&cask).as_deref(), Some("0.153.2"));
+
+        let npm = place("lib/node_modules/@openai/codex/bin/codex.js");
+        std::fs::write(
+            root.join("lib/node_modules/@openai/codex/package.json"),
+            r#"{"name": "@openai/codex", "version": "0.150.1"}"#,
+        )
+        .unwrap();
+        assert_eq!(installed_version(&npm).as_deref(), Some("0.150.1"));
+
+        // Three levels up is too far: nothing further than two directories is read.
+        let shim = place("volta/bin/volta-shim");
+        std::fs::write(
+            root.join("package.json"),
+            r#"{"name": "@openai/codex", "version": "1.2.3"}"#,
+        )
+        .unwrap();
+        assert_eq!(installed_version(&shim), None);
+    }
+
+    // `codex.exe` has no version resource in 0.162.1.
+    #[test]
+    fn a_version_is_read_where_codex_is_installed_on_windows() {
+        let scratch = tempfile::tempdir().expect("a scratch home");
+        let root = scratch.path().to_path_buf();
+        let place = |at: &str| {
+            let path = root.join(at);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(&path, "").unwrap();
+            path
+        };
+        let layout = |version: &str, variant: &str| {
+            format!(
+                r#"{{"layoutVersion": 1, "version": "{version}", "target": "x86_64-pc-windows-msvc", "variant": "{variant}", "entrypoint": "bin/codex.exe"}}"#
+            )
+        };
+
+        let vendored = place("codex-win32-x64/vendor/x86_64-pc-windows-msvc/bin/codex.exe");
+        let package = root.join("codex-win32-x64/vendor/x86_64-pc-windows-msvc/codex-package.json");
+        std::fs::write(&package, layout("0.162.1", "codex")).unwrap();
+        assert_eq!(installed_version(&vendored).as_deref(), Some("0.162.1"));
+        std::fs::write(&package, layout("0.162.1", "something-else")).unwrap();
+        assert_eq!(
+            installed_version(&vendored),
+            None,
+            "only Codex's own package"
+        );
+
+        place("npm/node_modules/@openai/codex/bin/codex.js");
+        std::fs::write(
+            root.join("npm/node_modules/@openai/codex/package.json"),
+            r#"{"name": "@openai/codex", "version": "0.161.0"}"#,
+        )
+        .unwrap();
+        let shim = root.join("npm/codex.cmd");
+        std::fs::write(
+            &shim,
+            "@ECHO off\r\nIF EXIST \"%dp0%\\node.exe\" (\r\n  SET \"_prog=%dp0%\\node.exe\"\r\n)\r\n\
+             \"%_prog%\"  \"%dp0%\\node_modules\\@openai\\codex\\bin\\codex.js\" %*\r\n",
+        )
+        .unwrap();
+        assert_eq!(installed_version(&shim).as_deref(), Some("0.161.0"));
     }
 }

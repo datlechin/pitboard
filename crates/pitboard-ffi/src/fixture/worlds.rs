@@ -413,7 +413,7 @@ impl Stage {
         {
             let mut usage = self.usage();
             for window in usage.entry(id.clone()).or_default() {
-                if window.kind == "session" {
+                if window.kind == usage::LimitKind::Session {
                     window.percent = 1.0;
                     window.resets_at = Some(now + 5 * HOUR);
                 }
@@ -489,12 +489,8 @@ impl Stage {
     /// with: a five-hour limit barely touched, for somebody new.
     fn used_by(&self, person: &Person) -> usage::Snapshot {
         let windows = self.usage().get(&person.id).cloned().unwrap_or_else(|| {
-            let kind = match person.tool {
-                ProviderId::Codex => "five_hour",
-                _ => "session",
-            };
             vec![usage::Window {
-                kind: kind.into(),
+                kind: usage::LimitKind::Session,
                 scope: None,
                 percent: 3.0,
                 resets_at: Some(self.now + 5 * HOUR),

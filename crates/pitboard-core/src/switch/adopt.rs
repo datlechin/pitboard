@@ -21,7 +21,7 @@
 use super::{exclusive, purge};
 use crate::context::Context;
 use crate::error::Result;
-use crate::service::Permit;
+use crate::permit::Permit;
 use crate::state::{Aside, ParkKind, SetAside};
 use crate::{audit, state, store};
 

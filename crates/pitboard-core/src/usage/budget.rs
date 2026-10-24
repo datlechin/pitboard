@@ -21,29 +21,12 @@
 //! Nothing here is secret. It is names, times and counts.
 
 use crate::context::Context;
-use crate::service::Permit;
+use crate::permit::Permit;
 use crate::usage::Snapshot;
 use crate::{atomic, home};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
-
-/// How long a window runs, which is what makes the floor a derivation rather than a
-/// preference.
-///
-/// The reading says, where the service said: OpenAI states every window's length, and
-/// Pitboard derives Anthropic's from its kind when it reads the answer. A reading
-/// remembered from before Pitboard kept the length has only its kind, and Anthropic's
-/// kinds are the only ones that could have been remembered then.
-///
-/// Until this read the length, it knew only `five_hour` and `seven_day`, and Anthropic has
-/// been answering `session` and `weekly_all`. Every account was asked about once a minute,
-/// the unknown-window fallback, against the three minutes this module promises.
-fn window_seconds(window: &crate::usage::Window) -> Option<i64> {
-    window
-        .length_seconds
-        .or_else(|| crate::usage::anthropic_window_length(&window.kind))
-}
 
 /// One percentage point of the tightest window this account has, in seconds. The floor.
 ///
@@ -56,7 +39,7 @@ pub(crate) fn floor_for(reading: Option<&Snapshot>) -> i64 {
         .map(|s| s.windows.as_slice())
         .unwrap_or_default()
         .iter()
-        .filter_map(window_seconds)
+        .filter_map(crate::usage::Window::length)
         .min();
     shortest.map_or(UNKNOWN_FLOOR, |seconds| (seconds / 100).max(1))
 }
@@ -154,22 +137,20 @@ pub(crate) enum Held {
     Unreachable,
 }
 
-/// Whether to ask about this account now.
-///
-/// `None` means ask. `Some(held)` means do not, and says which of the three reasons it is,
-/// so a front end can show the right thing and a person can tell a quiet answer from a
-/// refused one.
-///
-/// `forced` is a person asking, with `status --fresh` or the app's Refresh. It goes past the
-/// floor and past a wait Pitboard chose after failing to reach the service, since asking is
-/// how somebody says the network is back. It does not go past a wait the service asked for:
-/// that request is the traffic the service asked not to get, and it would answer with the
-/// same refusal.
+// `status --fresh`, the app's Refresh and a warm-up seeing its period ask `Now`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Ask {
+    WhenDue,
+    Now,
+}
+
+// `Now` asks past Pitboard's own wait, since asking is how somebody says the network is back,
+// and not past the service's, which it would answer with the same refusal.
 pub(crate) fn may_ask(
     ctx: &Context,
     id: &str,
     last_reading: Option<&Snapshot>,
-    forced: bool,
+    ask: Ask,
 ) -> Option<Held> {
     let ledger = load(ctx);
     let entry = ledger.get(id)?;
@@ -177,9 +158,10 @@ pub(crate) fn may_ask(
     let now = ctx.now();
     if record.held_until > now {
         let held = entry.held();
-        return (!forced || held == Held::RateLimited).then_some(held);
+        return (ask == Ask::WhenDue || held == Held::RateLimited).then_some(held);
     }
-    (!forced && now - record.answered_at < floor_for(last_reading)).then_some(Held::Fresh)
+    (ask == Ask::WhenDue && now - record.answered_at < floor_for(last_reading))
+        .then_some(Held::Fresh)
 }
 
 /// What one request turned out to be, for recording afterwards.
@@ -318,7 +300,7 @@ mod tests {
             windows: kinds
                 .iter()
                 .map(|kind| Window {
-                    kind: (*kind).to_string(),
+                    kind: (*kind).into(),
                     scope: None,
                     percent: 10.0,
                     resets_at: None,
@@ -373,7 +355,7 @@ mod tests {
     #[test]
     fn an_account_nobody_has_asked_about_is_asked_about() {
         let (ctx, _clock, _s) = machine();
-        assert_eq!(may_ask(&ctx, "acc", None, false), None);
+        assert_eq!(may_ask(&ctx, "acc", None, Ask::WhenDue), None);
     }
 
     #[test]
@@ -387,16 +369,16 @@ mod tests {
         );
 
         assert_eq!(
-            may_ask(&ctx, "acc", Some(&five_hour), false),
+            may_ask(&ctx, "acc", Some(&five_hour), Ask::WhenDue),
             Some(Held::Fresh)
         );
         clock.advance(179);
         assert_eq!(
-            may_ask(&ctx, "acc", Some(&five_hour), false),
+            may_ask(&ctx, "acc", Some(&five_hour), Ask::WhenDue),
             Some(Held::Fresh)
         );
         clock.advance(2);
-        assert_eq!(may_ask(&ctx, "acc", Some(&five_hour), false), None);
+        assert_eq!(may_ask(&ctx, "acc", Some(&five_hour), Ask::WhenDue), None);
     }
 
     #[test]
@@ -408,7 +390,7 @@ mod tests {
             &[("acc".into(), Outcome::Answered)],
         );
         assert_eq!(
-            may_ask(&ctx, "acc", Some(&reading(&["five_hour"])), true),
+            may_ask(&ctx, "acc", Some(&reading(&["five_hour"])), Ask::Now),
             None
         );
     }
@@ -423,9 +405,12 @@ mod tests {
             Permit::for_a_test(),
             &[("acc".into(), Outcome::RateLimited(Some(300)))],
         );
-        assert_eq!(may_ask(&ctx, "acc", None, true), Some(Held::RateLimited));
+        assert_eq!(
+            may_ask(&ctx, "acc", None, Ask::Now),
+            Some(Held::RateLimited)
+        );
         clock.advance(301);
-        assert_eq!(may_ask(&ctx, "acc", None, true), None);
+        assert_eq!(may_ask(&ctx, "acc", None, Ask::Now), None);
     }
 
     /// A wait Pitboard chose after failing to reach the service is its own guess, and
@@ -438,8 +423,11 @@ mod tests {
             Permit::for_a_test(),
             &[("acc".into(), Outcome::Unreachable)],
         );
-        assert_eq!(may_ask(&ctx, "acc", None, false), Some(Held::Unreachable));
-        assert_eq!(may_ask(&ctx, "acc", None, true), None);
+        assert_eq!(
+            may_ask(&ctx, "acc", None, Ask::WhenDue),
+            Some(Held::Unreachable)
+        );
+        assert_eq!(may_ask(&ctx, "acc", None, Ask::Now), None);
     }
 
     /// The reason was told by the wait's length alone, and an account never answered
@@ -453,7 +441,10 @@ mod tests {
             Permit::for_a_test(),
             &[("acc".into(), Outcome::Unreachable)],
         );
-        assert_eq!(may_ask(&ctx, "acc", None, false), Some(Held::Unreachable));
+        assert_eq!(
+            may_ask(&ctx, "acc", None, Ask::WhenDue),
+            Some(Held::Unreachable)
+        );
     }
 
     /// A record an older Pitboard wrote has no reason, and is told by its length as it
@@ -468,9 +459,15 @@ mod tests {
             s = NOW + 20,
         );
         std::fs::write(path(&ctx), written).unwrap();
-        assert_eq!(may_ask(&ctx, "asked", None, true), Some(Held::RateLimited));
-        assert_eq!(may_ask(&ctx, "short", None, false), Some(Held::Unreachable));
-        assert_eq!(may_ask(&ctx, "short", None, true), None);
+        assert_eq!(
+            may_ask(&ctx, "asked", None, Ask::Now),
+            Some(Held::RateLimited)
+        );
+        assert_eq!(
+            may_ask(&ctx, "short", None, Ask::WhenDue),
+            Some(Held::Unreachable)
+        );
+        assert_eq!(may_ask(&ctx, "short", None, Ask::Now), None);
     }
 
     /// What Anthropic said to wait is believed over anything Pitboard would pick.
@@ -483,11 +480,11 @@ mod tests {
             &[("acc".into(), Outcome::RateLimited(Some(300)))],
         );
 
-        assert!(may_ask(&ctx, "acc", None, false).is_some());
+        assert!(may_ask(&ctx, "acc", None, Ask::WhenDue).is_some());
         clock.advance(299);
-        assert!(may_ask(&ctx, "acc", None, false).is_some());
+        assert!(may_ask(&ctx, "acc", None, Ask::WhenDue).is_some());
         clock.advance(2);
-        assert_eq!(may_ask(&ctx, "acc", None, false), None);
+        assert_eq!(may_ask(&ctx, "acc", None, Ask::WhenDue), None);
     }
 
     #[test]
@@ -530,7 +527,7 @@ mod tests {
             &[("acc".into(), Outcome::Answered)],
         );
         assert!(holds(&ctx).is_empty());
-        assert_eq!(may_ask(&ctx, "acc", None, false), Some(Held::Fresh));
+        assert_eq!(may_ask(&ctx, "acc", None, Ask::WhenDue), Some(Held::Fresh));
     }
 
     #[test]
@@ -543,6 +540,6 @@ mod tests {
         );
         forget(&ctx, Permit::for_a_test(), "acc");
         assert!(holds(&ctx).is_empty());
-        assert_eq!(may_ask(&ctx, "acc", None, false), None);
+        assert_eq!(may_ask(&ctx, "acc", None, Ask::WhenDue), None);
     }
 }

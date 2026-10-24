@@ -10,7 +10,7 @@
 //! week is dropped.
 
 use crate::context::Context;
-use crate::service::Permit;
+use crate::permit::Permit;
 use crate::{atomic, home};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};

@@ -12,6 +12,7 @@ use crate::context::Context;
 use crate::provider::Owner;
 use crate::provider::{self, LoginKind, ProviderId};
 use crate::state::{Key, State, new_id};
+use crate::warning::Warning;
 use serde::{Deserialize, Serialize};
 
 /// Whose login one tool has stored, and which login that was.
@@ -213,6 +214,70 @@ pub(crate) fn naming(which: ProviderId, owner: &Owner) -> Option<String> {
     match provider::of(which) {
         LoginKind::Document(tool) => (!tool.identifies_by_itself()).then(|| new_id(which, owner)),
         LoginKind::Folder(_) => Some(new_id(which, owner)),
+    }
+}
+
+pub(crate) fn in_doubt(state: &State, tool: ProviderId, known: &Known) -> Option<Warning> {
+    let named = Stored::of(state, tool, known.own_record.as_ref());
+    if let Some(doubt) = known.unconfirmed() {
+        return Some(Warning::InUseUnconfirmed {
+            tool,
+            last: Stored::of(state, tool, known.owner()),
+            named,
+            asked: doubt == Doubt::NamedMoved,
+        });
+    }
+    known
+        .named_another(tool)
+        .map(|_| Warning::ConfigNamesAnother {
+            tool,
+            config: named,
+            in_use: Stored::of(state, tool, known.owner()),
+        })
+}
+
+/// An account as a warning or a doctor check names it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Stored {
+    /// An enrolled account's, by the name to type for it.
+    Account(String),
+    /// An account nobody enrolled, by its email.
+    Unenrolled(String),
+    Nothing,
+    /// Nothing is recorded of the tool's store here.
+    Unknown,
+}
+
+impl Stored {
+    pub(crate) fn of(state: &State, tool: ProviderId, owner: Option<&Owner>) -> Stored {
+        match owner {
+            None => Stored::Nothing,
+            Some(owner) => state.account_of(tool, owner).map_or_else(
+                || Stored::Unenrolled(owner.email.clone()),
+                |account| Stored::Account(state.typed(&account.key())),
+            ),
+        }
+    }
+
+    pub(crate) fn said(&self, nobody: &str) -> String {
+        match self {
+            Stored::Account(name) => format!("`{name}`"),
+            Stored::Unenrolled(email) if email.is_empty() => {
+                "an account Pitboard has not enrolled".into()
+            }
+            Stored::Unenrolled(email) => email.clone(),
+            Stored::Nothing | Stored::Unknown => nobody.to_string(),
+        }
+    }
+
+    // What writes this account into the tool's own record again.
+    pub(crate) fn how_to_name(&self) -> String {
+        match self {
+            Stored::Account(name) => {
+                format!("`pitboard use {name}` writes `{name}` into the config.")
+            }
+            _ => "A switch writes the account it puts in use into the config.".into(),
+        }
     }
 }
 

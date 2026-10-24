@@ -9,11 +9,11 @@
 //! test that can say "asked once, for two front ends" is how that stays true.
 
 use crate::context::Context;
+use crate::permit::Permit;
 use crate::provider::Owner;
 use crate::provider::ProviderError;
 use crate::provider::claude::api::{Api, Renewed, Validated};
 use crate::provider::codex::api::{Authority, Fresh, Login, OpenAi};
-use crate::service::Permit;
 use crate::usage::Snapshot;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
