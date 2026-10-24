@@ -1,0 +1,22 @@
+---
+source: crates/pitboard/tests/cli/contract.rs
+expression: "serde_json :: json! ({ \"exit\" : code, \"envelope\" : value })"
+---
+{
+  "exit": 1,
+  "envelope": {
+    "v": 1,
+    "command": "use",
+    "ok": false,
+    "data": null,
+    "warnings": [],
+    "error": {
+      "code": "identity_unverifiable",
+      "message": "Pitboard could not confirm with Anthropic whose login is parked for `beta` (Anthropic answered 400: This organization cannot be read; request req_test), and will not put in use a login it cannot identify. Sign in to it again with `pitboard enroll beta --sign-in`.",
+      "cause": {
+        "code": "refused",
+        "worth_retrying": false
+      }
+    }
+  }
+}

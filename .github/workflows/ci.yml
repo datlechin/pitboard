@@ -188,8 +188,8 @@ jobs:
           RUSTFLAGS: -D warnings -C target-feature=+crt-static
           CARGO_TARGET_DIR: target/gated
         run: >
-          ./.github/scripts/test-as-standard-user.ps1 -Cargo '--locked -p pitboard --test windows_refuses'
-          -Probe target/debug/pitboard-probe.exe
+          ./.github/scripts/test-as-standard-user.ps1 -Cargo '--locked -p pitboard --test cli'
+          -Filter 'test(/^windows_refuses::/)' -Probe target/debug/pitboard-probe.exe
       - run: cargo clippy --workspace --all-targets --locked
       - run: cargo clippy -p pitboard-ffi --all-targets --locked --features fixture
       # No filter and no --skip: the windows-pending job checks each test left out says why.

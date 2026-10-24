@@ -465,7 +465,7 @@ window loads its site, and whatever the site's pages load, as a browser would.
     each kind of process found running a tool (`holder::Holding`) carry that name, since their
     words are made with no context.
 - `crates/pitboard`: the command line. Arguments, rendering for people, the man page, and
-  the `--json` contract, pinned by the snapshots in `crates/pitboard/tests/snapshots`.
+  the `--json` contract, pinned by the snapshots in `crates/pitboard/tests/cli/snapshots`.
   `build.rs` gives a Windows build its manifest, which the linker embeds, and its version
   resource, which `rc.exe` or `llvm-rc` compiles, both through `build/versioninfo.rs`.
   `json.rs` is the one writer of that JSON, for every command and every error. Its example
@@ -1094,7 +1094,7 @@ window loads its site, and whatever the site's pages load, as a browser would.
   from a link to a file or to nothing, `link`. So a system whose files have no mode, or that
   links a directory otherwise than a file, says how in its own face and nowhere else. The
   integration tests' harness says what differs by system in
-  `crates/pitboard/tests/common/os.rs`, one `match` on `host::OS` for each fact: where
+  `crates/pitboard/tests/cli/common/os.rs`, one `match` on `host::OS` for each fact: where
   Claude Code keeps the login it uses (`.credentials.json` on Windows, as on Linux, unless a
   test turns Credential Manager on, `Env::turn_credential_manager_on`, whose items in its own
   slot the harness deletes by name: `windows_backend_choice`), where Pitboard
@@ -1262,7 +1262,7 @@ window loads its site, and whatever the site's pages load, as a browser would.
   `watch_service`. Its run is ended only while Pitboard's lock is held, so never in the middle
   of a renewal or a switch; a removal of renewal's task leaves its run to finish. On Linux, a
   watch service systemd will not stop stays installed and says why. The app may be switching too: a switch is decided again under the lock
-  (`switch::auto`), and `tests/watch.rs` has four processes decide from one reading and make
+  (`switch::auto`), and `tests/cli/watch.rs` has four processes decide from one reading and make
   one switch.
 - On Windows `doctor` also reads what Task Scheduler keeps of the task (`Scheduler::task`):
   when it last ran and how that run ended, and the settings Pitboard writes that were changed
@@ -4225,7 +4225,7 @@ against ureq's own `Proxy::try_from_env` in a process given that row's variables
   to, and it failed with `Connection refused`, unless `NO_PROXY` named the host. That is
   what 0.7.0 did. With the refusal, each of the five fails before anything reaches the
   proxy or the host, in the core's tests (`proxy.rs`) and in `pitboard enroll`
-  (`tests/proxy.rs`), and an exempt host is reached with nothing but its own address
+  (`tests/cli/proxy.rs`), and an exempt host is reached with nothing but its own address
   looked up.
 - `Proxy::username` and `Proxy::password` are the address's own text, split at the last
   `:` before the `@`, and ureq sends them to an HTTP proxy as `Proxy-Authorization: Basic`.

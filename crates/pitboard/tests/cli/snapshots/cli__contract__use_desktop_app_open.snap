@@ -1,0 +1,19 @@
+---
+source: crates/pitboard/tests/cli/contract.rs
+expression: "serde_json :: json! ({ \"exit\" : code, \"envelope\" : value })"
+---
+{
+  "exit": 1,
+  "envelope": {
+    "v": 1,
+    "command": "use",
+    "ok": false,
+    "data": null,
+    "warnings": [],
+    "error": {
+      "code": "app_open",
+      "message": "Claude is open, and Pitboard changes its login only while it is closed. Quit Claude with Command-Q, then run this again. Nothing has changed.",
+      "cause": null
+    }
+  }
+}

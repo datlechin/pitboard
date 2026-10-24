@@ -1,0 +1,19 @@
+---
+source: crates/pitboard/tests/cli/contract.rs
+expression: "serde_json :: json! ({ \"exit\" : code, \"envelope\" : value })"
+---
+{
+  "exit": 1,
+  "envelope": {
+    "v": 1,
+    "command": "use",
+    "ok": false,
+    "data": null,
+    "warnings": [],
+    "error": {
+      "code": "account_unknown",
+      "message": "no account is enrolled as `Đạt2`. Enrolled: `Đạt`, `🏁`. Run `pitboard enroll Đạt2 --sign-in` to add it.",
+      "cause": null
+    }
+  }
+}

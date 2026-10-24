@@ -1,0 +1,34 @@
+---
+source: crates/pitboard/tests/cli/contract.rs
+expression: "serde_json :: json! ({ \"exit\" : code, \"envelope\" : value })"
+---
+{
+  "exit": 0,
+  "envelope": {
+    "v": 1,
+    "command": "warm",
+    "ok": true,
+    "data": {
+      "range": {
+        "from": "07:30",
+        "to": "23:00"
+      },
+      "halted": null,
+      "accounts": [
+        {
+          "label": "alpha",
+          "on": false
+        },
+        {
+          "label": "beta",
+          "on": true,
+          "state": "held",
+          "reason": "no_reading",
+          "until": null
+        }
+      ]
+    },
+    "warnings": [],
+    "error": null
+  }
+}

@@ -4,7 +4,7 @@ nextest-version = "0.9.131"
 # These time keychain reads, which `security` calls from other tests slow down. Run first,
 # they start without waiting for every running test to end.
 [[profile.default.overrides]]
-filter = "binary_id(pitboard::keychain_write_is_harmless)"
+filter = "binary_id(pitboard::cli) & test(/^keychain_write_is_harmless::/)"
 threads-required = "num-test-threads"
 priority = 100
 
@@ -19,7 +19,7 @@ priority = 100
 # write in pieces twice found the `#p` that write had just deleted (runs 39137503718 and
 # 39909919492), as the round trip above once did before it ran alone (run 38862457415).
 [[profile.default.overrides]]
-filter = "binary_id(pitboard::credman_write_is_harmless) & test(=writing_leaves_each_item_as_bun_writes_one)"
+filter = "binary_id(pitboard::cli) & test(=credman_write_is_harmless::writing_leaves_each_item_as_bun_writes_one)"
 threads-required = "num-test-threads"
 priority = 100
 
@@ -28,9 +28,9 @@ priority = 100
 # median job.
 [[profile.default.overrides]]
 filter = """
-binary_id(pitboard::windows_terminal)
-& (test(=a_warm_status_line_run_is_within_its_budget_and_holds_nothing_after)
-   | test(=status_lines_side_by_side_each_keep_their_session))
+binary_id(pitboard::cli)
+& (test(=windows_terminal::a_warm_status_line_run_is_within_its_budget_and_holds_nothing_after)
+   | test(=windows_terminal::status_lines_side_by_side_each_keep_their_session))
 """
 threads-required = "num-test-threads"
 priority = 100
@@ -44,10 +44,10 @@ credential-manager = { max-threads = 1 }
 [[profile.default.overrides]]
 filter = """
 (binary_id(pitboard-core) & (test(/^host::windows::credman::/) | test(/^provider::claude::credman::/)))
-| binary_id(pitboard::credman_write_is_harmless)
-| (binary_id(pitboard::switch_round_trip) & test(/credential_manager/))
-| (binary_id(pitboard::watch) & test(=a_warning_is_printed_though_the_line_it_comes_with_was_printed_before))
-| (binary_id(pitboard::contract) & test(=stow))
+| (binary_id(pitboard::cli) & test(/^credman_write_is_harmless::/))
+| (binary_id(pitboard::cli) & test(/^switch_round_trip::.*credential_manager/))
+| (binary_id(pitboard::cli) & test(=watch::a_warning_is_printed_though_the_line_it_comes_with_was_printed_before))
+| (binary_id(pitboard::cli) & test(=contract::stow))
 """
 test-group = "credential-manager"
 
@@ -71,7 +71,7 @@ slow-timeout = { period = "120s", terminate-after = 5 }
 
 # J2's reading, in every run's log.
 [[profile.ci.overrides]]
-filter = "binary_id(pitboard::windows_terminal) & test(=a_warm_status_line_run_is_within_its_budget_and_holds_nothing_after)"
+filter = "binary_id(pitboard::cli) & test(=windows_terminal::a_warm_status_line_run_is_within_its_budget_and_holds_nothing_after)"
 success-output = "immediate"
 
 [profile.ci.junit]

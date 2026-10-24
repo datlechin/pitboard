@@ -1,0 +1,23 @@
+---
+source: crates/pitboard/tests/cli/contract.rs
+expression: "serde_json::json!({ \"exit\": code, \"accounts\": accounts })"
+---
+{
+  "exit": 0,
+  "accounts": [
+    {
+      "code": "parked_login",
+      "name": "account Đạt",
+      "level": "ok",
+      "detail": "signed in; parked when you switch away",
+      "advice": ""
+    },
+    {
+      "code": "parked_login",
+      "name": "account 🏁",
+      "level": "ok",
+      "detail": "[parked, good for]",
+      "advice": ""
+    }
+  ]
+}

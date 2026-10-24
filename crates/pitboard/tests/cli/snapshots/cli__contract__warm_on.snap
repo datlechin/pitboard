@@ -1,0 +1,19 @@
+---
+source: crates/pitboard/tests/cli/contract.rs
+expression: "serde_json :: json! ({ \"exit\" : code, \"envelope\" : value })"
+---
+{
+  "exit": 0,
+  "envelope": {
+    "v": 1,
+    "command": "warm",
+    "ok": true,
+    "data": {
+      "label": "beta",
+      "on": true,
+      "changed": true
+    },
+    "warnings": [],
+    "error": null
+  }
+}

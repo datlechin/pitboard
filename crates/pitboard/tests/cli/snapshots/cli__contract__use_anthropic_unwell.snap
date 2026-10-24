@@ -1,0 +1,22 @@
+---
+source: crates/pitboard/tests/cli/contract.rs
+expression: "serde_json :: json! ({ \"exit\" : code, \"envelope\" : value })"
+---
+{
+  "exit": 1,
+  "envelope": {
+    "v": 1,
+    "command": "use",
+    "ok": false,
+    "data": null,
+    "warnings": [],
+    "error": {
+      "code": "identity_unverifiable",
+      "message": "Pitboard could not confirm with Anthropic whose login is parked for `beta` (Anthropic answered 503: api_error; request req_test), and will not put in use a login it cannot identify. Try again later.",
+      "cause": {
+        "code": "server_error",
+        "worth_retrying": true
+      }
+    }
+  }
+}
