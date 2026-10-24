@@ -630,6 +630,8 @@ struct Kept {
     make: Box<dyn Fn() -> (Made, bool) + Send + Sync>,
     again_after: Duration,
     held: Mutex<Option<Held>>,
+    #[cfg(test)]
+    waiting: std::sync::OnceLock<std::sync::mpsc::Sender<()>>,
 }
 
 struct Held {
@@ -649,6 +651,8 @@ impl Kept {
     }
 
     fn value(&self) -> Arc<Made> {
+        #[cfg(test)]
+        self.say_if_waiting();
         let mut held = self.held();
         if let Some(held) = held.as_ref() {
             return held.made.clone();
@@ -692,6 +696,20 @@ impl Kept {
             asked_again: true,
         });
         again
+    }
+
+    // Tells a test listening of a call that finds another making the value, and waits for it.
+    #[cfg(test)]
+    fn say_if_waiting(&self) {
+        if let Some(waiting) = self.waiting.get() {
+            let busy = matches!(
+                self.held.try_lock(),
+                Err(std::sync::TryLockError::WouldBlock)
+            );
+            if busy {
+                let _ = waiting.send(());
+            }
+        }
     }
 }
 
@@ -740,6 +758,8 @@ impl AppCore {
                 make: Box::new(make),
                 again_after,
                 held: Mutex::new(None),
+                #[cfg(test)]
+                waiting: std::sync::OnceLock::new(),
             },
             open: std::sync::OnceLock::new(),
         }
@@ -1534,9 +1554,7 @@ mod tests {
         assert!(!named.schedule_repair().expect("nothing to repair"));
     }
 
-    /// Where the tools are can take asking the person's login shell, so the core is made when
-    /// something first needs it, and not when the app makes its model, which it does on its
-    /// main thread; and once, however many calls arrive at the same time.
+    // Asking the login shell can take seconds, and an app makes its model on its main thread.
     #[test]
     fn the_core_is_made_once_when_it_is_first_needed() {
         let asks = Asks::default();
@@ -1550,8 +1568,6 @@ mod tests {
                     asks.note();
                     let _ = making.send(());
                     let _ = released.lock().expect("a test's own lock").recv();
-                    // Nothing shows a call waiting on the core: this widens the race, no more.
-                    std::thread::sleep(Duration::from_millis(100));
                     (answering("/answered"), false)
                 }
             },
@@ -1570,29 +1586,27 @@ mod tests {
             0,
             "nor opening an app whose login is a document"
         );
-        let (calling, under_way) = std::sync::mpsc::channel();
-        let calls: Vec<_> = (0..3)
-            .map(|which| {
-                let (core, calling) = (core.clone(), calling.clone());
-                std::thread::spawn(move || {
-                    let _ = calling.send(which);
-                    match which {
-                        0 => drop(core.installed()),
-                        1 => drop(core.changed_at()),
-                        _ => drop(core.command_line()),
-                    }
-                })
+        let (waiting, waits) = std::sync::mpsc::channel();
+        core.made.waiting.set(waiting).expect("listened to once");
+        let call = |which| {
+            let core = core.clone();
+            std::thread::spawn(move || match which {
+                0 => drop(core.installed()),
+                1 => drop(core.changed_at()),
+                _ => drop(core.command_line()),
             })
-            .collect();
-        for _ in 0..3 {
-            under_way
-                .recv_timeout(Duration::from_secs(20))
-                .expect("a call under way");
-        }
+        };
+        let first = call(0);
         made.recv_timeout(Duration::from_secs(20))
             .expect("the core being made");
+        let others = [call(1), call(2)];
+        for _ in &others {
+            waits
+                .recv_timeout(Duration::from_secs(20))
+                .expect("a call waiting for it");
+        }
         drop(release);
-        for call in calls {
+        for call in std::iter::once(first).chain(others) {
             call.join().expect("a call that answers");
         }
         assert_eq!(shell_said(&core).as_deref(), Some("/answered"));
