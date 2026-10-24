@@ -17,9 +17,7 @@ const PWSH: &str = r"C:\Program Files\PowerShell\7\pwsh.exe";
 // harness withholds it, since Pitboard reads it.
 const PATHEXT: &str = ".COM;.EXE;.BAT;.CMD;.VBS;.VBE;.JS;.JSE;.WSF;.WSH;.MSC;.CPL";
 
-// Claude Code waits 300 ms after a change before it runs the line, and its next run cancels one
-// still going (2.1.302's status line, read in both Windows builds), so a run within that keeps
-// the line up to date.
+// Only a run within 300 ms keeps the line up to date (the register's `statusline_run_timing`).
 const BUDGET: Duration = Duration::from_millis(300);
 
 #[allow(

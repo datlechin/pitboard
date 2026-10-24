@@ -178,9 +178,10 @@ pub(crate) const PER_SYSTEM: &[PerSystem] = &[
         linux: NotRead("a Linux install names its version in its path or its package.json"),
         windows: Read(WINDOWS_VERIFIED_AGAINST),
     },
-    // Its static half read from 0.162.1's source: it binds 127.0.0.1:1455, sends `GET /cancel`
-    // to a login server already there and falls back to 1457, opens the browser with the `http`
-    // association's command as a child of its own with no stdio, and reads nothing typed back.
+    // Its static half read on 2026-10-16 in 0.162.1's codex-rs/login/src/server.rs and webbrowser
+    // 1.2.4: it binds 127.0.0.1:1455, sends `GET /cancel` to a login server already there and
+    // falls back to 1457, opens the browser with the `http` association's command
+    // (`AssocQueryStringW`) as a child of its own with no stdio, and reads nothing typed back.
     later_on_windows(
         "codex_login_is_driveable",
         VERIFIED_AGAINST,
@@ -230,6 +231,12 @@ pub(crate) const PER_SYSTEM: &[PerSystem] = &[
         windows: Read(WINDOWS_VERIFIED_AGAINST),
     },
     PerSystem {
+        name: "codex_windows_sandbox_token",
+        macos: NotRead("Codex's sandbox token is a Windows token"),
+        linux: NotRead("Codex's sandbox token is a Windows token"),
+        windows: Read("0.162.1"),
+    },
+    PerSystem {
         name: "codex_wsl",
         macos: NotRead("WSL runs Codex's Linux build"),
         linux: Read("0.164.0"),
@@ -253,7 +260,7 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
         fact: "the login is `$CODEX_HOME/auth.json`, default `~/.codex/auth.json`, mode 0600, \
                and `file` is the packaged default backend (`cli_auth_credentials_store`); the \
                alternatives are `keyring`, `auto` and `ephemeral`. Which of them a machine \
-               uses is codex_store_layers'",
+               uses is codex_store_layers'. Codex writes the file with no lock of any kind",
         read_from: "get_auth_file and FileAuthStorage's 0o600 in codex-rs/login/src/auth/\
                     storage.rs, AuthCredentialsStoreMode in codex-rs/config/src/types.rs, and \
                     codex-rs/config/defaults.toml, at tag rust-v0.160.0, read on 2026-10-07. \
@@ -319,7 +326,8 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
         verified_against: "0.164.0",
         depends: "provider::codex::engine's refusal of `keyring`, `auto` and the secret store \
                   on Windows, and doctor's `codex_credential_manager`, which counts `cli|` and \
-                  `secrets|` items by name while Codex keeps the file",
+                  `secrets|` items by name while Codex keeps the file and looks for no `Codex \
+                  MCP Credentials` target, which no prefix lists",
         probe: &[
             "Codex Auth",
             "failed to deserialize CLI auth from keyring",
@@ -335,6 +343,7 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
                refresh_token, oauth_provenance{issuer, client_id}, login_owner_id, \
                account_id}, last_refresh}`, with `agent_identity`, `personal_access_token`, \
                `bedrock_api_key` and `bedrock_access_keys` beside them for other sign-ins. \
+               `OPENAI_API_KEY` can hold an API key Codex got at sign-in. \
                `oauth_provenance` and `login_owner_id` are left out where a login has none, as \
                one made before 0.164.0 has; `login_owner_id` names one completed login and \
                renewal keeps it. `last_refresh` is an RFC 3339 string, and Codex matches on it \
@@ -387,7 +396,8 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
                     rust-v0.164.0, read on 2026-10-23",
         verified_against: "0.164.0",
         depends: "provider::codex::api::renew and its Authority, which reads neither \
-                  variable",
+                  variable and takes only an https issuer, since the refresh token goes there, \
+                  and keeps a park OpenAI refused for its client (`OtherClient`)",
         probe: &[
             "app_EMoamEEZ73f0CkXaXp7hrann",
             "auth.openai.com",
@@ -600,8 +610,9 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
         fact: "the `keyring` and `auto` stores keep the login in a keychain item `Codex Auth` \
                that Codex creates through the Security framework, and `[features] \
                secret_auth_storage` keeps it in `secrets/codex_auth.age` under a keychain key. \
-               Neither item trusts `/usr/bin/security`, so Pitboard refuses those stores \
-               rather than put a permission prompt in front of every read",
+               Neither item trusts `/usr/bin/security`: another program's read brings up a \
+               permission prompt, and **Always Allow** there would change Codex's item. So \
+               Pitboard refuses those stores rather than put a prompt in front of every read",
         read_from: "the keyring store, the secret auth storage feature and their key names",
         verified_against: VERIFIED_AGAINST,
         depends: "provider::codex::layers and Codex::live's refusal",
@@ -623,8 +634,9 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
     Assumption {
         name: "codex_refusal_is_invalid_grant",
         fact: "a refresh token that has been spent or revoked is refused with a 400 whose \
-               error is `invalid_grant`, or a 401. Any other 400 is a request the server did \
-               not like and is not a dead login",
+               error is `invalid_grant`, or one of the older `refresh_token_expired`, \
+               `refresh_token_reused` and `refresh_token_invalidated`, or a 401. Any other 400 \
+               is a request the server did not like and is not a dead login",
         read_from: "the refresh error classification",
         verified_against: VERIFIED_AGAINST,
         depends: "provider::codex::api's refused_for_good, which decides when a park is \
@@ -637,10 +649,14 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
         fact: "the standalone installer links `~/.local/bin/codex`, or `$CODEX_INSTALL_DIR/codex`, \
                to `$CODEX_HOME/packages/standalone/current/bin/codex`; the build names \
                `npm install -g @openai/codex` and `brew upgrade --cask codex` as the other ways \
-               it is kept up to date, which put `codex` in npm's and Homebrew's `bin`",
+               it is kept up to date, which put `codex` in npm's and Homebrew's `bin`. npm's \
+               launcher, `bin/codex.js`, starts the native `codex` with `stdio: \"inherit\"` \
+               and hands on only `SIGINT`, `SIGTERM` and `SIGHUP`, so a killed launcher leaves \
+               `codex login` running with its output",
         read_from: "`scripts/install/install.sh` at tag `rust-v0.159.2`, the link a standalone \
-                    install of 0.159.2 left on a Mac, read on 2026-10-05, and the update \
-                    commands in the macOS and Linux binaries",
+                    install of 0.159.2 left on a Mac, read on 2026-10-05, the update \
+                    commands in the macOS and Linux binaries, and `bin/codex.js` of \
+                    `@openai/codex@0.149.1`, read on 2026-10-06",
         // 0.154.0 names the installers too, but not the standalone package layout.
         // Read again at tag rust-v0.164.0 on 2026-10-23.
         verified_against: "0.164.0",
@@ -669,7 +685,10 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
                its own package's folder and `CODEX_MANAGED_BY_NPM` to `1`, where no other \
                package manager's files are found, the other `CODEX_MANAGED_BY_` ones removed. \
                winget's `OpenAI.Codex` is a zip whose \
-               nested portable `codex-<target>.exe` is linked in winget's `Links` as `codex`",
+               nested portable `codex-<target>.exe` is linked in winget's `Links` as `codex`. \
+               The platform's package holds `codex-command-runner.exe`, \
+               `codex-code-mode-host.exe`, `codex-windows-sandbox-setup.exe`, \
+               `codex-voice-host.exe` and `rg.exe` beside `codex.exe`, which alone is Codex",
         read_from: "scripts/install/install.ps1 at tag rust-v0.162.1; `bin/codex.js` of \
                     `@openai/codex@0.162.1`, and its win32-x64 and win32-arm64 packages; the \
                     installer manifest of `OpenAI.Codex` 0.161.0, the newest in \
@@ -938,9 +957,10 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
                holding a comma, or a value of another kind, stops it from starting. As the TUI \
                starts, a ChatGPT login that the forced two leave out, by its method or its ID \
                token's `chatgpt_account_id`, is signed out of in every store and deleted, with \
-               no revoke. Every Codex leaves unused a login that the forced workspaces or the \
-               requirements leave out, by its `tokens.account_id` first, and then by that \
-               claim. A trusted project's config and an enterprise's cloud \
+               no revoke; `codex exec`, the app server and the ChatGPT app do not. Every Codex \
+               leaves unused a login that the forced workspaces or the requirements leave out, \
+               by its `tokens.account_id` first, and then by that claim. A trusted project's \
+               config and an enterprise's cloud \
                configuration can set the forced two as well, and are not read, as for the store",
         read_from: "enforce_login_restrictions_with_agent_identity_authapi_base_url, \
                     logout_with_message, logout_all_stores, AuthConfig and \
@@ -1024,6 +1044,23 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
             "ProxyServer",
             "system_proxy_fallback",
         ],
+        absent: &[],
+    },
+    Assumption {
+        name: "codex_windows_sandbox_token",
+        fact: "on Windows Codex runs its unelevated sandbox's programs with a token made from \
+               the person's with `DISABLE_MAX_PRIVILEGE | LUA_TOKEN | WRITE_RESTRICTED`, a \
+               capability SID, the logon SID and Everyone as restricting SIDs in that order, a \
+               default DACL of its own and a desktop of its own granted to the logon SID. Such \
+               a token is the person's, not elevated",
+        read_from: "`prepare_legacy_session_security` in spawn_prep.rs and \
+                    `create_token_with_caps_from` and `set_default_dacl` in token.rs, in \
+                    codex-rs/windows-sandbox-rs at tag rust-v0.162.1, read on 2026-10-15",
+        verified_against: "0.162.1",
+        depends: "what the seal of a park on Windows keeps out, which a program running as the \
+                  person, as this sandbox's do, gets past, and pitboard-probe's restricted \
+                  token, made the same way",
+        probe: &[],
         absent: &[],
     },
     Assumption {
@@ -1114,6 +1151,7 @@ mod tests {
                 "codex_login_restrictions",
                 "codex_model_limits",
                 "codex_windows_system_proxy",
+                "codex_windows_sandbox_token",
             ]
         );
     }
@@ -1131,6 +1169,7 @@ mod tests {
             "codex_windows_version",
             "codex_windows_store_layers",
             "codex_windows_system_proxy",
+            "codex_windows_sandbox_token",
         ];
         let linux = ["codex_wsl", "codex_linux_app"];
         for line in PER_SYSTEM

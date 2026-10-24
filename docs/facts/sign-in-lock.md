@@ -55,10 +55,8 @@ which is `flock`.
   answered after the sign-in had finished took its enrolment for a change made elsewhere,
   so the read after the sign-in was dropped, and nothing said when the accounts were read.
 - A program a tool started can hold the tool's output open once the tool has been stopped
-  and waited for. Read on 6 October 2026: `bin/codex.js` of @openai/codex 0.149.1, the
-  `codex` npm installs, starts the native `codex` with `stdio: "inherit"` and hands on only
-  `SIGINT`, `SIGTERM` and `SIGHUP`, so killing it leaves `codex login` running with its
-  output. Measured the same day on the same two systems with
+  and waited for, as `codex login` does once npm's `codex` launcher is killed
+  (`codex_install_places`). Measured on 6 October 2026 on the same two systems with
   `a_sign_in_after_a_cancel_waits_for_no_output_the_tool_stopped_left_open`, whose stand-in
   for `claude` starts a shell that holds its output open until the test lets it go, then
   Cancel and Sign In. While the model waited for the cancelled sign-in's thread, the second

@@ -9,8 +9,8 @@ a scratch item.
 - A keychain item written in process, through the Security framework, stays slow to read.
   Every later read of it by `security` takes about a second instead of 0.01 seconds. On a
   scratch item, reads went from 0.01 seconds to 20.55, then settled around 0.8.
-- Claude Code reads its login on every cache miss, so writing its item through the framework
-  would slow Claude Code for good. Pitboard writes a large login on the argument line
+- Claude Code reads its login at every miss of its cache (`credential_cache`), so writing its
+  item through the framework would slow Claude Code for good. Pitboard writes a large login on the argument line
   instead, where `ps` can see it for the length of one call.
 - Undoing the framework's change needs `security set-key-partition-list`, which asks for the
   keychain password.
@@ -25,3 +25,7 @@ a scratch item.
   `"svce"<blob>="<name>"`.
 - A lock taken with `flock` outlives the file it was taken on while another thread is
   starting a process, here as on Linux: [One sign-in at a time](sign-in-lock.md).
+- `ps` gives what a process was started as: a `codex` started from a shell by its bare name
+  lists as `codex`, and one started by its path lists the path (1 October 2026). So Pitboard
+  tells the kinds of Codex apart by the folders in that path, and takes a bare name for a
+  `codex` session.

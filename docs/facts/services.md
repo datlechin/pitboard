@@ -1,5 +1,12 @@
 # Anthropic's and OpenAI's services
 
+## api.anthropic.com
+
+On 22 September 2026 the machine measured sat within 0.75 seconds of the `Date` header of
+api.anthropic.com across eight requests, and `Date` has a granularity of one second. That
+spread is inside the noise, so Pitboard keeps no estimate of clock skew, and a renewal's
+expiries are counted from the `Date` of the answer that carried them.
+
 ## claude.ai and chatgpt.com
 
 Read and measured on 29 September 2026. Nobody has watched a sign-in complete in a window.

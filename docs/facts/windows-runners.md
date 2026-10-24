@@ -6,8 +6,8 @@ Every run met the same images: windows-2025 (Windows Server 2025 Datacenter, 24H
 26100, UBR 33438) and windows-11-arm (build 26200, UBR 9457, 25H2). The script runs the
 probe as the job's user and as three throwaway users it makes: a standard user, a standard
 user whose name is not ASCII, and a member of Administrators. Its Bun is 1.4.3 from Bun's
-release, the version Claude Code 2.1.300 and 2.1.301 embed, with proper-lockfile 4.1.2; 2.1.302
-and 2.1.303 embed 1.4.4, which has no public release. A fact holds on both images unless it
+release, with proper-lockfile 4.1.2; which Bun each Claude Code build embeds is in its
+register. A fact holds on both images unless it
 names one. The tokens these list, and the session machine's, are the only ones the Windows face
 has been seen to read.
 
@@ -296,10 +296,8 @@ DPAPI:
 - After an administrator resets the password, nothing sealed before unseals: 0x8009000B.
 - A task with the job user's interactive token, in its session, unseals what the job user
   sealed.
-- A token made from the standard user's as Codex 0.162.1 makes its unelevated sandbox's,
-  with `DISABLE_MAX_PRIVILEGE | LUA_TOKEN | WRITE_RESTRICTED`, a capability SID, the logon
-  SID and Everyone as restricting SIDs, Codex's default DACL and a desktop of its own
-  granted to the logon SID, is not elevated, at medium integrity. A program started with it
+- A token made from the standard user's as Codex 0.162.1 makes its unelevated sandbox's
+  (`codex_windows_sandbox_token`) is not elevated, at medium integrity. A program started with it
   unseals what the user sealed, its first unseal taking 1.5 ms on windows-11-arm and 1 ms on
   windows-2025. It opens a file whose protected DACL grants only the user, SYSTEM and
   Administrators for read and for delete, and fails 5 opening it for write (run
@@ -387,8 +385,8 @@ against the drive of its working folder (RF-T7, runs 39310064516 and 39320680285
 
 So a session reads the file at the root of the drive its working folder is on, and doctor's
 `auth_source` check and a warm-up's halt over `.api_key` look at the root of each fixed
-drive. Each reads at most 64 KiB of a regular file, as Claude Code does, since any account on
-the PC may put one there.
+drive. Each reads at most 64 KiB of a regular file, as `remote_token_files` has Claude Code
+read one, since any account on the PC may put one there.
 
 Credential Manager:
 
@@ -403,6 +401,15 @@ Credential Manager:
   live login family and `pitboard-*` without an error, and finds no item. As the fresh
   standard user, after each Windows test run, it does the same and finds nothing (run
   37762408901).
+- A fresh standard user's Credential Manager takes about 237 pieces of 2400 characters, then
+  `CredWriteW` fails with `ERROR_NOT_ENOUGH_MEMORY`, and pieces a failed run left count
+  against that (runs 38856939312 and 38858363708). A login near Claude Code's 256 pieces
+  (`credman_chunking`) fails there, so the runner tests write at most 100 pieces, and a round
+  trip over items in memory holds the 256-piece edge.
+- Beside other readers, the read after a write in pieces has found the `#p` the write deleted
+  (runs 39137503718 and 39909919492). Where the pieces hold the login, Pitboard's write
+  deletes `#p` again, five times at most, 20 ms apart, and one that still finds it says what
+  the delete said.
 
 A network logon, by key through sshd as the standard user: windows-2025's own OpenSSH 9.5p2,
 and on windows-11-arm the Win32-OpenSSH 10.0p2 RF-M installs (runs 38821312770, 38922866517,

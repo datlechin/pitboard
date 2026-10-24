@@ -70,21 +70,14 @@ The MSI, `Pitboard.exe` and the notification area:
 - The x64 MSI installed under emulation: `Pitboard.exe` and `bin\pitboard.exe` are machine
   0x8664, and both ran.
 
-Claude Code 2.1.302:
+Claude Code 2.1.302, whose readings are in its register: `windows_file_adoption`,
+`windows_open_sharing`, `settings_byte_order_mark`, `credman_move_lost_a_piece` and
+`windows_statusline_powershell`.
 
 - `pitboard enroll --sign-in` drove Claude Code's manual flow, the code pasted back; the app's
   **Add account** drove its localhost flow, with nothing to paste. Neither left a scratch slot
   in Credential Manager.
-- A running session took a switch's `.credentials.json` at its next prompt
-  (`windows_file_adoption`). Process Monitor saw it open its files sharing all three access
-  modes, and no sharing violation on any `.claude` path (`windows_open_sharing`).
-- A `settings.json` that starts with a byte order mark is read
-  (`settings_byte_order_mark`), and its first move of a login into Credential Manager lost it
-  (`credman_move_lost_a_piece`). A sign-in into an empty Credential Manager wrote one whole
-  item of 524 bytes.
-- It ran the status line in `powershell.exe` with neither PowerShell 7 nor Git installed, in
-  `pwsh.exe` with PowerShell 7.6.7, and in Git 2.55.0's `bash.exe`
-  (`windows_statusline_powershell`), an account named `bé` shown whole. Twenty runs of
+- The status line showed an account named `bé` whole in each shell. Twenty runs of
   `pitboard statusline` took 16 ms each from PowerShell, and 132 ms each through Git Bash.
 
 Daily renewal:

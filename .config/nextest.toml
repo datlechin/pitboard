@@ -8,8 +8,8 @@ filter = "binary_id(pitboard::cli) & test(/^keychain_write_is_harmless::/)"
 threads-required = "num-test-threads"
 priority = 100
 
-# 100 pieces, near half of what a runner's Credential Manager takes (ARCHITECTURE.md), alone so
-# no other test's items run it out of room.
+# 100 pieces, near half of what a runner's Credential Manager takes
+# (docs/facts/windows-runners.md), alone so no other test's items run it out of room.
 [[profile.default.overrides]]
 filter = "binary_id(pitboard-core) & test(=provider::claude::credman::tests::claude_codes_login_round_trips_through_credential_manager_and_shrinks_back_to_one_item)"
 threads-required = "num-test-threads"

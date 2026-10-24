@@ -19,8 +19,8 @@ version 1, and the guard refuses an rc or a full release while no signer is set
 ## Prepare a release
 
 The first release with Claude Desktop waits until the hand measurements M1 to M10 in
-[ARCHITECTURE.md](ARCHITECTURE.md#claude-desktop) are recorded. The first release that signs
-Pitboard for Windows, and 1.0.0, also rewrite what
+[Not measured](docs/facts/not-measured.md#claude-desktop) are recorded. The first release
+that signs Pitboard for Windows, and 1.0.0, also rewrite what
 [Site and docs tied to Windows' status](#site-and-docs-tied-to-windows-status) lists.
 
 1. Pick the version: minor for anything people would notice, patch for fixes alone.
