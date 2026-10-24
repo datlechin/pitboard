@@ -812,7 +812,8 @@ impl Context {
         crate::state::machine_id()
     }
 
-    #[cfg(test)]
+    // For a Claude Desktop test of a Mac that cannot be identified.
+    #[cfg(all(test, not(windows)))]
     pub(crate) fn with_unknown_machine(mut self) -> Context {
         self.unknown_machine = true;
         self
