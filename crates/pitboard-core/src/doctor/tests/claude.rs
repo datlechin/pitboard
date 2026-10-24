@@ -658,12 +658,12 @@ fn a_managed_organisation_pin_is_named_with_the_accounts_it_rules_out() {
     state.accounts.push(account("there", "there", None));
     let judged = |f: &Facts| evaluate(f);
     let mut f = facts();
-    (f.organisation_pins, f.pinned_out) = login_pins(&ctx, Some(&state));
+    (f.login_pins, f.pinned_out) = login_pins(&ctx, Some(&state));
     assert!(judged(&f).iter().all(|c| c.code != "login_restrictions"));
 
     let file = crate::settings::managed_dir(ctx.os).join("managed-settings.json");
     host.administers(&file, r#"{"forceLoginOrgUUID": ["org-here"]}"#);
-    (f.organisation_pins, f.pinned_out) = login_pins(&ctx, Some(&state));
+    (f.login_pins, f.pinned_out) = login_pins(&ctx, Some(&state));
     let checks = judged(&f);
     let found = check(&checks, "login_restrictions");
     assert_eq!(found.level, Level::Warn);
@@ -675,8 +675,42 @@ fn a_managed_organisation_pin_is_named_with_the_accounts_it_rules_out() {
     assert_eq!(found.advice, words::refused_as_a_session_starts("`there`"));
 
     host.administers(&file, r#"{"forceLoginOrgUUID": ["org-here", "org-there"]}"#);
-    (f.organisation_pins, f.pinned_out) = login_pins(&ctx, Some(&state));
+    (f.login_pins, f.pinned_out) = login_pins(&ctx, Some(&state));
     assert_eq!(check(&judged(&f), "login_restrictions").level, Level::Ok);
+}
+
+// Under it Claude Code 2.1.310 signs in to Console (`login_method_pin`): a sign-in is refused,
+// and a switch goes ahead.
+#[test]
+fn a_managed_console_pin_is_named_beside_an_organisation_pin() {
+    let host = crate::host::memory::MemoryHost::new();
+    let ctx = Context::for_unit_test().with_memory_stores(host.clone());
+    let file = crate::settings::managed_dir(ctx.os).join("managed-settings.json");
+    let mut f = facts();
+    host.administers(&file, r#"{"forceLoginMethod": "claudeai"}"#);
+    (f.login_pins, f.pinned_out) = login_pins(&ctx, None);
+    assert!(evaluate(&f).iter().all(|c| c.code != "login_restrictions"));
+
+    host.administers(&file, r#"{"forceLoginMethod": "console"}"#);
+    (f.login_pins, f.pinned_out) = login_pins(&ctx, None);
+    let checks = evaluate(&f);
+    let found = check(&checks, "login_restrictions");
+    assert_eq!(found.level, Level::Ok);
+    assert_eq!(found.detail, words::console_pinned(file.display()));
+
+    host.administers(
+        &file,
+        r#"{"forceLoginMethod": "console", "forceLoginOrgUUID": "org-here"}"#,
+    );
+    (f.login_pins, f.pinned_out) = login_pins(&ctx, None);
+    assert_eq!(
+        check(&evaluate(&f), "login_restrictions").detail,
+        format!(
+            "{}; {}",
+            words::org_pinned("`org-here`", file.display()),
+            words::console_pinned(file.display())
+        )
+    );
 }
 
 // Add account said Claude Code was not installed, and This PC said to run it.

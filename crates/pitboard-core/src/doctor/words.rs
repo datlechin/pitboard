@@ -223,6 +223,10 @@ pub(super) fn org_pinned(ids: &str, layer: impl Display) -> String {
     format!("`forceLoginOrgUUID` set to {ids} in {layer}")
 }
 
+pub(super) fn console_pinned(layer: impl Display) -> String {
+    format!("`forceLoginMethod` set to `console` in {layer}")
+}
+
 pub(super) fn run_once(program: &str) -> String {
     format!("Run `{program}` once.")
 }
@@ -1534,6 +1538,10 @@ mod tests {
         assert_eq!(
             org_pinned("`org-here`", "/etc/claude-code/managed-settings.json"),
             "`forceLoginOrgUUID` set to `org-here` in /etc/claude-code/managed-settings.json"
+        );
+        assert_eq!(
+            console_pinned("/etc/claude-code/managed-settings.json"),
+            "`forceLoginMethod` set to `console` in /etc/claude-code/managed-settings.json"
         );
         assert_eq!(run_once("claude.cmd"), "Run `claude.cmd` once.");
         assert_eq!(

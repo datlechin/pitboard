@@ -145,7 +145,7 @@ pub(super) fn facts() -> Facts {
         claude_version: Some(crate::provider::claude::assumptions::VERIFIED_AGAINST.into()),
         claude_program: Some(PathBuf::from("/opt/homebrew/bin/claude")),
         auth_overrides: Vec::new(),
-        organisation_pins: Vec::new(),
+        login_pins: Vec::new(),
         pinned_out: Vec::new(),
         asking_held: Vec::new(),
         state: Ok(State::default()),
@@ -442,7 +442,7 @@ pub(super) fn everything_said(os: Os) -> Facts {
         at: None,
         task: None,
     });
-    f.organisation_pins = vec!["`forceLoginOrgUUID` set to `org` in managed settings".into()];
+    f.login_pins = vec!["`forceLoginOrgUUID` set to `org` in managed settings".into()];
     f.parks = vec![
         dormant(parked("old", Some(NOW + 20 * 86_400))),
         dormant(codex_parked("old", Some(NOW + 20 * 86_400))),

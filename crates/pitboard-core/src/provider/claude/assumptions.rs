@@ -2250,9 +2250,10 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
                   switch goes on: a session takes the login a switch puts in place. \
                   settings::console_pin, so a sign-in under a managed `console` and no managed \
                   gateway, which would make an API key and leave nothing to enrol, refuses with \
-                  `sign_in_pinned_to_console` before `claude auth login` starts. Neither the \
-                  person's own settings nor a project's reach a sign-in in Pitboard's private \
-                  folder (project_settings_folder)",
+                  `sign_in_pinned_to_console` before `claude auth login` starts, and doctor's \
+                  login_restrictions names it. Neither the person's own settings nor a \
+                  project's reach a sign-in in Pitboard's private folder \
+                  (project_settings_folder)",
         probe: &[
             "forceLoginMethod is 'console' in ",
             "; log in with an Anthropic Console account instead.",
