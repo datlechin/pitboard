@@ -360,18 +360,14 @@ pub(crate) fn read(
     permit: Option<crate::service::Permit>,
     input: &str,
 ) -> StatusLine {
-    crate::timing::mark("read");
     let input: Value = serde_json::from_str(input).unwrap_or(Value::Null);
     let state = crate::state::load(ctx).unwrap_or_default();
-    crate::timing::mark("state");
     // Whose login Claude Code has stored, as Anthropic last said, and whether its config has
     // moved since: files, and so something a status bar can afford to read after every
     // message.
     let in_use = crate::in_use::known(ctx, &state, ProviderId::Claude);
-    crate::timing::mark("in_use");
     let now = ctx.now();
     let remembered = crate::usage::readings::load(ctx);
-    crate::timing::mark("readings");
     let run = run_of(&input);
     let before = input
         .get("session_id")
@@ -380,7 +376,6 @@ pub(crate) fn read(
             Some(permit) => crate::sessions::exchange(ctx, permit, id, &run),
             None => crate::sessions::last(ctx, id),
         });
-    crate::timing::mark("exchange");
     let passed = windows_of(&run);
     let moved = moved_since(&run, before.as_ref());
     let whose = whose(&state, &remembered, &passed, now);
@@ -389,10 +384,7 @@ pub(crate) fn read(
     {
         crate::usage::readings::moved(ctx, permit, &account.id, &moved);
     }
-    crate::timing::mark("moved");
-    let drawn = line(&state, &in_use, &remembered, &whose, &passed, &moved, now);
-    crate::timing::mark("line");
-    drawn
+    line(&state, &in_use, &remembered, &whose, &passed, &moved, now)
 }
 
 #[cfg(test)]

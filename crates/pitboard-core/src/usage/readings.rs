@@ -87,21 +87,15 @@ fn change(ctx: &Context, permit: Permit, fold: impl Fn(&mut HashMap<String, Snap
     if !fold(&mut load(ctx)) {
         return;
     }
-    crate::timing::mark("r_load");
     let Some(_held) = exclusive(ctx, permit) else {
         return;
     };
     let mut all = load(ctx);
-    crate::timing::mark("r_load2");
     // A reading a power cut loses comes back with its account's next answer.
     if fold(&mut all)
         && let Ok(body) = serde_json::to_string(&all)
     {
-        if crate::timing::flushed() {
-            let _ = atomic::write(permit, &path(ctx), body.as_bytes(), atomic::Perms::Secret);
-        } else {
-            let _ = atomic::write_unsynced(permit, &path(ctx), body.as_bytes());
-        }
+        let _ = atomic::write_unsynced(permit, &path(ctx), body.as_bytes());
     }
 }
 
@@ -110,12 +104,9 @@ fn change(ctx: &Context, permit: Permit, fold: impl Fn(&mut HashMap<String, Snap
 /// around switches: a status line must never wait on a switch.
 pub(crate) fn exclusive(ctx: &Context, permit: Permit) -> Option<std::fs::File> {
     home::ensure(ctx, permit).ok()?;
-    crate::timing::mark("ensure");
     let file =
         crate::host::fs::open_private_lock(permit, &home::dir(ctx).join("usage.lock")).ok()?;
-    crate::timing::mark("lock_open");
     file.lock().ok()?;
-    crate::timing::mark("locked");
     Some(file)
 }
 

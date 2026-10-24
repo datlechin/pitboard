@@ -73,10 +73,8 @@ pub(crate) fn exchange(ctx: &Context, permit: Permit, id: &str, run: &Run) -> Op
     {
         return Some(seen.run);
     }
-    crate::timing::mark("s_load");
     let _held = crate::usage::readings::exclusive(ctx, permit)?;
     let mut all = load(ctx);
-    crate::timing::mark("s_load2");
     let before = all.remove(id).map(|seen| seen.run);
     all.retain(|_, seen| now - seen.seen_at < FORGET_AFTER);
     all.insert(
@@ -88,11 +86,7 @@ pub(crate) fn exchange(ctx: &Context, permit: Permit, id: &str, run: &Run) -> Op
     );
     // A run a power cut loses costs that session one filing.
     if let Ok(body) = serde_json::to_string(&all) {
-        if crate::timing::flushed() {
-            let _ = atomic::write(permit, &path(ctx), body.as_bytes(), atomic::Perms::Secret);
-        } else {
-            let _ = atomic::write_unsynced(permit, &path(ctx), body.as_bytes());
-        }
+        let _ = atomic::write_unsynced(permit, &path(ctx), body.as_bytes());
     }
     before
 }
