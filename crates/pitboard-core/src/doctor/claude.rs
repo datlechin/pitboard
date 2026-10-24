@@ -477,7 +477,7 @@ pub(super) fn judge_fallback_login(facts: &Facts) -> Option<Check> {
     Some(warn("fallback_login", "fallback login", detail, advice))
 }
 
-// The flag moves no login out of the keychain (2.1.278): only a login in the file may differ.
+// The flag moves no login out of the keychain (`live_chain_order`): only the file's may differ.
 pub(super) fn judge_storage_v5(facts: &Facts) -> Check {
     let flag_on = facts
         .config

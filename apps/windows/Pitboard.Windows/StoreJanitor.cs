@@ -23,9 +23,9 @@ public interface IProfileFolders
 }
 
 // Which stores go, and when, is the model's, in AccountWindowsShown.Deleting. A deleted profile's folder outlived its
-// browser process on both runners and went as the next one started (run 38842851059), so a store is held until then,
-// and the model asks again after its next read: once marked, it is swept by a new browser process when none runs, and
-// marked again if a start since left it.
+// browser process on both runners and went as the next one started (docs/facts/windows-runners.md), so a store is held
+// until then, and the model asks again after its next read: once marked, it is swept by a new browser process when none
+// runs, and marked again if a start since left it.
 public sealed class StoreJanitor(IProfileFolders profiles)
 {
     // Each ask once, however many snapshots list it before the model has heard how it went.

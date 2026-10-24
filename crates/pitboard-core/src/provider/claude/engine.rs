@@ -23,10 +23,7 @@ use std::path::PathBuf;
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct Claude;
 
-/// Claude Code serves its credential from a 30 second cache, so a session already running
-/// picks a switch up on its own where nothing sits behind the keychain. Measured against a
-/// running session; the three seconds of margin are for the round trip that follows the
-/// cache expiring.
+// The 30 second cache and the round trip after it (`credential_cache`).
 const ADOPTION_SECONDS: u32 = switch::ADOPTION_CEILING_SECONDS;
 
 // Every system's answer, so each is tested on every system.
@@ -230,8 +227,9 @@ impl Provider for Claude {
     }
 
     // `CLAUDE_SECURESTORAGE_CONFIG_DIR` would pin the slot back to a real one, and
-    // `CLAUDE_CODE_FORCE_WINDOWS_CREDMAN` the login into Credential Manager (2.1.300). Started
-    // in `dir`, it takes no project's settings (project_settings_folder).
+    // `CLAUDE_CODE_FORCE_WINDOWS_CREDMAN` the login into Credential Manager
+    // (`windows_backend_choice`). Started in `dir`, it takes no project's settings
+    // (`project_settings_folder`).
     fn sign_in(
         &self,
         ctx: &Context,
@@ -262,14 +260,7 @@ impl Provider for Claude {
         let _ = live::discard_signin(ctx, permit, dir);
     }
 
-    /// Read from 2.1.289. Before it opens the browser, `claude auth login` writes to stdout
-    /// `Opening browser to sign in…`, then `If the browser didn't open, visit: ` and an
-    /// address, then its prompt with no newline after it, and from then on it reads a
-    /// pasted code. So the field is offered with the address. The address it prints is the
-    /// manual one, `https`, whose page shows the code to paste; the browser it opens itself
-    /// goes to another, which comes back to the loopback callback. It is printed bare, or as
-    /// a terminal hyperlink to itself where the environment says the terminal takes them,
-    /// and either way the address read is the one it goes to.
+    // The address `claude auth login` prints and its prompt for a code (`sign_in_output`).
     fn read_sign_in(&self, said: &str) -> SignInView {
         SignInView {
             url: crate::provider::https_address(said),
@@ -277,10 +268,8 @@ impl Provider for Claude {
         }
     }
 
-    /// Read from 2.1.289, as the register's `sign_in_takes_another_code` holds: a line typed
-    /// back that is not `<code>#<state>` with both halves is refused, with `Invalid code.`
-    /// on stderr, and `claude auth login` goes on reading in the same process. It prints no
-    /// prompt again, so the field is offered again on the refusal alone.
+    // It prints no prompt again, so the refusal alone offers the field again
+    // (`sign_in_takes_another_code`).
     fn refused_code(&self, since: &str) -> bool {
         since.contains(REFUSES_A_CODE)
     }

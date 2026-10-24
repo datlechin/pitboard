@@ -21,6 +21,8 @@
 //! What is deliberately not reachable: nothing outside this crate may write Pitboard's index.
 //! Every change goes through [`switch`], which records what it is about to do first.
 
+#![warn(clippy::print_stdout, clippy::print_stderr)]
+
 // Pitboard for Windows is being built, and reaches people only once the command line, the
 // app, their installers and their docs are done. Until then a Windows build of a release
 // compiles and refuses everything at run time (`release`). It compiles only for the two
@@ -96,6 +98,11 @@ pub(crate) mod sessions;
 /// tests run with the core's.
 #[cfg(any(test, feature = "test-support"))]
 #[doc(hidden)]
+#[allow(
+    clippy::print_stdout,
+    clippy::print_stderr,
+    reason = "it prints what the program it plays would"
+)]
 pub mod stand_in;
 pub(crate) mod store;
 

@@ -170,7 +170,7 @@ impl Os {
         }
     }
 
-    // Homebrew's on a Mac, also npm's global `bin` there (Claude Code 2.1.289); none on Linux.
+    // Homebrew's on a Mac, also npm's global `bin` there (`install_places`); none on Linux.
     pub(crate) fn package_bins(self, env: &Environment) -> Vec<PathBuf> {
         match self {
             Os::MacOs => vec!["/opt/homebrew/bin".into(), "/usr/local/bin".into()],
@@ -974,7 +974,7 @@ pub(crate) trait Host: Send + Sync + std::fmt::Debug {
         WindowsSettings::default()
     }
 
-    // Whether `/proc/version` names Microsoft, as Codex 0.163.0 tells WSL by; false elsewhere,
+    // Whether `/proc/version` names Microsoft, as Codex tells WSL (`codex_wsl`); false elsewhere,
     // and in a build for tests on the real hosts.
     fn kernel_is_wsl(&self) -> bool {
         false

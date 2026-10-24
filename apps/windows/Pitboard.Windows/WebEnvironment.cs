@@ -155,7 +155,7 @@ public sealed class WebEnvironment
     }
 
     // A page of the default profile, kept until gone says so or fifteen seconds pass: a browser process deletes the
-    // folders of profiles deleted before it about five seconds after it starts (run 38842851059).
+    // folders of profiles deleted before it about five seconds after it starts (docs/facts/windows-runners.md).
     public async Task Sweep(nint parent, Func<bool> gone)
     {
         var keeper = await Keeper(parent);
@@ -174,8 +174,9 @@ public sealed class WebEnvironment
     }
 
     // A page of a store's profile, which make makes. A browser process started after a profile's deletion refused its
-    // name for its first seconds, even where the folder had gone as the last one exited (run 38852781290), so until it
-    // takes the name a page of the default profile keeps it running, for thirty seconds at most.
+    // name for its first seconds, even where the folder had gone as the last one exited
+    // (docs/facts/windows-runners.md), so until it takes the name a page of the default profile keeps it running, for
+    // thirty seconds at most.
     public async Task<T> Reusing<T>(nint parent, Func<Task<T>> make)
     {
         try

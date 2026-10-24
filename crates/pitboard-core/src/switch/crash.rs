@@ -477,7 +477,7 @@ fn signing_in_again_killed_at_any_step_recovers_to_something_whole() {
     }
 }
 
-/// The one Claude Code write this lock cannot exclude. Measured in 2.1.278: a `/logout`
+/// The one Claude Code write this lock cannot exclude (`logout_skips_the_lock`): a `/logout`
 /// that has given up waiting deletes the credential with nothing held. If it lands just
 /// after the install, the incoming login is gone, and Pitboard used to print "Switched to
 /// work" and exit 0 over an account that was signed out.

@@ -296,8 +296,7 @@ pub fn decide_response(
     role: PageRole,
     response: ResponseFacts,
 ) -> ResponseDecision {
-    // Trimmed as Foundation's `CharacterSet.whitespaces` trims: a tab, Unicode's spaces and
-    // U+200B, measured on macOS 27 over every scalar. Not a newline.
+    // Trimmed as Foundation's `CharacterSet.whitespaces` trims (docs/facts/foundation-urls.md).
     let blank = |c: char| {
         matches!(
             c,

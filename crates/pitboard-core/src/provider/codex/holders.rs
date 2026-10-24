@@ -1,14 +1,9 @@
-//! Where a running `codex` can be, and what makes each take a switch.
-//!
-//! Every one of them reads `$CODEX_HOME/auth.json` when it starts and keeps the login in
-//! memory until it stops (`codex_never_follows_a_switch`), so each has to be started again,
-//! each its own way. Measured on 2026-10-01 from the process list of a Mac running ChatGPT
-//! 26.928.31416, its bundled codex 0.159.2, Codex's app-server daemon 0.159.3 and terminal
-//! sessions, with the facts in `assumptions`. No editor with the Codex extension was
-//! running there, so its place is the extension's packaged layout, unmeasured. On Windows the
-//! app server's place and ChatGPT's package are read from 0.164.0's source; that ChatGPT's own
-//! codex runs in that package waits on the session's step 10. ChatGPT for Linux is read from
-//! its packages, 26.1016.61520 and 26.1021.22027, not run.
+//! Where a running `codex` can be, and how each is started again to take a switch
+//! (`codex_never_follows_a_switch`).
+
+// Each place is a register fact: codex_runs_inside_the_chatgpt_app, codex_app_server_daemon,
+// codex_windows_app_server, codex_windows_app_identity and codex_linux_app. An editor's
+// extension is not measured (docs/facts/not-measured.md).
 
 use crate::context::Context;
 use crate::holder::{AppId, Holder, Location, Noun, Remedy};
@@ -45,10 +40,8 @@ pub(crate) const HOLDERS: &[Holder] = &[
         location: Location::Within("chatgpt"),
         remedy: Remedy::Do("quit ChatGPT and open it again"),
     },
-    // `~/.codex/packages/app-server-daemon/releases/0.159.3-aarch64-apple-darwin/bin/codex`,
-    // a child of launchd, which terminal sessions can share. On Windows
-    // `releases\<version>-<target>\bin\codex.exe` there, which `current` resolves to
-    // (codex_windows_app_server).
+    // `releases/<version>/bin/codex` in Codex's package, a child of launchd, which terminal
+    // sessions can share (`codex_app_server_daemon`, `codex_windows_app_server`).
     Holder {
         kind: "app_server_daemon",
         noun: Noun::One("Codex's background app server"),

@@ -148,7 +148,7 @@ fn get(ctx: &Context, path: &str, access_token: &str) -> Result<Value, ProviderE
     read(response)
 }
 
-// As Claude Code 2.1.301 sends it: no body, and no beta header.
+// As Claude Code sends it (`validate_names_the_login`).
 fn post(ctx: &Context, path: &str, access_token: &str) -> Result<Value, ProviderError> {
     let response = agent(ctx)
         .post(format!("{}{path}", base(ctx)))
@@ -184,8 +184,7 @@ fn read(mut response: ureq::http::Response<ureq::Body>) -> Result<Value, Provide
     }
 }
 
-// A 401 or 403 that no renewal mends, as Claude Code 2.1.301 tells one apart (the register's
-// `account_refusals`): the account must be verified, or its organisation allows no OAuth.
+// A 401 or 403 that no renewal mends, as Claude Code tells one apart (`account_refusals`).
 fn refuses_the_account(refusal: &Refusal) -> bool {
     let verification = refusal.status == 403
         && refusal.kind.as_deref() == Some("permission_error")
@@ -196,9 +195,7 @@ fn refuses_the_account(refusal: &Refusal) -> bool {
     verification || organisation
 }
 
-// As Claude Code 2.1.301 reads the token endpoint (the register's `token_refusals`): an
-// account on hold answers `invalid_grant` or `access_denied` with `account_on_hold`, and keeps
-// its login; only `invalid_grant` otherwise is a refresh token spent for good.
+// As Claude Code reads the token endpoint (`token_refusals`).
 fn token_refused(refusal: Refusal) -> ProviderError {
     let error = refusal.oauth_error();
     if matches!(refusal.status, 400 | 401 | 403)
@@ -216,7 +213,7 @@ fn token_refused(refusal: Refusal) -> ProviderError {
     ProviderError::answered(SERVICE, refusal)
 }
 
-// Only a page of Anthropic's own, as Claude Code 2.1.301 opens one.
+// Only a page of Anthropic's own, as Claude Code opens one (`token_refusals`).
 fn anthropic_page(link: &str) -> Option<String> {
     let uri = link.parse::<ureq::http::Uri>().ok()?;
     let authority = uri.authority()?;

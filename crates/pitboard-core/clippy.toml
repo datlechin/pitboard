@@ -3,6 +3,9 @@
 # through host::fs, which says how each system makes one private. An #[allow] says why one is
 # meant elsewhere: in host/'s faces, the stand-in, the Claude Desktop the tests play, and the
 # tests that set up a scratch folder.
+#
+# The core prints nothing, so lib.rs warns on print_stdout and print_stderr; a test may print.
+allow-print-in-tests = true
 disallowed-methods = [
     { path = "std::env::var", reason = "read the environment through context::Environment, or say why not in an #[allow]" },
     { path = "std::env::var_os", reason = "read the environment through context::Environment, or say why not in an #[allow]" },

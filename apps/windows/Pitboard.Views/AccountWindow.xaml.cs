@@ -388,7 +388,7 @@ public sealed partial class AccountWindow : Window, ISessionWindow
             }
         }));
 
-    // An accelerator on Root missed Alt+Left from the command bar's More on windows-2025 (run 39310757537).
+    // An accelerator on Root missed Alt+Left from the command bar's More on windows-2025 (docs/facts/windows-app.md).
     private void OnPreviewKeyDown(object sender, KeyRoutedEventArgs args)
     {
         if (!Held(VirtualKey.Menu) || Held(VirtualKey.Control) || Held(VirtualKey.Shift))

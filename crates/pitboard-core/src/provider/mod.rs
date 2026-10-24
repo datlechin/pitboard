@@ -344,14 +344,7 @@ impl ProviderError {
     }
 }
 
-/// When a session that is already running picks a switch up.
-///
-/// Measured or read, not assumed, and it differs enough between tools that a single number
-/// would be a lie for two of the three. Claude Code serves its credential from a 30 second
-/// cache, so a session follows on its own, unless a file sits behind the keychain, which it
-/// watches in place of the store. Codex caches for the life of the process, watches no file
-/// and refuses a reload whose account id has changed; Gemini caches its client for the
-/// process with no expiry. Neither ever notices.
+/// When a session that is already running picks a switch up, as each tool's register has it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Adoption {
     /// A session already running follows within this many seconds, with no action.

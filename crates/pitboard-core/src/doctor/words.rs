@@ -676,7 +676,7 @@ pub(super) const NO_CODEX_FILE: &str = "absent; nothing is signed in to Codex";
 
 pub(super) fn codex_file_open(os: Os, commands: &[String]) -> String {
     let file = match os {
-        // Codex 0.162.1's file store sets its mode under `cfg(unix)` alone.
+        // Codex's file store sets its mode on Unix alone (`codex_windows_login_location`).
         Os::MacOs | Os::Linux => {
             "It holds a usable login in plain text, and Codex sets 0600 only when it creates the \
              file, never on a later write"

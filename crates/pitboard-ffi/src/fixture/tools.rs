@@ -3,16 +3,10 @@
 //! around it is the real core's: the private directory it reserves, the login it reads back
 //! from where the tool stores it there, and the enrolment.
 //!
-//! Each prints what its tool's register records it printing, and reads what it records it
-//! reading. Claude Code's, as `sign_in_output` has 2.1.289, prints that it opens the browser,
-//! the address to open where the browser did not, and its prompt for the code the browser
-//! shows, and then reads each line typed back, as `sign_in_takes_another_code` has 2.1.289
-//! read them: a line that is not `<code>#<state>` with both halves it refuses with its own
-//! `Invalid code.` line and reads on, printing no prompt again, and the first line with both
-//! halves it takes, whatever its state half says. So a test types a code with its `#`, such
-//! as `fixture-code#state`. Codex's, as `codex_login_prints_its_address` has 0.160.0, prints
-//! where its loopback server listens and the address to open, reads nothing typed back, and
-//! finishes by itself a moment later, once the browser would have come back.
+//! Each prints and reads what its tool's register records: `sign_in_output` and
+//! `sign_in_takes_another_code` for Claude Code, so a test types a code with its `#`, such as
+//! `fixture-code#state`, and `codex_login_prints_its_address` for Codex, which finishes by
+//! itself once the browser would have come back.
 //!
 //! Whoever signs in is the person the account is for: one enrolled already under that name
 //! signs in again as themselves, and anybody else is somebody new, `<name>@example.com`,
@@ -53,7 +47,7 @@ pub(crate) const CLAUDE_REFUSES: &str =
 
 /// Claude Code's headless run of a warm-up on a fixture's machine, played through
 /// pitboard-core's seam for a run that starts no program. It answers as print mode does when
-/// a request is answered, as the register's `headless_result` has 2.1.296 print it, and the
+/// a request is answered, as the register's `headless_result` has it print, and the
 /// five-hour period of the account whose access token it was handed starts, as Anthropic's
 /// next answer says.
 pub(crate) struct Warmer {
@@ -225,9 +219,7 @@ fn play(
     done
 }
 
-/// Whether Claude Code takes `line` as the code the browser shows: trimmed and split at `#`,
-/// a code and a state, neither of them empty, as the register's `sign_in_takes_another_code`
-/// reads 2.1.289. What the state says is not looked at.
+// A code and a state, neither empty, whatever the state says (`sign_in_takes_another_code`).
 fn is_whole_code(line: &str) -> bool {
     let mut halves = line.trim().split('#');
     let code = halves.next().unwrap_or_default();

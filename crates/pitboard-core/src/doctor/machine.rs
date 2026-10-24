@@ -8,7 +8,7 @@ use crate::store;
 use crate::words as said;
 use std::path::PathBuf;
 
-// On Windows Claude Code's file takes its folder's access list (2.1.300, RF-C1b).
+// On Windows Claude Code's file takes its folder's access list (`windows_plaintext_write`).
 pub(super) fn loose_logins(ctx: &Context) -> Vec<(String, Kind, Access)> {
     let mut loose = Vec::new();
     let mut look = |path: PathBuf| {

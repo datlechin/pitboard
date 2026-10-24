@@ -12,11 +12,11 @@ use unicode_normalization::UnicodeNormalization;
 /// name it tries.
 ///
 /// The web view wants a file that does not exist yet, and two downloads can ask at once. It
-/// has already made the name safe: measured on macOS 27, WebKit turns `../../evil:name.txt`
-/// into `_.._evil_name.txt`.
+/// has already made the name safe (docs/facts/webkit.md).
 ///
 /// A path in `reserved` may come back in another Unicode form than it was given in: the macOS
-/// app keeps each as a `URL`, whose `path` Foundation gives decomposed, measured on macOS 27.0.
+/// app keeps each as a `URL`, whose `path` Foundation gives decomposed
+/// (docs/facts/foundation-urls.md).
 #[uniffi::export]
 pub fn download_destination(folder: String, suggested: String, reserved: Vec<String>) -> String {
     let taken = |candidate: &Path| {
@@ -73,7 +73,7 @@ fn numbered(os: Os, name: &str, base: &str, extension: Option<&str>, nth: u64) -
 }
 
 /// Whether `os` takes the paths `one` and `other` for one file. A Mac's file system takes
-/// names that are canonically equivalent in Unicode for one, measured on APFS on macOS 27.0,
+/// names that are canonically equivalent in Unicode for one (docs/facts/foundation-urls.md),
 /// so they are compared decomposed. No app runs on Linux, which compares them as the Mac
 /// does; where its file system takes them for two, a name is numbered that need not be.
 /// Windows takes names in any case for one, and does not normalise them, so two forms of one
@@ -115,8 +115,7 @@ fn split_as_chromium(name: &str) -> (&str, Option<&str>) {
     (&name[..dot], Some(&name[dot + 1..]))
 }
 
-/// The last part of `path` as `NSString.lastPathComponent` reads it: slashes at the end are
-/// dropped, and a path of slashes alone is `/`. Measured on macOS 27.
+// As `NSString.lastPathComponent` reads it (docs/facts/foundation-urls.md).
 fn last_component(path: &str) -> &str {
     let trimmed = path.trim_end_matches('/');
     if trimmed.is_empty() {
@@ -125,9 +124,7 @@ fn last_component(path: &str) -> &str {
     trimmed.rsplit('/').next().unwrap_or(trimmed)
 }
 
-/// `name` as `NSString` splits a file name into its base and its extension, measured on
-/// macOS 27: the extension follows the last `.`, and is none where it would be empty or hold
-/// a space, or where the base would be empty, `.` or `..`, as in `.hidden` or `..a`.
+// As `NSString` splits a file name into its base and extension (docs/facts/foundation-urls.md).
 fn split_extension(name: &str) -> (&str, Option<&str>) {
     match name.rsplit_once('.') {
         Some((base, extension))

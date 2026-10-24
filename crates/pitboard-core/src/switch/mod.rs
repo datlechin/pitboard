@@ -83,9 +83,7 @@ use std::path::PathBuf;
 
 /// Claude Code serves the credential from a 30 second cache, so a session already running
 /// picks up a swap within about 33 seconds, wherever no `.credentials.json` sits behind the
-/// keychain (the register's `credential_cache`). Measured over three runs on one machine
-/// with 2.1.278: swapping at t+8, t+20 and t+28 seconds took effect at t+32.3, t+33.5 and
-/// t+32.95 from process start.
+/// keychain (the register's `credential_cache`).
 pub const ADOPTION_CEILING_SECONDS: u32 = 33;
 
 #[derive(Debug)]
@@ -441,7 +439,7 @@ pub(crate) fn update_config(settled: Settled, key: &Key) -> Result<(Outcome, Vec
 }
 
 /// Why the login in use no longer works, where its service refuses its refresh token for
-/// good, as Claude Code 2.1.301 takes `invalid_grant` alone to mean (the register's
+/// good, as Claude Code takes `invalid_grant` alone to mean (the register's
 /// `token_refusals`), or it has none. Never for any other refusal: a login its service will
 /// not name may work, and one on hold comes back.
 fn refused_for_good(error: &Error) -> Option<String> {
@@ -868,11 +866,11 @@ fn switch_from(
     }
     fault::point("switch.installed");
 
-    // The write landed. That is not the same as it having held. Measured in Claude Code
-    // 2.1.278, a `/logout` that has given up waiting deletes the credential with no lock
-    // held at all, which is the one write its lock does not exclude; and a lock that aged
-    // out while the machine slept lets the tool reclaim it and write underneath. Both cost
-    // one read to notice here, and cost a browser sign-in to discover later.
+    // The write landed. That is not the same as it having held: a `/logout` that has given
+    // up waiting deletes the credential with no lock held (the register's
+    // `logout_skips_the_lock`), and a lock that aged out while the machine slept lets the tool
+    // reclaim it and write underneath. Both cost one read to notice here, and a browser
+    // sign-in to discover later.
     //
     // Checked before the incoming copy is discarded, so finding it did not hold leaves both
     // logins parked rather than neither.

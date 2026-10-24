@@ -1,8 +1,4 @@
-//! Where Codex CLI keeps things.
-//!
-//! Read from codex-cli 0.154.0: the binary on this machine, and the matching public source
-//! at tag `rust-v0.154.0`. Which store it keeps its login in is read from 0.160.0, in
-//! [`super::layers`].
+//! Where Codex CLI keeps things (`codex_login_location`); which store, [`super::layers`].
 
 use super::layers;
 use crate::context::{Context, Environment};
@@ -35,9 +31,8 @@ pub(crate) fn auth_file(ctx: &Context) -> PathBuf {
     home(ctx).join(AUTH_FILE)
 }
 
-// `codex_install_places` and `codex_windows_install_places` in the register. Never the copy
-// inside the ChatGPT app: OpenAI documents no use of it, and in ChatGPT 26.1007.71326 it was a
-// 0.162.0 alpha for Apple silicon alone.
+// `codex_install_places` and `codex_windows_install_places`. Never the copy inside the ChatGPT
+// app, which OpenAI documents no use of (`codex_runs_inside_the_chatgpt_app`).
 pub(crate) fn install_places(env: &Environment) -> Vec<PathBuf> {
     let standalone = match env.os() {
         Os::MacOs | Os::Linux => Some(env.home().join(".local").join("bin")),
@@ -137,12 +132,7 @@ pub(crate) fn config_file(ctx: &Context) -> PathBuf {
     home(ctx).join("config.toml")
 }
 
-/// Where this machine's Codex keeps its login, from every layer Codex 0.160.0 reads outside
-/// a project, in its order ([`layers`]): its own default, `/etc/codex`, the person's own
-/// `config.toml` and, on macOS, the managed preferences an administrator forces.
-///
-/// It read only `$CODEX_HOME/config.toml` before, so a store `/etc/codex` or a managed
-/// profile chose was taken for the file, and Pitboard read an `auth.json` Codex did not use.
+// Where this machine's Codex keeps its login, from every layer it reads outside a project.
 pub(crate) fn store(ctx: &Context) -> layers::Store {
     layers::of(ctx, &config_file(ctx))
 }

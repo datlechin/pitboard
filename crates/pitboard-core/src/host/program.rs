@@ -147,7 +147,7 @@ pub(crate) fn npm_shim_target(shim: &Path) -> Option<PathBuf> {
 
 // Where an upgrade still finds `running`: an upgrade replaces the folder Scoop or winget named
 // for the version, and keeps Scoop's `apps\<app>\current` junction and winget's link in
-// `WinGet\Links` (run 38725515950). `same` says whether two paths lead to one file.
+// `WinGet\Links` (docs/facts/windows-runners.md). `same` says whether two paths lead to one file.
 #[cfg(any(windows, test))]
 pub(crate) fn lasting(running: PathBuf, same: impl Fn(&Path, &Path) -> bool) -> PathBuf {
     let named = |dir: Option<&Path>, name: &str| {

@@ -1,10 +1,5 @@
-//! How Claude Code lays out its credential document, and which parts of it belong to the
-//! account signed in rather than to the machine.
-//!
-//! Read out of 2.1.278 and dated in [`super::assumptions`]. The shared switch and park code
-//! reach this only through the provider boundary: nothing outside Claude Code's own module
-//! knows that its login sits under `claudeAiOauth`, beside keys that belong to nobody's
-//! account.
+//! Claude Code's credential document, and which parts of it are the account's
+//! (`account_scoped_keys`). Nothing outside Claude Code's module knows its layout.
 
 use super::api;
 use crate::store;
@@ -25,18 +20,8 @@ pub(crate) fn signed_out(document: &Value) -> bool {
     document.is_object() && document.get("claudeAiOauth").is_none()
 }
 
-/// The account's whole slice of a credential document: `claudeAiOauth` and whatever else of
-/// [`ACCOUNT_SCOPED`] is there.
-///
-/// This is what gets parked. Parking the OAuth block alone meant a switch away deleted the
-/// rest of the account's keys and a switch back could not put them there, so an account
-/// came back to Claude Code slightly less than it left. Whether that costs a device
-/// re-verification is not something Pitboard has measured, and it is not claimed anywhere;
-/// what is claimed is that restoring an account restores what was there.
-///
-/// Measured on one real account: the slice is 524 bytes against 506 for the OAuth block
-/// alone, which is nothing against the 4032-byte ceiling. An account holding a device token
-/// has not been measured, and the write path handles an oversized login either way.
+// What a park holds: `claudeAiOauth` and the rest of ACCOUNT_SCOPED, so an account comes back
+// with every key it left with. Its size is measured in `account_scoped_keys`.
 pub(crate) fn slice(document: &Value) -> Result<Value, String> {
     let object = document
         .as_object()
@@ -95,11 +80,8 @@ pub(crate) fn fingerprint_of(document: &Value) -> String {
         .unwrap_or_default()
 }
 
-/// The parked login with fresh tokens, stored as Claude Code stores its own after renewing,
-/// so it reads the same to Claude Code once restored. With no refresh-token lifetime in the
-/// answer Claude Code keeps the date it already had (`refreshTokenExpiresAt ?? previous`,
-/// measured in 2.1.278); dropping it instead would make a lapsed park look immortal, and
-/// Pitboard would keep offering and renewing it forever.
+// Stored as Claude Code stores a renewal, keeping the date an answer leaves out
+// (`refresh_token_end`): dropped, a lapsed park would look immortal.
 pub(crate) fn renewed(document: &Value, fresh: &api::Renewed, now_millis: i64) -> Value {
     let mut next = document.clone();
     // Whatever else the slice holds is kept; only the tokens move.

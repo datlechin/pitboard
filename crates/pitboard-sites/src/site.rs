@@ -62,7 +62,7 @@ pub static CLAUDE: Site = Site {
                        connected in this window.",
 };
 
-// ARCHITECTURE.md's "claude.ai and chatgpt.com" says where its hosts and aliases were read.
+// docs/facts/services.md's "claude.ai and chatgpt.com" says where its hosts and aliases were read.
 pub static CHATGPT: Site = Site {
     host: "chatgpt.com",
     provider: "codex",

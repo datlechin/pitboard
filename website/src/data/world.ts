@@ -1,4 +1,4 @@
-// Each plan has the limits Pitboard measured it with (ARCHITECTURE.md, "Anthropic's usage answer").
+// Each plan has the limits Pitboard measured it with (register: usage_answer_lists_every_limit).
 import { platforms, type Platform } from "../lib/platform.ts";
 
 export type Tool = "claude" | "codex" | "desktop";

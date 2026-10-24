@@ -1,7 +1,5 @@
-//! What Pitboard asks OpenAI about a Codex login.
-//!
-//! Read from codex-cli 0.154.0. Two requests: one to exchange a refresh token, one to ask
-//! how much of a plan is left. Neither is a model request and neither costs quota.
+//! What Pitboard asks OpenAI about a Codex login: a renewal and its usage
+//! (`codex_renewal`, `codex_usage_endpoint`), neither of which costs quota.
 
 use crate::api::{Refusal, agent, retry_after, server_time, test_base};
 use crate::context::Context;
@@ -375,15 +373,11 @@ fn kind(seconds: Option<i64>, which: &str, scope: Option<&str>) -> LimitKind {
     }
 }
 
-/// Epoch seconds, however the answer put them.
-///
-/// Measured as a number. The string form is read too because the field is a timestamp and
-/// reading one shape while silently dropping the other would show a limit with no reset
-/// time and no reason.
+// Epoch seconds: a number, as the answers read gave it, or a string, read too so no reset is
+// dropped without a reason.
 fn moment(value: &Value) -> Option<i64> {
     if let Some(seconds) = value.as_i64() {
-        // A value in milliseconds would be around a thousand times too large; nothing
-        // measured has sent one, and a date in the year 55000 is worth refusing.
+        // No answer read has sent milliseconds, and a date in the year 55000 is worth refusing.
         return (seconds > 0 && seconds < 100_000_000_000).then_some(seconds);
     }
     value

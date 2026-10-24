@@ -1,11 +1,5 @@
-//! The macOS backend. Every call execs `/usr/bin/security`, the only application the
-//! item's access list trusts.
-//!
-//! Measured on throwaway items: a foreign in-process read adds the caller to that list, and
-//! a foreign in-process write replaces the item's partition list, after which every read by
-//! `/usr/bin/security` takes 1-3 seconds instead of 0.02, or waits on a keychain password
-//! dialog in a desktop session, a cost Claude Code then pays on every credential re-read.
-//! A write through `security -U` changes only the item's mtime.
+//! The macOS backend: every call runs `/usr/bin/security`, the one program the item trusts,
+//! and never the Security framework in process (docs/facts/macos.md).
 
 use crate::context::Context;
 use crate::host::{Input, SECURITY};
@@ -190,9 +184,8 @@ impl RawStore for Keychain {
             )));
         }
 
-        // Measured on macOS 26: `security -i` reads at most 4097 bytes of command line and
-        // treats the rest as another command. Past that the only route `security` offers is
-        // the argument line, which is what Claude Code falls back to for the same login.
+        // Past what `security -i` reads (docs/facts/macos.md) the argument line is the one route,
+        // as it is Claude Code's (`keychain_write_route`).
         let hex = hex::encode(contents.as_bytes());
         let out = if price.over() {
             let args = [
@@ -242,13 +235,8 @@ impl RawStore for Keychain {
         }
     }
 
-    /// Measured on macOS 26 against a keychain holding 362 items: `dump-keychain` without
-    /// `-d` exits 0 in 0.06 seconds, never prompts, and emits attributes only, no secret of
-    /// any item. Reads of Pitboard's own items afterwards take the usual 0.016 seconds, so
-    /// listing does not carry the access-list side effect an in-process read does.
-    ///
-    /// Only Pitboard's own names are returned, and only from the vault: the live chain has
-    /// nothing to enumerate and Claude Code's items are none of Pitboard's business.
+    // `dump-keychain` without `-d` prompts for nothing and shows no secret (docs/facts/macos.md).
+    // Only the vault's own names come back: Claude Code's items are none of Pitboard's.
     fn list(&self) -> Result<Option<Vec<String>>, Error> {
         if self.owner != Owner::Pitboard {
             return Ok(None);

@@ -4,9 +4,9 @@ namespace Pitboard.Windows;
 
 // The navigations of a page and its frames, by WebView2's id, for telling whose a download is: WebView2 names no frame
 // in DownloadStarting. On both runners a navigation that became a download completed first, unsuccessful and
-// ConnectionAborted, and DownloadStarting followed (run 38825074643). So a navigation counts while it is under way, and
-// after it completed so, until the page next navigates. A download nothing accounts for counts as a frame's, so it is
-// asked about more often than on macOS, never less.
+// ConnectionAborted, and DownloadStarting followed (docs/facts/windows-runners.md). So a navigation counts while it is
+// under way, and after it completed so, until the page next navigates. A download nothing accounts for counts as a
+// frame's, so it is asked about more often than on macOS, never less.
 public sealed class PageNavigations
 {
     private readonly Dictionary<ulong, string> _page = [];

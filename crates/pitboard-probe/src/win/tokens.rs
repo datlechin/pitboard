@@ -178,7 +178,7 @@ pub(super) fn safer(spawn: bool, scratch: Option<&Path>) -> Report {
     Report::ok("safer", logon, data)
 }
 
-// Codex 0.162.1's unelevated sandbox flags (codex-rs/windows-sandbox-rs/src/token.rs).
+// Codex's unelevated sandbox flags (`codex_windows_sandbox_token`).
 const SE_GROUP_LOGON_ID: u32 = 0xC000_0000;
 
 /// A copy of the logon session SID in `token`'s groups, which Codex uses as a restricting SID.
@@ -254,15 +254,8 @@ fn copy_sid(sid: PSID) -> Option<Vec<u8>> {
     Some(unsafe { std::slice::from_raw_parts(sid as *const u8, len) }.to_vec())
 }
 
-/// A restricted token shaped like Codex 0.162.1's unelevated sandbox
-/// (`spawn_prep.rs::prepare_legacy_session_security`, `token.rs::create_token_with_caps_from`):
-/// the same three flags, and its restricting-SID order, one capability SID, then the logon SID,
-/// then Everyone. Codex always passes a capability SID (its readonly cap, or the write-root
-/// caps), so the probe adds a random `S-1-5-21-a-b-c-d` one, as `cap.rs::make_random_cap_sid_string`
-/// makes it. The token's default DACL is set like Codex's (`token.rs::set_default_dacl`): the
-/// logon SID GENERIC_ALL, OWNER RIGHTS (`S-1-3-4`) READ_CONTROL, so a write-restricted child may
-/// reach its own objects. SeChangeNotifyPrivilege is enabled so a directory can be traversed.
-/// The restricting-SID labels go back with the token.
+// Codex's unelevated sandbox token (`codex_windows_sandbox_token`), with a random capability
+// SID and SeChangeNotifyPrivilege on so a folder can be traversed.
 fn restricted_token() -> Result<(Token, Vec<&'static str>), String> {
     let mut base: HANDLE = std::ptr::null_mut();
     // SAFETY: a pseudo-handle for this process; `base` receives a token handle.

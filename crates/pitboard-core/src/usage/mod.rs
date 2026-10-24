@@ -441,14 +441,8 @@ fn window_from_named(name: &str, v: &Value) -> Option<Window> {
     })
 }
 
-/// A reading taken from Anthropic's usage endpoint just now.
-///
-/// Its `limits` are every limit the account has: read on 8 October 2026 from the answers
-/// Claude Code 2.1.294 kept from `GET /api/oauth/usage` on one machine, where a Team seat's
-/// holds `session` and one model's `weekly_scoped` and no `weekly_all`. The reading says so
-/// only where `limits` held rows and every one was read. A row dropped for a value that
-/// does not normalise is still a limit of the account's, and an answer without `limits`
-/// names the five-hour and weekly limits alone.
+// Every limit the account has (`usage_answer_lists_every_limit`), said only where `limits`
+// held rows and every one was read: a row that does not normalise is still the account's.
 pub(crate) fn from_usage_object(u: &Value, observed_at: i64) -> Snapshot {
     let limits = u.get("limits").and_then(Value::as_array);
     let mut windows: Vec<Window> = limits

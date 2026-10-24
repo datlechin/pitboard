@@ -39,11 +39,8 @@ private struct WebViewHost: NSViewRepresentable {
     }
 }
 
-/// WebKit finds text for a find bar but shows none itself: measured on macOS 27, a web view
-/// answers neither `performFindPanelAction:` nor `performTextFinderAction:`. An `NSTextFinder`
-/// with the web view as its client and this view as its bar's container shows the system's
-/// own find bar and steps through matches, which is how WebKit's SwiftUI `WebView` does it on
-/// the Mac. The Find menu's items reach this view on their way up from the web view.
+/// A web view shows no find bar of its own (docs/facts/webkit.md), so this view contains the
+/// system's, with the web view as its `NSTextFinder`'s client, as SwiftUI's `WebView` does.
 final class WebContainer: NSView, @preconcurrency NSTextFinderBarContainer, NSMenuItemValidation
 {
     private var webView: WKWebView
@@ -54,8 +51,8 @@ final class WebContainer: NSView, @preconcurrency NSTextFinderBarContainer, NSMe
         super.init(frame: .zero)
         finder.client = webView
         finder.findBarContainer = self
-        // Measured on macOS 27: incremental searching leaves the page's selection where it was
-        // when Find Next is chosen, so a search runs when Return is pressed.
+        // Incremental searching leaves the page's selection where it was when Find Next is
+        // chosen, so a search runs when Return is pressed (docs/facts/webkit.md).
         finder.isIncrementalSearchingEnabled = false
         addSubview(webView)
     }
@@ -107,8 +104,8 @@ final class WebContainer: NSView, @preconcurrency NSTextFinderBarContainer, NSMe
 
     // MARK: - The find bar
 
-    // The bar is in the view only while it shows: measured on macOS 27, a finder whose bar is
-    // already in place, hidden, never says to show it.
+    // The bar is in the view only while it shows: a finder whose bar is already in place,
+    // hidden, never says to show it (docs/facts/webkit.md).
     var findBarView: NSView? {
         didSet {
             oldValue?.removeFromSuperview()

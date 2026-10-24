@@ -1,4 +1,10 @@
 // Read by a change only, with the app seen closed and its folder held. Nothing is recorded.
+// Nobody can be asked whose a session is, so Pitboard knows one by its cookie's fingerprint.
+// One it has not seen is taken as the app names it in one case alone, the app replacing its
+// own session: the settings name the account in use, which holds no parked login, and no token
+// cache holds what a Log out leaves. That lets a switch park it, and lets nothing be deleted.
+// An unseen session beside an emptied cache is a sign-in the app has not finished; any other
+// is doubt, which every change refuses over, `pitboard enroll` under a label the way out.
 
 use super::super::{Error, Result, shape};
 use super::there;

@@ -18,9 +18,9 @@ version 1, and the guard refuses an rc or a full release while no signer is set
 
 ## Prepare a release
 
-The first release with Claude Desktop waits until the hand measurements M1 to M10 in
-[ARCHITECTURE.md](ARCHITECTURE.md#claude-desktop) are recorded. The first release that signs
-Pitboard for Windows, and 1.0.0, also rewrite what
+The first release with Claude Desktop waits until the hand measurements M1 to M11 in
+[Not measured](docs/facts/not-measured.md#claude-desktop) are recorded. The first release
+that signs Pitboard for Windows, and 1.0.0, also rewrite what
 [Site and docs tied to Windows' status](#site-and-docs-tied-to-windows-status) lists.
 
 1. Pick the version: minor for anything people would notice, patch for fixes alone.
@@ -110,8 +110,8 @@ Tag the first release with Windows files only once each of these holds:
 - No Rust or C# test waits on a later Windows pull request: none is ignored or excluded on
   Windows with a `W<id>` reason.
 - The session on [the session machine](AGENTS.md#the-session-machine) is done, on the bundle
-  built from `Release 1.0.0-beta.1`, and `ARCHITECTURE.md` records what it measured, with the
-  build and the date.
+  built from `Release 1.0.0-beta.1`, and [its facts page](docs/facts/windows-session.md)
+  records what it measured, with the build and the date.
 - The last 0.x release is published with the release kinds above, and `release/0.N` is cut
   from its tag.
 - `windows-release` passed on the pull request that holds `Release 1.0.0-beta.1`.

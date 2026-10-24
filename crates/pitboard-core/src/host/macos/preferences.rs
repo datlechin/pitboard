@@ -1,10 +1,6 @@
-//! Managed preferences: what a configuration profile an administrator installed forces for a
-//! program, which macOS keeps apart from the person's own defaults.
-//!
-//! Read the way Codex 0.160.0 reads its own, in `codex-rs/config/src/loader/macos.rs`
-//! (`codex_managed_preferences` in its register): a value counts only while
-//! `CFPreferencesAppValueIsForced` says a profile forces it, and must be a string. Claude
-//! Code reads the profile's plist whole instead (`macos_managed_preferences`).
+//! What an administrator's configuration profile forces for a program, read as Codex reads its
+//! own (`codex_managed_preferences`), or as Claude Code reads the plist whole
+//! (`macos_managed_preferences`).
 
 use crate::host::Input;
 use crate::host::administered::{self, Administered};
@@ -55,7 +51,7 @@ pub(super) fn forced(domain: &str, key: &str) -> Administered {
     }
 }
 
-// As Claude Code 2.1.309 converts it with `plutil` (`macos_managed_preferences`).
+// As Claude Code converts it with `plutil` (`macos_managed_preferences`).
 pub(super) fn as_json(path: &Path) -> Administered {
     if let Err(e) = std::fs::File::open(path) {
         return administered::unread(&e);

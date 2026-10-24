@@ -1,7 +1,4 @@
-//! Codex CLI behind the provider boundary.
-//!
-//! Read from codex-cli 0.154.0: the binary on this machine and the matching public source.
-//! Every fact this leans on is dated in [`super::assumptions`].
+//! Codex CLI behind the provider boundary, on the facts in [`super::assumptions`].
 
 use super::{api, layers, paths};
 use crate::context::Context;
@@ -356,10 +353,8 @@ impl Provider for Codex {
     /// Everything a sign-in writes goes inside its home, so the directory is all there is.
     fn discard_signin(&self, _ctx: &Context, _: Permit, _dir: &std::path::Path) {}
 
-    /// Read from 0.160.0. `codex login` prints to stderr where its loopback server listens,
-    /// `http://localhost:<port>`, and then, bare on a line of its own, the `https` address
-    /// on auth.openai.com to open when the browser did not. So the first `https` address is
-    /// the one to open. It reads nothing typed back, whatever it prints.
+    // The first `https` address `codex login` prints is the one to open
+    // (`codex_login_prints_its_address`).
     fn read_sign_in(&self, said: &str) -> SignInView {
         SignInView {
             url: crate::provider::https_address(said),
@@ -372,9 +367,8 @@ impl Provider for Codex {
         false
     }
 
-    /// Nothing measured yet. Codex reads an API key from its own login document, which moves
-    /// with the account, and whether an environment key takes precedence over a ChatGPT
-    /// login in 0.154.0 has not been read closely enough to warn about.
+    // None named: whether a key in the environment wins over a ChatGPT login is not read
+    // (docs/facts/not-measured.md).
     fn overridden_by(&self, _ctx: &Context) -> Vec<String> {
         Vec::new()
     }
@@ -477,11 +471,9 @@ impl Provider for Codex {
                     .into(),
             });
         }
-        // A login whose tokens belong to one account and whose account id names another is
-        // not one account's login. Codex until 0.163.0 leaves exactly that when a session still
-        // running from before a switch refreshes during one: it re-reads the file, keeps the account
-        // id it finds and writes its own account's tokens over the rest. Parking it, or
-        // taking it as proof a switch held, would file one account's tokens under the other.
+        // Tokens of one account under another's account id, as an older Codex left a refresh
+        // under way at a switch (`codex_never_follows_a_switch`): parked, or taken as proof a
+        // switch held, it would file one account's tokens under the other.
         let stored = live["tokens"]["account_id"].as_str();
         let claimed = live["tokens"]["id_token"]
             .as_str()

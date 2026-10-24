@@ -17,7 +17,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::Duration;
 
-/// How long a run is given before it is stopped. The measured runs took 7 to 15 seconds.
+// The runs measured took 7 to 15 seconds (`headless_print_mode`).
 const CEILING: Duration = Duration::from_secs(120);
 
 // A run about to start: the command, and the access token on descriptor 3, where one is handed.
@@ -39,10 +39,8 @@ pub(crate) fn home(ctx: &Context, tool: ProviderId) -> PathBuf {
     crate::home::dir(ctx).join("warm").join(tool.code())
 }
 
-/// Makes `home` afresh, each folder private to this user. Nothing one run left is there for
-/// the next, which may be another account's: what a tool keeps of its own, such as the
-/// policies and profile it fetches with a login, is that login's. Every run was measured
-/// this way, from an empty home.
+// Afresh and private to this user: what a tool keeps of its own, such as the policies and
+// profile it fetches with a login, is that login's, and the next run may be another account's.
 pub(crate) fn prepare(permit: Permit, home: &Path) -> std::io::Result<()> {
     if home.exists() {
         crate::home::remove_all(permit, home)?;

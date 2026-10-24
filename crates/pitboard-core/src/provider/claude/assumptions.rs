@@ -14,11 +14,14 @@ use crate::assumptions::OnSystem::{NotRead, Pending, Read};
 use crate::assumptions::{Assumption, OnSystem, PerSystem};
 
 /// The build every entry below was read from on macOS and Linux, unless it says otherwise.
+// The checker goes red on 2.1.124 (2026-09-22) and 2.1.110 (2026-10-06), which predate the write
+// lock.
 pub(crate) const VERIFIED_AGAINST: &str = "2.1.284";
 
 // Both Windows builds of 2.1.303 (commit 07df2ae), compared as bytes on 2026-10-20 with the build
-// each reading named before. They embed Bun 1.4.4, whose source is not public, so a fact's Bun
-// half stays its entry's reading of bun-v1.4.3.
+// each reading named before. They embed Bun 1.4.4 at 0049fd75e, whose source is not public, so a
+// fact's Bun half stays its entry's reading of bun-v1.4.3. 2.1.289 to 2.1.296 embed Bun 1.4.3 at
+// eecfd55de, and 2.1.300 and 2.1.301 at 9ecafc196, neither a public commit.
 pub(crate) const WINDOWS_VERIFIED_AGAINST: &str = "2.1.303";
 
 /// The Linux build has no keychain backend, so a keychain fact read from it reports the
@@ -448,6 +451,12 @@ pub(crate) const PER_SYSTEM: &[PerSystem] = &[
         windows: Read(WINDOWS_VERIFIED_AGAINST),
     },
     PerSystem {
+        name: "statusline_run_timing",
+        macos: NotRead("read in the Windows builds alone, for a status line run's budget there"),
+        linux: NotRead("read in the Windows builds alone, for a status line run's budget there"),
+        windows: Read("2.1.302"),
+    },
+    PerSystem {
         name: "proxy_from_variables",
         macos: Read("2.1.301"),
         linux: Read("2.1.301"),
@@ -468,6 +477,13 @@ pub(crate) const PER_SYSTEM: &[PerSystem] = &[
     of_the_service("request_starts_the_five_hour_period"),
     of_the_service("weekly_period_is_a_fixed_cycle"),
     of_the_service("used_up_limit_refuses_every_request"),
+    // Anthropic's answer as 2.1.294 kept it, so the same whatever system asked.
+    PerSystem {
+        name: "usage_answer_lists_every_limit",
+        macos: Read("2.1.294"),
+        linux: Read("2.1.294"),
+        windows: Read("2.1.294"),
+    },
     answers("refusals_are_final"),
     answers("account_refusals"),
     answers("token_refusals"),
@@ -528,7 +544,8 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
         name: "credential_service_name",
         fact: "the login lives in a keychain item named `Claude Code${OAUTH_FILE_SUFFIX}-credentials`, \
                with `-<first 8 hex of sha256 of the NFC-normalised storage directory>` appended for \
-               any directory but the default",
+               any directory but the default. The slot tests `!CLAUDE_CONFIG_DIR`, so an empty \
+               `CLAUDE_CONFIG_DIR` names the default slot (read in 2.1.289)",
         read_from: "the secure storage module's service name and slot derivation",
         verified_against: VERIFIED_AGAINST,
         depends: "slot.rs, and every read and write of the live credential",
@@ -564,8 +581,10 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
         fact: "a write gives `security -i` the line `add-generic-password -U -a \"<account>\" \
                -s \"<service>\" -X \"<hex>\"` on stdin while that line is at most 4032 bytes, \
                and the same command on the argument line above that; it never refuses or \
-               splits a login. Each call has a 2 second timeout. A failed write is transient, \
-               and skips the plaintext fallback, when it timed out or, from 2.1.281, when it \
+               splits a login. The login goes as hex, two characters a byte, so stdin carries \
+               about 2 KB of it, and a larger one is on the argument line at every renewal. \
+               Each call has a 2 second timeout. A failed write is transient, and skips the \
+               plaintext fallback, when it timed out or, from 2.1.281, when it \
                exited 36 after this process had seen the item; any other failure moves the \
                login to `.credentials.json`",
         read_from: "the keychain backend's update path and the fallback wrapper around it",
@@ -607,7 +626,8 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
                backoff, and re-reads the credential inside the lock before changing it. A \
                re-read that fails abandons the write (`read_failed_skip_write`); from 2.1.281 a \
                locked keychain counts as a failed re-read once this process has seen the item, \
-               where before it read as empty",
+               where before it read as empty. Where the lock goes missing under a write, it \
+               warns (`write lock compromised`) and writes on",
         read_from: "the secure storage module's write wrapper",
         verified_against: VERIFIED_AGAINST,
         depends: "lock.rs, the whole switch, and `pitboard stow`, which takes it once before it \
@@ -643,7 +663,8 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
                it sent, writing nothing otherwise. So the write lock does not keep a renewal \
                from spending a refresh token: this lock does. A holder is taken over before \
                the lock is stale only where its owner record, \
-               `<storage dir>/.oauth_refresh.lock.owner`, proves it gone",
+               `<storage dir>/.oauth_refresh.lock.owner`, proves it gone. From 2.1.301 it takes \
+               the lock through a synchronous `fs`, at the same path and timing",
         read_from: "the refresh lock's options and the function taking both locks, the token \
                     refresh and the scope expansion, which take it before they read the login \
                     again and send the refresh token, the refresh's compare-and-set save through \
@@ -682,7 +703,9 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
         read_from: "the re-login prune and the logout path, which also revokes \
                     cloudSessionsOauth's refresh token, in the darwin-arm64, linux-x64, \
                     win32-x64 and win32-arm64 builds of 2.1.303, read as bytes on 2026-10-20; \
-                    the win32-x64 builds of 2.1.300 to 2.1.302 prune the same seven",
+                    the win32-x64 builds of 2.1.300 to 2.1.302 prune the same seven. Measured on \
+                    one real account on 2026-09-22: its slice was 524 bytes, 506 of them the \
+                    OAuth block; one holding a device token was not measured",
         verified_against: "2.1.303",
         depends: "document::ACCOUNT_SCOPED, and what a park holds",
         probe: &[
@@ -703,7 +726,9 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
                the keychain; see `fallback_file_pins_session_login`. The 30 seconds are \
                unchanged in 2.1.284; its re-checks after 1, 3 and 10 seconds, behind \
                `tengu_streamed_thimble` from 2.1.281, can only shorten that",
-        read_from: "the keychain backend's cache, and measured against a running session",
+        read_from: "the keychain backend's cache, and measured against a running session on \
+                    one machine: over three runs, swaps at t+8, t+20 and t+28 seconds took \
+                    effect at t+32.3, t+33.5 and t+32.95 from the process's start",
         // The 33 seconds were measured against a running 2.1.278; nothing later was run.
         verified_against: "2.1.278",
         depends: "switch::ADOPTION_CEILING_SECONDS and Claude's adoption where nothing is \
@@ -722,7 +747,11 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
                value is the home folder, while the config dir is \
                `(CLAUDE_CONFIG_DIR ?? join(homedir(), \".claude\")).normalize(\"NFC\")`, so an \
                empty value makes it the empty path and `.config.json` is looked for in the \
-               working directory",
+               working directory. One of its features refuses a relative config dir: `the \
+               configuration home (CLAUDE_CONFIG_DIR) is not an absolute path` (read in \
+               2.1.289's win32-x64 build). It takes no lock on the config file, and a running \
+               session rewrites it about every forty seconds, each time changing something \
+               (measured against a running session on 2026-09-22)",
         read_from: "the config path resolution, and the config dir the secure storage module \
                     shares",
         // Read on 2026-10-15 from the darwin-arm64, linux-x64, win32-x64 and win32-arm64 builds
@@ -779,8 +808,10 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
     Assumption {
         name: "supervisor_daemon",
         fact: "a supervisor daemon outlives the session that started it, refreshes the login on \
-               a timer of roughly eight hours, records itself in `<config dir>/daemon.lock`, and \
-               writes through the same lock as everything else",
+               a timer of roughly eight hours, records itself in `<config dir>/daemon.lock` with \
+               its pid and the version that started it, leaves that file behind when it stops, \
+               writes through the same lock as everything else, and exits once no session has \
+               used it for a while",
         read_from: "the daemon's auth scheduler and its lock file",
         // Read again on 2026-10-23 from the darwin-arm64 and linux-x64 builds of 2.1.309.
         verified_against: "2.1.309",
@@ -1102,7 +1133,9 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
         read_from: "the usage read, which takes the config's `accountUuid` before it asks with \
                     the session's credentials, the cache's writer, which writes only where the \
                     config still names that account, the cache's two readers, and the reset \
-                    a sign-in and a logout both run",
+                    a sign-in and a logout both run. Of five caches captured on one machine on \
+                    2026-10-08, four held the numbers of another login than the account they \
+                    named, one with no switch near it",
         // Read on 2026-10-08 from the macOS build and on 2026-10-09 from the Linux x64,
         // Windows x64 and Windows arm64 builds of 2.1.294, whose code here is the same, and
         // again on 2026-10-23 from the four builds of 2.1.309.
@@ -1155,7 +1188,8 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
                person writes that organisation",
         read_from: "the sign-in's profile and `tokenAccount` write, the start-up profile fetch \
                     and its 24 hour check, the bootstrap merge into `oauthAccount`, and the \
-                    refresh's profile update",
+                    refresh's profile update. On 2026-10-08 one machine's config named another \
+                    account than the keychain's login for three hours",
         // Read on 2026-10-08 from the macOS build and on 2026-10-09 from the Linux x64,
         // Windows x64 and Windows arm64 builds of 2.1.294, whose code here is the same, and
         // again on 2026-10-23 from the four builds of 2.1.309.
@@ -1825,6 +1859,19 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
         absent: &[],
     },
     Assumption {
+        name: "statusline_run_timing",
+        fact: "a session runs its `statusLine` command 300 ms after a change, and a run it \
+               starts cancels one still going, so only a run within that keeps the line up to \
+               date",
+        read_from: "the status line's runner in the win32-x64 and win32-arm64 builds of \
+                    2.1.301, read as bytes on 2026-10-16, and of 2.1.302 on 2026-10-17",
+        verified_against: "2.1.302",
+        depends: "the 300 ms the Windows tests hold a warm `pitboard statusline` run to, and \
+                  atomic::write_unsynced, by which what the status line writes is not flushed",
+        probe: &[],
+        absent: &[],
+    },
+    Assumption {
         name: "proxy_from_variables",
         fact: "Claude Code sends its requests through the proxy the first of `https_proxy`, \
                `HTTPS_PROXY`, `http_proxy` and `HTTP_PROXY` that is set names, and exempts the \
@@ -1944,8 +1991,9 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
         name: "request_starts_the_five_hour_period",
         fact: "an account's five-hour period starts with its first request after the last one \
                reset, print mode's on the smallest model included, and counts on the plan, not \
-               the monthly credit. It starts at the start of the ten minutes the request fell \
-               in: a request at 17:52 gave a reset at 22:50, one at 18:02 gave 23:00. Until \
+               the monthly credit (`fallback_credit: null`). It starts at the start of the ten \
+               minutes the request fell in: a request at 17:52 gave a reset at 22:50, one at \
+               18:02 gave 23:00. Until \
                then the usage answer gives the limit's row, `session`, at 0% with no reset, \
                and `five_hour` with no reset",
         read_from: "measured on 12 October 2026 on a Team 5x and a Max 20x account: the usage \
@@ -1979,6 +2027,31 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
                     the answer after it still had no five-hour period running",
         verified_against: "2.1.296",
         depends: "warm::decide, which warms up no account with a limit used up",
+        probe: &[],
+        absent: &[],
+    },
+    Assumption {
+        name: "usage_answer_lists_every_limit",
+        fact: "`GET /api/oauth/usage` lists in `limits` every limit the account has, so one it \
+               leaves out is one the account does not have: a Team seat's answer held \
+               `session` and one model's `weekly_scoped` and no `weekly_all`, and a personal \
+               Max account's `session`, `weekly_all` and `weekly_scoped`. Anthropic documents \
+               none of it, and whether a plan with no limit for a model offers that model at \
+               all is not known",
+        read_from: "the `utilization` Claude Code 2.1.294 keeps in `~/.claude.json` from its \
+                    last usage request, in five backups of that file on one machine on \
+                    2026-10-08, four of them Team seats' and the fifth, from 16:13:36, noted \
+                    with `session` alone and not read again, and Pitboard's reading of a \
+                    personal Max account from Anthropic's answers the same day. That day \
+                    0.9.0's `sessions.json` agreed: ten sessions in two Team seats passed the \
+                    five-hour window alone, and four of personal accounts each a weekly one",
+        verified_against: "2.1.294",
+        depends: "usage::answered, which replaces a reading whole where every row of its \
+                  `limits` was read (`Snapshot::lists_every_limit`); usage::room, which counts \
+                  a limit such a reading leaves out as one with none used, so a Team seat is a \
+                  place to go once a personal account's weekly limit reaches the share; and the \
+                  status line, which files no session that passes a limit such a reading \
+                  leaves out under that account",
         probe: &[],
         absent: &[],
     },
@@ -2042,7 +2115,7 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
     Assumption {
         name: "validate_names_the_login",
         fact: "`POST /api/oauth/validate` with an access token as `Authorization: Bearer`, \
-               `Content-Type: application/json` and no body answers `{\"valid\", \
+               `Content-Type: application/json`, no body and no beta header answers `{\"valid\", \
                \"account_uuid\", \"organization_uuid\", \"scopes\"}` for a token with \
                `user:profile`, `user:office` or `user:ccr_inference`. Claude Code asks it where \
                an identity decides something: whether a login is of an organisation managed \
@@ -2276,7 +2349,10 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
                source alone and drops the folder's. In the folder a later file's value overrides \
                an earlier one's. Its schema drops a `forceLoginMethod` other than `claudeai`, \
                `console` or `gateway`, and a `forceLoginGatewayUrl` that is not a string or is \
-               empty",
+               empty. The managed folder is `/Library/Application Support/ClaudeCode` on macOS \
+               and `/etc/claude-code` on Linux, with its `managed-settings.json` and the files \
+               of `managed-settings.d`, and a person's own settings are \
+               `<config dir>/settings.json` (read in 2.1.278)",
         read_from: "the keys the managed sources' merge takes from the first source alone and \
                     drops from the others, the merge, the folder's merge of \
                     `managed-settings.json` and `managed-settings.d`, the machine's login pins \
@@ -2381,6 +2457,7 @@ mod tests {
                 "windows_token_env",
                 "windows_statusline_shell",
                 "windows_statusline_powershell",
+                "statusline_run_timing",
                 "proxy_from_variables",
                 "remote_token_files",
                 "headless_print_mode",
@@ -2388,6 +2465,7 @@ mod tests {
                 "request_starts_the_five_hour_period",
                 "weekly_period_is_a_fixed_cycle",
                 "used_up_limit_refuses_every_request",
+                "usage_answer_lists_every_limit",
                 "refusals_are_final",
                 "account_refusals",
                 "token_refusals",

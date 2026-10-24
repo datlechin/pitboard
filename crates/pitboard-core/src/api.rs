@@ -123,13 +123,7 @@ pub(crate) fn retry_after(headers: &ureq::http::HeaderMap) -> Option<i64> {
         .filter(|seconds| *seconds > 0)
 }
 
-/// The instant a response says it was sent, from its `Date` header.
-///
-/// Measured against api.anthropic.com over eight requests: this machine sat within 0.75
-/// seconds of the server, and `Date` has a granularity of one second, so the whole spread
-/// was inside the noise. That is why there is no skew estimate here and no median of
-/// several observations: on a machine whose clock works there is nothing to correct, and
-/// on a machine whose clock does not, reading the time off the answer is the correction.
+// The instant a response says it was sent, with no skew estimated (docs/facts/services.md).
 pub(crate) fn server_time(headers: &ureq::http::HeaderMap) -> Option<i64> {
     let raw = headers.get("date")?.to_str().ok()?;
     // RFC 9110's preferred form, which is what every answer measured used:
@@ -215,8 +209,7 @@ impl Refusal {
         }
     }
 
-    /// Asking again will be answered the same way: a 4xx other than 408, 409 and 429, as
-    /// Claude Code 2.1.301 decides what not to retry (the register's `refusals_are_final`).
+    // Asking again is answered the same way, as Claude Code decides (`refusals_are_final`).
     pub(crate) fn is_final(&self) -> bool {
         (400..500).contains(&self.status) && !matches!(self.status, 408 | 409 | 429)
     }

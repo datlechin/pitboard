@@ -3,10 +3,8 @@ import Foundation
 import PitboardKit
 import WebKit
 
-/// `WebPage` itself cannot host an account window: measured on macOS 27, it opens no window
-/// for `window.open`, so a sign-in that opens one never starts, and the downloads it is asked
-/// for never reach disk. Keeping this page's shape close to `WebPage`'s is what makes moving
-/// to it a matter of conformances once it can.
+/// `WebPage` cannot host an account window (docs/facts/webkit.md), so this keeps its shape,
+/// and moving to it once it can is a matter of conformances.
 @MainActor
 @Observable
 final class Page {
@@ -121,8 +119,8 @@ final class Page {
     func zoom(_ change: ZoomChange) {
         zoom = Self.zoom(from: zoom, toward: change)
         webView.pageZoom = zoom
-        // A pinch zooms on its own, and Actual Size undoes both, as in Safari: measured on
-        // macOS 27, setting the page zoom leaves a pinch's magnification as it was.
+        // A pinch zooms on its own, and Actual Size undoes both, as in Safari: setting the
+        // page zoom leaves a pinch's magnification as it was (docs/facts/webkit.md).
         if change == .actualSize { webView.magnification = 1 }
     }
 

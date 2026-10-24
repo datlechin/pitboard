@@ -6,9 +6,7 @@
 //!
 //! A tool's builds for different systems carry different code, so the system is read from
 //! the binary's own header and a fact is read only from the builds its register's table
-//! reads it on. Read from the Linux build alone, Claude Code's keychain facts looked gone on
-//! every build from 2.1.278 on, while the one real change, in 2.1.281, showed only in the
-//! macOS build. Claude Desktop's facts are read from its app's archive, `app.asar`, which
+//! reads it on. Claude Desktop's facts are read from its app's archive, `app.asar`, which
 //! its register's table ties to macOS.
 
 use clap::Parser;

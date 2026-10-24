@@ -93,7 +93,7 @@ fn replace(
     Ok(())
 }
 
-// Any reader can find a file missing while NTFS replaces it (ARCHITECTURE.md).
+// Any reader can find a file missing while NTFS replaces it (docs/facts/windows-runners.md).
 pub(crate) fn read<T>(path: &Path, read: impl Fn(&Path) -> io::Result<T>) -> io::Result<T> {
     let mut again = 0;
     loop {

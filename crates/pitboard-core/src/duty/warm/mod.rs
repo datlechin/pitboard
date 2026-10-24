@@ -13,8 +13,8 @@
 //! to 22:00 unless they chose otherwise, so periods run back to back through the hours
 //! somebody works and none is started for a night nobody uses. The weekly limit is a fixed
 //! cycle that runs whether or not anything is sent (`weekly_period_is_a_fixed_cycle`),
-//! so there is nothing to start there. Claude Code only: when a Codex period starts has not
-//! been measured.
+//! so there is nothing to start there. Claude Code only: when a Codex period starts is not
+//! measured (docs/facts/not-measured.md).
 //!
 //! Which accounts, and the span, are kept in `warm.json` in Pitboard's directory, read by
 //! every front end alike.

@@ -1,4 +1,13 @@
-//! `pitboard watch` run by the system's own service manager; ARCHITECTURE.md has its rules.
+//! `pitboard watch` run by the system's own service manager, a second job beside daily renewal
+//! (`schedule::Job::Watch`): a LaunchAgent, a systemd user service, or a task that starts at
+//! the person's sign-in. It keeps the schedule's rules: it serves the default home alone, a run
+//! watches that home whatever `PITBOARD_HOME` says, it is given the installing Pitboard's proxy
+//! variables, and the gate refuses it where Pitboard may change nothing.
+//!
+//! Its run is ended only while Pitboard's lock is held, so never in the middle of a renewal or
+//! a switch, and `uninstall` takes it away before the schedule, since it writes in the
+//! directory as it runs. The app may be switching too: a switch is decided again under the
+//! lock, so the two make one.
 
 use crate::context::Context;
 use crate::duty::autoswitch::Threshold;

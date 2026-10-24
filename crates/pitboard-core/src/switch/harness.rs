@@ -641,7 +641,7 @@ pub(crate) fn lets_go_of_the_write_lock(m: &Rig) -> impl FnOnce() + 'static {
 }
 
 /// A session renewing the login `store` holds at the moment it is called, as Claude Code
-/// 2.1.294 does (the register's `refresh_lock`): the keychain's, or the file's for a session
+/// does (the register's `refresh_lock`): the keychain's, or the file's for a session
 /// that signed in with the file. It takes the refresh lock, as a directory, without waiting
 /// here: held, it waits, which is all that happens. Taken, it sends the refresh token stored,
 /// which spends it, then saves the renewed login, with an access token good for an hour,
@@ -731,8 +731,9 @@ pub(crate) fn usage_answer(percent: f64) -> Value {
     json!({"limits": [{"kind": "session", "percent": percent, "resets_at": resets_at.to_string()}]})
 }
 
-/// Claude Code's usage cache, put in its config as 2.1.294 writes one: stamped with `here`,
-/// the account the config names, whichever login `answer` was asked with.
+/// Claude Code's usage cache, put in its config as Claude Code writes one
+/// (`usage_cache_stamp_is_the_configs`): stamped with `here`, the account the config names,
+/// whichever login `answer` was asked with.
 pub(crate) fn cache_usage(m: &Rig, answer: Value) {
     let path = m.root.path().join(".claude.json");
     let mut config: Value =
