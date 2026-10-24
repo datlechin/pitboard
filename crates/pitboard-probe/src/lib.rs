@@ -24,7 +24,8 @@
 //! - it writes, reads or deletes only Credential Manager items, tasks, registry keys and
 //!   files it made itself under a `pitboard-probe-*` name or in a scratch folder it was
 //!   given, and every file it is named (`--out`, `dpapi --file`, `swap`) carries that
-//!   prefix; `credman-names` asks Credential Manager only for the live login families and
+//!   prefix; past those it only reads the task Pitboard's watch service registered for the
+//!   account; `credman-names` asks Credential Manager only for the live login families and
 //!   `pitboard-*` names, and never reads a blob out ([`names`]);
 //! - it names processes only when they are the tools', their runtimes', Pitboard's, the
 //!   probe's or a browser's ([`images`]);

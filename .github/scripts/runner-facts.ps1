@@ -132,19 +132,50 @@ function Get-PlainText([securestring] $Secure) {
     [System.Net.NetworkCredential]::new('', $Secure).Password
 }
 
-# The last lines a run wrote to standard error, for a run that failed, with the throwaway
-# user's and the job user's names and profiles taken out.
+# $Text with the throwaway user's and the job user's SIDs, profiles and names taken out.
+function Hide-Account([string] $Text, $User) {
+    foreach ($pair in @(
+            @($User.Sid, '<sid>'), @($jobSid, '<job-sid>'),
+            @($User.ProfileDir, '<profile>'), @($env:USERPROFILE, '<job-profile>'),
+            @($User.Name, '<user>'), @($env:USERNAME, '<job-user>'))) {
+        if ($pair[0]) { $Text = $Text -replace [regex]::Escape($pair[0]), $pair[1] }
+    }
+    $Text
+}
+
+# The last lines a run wrote to standard error, for a run that failed, with the accounts taken
+# out.
 function Get-ErrorTail([string] $Path, $User) {
     if (-not (Test-Path -LiteralPath $Path)) { return $null }
     $text = (Get-Content -Path $Path -Tail 6 -ErrorAction SilentlyContinue) -join "`n"
     if (-not $text) { return $null }
-    foreach ($pair in @(
-            @($User.ProfileDir, '<profile>'), @($env:USERPROFILE, '<job-profile>'),
-            @($User.Name, '<user>'), @($env:USERNAME, '<job-user>'))) {
-        if ($pair[0]) { $text = $text -replace [regex]::Escape($pair[0]), $pair[1] }
-    }
+    $text = Hide-Account $text $User
     if ($text.Length -gt 800) { $text = $text.Substring($text.Length - 800) }
     $text
+}
+
+# What a run of pitboard.exe --json said, by its codes and RF-E6's fields. The task's path
+# names the user's SID, so it is compared, not kept.
+function Get-Envelope($Run, $User) {
+    $said = [ordered]@{ started = $Run.started; timed_out = $Run.timed_out; exit = $Run.exit }
+    $envelope = $Run.report
+    if ($envelope -and -not $envelope.unreadable) {
+        $said.ok = $envelope.ok
+        $said.warnings = @($envelope.warnings | ForEach-Object { $_.code })
+        if ($envelope.error) {
+            $said.code = $envelope.error.code
+            $said.message = Hide-Account $envelope.error.message $User
+        }
+        if ($envelope.data) {
+            foreach ($key in 'installed', 'threshold', 'removed') {
+                if ($envelope.data.PSObject.Properties.Name -contains $key) { $said[$key] = $envelope.data.$key }
+            }
+            if ($envelope.data.task) { $said.task_is_watch_and_the_sid = $envelope.data.task -ceq "\Pitboard\Watch $($User.Sid)" }
+        }
+    }
+    if ($Run.error) { $said.error = Hide-Account $Run.error $User }
+    if ($Run.stderr_tail) { $said.stderr_tail = $Run.stderr_tail }
+    $said
 }
 
 # Start a program as $User, with its own profile's variables and any $Extra ones (a $null
@@ -601,6 +632,122 @@ function Measure-Task($User, [string] $In, [string] $Label, [string] $TaskFolder
     $result
 }
 
+# RF-E6: the watch service's task as a fresh standard user's pitboard.exe installs, installs
+# again and uninstalls it in the user's default homes, read by the user's probe at each step,
+# then what is left. With no signed-in session the user's task never starts (RF-E1).
+function Measure-WatchService($User) {
+    if (-not $Pitboard) { throw 'no -Pitboard build was given' }
+    $defaults = @{ HOME = $null; PITBOARD_HOME = $null; CLAUDE_CONFIG_DIR = $null; CODEX_HOME = $null }
+    $read = { param([string] $Step) Invoke-AsUser $User "e6-read-$Step" @('task', '--action', 'read', '--watch-service') }
+    $cli = {
+        param([string] $Step, [string[]] $Arguments)
+        Get-Envelope (Invoke-AsUser $User "e6-$Step" ($Arguments + '--json') -FilePath $Pitboard -Extra $defaults -TimeoutSeconds 120) $User
+    }
+    $runs = {
+        @(Get-CimInstance -ClassName Win32_Process -Filter "Name = 'pitboard.exe'" | Where-Object {
+                (Invoke-CimMethod -InputObject $_ -MethodName GetOwner -ErrorAction SilentlyContinue).User -eq $User.Name
+            }).Count
+    }
+    $schedule = { $service = New-Object -ComObject 'Schedule.Service'; $service.Connect(); $service }
+    $pitboardFolder = { try { (& $schedule).GetFolder('\Pitboard') } catch { $null } }
+    $pitboardHome = Join-Path $User.ProfileDir 'AppData\Local\Pitboard'
+    $r = [ordered]@{
+        home_before = Test-Path -LiteralPath $pitboardHome
+        folder_before = [bool] (& $pitboardFolder)
+        read_before = & $read 'before'
+    }
+    try {
+        $r.install = & $cli 'install' @('watch', 'install')
+        Start-Sleep -Seconds 5
+        $r.read = & $read 'installed'
+        $r.runs = & $runs
+        $r.status = & $cli 'status' @('watch', 'status')
+        $r.install_again = & $cli 'install-again' @('watch', 'install', '--at', '90')
+        Start-Sleep -Seconds 5
+        $r.read_again = & $read 'installed-again'
+        $r.status_again = & $cli 'status-again' @('watch', 'status')
+        $r.uninstall = & $cli 'uninstall' @('watch', 'uninstall')
+        $r.read_after = & $read 'after'
+        $r.status_after = & $cli 'status-after' @('watch', 'status')
+        $r.runs_after = & $runs
+        $r.home_after = if (Test-Path -LiteralPath $pitboardHome) { @(Get-ChildItem -LiteralPath $pitboardHome -Recurse -Force -Name | Sort-Object) } else { $null }
+    } finally {
+        # What the uninstall left would change what the job user's RF-E1 row reads of \Pitboard\.
+        # A task left in it keeps the folder from going.
+        $r.left_its_task = Invoke-Fact {
+            $task = "Watch $($User.Sid)"
+            $folder = & $pitboardFolder
+            if ($folder -and $(try { $folder.GetTask($task) } catch { $null })) { $folder.DeleteTask($task, 0); $true } else { $false }
+        }
+        $r.left_its_folder = Invoke-Fact {
+            $folder = & $pitboardFolder
+            if ($folder -and -not $r.folder_before -and $folder.GetTasks(1).Count -eq 0 -and $folder.GetFolders(0).Count -eq 0) {
+                (& $schedule).GetFolder('\').DeleteFolder('Pitboard', 0)
+                $true
+            } else { $false }
+        }
+    }
+    $r
+}
+
+# RF-E6 as the job user, whose tasks start (RF-E1): two probe tasks shaped as the watch
+# service's, each holding a lock in place of `pitboard watch`, one with no time limit (PT0S) and
+# one with PT1M. Past the second's limit the first is stopped, then stopped again.
+function Measure-WatchTask([string] $In) {
+    $limits = [ordered]@{ 'e6-pt0s' = 'PT0S'; 'e6-pt1m' = 'PT1M' }
+    $call = {
+        param([string] $Label, [string] $Step, [string[]] $More = @())
+        Invoke-Probe "$Label-$Step" (@('task', '--scratch', $In, '--label', $Label, '--action', $Step) + $More)
+    }
+    # A hold is told by the folder in the command line its task started it with.
+    $holds = {
+        param([string] $Label)
+        @(Get-CimInstance -ClassName Win32_Process -Filter "Name = 'pitboard-probe.exe'" |
+                Where-Object { $_.CommandLine -and $_.CommandLine.Contains("--scratch $(Join-Path $In $Label) ") })
+    }
+    $r = [ordered]@{}
+    try {
+        foreach ($label in $limits.Keys) {
+            $hold = "lockfileex --scratch $(Join-Path $In $label) --mode hold --seconds 900"
+            $r[$label] = [ordered]@{
+                register = & $call $label 'register' @('--logon', '--time-limit', $limits[$label], '--allow-battery', '--start-when-available', '--args', $hold)
+            }
+        }
+        $started = Get-Date
+        foreach ($label in $limits.Keys) { $r[$label].run = & $call $label 'run' }
+        foreach ($label in $limits.Keys) {
+            $r[$label].ready = Wait-File (Join-Path $In "$label\pitboard-probe-home\pitboard-probe-ready") 30
+            $r[$label].ready_after_seconds = [math]::Round(((Get-Date) - $started).TotalSeconds, 1)
+            $r[$label].read_running = & $call $label 'read'
+            $r[$label].holds_running = (& $holds $label).Count
+        }
+        $wait = ($started.AddSeconds(150) - (Get-Date)).TotalSeconds
+        if ($wait -gt 0) { Start-Sleep -Seconds ([int] [math]::Ceiling($wait)) }
+        $r.read_later_after_seconds = [int] ((Get-Date) - $started).TotalSeconds
+        foreach ($label in $limits.Keys) {
+            $r[$label].read_later = & $call $label 'read'
+            $r[$label].holds_later = (& $holds $label).Count
+        }
+        $unlimited = $r['e6-pt0s']
+        $unlimited.stop = & $call 'e6-pt0s' 'stop'
+        $stopped = Get-Date
+        while ((& $holds 'e6-pt0s').Count -gt 0 -and ((Get-Date) - $stopped).TotalSeconds -lt 30) { Start-Sleep -Milliseconds 200 }
+        $unlimited.holds_after_stop = (& $holds 'e6-pt0s').Count
+        $unlimited.stop_took_seconds = [math]::Round(((Get-Date) - $stopped).TotalSeconds, 1)
+        $unlimited.read_stopped = & $call 'e6-pt0s' 'read'
+        $unlimited.stop_again = & $call 'e6-pt0s' 'stop'
+    } finally {
+        foreach ($label in $limits.Keys) {
+            if (-not $r.Contains($label)) { continue }
+            $r[$label].delete = & $call $label 'delete'
+            $left = & $holds $label
+            $r[$label].holds_left = $left.Count
+            $left | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+        }
+    }
+    $r
+}
+
 # RF-C3r: a 51 GB expandable VHDX made ReFS, as a Dev Drive where the system is Windows 11
 # (format fs=refs is a server's) and plain where it is Windows Server; the rename routes, the
 # replace loop and LockFileEx there, as the job's user and as $User.
@@ -975,6 +1122,7 @@ function Measure-FreshUser($User, $Result, [string] $Bun, [string] $X64) {
             root_folder = Measure-Task $User $s 'e1' 'root' 'logon' -SidSuffix
         }
     }
+    Invoke-Row $Result 'rf_e6' { Measure-WatchService $User }
     Invoke-Row $Result 'rf_d2' {
         $out = Join-Path $s 'pitboard-probe-d2-unseal.json'
         [ordered]@{
@@ -1532,7 +1680,7 @@ function Measure-SettingChange($Result) {
     }
 }
 
-# The job user's rows: RF-E1's, RF-E3, RF-D2's and RF-F2.
+# The job user's rows: RF-E1's, RF-E6's, RF-E3, RF-D2's and RF-F2.
 function Measure-JobUser($Result) {
     $s = Join-Path $scratch 'job'
     Invoke-Row $Result 'rf_e1' {
@@ -1541,6 +1689,7 @@ function Measure-JobUser($Result) {
             root_folder = Measure-Task $null $s 'e1j' 'root' 'logon' -SidSuffix
         }
     }
+    Invoke-Row $Result 'rf_e6' { Measure-WatchTask (Join-Path $s 'e6') }
     # The three values are put back exactly as they were, value and kind, or removed where
     # they were absent.
     Invoke-Row $Result 'rf_e3' {

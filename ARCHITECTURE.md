@@ -2901,6 +2901,18 @@ Tasks:
   0x80070091 while the second's task is in it, and succeeds once it is gone (RF-E1 and
   RF-E1c, run 38922866517).
 - The job user's task in either folder runs, with last result 0.
+- A fresh standard user's `pitboard watch install` registers `\Pitboard\Watch <SID>`. Task
+  Scheduler reads its trigger's and principal's user back as that user's name, the logon type
+  as an interactive token at least privilege, and the time limit as `PT0S`. With no signed-in
+  session its `Run` succeeds and starts nothing: the last result stays 0x00041303 and no
+  `pitboard.exe` runs. Installing again at 90% and `watch uninstall` succeed, and the
+  uninstall takes `\Pitboard\` with the task. The home keeps `audit.log` and `state.lock`
+  (RF-E6, run 40030964166).
+- The job user's tasks shaped as the watch service's start their program within 0.4 s of
+  `Run`. At 150 s the run with a `PT0S` limit is under way, and Task Scheduler has ended the
+  one with `PT1M` and its program, last result 0x00041306. `Stop` ends the `PT0S` run and its
+  program within 1.2 s, with the same result, and succeeds again with no run under way
+  (RF-E6, run 40030964166).
 
 Processes and jobs:
 
@@ -3186,6 +3198,7 @@ Daily renewal:
 Windows facts Pitboard stands on that Microsoft documents and nothing has measured yet, read
 on 15 and 16 October 2026. W27 took out the rows [The session machine](#the-session-machine)
 measured on 18 October 2026, and those CI and the runner facts measured by 20 October 2026.
+RF-E6 took out two of the watch service's on 23 October 2026 (run 40030964166).
 
 | Fact | Source | Why not measured |
 |---|---|---|
@@ -3194,9 +3207,7 @@ measured on 18 October 2026, and those CI and the runner facts measured by 20 Oc
 | WTS lists another session's processes to Administrators only | [WTSEnumerateProcessesExW](https://learn.microsoft.com/en-us/windows/win32/api/wtsapi32/nf-wtsapi32-wtsenumerateprocessesexw) | No row looked at another user's process in another session. A standard user's listing held session 0's processes. |
 | `longPathAware` in a manifest lifts nothing where `LongPathsEnabled` is 0 or absent, as on a PC no policy or installer changed | [Maximum path length limitation](https://learn.microsoft.com/en-us/windows/win32/fileio/maximum-file-path-limitation) | Both images set it to 1, where the manifest lifts the limit (RF-T8, runs 39310064516 and 39320680285), and AGENTS.md does not let runner-facts.ps1 change it. |
 | `StartWhenAvailable` runs, about 10 minutes later, a start missed while the PC slept or was off | [StartWhenAvailable](https://learn.microsoft.com/en-us/windows/win32/taskschd/tasksettings-startwhenavailable) | A runner never sleeps through a trigger. Task Scheduler took no missed start of the renewal's daily trigger begun before the task was registered, or passed while it was disabled: none of four tasks, two with the setting, ran within 21 to 29 minutes, each `0x00041303` with no missed run counted (RF-T8, runs 39310064516 and 39320680285). |
-| A `LogonTrigger` whose `UserId` is the person's SID starts the task at their sign-in, for the watch service | [LogonTrigger.UserId](https://learn.microsoft.com/en-us/windows/win32/taskschd/logontrigger-userid) | No run of `windows-facts.yml` has registered the watch service's task yet. |
-| `ExecutionTimeLimit` of `PT0S` lets the watch service's task run with no limit | [TaskSettings.ExecutionTimeLimit](https://learn.microsoft.com/en-us/windows/win32/taskschd/tasksettings-executiontimelimit) | As above. |
-| `IRegisteredTask::Run` starts the task at once, and `Stop` ends its run under way | [IRegisteredTask](https://learn.microsoft.com/en-us/windows/win32/api/taskschd/nn-taskschd-iregisteredtask) | As above. |
+| A `LogonTrigger` whose `UserId` is the person's SID starts the task at their sign-in, for the watch service | [LogonTrigger.UserId](https://learn.microsoft.com/en-us/windows/win32/taskschd/logontrigger-userid) | No runner signs in. RF-E6 registered the watch service's task, and it never started (run 40030964166). |
 | Restart Manager asks a console program, such as the `bin\pitboard.exe` the watch service runs, to end by `CTRL_C_EVENT`, and an MSI replaces a file it cannot free at the next restart. `/passive` then restarts Windows unasked; `/norestart`, which the update feed passes, never does | [Guidelines for Applications](https://learn.microsoft.com/en-us/windows/win32/rstmgr/guidelines-for-applications), [Standard Installer command-line options](https://learn.microsoft.com/en-us/windows/win32/msi/standard-installer-command-line-options) (updated 29 April 2025, read on 23 October 2026) | No runner updates Pitboard while the watch service runs. The next session's update should run with the service installed. |
 | WSL 2's processes run in a utility VM | [Comparing WSL versions](https://learn.microsoft.com/en-us/windows/wsl/compare-versions) | No runner has WSL. |
 | Each subkey of `HKCU\Software\Microsoft\Windows\CurrentVersion\Lxss` is a distribution WSL holds for the account, named by its `DistributionName` | [How to manage WSL disk space](https://learn.microsoft.com/en-us/windows/wsl/disk-space) | No runner has WSL. |
@@ -3605,12 +3616,16 @@ treated, and only the macOS build shows it. The run reads both builds since.
   `anthropic_profiles`, `profile_folder`, `windows_profile_folder`, `organisation_pin`): a
   session also signs in another way under `CLAUDE_CODE_USE_MANTLE`, an Anthropic profile, or
   managed settings that require the Cloud gateway's sign-in. `settings::overrides` names
-  each, as it names a variable. `settings::Profiles` reads the profile variables from the
-  environment only: Claude Code reads them from `process.env`, and Pitboard does not follow
-  which settings `env` blocks reach it. A managed `forceLoginOrgUUID` makes Claude Code refuse
-  a login of another organisation as a session starts, so `Provider::refuses` asks it of the
-  account going in, by the organisation Pitboard recorded for it. Where several managed
-  sources set it, a login none of them names is refused.
+  each, as it names a variable. Claude Code reads the profile variables from `process.env`,
+  which it sets at start from the `env` of its config file and of each settings source. Read
+  again on 24 October 2026, `settings::profile` takes each variable and `ANTHROPIC_CONFIG_DIR`
+  from the highest managed source, the person's `settings.json` or the config file that sets
+  it, and from what `settings::Profiles` kept of the environment Pitboard started with where
+  none does. A project's, a local and a `--settings` file are not read. A managed
+  `forceLoginOrgUUID` makes Claude Code refuse a login of another organisation as a session
+  starts, so `Provider::refuses` asks it of the account going in, by the organisation Pitboard
+  recorded for it. Where several managed sources set it, a login none of them names is
+  refused.
 - Read on 23 October 2026 from the darwin-arm64 build of 2.1.309
   (`macos_managed_preferences`): on macOS a configuration profile's plist, the person's in
   `/Library/Managed Preferences/<user>` before the device's, is a managed source too. Claude
@@ -3852,25 +3867,28 @@ real `auth.json` that build wrote. The register is `provider/codex/assumptions.r
   - No editor with the Codex extension was running there. Its place, a folder named
     `openai.chatgpt-<version>`, is the extension's packaged layout, not measured.
 - Read again in the source at tag `rust-v0.164.0` on 23 October 2026, whose four builds pass
-  pitboard-conformance: every fact of the CLI's but the Windows ones, which keep their 0.162.1
-  and 0.163.0 readings. `codex_app_server_daemon` moved: where `packages/app-server-daemon`
-  has no `current` and an older Codex left a daemon's pid file or log, the daemon runs from
-  `packages/standalone/current`. A second `app_server_daemon` holder takes those directories,
-  `holder::Location::WithinEach`. On Linux the path resolves to a release, as a standalone
-  install's sessions do, so such a daemon reads as a session there. One the daemon's updater
-  starts again runs from the release itself (`resolved_managed_codex_bin`), and reads as a
-  session on macOS too.
+  pitboard-conformance: every fact of the CLI's, and the Windows ones on 24 October 2026.
+  `codex_app_server_daemon` moved: where `packages/app-server-daemon` has no `current` and an
+  older Codex left a daemon's pid file or log, the daemon's package is `packages/standalone`.
+  Codex starts it from the release that package's `current` resolves to (`pid_start.rs`
+  canonicalises the path), where a standalone install's sessions run. So a second
+  `app_server_daemon` holder, `holder::Location::Recorded`, takes the pids Codex records for
+  the daemon and its updater in `$CODEX_HOME/app-server-daemon`.
 - Read on 23 October 2026 from the amd64 `.deb` of ChatGPT for Linux 26.1016.61520, as bytes
   and never run (`codex_linux_app`): it installs to `/usr/lib/chatgpt` and runs its own
   `resources/codex` as `codex app-server` with the app's environment. So a folder named
-  `chatgpt` holds a `chatgpt_app`, whose remedy says to quit ChatGPT and open it again: whether
-  closing its windows quits it turns on something of its own, not traced.
+  `chatgpt` holds a `chatgpt_app`, whose remedy says to quit ChatGPT and open it again. Read on
+  24 October 2026 from the `.rpm`, the Arch package and the `.deb` of 26.1021.22027: one layout,
+  one `app.asar` and one codex in all three, and the app stays open after its last window
+  closes while the notification-area icon it always puts up on Linux is there.
 - Read on 16 October 2026 from Codex's source at tag `rust-v0.162.1` and its win32 builds:
-  - (`codex_windows_app_server`) the background app server runs
-    `<CODEX_HOME>\packages\app-server-daemon\current\bin\codex.exe`, `current` a
-    junction Codex points at one of its releases. It is started with `DETACHED_PROCESS |
-    CREATE_BREAKAWAY_FROM_JOB`, never from an elevated terminal, so its remedy there says to
-    run `codex app-server daemon restart` from a terminal that is not elevated.
+  - (`codex_windows_app_server`) the background app server runs the `bin\codex.exe` of the
+    release `<CODEX_HOME>\packages\app-server-daemon\current` resolves to, `current` a
+    junction Codex points at one of its releases: `pid_start.rs` starts the path
+    canonicalised, already at 0.162.1, which this note first missed. It is started with
+    `DETACHED_PROCESS | CREATE_BREAKAWAY_FROM_JOB`, never from an elevated terminal, so its
+    remedy there says to run `codex app-server daemon restart` from a terminal that is not
+    elevated.
   - (`codex_windows_app_identity`) the desktop app for Windows, ChatGPT- or Codex-branded,
     is the package of family `OpenAI.Codex_2p2nqsd0c76g0`, its app
     `OpenAI.Codex_2p2nqsd0c76g0!App`, and Codex tells its process by that family. So

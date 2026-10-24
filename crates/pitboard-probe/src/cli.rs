@@ -195,7 +195,7 @@ pub enum Command {
         #[arg(long, value_enum, default_value_t = HandoverKind::Pipe)]
         kind: HandoverKind,
     },
-    /// E1-E4: register, run, read, list or delete a probe task through ITaskService.
+    /// E1-E6: register, run, stop, read, list or delete a probe task through ITaskService.
     Task {
         #[arg(long, value_enum, default_value_t = TaskAction::List)]
         action: TaskAction,
@@ -209,6 +209,9 @@ pub enum Command {
         /// Append the account's SID to the name, as W25 might.
         #[arg(long)]
         sid_suffix: bool,
+        /// E6: read Pitboard's own `\Pitboard\Watch <SID>` in place of a probe task.
+        #[arg(long, conflicts_with_all = ["label", "folder", "sid_suffix"])]
+        watch_service: bool,
         /// Which of the probe's programs the action runs.
         #[arg(long, value_enum, default_value_t = TaskExec::Probe)]
         exec: TaskExec,
@@ -233,6 +236,12 @@ pub enum Command {
         /// Let it start and keep running on battery.
         #[arg(long)]
         allow_battery: bool,
+        /// E6: a trigger at this account's sign-in that names its SID, as the watch service's.
+        #[arg(long)]
+        logon: bool,
+        /// How long a run may last, in ISO 8601; the watch service's is PT0S.
+        #[arg(long, default_value = "PT10M")]
+        time_limit: String,
     },
     /// E4: whether each console variant gets a console and a window, started each way.
     Console {
@@ -527,6 +536,7 @@ pub enum HandoverKind {
 pub enum TaskAction {
     Register,
     Run,
+    Stop,
     Read,
     List,
     Delete,
@@ -998,6 +1008,56 @@ mod tests {
                 ..
             }
         ));
+    }
+
+    #[test]
+    fn a_task_takes_the_watch_services_shape_and_reads_its_task() {
+        let cli = Cli::try_parse_from([
+            "pitboard-probe",
+            "task",
+            "--action",
+            "register",
+            "--logon",
+            "--time-limit",
+            "PT0S",
+        ])
+        .unwrap();
+        assert!(matches!(
+            cli.command,
+            Command::Task { logon: true, ref time_limit, .. } if time_limit == "PT0S"
+        ));
+        let cli = Cli::try_parse_from(["pitboard-probe", "task", "--action", "stop"]).unwrap();
+        assert!(matches!(
+            cli.command,
+            Command::Task { action: TaskAction::Stop, logon: false, ref time_limit, .. }
+                if time_limit == "PT10M"
+        ));
+        let cli = Cli::try_parse_from([
+            "pitboard-probe",
+            "task",
+            "--action",
+            "read",
+            "--watch-service",
+        ])
+        .unwrap();
+        assert!(matches!(
+            cli.command,
+            Command::Task {
+                watch_service: true,
+                ..
+            }
+        ));
+        for named in [
+            &["--label", "e6"][..],
+            &["--folder", "root"],
+            &["--sid-suffix"],
+        ] {
+            let args = ["pitboard-probe", "task", "--watch-service"];
+            assert!(
+                Cli::try_parse_from(args.iter().chain(named)).is_err(),
+                "{named:?}"
+            );
+        }
     }
 
     #[test]

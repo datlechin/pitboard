@@ -6,10 +6,11 @@
 //! 26.928.31416, its bundled codex 0.159.2, Codex's app-server daemon 0.159.3 and terminal
 //! sessions, with the facts in `assumptions`. No editor with the Codex extension was
 //! running there, so its place is the extension's packaged layout, unmeasured. On Windows the
-//! app server's place and ChatGPT's package are read from 0.162.1's source; that ChatGPT's own
+//! app server's place and ChatGPT's package are read from 0.164.0's source; that ChatGPT's own
 //! codex runs in that package waits on the session's step 10. ChatGPT for Linux is read from
-//! its package, 26.1016.61520, not run.
+//! its packages, 26.1016.61520 and 26.1021.22027, not run.
 
+use crate::context::Context;
 use crate::holder::{AppId, Holder, Location, Noun, Remedy};
 use crate::host::{OS, Os};
 
@@ -37,7 +38,7 @@ pub(crate) const HOLDERS: &[Holder] = &[
         },
     },
     // `/usr/lib/chatgpt/resources/codex`, which the app runs as `codex app-server` with its own
-    // environment (codex_linux_app). It may stay open after its windows close.
+    // environment (codex_linux_app). It stays open after its windows close while its icon is up.
     Holder {
         kind: "chatgpt_app",
         noun: Noun::One("the ChatGPT app"),
@@ -46,20 +47,20 @@ pub(crate) const HOLDERS: &[Holder] = &[
     },
     // `~/.codex/packages/app-server-daemon/releases/0.159.3-aarch64-apple-darwin/bin/codex`,
     // a child of launchd, which terminal sessions can share. On Windows
-    // `current\bin\codex.exe` there, through a junction (codex_windows_app_server).
+    // `releases\<version>-<target>\bin\codex.exe` there, which `current` resolves to
+    // (codex_windows_app_server).
     Holder {
         kind: "app_server_daemon",
         noun: Noun::One("Codex's background app server"),
         location: Location::Within("app-server-daemon"),
         remedy: restart_the_app_server(OS),
     },
-    // From 0.164.0, where an older Codex left a daemon's launch state, the app server runs from
-    // the standalone package's `current`. It reads as a session where its path is a release's,
-    // as a terminal session's is: on Linux, which resolves it, and once its updater restarts it.
+    // Where an older Codex left a daemon's launch state, the app server runs from the standalone
+    // package's release, as a terminal session does, so it is told by the pid Codex records.
     Holder {
         kind: "app_server_daemon",
         noun: Noun::One("Codex's background app server"),
-        location: Location::WithinEach(&["standalone", "current"]),
+        location: Location::Recorded,
         remedy: restart_the_app_server(OS),
     },
     // `<extensions>/openai.chatgpt-<version>-<platform>/bin/<platform>/codex`.
@@ -80,6 +81,28 @@ pub(crate) const HOLDERS: &[Holder] = &[
         remedy: Remedy::Restart,
     },
 ];
+
+// The app server and its updater, each as `{"pid": ...}`, in the names for the package each runs
+// from (codex_app_server_daemon).
+const PID_FILES: [&str; 4] = [
+    "daemon.pid",
+    "daemon-updater.pid",
+    "app-server.pid",
+    "app-server-updater.pid",
+];
+
+// What a stopped daemon left names a process no longer running, or one that took its id since.
+pub(crate) fn recorded(ctx: &Context) -> Vec<u32> {
+    let folder = super::paths::home(ctx).join("app-server-daemon");
+    PID_FILES
+        .iter()
+        .filter_map(|name| {
+            let text = std::fs::read_to_string(folder.join(name)).ok()?;
+            let record: serde_json::Value = serde_json::from_str(&text).ok()?;
+            u32::try_from(record.get("pid")?.as_u64()?).ok()
+        })
+        .collect()
+}
 
 // Codex refuses to start its Windows daemon from an elevated terminal (codex_windows_app_server).
 const fn restart_the_app_server(os: Os) -> Remedy {
@@ -115,7 +138,7 @@ mod tests {
                 package: None,
             })
             .collect();
-        let holding = classify(&processes, HOLDERS, "codex");
+        let holding = classify(&processes, HOLDERS, "codex", &[]);
         let kinds: Vec<(&str, Vec<u32>)> = holding
             .iter()
             .map(|h| (h.holder.kind, h.pids.clone()))
@@ -144,7 +167,7 @@ mod tests {
                 Some("OpenAI.Codex_2p2nqsd0c76g0"),
             ),
             (
-                "C:/Users/a/.codex/packages/app-server-daemon/current/bin/codex.exe",
+                "C:/Users/a/.codex/packages/app-server-daemon/releases/0.164.0-x86_64-pc-windows-msvc/bin/codex.exe",
                 None,
             ),
             (
@@ -160,7 +183,7 @@ mod tests {
                 package: package.map(str::to_owned),
             })
             .collect();
-        let holding = classify(&processes, HOLDERS, "codex");
+        let holding = classify(&processes, HOLDERS, "codex", &[]);
         let kinds: Vec<(&str, Vec<u32>)> = holding
             .iter()
             .map(|h| (h.holder.kind, h.pids.clone()))
@@ -183,39 +206,56 @@ mod tests {
         );
     }
 
-    // From 0.164.0 a daemon whose launch state an older Codex left runs from the standalone
-    // package's `current` (codex_app_server_daemon), and a terminal session from its release.
+    // Codex 0.164.0 starts its app server from the release its package's `current` resolves to,
+    // which for the standalone package an older Codex's launch state leaves is a terminal
+    // session's (codex_app_server_daemon).
     #[test]
-    fn a_daemon_left_in_the_standalone_package_is_the_app_server() {
-        let listed = [
-            "/Users/a/.codex/packages/standalone/releases/0.164.0-aarch64-apple-darwin/bin/codex",
-            "/Users/a/.codex/packages/standalone/current/bin/codex",
-            "/Users/a/.codex/packages/app-server-daemon/current/bin/codex",
-        ];
-        let processes: Vec<Process> = (1..)
-            .zip(listed)
-            .map(|(pid, path)| Process {
-                pid,
-                path: PathBuf::from(path),
-                package: None,
-            })
-            .collect();
-        let kinds: Vec<(&str, Vec<u32>)> = classify(&processes, HOLDERS, "codex")
-            .iter()
-            .map(|h| (h.holder.kind, h.pids.clone()))
-            .collect();
-        assert_eq!(
-            kinds,
+    #[allow(
+        clippy::disallowed_methods,
+        reason = "a test lays out the pid files Codex's app server leaves"
+    )]
+    fn a_daemon_left_in_the_standalone_package_is_told_by_the_pid_codex_records() {
+        let release = "/home/a/.codex/packages/standalone/releases/0.164.0-x86_64-unknown-linux-musl/bin/codex";
+        let mem = crate::host::memory::MemoryHost::new();
+        mem.runs_at("codex", &[release, release]);
+        let scratch = tempfile::tempdir().expect("a scratch home");
+        let home = scratch.path().join("codex");
+        let folder = home.join("app-server-daemon");
+        std::fs::create_dir_all(&folder).expect("a folder");
+        let ctx = Context::for_command_line(&crate::context::Environment::on(
+            OS,
             [
-                ("app_server_daemon", vec![3]),
-                ("app_server_daemon", vec![2]),
-                ("session", vec![1]),
-            ]
+                ("HOME", scratch.path().as_os_str()),
+                ("USERPROFILE", scratch.path().as_os_str()),
+                ("CODEX_HOME", home.as_os_str()),
+            ],
+        ))
+        .with_memory_stores(std::sync::Arc::clone(&mem));
+        let found = || {
+            crate::holder::find(&ctx, crate::provider::ProviderId::Codex, "codex", HOLDERS)
+                .expect("a process list")
+                .iter()
+                .map(|h| (h.holder.kind, h.pids.clone()))
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(found(), [("session", vec![1, 2])]);
+
+        std::fs::write(
+            folder.join("app-server.pid"),
+            r#"{"pid":2,"processStartTime":"Fri Oct 23 10:00:00 2026"}"#,
+        )
+        .expect("written");
+        std::fs::write(folder.join("app-server-updater.pid"), "").expect("written");
+        std::fs::write(folder.join("daemon.pid"), "not a record").expect("written");
+        assert_eq!(recorded(&ctx), [2]);
+        assert_eq!(
+            found(),
+            [("app_server_daemon", vec![2]), ("session", vec![1])]
         );
     }
 
-    // ChatGPT for Linux 26.1016.61520 runs `resources/codex` under `/usr/lib/chatgpt`
-    // (codex_linux_app).
+    // ChatGPT for Linux 26.1021.22027 runs `resources/codex` under `/usr/lib/chatgpt`, from its
+    // `.deb`, `.rpm` or Arch package alike (codex_linux_app).
     #[test]
     fn every_codex_on_linux_is_its_own_kind() {
         let listed = [
@@ -233,7 +273,7 @@ mod tests {
                 package: None,
             })
             .collect();
-        let holding = classify(&processes, HOLDERS, "codex");
+        let holding = classify(&processes, HOLDERS, "codex", &[]);
         let kinds: Vec<(&str, Vec<u32>)> = holding
             .iter()
             .map(|h| (h.holder.kind, h.pids.clone()))
@@ -328,8 +368,8 @@ mod tests {
                     ("PATH", folder.as_os_str()),
                 ],
             );
-            let ctx = crate::context::Context::for_command_line(&env)
-                .with_memory_stores(std::sync::Arc::clone(&mem));
+            let ctx =
+                Context::for_command_line(&env).with_memory_stores(std::sync::Arc::clone(&mem));
             let holding =
                 crate::holder::find(&ctx, crate::provider::ProviderId::Codex, "codex", HOLDERS)
                     .expect("a process list");

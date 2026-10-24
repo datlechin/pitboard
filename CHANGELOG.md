@@ -13,6 +13,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the model's name, as they show Claude Code's.
 - `pitboard doctor`, **This Mac** and **This PC** name each Codex setting that limits which logins
   Codex keeps, such as `forced_chatgpt_workspace_id`, and the accounts it rules out.
+- `pitboard doctor`, **This Mac** and **This PC** name a managed `forceLoginOrgUUID` of Claude
+  Code's, and the accounts whose organisation it leaves out.
 - A Codex switch on Linux names the ChatGPT app among what still runs Codex, and says to quit it
   and open it again.
 - `pitboard watch install` has the system's own service manager run `pitboard watch` from each
@@ -109,18 +111,21 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- On Windows, Pitboard reads Codex's requirements from the file the policy `RequirementsPath` in
+  `HKLM\SOFTWARE\Policies\OpenAI\Codex` names, as Codex 0.164.0 does, before it switches Codex.
 - Pitboard renews a parked Codex login at the issuer and as the client Codex 0.164.0 records in
   it, instead of always as Codex's own client.
 - Pitboard takes no numbers from an OpenAI usage answer that names another account than the
   Codex login it asked about.
 - Pitboard keeps a parked Codex login that OpenAI refuses to renew as another client than its
   own, and says why, instead of dropping it.
-- On macOS, a Codex switch names Codex's background app server where it runs from the standalone
-  package an older Codex left, and says to restart it, instead of counting it as a `codex`
-  session.
+- A Codex switch names Codex's background app server where it runs from the standalone package
+  an older Codex left, by the process ID Codex records for it, and says to restart it, instead of
+  counting it as a `codex` session.
 - Pitboard warns with `auth_overridden`, and the automatic switch holds back, while
-  `CLAUDE_CODE_USE_MANTLE`, an Anthropic profile or managed settings that require the Cloud
-  gateway make Claude Code sign in another way.
+  `CLAUDE_CODE_USE_MANTLE`, managed settings that require the Cloud gateway, or an Anthropic
+  profile named in the environment or in the `env` of Claude Code's settings or `~/.claude.json`
+  make Claude Code sign in another way.
 - On Linux, Pitboard and its install script work as root where root owns every folder they write
   in, as on a server whose only user is root, and refuse only under `sudo` or as root in a folder
   another user owns.
@@ -134,6 +139,7 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `home_unwritable` error that named `systemctl`.
 - Shell completions leave out `pitboard renew --scheduled`, which only the daily renewal
   schedule runs.
+- Shell completions leave out `pitboard manpage`, as `pitboard --help` does.
 - On Windows, `pitboard doctor` says where Codex keeps its home among Codex's checks, instead
   of under a second Codex heading above Pitboard's own.
 - The app marks an account whose parked login Anthropic or OpenAI refused **Needs signing in

@@ -7,7 +7,8 @@
 //! `cli_auth_credentials_store_mode` it feeds for how a requirement pins the store, and
 //! `loader/macos.rs` for the managed preferences. The register calls these
 //! `codex_store_layers` and `codex_managed_preferences`. Windows' are read from the same
-//! loader at tag `rust-v0.163.0`, `codex_windows_store_layers`.
+//! loader at tag `rust-v0.163.0`, and the policy that names its requirements file at
+//! `rust-v0.164.0`, `codex_windows_store_layers`.
 //!
 //! A setting in a higher layer replaces the same setting in a lower one, and a requirement
 //! pins it over every layer. Codex starts only where every layer it reads is TOML it can
@@ -50,7 +51,7 @@
 
 use super::paths::Backend;
 use crate::context::Context;
-use crate::host::{Administered, Os};
+use crate::host::{Administered, Hive, Os};
 use crate::words::listed_values;
 use base64::prelude::{BASE64_STANDARD, Engine as _};
 use std::fmt::Write as _;
@@ -63,6 +64,10 @@ const REQUIREMENTS_KEY: &str = "requirements_toml_base64";
 
 /// The setting that chooses the store.
 const STORE: &str = "cli_auth_credentials_store";
+
+// The policy that names Codex's requirements file on Windows, under `HKLM`.
+const POLICY_KEY: &str = r"SOFTWARE\Policies\OpenAI\Codex";
+const POLICY_VALUE: &str = "RequirementsPath";
 
 /// The feature that keeps a keychain store's login in an encrypted file of secrets.
 const SECRETS: &str = "secret_auth_storage";
@@ -104,22 +109,75 @@ impl Layer {
         matches!(self, Layer::Required | Layer::RequiredByPreference)
     }
 
-    fn place(self, system: &Path, own: &Path) -> String {
-        let file = |name: &str| system.join(name).display().to_string();
+    fn place(self, places: &Places) -> String {
+        let file = |name: &str| places.system.join(name).display().to_string();
         match self {
             Layer::Packaged => "Codex's default".into(),
             Layer::System => file("config.toml"),
-            Layer::Own => own.display().to_string(),
+            Layer::Own => places.own.display().to_string(),
             Layer::CommandLine => "the `-c` Pitboard's sign-ins give `codex login`".into(),
             Layer::Managed => file("managed_config.toml"),
             Layer::ManagedPreference => {
                 format!("the managed preference `{CONFIG_KEY}` of `{PREFERENCES}`")
             }
-            Layer::Required => file("requirements.toml"),
+            Layer::Required => match &places.required {
+                Ok(file) => file.display().to_string(),
+                Err(_) => format!("the policy `{POLICY_VALUE}` of `HKLM\\{POLICY_KEY}`"),
+            },
             Layer::RequiredByPreference => {
                 format!("the managed preference `{REQUIREMENTS_KEY}` of `{PREFERENCES}`")
             }
         }
+    }
+}
+
+// Where the layers this machine's Codex reads are, for reading them and for the words.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Places {
+    // This machine's folder of Codex's configuration.
+    system: PathBuf,
+    // Its requirements, or what the policy that names them holds where that is no full path.
+    required: Result<PathBuf, String>,
+    // The person's own `config.toml`, where a line that changes the store goes.
+    own: PathBuf,
+}
+
+fn places_of(ctx: &Context, own: &Path) -> Places {
+    let system = system_dir_of(ctx);
+    let named = match crate::host::OS {
+        Os::Windows => ctx.host().policy(Hive::Machine, POLICY_KEY, POLICY_VALUE),
+        Os::MacOs | Os::Linux => Administered::Unset,
+    };
+    Places {
+        required: required_file(&system, named, ctx.profile.as_deref().unwrap_or(ctx.home())),
+        system,
+        own: own.to_path_buf(),
+    }
+}
+
+// Codex 0.164.0 on Windows takes the file `HKLM`'s policy names, where it can read that, with a
+// leading `~` its profile folder, and does not start where it names no full path
+// (codex_windows_store_layers).
+fn required_file(system: &Path, named: Administered, profile: &Path) -> Result<PathBuf, String> {
+    let Administered::Set(named) = named else {
+        return Ok(system.join("requirements.toml"));
+    };
+    let home = |rest: &str, separator| {
+        rest.strip_prefix(separator)
+            .map(|rest| profile.join(rest.trim_start_matches(separator)))
+    };
+    let expanded = match named.strip_prefix('~') {
+        Some("") => profile.to_path_buf(),
+        Some(rest) => home(rest, '/')
+            .or_else(|| home(rest, '\\'))
+            .unwrap_or_else(|| PathBuf::from(&named)),
+        None => PathBuf::from(&named),
+    };
+    let expanded = crate::host::without_verbatim_prefix(expanded);
+    if crate::host::windows_absolute(&expanded.to_string_lossy()) {
+        Ok(expanded)
+    } else {
+        Err(named)
     }
 }
 
@@ -255,10 +313,7 @@ pub(crate) struct Store {
     secrets_by: Option<Layer>,
     /// For [`Backend::Unknown`], why nobody can tell.
     unknown: Option<Unknown>,
-    // This machine's folder of Codex's configuration.
-    system: PathBuf,
-    /// The person's own `config.toml`, where a line that changes the store goes.
-    own: PathBuf,
+    places: Places,
 }
 
 /// Why nobody can tell the store, for [`Backend::Unknown`].
@@ -315,7 +370,7 @@ impl Store {
             Layer::Packaged | Layer::System | Layer::Own | Layer::CommandLine => format!(
                 "To use the file store, set {line} in {}, then sign in again with `{program} \
                  login`",
-                self.own.display()
+                self.places.own.display()
             ),
             Layer::Managed => format!(
                 "{place} sets it over your own config.toml, so only an administrator can \
@@ -356,15 +411,15 @@ impl Store {
     }
 
     fn place(&self, layer: Layer) -> String {
-        layer.place(&self.system, &self.own)
+        layer.place(&self.places)
     }
 }
 
 /// The store this machine's Codex keeps its login in, read for the home `ctx` names.
 pub(crate) fn of(ctx: &Context, own: &Path) -> Store {
-    let system = system_dir_of(ctx);
-    resolve(crate::host::OS, &system, own, &|layer| {
-        read(ctx, &system, layer, Some(own), None)
+    let places = places_of(ctx, own);
+    resolve(crate::host::OS, &places, &|layer| {
+        read(ctx, &places, layer, Some(own), None)
     })
 }
 
@@ -372,9 +427,9 @@ pub(crate) fn of(ctx: &Context, own: &Path) -> Store {
 /// `config.toml`, with [`FILE_STORE`] on its command line. `own` is the person's own
 /// `config.toml`, for what the words name.
 pub(crate) fn of_a_sign_in(ctx: &Context, own: &Path) -> Store {
-    let system = system_dir_of(ctx);
-    resolve(crate::host::OS, &system, own, &|layer| {
-        read(ctx, &system, layer, None, Some(FILE_STORE))
+    let places = places_of(ctx, own);
+    resolve(crate::host::OS, &places, &|layer| {
+        read(ctx, &places, layer, None, Some(FILE_STORE))
     })
 }
 
@@ -382,13 +437,13 @@ pub(crate) fn of_a_sign_in(ctx: &Context, own: &Path) -> Store {
 // gives.
 fn read(
     ctx: &Context,
-    system: &Path,
+    places: &Places,
     layer: Layer,
     own: Option<&Path>,
     command_line: Option<&str>,
 ) -> Administered {
     let host = ctx.host();
-    let file = |name: &str| host.administered_file(&system.join(name));
+    let file = |name: &str| host.administered_file(&places.system.join(name));
     match layer {
         Layer::Packaged => Administered::Set(PACKAGED.into()),
         Layer::System => file("config.toml"),
@@ -399,7 +454,12 @@ fn read(
         }),
         Layer::Managed => file("managed_config.toml"),
         Layer::ManagedPreference => decoded(host.managed_preference(PREFERENCES, CONFIG_KEY)),
-        Layer::Required => file("requirements.toml"),
+        Layer::Required => match &places.required {
+            Ok(required) => host.administered_file(required),
+            Err(named) => {
+                Administered::Unreadable(format!("names `{named}`, which is no full path"))
+            }
+        },
         Layer::RequiredByPreference => {
             decoded(host.managed_preference(PREFERENCES, REQUIREMENTS_KEY))
         }
@@ -605,13 +665,7 @@ fn broken(required: &Read, config: &Read) -> Option<(Layer, String)> {
         })
 }
 
-// `system` and `own`, the person's `config.toml`, are for the words.
-pub(crate) fn resolve(
-    os: Os,
-    system: &Path,
-    own: &Path,
-    read: &dyn Fn(Layer) -> Administered,
-) -> Store {
+pub(crate) fn resolve(os: Os, places: &Places, read: &dyn Fn(Layer) -> Administered) -> Store {
     let (required, config) = read_layers(os, read);
     let store = |backend, chosen_by, mode, secrets_by, unknown| Store {
         backend,
@@ -619,8 +673,7 @@ pub(crate) fn resolve(
         mode,
         secrets_by,
         unknown,
-        system: system.to_path_buf(),
-        own: own.to_path_buf(),
+        places: places.clone(),
     };
     let unknown = |layer: Layer, why: String, then: Then| {
         store(
@@ -746,8 +799,7 @@ pub(crate) struct Restrictions {
     allowed_workspaces: Option<(Layer, Vec<String>)>,
     // What Codex cannot take, which stops it from starting.
     unreadable: Option<(Layer, String)>,
-    system: PathBuf,
-    own: PathBuf,
+    places: Places,
 }
 
 impl Restrictions {
@@ -849,23 +901,18 @@ impl Restrictions {
     }
 
     fn place(&self, layer: Layer) -> String {
-        layer.place(&self.system, &self.own)
+        layer.place(&self.places)
     }
 }
 
 pub(crate) fn restrictions_of(ctx: &Context, own: &Path) -> Restrictions {
-    let system = system_dir_of(ctx);
-    restrictions(crate::host::OS, &system, own, &|layer| {
-        read(ctx, &system, layer, Some(own), None)
+    let places = places_of(ctx, own);
+    restrictions(crate::host::OS, &places, &|layer| {
+        read(ctx, &places, layer, Some(own), None)
     })
 }
 
-fn restrictions(
-    os: Os,
-    system: &Path,
-    own: &Path,
-    read: &dyn Fn(Layer) -> Administered,
-) -> Restrictions {
+fn restrictions(os: Os, places: &Places, read: &dyn Fn(Layer) -> Administered) -> Restrictions {
     let (required, config) = read_layers(os, read);
     let mut found = Restrictions {
         method: None,
@@ -873,8 +920,7 @@ fn restrictions(
         allowed_methods: None,
         allowed_workspaces: None,
         unreadable: broken(&required, &config),
-        system: system.to_path_buf(),
-        own: own.to_path_buf(),
+        places: places.clone(),
     };
     if found.unreadable.is_some() {
         return found;
@@ -1017,9 +1063,22 @@ mod tests {
             .to_string()
     }
 
+    fn places(os: Os) -> Places {
+        let system = system_dir(os, None);
+        Places {
+            required: Ok(system.join("requirements.toml")),
+            system,
+            own: PathBuf::from(OWN),
+        }
+    }
+
     /// What each layer holds, by layer, as a test says: unset where it says nothing. A managed
     /// preference is given as it is forced, in base64, and decoded as [`read`] decodes it.
     fn machine(os: Os, holds: &[(Layer, &str)]) -> Store {
+        machine_at(os, &places(os), holds)
+    }
+
+    fn machine_at(os: Os, places: &Places, holds: &[(Layer, &str)]) -> Store {
         let holds: HashMap<Layer, Administered> = holds
             .iter()
             .map(|&(layer, text)| {
@@ -1031,15 +1090,10 @@ mod tests {
                 (layer, holds)
             })
             .collect();
-        resolve(
-            os,
-            &system_dir(os, None),
-            Path::new(OWN),
-            &|layer| match layer {
-                Layer::Packaged => Administered::Set(PACKAGED.into()),
-                _ => holds.get(&layer).cloned().unwrap_or(Administered::Unset),
-            },
-        )
+        resolve(os, places, &|layer| match layer {
+            Layer::Packaged => Administered::Set(PACKAGED.into()),
+            _ => holds.get(&layer).cloned().unwrap_or(Administered::Unset),
+        })
     }
 
     const KEYRING: &str = "cli_auth_credentials_store = \"keyring\"\n";
@@ -1397,23 +1451,15 @@ mod tests {
             assert_eq!(store.backend, Backend::Unknown, "{text}");
             assert_eq!(
                 store.why_unknown(),
-                Some(format!(
-                    "{} {why}",
-                    layer.place(&system_dir(Os::Linux, None), Path::new(OWN))
-                )),
+                Some(format!("{} {why}", layer.place(&places(Os::Linux)))),
                 "{text}"
             );
         }
-        let unreadable = resolve(
-            Os::Linux,
-            &etc_codex(),
-            Path::new(OWN),
-            &|layer| match layer {
-                Layer::Packaged => Administered::Set(PACKAGED.into()),
-                Layer::Required => Administered::Unreadable("cannot be read: denied".into()),
-                _ => Administered::Unset,
-            },
-        );
+        let unreadable = resolve(Os::Linux, &places(Os::Linux), &|layer| match layer {
+            Layer::Packaged => Administered::Set(PACKAGED.into()),
+            Layer::Required => Administered::Unreadable("cannot be read: denied".into()),
+            _ => Administered::Unset,
+        });
         assert_eq!(unreadable.backend, Backend::Unknown);
         assert_eq!(
             unreadable.why_unknown(),
@@ -1582,7 +1628,7 @@ mod tests {
                 store.why_unknown(),
                 Some(format!(
                     "{} sets `profile = \"work\"`, a profile no `[profiles.work]` table defines",
-                    layer.place(&system_dir(Os::Linux, None), Path::new(OWN))
+                    layer.place(&places(Os::Linux))
                 )),
                 "{layer:?}"
             );
@@ -1814,6 +1860,109 @@ mod tests {
         );
     }
 
+    // Codex 0.164.0 on Windows reads its requirements from the file `HKLM`'s `RequirementsPath`
+    // names, `~` its profile folder, past a policy it cannot read, and does not start where the
+    // policy names no full path (codex_windows_store_layers).
+    #[test]
+    fn a_policy_on_windows_names_codexs_requirements_file() {
+        let system = system_dir(Os::Windows, None);
+        let beside = Ok(system.join("requirements.toml"));
+        let profile = Path::new(r"C:\Users\someone");
+        let named = |text: &str| required_file(&system, Administered::Set(text.into()), profile);
+        assert_eq!(required_file(&system, Administered::Unset, profile), beside);
+        assert_eq!(
+            required_file(&system, Administered::Unreadable("denied".into()), profile),
+            beside
+        );
+        assert_eq!(
+            named(r"D:\Policy\codex.toml"),
+            Ok(PathBuf::from(r"D:\Policy\codex.toml"))
+        );
+        assert_eq!(named(r"~\codex.toml"), Ok(profile.join("codex.toml")));
+        assert_eq!(
+            named(r"\\?\D:\codex.toml"),
+            Ok(PathBuf::from(r"D:\codex.toml"))
+        );
+        for full in [
+            r"\\server\share\codex.toml",
+            "//server/share/codex.toml",
+            r"/\server\share",
+            r"\\.\D:\codex.toml",
+            r"\\?\Volume{0}\codex.toml",
+            "//?/D:/codex.toml",
+        ] {
+            assert_eq!(named(full), Ok(PathBuf::from(full)), "{full}");
+        }
+        for relative in [
+            "",
+            "codex.toml",
+            r"C:codex.toml",
+            r"\codex.toml",
+            r"\\server",
+            r"\\server\",
+            r"\\.",
+            r"\\?/",
+        ] {
+            assert_eq!(named(relative), Err(relative.to_owned()), "{relative}");
+        }
+
+        let elsewhere = Places {
+            required: Ok(PathBuf::from(r"D:\Policy\codex.toml")),
+            ..places(Os::Windows)
+        };
+        let store = machine_at(
+            Os::Windows,
+            &elsewhere,
+            &[(Layer::Own, FILE), (Layer::Required, EPHEMERAL)],
+        );
+        assert_eq!(
+            store.setting(),
+            r"pinned to `ephemeral` by D:\Policy\codex.toml"
+        );
+        let nowhere = Places {
+            required: Err("codex.toml".into()),
+            ..places(Os::Windows)
+        };
+        let ctx =
+            Context::for_unit_test().with_memory_stores(crate::host::memory::MemoryHost::new());
+        let store = resolve(Os::Windows, &nowhere, &|layer| {
+            read(&ctx, &nowhere, layer, None, None)
+        });
+        assert_eq!(store.backend, Backend::Unknown);
+        assert_eq!(
+            store.why_unknown().as_deref(),
+            Some(
+                "the policy `RequirementsPath` of `HKLM\\SOFTWARE\\Policies\\OpenAI\\Codex` \
+                 names `codex.toml`, which is no full path"
+            )
+        );
+    }
+
+    // On Windows alone, where the host reads the policy.
+    #[cfg(windows)]
+    #[test]
+    fn codex_on_windows_takes_its_requirements_from_the_file_the_policy_names() {
+        let host = crate::host::memory::MemoryHost::new();
+        let ctx = Context::for_unit_test().with_memory_stores(host.clone());
+        let named = PathBuf::from(r"D:\Policy\codex.toml");
+        host.sets_policy(
+            Hive::Machine,
+            r"SOFTWARE\Policies\OpenAI\Codex",
+            "RequirementsPath",
+            &named.display().to_string(),
+        );
+        host.administers(&named, EPHEMERAL);
+        let store = of(&ctx, Path::new(OWN));
+        assert_eq!(
+            (store.backend, store.chosen_by),
+            (Backend::Ephemeral, Layer::Required)
+        );
+        assert_eq!(
+            store.setting(),
+            format!("pinned to `ephemeral` by {}", named.display())
+        );
+    }
+
     #[test]
     fn codexs_machine_folder_on_windows_is_in_the_known_program_data_folder() {
         let data = PathBuf::from(r"D:\Data");
@@ -1841,7 +1990,7 @@ mod tests {
             .iter()
             .map(|&(layer, text)| (layer, Administered::Set(text.to_string())))
             .collect();
-        restrictions(os, &system_dir(os, None), Path::new(OWN), &|layer| {
+        restrictions(os, &places(os), &|layer| {
             holds.get(&layer).cloned().unwrap_or(Administered::Unset)
         })
     }

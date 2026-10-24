@@ -163,7 +163,7 @@ enum Command {
     Statusline,
     /// Renew every parked login that is due, and nothing else
     Renew {
-        // Given by `--scheduled`, which only the parser knows (`with_the_jobs_markers`).
+        // Given by `--scheduled`, which only the parser knows (`parser`).
         #[arg(skip)]
         scheduled: bool,
     },
@@ -201,8 +201,8 @@ enum Command {
     Adopt,
     /// Print a shell completion script
     Completions { shell: clap_complete::Shell },
-    /// Print the man page
-    #[command(hide = true)]
+    // Only the parser knows `manpage` (`parser`).
+    #[command(skip)]
     Manpage,
 }
 
@@ -1238,15 +1238,24 @@ fn agreed(question: &str) -> bool {
     matches!(answer.trim(), "y" | "Y" | "yes")
 }
 
-// `--scheduled`, the marker each job runs `renew` or `watch` with. Only the parser is given it:
-// clap_complete writes even a hidden argument into every shell's completions.
-fn with_the_jobs_markers(cli: clap::Command) -> clap::Command {
+// The command line with what completions leave out, since clap_complete writes even a hidden
+// argument or command into them: `--scheduled`, each job's marker, and `manpage`.
+fn parser() -> clap::Command {
     let marker = clap::Arg::new("scheduled")
         .long("scheduled")
         .action(clap::ArgAction::SetTrue)
         .hide(true);
-    cli.mut_subcommand("renew", |renew| renew.arg(marker.clone()))
-        .mut_subcommand("watch", |watch| watch.arg(marker.conflicts_with("once")))
+    Cli::command()
+        .mut_subcommands(|sub| match sub.get_name() {
+            "renew" => sub.arg(marker.clone()),
+            "watch" => sub.arg(marker.clone().conflicts_with("once")),
+            _ => sub,
+        })
+        .subcommand(
+            clap::Command::new("manpage")
+                .about("Print the man page")
+                .hide(true),
+        )
 }
 
 fn command_line<I, T>(args: I) -> Result<Cli, clap::Error>
@@ -1254,7 +1263,7 @@ where
     I: IntoIterator<Item = T>,
     T: Into<std::ffi::OsString> + Clone,
 {
-    let mut matches = with_the_jobs_markers(Cli::command()).try_get_matches_from(args)?;
+    let mut matches = parser().try_get_matches_from(args)?;
     // A run's own options beside `watch`'s subcommand, which clap's conflict rule would refuse
     // the global `--json` beside too.
     if let Some(("watch", watch)) = matches.subcommand()
@@ -1263,7 +1272,7 @@ where
             .into_iter()
             .find(|id| watch.value_source(id) == Some(clap::parser::ValueSource::CommandLine))
     {
-        let mut cli = with_the_jobs_markers(Cli::command());
+        let mut cli = parser();
         cli.build();
         let message = format!("the subcommand '{what}' cannot be used with '--{given}'");
         let kind = clap::error::ErrorKind::ArgumentConflict;
@@ -1275,11 +1284,15 @@ where
     let marked = matches
         .subcommand()
         .is_some_and(|(_, given)| matches!(given.try_get_one::<bool>("scheduled"), Ok(Some(true))));
+    let manpage = matches.subcommand_name() == Some("manpage");
     let mut cli =
         Cli::from_arg_matches_mut(&mut matches).map_err(|e| e.format(&mut Cli::command()))?;
     if let Some(Command::Renew { scheduled } | Command::Watch { scheduled, .. }) = &mut cli.command
     {
         *scheduled = marked;
+    }
+    if manpage {
+        cli.command = Some(Command::Manpage);
     }
     Ok(cli)
 }
@@ -1925,7 +1938,7 @@ mod tests {
     }
 
     #[test]
-    fn the_jobs_markers_are_in_no_help_or_completions() {
+    fn the_jobs_markers_are_in_no_help_and_manpage_in_no_completions() {
         use clap_complete::Shell;
         for shell in [
             Shell::Bash,
@@ -1938,13 +1951,20 @@ mod tests {
             clap_complete::generate(shell, &mut Cli::command(), "pitboard", &mut out);
             let file = String::from_utf8(out).expect("text");
             assert!(!file.contains("scheduled"), "{shell}: {file}");
-            assert!(
-                file.contains("manpage"),
-                "{shell}: as the hidden command is"
-            );
+            assert!(!file.contains("manpage"), "{shell}: {file}");
+        }
+        for args in [
+            &["manpage"][..],
+            &["manpage", "--json"],
+            &["--json", "manpage"],
+        ] {
+            let cli = command_line(std::iter::once("pitboard").chain(args.iter().copied()))
+                .unwrap_or_else(|e| panic!("{args:?}: {e}"));
+            assert!(matches!(cli.command, Some(Command::Manpage)), "{args:?}");
+            assert_eq!(cli.json, args.contains(&"--json"), "{args:?}");
         }
         for job in ["renew", "watch"] {
-            let mut cli = with_the_jobs_markers(Cli::command());
+            let mut cli = parser();
             let help = cli
                 .find_subcommand_mut(job)
                 .expect(job)
@@ -2130,7 +2150,7 @@ mod tests {
                 each(sub, &format!("{typed} {name}"), said);
             }
         }
-        let mut cli = Cli::command().term_width(columns);
+        let mut cli = parser().term_width(columns);
         cli.build();
         let mut said = String::new();
         each(&mut cli, "pitboard", &mut said);

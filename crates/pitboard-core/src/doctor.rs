@@ -86,6 +86,10 @@ pub(crate) struct Facts {
     /// Every reason a session here would authenticate as something other than the stored
     /// login, read from settings files as well as from this process's environment.
     pub(crate) auth_overrides: Vec<crate::settings::Override>,
+    // Each managed `forceLoginOrgUUID` a session takes, and where, and the enrolled accounts none
+    // of them lets Claude Code keep.
+    pub(crate) organisation_pins: Vec<String>,
+    pub(crate) pinned_out: Vec<String>,
     /// Accounts Pitboard is not asking Anthropic about yet, and for how long: (uuid, seconds).
     pub(crate) asking_held: Vec<(String, i64)>,
     pub(crate) state: Result<State, Error>,
@@ -491,6 +495,7 @@ pub(crate) fn gather(ctx: &Context) -> Facts {
     let service = claude::live_service(ctx);
     let home = home::dir(ctx);
     let config_account = config.as_ref().ok().and_then(claude::config_account);
+    let (organisation_pins, pinned_out) = login_pins(ctx, state.as_ref().ok());
     Facts {
         os: crate::host::OS,
         sid: ctx.sid.clone(),
@@ -536,6 +541,8 @@ pub(crate) fn gather(ctx: &Context) -> Facts {
         claude_version: claude::installed_version(ctx),
         claude_program: claude::program(ctx),
         auth_overrides: crate::settings::overrides(ctx),
+        organisation_pins,
+        pinned_out,
         asking_held: crate::usage::budget::holds(ctx),
         in_use: state
             .as_ref()
@@ -585,6 +592,30 @@ pub(crate) fn gather(ctx: &Context) -> Facts {
         wsl: wsl_fact(ctx),
         now: ctx.now(),
     }
+}
+
+fn login_pins(ctx: &Context, state: Option<&State>) -> (Vec<String>, Vec<String>) {
+    let said = crate::settings::organisation_pins(ctx)
+        .into_iter()
+        .map(|(layer, ids)| {
+            format!(
+                "`forceLoginOrgUUID` set to {} in {layer}",
+                words::listed_values(&ids)
+            )
+        })
+        .collect();
+    let LoginKind::Document(claude) = crate::provider::of(ProviderId::Claude) else {
+        return (said, Vec::new());
+    };
+    let ruled_out = state.map_or_else(Vec::new, |s| {
+        s.accounts
+            .iter()
+            .filter(|a| a.provider() == ProviderId::Claude)
+            .filter(|a| claude.refuses(ctx, &Value::Null, &a.owner()).is_some())
+            .map(|a| format!("`{}`", s.typed(&a.key())))
+            .collect()
+    });
+    (said, ruled_out)
 }
 
 // As Codex 0.163.0's Linux build tells WSL (`codex_wsl`).
@@ -1739,6 +1770,7 @@ pub(crate) fn evaluate_with(facts: &Facts, moment: &dyn Fn(i64, i64) -> String) 
     checks.push(judge_claude_version(facts));
     checks.extend(judge_status_line(facts.status_line.as_ref()));
     checks.push(judge_auth(facts));
+    checks.extend(judge_login_restrictions(facts));
     checks.push(judge_asking(facts));
     checks.push(judge_network(&facts.network));
     checks.extend(
@@ -1789,6 +1821,7 @@ const CLAUDE_CODES_OWN: &[&str] = &[
     "claude_version",
     "status_line",
     "auth_source",
+    "login_restrictions",
 ];
 
 // The tool whose section a check is in; None for Claude Code's and Pitboard's own.
@@ -2554,6 +2587,28 @@ fn exempting(proxy: &ProxyFact) -> Option<String> {
                 words::listed(proxy.exempt.clone())
             )
         }
+    })
+}
+
+fn judge_login_restrictions(facts: &Facts) -> Option<Check> {
+    if facts.organisation_pins.is_empty() {
+        return None;
+    }
+    let name = "login restrictions";
+    let said = facts.organisation_pins.join("; ");
+    Some(if facts.pinned_out.is_empty() {
+        ok("login_restrictions", name, said)
+    } else {
+        warn(
+            "login_restrictions",
+            name,
+            said,
+            format!(
+                "Claude Code refuses the logins of {} as a session starts, so Pitboard does not \
+                 put them in use.",
+                words::listed(facts.pinned_out.clone())
+            ),
+        )
     })
 }
 
@@ -4769,6 +4824,8 @@ mod tests {
             claude_version: Some(crate::provider::claude::assumptions::VERIFIED_AGAINST.into()),
             claude_program: Some(PathBuf::from("/opt/homebrew/bin/claude")),
             auth_overrides: Vec::new(),
+            organisation_pins: Vec::new(),
+            pinned_out: Vec::new(),
             asking_held: Vec::new(),
             state: Ok(State::default()),
             in_use: Some(in_use_as_named()),
@@ -7468,6 +7525,46 @@ mod tests {
         }
     }
 
+    // Claude Code 2.1.309 refuses, as a session starts, a login of an organisation a managed
+    // `forceLoginOrgUUID` leaves out (organisation_pin), so the setting is named as Codex's are.
+    #[test]
+    fn a_managed_organisation_pin_is_named_with_the_accounts_it_rules_out() {
+        use crate::switch::harness::account;
+        let host = crate::host::memory::MemoryHost::new();
+        let ctx = Context::for_unit_test().with_memory_stores(host.clone());
+        let mut state = State::default();
+        state.accounts.push(account("here", "here", None));
+        state.accounts.push(account("there", "there", None));
+        let judged = |f: &Facts| evaluate(f);
+        let mut f = facts();
+        (f.organisation_pins, f.pinned_out) = login_pins(&ctx, Some(&state));
+        assert!(judged(&f).iter().all(|c| c.code != "login_restrictions"));
+
+        let file = crate::settings::managed_dir(ctx.os).join("managed-settings.json");
+        host.administers(&file, r#"{"forceLoginOrgUUID": ["org-here"]}"#);
+        (f.organisation_pins, f.pinned_out) = login_pins(&ctx, Some(&state));
+        let checks = judged(&f);
+        let found = check(&checks, "login_restrictions");
+        assert_eq!(found.level, Level::Warn);
+        assert_eq!(found.name, "login restrictions");
+        assert_eq!(
+            found.detail,
+            format!(
+                "`forceLoginOrgUUID` set to `org-here` in {}",
+                file.display()
+            )
+        );
+        assert_eq!(
+            found.advice,
+            "Claude Code refuses the logins of `there` as a session starts, so Pitboard does \
+             not put them in use."
+        );
+
+        host.administers(&file, r#"{"forceLoginOrgUUID": ["org-here", "org-there"]}"#);
+        (f.organisation_pins, f.pinned_out) = login_pins(&ctx, Some(&state));
+        assert_eq!(check(&judged(&f), "login_restrictions").level, Level::Ok);
+    }
+
     // Codex 0.164.0 signs out of a login from a workspace its configuration leaves out
     // (`codex_login_restrictions`), so the setting is named with the accounts it rules out.
     #[test]
@@ -7987,6 +8084,7 @@ mod tests {
             &[at(4321, "codex"), at(99, "codex")],
             holders,
             "codex",
+            &[],
         ));
         let checks = codex_checks(&codex);
         let running = check(&checks, "codex_running");
@@ -8009,7 +8107,7 @@ mod tests {
         );
 
         let many: Vec<Process> = (1..=23).map(|pid| at(pid, "codex")).collect();
-        codex.running = Some(classify(&many, holders, "codex"));
+        codex.running = Some(classify(&many, holders, "codex", &[]));
         let detail = check(&codex_checks(&codex), "codex_running").detail.clone();
         assert!(detail.starts_with("23 `codex` sessions"), "{detail}");
         assert!(detail.contains("1, 2, 3 and 20 more"), "{detail}");
@@ -8022,6 +8120,7 @@ mod tests {
             )],
             holders,
             "codex",
+            &[],
         ));
         let checks = codex_checks(&codex);
         let app = check(&checks, "codex_running");
@@ -9001,6 +9100,7 @@ mod tests {
             pitboard: None,
             runs_pitboard: false,
         });
+        windows.organisation_pins = vec!["`forceLoginOrgUUID` set to `org` there".into()];
         let made: Vec<&str> = evaluate(&windows).iter().map(|c| c.code).collect();
         // A name no check makes hides nothing, and the loop under it would pass over it.
         for own in CLAUDE_CODES_OWN {
