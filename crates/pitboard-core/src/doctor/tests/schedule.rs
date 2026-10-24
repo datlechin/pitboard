@@ -21,13 +21,19 @@ fn a_schedule_is_judged_by_whether_the_pitboard_it_runs_is_still_there() {
     let checks = evaluate(&f);
     let found = check(&checks, "schedule");
     assert_eq!(found.level, Level::Ok);
-    assert!(found.detail.contains("/opt/homebrew/bin/pitboard"));
+    assert_eq!(
+        found.detail,
+        words::runs_daily("/opt/homebrew/bin/pitboard")
+    );
 
     f.schedule.as_mut().expect("set above").program_found = false;
     let checks = evaluate(&f);
     let gone = check(&checks, "schedule");
     assert_eq!(gone.level, Level::Fail, "every renewal from now on fails");
-    assert!(gone.detail.contains("/opt/homebrew/bin/pitboard"));
+    assert_eq!(
+        gone.detail,
+        words::runs_what_is_gone("/opt/homebrew/bin/pitboard")
+    );
     assert_eq!(gone.advice, again(crate::host::OS));
 
     f.schedule = Some(ScheduleFact {
@@ -49,10 +55,9 @@ fn a_schedule_is_judged_by_whether_the_pitboard_it_runs_is_still_there() {
         Level::Fail,
         "0.3.0's app renews nothing when started with `renew`"
     );
-    assert!(
-        the_app.detail.contains("the app itself"),
-        "{}",
-        the_app.detail
+    assert_eq!(
+        the_app.detail,
+        words::runs_the_app("/Applications/Pitboard.app/Contents/MacOS/Pitboard")
     );
     f.schedule.as_mut().expect("set above").program = Some(PathBuf::from(
         "/Applications/Pitboard.app/Contents/Helpers/pitboard",
@@ -67,7 +72,13 @@ fn a_schedule_is_judged_by_whether_the_pitboard_it_runs_is_still_there() {
     let checks = evaluate(&f);
     let unread = check(&checks, "schedule");
     assert_eq!(unread.level, Level::Warn);
-    assert!(!unread.advice.is_empty());
+    assert_eq!(
+        (unread.detail.clone(), unread.advice.as_str()),
+        (
+            words::does_not_say_which_pitboard(&f.schedule.as_ref().expect("set above").location),
+            again(crate::host::OS)
+        )
+    );
 }
 
 #[test]
@@ -93,7 +104,7 @@ fn the_watch_service_is_judged_by_its_pitboard_and_its_last_run() {
     assert_eq!(found.level, Level::Ok);
     assert_eq!(
         found.detail,
-        "from sign-in  ·  switches at 90%  ·  runs /opt/homebrew/bin/pitboard"
+        words::runs_from_sign_in(Some(90), "/opt/homebrew/bin/pitboard")
     );
     assert_eq!(found.name, "watch service");
     assert_eq!(section("watch_service"), None, "Pitboard's own");
@@ -102,10 +113,7 @@ fn the_watch_service_is_judged_by_its_pitboard_and_its_last_run() {
     let checks = evaluate(&f);
     let gone = check(&checks, "watch_service");
     assert_eq!(gone.level, Level::Fail, "it switches nothing from now on");
-    assert_eq!(
-        gone.advice,
-        "Install it again with `pitboard watch install`."
-    );
+    assert_eq!(gone.advice, words::INSTALL_THE_SERVICE_AGAIN);
 
     f.watch_service = Some(service(None, None));
     assert_eq!(check(&evaluate(&f), "watch_service").level, Level::Warn);
@@ -119,12 +127,16 @@ fn the_watch_service_is_judged_by_its_pitboard_and_its_last_run() {
     let checks = evaluate(&f);
     let failed = check(&checks, "watch_service");
     assert_eq!(failed.level, Level::Warn);
-    assert!(
-        failed
-            .detail
-            .ends_with("and its last run ended with exit code 1"),
-        "{}",
-        failed.detail
+    assert_eq!(
+        (failed.detail.clone(), failed.advice.as_str()),
+        (
+            words::last_run_ended(
+                &words::runs_from_sign_in(Some(90), r"C:\bin\pitboard.exe"),
+                None,
+                1
+            ),
+            words::WATCH_TO_SEE_WHY
+        )
     );
 }
 
@@ -155,37 +167,27 @@ fn a_task_is_judged_by_its_settings_and_its_last_run() {
     f.schedule = Some(task(None, 0x0004_1303, Vec::new()));
     let fresh = judged(&f);
     assert_eq!(fresh.level, Level::Ok);
-    assert_eq!(
-        fresh.detail,
-        format!("daily  ·  runs {program}  ·  not run yet")
-    );
+    let runs = words::runs_daily(program);
+    assert_eq!(fresh.detail, words::not_run_yet(&runs));
 
     let an_hour_ago = Some(f.now - 3_660);
     for fine in [0, 0x0004_1301] {
         f.schedule = Some(task(an_hour_ago, fine, Vec::new()));
         let ran = judged(&f);
         assert_eq!(ran.level, Level::Ok, "{fine:#x}");
-        assert_eq!(
-            ran.detail,
-            format!("daily  ·  runs {program}  ·  last ran 1h 01m ago")
-        );
+        assert_eq!(ran.detail, words::last_ran(&runs, 3_660));
     }
 
-    for (result, ended) in [
-        (1, "with exit code 1"),
-        (0x8007_10E0_u32 as i32, "with 0x800710E0"),
-    ] {
+    for result in [1, 0x8007_10E0_u32 as i32] {
         f.schedule = Some(task(an_hour_ago, result, Vec::new()));
         let failed = judged(&f);
         assert_eq!(failed.level, Level::Warn);
         assert_eq!(
-            failed.detail,
-            format!("daily  ·  runs {program}, and its last run, 1h 01m ago, ended {ended}")
-        );
-        assert!(
-            failed.advice.contains("`pitboard renew`"),
-            "{}",
-            failed.advice
+            (failed.detail, failed.advice.as_str()),
+            (
+                words::last_run_ended(&runs, Some(3_660), result),
+                words::RENEW_TO_SEE_WHY
+            )
         );
     }
 
@@ -198,9 +200,12 @@ fn a_task_is_judged_by_its_settings_and_its_last_run() {
     assert_eq!(drifted.level, Level::Warn);
     assert_eq!(
         drifted.detail,
-        format!(
-            "daily  ·  runs {program}, but in Task Scheduler it starts only if the computer \
-             is on AC power and is disabled"
+        words::drifted_in_task_scheduler(
+            &runs,
+            &[
+                words::drift(&Drift::OnAcPowerOnly),
+                words::drift(&Drift::Disabled)
+            ]
         )
     );
     assert_eq!(drifted.advice, again(Os::Windows));
@@ -211,16 +216,13 @@ fn a_task_is_judged_by_its_settings_and_its_last_run() {
 #[test]
 fn a_broken_schedule_is_written_again_by_whatever_this_machine_has() {
     for os in [Os::MacOs, Os::Windows] {
-        let with_app = again(os);
-        assert!(
-            with_app.contains("the app's Settings")
-                && with_app.contains("pitboard schedule install"),
-            "{os:?}: {with_app}"
-        );
+        assert_eq!(again(os), words::AGAIN_IN_THE_APP_OR_A_TERMINAL, "{os:?}");
     }
-    let linux = again(Os::Linux);
-    assert!(linux.contains("pitboard schedule install"), "{linux}");
-    assert!(!linux.contains("app"), "there is no app here: {linux}");
+    assert_eq!(
+        again(Os::Linux),
+        words::AGAIN_IN_A_TERMINAL,
+        "there is no app here"
+    );
 }
 
 /// What the check above is given, read off a real disk: a schedule written the way
@@ -313,20 +315,16 @@ fn a_schedule_whose_proxy_differs_from_this_runs_is_said() {
     f.schedule = Some(scheduled(by(through(None, &[])), true));
     let checks = evaluate(&f);
     let line = check(&checks, "schedule_proxy");
+    let installed = || words::installed_with(&words::proxy_named(&through(None, &[])));
     assert_eq!(
-        (line.level, line.name.as_str(), line.detail.as_str()),
+        (line.level, line.name.as_str(), line.detail.clone()),
         (
             Level::Warn,
             "renewal schedule's proxy",
-            "the schedule was installed with http://***:***@proxy.example.com:3128, from \
-             HTTPS_PROXY; this run goes directly"
+            words::installed_and_here(&installed(), &words::goes_directly("this run"))
         )
     );
-    assert!(
-        line.advice.contains("`pitboard schedule install`"),
-        "{}",
-        line.advice
-    );
+    assert_eq!(line.advice, words::INSTALL_AGAIN_FROM_HERE);
 
     let on_loopback = || ProxyFact {
         variable: "ALL_PROXY",
@@ -339,8 +337,10 @@ fn a_schedule_whose_proxy_differs_from_this_runs_is_said() {
     f.schedule = Some(scheduled(direct(), true));
     assert_eq!(
         check(&evaluate(&f), "schedule_proxy").detail,
-        "the schedule was installed with no proxy; this run goes through \
-         http://127.0.0.1:3128, from ALL_PROXY, NO_PROXY exempting chatgpt.com"
+        words::installed_and_here(
+            words::INSTALLED_WITH_NO_PROXY,
+            &words::goes_through("this run", &words::proxy_named(&on_loopback()))
+        )
     );
 
     // A SOCKS proxy, which Pitboard does not use yet, is given, not gone through. Installing
@@ -357,15 +357,13 @@ fn a_schedule_whose_proxy_differs_from_this_runs_is_said() {
     let checks = evaluate(&f);
     let line = check(&checks, "schedule_proxy");
     assert_eq!(
-        (line.detail.as_str(), line.advice.as_str()),
+        (line.detail.clone(), line.advice.clone()),
         (
-            "the schedule was installed with no proxy; this run is given \
-             socks5h://127.0.0.1:1080, from ALL_PROXY, NO_PROXY exempting chatgpt.com",
-            "The schedule's runs are given the proxy variables it was installed with. \
-             Installed again from here, they would be given this run's SOCKS proxy, which \
-             Pitboard does not use yet, and their requests would fail. Set ALL_PROXY to an \
-             HTTP proxy's address, or unset it, then install it again with `pitboard \
-             schedule install`, which takes the proxy variables set where it runs."
+            words::installed_and_here(
+                words::INSTALLED_WITH_NO_PROXY,
+                &words::is_given("this run", &words::proxy_named(&socks()))
+            ),
+            words::socks_would_fail("ALL_PROXY")
         )
     );
     // With every host Pitboard calls exempt from it, nothing fails, and installing the
@@ -383,22 +381,16 @@ fn a_schedule_whose_proxy_differs_from_this_runs_is_said() {
         ..socks()
     });
     let checks = evaluate(&f);
-    let advice = &check(&checks, "schedule_proxy").advice;
-    assert!(
-        advice.starts_with(
-            "The schedule's runs are given the proxy variables it was installed with. To \
-             give them this run's, install it again from here"
-        ),
-        "{advice}"
+    assert_eq!(
+        check(&checks, "schedule_proxy").advice,
+        words::INSTALL_AGAIN_FROM_HERE
     );
 
     f.network = by(through(None, &[]));
     f.schedule = Some(scheduled(by(through(None, &[])), true));
     assert_eq!(
         check(&evaluate(&f), "schedule_proxy").detail,
-        "the schedule was installed with this run's proxy, \
-         http://***:***@proxy.example.com:3128, from HTTPS_PROXY, but with another user \
-         name or password"
+        words::another_user_or_password("this run", &words::proxy_named(&through(None, &[])))
     );
 }
 
@@ -416,25 +408,24 @@ fn in_the_app_a_schedules_other_proxy_is_said_without_a_warning() {
     f.schedule = Some(scheduled(by(through(None, &[])), true));
     let checks = evaluate(&f);
     let line = check(&checks, "schedule_proxy");
+    let proxy = || words::proxy_named(&through(None, &[]));
     assert_eq!(
-        (line.level, line.name.as_str(), line.detail.as_str()),
+        (line.level, line.name.as_str(), line.detail.clone()),
         (
             Level::Ok,
             "renewal schedule's proxy",
-            "the schedule was installed with http://***:***@proxy.example.com:3128, from \
-             HTTPS_PROXY; the app goes directly"
+            words::installed_and_here(
+                &words::installed_with(&proxy()),
+                &words::goes_directly("the app")
+            )
         )
     );
-    for said in ["Settings", "`pitboard schedule install` in a terminal"] {
-        assert!(line.advice.contains(said), "{said}: {}", line.advice);
-    }
+    assert_eq!(line.advice, words::THE_APPS_OWN_ENVIRONMENT);
 
     f.network = by(through(None, &[]));
     assert_eq!(
         check(&evaluate(&f), "schedule_proxy").detail,
-        "the schedule was installed with the app's proxy, \
-         http://***:***@proxy.example.com:3128, from HTTPS_PROXY, but with another user \
-         name or password"
+        words::another_user_or_password("the app", &proxy())
     );
 }
 
@@ -476,9 +467,12 @@ fn the_schedules_proxy_is_read_from_what_install_wrote() {
 
     let changed = gathered(&run(Some("http://alice:changed@proxy.example.com:3128")));
     let detail = check(&evaluate(&changed), "schedule_proxy").detail.clone();
-    assert!(
-        detail.ends_with("but with another user name or password"),
-        "{detail}"
+    assert_eq!(
+        detail,
+        words::another_user_or_password(
+            "this run",
+            &words::proxy_named(changed.network.proxy.as_ref().expect("a proxy"))
+        )
     );
     for secret in ["alice", "s3cret", "changed"] {
         assert!(!detail.contains(secret), "{secret}: {detail}");
@@ -489,8 +483,15 @@ fn the_schedules_proxy_is_read_from_what_install_wrote() {
     let detail = check(&evaluate(&f), "schedule_proxy").detail.clone();
     assert_eq!(
         detail,
-        "the schedule was installed with http://***:***@proxy.example.com:3128, from \
-         HTTPS_PROXY; this run goes directly"
+        words::installed_and_here(
+            &words::installed_with(&words::proxy_named(
+                f.schedule
+                    .as_ref()
+                    .and_then(|schedule| schedule.network.proxy.as_ref())
+                    .expect("installed with a proxy")
+            )),
+            &words::goes_directly("this run")
+        )
     );
     let hidden = redaction_for(&direct, &f).over(&detail);
     assert!(

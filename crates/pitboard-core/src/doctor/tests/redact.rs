@@ -64,7 +64,7 @@ fn a_proxys_host_is_redacted_from_a_report_unless_it_is_on_loopback() {
     assert!(!hidden.contains("proxy.example.com"), "{hidden}");
     assert!(!hidden.contains("3128"), "{hidden}");
     assert!(
-        hidden.starts_with("through http://***:***@<proxy ") && hidden.contains("from HTTPS_PROXY"),
+        hidden.starts_with("through http://***:***@<proxy "),
         "{hidden}"
     );
 

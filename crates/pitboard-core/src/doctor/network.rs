@@ -1,5 +1,4 @@
-use super::{Check, ok, warn};
-use crate::words;
+use super::{Check, ok, warn, words};
 use std::fmt::Write as _;
 
 /// How Pitboard's requests leave this machine: directly, or through the HTTP proxy its
@@ -81,39 +80,34 @@ pub(super) fn network_fact(proxies: &crate::proxy::Proxies) -> NetworkFact {
 /// variable exempting hosts does not name fails. With every one of them exempt, nothing
 /// fails, and it does not warn for that.
 pub(super) fn judge_network(network: &NetworkFact) -> Check {
-    pub(super) const NAME: &str = "network";
+    const NAME: &str = "network";
     let (passed, set_right) = match network.passed_over.as_slice() {
         [] => (None, ""),
-        [one] => (
-            Some(format!(
-                "{one} holds no proxy's address Pitboard can read, so it is passed over"
-            )),
-            "Set it to a proxy's address, such as http://proxy.example.com:8080, or unset it.",
+        [_] => (
+            Some(words::passed_over(&network.passed_over)),
+            words::SET_IT_RIGHT,
         ),
-        many => (
-            Some(format!(
-                "{} hold no proxy's address Pitboard can read, so they are passed over",
-                words::listed(many.iter())
-            )),
-            "Set each to a proxy's address, such as http://proxy.example.com:8080, or unset them.",
+        _ => (
+            Some(words::passed_over(&network.passed_over)),
+            words::SET_EACH_RIGHT,
         ),
     };
     let Some(proxy) = &network.proxy else {
         return match passed {
-            None => ok("network", NAME, "direct: no variable names a proxy"),
-            Some(passed) => warn("network", NAME, format!("direct: {passed}"), set_right),
+            None => ok("network", NAME, words::DIRECT),
+            Some(passed) => warn(
+                "network",
+                NAME,
+                words::direct_passing_over(&passed),
+                set_right,
+            ),
         };
     };
     let fails = proxy.fails;
     let mut detail = if !proxy.socks {
-        format!("through {}, from {}", proxy.address, proxy.variable)
+        words::through(&proxy.address, proxy.variable)
     } else {
-        format!(
-            "{}: {}, {}",
-            if fails { "requests fail" } else { "direct" },
-            crate::proxy::refused(proxy.variable),
-            proxy.address
-        )
+        words::socks(fails, proxy.variable, &proxy.address)
     };
     for clause in exempting(proxy).iter().chain(&passed) {
         let _ = write!(detail, "; {clause}");
@@ -128,17 +122,13 @@ pub(super) fn judge_network(network: &NetworkFact) -> Check {
                 .map(|name| (*name).to_string())
                 .collect();
             names.push(proxy.variable.to_string());
-            (format!("each of {}", words::listed(names)), "them")
+            (words::each_of(&names), "them")
         };
         return warn(
             "network",
             NAME,
             detail,
-            format!(
-                "Pitboard goes through HTTP and HTTPS proxies only. For its requests to go \
-                 out, set {each} to an HTTP proxy's address, such as \
-                 http://proxy.example.com:8080, or unset {them}."
-            ),
+            words::http_proxies_only(&each, them),
         );
     }
     match passed {
@@ -152,14 +142,11 @@ pub(super) fn judge_network(network: &NetworkFact) -> Check {
 pub(super) fn exempting(proxy: &ProxyFact) -> Option<String> {
     proxy.exempting.map(|exempting| {
         if proxy.exempt.is_empty() {
-            format!("{exempting} exempts none of the hosts Pitboard calls")
+            words::exempts_none(exempting)
         } else if proxy.exempt.len() == crate::proxy::called().len() {
-            format!("{exempting} exempts every host Pitboard calls, which it reaches directly")
+            words::exempts_every_host(exempting)
         } else {
-            format!(
-                "{exempting} exempts {}, which Pitboard reaches directly",
-                words::listed(proxy.exempt.clone())
-            )
+            words::exempts(exempting, &proxy.exempt)
         }
     })
 }

@@ -9,6 +9,7 @@ mod run;
 mod schedule;
 mod windows;
 
+use super::words;
 use super::*;
 use super::{
     claude::*, codex::*, desktop::*, machine::*, network::*, parks::*, redact::*, schedule::*,
@@ -25,7 +26,8 @@ use crate::provider::claude::daemon;
 use crate::schedule::Location;
 use crate::state::{Key, Park, RENEW_WITHIN, State};
 use crate::time;
-use crate::{store, switch, words};
+use crate::words as said;
+use crate::{store, switch};
 use serde_json::json;
 use std::path::PathBuf;
 use std::sync::Arc;

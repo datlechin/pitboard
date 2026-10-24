@@ -33,45 +33,6 @@ fn section_names_the_tool_whose_checks_these_are() {
     }
 }
 
-// On Windows two `icacls` a path, and none where the person's SID could not be read.
-#[test]
-fn advice_names_a_command_only_where_there_is_one() {
-    assert_eq!(
-        running(&Os::MacOs.make_private_commands(Kind::File, &["/a"], Some(SID))),
-        ": `chmod 600 /a`."
-    );
-    assert_eq!(
-        running(&Os::Linux.make_private_commands(Kind::Directory, &["/a", "/b"], None)),
-        ": `chmod 700 /a /b`."
-    );
-    let windows = Os::Windows.make_private_commands(Kind::File, &[r"C:\a", r"C:\b c\"], Some(SID));
-    assert_eq!(
-        windows,
-        [r"C:\a", r"C:\b c"]
-            .map(|path| crate::host::acl::icacls(false, path, SID))
-            .concat()
-    );
-    assert_eq!(
-        running(&windows),
-        format!(
-            ": `{}`, `{}`, `{}` and `{}`.",
-            windows[0], windows[1], windows[2], windows[3]
-        )
-    );
-    assert!(
-        Os::Windows
-            .make_private_commands(Kind::File, &[r"C:\a"], None)
-            .is_empty()
-    );
-    // No one `icacls` line serves a file and a folder alike.
-    assert!(
-        Os::Windows
-            .make_private_commands(Kind::Any, &[r"C:\a"], Some(SID))
-            .is_empty()
-    );
-    assert_eq!(running(&[]), ".");
-}
-
 #[test]
 fn a_healthy_machine_reports_no_failures() {
     let checks = evaluate(&facts());
@@ -131,7 +92,7 @@ fn each_moment_a_check_names_is_written_as_the_front_end_writes_it() {
 
     assert_eq!(
         check(&diagnosis.checks, "in_use").detail,
-        format!("`here`, as Anthropic said at {NOW} of {NOW}")
+        words::as_anthropic_said("`here`", &format!("at {NOW} of {NOW}"))
     );
 }
 
@@ -146,13 +107,13 @@ fn a_build_is_set_beside_the_one_read_for_this_system() {
         f.claude_version = None;
         assert_eq!(
             check(&evaluate(&f), "claude_version").detail,
-            format!("not found here; Pitboard's facts were read from {claude}"),
+            words::build_not_found(claude),
             "{os:?}"
         );
         f.claude_version = Some(claude.into());
         assert_eq!(
             check(&evaluate(&f), "claude_version").detail,
-            format!("{claude}, which is what Pitboard's facts were read from"),
+            words::build_as_read(claude),
             "{os:?}"
         );
 
@@ -164,7 +125,7 @@ fn a_build_is_set_beside_the_one_read_for_this_system() {
         let checks = judge_codex(os, None, &installed, &[], NOW, &time::moment);
         assert_eq!(
             check(&checks, "codex_version").detail,
-            format!("{codex}, which is what Pitboard's facts were read from"),
+            words::build_as_read(codex),
             "{os:?}"
         );
     }
@@ -212,7 +173,7 @@ fn a_machine_with_only_codex_is_not_judged_on_claude_code() {
         facts.claude_present = false;
         facts.config = Err(Error::ClaudeConfigMissing {
             path: PathBuf::from("/nowhere/.claude.json"),
-            spelling: words::Spelling::Bare,
+            spelling: said::Spelling::Bare,
         });
         facts.codex.present = true;
         let checks = evaluate(&facts);
@@ -264,12 +225,13 @@ fn doctor_checks_nothing_under_a_home_that_is_not_a_full_path() {
     let variable = crate::host::OS.home_variable();
     let scratch = tempfile::tempdir().expect("a scratch folder");
     let full = scratch.path().to_string_lossy().into_owned();
-    let empty = format!("{variable} is empty");
+    let empty = words::not_a_full_path(variable, std::path::Path::new(""));
+    let relative = words::not_a_full_path("CODEX_HOME", std::path::Path::new("codex"));
     for (pairs, said) in [
         (&[(variable, "")][..], empty.as_str()),
         (
             &[(variable, full.as_str()), ("CODEX_HOME", "codex")],
-            "CODEX_HOME is `codex`, which is not a full path",
+            relative.as_str(),
         ),
     ] {
         let env: Environment = pairs.iter().copied().collect();
@@ -282,11 +244,7 @@ fn doctor_checks_nothing_under_a_home_that_is_not_a_full_path() {
             .map(|c| (c.code, c.level, c.detail.as_str()))
             .collect();
         assert_eq!(checks, [("homes", Level::Fail, said)], "{pairs:?}");
-        assert!(
-            diagnosis.checks[0]
-                .advice
-                .starts_with("Set it to a full path")
-        );
+        assert_eq!(diagnosis.checks[0].advice, words::SET_A_FULL_PATH);
         assert_eq!(diagnosis.environment, json!({}));
     }
 }

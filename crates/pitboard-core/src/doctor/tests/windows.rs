@@ -31,11 +31,7 @@ fn windows_is_told_which_shell_runs_the_status_line_and_whether_it_finds_pitboar
         said(Some(&bash), None, true),
         (
             Level::Ok,
-            format!(
-                "Claude Code runs the status line in Git Bash, {}; `pitboard` there is {}",
-                bash.display(),
-                pitboard.display()
-            ),
+            words::pitboard_there(&words::in_git_bash(bash.display()), pitboard.display(), ""),
             String::new()
         )
     );
@@ -43,13 +39,10 @@ fn windows_is_told_which_shell_runs_the_status_line_and_whether_it_finds_pitboar
         said(None, Some(&named), true),
         (
             Level::Ok,
-            format!(
-                "Claude Code runs the status line in Windows PowerShell, {}, finding no Git \
-                 Bash; `pitboard` there is {}; it passes over {}, which \
-                 CLAUDE_CODE_GIT_BASH_PATH names",
-                five.display(),
+            words::pitboard_there(
+                &words::in_windows_powershell(five.display()),
                 pitboard.display(),
-                named.display()
+                &words::passes_over(named.display())
             ),
             String::new()
         )
@@ -58,34 +51,24 @@ fn windows_is_told_which_shell_runs_the_status_line_and_whether_it_finds_pitboar
     *powershell.borrow_mut() = Some(claude_paths::PowerShell::Seven(seven.clone()));
     assert_eq!(
         said(None, None, true).1,
-        format!(
-            "Claude Code runs the status line in PowerShell 7, {}, finding no Git Bash; \
-             `pitboard` there is {}",
-            seven.display(),
-            pitboard.display()
+        words::pitboard_there(
+            &words::in_powershell_7(seven.display()),
+            pitboard.display(),
+            ""
         )
     );
     *powershell.borrow_mut() = None;
     assert_eq!(
         said(None, None, true).1,
-        format!(
-            "Claude Code finds neither Git Bash nor PowerShell to run the status line in; \
-             `pitboard` there is {}",
-            pitboard.display()
-        )
+        words::pitboard_there(words::NO_SHELL, pitboard.display(), "")
     );
     *powershell.borrow_mut() = Some(claude_paths::PowerShell::Windows(five.clone()));
     assert_eq!(
         said(Some(&bash), None, false),
         (
             Level::Warn,
-            format!(
-                "Claude Code runs the status line in Git Bash, {}; no `pitboard` is on its \
-                 PATH",
-                bash.display()
-            ),
-            "Add the folder pitboard.exe is in to your PATH, then start Claude Code again."
-                .to_string()
+            words::no_pitboard_there(&words::in_git_bash(bash.display()), ""),
+            words::ADD_PITBOARD_TO_PATH.to_string()
         )
     );
     runs_pitboard.set(false);
@@ -152,33 +135,23 @@ fn windows_is_told_what_its_settings_change_for_pitboard_and_the_tools() {
             (
                 "wsl",
                 Level::Ok,
-                "WSL holds Ubuntu and Debian".to_string(),
-                "Claude Code and Codex installed there are installs of their own, which \
-                 Pitboard on Windows does not switch. Claude Code there keeps its own login. \
-                 Where Codex there uses C:\\Users\\x\\.codex, Codex's home here, a switch here \
-                 changes its login too. WSL 2 runs them in a virtual machine, so Windows' list \
-                 of processes does not show them running."
-                    .to_string()
+                words::wsl_holds(&["Ubuntu".into(), "Debian".into()]),
+                words::installs_of_their_own(facts.codex.home.display())
             ),
             (
                 "pitboard_copies",
                 Level::Ok,
-                r"C:\a\pitboard.exe on PATH, then C:\b\pitboard.exe and C:\c\pitboard.exe"
-                    .to_string(),
-                "A shell runs the first, so updating another changes nothing there. \
-                 Uninstall the copies you do not use."
-                    .to_string()
+                words::copies_on_path(
+                    copy("a").display(),
+                    &[r"C:\b\pitboard.exe".into(), r"C:\c\pitboard.exe".into()]
+                ),
+                words::UNINSTALL_THE_OTHERS.to_string()
             ),
             (
                 "system_proxy",
                 Level::Ok,
-                "Windows' proxy settings name proxy.example.com:8080, and HTTPS_PROXY is not \
-                 set"
-                .to_string(),
-                "Codex sends its requests through it. Claude Code and Pitboard follow only \
-                 the proxy variables, so theirs go out directly: set HTTPS_PROXY where this \
-                 network needs the proxy."
-                    .to_string()
+                words::system_proxy("proxy.example.com:8080"),
+                words::set_https_proxy(words::CODEX_GOES_THROUGH_IT, words::THE_OTHERS_GO_DIRECTLY)
             ),
         ]
     );
@@ -193,15 +166,21 @@ fn windows_is_told_what_its_settings_change_for_pitboard_and_the_tools() {
     facts.network = named_by("HTTP_PROXY");
     assert_eq!(
         advice(&facts),
-        "Codex sends its requests through it. Claude Code's go through the one HTTP_PROXY \
-         names, and Pitboard's through the one HTTP_PROXY names: set HTTPS_PROXY where this \
-         network needs the proxy."
+        words::set_https_proxy(
+            words::CODEX_GOES_THROUGH_IT,
+            &words::the_others_go(
+                &words::the_way(Some("HTTP_PROXY")),
+                &words::the_way(Some("HTTP_PROXY"))
+            )
+        )
     );
     facts.network = named_by("ALL_PROXY");
     assert_eq!(
         advice(&facts),
-        "Codex sends its requests through it. Claude Code's go out directly, and Pitboard's \
-         through the one ALL_PROXY names: set HTTPS_PROXY where this network needs the proxy."
+        words::set_https_proxy(
+            words::CODEX_GOES_THROUGH_IT,
+            &words::the_others_go(&words::the_way(None), &words::the_way(Some("ALL_PROXY")))
+        )
     );
     facts.network = direct();
     let with_server = |facts: &mut Facts, server: &str| {
@@ -215,18 +194,18 @@ fn windows_is_told_what_its_settings_change_for_pitboard_and_the_tools() {
     );
     assert_eq!(
         advice(&facts),
-        "Codex reads the setting as one address, which a proxy for each protocol is not, so \
-         its requests go out directly. Claude Code and Pitboard follow only the proxy \
-         variables, so theirs go out directly: set HTTPS_PROXY where this network needs the \
-         proxy."
+        words::set_https_proxy(
+            &words::codex_goes(&words::the_way(None)),
+            words::THE_OTHERS_GO_DIRECTLY
+        )
     );
     with_server(&mut facts, "https=secure.example.com:443");
     assert_eq!(
         advice(&facts),
-        "Codex reads the setting as one address, so it sends its requests to a proxy named \
-         https=secure.example.com:443, and they fail. Claude Code and Pitboard follow only \
-         the proxy variables, so theirs go out directly: set HTTPS_PROXY where this network \
-         needs the proxy."
+        words::set_https_proxy(
+            &words::codex_fails_through("https=secure.example.com:443"),
+            words::THE_OTHERS_GO_DIRECTLY
+        )
     );
     with_server(&mut facts, "proxy.example.com:8080");
 
@@ -329,10 +308,7 @@ fn a_password_in_windows_proxy_setting_is_never_shown() {
         });
         let checks = evaluate(&f);
         let line = check(&checks, "system_proxy");
-        assert_eq!(
-            line.detail,
-            format!("Windows' proxy settings name {shown}, and HTTPS_PROXY is not set")
-        );
+        assert_eq!(line.detail, words::system_proxy(shown));
         for said in [&line.detail, &line.advice] {
             let redacted = redaction_for(&ctx, &f).over(said);
             for secret in ["alice", "bob", "s3cret", "p=ss"] {
@@ -361,15 +337,10 @@ fn linux_inside_wsl_is_told_what_pitboard_switches_there() {
         said(&facts),
         (
             Level::Ok,
-            "inside WSL, in Ubuntu".into(),
-            "Pitboard here switches what is installed in this Linux. Claude Code and Codex \
-             installed on Windows keep their own logins, which Pitboard for Windows switches."
-                .into()
+            words::inside_wsl(Some("Ubuntu")),
+            words::WINDOWS_KEEPS_ITS_LOGINS.into()
         )
     );
-    let shared = "Pitboard here switches what is installed in this Linux. Claude Code \
-                  installed on Windows keeps its own login, which Pitboard for Windows \
-                  switches.";
     facts.wsl = Some(WslFact {
         distribution: None,
         codex_home_on_windows: Some(PathBuf::from("/mnt/c/Users/x/.codex")),
@@ -378,12 +349,8 @@ fn linux_inside_wsl_is_told_what_pitboard_switches_there() {
         said(&facts),
         (
             Level::Ok,
-            "inside WSL".into(),
-            format!(
-                "{shared} Codex's home, /mnt/c/Users/x/.codex, is C:\\Users\\x\\.codex on \
-                 Windows, where Codex here starts no shared background server. Where Codex \
-                 on Windows uses C:\\Users\\x\\.codex, a switch here changes its login too."
-            )
+            words::inside_wsl(None),
+            words::codex_home_on_windows("/mnt/c/Users/x/.codex", Some(r"C:\Users\x\.codex"))
         )
     );
     facts.wsl = Some(WslFact {
@@ -392,11 +359,7 @@ fn linux_inside_wsl_is_told_what_pitboard_switches_there() {
     });
     assert_eq!(
         said(&facts).2,
-        format!(
-            "{shared} Codex's home, /media/c/codex, is on a Windows drive, where Codex here \
-             starts no shared background server. Where Codex on Windows uses that folder, a \
-             switch here changes its login too."
-        )
+        words::codex_home_on_windows("/media/c/codex", None)
     );
 }
 

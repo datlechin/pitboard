@@ -1,10 +1,11 @@
-use super::{Check, Facts, fail, ok, running, warn};
+use super::{Check, Facts, fail, ok, warn, words};
 use crate::context::Context;
 use crate::error::Error;
 use crate::host::{Access, Kind, Os};
 use crate::provider::ProviderId;
 use crate::provider::claude::live as claude_live;
-use crate::{store, words};
+use crate::store;
+use crate::words as said;
 use std::path::PathBuf;
 
 // Every file holding a login that others may read, or, where it is sealed, change: who a file
@@ -40,52 +41,44 @@ pub(super) fn loose_logins(ctx: &Context) -> Vec<(String, Kind, Access)> {
     loose
 }
 
-/// The check that fails where the host says this process is not the person themselves
-/// ([`crate::host::Host::elevation`]), or nobody could tell whether it is, since then Pitboard
-/// changes nothing: `None` where it runs as the person themselves.
 pub(super) fn elevated(
     os: Os,
     elevation: crate::host::Elevation,
     admin_approval: Option<bool>,
 ) -> Option<Check> {
-    let said = match elevation {
+    let told = match elevation {
         crate::host::Elevation::Normal => return None,
-        crate::host::Elevation::Elevated { why } => words::elevated(os, Some(why)),
-        crate::host::Elevation::Unknown => words::elevated(os, None),
+        crate::host::Elevation::Elevated { why } => said::elevated(os, Some(why)),
+        crate::host::Elevation::Unknown => said::elevated(os, None),
     };
     // `EnableLUA` 0 says it is User Account Control off, not the built-in Administrator.
     let way_out = match (elevation, admin_approval) {
         (crate::host::Elevation::Elevated { why }, Some(false))
             if why == crate::host::token::IN_EVERY_PROGRAM =>
         {
-            words::ADMIN_APPROVAL_OFF
+            said::ADMIN_APPROVAL_OFF
         }
-        _ => said.way_out,
+        _ => told.way_out,
     };
     Some(fail(
         "elevated",
         "runs as",
-        said.because,
-        format!(
-            "Pitboard changes nothing this way: it reads, and renews and writes nothing. {way_out}"
-        ),
+        told.because,
+        words::changes_nothing_this_way(way_out),
     ))
 }
 
 pub(super) fn too_old(floor: crate::host::Floor) -> Option<Check> {
-    let said = match floor {
+    let told = match floor {
         crate::host::Floor::Met => return None,
-        crate::host::Floor::Below { build } => words::too_old(Some(build)),
-        crate::host::Floor::Unknown => words::too_old(None),
+        crate::host::Floor::Below { build } => said::too_old(Some(build)),
+        crate::host::Floor::Unknown => said::too_old(None),
     };
     Some(fail(
         "system_too_old",
         "runs on",
-        said.because,
-        format!(
-            "Pitboard changes nothing here: it reads, and renews and writes nothing. {}",
-            said.way_out
-        ),
+        told.because,
+        words::changes_nothing_here(told.way_out),
     ))
 }
 
@@ -96,34 +89,26 @@ pub(super) fn judge_security_tool(facts: &Facts) -> Option<Check> {
         None => fail(
             "security_tool",
             "security tool",
-            format!("{tool} is missing"),
-            "Pitboard reads the keychain the same way Claude Code does. Without it, nothing works.",
+            words::missing(tool),
+            words::READS_THE_KEYCHAIN_AS_CLAUDE_CODE,
         ),
     })
 }
 
 pub(super) fn judge_home(facts: &Facts) -> Check {
+    let home = facts.home.display();
     match &facts.home_access {
-        None => ok(
-            "home",
-            "Pitboard home",
-            format!("{} (not created yet)", facts.home.display()),
-        ),
-        Some(access) if !access.shared => {
-            ok("home", "Pitboard home", facts.home.display().to_string())
-        }
+        None => ok("home", "Pitboard home", words::not_created_yet(home)),
+        Some(access) if !access.shared => ok("home", "Pitboard home", home.to_string()),
         Some(access) => warn(
             "home",
             "Pitboard home",
-            format!("{} is {}", facts.home.display(), access.described),
-            format!(
-                "Park names contain account identifiers, so only you should read it{}",
-                running(&facts.os.make_private_commands(
-                    Kind::Directory,
-                    &[&facts.home.display().to_string()],
-                    facts.sid.as_deref(),
-                ))
-            ),
+            words::open_to(&home, access),
+            words::only_you_should_read_the_home(&facts.os.make_private_commands(
+                Kind::Directory,
+                &[&home.to_string()],
+                facts.sid.as_deref(),
+            )),
         ),
     }
 }
@@ -133,13 +118,13 @@ pub(super) fn judge_private_on_disk(facts: &Facts) -> Check {
         return ok(
             "private_on_disk",
             "logins on disk",
-            "nothing holding a login is readable by anyone else",
+            words::NOTHING_READABLE_BY_OTHERS,
         );
     }
     let names: Vec<String> = facts
         .readable_by_others
         .iter()
-        .map(|(path, _, access)| format!("{path} is {}", access.described))
+        .map(|(path, _, access)| words::open_to(path, access))
         .collect();
     let sid = facts.sid.as_deref();
     let commands: Vec<String> = match facts.os {
@@ -162,71 +147,41 @@ pub(super) fn judge_private_on_disk(facts: &Facts) -> Check {
         "private_on_disk",
         "logins on disk",
         names.join("; "),
-        format!(
-            "{}{}",
-            match facts.os {
-                Os::MacOs | Os::Linux =>
-                    "These hold usable OAuth tokens in plain text, which is how Claude \
-                     Code stores them where there is no keychain. Anyone else on this \
-                     machine can read them",
-                Os::Windows =>
-                    "These hold a login: Claude Code's file in plain text, a sealed park \
-                     only this account opens. Claude Code's file takes the access list of \
-                     the folder it is in, and a seal stops reading, not writing. Anyone \
-                     else on this PC can read or change them",
-            },
-            running(&commands),
-        ),
+        words::others_can_read(facts.os, &commands),
     )
 }
 
 pub(super) fn judge_state(facts: &Facts) -> Check {
     match &facts.state {
-        Ok(state) => ok(
-            "state",
-            "accounts",
-            match state.accounts.len() {
-                0 => "none enrolled yet".to_string(),
-                1 => "1 enrolled".to_string(),
-                n => format!("{n} enrolled"),
-            },
-        ),
+        Ok(state) => ok("state", "accounts", words::enrolled(state.accounts.len())),
         Err(e) => fail(
             "state",
             "accounts",
             e.to_string(),
             match e {
                 // The one unreadable state that has a command of its own.
-                Error::StateWrongMachine { .. } => {
-                    "Run `pitboard adopt` to keep these accounts on this computer. The \
-                     logins they came with are dropped, because a login belongs to the \
-                     computer that signed in."
-                }
-                _ => "Pitboard will not switch until its account list can be read.",
+                Error::StateWrongMachine { .. } => words::ADOPT_TO_KEEP_THEM,
+                _ => words::NO_SWITCH_UNTIL_READABLE,
             },
         ),
     }
 }
 
 pub(super) fn judge_interrupted(facts: &Facts) -> Option<Check> {
-    if let Some(refusal) = &facts.stuck {
-        Some(warn(
-            "interrupted_switch",
-            "interrupted switch",
-            refusal.clone(),
-            "If it still cannot be finished, `pitboard abandon` gives up on the switch and \
-             keeps every login.",
-        ))
-    } else if facts.interrupted {
-        Some(warn(
-            "interrupted_switch",
-            "interrupted switch",
-            "a switch did not finish",
-            "The next `pitboard use`, `enroll` or `forget` finishes it before anything else.",
-        ))
-    } else {
-        None
-    }
+    let (detail, advice) = match &facts.stuck {
+        Some(refusal) => (refusal.clone(), words::ABANDON_KEEPS_EVERY_LOGIN),
+        None if facts.interrupted => (
+            words::A_SWITCH_DID_NOT_FINISH.to_string(),
+            words::THE_NEXT_CHANGE_FINISHES_IT,
+        ),
+        None => return None,
+    };
+    Some(warn(
+        "interrupted_switch",
+        "interrupted switch",
+        detail,
+        advice,
+    ))
 }
 
 pub(super) fn judge_discarded(facts: &Facts) -> Option<Check> {
@@ -241,21 +196,17 @@ pub(super) fn judge_discarded(facts: &Facts) -> Option<Check> {
         .filter(|d| d.kind == crate::state::ParkKind::Folder)
         .count();
     let vault = state.discarded.len() - folders;
-    let (detail, advice) = match (vault, folders) {
-        (vault, 0) => (
-            format!("{vault} waiting to be deleted"),
-            "Pitboard deletes them on its next change; if they stay, check the keychain is unlocked.",
-        ),
-        (0, folders) => (
-            format!("{folders} folder(s) waiting to be deleted"),
-            "Pitboard deletes them on its next change.",
-        ),
-        (vault, folders) => (
-            format!("{vault} waiting to be deleted, and {folders} folder(s)"),
-            "Pitboard deletes them on its next change; if they stay, check the keychain is unlocked.",
-        ),
+    let advice = if vault == 0 {
+        words::DELETED_ON_THE_NEXT_CHANGE
+    } else {
+        words::DELETED_ONCE_THE_KEYCHAIN_OPENS
     };
-    Some(warn("discarded", "old parked logins", detail, advice))
+    Some(warn(
+        "discarded",
+        "old parked logins",
+        words::waiting_to_be_deleted(vault, folders),
+        advice,
+    ))
 }
 
 pub(super) fn judge_machine_id(facts: &Facts) -> Option<Check> {
@@ -263,21 +214,13 @@ pub(super) fn judge_machine_id(facts: &Facts) -> Option<Check> {
         Some(warn(
             "machine_id",
             "machine id",
-            "this machine has no stable identifier",
-            format!(
-                "Pitboard cannot tell this machine from another that also lacks one, so it \
-                 cannot refuse state copied between them. Never copy {} between machines.",
-                facts.home.display()
-            ),
+            words::NO_STABLE_IDENTIFIER,
+            words::never_copy_between_machines(facts.home.display()),
         ))
     } else if facts.os == Os::Windows {
         Some(Check {
-            advice: "Pitboard tells this PC apart by it, and a copy of the PC keeps it, such as a \
-                     virtual machine copied whole. Such a copy takes this PC's accounts for its \
-                     own, and both renew the same parked logins: on a copy, forget each account \
-                     and enrol it again with `--sign-in`."
-                .into(),
-            ..ok("machine_id", "machine id", "Windows' MachineGuid")
+            advice: words::A_COPY_KEEPS_THE_MACHINE_GUID.into(),
+            ..ok("machine_id", "machine id", words::MACHINE_GUID)
         })
     } else {
         None
@@ -334,7 +277,7 @@ pub(super) fn judge_asking(facts: &Facts) -> Check {
         .collect();
     let holders = services(&mut holding);
     match facts.asking_held.len() {
-        0 => ok("asking", name, "nothing is being held back"),
+        0 => ok("asking", name, words::NOTHING_HELD_BACK),
         n => {
             let longest = facts
                 .asking_held
@@ -345,15 +288,8 @@ pub(super) fn judge_asking(facts: &Facts) -> Check {
             warn(
                 "asking",
                 name,
-                format!(
-                    "{n} account(s) not being asked about for up to {}",
-                    words::span(longest)
-                ),
-                format!(
-                    "{holders} asked for less traffic, or could not be reached. The numbers \
-                     shown are the last ones measured until then; `pitboard status --fresh` \
-                     does not override a wait {holders} asked for."
-                ),
+                words::not_asked_about(n, longest),
+                words::held_back_by(&holders),
             )
         }
     }
@@ -364,14 +300,16 @@ pub(super) fn judge_asking(facts: &Facts) -> Check {
 /// could not be read, which on macOS is a locked keychain and nothing worse.
 pub(super) fn judge_pending(facts: &Facts) -> Check {
     match facts.pending_parks.len() {
-        0 => ok("pending_parks", "parks being reclaimed", "none outstanding"),
+        0 => ok(
+            "pending_parks",
+            "parks being reclaimed",
+            words::NONE_OUTSTANDING,
+        ),
         n => warn(
             "pending_parks",
             "parks being reclaimed",
-            format!("{n} could not be read this time"),
-            "Pitboard wrote these names down before creating a login in them and cannot \
-             read them back to find out what is there. Unlock the keychain and run any \
-             Pitboard command; it resolves them before doing anything else.",
+            words::could_not_be_read_this_time(n),
+            words::UNLOCK_AND_RUN_ANY_COMMAND,
         ),
     }
 }

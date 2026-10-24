@@ -28,7 +28,7 @@ fn a_park_behind_a_locked_keychain_is_read_as_locked() {
     };
     assert_eq!(
         park_facts(&ctx, &state)[0].unreadable,
-        Some(Unreadable::Broken("missing from the vault".into()))
+        Some(Unreadable::Broken(words::MISSING_FROM_THE_VAULT.into()))
     );
     host.vault().fault_all(Fault::Locked);
     assert_eq!(
@@ -59,7 +59,13 @@ fn an_account_nobody_has_come_back_to_is_said_out_loud() {
     let checks = evaluate(&f);
     let dormant = check(&checks, "dormant_account");
     assert_eq!(dormant.level, Level::Warn);
-    assert!(dormant.advice.contains("pitboard forget work"));
+    assert_eq!(
+        (dormant.detail.as_str(), dormant.advice.as_str()),
+        (
+            words::not_switched_to_for(31 * 86_400).as_str(),
+            words::forget_if_not_coming_back("work").as_str()
+        )
+    );
 
     // A month is the token's own life. Inside it, there is nothing to say.
     f.parks[0].last_used_at = Some(f.now - 29 * 86_400);
@@ -81,7 +87,7 @@ fn an_account_nobody_has_come_back_to_is_said_out_loud() {
 fn every_parked_login_is_judged_and_a_way_back_is_offered() {
     let mut f = facts();
     let mut unusable = parked("broken", Some(NOW + 30 * 86_400));
-    unusable.unreadable = Some(Unreadable::Broken("missing from the vault".into()));
+    unusable.unreadable = Some(Unreadable::Broken(words::MISSING_FROM_THE_VAULT.into()));
     f.parks = vec![
         parked("fine", Some(NOW + 20 * 86_400)),
         parked("soon", Some(NOW + 86_400)),
@@ -117,25 +123,35 @@ fn every_parked_login_is_judged_and_a_way_back_is_offered() {
         assert_eq!(c.level, level, "{name}: {}", c.detail);
         if level != Level::Ok {
             let label = name.trim_start_matches("account ");
-            assert!(
-                c.advice
-                    .contains(&format!("pitboard enroll {label} --sign-in"))
-            );
+            assert_eq!(c.advice, words::sign_in_again(label));
         }
     }
     // A parked login's life is said in the column `pitboard status` shows, after the
     // check's own words, and an expired one with when it expired.
+    let life = |left: i64| said::parked_life_column(NOW + left, NOW);
     assert_eq!(
         named(&checks, "account fine").detail,
-        "parked, good for 20d 0h"
+        words::parked_with(&life(20 * 86_400))
     );
     assert_eq!(
         named(&checks, "account soon").detail,
-        "its parked login expires in 1d 0h"
+        words::park_life(&life(86_400))
     );
     assert_eq!(
         named(&checks, "account gone").detail,
-        format!("its parked login expired {}", time::moment(NOW - 1, NOW))
+        words::park_life_since(&life(-1), &time::moment(NOW - 1, NOW))
+    );
+    assert_eq!(
+        named(&checks, "account broken").detail,
+        words::park_unusable(words::MISSING_FROM_THE_VAULT)
+    );
+    assert_eq!(
+        named(&checks, "account empty").detail,
+        words::NOTHING_PARKED
+    );
+    assert_eq!(
+        named(&checks, "account live").detail,
+        words::SIGNED_IN_PARKED_ON_A_SWITCH
     );
 }
 
@@ -157,39 +173,37 @@ fn parks_sealed_to_the_account_are_said_so_and_all_lost_at_once_is_one_finding()
     let vault = check(&checks, "vault");
     assert_eq!(
         (vault.level, vault.name.as_str(), vault.detail.as_str()),
-        (
-            Level::Ok,
-            "parked logins",
-            "sealed to this Windows account, not plain text"
-        )
+        (Level::Ok, "parked logins", words::SEALED_TO_THIS_ACCOUNT)
     );
 
     let lost = Some(Unreadable::Sealed(Some(DPAPI_KEY_RESET)));
     f.parks[0].unreadable = lost.clone();
     let checks = evaluate(&f);
     assert_eq!(check(&checks, "vault").level, Level::Ok, "one of two");
-    assert_eq!(named(&checks, "account work").level, Level::Fail);
-    assert!(
-        named(&checks, "account work")
-            .advice
-            .contains("pitboard enroll work --sign-in")
+    assert_eq!(
+        (
+            named(&checks, "account work").level,
+            named(&checks, "account work").detail.as_str(),
+            named(&checks, "account work").advice.clone()
+        ),
+        (
+            Level::Fail,
+            words::PARK_DOES_NOT_OPEN,
+            words::sign_in_again("work")
+        )
     );
 
     f.parks[1].unreadable = lost;
     let checks = evaluate(&f);
     let vault = check(&checks, "vault");
     assert_eq!(vault.level, Level::Fail);
+    assert_eq!(vault.detail, words::none_opens(2));
     assert_eq!(
-        vault.detail,
-        "none of the 2 parked logins opens for this Windows account"
-    );
-    assert!(
-        vault.advice.ends_with(
-            "Sign in to each again: `pitboard enroll work --sign-in` and \
-             `pitboard enroll codex/home --sign-in`."
-        ),
-        "{}",
-        vault.advice
+        vault.advice,
+        words::sealed_by_a_lost_key(&[
+            words::enroll_signing_in("work"),
+            words::enroll_signing_in("codex/home")
+        ])
     );
     for code in ["parked_login", "codex_parked_login"] {
         assert!(
@@ -213,7 +227,7 @@ fn missing_sealed_parks_are_not_a_reset_finding() {
     let mut f = facts();
     f.vault = store::Backend::SealedFile;
     f.parks = vec![parked("work", None), codex_parked("home", None)];
-    let missing = Some(Unreadable::Broken("missing from the vault".into()));
+    let missing = Some(Unreadable::Broken(words::MISSING_FROM_THE_VAULT.into()));
     f.parks[0].unreadable = missing.clone();
     f.parks[1].unreadable = missing;
     let checks = evaluate(&f);
@@ -239,17 +253,14 @@ fn sealed_parks_lost_to_this_logon_get_neutral_wording() {
     let checks = evaluate(&f);
     let vault = check(&checks, "vault");
     assert_eq!(vault.level, Level::Fail);
-    assert!(
-        vault.advice.contains("from a desktop session"),
-        "{}",
-        vault.advice
+    assert_eq!(
+        vault.advice,
+        words::not_open_in_this_logon(&[
+            words::enroll_signing_in("work"),
+            words::enroll_signing_in("codex/home")
+        ])
     );
-    assert!(!vault.advice.contains("administrator"), "{}", vault.advice);
 }
-
-/// A parked login is due to be renewed from three days before its refresh token expires
-/// until it does. Past that it cannot be renewed, so it is not due: its account needs a
-/// sign-in instead.
 
 /// The advice has to be something a person can type and have it act on the right
 /// account. `pitboard enroll work --sign-in` about a Codex account would enroll a
@@ -267,21 +278,14 @@ fn advice_names_a_codex_account_the_way_it_is_typed() {
     f.parks = vec![claude, codex];
     let checks = evaluate(&f);
 
-    let codex_park = named(&checks, "account codex/work");
-    assert!(
-        codex_park
-            .advice
-            .contains("`pitboard enroll codex/work --sign-in`"),
-        "{}",
-        codex_park.advice
+    assert_eq!(
+        named(&checks, "account codex/work").advice,
+        words::sign_in_again("codex/work")
     );
-    let claude_park = named(&checks, "account claude/work");
-    assert!(
-        claude_park
-            .advice
-            .contains("`pitboard enroll claude/work --sign-in`"),
-        "a name a command here takes, which a bare `work` is not: {}",
-        claude_park.advice
+    assert_eq!(
+        named(&checks, "account claude/work").advice,
+        words::sign_in_again("claude/work"),
+        "a name a command here takes, which a bare `work` is not"
     );
 
     let dormant: Vec<&Check> = checks
@@ -289,13 +293,10 @@ fn advice_names_a_codex_account_the_way_it_is_typed() {
         .filter(|c| c.code.ends_with("dormant_account"))
         .collect();
     assert_eq!(dormant.len(), 2);
-    assert!(dormant.iter().any(
-        |c| c.name == "account codex/work" && c.advice.contains("`pitboard forget codex/work`")
-    ));
-    assert!(
-        dormant.iter().any(|c| c.name == "account claude/work"
-            && c.advice.contains("`pitboard forget claude/work`"))
-    );
+    for typed in ["codex/work", "claude/work"] {
+        assert!(dormant.iter().any(|c| c.name == format!("account {typed}")
+            && c.advice == words::forget_if_not_coming_back(typed)));
+    }
 }
 
 /// Whether an account is the one signed in is its own tool's question: Claude Code's from

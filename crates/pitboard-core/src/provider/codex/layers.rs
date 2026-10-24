@@ -2158,4 +2158,21 @@ mod tests {
             );
         }
     }
+
+    #[test]
+    fn the_file_store_alone_is_said_in_each_systems_words() {
+        for os in [Os::MacOs, Os::Linux] {
+            assert_eq!(
+                file_store_only(os),
+                "Pitboard handles Codex's file store, auth.json, and does not read an item Codex \
+                 created for itself, because every read would ask you for permission",
+                "{os:?}"
+            );
+        }
+        assert_eq!(
+            file_store_only(Os::Windows),
+            "Pitboard handles Codex's file store, auth.json, and does not follow Codex into a \
+             store it uses only when told to"
+        );
+    }
 }

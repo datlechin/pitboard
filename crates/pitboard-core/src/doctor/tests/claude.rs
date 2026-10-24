@@ -36,20 +36,20 @@ fn a_locked_keychain_is_one_failure_and_sends_nobody_to_sign_in_again() {
     let checks = evaluate(&f);
     let credential = check(&checks, "credential");
     assert_eq!(credential.level, Level::Fail);
+    assert_eq!(credential.detail, words::KEYCHAIN_LOCKED);
     assert_eq!(
-        credential.detail,
-        "the keychain is locked, and cannot ask to be unlocked from here"
-    );
-    assert!(
-        credential.advice.contains("`security unlock-keychain`")
-            && credential.advice.contains("keeps the login it last read"),
-        "{}",
-        credential.advice
+        credential.advice,
+        words::unlock_the_keychain(words::THEN_SIGNED_OUT)
     );
     let park = named(&checks, "account work");
     assert_eq!(park.level, Level::Warn, "{}", park.detail);
-    assert_eq!(park.detail, "not read: the keychain is locked");
-    assert!(!park.advice.contains("--sign-in"), "{}", park.advice);
+    assert_eq!(
+        (park.detail.as_str(), park.advice.as_str()),
+        (
+            words::NOT_READ_THE_KEYCHAIN_IS_LOCKED,
+            words::UNLOCK_IT_THEN_DOCTOR
+        )
+    );
     assert_eq!(
         checks.iter().filter(|c| c.level == Level::Fail).count(),
         1,
@@ -62,10 +62,9 @@ fn a_locked_keychain_is_one_failure_and_sends_nobody_to_sign_in_again() {
         path: f.credential_file.clone(),
         fingerprint: Ok(Some("0123456789abcdef".into())),
     });
-    let advice = check(&evaluate(&f), "credential").advice.clone();
-    assert!(
-        advice.contains("signs in with the login in /home/x/.claude/.credentials.json"),
-        "{advice}"
+    assert_eq!(
+        check(&evaluate(&f), "credential").advice,
+        words::unlock_the_keychain(&words::then_signs_in_with(f.credential_file.display()))
     );
 }
 
@@ -87,23 +86,9 @@ fn a_login_left_behind_the_keychain_is_said_with_what_reads_it() {
     assert_eq!(said.name, "fallback login");
     assert_eq!(
         said.detail,
-        "/home/x/.claude/.credentials.json  ·  refresh 0123456789abcdef"
+        words::file_refresh(f.credential_file.display(), "0123456789abcdef")
     );
-    assert!(
-        said.advice.contains("over SSH")
-            && said.advice.contains(
-                "While it is there, Claude Code sessions already running at a switch keep \
-                 the account they are on until their login is next renewed"
-            )
-            && said.advice.ends_with(
-                "`pitboard stow` keeps this login for its account, where Pitboard holds no \
-                 other it can switch to, then deletes the file, which leaves one login for \
-                 every session."
-            ),
-        "{}",
-        said.advice
-    );
-    assert!(!said.advice.contains("rm "), "{}", said.advice);
+    assert_eq!(said.advice, words::the_file_signs_sessions_in(Os::MacOs));
     assert!(healthy(&checks), "nothing Pitboard does is stopped by it");
 }
 
@@ -122,29 +107,19 @@ fn a_file_behind_the_keychain_with_no_login_in_it_is_said_with_what_it_holds_bac
     assert_eq!(said.level, Level::Warn);
     assert_eq!(
         said.detail,
-        "/home/x/.claude/.credentials.json  ·  no login in it"
+        words::file_without_a_login(f.credential_file.display())
     );
+    assert_eq!(said.advice, words::stow_deletes_it());
     assert_eq!(
-        said.advice,
-        "It holds no Claude Code login. While it is there, Claude Code sessions already \
-         running at a switch keep the account they are on until their login is next \
-         renewed, or until they are started again. `pitboard stow` deletes it, which lets \
-         them follow a switch."
-    );
-    assert!(
-        check(&checks, "auth_source")
-            .detail
-            .ends_with(", once a session reads it again"),
-        "{}",
-        check(&checks, "auth_source").detail
+        check(&checks, "auth_source").detail,
+        words::THE_STORED_LOGIN_ONCE_READ
     );
 
     f.os = Os::MacOs;
     f.credential = Err(store::Error::Locked);
-    let advice = check(&evaluate(&f), "credential").advice.clone();
-    assert!(
-        advice.ends_with("one started here is signed out."),
-        "{advice}"
+    assert_eq!(
+        check(&evaluate(&f), "credential").advice,
+        words::unlock_the_keychain(words::THEN_SIGNED_OUT)
     );
 }
 
@@ -165,30 +140,23 @@ fn a_file_behind_the_keychain_that_cannot_be_read_is_said_with_why() {
     let checks = evaluate(&f);
     let said = check(&checks, "fallback_login");
     assert_eq!(said.level, Level::Warn);
+    let why = store::Error::Unreadable(
+        "cannot read /home/x/.claude/.credentials.json: Permission denied".into(),
+    );
     assert_eq!(
         said.detail,
-        "/home/x/.claude/.credentials.json  ·  not read: the credential store could not be \
-         read: cannot read /home/x/.claude/.credentials.json: Permission denied"
+        words::file_not_read(f.credential_file.display(), why)
     );
     assert_eq!(
         said.advice,
-        "Pitboard could not read it, so whether it holds a login, which a session that \
-         cannot read the keychain signs in with, cannot be told, and `pitboard stow` cannot \
-         put it away. While it is there, Claude Code sessions already running at a switch \
-         keep the account they are on until their login is next renewed, or until they are \
-         started again. Deleting it lets them follow a switch, and takes whatever it holds \
-         with it: `rm '/home/x/.claude/.credentials.json'`."
+        words::delete_it_yourself(Os::MacOs, "rm '/home/x/.claude/.credentials.json'")
     );
     assert!(healthy(&checks), "nothing Pitboard does is stopped by it");
 
     f.credential = Err(store::Error::Locked);
-    let advice = check(&evaluate(&f), "credential").advice.clone();
-    assert!(
-        advice.ends_with(
-            "whether one started here signs in with what /home/x/.claude/.credentials.json \
-             holds cannot be told, since Pitboard could not read it."
-        ),
-        "{advice}"
+    assert_eq!(
+        check(&evaluate(&f), "credential").advice,
+        words::unlock_the_keychain(&words::then_cannot_tell(f.credential_file.display()))
     );
 }
 
@@ -203,34 +171,21 @@ fn a_file_behind_credential_manager_is_said_in_the_words_of_windows() {
         path: path.clone(),
         fingerprint: Ok(Some("0123456789abcdef".into())),
     });
-    let said = check(&evaluate(&f), "fallback_login").advice.clone();
-    assert!(
-        said.starts_with(
-            "Claude Code signs in with this wherever it cannot reach Credential Manager, \
-             such as in a sign-in over SSH with a key, and no switch reaches it. A sign-in \
-             made where Credential Manager could not be reached leaves one, as `/login` does \
-             in a sign-in over SSH with a key. While it is there,"
-        ),
-        "{said}"
+    assert_eq!(
+        check(&evaluate(&f), "fallback_login").advice,
+        words::the_file_signs_sessions_in(Os::Windows)
     );
 
     f.fallback_login = Some(FallbackLogin {
         path,
         fingerprint: Err(store::Error::Unreadable("access is denied".into())),
     });
-    let said = check(&evaluate(&f), "fallback_login").advice.clone();
-    assert!(
-        said.starts_with(
-            "Pitboard could not read it, so whether it holds a login, which a session that \
-             cannot reach Credential Manager signs in with, cannot be told"
-        ),
-        "{said}"
-    );
-    assert!(
-        said.ends_with(
-            r"with it: `Remove-Item -LiteralPath 'C:\Users\o''neil\.claude\.credentials.json'`."
-        ),
-        "{said}"
+    assert_eq!(
+        check(&evaluate(&f), "fallback_login").advice,
+        words::delete_it_yourself(
+            Os::Windows,
+            r"Remove-Item -LiteralPath 'C:\Users\o''neil\.claude\.credentials.json'"
+        )
     );
     assert_eq!(
         Os::Windows.remove_file_command(std::path::Path::new("C:\\it\u{2019}s")),
@@ -315,26 +270,34 @@ fn the_login_in_use_is_judged_by_when_its_refresh_token_expires_as_a_park_is() {
     };
     let mut f = facts();
     let now = f.now;
-    let (level, detail, _) = credential(&mut f, Some(now + RENEW_WITHIN));
-    assert_eq!(level, Level::Ok);
-    assert!(detail.contains("  ·  good for 3d 0h  ·  "), "{detail}");
-    let (level, detail, advice) = credential(&mut f, Some(now + RENEW_WITHIN - 1));
-    assert_eq!(level, Level::Warn);
-    assert!(detail.contains("  ·  expires in 2d 23h  ·  "), "{detail}");
+    let keys = ["claudeAiOauth"];
+    let fingerprint = store::fingerprint("r");
+    let with_life = |at: i64| {
+        words::refresh_life_and_keys(&fingerprint, &said::parked_life_column(at, now), &keys)
+    };
+    let at = now + RENEW_WITHIN;
     assert_eq!(
-        advice,
-        "This login expires soon and will need signing in again."
+        credential(&mut f, Some(at)),
+        (Level::Ok, with_life(at), String::new())
     );
-    let (level, detail, advice) = credential(&mut f, Some(now - 60));
-    assert_eq!(level, Level::Warn);
-    assert!(detail.contains("  ·  expired  ·  "), "{detail}");
+    let at = now + RENEW_WITHIN - 1;
     assert_eq!(
-        advice,
-        "This login has expired: sign in to Claude Code again."
+        credential(&mut f, Some(at)),
+        (Level::Warn, with_life(at), words::EXPIRES_SOON.into())
     );
-    let (level, detail, _) = credential(&mut f, None);
-    assert_eq!(level, Level::Ok);
-    assert!(!detail.contains("days"), "{detail}");
+    let at = now - 60;
+    assert_eq!(
+        credential(&mut f, Some(at)),
+        (Level::Warn, with_life(at), words::EXPIRED.into())
+    );
+    assert_eq!(
+        credential(&mut f, None),
+        (
+            Level::Ok,
+            words::refresh_and_keys(&fingerprint, &keys),
+            String::new()
+        )
+    );
 }
 
 #[test]
@@ -379,12 +342,7 @@ fn a_file_store_is_the_whole_answer_on_linux_and_windows() {
     f.backend = Ok(store::Backend::File);
     for (os, level, advice) in [
         (Os::Linux, Level::Ok, ""),
-        (
-            Os::MacOs,
-            Level::Warn,
-            "Claude Code fell back to a file, which means a keychain write failed at some \
-             point.",
-        ),
+        (Os::MacOs, Level::Warn, words::FELL_BACK_TO_A_FILE),
         (Os::Windows, Level::Ok, ""),
     ] {
         f.os = os;
@@ -395,7 +353,11 @@ fn a_file_store_is_the_whole_answer_on_linux_and_windows() {
             (level, advice),
             "{os:?}"
         );
-        assert!(store.detail.starts_with("plaintext file"), "{os:?}");
+        assert_eq!(
+            store.detail,
+            words::plaintext_file(f.credential_file.display()),
+            "{os:?}"
+        );
     }
 }
 
@@ -416,7 +378,7 @@ fn a_config_that_names_somebody_signed_in_with_no_login_anywhere_is_a_failure() 
     let checks = evaluate(&f);
     let store = check(&checks, "credential_store");
     assert_eq!(store.level, Level::Warn);
-    assert!(store.advice.contains("Nothing is signed in"));
+    assert_eq!(store.advice, words::NOTHING_SIGNED_IN);
 }
 
 // Enterprise persistence (`credman_attributes`): the login roams with a roaming profile.
@@ -439,8 +401,7 @@ fn credential_manager_is_named_by_its_item_and_a_roaming_profile_is_warned_of() 
     assert_eq!(store.level, Level::Ok);
     assert_eq!(
         store.detail,
-        "Credential Manager  ·  Claude Code-credentials/claude-code-user  ·  every logon of \
-         yours on this PC reads it"
+        words::in_credential_manager(&f.service, "claude-code-user")
     );
     if let Some(homes) = f.windows.as_mut() {
         homes.roams = true;
@@ -448,11 +409,7 @@ fn credential_manager_is_named_by_its_item_and_a_roaming_profile_is_warned_of() 
     let checks = evaluate(&f);
     let store = check(&checks, "credential_store");
     assert_eq!(store.level, Level::Warn);
-    assert!(
-        store.advice.starts_with("Your profile roams"),
-        "{}",
-        store.advice
-    );
+    assert_eq!(store.advice, words::ROAMS_WITH_THE_PROFILE);
 }
 
 #[test]
@@ -472,17 +429,17 @@ fn a_login_in_credential_manager_is_counted_in_pieces_and_257_fail() {
     });
     assert_eq!(
         check(&evaluate(&f), "credential_size").detail,
-        "900 bytes, in one item"
+        words::in_one_item(900)
     );
     let pieces = size(&f, 2401);
     assert_eq!(pieces.level, Level::Ok);
-    assert_eq!(pieces.detail, "2401 bytes, in 2 pieces of 2400 characters");
+    assert_eq!(
+        pieces.detail,
+        words::in_pieces(2401, 2, crate::provider::claude::pieces::PIECE)
+    );
     let past = size(&f, 460_801);
     assert_eq!(past.level, Level::Fail);
-    assert_eq!(
-        past.detail,
-        words::past_credential_manager(460_801, 460_800)
-    );
+    assert_eq!(past.detail, said::past_credential_manager(460_801, 460_800));
 }
 
 #[test]
@@ -495,7 +452,7 @@ fn pitboard_no_argv_is_said_to_change_nothing_on_windows() {
     let checks = evaluate(&f);
     let said = check(&checks, "no_argv");
     assert_eq!(said.level, Level::Warn);
-    assert_eq!(said.detail, "set, and it changes nothing on Windows");
+    assert_eq!(said.detail, words::NO_ARGV_CHANGES_NOTHING);
 }
 
 // A network logon, as over sshd with a key, has no credential set: 1312 (MC-net).
@@ -508,18 +465,11 @@ fn credential_manager_out_of_this_logons_reach_is_said_in_its_own_words() {
     let checks = evaluate(&f);
     let said = check(&checks, "credential");
     assert_eq!(said.level, Level::Fail);
+    assert_eq!(said.detail, words::CREDENTIAL_MANAGER_OUT_OF_REACH);
     assert_eq!(
-        said.detail,
-        "Credential Manager cannot be reached from this logon"
+        said.advice,
+        words::from_a_desktop_session(f.credential_file.display())
     );
-    assert!(
-        said.advice.ends_with(
-            r"A Claude Code session started from this logon reads only C:\Users\dana\.claude\.credentials.json."
-        ),
-        "{}",
-        said.advice
-    );
-    assert!(!said.advice.contains("keychain"));
 }
 
 #[test]
@@ -532,14 +482,7 @@ fn a_login_credential_manager_holds_that_nothing_turns_on_is_said_to_sign_sessio
     let checks = evaluate(&f);
     let said = check(&checks, "credential_store");
     assert_eq!(said.level, Level::Fail);
-    assert!(
-        said.advice.ends_with(
-            "its sessions read only .credentials.json, so a login left only in Credential \
-             Manager is signed out to them."
-        ),
-        "{}",
-        said.advice
-    );
+    assert_eq!(said.advice, words::UNKNOWN_AND_SIGNED_OUT);
 }
 
 #[test]
@@ -556,7 +499,10 @@ fn a_login_past_the_ceiling_reads_differently_when_the_way_past_it_is_refused() 
     let checks = evaluate(&f);
     let written = check(&checks, "credential_size");
     assert_eq!(written.level, Level::Warn);
-    assert!(written.detail.contains("argument line"));
+    assert_eq!(
+        written.detail,
+        words::size_on_the_argument_line(8503, 4032, "")
+    );
 
     f.credential_cost = Some(store::Cost {
         needs: 8503,
@@ -570,7 +516,7 @@ fn a_login_past_the_ceiling_reads_differently_when_the_way_past_it_is_refused() 
         Level::Fail,
         "there is no third way to write it"
     );
-    assert!(refused.detail.contains("PITBOARD_NO_ARGV"));
+    assert_eq!(refused.detail, words::size_refused(8503, 4032, ""));
 }
 
 /// An account nobody has come back to keeps a live, continuously rotated refresh token
@@ -631,7 +577,7 @@ fn what_takes_up_the_room_is_listed_largest_first_and_named_per_server() {
 fn the_daemon_is_reported_without_being_a_problem() {
     let mut f = facts();
     let checks = evaluate(&f);
-    assert!(check(&checks, "claude_daemon").detail.contains("none"));
+    assert_eq!(check(&checks, "claude_daemon").detail, words::NO_DAEMON);
 
     f.daemon = Some(daemon::Daemon {
         pid: 4321,
@@ -641,15 +587,14 @@ fn the_daemon_is_reported_without_being_a_problem() {
     let checks = evaluate(&f);
     let running = check(&checks, "claude_daemon");
     assert_eq!(running.level, Level::Ok);
-    assert!(running.detail.contains("running"));
-    assert!(running.detail.contains("2.1.278"));
-    assert!(running.detail.contains("4321"));
+    let version = words::daemon_version(Some("2.1.278"));
+    assert_eq!(running.detail, words::daemon_running(&version, 4321));
 
     f.daemon.as_mut().expect("set above").running = false;
     let checks = evaluate(&f);
     let stopped = check(&checks, "claude_daemon");
     assert_eq!(stopped.level, Level::Ok);
-    assert!(stopped.detail.contains("not running"));
+    assert_eq!(stopped.detail, words::daemon_stopped(&version));
 }
 
 /// The account in use is the one Anthropic last named for the login stored, known by
@@ -666,7 +611,7 @@ fn the_account_in_use_is_the_one_anthropic_named() {
     let checks = evaluate(&facts);
     let said = check(&checks, "in_use");
     assert_eq!(said.level, Level::Ok);
-    assert_eq!(said.detail, format!("`here`, as Anthropic said {at}"));
+    assert_eq!(said.detail, words::as_anthropic_said("`here`", &at));
     assert_eq!(in_use(&facts), ["here"]);
 
     config_names(&m, "there");
@@ -679,12 +624,11 @@ fn the_account_in_use_is_the_one_anthropic_named() {
     assert_eq!(said.level, Level::Warn);
     assert_eq!(
         said.detail,
-        format!("`here`, as Anthropic said {at}, and Claude Code's config names `there`")
+        words::config_names_another("`here`", &at, "`there`")
     );
     assert_eq!(
         said.advice,
-        "`/status` in Claude Code shows `there`. `pitboard use here` writes `here` into the \
-         config."
+        words::status_shows("`there`", &Stored::Account("here".into()).how_to_name())
     );
     assert_eq!(in_use(&facts), ["here"]);
 }
@@ -704,11 +648,7 @@ fn a_renewed_login_is_not_a_warning() {
     assert_eq!(said.level, Level::Ok);
     assert_eq!(
         said.detail,
-        format!(
-            "`here`, as Anthropic said {} of a login renewed or replaced since; the next \
-             `pitboard status` asks whose it is",
-            time::moment(NOW, NOW)
-        )
+        words::renewed_since("`here`", &time::moment(NOW, NOW))
     );
     assert_eq!(m.api.calls(), 0);
 }
@@ -730,16 +670,12 @@ fn a_config_that_moved_since_is_a_warning() {
     assert_eq!(said.level, Level::Warn);
     assert_eq!(
         said.detail,
-        format!(
-            "Claude Code's config has named `there` since Anthropic named `here` {}, so \
-             another login may be stored",
-            time::moment(NOW, NOW)
+        words::config_named_since(
+            "`there`",
+            &words::anthropic_named("`here`", &time::moment(NOW, NOW))
         )
     );
-    assert_eq!(
-        said.advice,
-        "Run `pitboard status`, which asks Anthropic whose login Claude Code has stored."
-    );
+    assert_eq!(said.advice, words::ASK_WITH_STATUS);
     assert_eq!(in_use(&facts), ["here"]);
     assert_eq!(m.api.calls(), 0);
 }
@@ -768,16 +704,9 @@ fn a_managed_organisation_pin_is_named_with_the_accounts_it_rules_out() {
     assert_eq!(found.name, "login restrictions");
     assert_eq!(
         found.detail,
-        format!(
-            "`forceLoginOrgUUID` set to `org-here` in {}",
-            file.display()
-        )
+        words::org_pinned("`org-here`", file.display())
     );
-    assert_eq!(
-        found.advice,
-        "Claude Code refuses the logins of `there` as a session starts, so Pitboard does \
-         not put them in use."
-    );
+    assert_eq!(found.advice, words::refused_as_a_session_starts("`there`"));
 
     host.administers(&file, r#"{"forceLoginOrgUUID": ["org-here", "org-there"]}"#);
     (f.organisation_pins, f.pinned_out) = login_pins(&ctx, Some(&state));
@@ -791,7 +720,7 @@ fn a_machine_without_claude_code_is_told_to_install_it() {
     facts.claude_program = None;
     facts.config = Err(Error::ClaudeConfigMissing {
         path: PathBuf::from("/home/x/.claude.json"),
-        spelling: words::Spelling::Bare,
+        spelling: said::Spelling::Bare,
     });
     facts.config_account = None;
     let checks = evaluate(&facts);
@@ -802,16 +731,13 @@ fn a_machine_without_claude_code_is_told_to_install_it() {
     assert_eq!(
         said("config_file"),
         (
-            "Claude Code is not installed where Pitboard looks, and /home/x/.claude.json does \
-             not exist"
-                .into(),
-            "Install Claude Code, then run `claude` once.".into()
+            words::not_installed_and_no_config("/home/x/.claude.json"),
+            words::install_then_run_once("claude")
         )
     );
     assert_eq!(
         said("identity").1,
-        "It writes this after its first successful call. Install Claude Code, then run \
-         `claude` once."
+        words::written_after_the_first_call(&words::install_then_run_once("claude"))
     );
 }
 
@@ -819,16 +745,16 @@ fn a_machine_without_claude_code_is_told_to_install_it() {
 #[test]
 fn a_machine_where_claude_code_never_ran_is_told_to_run_it() {
     for (os, found, spelling) in [
-        (Os::MacOs, "/opt/homebrew/bin/claude", words::Spelling::Bare),
+        (Os::MacOs, "/opt/homebrew/bin/claude", said::Spelling::Bare),
         (
             Os::Windows,
             "C:/Users/x/.local/bin/claude.exe",
-            words::Spelling::Bare,
+            said::Spelling::Bare,
         ),
         (
             Os::Windows,
             "C:/Users/x/AppData/Roaming/npm/claude.cmd",
-            words::Spelling::Cmd,
+            said::Spelling::Cmd,
         ),
     ] {
         let program = spelling.of(ProviderId::Claude);
@@ -849,12 +775,12 @@ fn a_machine_where_claude_code_never_ran_is_told_to_run_it() {
         };
         assert_eq!(
             said("config_file"),
-            (detail, format!("Run `{program}` once.")),
+            (detail, words::run_once(program)),
             "{found}"
         );
         assert_eq!(
             said("identity").1,
-            format!("It writes this after its first successful call. Run `{program}` once.")
+            words::written_after_the_first_call(&words::run_once(program))
         );
     }
 }
@@ -866,7 +792,7 @@ fn claude_code_that_never_ran_breaks_nothing() {
     let mut facts = facts();
     facts.config = Err(Error::ClaudeConfigMissing {
         path: PathBuf::from("/home/x/.claude.json"),
-        spelling: words::Spelling::Bare,
+        spelling: said::Spelling::Bare,
     });
     facts.config_account = None;
     facts.in_use = None;
@@ -896,10 +822,10 @@ fn claude_code_that_never_ran_breaks_nothing() {
 #[test]
 fn pieces_nobody_can_join_are_said_to_be_unreadable_to_claude_code_too() {
     for (found, spelling) in [
-        ("C:/Users/x/.local/bin/claude.exe", words::Spelling::Bare),
+        ("C:/Users/x/.local/bin/claude.exe", said::Spelling::Bare),
         (
             "C:/Users/x/AppData/Roaming/npm/claude.cmd",
-            words::Spelling::Cmd,
+            said::Spelling::Cmd,
         ),
     ] {
         let program = spelling.of(ProviderId::Claude);
@@ -907,26 +833,16 @@ fn pieces_nobody_can_join_are_said_to_be_unreadable_to_claude_code_too() {
         facts.os = Os::Windows;
         facts.claude_program = Some(PathBuf::from(found));
         facts.backend = Ok(store::Backend::CredentialManager);
+        let why = "`Claude Code-credentials/claude-code-user` lacks piece #2 of the 3 its \
+                   manifest names";
         facts.credential = Err(store::Error::Broken {
-            why: "`Claude Code-credentials/claude-code-user` lacks piece #2 of the 3 its \
-                  manifest names"
-                .into(),
+            why: why.into(),
             spelling,
         });
         let check = judge_credential(&facts);
         assert_eq!(check.level, Level::Fail);
-        assert_eq!(
-            check.detail,
-            "`Claude Code-credentials/claude-code-user` lacks piece #2 of the 3 its manifest \
-             names, which Claude Code cannot read either"
-        );
-        assert!(
-            check
-                .advice
-                .starts_with(&format!("Run `{program} auth logout`")),
-            "{}",
-            check.advice
-        );
+        assert_eq!(check.detail, words::unreadable_to_claude_code_too(why));
+        assert_eq!(check.advice, words::log_out_to_delete_it(program));
     }
 }
 
@@ -937,7 +853,7 @@ fn a_signed_out_credential_is_said_to_be_one() {
     facts.credential = Ok(Some(serde_json::json!({"mcpOAuth": {"server": {}}})));
     let check = judge_credential(&facts);
     assert!(matches!(check.level, Level::Warn), "{}", check.detail);
-    assert!(check.detail.contains("signed out"), "{}", check.detail);
+    assert_eq!(check.detail, words::signed_out_keeps(&["mcpOAuth"]));
 }
 
 // A switch refuses it as a shape it does not know, so it is no signed-out document.
@@ -953,7 +869,7 @@ fn a_credential_that_is_not_an_object_is_a_failure() {
     facts.credential = Ok(Some(document));
     let judged = judge_credential(&facts);
     assert_eq!(judged.level, Level::Fail);
-    assert_eq!(judged.detail, "the stored login is not a JSON object");
+    assert_eq!(judged.detail, words::NOT_A_JSON_OBJECT);
 }
 
 // Which login it is cannot be told, which is not that none is stored.
@@ -965,7 +881,7 @@ fn a_stored_login_that_is_not_an_object_leaves_the_account_in_use_as_named() {
     let checks = evaluate(&gather(&m.ctx));
     assert_eq!(
         check(&checks, "in_use").detail,
-        format!("`here`, as Anthropic said {}", time::moment(NOW, NOW))
+        words::as_anthropic_said("`here`", &time::moment(NOW, NOW))
     );
 }
 

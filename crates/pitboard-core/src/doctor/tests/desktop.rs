@@ -26,19 +26,18 @@ fn an_interrupted_move_and_a_parks_folder_on_another_volume_are_said() {
     let moved = said(&checks, "desktop_move");
     assert_eq!(moved.len(), 1, "{moved:?}");
     assert_eq!(moved[0].0, Level::Warn);
-    assert!(
-        moved[0]
-            .1
-            .starts_with("a move of `desktop/work`'s login was interrupted"),
-        "{moved:?}"
+    assert_eq!(
+        moved[0].1,
+        words::move_interrupted("desktop/work", &time::moment(NOW - 300, NOW))
     );
     assert_eq!(
         said(&checks, "desktop_parks_folder"),
         [(
             Level::Fail,
-            "/Users/dana/.pitboard/parks is on another volume than /Users/dana/Library/\
-             Application Support/Claude"
-                .into()
+            words::on_another_volume(
+                facts.parks_dir.display(),
+                facts.root.as_ref().ok().map(|root| root.display())
+            )
         )]
     );
 
@@ -111,34 +110,28 @@ fn claude_desktops_checks_say_what_the_index_and_the_settings_say() {
             "desktop_build",
         ]
     );
+    let life = |at: i64| said::session_life_column(at, NOW);
     assert_eq!(
         said(&checks, "desktop_parked_login"),
         [
-            (Level::Ok, "signed in; parked when you switch away".into()),
-            (Level::Ok, "parked, sign-in may lapse in 1d 1h".into()),
-            (Level::Warn, "parked, sign-in may have lapsed".into()),
-            (
-                Level::Fail,
-                "its parked login is missing from /Users/dana/.pitboard/parks".into()
-            ),
-            (Level::Warn, "nothing parked to switch to".into()),
+            (Level::Ok, words::SIGNED_IN_PARKED_ON_A_SWITCH.into()),
+            (Level::Ok, words::parked_with(&life(NOW + 90_000))),
+            (Level::Warn, words::parked_with(&life(NOW - 5))),
+            (Level::Fail, words::missing_from(facts.parks_dir.display())),
+            (Level::Warn, words::NOTHING_PARKED.into()),
         ]
     );
     assert_eq!(
         said(&checks, "desktop_settings"),
-        [(Level::Ok, "config.json read".into())]
+        [(Level::Ok, words::SETTINGS_READ.into())]
     );
-    let login = said(&checks, "desktop_login");
-    assert!(
-        login[0]
-            .1
-            .starts_with("`desktop/work`, as Pitboard last read it"),
-        "{login:?}"
+    assert_eq!(
+        said(&checks, "desktop_login")[0].1,
+        words::as_last_read("`desktop/work`", &time::moment(NOW - 60, NOW))
     );
     assert_eq!(
         said(&checks, "desktop_build")[0].1,
-        "Claude 2.31226.1; Pitboard's facts were read from 2.19675.0, 2.7032.0, \
-         2.42304.0 and 3.6556.2, and it checks the folder before each move, not the build"
+        words::claude_build("2.31226.1")
     );
     assert!(checks.iter().all(|c| !c.code.contains("dormant")));
 
@@ -153,61 +146,39 @@ fn claude_desktops_checks_say_what_the_index_and_the_settings_say() {
     let checks = judge_desktop(Os::MacOs, &facts, &state, &parks, NOW, &time::moment);
     assert_eq!(
         said(&checks, "desktop_layout"),
-        [(
-            Level::Warn,
-            "holds `CdmStorage.db-wal` and `Cookies-wal`, parts of the account's data this \
-             Pitboard has not read"
-                .into()
-        )]
+        [(Level::Warn, words::holds_parts_unread(&facts.unread))]
     );
     let settings = checks
         .iter()
         .find(|c| c.code == "desktop_settings")
         .unwrap();
     assert_eq!(settings.level, Level::Fail);
-    assert!(
-        settings.advice.starts_with("Claude resets a settings file"),
-        "{}",
-        settings.advice
-    );
-    assert!(
-        settings.advice.ends_with("then run this again."),
-        "{}",
-        settings.advice
+    assert_eq!(
+        settings.advice,
+        crate::error::Then::CopyAside.said().trim_end()
     );
     assert_eq!(said(&checks, "desktop_parks_folder")[0].0, Level::Fail);
     assert_eq!(
         check(&checks, "desktop_parks_folder").advice,
-        "Run `chmod 700 /Users/dana/.pitboard/parks`."
+        words::run_them(&["chmod 700 /Users/dana/.pitboard/parks".into()])
     );
-    assert!(
-        said(&checks, "desktop_login")[0]
-            .1
-            .contains("looks signed out")
+    assert_eq!(
+        said(&checks, "desktop_login")[0].1,
+        words::looks_signed_out_since("`desktop/work`", &time::moment(NOW - 60, NOW))
     );
     assert_eq!(
         said(&checks, "desktop_build")[0].1,
-        "not found in /Applications"
+        words::NOT_IN_APPLICATIONS
     );
 
-    for (unfit, detail, advice) in [
-        (
-            Unfit::Link,
-            "/Users/dana/Library/Application Support/Claude is a link",
-            "Pitboard moves no Claude Desktop login through a link.",
-        ),
+    let root = facts.root.clone().expect("a data folder");
+    for (unfit, advice) in [
+        (Unfit::Link, words::NO_MOVE_THROUGH_A_LINK),
         (
             Unfit::ThirdParty("Claude-3p"),
-            "/Users/dana/Library/Application Support/Claude is not the one Claude runs \
-             from: it runs as a third-party deployment, from `Claude-3p` beside it",
-            "Pitboard moves no Claude Desktop login for a third-party deployment.",
+            words::NO_MOVE_FOR_A_THIRD_PARTY,
         ),
-        (
-            Unfit::ResetWaits,
-            "/Users/dana/Library/Application Support/Claude is waiting for Reset App Data, \
-             which deletes what it holds the next time Claude opens",
-            "Open Claude to let the reset finish, then quit it with Command-Q.",
-        ),
+        (Unfit::ResetWaits, words::LET_THE_RESET_FINISH),
     ] {
         facts.refused = Some(unfit);
         let checks = judge_desktop(Os::MacOs, &facts, &state, &parks, NOW, &time::moment);
@@ -216,8 +187,12 @@ fn claude_desktops_checks_say_what_the_index_and_the_settings_say() {
             .find(|c| c.code == "desktop_data_folder")
             .unwrap();
         assert_eq!(
-            (folder.level, folder.detail.as_str(), folder.advice.as_str()),
-            (Level::Fail, detail, advice)
+            (folder.level, folder.detail.clone(), folder.advice.as_str()),
+            (
+                Level::Fail,
+                words::the_folder(root.display(), unfit),
+                advice
+            )
         );
     }
     facts.refused = None;
@@ -231,11 +206,11 @@ fn claude_desktops_checks_say_what_the_index_and_the_settings_say() {
         .find(|c| c.code == "desktop_data_folder")
         .unwrap();
     assert_eq!(
-        (folder.level, folder.detail.as_str(), folder.advice.as_str()),
+        (folder.level, folder.detail.as_str(), folder.advice.clone()),
         (
             Level::Fail,
             "`HOME` names another folder than this account's own",
-            "Run Pitboard with `HOME` unset, or set to /Users/dana."
+            words::run_with_home_unset("/Users/dana")
         )
     );
     assert!(said(&checks, "desktop_settings").is_empty());
@@ -276,7 +251,7 @@ fn claude_desktops_facts_come_from_one_read_of_its_settings() {
     );
     assert_eq!(
         said(&checks, "desktop_settings"),
-        [(Level::Ok, "no config.json yet".into())]
+        [(Level::Ok, words::NO_SETTINGS_YET.into())]
     );
 }
 
@@ -298,11 +273,7 @@ fn doctor_says_the_build_of_the_claude_installed() {
         .iter()
         .find(|c| c.code == "desktop_build")
         .expect("the build is said");
-    assert!(
-        build.detail.starts_with("Claude 2.31226.1; "),
-        "{}",
-        build.detail
-    );
+    assert_eq!(build.detail, words::claude_build("2.31226.1"));
     assert_eq!(diagnosis.environment["desktop"]["build"], "2.31226.1");
 }
 
@@ -334,14 +305,9 @@ fn a_park_doctor_cannot_look_at_is_never_said_missing() {
         .map(|c| (c.level, c.detail.clone(), c.advice.clone()))
         .expect("home's park is checked");
     assert_eq!(home.0, Level::Warn, "{home:?}");
-    assert!(
-        home.1.starts_with(&format!(
-            "not read: Pitboard could not look at it in {} (",
-            parks_dir.display()
-        )),
-        "{home:?}"
-    );
-    assert!(!home.2.contains("--sign-in"), "{home:?}");
+    let unread = words::not_looked_at(parks_dir.display(), "");
+    assert!(home.1.starts_with(unread.trim_end_matches(')')), "{home:?}");
+    assert_eq!(home.2, words::make_it_readable(parks_dir.display()));
 }
 
 #[test]
@@ -418,12 +384,14 @@ fn a_folder_set_aside_warns_only_where_its_account_holds_nothing_else() {
     state
         .aside
         .push(aside("pitboard-aside-1", SetAside::InTheWay, None, None));
+    let parks = desktop().parks_dir;
+    let when = time::moment(NOW - 3_600, NOW);
     let none = set_aside(&state);
     assert_eq!(none[0].0, Level::Ok);
     assert_eq!(
         none[0].1,
-        "1 in /Users/dana/.pitboard/parks, none holding a login; they hold only what Claude \
-         made while signed out"
+        words::set_aside(1, parks.display(), &[])
+            + &words::the_rest_hold(true, true, &[words::MADE_WHILE_SIGNED_OUT.into()])
     );
 
     // Parts of an account's login: its earlier keys, or what a give-up left.
@@ -447,16 +415,20 @@ fn a_folder_set_aside_warns_only_where_its_account_holds_nothing_else() {
     ));
     let parts = set_aside(&state);
     assert_eq!(parts[0].0, Level::Ok);
-    for said in [
-        "4 in /Users/dana/.pitboard/parks, none holding a login",
-        "parts of `desktop/home`'s login, set aside",
-        "parts of `desktop/work`'s login, set aside",
-        "parts of a login no account here holds, set aside",
-        "what Claude made while signed out",
-    ] {
-        assert!(parts[0].1.contains(said), "{said}: {parts:?}");
-    }
-    assert!(!parts[0].1.contains("only what Claude made"), "{parts:?}");
+    assert_eq!(
+        parts[0].1,
+        words::set_aside(4, parks.display(), &[])
+            + &words::the_rest_hold(
+                true,
+                false,
+                &[
+                    words::parts_of("desktop/home", &when),
+                    words::parts_of("desktop/work", &when),
+                    words::parts_of_nobodys(&when),
+                    words::MADE_WHILE_SIGNED_OUT.into(),
+                ]
+            )
+    );
     state.aside.truncate(1);
 
     state.aside.push(aside(
@@ -477,22 +449,16 @@ fn a_folder_set_aside_warns_only_where_its_account_holds_nothing_else() {
         Level::Ok,
         "its account holds a newer park, or is in use"
     );
-    assert!(
-        kept[0]
-            .1
-            .starts_with("3 in /Users/dana/.pitboard/parks, 2 holding a login: ")
-    );
-    assert!(
-        kept[0]
-            .1
-            .contains("`desktop/home`'s login from before a sign-in again, set aside"),
-        "{kept:?}"
-    );
-    assert!(
-        kept[0]
-            .1
-            .ends_with("; the rest hold what Claude made while signed out"),
-        "{kept:?}"
+    assert_eq!(
+        kept[0].1,
+        words::set_aside(
+            3,
+            parks.display(),
+            &[
+                words::from_before_signing_in_again("desktop/home", &when),
+                words::from_before_signing_in_again("desktop/work", &when),
+            ]
+        ) + &words::the_rest_hold(false, false, &[words::MADE_WHILE_SIGNED_OUT.into()])
     );
 
     state.aside.push(aside(
@@ -506,17 +472,18 @@ fn a_folder_set_aside_warns_only_where_its_account_holds_nothing_else() {
         .push(aside("x-1", SetAside::Orphan, None, Some("d")));
     let warned = set_aside(&state);
     assert_eq!(warned[0].0, Level::Warn);
-    assert!(
-        warned[0]
-            .1
-            .contains("`desktop/lost`'s login from another Mac"),
-        "{warned:?}"
-    );
-    assert!(
-        warned[0]
-            .1
-            .contains("a login no account here holds, set aside"),
-        "{warned:?}"
+    assert_eq!(
+        warned[0].1,
+        words::set_aside(
+            5,
+            parks.display(),
+            &[
+                words::from_before_signing_in_again("desktop/home", &when),
+                words::from_before_signing_in_again("desktop/work", &when),
+                words::from_another_mac("desktop/lost"),
+                words::nobodys_login(&when),
+            ]
+        ) + &words::the_rest_hold(false, false, &[words::MADE_WHILE_SIGNED_OUT.into()])
     );
 }
 
@@ -550,7 +517,7 @@ fn claude_desktop_named_since_signed_out_reads_as_the_warning_does() {
     .to_string();
     assert_eq!(
         login[0].1,
-        words::desktop_named(
+        said::desktop_named(
             &Stored::Account("desktop/work".into()),
             &Stored::Nothing,
             |stored| stored.said("nobody")
@@ -603,10 +570,8 @@ fn a_claude_desktop_account_in_an_index_off_macos_is_a_note() {
             [(
                 "desktop_data_folder",
                 Level::Ok,
-                "Pitboard switches Claude Desktop accounts on macOS only".to_string(),
-                "This index holds `desktop/work` and `desktop/home`. Nothing here changes \
-                 them."
-                    .to_string()
+                crate::provider::desktop::paths::MACOS_ONLY.to_string(),
+                words::nothing_here_changes("`desktop/work` and `desktop/home`")
             )],
             "{os:?}"
         );
@@ -622,6 +587,6 @@ fn a_claude_desktop_account_in_an_index_off_macos_is_a_note() {
     state.accounts.clear();
     assert_eq!(
         judge_desktop_off_macos(&state).advice,
-        "This index holds folders set aside for Claude Desktop. Nothing here changes them."
+        words::nothing_here_changes(words::FOLDERS_SET_ASIDE_FOR_IT)
     );
 }

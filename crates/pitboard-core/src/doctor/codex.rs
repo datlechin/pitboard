@@ -1,11 +1,11 @@
 use super::parks::{ParkFact, judge_dormant, judge_park};
-use super::{Check, Facts, fail, ok, read_from, running, warn};
+use super::{Check, Facts, fail, ok, read_from, warn, words};
 use crate::context::Context;
 use crate::host::{Access, Kind, Os};
 use crate::provider::ProviderId;
 use crate::provider::codex::paths as codex;
 use crate::state::State;
-use crate::words;
+use crate::words as said;
 use std::path::PathBuf;
 
 /// What is read about Codex CLI on this machine.
@@ -125,8 +125,7 @@ pub(super) fn codex_facts(ctx: &Context, state: Option<&State>) -> CodexFacts {
             codex::Backend::File => String::new(),
             codex::Backend::Unknown => store.while_unknown().unwrap_or_default(),
             _ => store.to_use_the_file(
-                words::spelling(ctx.os, ProviderId::Codex, program.as_deref())
-                    .of(ProviderId::Codex),
+                said::spelling(ctx.os, ProviderId::Codex, program.as_deref()).of(ProviderId::Codex),
             ),
         },
         auth_access: crate::host::fs::access(&auth_file),
@@ -168,11 +167,6 @@ pub(super) fn stored_elsewhere(ctx: &Context) -> (usize, usize) {
         count("secrets|", Family::CodexSecrets),
     )
 }
-
-/// What the file store's line adds: the one layer Pitboard leaves unread, and what it does.
-pub(super) const PROJECTS_NOT_READ: &str = "Pitboard does not read a project's own \
-    `.codex/config.toml`, which applies only inside that project: in a trusted project that \
-    sets `cli_auth_credentials_store`, Codex keeps its login somewhere else.";
 
 /// Whose login Codex's file holds, from the login's own ID token and with no network call.
 pub(super) fn codex_login(ctx: &Context) -> Result<Option<CodexLogin>, CodexLoginTrouble> {
@@ -222,12 +216,8 @@ pub(super) fn judge_codex_installer_home(facts: &Facts) -> Option<Check> {
         warn(
             "codex_installer_home",
             "Codex's home",
-            format!(
-                "Codex keeps its login in {}, and its installer, install.ps1, in {}",
-                codex(profile).display(),
-                codex(&windows.home).display()
-            ),
-            "Set CODEX_HOME, so both use one folder.",
+            words::codex_homes_apart(codex(profile).display(), codex(&windows.home).display()),
+            words::SET_CODEX_HOME,
         )
     })
 }
@@ -258,7 +248,7 @@ pub(super) fn judge_codex(
     let mut checks = Vec::new();
     let enrolled = facts.enrolled > 0 || !parks.is_empty();
     let program =
-        words::spelling(os, ProviderId::Codex, facts.program.as_deref()).of(ProviderId::Codex);
+        said::spelling(os, ProviderId::Codex, facts.program.as_deref()).of(ProviderId::Codex);
     let broken = |code, name: &str, detail: String, advice: String| {
         if enrolled {
             fail(code, name, detail, advice)
@@ -268,18 +258,19 @@ pub(super) fn judge_codex(
     };
     let file = facts.backend == codex::Backend::File;
     let setting = &facts.backend_setting;
+    let remedy = &facts.backend_remedy;
     let described = match facts.backend {
-        codex::Backend::Ephemeral => format!("in memory only ({setting})"),
-        codex::Backend::Unknown => format!("cannot tell: {setting}"),
-        other => format!("{} ({setting})", other.word()),
+        codex::Backend::Ephemeral => words::in_memory_only(setting),
+        codex::Backend::Unknown => words::cannot_tell_the_store(setting),
+        other => words::store_set_by(other.word(), setting),
     };
     checks.push(match facts.backend {
         codex::Backend::File => Check {
-            advice: PROJECTS_NOT_READ.into(),
+            advice: words::PROJECTS_NOT_READ.into(),
             ..ok(
                 "codex_backend",
                 "Codex login store",
-                format!("file ({setting})  ·  {}", facts.auth_file.display()),
+                words::file_store(setting, facts.auth_file.display()),
             )
         },
         // Not a choice: a layer Codex reads stops it from starting.
@@ -287,11 +278,7 @@ pub(super) fn judge_codex(
             "codex_backend",
             "Codex login store",
             described,
-            format!(
-                "{}. Pitboard parks and switches no Codex login while it cannot tell where \
-                 Codex keeps it.",
-                facts.backend_remedy
-            ),
+            words::no_store_known(remedy),
         ),
         // A choice, and one that leaves nothing Pitboard can park or switch.
         other if enrolled => fail(
@@ -299,49 +286,38 @@ pub(super) fn judge_codex(
             "Codex login store",
             described,
             match other {
-                codex::Backend::Ephemeral => format!(
-                    "Codex keeps nothing at rest, so there is no login Pitboard can park or \
-                     switch. {}.",
-                    facts.backend_remedy
-                ),
-                _ => format!(
-                    "{}, so no enrolled Codex account can be switched to. {}.",
+                codex::Backend::Ephemeral => words::nothing_at_rest(remedy),
+                _ => words::no_account_to_switch_to(
                     crate::provider::codex::layers::file_store_only(os),
-                    facts.backend_remedy
+                    remedy,
                 ),
             },
         ),
         _ => ok(
             "codex_backend",
             "Codex login store",
-            format!("{described}; Pitboard switches Codex accounts only in the file store"),
+            words::switched_only_in_the_file(&described),
         ),
     });
 
     if !facts.restrictions.is_empty() {
         let name = "Codex login restrictions";
-        let said = facts.restrictions.join("; ");
+        let restrictions = facts.restrictions.join("; ");
         checks.push(if facts.restrictions_unreadable {
             broken(
                 "codex_login_restrictions",
                 name,
-                said,
-                "Codex does not start until that is put right, and Pitboard switches no Codex \
-                 account while which logins Codex keeps cannot be told."
-                    .into(),
+                restrictions,
+                words::RESTRICTIONS_UNREADABLE.into(),
             )
         } else if facts.ruled_out.is_empty() {
-            ok("codex_login_restrictions", name, said)
+            ok("codex_login_restrictions", name, restrictions)
         } else {
             warn(
                 "codex_login_restrictions",
                 name,
-                said,
-                format!(
-                    "Codex signs out of or does not use the logins of {}, so Pitboard does not \
-                     put them in use.",
-                    words::listed(facts.ruled_out.clone())
-                ),
+                restrictions,
+                words::codex_rules_out(&said::listed(facts.ruled_out.clone())),
             )
         });
     }
@@ -349,65 +325,42 @@ pub(super) fn judge_codex(
     // The file and what is in it are only worth a word where the file is the store: a
     // keychain store deletes it on purpose.
     if file {
+        let auth_file = facts.auth_file.display();
         checks.push(match &facts.auth_access {
             None if enrolled => warn(
                 "codex_auth_file",
                 "Codex login file",
-                format!(
-                    "{} is absent: nothing is signed in to Codex",
-                    facts.auth_file.display()
-                ),
-                format!(
-                    "Put one of your enrolled accounts in use with `pitboard use \
-                     codex/<label>`, or sign in with `{program} login`."
-                ),
+                words::codex_file_absent(auth_file),
+                words::use_or_sign_in(program),
             ),
-            None => ok(
-                "codex_auth_file",
-                "Codex login file",
-                "absent; nothing is signed in to Codex",
-            ),
+            None => ok("codex_auth_file", "Codex login file", words::NO_CODEX_FILE),
             Some(access) if access.shared => warn(
                 "codex_auth_file",
                 "Codex login file",
-                format!("{} is {}", facts.auth_file.display(), access.described),
-                format!(
-                    "{}{}",
-                    match os {
-                        // Codex 0.162.1's file store sets its mode under `cfg(unix)` alone.
-                        Os::MacOs | Os::Linux =>
-                            "It holds a usable login in plain text, and Codex sets 0600 only \
-                             when it creates the file, never on a later write",
-                        Os::Windows =>
-                            "It holds a usable login in plain text, and Codex gives it no \
-                             access list of its own, so it takes its folder's",
-                    },
-                    running(&os.make_private_commands(
-                        Kind::File,
-                        &[&facts.auth_file.display().to_string()],
-                        sid,
-                    ))
+                words::open_to(&auth_file, access),
+                words::codex_file_open(
+                    os,
+                    &os.make_private_commands(Kind::File, &[&auth_file.to_string()], sid),
                 ),
             ),
             Some(access) => ok(
                 "codex_auth_file",
                 "Codex login file",
-                format!("{}  ·  {}", facts.auth_file.display(), access.described),
+                words::codex_file(auth_file, access),
             ),
         });
         match &facts.login {
             Ok(Some(login)) => checks.push(ok(
                 "codex_login",
                 "Codex login",
-                format!(
-                    "{}  ·  account {}  ·  refresh {}",
-                    login.email,
-                    login.account_id,
+                words::codex_login(
+                    &login.email,
+                    &login.account_id,
                     if login.fingerprint.is_empty() {
-                        "none"
+                        words::NO_TOKEN
                     } else {
-                        login.fingerprint.as_str()
-                    }
+                        &login.fingerprint
+                    },
                 ),
             )),
             // No file, which the check above has already said.
@@ -418,12 +371,7 @@ pub(super) fn judge_codex(
                 "codex_login",
                 "Codex login",
                 why.clone(),
-                format!(
-                    "Pitboard parks and switches Codex's ChatGPT sign-ins, so `pitboard use \
-                     codex/<label>` refuses while Codex is signed in this way rather than \
-                     replace a login it has nowhere to park. `{program} login` signs in with a \
-                     ChatGPT account."
-                ),
+                words::chatgpt_sign_ins_only(program),
             )),
             Err(CodexLoginTrouble::NotAnAccount(why)) => {
                 checks.push(ok("codex_login", "Codex login", why.clone()));
@@ -431,11 +379,8 @@ pub(super) fn judge_codex(
             Err(CodexLoginTrouble::Unusable(why)) => checks.push(broken(
                 "codex_login",
                 "Codex login",
-                format!("it cannot be used: {why}"),
-                format!(
-                    "Pitboard will not park or switch a Codex login it cannot read as one \
-                     account's. Signing in with `{program}` again writes a fresh one."
-                ),
+                words::cannot_be_used(why),
+                words::sign_in_writes_a_fresh_one(program),
             )),
             Err(CodexLoginTrouble::NoHome(path)) => checks.push(broken(
                 "codex_login",
@@ -451,20 +396,13 @@ pub(super) fn judge_codex(
         let items = [(cli, "`cli|`"), (secrets, "`secrets|`")]
             .into_iter()
             .filter(|&(count, _)| count > 0)
-            .map(|(count, prefix)| match count {
-                1 => format!("1 {prefix} item"),
-                many => format!("{many} {prefix} items"),
-            });
+            .map(|(count, prefix)| words::items(count, prefix));
         checks.push(Check {
-            advice: "Codex keeps its login there where a setting Pitboard does not read, such as \
-                     an enterprise's cloud configuration in a session of `codex`, chooses \
-                     `keyring` or `auto`. A `secrets|` item also keeps the key of Codex's MCP \
-                     logins. Pitboard switches only auth.json."
-                .into(),
+            advice: words::CODEX_KEEPS_IT_THERE_TOO.into(),
             ..ok(
                 "codex_credential_manager",
                 "Codex in Credential Manager",
-                words::listed(items),
+                said::listed(items),
             )
         });
     }
@@ -483,13 +421,10 @@ pub(super) fn judge_codex(
 /// it. What makes each kind take a switch is the advice, since that differs by kind.
 pub(super) fn judge_codex_running(running: Option<&[crate::holder::Holding]>) -> Check {
     let (detail, advice) = match running {
-        None => ("could not tell".to_string(), String::new()),
-        Some([]) => ("none".to_string(), String::new()),
+        None => (words::COULD_NOT_TELL.to_string(), String::new()),
+        Some([]) => (words::NONE_RUNNING.to_string(), String::new()),
         Some(holding) => (
-            format!(
-                "{}; each keeps using the account it started with until it is started again",
-                crate::holder::described_with_pids(holding)
-            ),
+            words::each_keeps_its_account(&crate::holder::described_with_pids(holding)),
             crate::holder::remedies(holding, "to take a switch"),
         ),
     };
@@ -507,20 +442,12 @@ pub(super) fn judge_codex_version(os: Os, facts: &CodexFacts) -> Check {
         "codex_version",
         "Codex build",
         match (facts.program.as_deref(), facts.version.as_deref()) {
-            (None, _) => format!("not found here; Pitboard's facts were read from {verified}"),
+            (None, _) => words::build_not_found(verified),
             // Installed some way that does not put the version in its path, such as behind
             // a version manager's shim. Found is not the same as missing.
-            (Some(program), None) => format!(
-                "{}, whose path does not say which version it is; Pitboard's facts were \
-                 read from {verified}",
-                program.display()
-            ),
-            (Some(_), Some(installed)) if installed == verified => {
-                format!("{installed}, which is what Pitboard's facts were read from")
-            }
-            (Some(_), Some(installed)) => {
-                format!("{installed} installed; Pitboard's facts were read from {verified}")
-            }
+            (Some(program), None) => words::build_path_says_nothing(program.display(), verified),
+            (Some(_), Some(installed)) if installed == verified => words::build_as_read(installed),
+            (Some(_), Some(installed)) => words::build_installed(installed, verified),
         },
     )
 }

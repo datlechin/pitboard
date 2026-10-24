@@ -64,11 +64,9 @@ fn a_login_others_on_a_windows_pc_can_read_is_made_private_one_path_at_a_time() 
     assert_eq!(found.level, Level::Fail);
     assert_eq!(
         found.detail,
-        format!(
-            "{claude} is open to Users, you, SYSTEM and Administrators; {vault} is open to \
-             Users, you, SYSTEM and Administrators; {park} is open to Users, you, SYSTEM and \
-             Administrators"
-        )
+        [claude, vault, park]
+            .map(|path| words::open_to(path, &open_to_users()))
+            .join("; ")
     );
     // A folder's inheritance on a file leaves it open to nobody, its owner too.
     let [
@@ -79,19 +77,15 @@ fn a_login_others_on_a_windows_pc_can_read_is_made_private_one_path_at_a_time() 
         .map(|(path, folder)| crate::host::acl::icacls(folder, path, SID));
     assert_eq!(
         found.advice,
-        format!(
-            "These hold a login: Claude Code's file in plain text, a sealed park only this \
-             account opens. Claude Code's file takes the access list of the folder it is \
-             in, and a seal stops reading, not writing. Anyone else on this PC can read or \
-             change them: `{claude}`, `{claude_grant}`, `{vault}`, `{vault_grant}`, \
-             `{park}` and `{park_grant}`."
+        words::others_can_read(
+            Os::Windows,
+            &[claude, claude_grant, vault, vault_grant, park, park_grant]
         )
     );
     f.sid = None;
-    assert!(
-        check(&evaluate(&f), "private_on_disk")
-            .advice
-            .ends_with("can read or change them."),
+    assert_eq!(
+        check(&evaluate(&f), "private_on_disk").advice,
+        words::others_can_read(Os::Windows, &[]),
         "no command without the SID"
     );
 }
@@ -108,15 +102,12 @@ fn a_pitboard_folder_others_on_a_windows_pc_can_read_says_so() {
     assert_eq!(home.level, Level::Warn);
     assert_eq!(
         home.detail,
-        r"C:\Users\dana\AppData\Local\Pitboard is open to Users, you, SYSTEM and Administrators"
+        words::open_to(f.home.display(), &open_to_users())
     );
     let [reset, grant] = crate::host::acl::icacls(true, &f.home.display().to_string(), SID);
     assert_eq!(
         home.advice,
-        format!(
-            "Park names contain account identifiers, so only you should read it: `{reset}` \
-             and `{grant}`."
-        )
+        words::only_you_should_read_the_home(&[reset, grant])
     );
 }
 
@@ -242,10 +233,9 @@ fn a_machine_without_a_stable_identifier_is_flagged() {
     f.home = PathBuf::from("/elsewhere/pitboard");
     let checks = evaluate(&f);
     assert_eq!(check(&checks, "machine_id").level, Level::Warn);
-    assert!(
-        check(&checks, "machine_id")
-            .advice
-            .ends_with("Never copy /elsewhere/pitboard between machines."),
+    assert_eq!(
+        check(&checks, "machine_id").advice,
+        words::never_copy_between_machines(f.home.display()),
         "the folder in use"
     );
     for os in [Os::MacOs, Os::Linux] {
@@ -269,11 +259,8 @@ fn a_windows_pc_is_told_a_copy_of_it_keeps_its_machine_guid() {
         (note.level, note.detail.as_str(), note.advice.as_str()),
         (
             Level::Ok,
-            "Windows' MachineGuid",
-            "Pitboard tells this PC apart by it, and a copy of the PC keeps it, such as a \
-             virtual machine copied whole. Such a copy takes this PC's accounts for its own, \
-             and both renew the same parked logins: on a copy, forget each account and enrol \
-             it again with `--sign-in`."
+            words::MACHINE_GUID,
+            words::A_COPY_KEEPS_THE_MACHINE_GUID
         )
     );
     f.machine_id_known = false;
@@ -309,15 +296,8 @@ fn a_switch_the_next_change_cannot_finish_says_why_and_the_way_out() {
     let checks = evaluate(&f);
     let said = check(&checks, "interrupted_switch");
     assert_eq!(said.level, Level::Warn);
-    assert_eq!(
-        said.detail,
-        "an earlier switch from `work` to `personal` was interrupted"
-    );
-    assert!(
-        said.advice.contains("`pitboard abandon`"),
-        "{}",
-        said.advice
-    );
+    assert_eq!(Some(&said.detail), f.stuck.as_ref());
+    assert_eq!(said.advice, words::ABANDON_KEEPS_EVERY_LOGIN);
     assert_eq!(
         checks
             .iter()
@@ -342,37 +322,31 @@ fn windows_says_user_account_control_is_off_where_it_reads_so() {
     f.elevation = crate::host::Elevation::Elevated {
         why: crate::host::token::IN_EVERY_PROGRAM,
     };
-    let before = "Pitboard changes nothing this way: it reads, and renews and writes nothing. \
-                  That is so with User Account Control off and in the built-in Administrator \
-                  account: run it from a standard account, or turn User Account Control on.";
+    let way_out = |why| said::elevated(Os::Windows, Some(why)).way_out;
+    let before = words::changes_nothing_this_way(way_out(crate::host::token::IN_EVERY_PROGRAM));
     for read in [None, Some(true)] {
         f.windows_settings = Some(crate::host::WindowsSettings {
             admin_approval: read,
             ..crate::host::WindowsSettings::default()
         });
-        assert_eq!(advice(&f).as_deref(), Some(before), "{read:?}");
+        assert_eq!(advice(&f), Some(before.clone()), "{read:?}");
     }
     f.windows_settings = Some(crate::host::WindowsSettings {
         admin_approval: Some(false),
         ..crate::host::WindowsSettings::default()
     });
     assert_eq!(
-        advice(&f).as_deref(),
-        Some(
-            "Pitboard changes nothing this way: it reads, and renews and writes nothing. \
-             User Account Control is off on this PC, so every program an administrator \
-             starts is elevated: turn it on, or run Pitboard from a standard account."
-        )
+        advice(&f),
+        Some(words::changes_nothing_this_way(said::ADMIN_APPROVAL_OFF))
     );
     f.elevation = crate::host::Elevation::Elevated {
         why: crate::host::token::AS_ADMINISTRATOR,
     };
     assert_eq!(
-        advice(&f).as_deref(),
-        Some(
-            "Pitboard changes nothing this way: it reads, and renews and writes nothing. Run \
-             it from a terminal that is not elevated (not Run as administrator)."
-        )
+        advice(&f),
+        Some(words::changes_nothing_this_way(way_out(
+            crate::host::token::AS_ADMINISTRATOR
+        )))
     );
     f.elevation = crate::host::Elevation::Normal;
     assert_eq!(advice(&f), None);
@@ -394,15 +368,17 @@ fn windows_is_told_how_it_runs_and_which_build_it_needs() {
     facts.elevation = crate::host::Elevation::Elevated {
         why: crate::host::token::AS_ADMINISTRATOR,
     };
+    let elevated = |why| {
+        let told = said::elevated(Os::Windows, Some(why));
+        (
+            "elevated",
+            told.because,
+            words::changes_nothing_this_way(told.way_out),
+        )
+    };
     assert_eq!(
         refusing(&facts),
-        [(
-            "elevated",
-            "Pitboard runs as administrator".to_string(),
-            "Pitboard changes nothing this way: it reads, and renews and writes nothing. Run \
-             it from a terminal that is not elevated (not Run as administrator)."
-                .to_string()
-        )]
+        [elevated(crate::host::token::AS_ADMINISTRATOR)]
     );
 
     facts.elevation = crate::host::Elevation::Elevated {
@@ -414,21 +390,10 @@ fn windows_is_told_how_it_runs_and_which_build_it_needs() {
         [
             (
                 "system_too_old",
-                words::too_old(Some(22631)).because,
-                "Pitboard changes nothing here: it reads, and renews and writes nothing. It \
-                 changes things on Windows 11 24H2 and later, and on Windows Server 2025: \
-                 update Windows to use it here."
-                    .to_string()
+                said::too_old(Some(22631)).because,
+                words::changes_nothing_here(said::too_old(Some(22631)).way_out)
             ),
-            (
-                "elevated",
-                "Pitboard runs elevated, as every program this Windows account starts does"
-                    .to_string(),
-                "Pitboard changes nothing this way: it reads, and renews and writes nothing. \
-                 That is so with User Account Control off and in the built-in Administrator \
-                 account: run it from a standard account, or turn User Account Control on."
-                    .to_string()
-            ),
+            elevated(crate::host::token::IN_EVERY_PROGRAM),
         ]
     );
 }

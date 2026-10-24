@@ -22,6 +22,7 @@ mod schedule;
 )]
 mod tests;
 mod windows;
+mod words;
 
 use crate::context::Context;
 use crate::error::Error;
@@ -304,20 +305,6 @@ fn fail(
     }
 }
 
-// Each command to run, in backticks, or `None` where Pitboard can say none.
-fn commands(said: &[String]) -> Option<String> {
-    match said {
-        [] => None,
-        [one] => Some(format!("`{one}`")),
-        [all @ .., last] => Some(format!("`{}` and `{last}`", all.join("`, `"))),
-    }
-}
-
-// The end of a sentence of advice, from `: ` to its full stop.
-fn running(said: &[String]) -> String {
-    commands(said).map_or_else(|| ".".into(), |commands| format!(": {commands}."))
-}
-
 #[cfg(test)]
 pub(crate) fn evaluate(facts: &Facts) -> Vec<Check> {
     evaluate_with(facts, &crate::time::moment)
@@ -531,17 +518,11 @@ pub(crate) fn run(ctx: &Context, moment: &dyn Fn(i64, i64) -> String) -> Diagnos
 /// homes, and a relative one would have it read whatever is under the folder doctor was run
 /// from.
 fn unplaced(ctx: &Context, variable: &str, path: &std::path::Path) -> Diagnosis {
-    let holds = if path.as_os_str().is_empty() {
-        "empty".to_string()
-    } else {
-        format!("`{}`, which is not a full path", path.display())
-    };
     let homes = fail(
         "homes",
         "homes",
-        format!("{variable} is {holds}"),
-        "Set it to a full path, or unset it. Pitboard checks nothing else until then: \
-         everything it reads is under these folders.",
+        words::not_a_full_path(variable, path),
+        words::SET_A_FULL_PATH,
     );
     Diagnosis {
         checks: machine::too_old(ctx.host().floor())

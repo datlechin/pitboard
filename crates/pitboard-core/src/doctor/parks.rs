@@ -1,9 +1,10 @@
-use super::{Check, Facts, account_code, fail, ok, running, warn};
+use super::{Check, Facts, account_code, fail, ok, warn, words};
 use crate::context::Context;
 use crate::error::Error;
 use crate::provider::{LoginKind, ProviderId};
 use crate::state::{Park, State, renewal_due};
-use crate::{park, store, words};
+use crate::words as said;
+use crate::{park, store};
 
 pub(crate) struct ParkFact {
     /// Which tool the account belongs to, which is what decides how it is named back to a
@@ -77,7 +78,7 @@ pub(super) fn park_facts(ctx: &Context, state: &State) -> Vec<ParkFact> {
                     Error::Store(store::Error::Locked) => Unreadable::Locked,
                     Error::Store(store::Error::Sealed { code, .. }) => Unreadable::Sealed(code),
                     Error::ParkedCredentialMissing { .. } => {
-                        Unreadable::Broken("missing from the vault".into())
+                        Unreadable::Broken(words::MISSING_FROM_THE_VAULT.into())
                     }
                     Error::ParkedCredentialCorrupt { detail, .. } => Unreadable::Broken(detail),
                     other => Unreadable::Broken(other.to_string()),
@@ -120,16 +121,8 @@ pub(super) fn judge_dormant(park: &ParkFact, now: i64) -> Option<Check> {
             "desktop_dormant_account",
         ),
         format!("account {}", park.typed()),
-        format!(
-            "not switched to for {}; Pitboard has kept its login alive that whole time",
-            words::span(dormant_for)
-        ),
-        format!(
-            "Every `pitboard` renews it, so its refresh token is rotated and kept live on \
-             this machine for as long as it stays enrolled. If you are not coming back to \
-             it, `pitboard forget {}` deletes the login and the record.",
-            park.typed()
-        ),
+        words::not_switched_to_for(dormant_for),
+        words::forget_if_not_coming_back(&park.typed()),
     ))
 }
 
@@ -145,15 +138,11 @@ pub(super) fn judge_vault(facts: &Facts, lost: &[&ParkFact]) -> Option<Check> {
         return None;
     }
     if lost.is_empty() {
-        return Some(ok(
-            "vault",
-            "parked logins",
-            "sealed to this Windows account, not plain text",
-        ));
+        return Some(ok("vault", "parked logins", words::SEALED_TO_THIS_ACCOUNT));
     }
     let again: Vec<String> = lost
         .iter()
-        .map(|p| format!("pitboard enroll {} --sign-in", p.typed()))
+        .map(|p| words::enroll_signing_in(&p.typed()))
         .collect();
     let a_reset = lost.iter().all(|p| {
         matches!(
@@ -162,26 +151,14 @@ pub(super) fn judge_vault(facts: &Facts, lost: &[&ParkFact]) -> Option<Check> {
         )
     });
     let way_out = if a_reset {
-        format!(
-            "An administrator's reset of your Windows password, or a profile restored on \
-             another PC, leaves them sealed with a key this account no longer has. Sign in to \
-             each again{}",
-            running(&again)
-        )
+        words::sealed_by_a_lost_key(&again)
     } else {
-        format!(
-            "They do not open in this logon. Run `pitboard doctor` from a desktop session \
-             before signing in again{}",
-            running(&again)
-        )
+        words::not_open_in_this_logon(&again)
     };
     Some(fail(
         "vault",
         "parked logins",
-        format!(
-            "none of the {} parked logins opens for this Windows account",
-            lost.len()
-        ),
+        words::none_opens(lost.len()),
         way_out,
     ))
 }
@@ -217,12 +194,12 @@ pub(super) fn judge_park(fact: &ParkFact, now: i64, moment: &dyn Fn(i64, i64) ->
         "desktop_parked_login",
     );
     let name = format!("account {}", fact.typed());
-    let renew = format!("Run `pitboard enroll {} --sign-in`.", fact.typed());
+    let renew = words::sign_in_again(&fact.typed());
     let Some(park) = &fact.park else {
         return if fact.active {
-            ok(code, name, "signed in; parked when you switch away")
+            ok(code, name, words::SIGNED_IN_PARKED_ON_A_SWITCH)
         } else {
-            warn(code, name, "nothing parked to switch to", renew)
+            warn(code, name, words::NOTHING_PARKED, renew)
         };
     };
     match &fact.unreadable {
@@ -230,39 +207,29 @@ pub(super) fn judge_park(fact: &ParkFact, now: i64, moment: &dyn Fn(i64, i64) ->
             return warn(
                 code,
                 name,
-                "not read: the keychain is locked",
-                "Unlock it, then run `pitboard doctor` again.",
+                words::NOT_READ_THE_KEYCHAIN_IS_LOCKED,
+                words::UNLOCK_IT_THEN_DOCTOR,
             );
         }
         Some(Unreadable::Sealed(_)) => {
-            return fail(
-                code,
-                name,
-                "its parked login does not open in this logon",
-                renew,
-            );
+            return fail(code, name, words::PARK_DOES_NOT_OPEN, renew);
         }
         Some(Unreadable::Broken(why)) => {
-            return fail(
-                code,
-                name,
-                format!("its parked login is unusable: {why}"),
-                renew,
-            );
+            return fail(code, name, words::park_unusable(why), renew);
         }
         None => {}
     }
     let Some(at) = park.refresh_expires_at else {
-        return ok(code, name, "parked");
+        return ok(code, name, words::PARKED);
     };
     // The column `pitboard status` shows, after this check's own words.
-    let life = words::parked_life_column(at, now);
+    let life = said::parked_life_column(at, now);
     if !park.restorable_at(now) {
         let when = moment(at, now);
-        warn(code, name, format!("its parked login {life} {when}"), renew)
+        warn(code, name, words::park_life_since(&life, &when), renew)
     } else if renewal_due(at, now) {
-        warn(code, name, format!("its parked login {life}"), renew)
+        warn(code, name, words::park_life(&life), renew)
     } else {
-        ok(code, name, format!("parked, {life}"))
+        ok(code, name, words::parked_with(&life))
     }
 }

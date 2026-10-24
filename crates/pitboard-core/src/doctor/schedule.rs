@@ -1,10 +1,9 @@
-use super::network::{NetworkFact, ProxyFact, network_fact};
-use super::{Check, Facts, Level, fail, ok, warn};
+use super::network::{NetworkFact, network_fact};
+use super::{Check, Facts, Level, fail, ok, warn, words};
 use crate::context::Context;
 use crate::host::Os;
-use crate::host::task::{Drift, Task};
+use crate::host::task::Task;
 use crate::schedule::Fault;
-use crate::words;
 use std::path::PathBuf;
 
 /// The daily renewal schedule as it is installed, read from what Pitboard wrote: a file, or
@@ -86,7 +85,7 @@ pub(super) fn judge_schedule(facts: &Facts) -> Option<Check> {
         return Some(warn(
             "schedule",
             "renewal schedule",
-            format!("{} does not say which Pitboard it runs", schedule.location),
+            words::does_not_say_which_pitboard(&schedule.location),
             again,
         ));
     };
@@ -95,7 +94,7 @@ pub(super) fn judge_schedule(facts: &Facts) -> Option<Check> {
             return Some(fail(
                 "schedule",
                 "renewal schedule",
-                format!("runs {}, which is not there any more", program.display()),
+                words::runs_what_is_gone(program.display()),
                 again,
             ));
         }
@@ -103,54 +102,39 @@ pub(super) fn judge_schedule(facts: &Facts) -> Option<Check> {
             return Some(fail(
                 "schedule",
                 "renewal schedule",
-                format!(
-                    "runs {}, which is the app itself and not a command line",
-                    program.display()
-                ),
+                words::runs_the_app(program.display()),
                 again,
             ));
         }
         None => {}
     }
-    let runs = format!("daily  ·  runs {}", program.display());
+    let runs = words::runs_daily(program.display());
     let Some(task) = &schedule.task else {
         return Some(ok("schedule", "renewal schedule", runs));
     };
     if !task.drifted.is_empty() {
-        let drifted = task.drifted.iter().map(drift);
+        let drifted: Vec<String> = task.drifted.iter().map(words::drift).collect();
         return Some(warn(
             "schedule",
             "renewal schedule",
-            format!(
-                "{runs}, but in Task Scheduler it {}",
-                words::listed(drifted)
-            ),
+            words::drifted_in_task_scheduler(&runs, &drifted),
             again,
         ));
     }
-    let ago = |at: i64| words::span(facts.now - at);
+    let ago = |at: i64| facts.now - at;
     Some(match (task.failed(), task.last_run) {
         (Some(result), at) => warn(
             "schedule",
             "renewal schedule",
-            format!(
-                "{runs}, and its last run{} ended {}",
-                at.map(|at| format!(", {} ago,", ago(at)))
-                    .unwrap_or_default(),
-                ended(result)
-            ),
-            "Run `pitboard renew` to see what it says.",
+            words::last_run_ended(&runs, at.map(ago), result),
+            words::RENEW_TO_SEE_WHY,
         ),
         (None, Some(at)) => ok(
             "schedule",
             "renewal schedule",
-            format!("{runs}  ·  last ran {} ago", ago(at)),
+            words::last_ran(&runs, ago(at)),
         ),
-        (None, None) => ok(
-            "schedule",
-            "renewal schedule",
-            format!("{runs}  ·  not run yet"),
-        ),
+        (None, None) => ok("schedule", "renewal schedule", words::not_run_yet(&runs)),
     })
 }
 
@@ -158,12 +142,12 @@ pub(super) fn judge_schedule(facts: &Facts) -> Option<Check> {
 // failed stops every switch it would make, where nobody looks.
 pub(super) fn judge_watch_service(facts: &Facts) -> Option<Check> {
     let service = facts.watch_service.as_ref()?;
-    let again = "Install it again with `pitboard watch install`.";
+    let again = words::INSTALL_THE_SERVICE_AGAIN;
     let Some(program) = &service.program else {
         return Some(warn(
             "watch_service",
             "watch service",
-            format!("{} does not say which Pitboard it runs", service.location),
+            words::does_not_say_which_pitboard(&service.location),
             again,
         ));
     };
@@ -171,49 +155,20 @@ pub(super) fn judge_watch_service(facts: &Facts) -> Option<Check> {
         return Some(fail(
             "watch_service",
             "watch service",
-            format!("runs {}, which is not there any more", program.display()),
+            words::runs_what_is_gone(program.display()),
             again,
         ));
     }
-    let runs = match service.at {
-        Some(at) => format!(
-            "from sign-in  ·  switches at {}%  ·  runs {}",
-            at.percent(),
-            program.display()
-        ),
-        None => format!("from sign-in  ·  runs {}", program.display()),
-    };
+    let runs = words::runs_from_sign_in(service.at.map(|at| at.percent()), program.display());
     Some(match service.task.as_ref().and_then(Task::failed) {
         Some(result) => warn(
             "watch_service",
             "watch service",
-            format!("{runs}, and its last run ended {}", ended(result)),
-            "Run `pitboard watch` to see what it says.",
+            words::last_run_ended(&runs, None, result),
+            words::WATCH_TO_SEE_WHY,
         ),
         None => ok("watch_service", "watch service", runs),
     })
-}
-
-// As Task Scheduler's own settings word each.
-pub(super) fn drift(drift: &Drift) -> String {
-    match drift {
-        Drift::OnAcPowerOnly => "starts only if the computer is on AC power",
-        Drift::StopsOnBattery => "stops if the computer switches to battery power",
-        Drift::SkipsMissedStarts => {
-            "does not run as soon as possible after a scheduled start is missed"
-        }
-        Drift::Disabled => "is disabled",
-    }
-    .to_string()
-}
-
-// A program's exit code, or one of Task Scheduler's own results.
-pub(super) fn ended(result: i32) -> String {
-    if (0..=255).contains(&result) {
-        format!("with exit code {result}")
-    } else {
-        format!("with 0x{:08X}", result as u32)
-    }
 }
 
 /// The system starts the schedule's runs with its own environment, not the person's shell,
@@ -237,30 +192,24 @@ pub(super) fn judge_schedule_proxy(facts: &Facts) -> Option<Check> {
     if !schedule.network_differs {
         return None;
     }
-    let here = if facts.in_the_app {
-        "the app"
-    } else {
-        "this run"
-    };
+    let here = words::this_side(facts.in_the_app);
     let installed = match &schedule.network.proxy {
-        None => "the schedule was installed with no proxy".to_string(),
-        Some(proxy) => format!("the schedule was installed with {}", proxy_named(proxy)),
+        None => words::INSTALLED_WITH_NO_PROXY.to_string(),
+        Some(proxy) => words::installed_with(&words::proxy_named(proxy)),
     };
     // A SOCKS proxy is not gone through, so it is said to be given, and the network check
     // says what becomes of the requests.
     let this_run = match &facts.network.proxy {
-        None => format!("{here} goes directly"),
-        Some(proxy) if proxy.socks => format!("{here} is given {}", proxy_named(proxy)),
-        Some(proxy) => format!("{here} goes through {}", proxy_named(proxy)),
+        None => words::goes_directly(here),
+        Some(proxy) if proxy.socks => words::is_given(here, &words::proxy_named(proxy)),
+        Some(proxy) => words::goes_through(here, &words::proxy_named(proxy)),
     };
     let detail = match (&schedule.network.proxy, &facts.network.proxy) {
         // Everything shown is the same, so what differs is what is never shown.
-        (Some(its), Some(mine)) if proxy_named(its) == proxy_named(mine) => format!(
-            "the schedule was installed with {here}'s proxy, {}, but with another user name \
-             or password",
-            proxy_named(its)
-        ),
-        _ => format!("{installed}; {this_run}"),
+        (Some(its), Some(mine)) if words::proxy_named(its) == words::proxy_named(mine) => {
+            words::another_user_or_password(here, &words::proxy_named(its))
+        }
+        _ => words::installed_and_here(&installed, &this_run),
     };
     if facts.in_the_app {
         return Some(Check {
@@ -268,28 +217,14 @@ pub(super) fn judge_schedule_proxy(facts: &Facts) -> Option<Check> {
             name: "renewal schedule's proxy".into(),
             level: Level::Ok,
             detail,
-            advice: "The app runs with the environment the system started it with, not a \
-                     terminal's. Turning daily renewal off and on in Settings gives the \
-                     schedule the app's proxy variables; `pitboard schedule install` in a \
-                     terminal gives it that terminal's."
-                .into(),
+            advice: words::THE_APPS_OWN_ENVIRONMENT.into(),
         });
     }
     // Installed again from here, the schedule would be given a SOCKS proxy that fails its
     // requests, so the variable is to be changed first.
     let advice = match &facts.network.proxy {
-        Some(proxy) if proxy.fails => format!(
-            "The schedule's runs are given the proxy variables it was installed with. \
-             Installed again from here, they would be given this run's SOCKS proxy, which \
-             Pitboard does not use yet, and their requests would fail. Set {} to an HTTP \
-             proxy's address, or unset it, then install it again with `pitboard schedule \
-             install`, which takes the proxy variables set where it runs.",
-            proxy.variable
-        ),
-        _ => "The schedule's runs are given the proxy variables it was installed with. To give \
-              them this run's, install it again from here with `pitboard schedule install`, \
-              which takes the proxy variables set where it runs."
-            .to_string(),
+        Some(proxy) if proxy.fails => words::socks_would_fail(proxy.variable),
+        _ => words::INSTALL_AGAIN_FROM_HERE.to_string(),
     };
     Some(warn(
         "schedule_proxy",
@@ -299,27 +234,12 @@ pub(super) fn judge_schedule_proxy(facts: &Facts) -> Option<Check> {
     ))
 }
 
-/// A proxy as the schedule's line names it: its address, the variable it came from, and the
-/// hosts Pitboard calls that go around it, where any do.
-pub(super) fn proxy_named(proxy: &ProxyFact) -> String {
-    let named = format!("{}, from {}", proxy.address, proxy.variable);
-    match proxy.exempting {
-        Some(exempting) if !proxy.exempt.is_empty() => format!(
-            "{named}, {exempting} exempting {}",
-            words::listed(proxy.exempt.clone())
-        ),
-        _ => named,
-    }
-}
-
 /// How to write the schedule again.
 pub(super) fn again(os: Os) -> &'static str {
     if has_app(os) {
-        "Turn daily renewal off and on again: in the app's Settings, or with \
-         `pitboard schedule uninstall` and then `pitboard schedule install`."
+        words::AGAIN_IN_THE_APP_OR_A_TERMINAL
     } else {
-        "Turn daily renewal off and on again with `pitboard schedule uninstall` and then \
-         `pitboard schedule install`."
+        words::AGAIN_IN_A_TERMINAL
     }
 }
 

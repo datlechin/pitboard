@@ -1,11 +1,12 @@
 use super::parks::ParkFact;
-use super::{Check, commands, fail, ok, warn};
+use super::{Check, fail, ok, warn, words};
 use crate::context::Context;
 use crate::host::{Kind, Os};
 use crate::in_use::Stored;
 use crate::provider::{LoginKind, ProviderId};
 use crate::state::{Key, State};
-use crate::{store, switch, words};
+use crate::words as said;
+use crate::{store, switch};
 use std::path::PathBuf;
 
 // Read from the index, the settings and the data folder's first-level names: no jar, no process.
@@ -109,11 +110,11 @@ pub(super) fn judge_desktop_off_macos(state: &State) -> Check {
         .map(|account| format!("`{}`", state.typed(&account.key())))
         .collect();
     let holds = match held.is_empty() {
-        true => "folders set aside for Claude Desktop".to_string(),
-        false => words::listed(held),
+        true => words::FOLDERS_SET_ASIDE_FOR_IT.to_string(),
+        false => said::listed(held),
     };
     Check {
-        advice: format!("This index holds {holds}. Nothing here changes them."),
+        advice: words::nothing_here_changes(&holds),
         ..ok(
             "desktop_data_folder",
             "Claude data folder",
@@ -136,42 +137,31 @@ pub(super) fn judge_desktop(
     let folder = "Claude data folder";
     match &facts.root {
         Err(reason) => {
-            let advice = facts.own_home.as_ref().map_or_else(String::new, |own| {
-                format!(
-                    "Run Pitboard with `HOME` unset, or set to {}.",
-                    own.display()
-                )
-            });
+            let advice = facts
+                .own_home
+                .as_ref()
+                .map_or_else(String::new, |own| words::run_with_home_unset(own.display()));
             checks.push(fail("desktop_data_folder", folder, reason, advice));
         }
         Ok(root) => {
             let shown = root.display();
             checks.push(match facts.refused {
-                Some(unfit @ Unfit::Link) => fail(
+                Some(unfit) => fail(
                     "desktop_data_folder",
                     folder,
-                    format!("{shown} {unfit}"),
-                    "Pitboard moves no Claude Desktop login through a link.",
-                ),
-                Some(unfit @ Unfit::ThirdParty(_)) => fail(
-                    "desktop_data_folder",
-                    folder,
-                    format!("{shown} {unfit}"),
-                    "Pitboard moves no Claude Desktop login for a third-party deployment.",
-                ),
-                Some(unfit @ Unfit::ResetWaits) => fail(
-                    "desktop_data_folder",
-                    folder,
-                    format!("{shown} {unfit}"),
-                    "Open Claude to let the reset finish, then quit it with Command-Q.",
+                    words::the_folder(shown, unfit),
+                    match unfit {
+                        Unfit::Link => words::NO_MOVE_THROUGH_A_LINK,
+                        Unfit::ThirdParty(_) => words::NO_MOVE_FOR_A_THIRD_PARTY,
+                        Unfit::ResetWaits => words::LET_THE_RESET_FINISH,
+                    },
                 ),
                 None if facts.present => ok("desktop_data_folder", folder, shown.to_string()),
                 None => warn(
                     "desktop_data_folder",
                     folder,
-                    format!("{shown} does not exist"),
-                    "Run `pitboard enroll desktop/<label> --sign-in`, then open Claude and sign \
-                     in: Pitboard waits for it to quit.",
+                    words::does_not_exist(shown),
+                    words::ENROLL_THEN_SIGN_IN_INSIDE,
                 ),
             });
         }
@@ -179,24 +169,16 @@ pub(super) fn judge_desktop(
     if let (Ok(root), Some(settings)) = (&facts.root, &facts.settings) {
         let name = "Claude settings";
         checks.push(match settings {
-            Ok((Sidecar::Valid, _)) => ok(
-                "desktop_settings",
-                name,
-                "config.json read, with a settings write Claude left, which Pitboard reads as \
-                 Claude will",
-            ),
-            Ok((Sidecar::Stale, _)) => ok(
-                "desktop_settings",
-                name,
-                "config.json read; a stale settings write beside it, which Claude drops when it \
-                 opens",
-            ),
-            Ok((Sidecar::None, true)) => ok("desktop_settings", name, "config.json read"),
-            Ok((Sidecar::None, false)) => ok("desktop_settings", name, "no config.json yet"),
+            Ok((Sidecar::Valid, _)) => ok("desktop_settings", name, words::SETTINGS_WITH_A_WRITE),
+            Ok((Sidecar::Stale, _)) => {
+                ok("desktop_settings", name, words::SETTINGS_WITH_A_STALE_WRITE)
+            }
+            Ok((Sidecar::None, true)) => ok("desktop_settings", name, words::SETTINGS_READ),
+            Ok((Sidecar::None, false)) => ok("desktop_settings", name, words::NO_SETTINGS_YET),
             Err(Unread::Unknown { what, then }) => fail(
                 "desktop_settings",
                 name,
-                format!("{} {what}", root.display()),
+                words::the_folder(root.display(), what),
                 then.said().trim_end(),
             ),
             Err(Unread::Unreadable(detail)) => fail("desktop_settings", name, detail.clone(), ""),
@@ -204,31 +186,18 @@ pub(super) fn judge_desktop(
         if facts.present {
             let name = "Claude data folder layout";
             checks.push(match facts.unread.as_slice() {
-                [] => ok(
-                    "desktop_layout",
-                    name,
-                    "each part of the account's data is one Pitboard moves",
-                ),
+                [] => ok("desktop_layout", name, words::EVERY_PART_MOVED),
                 [part] => warn(
                     "desktop_layout",
                     name,
-                    format!(
-                        "holds `{part}`, a part of the account's data this Pitboard has not read"
-                    ),
-                    "Pitboard starts no move of a Claude Desktop login while it is there. Update \
-                     Pitboard, or report it at https://github.com/datlechin/pitboard/issues if no \
-                     release reads it yet.",
+                    words::holds_a_part_unread(part),
+                    words::NO_MOVE_WHILE_IT_IS_THERE,
                 ),
                 parts => warn(
                     "desktop_layout",
                     name,
-                    format!(
-                        "holds {}, parts of the account's data this Pitboard has not read",
-                        words::listed(parts.iter().map(|part| format!("`{part}`")))
-                    ),
-                    "Pitboard starts no move of a Claude Desktop login while they are there. \
-                     Update Pitboard, or report them at \
-                     https://github.com/datlechin/pitboard/issues if no release reads them yet.",
+                    words::holds_parts_unread(parts),
+                    words::NO_MOVE_WHILE_THEY_ARE_THERE,
                 ),
             });
         }
@@ -243,13 +212,8 @@ pub(super) fn judge_desktop(
         checks.push(warn(
             "desktop_move",
             "interrupted Claude Desktop move",
-            format!(
-                "a move of `{}`'s login was interrupted {}",
-                typed(&moving.label),
-                moment(moving.started_at, now)
-            ),
-            "Keep Claude closed: the next change to a Claude Desktop account settles it first. \
-             If it cannot, `pitboard abandon` keeps every folder and moves on.",
+            words::move_interrupted(&typed(&moving.label), &moment(moving.started_at, now)),
+            words::KEEP_CLAUDE_CLOSED,
         ));
     }
     if let Some(awaited) = state.awaiting(ProviderId::Desktop)
@@ -259,15 +223,8 @@ pub(super) fn judge_desktop(
         checks.push(warn(
             "desktop_awaiting",
             "awaited sign-in",
-            format!(
-                "Claude is signed out for a sign-in since {}, and `{put_back}` is parked",
-                moment(awaited.since, now)
-            ),
-            format!(
-                "Sign in inside Claude, quit it with Command-Q, then run `pitboard enroll {}`. \
-                 To go back, run `pitboard use {put_back}`.",
-                typed(&awaited.label)
-            ),
+            words::signed_out_for_a_sign_in(&moment(awaited.since, now), &put_back),
+            words::finish_the_sign_in(&typed(&awaited.label), &put_back),
         ));
     }
     let parks_dir = facts.parks_dir.display();
@@ -279,49 +236,45 @@ pub(super) fn judge_desktop(
                 crate::host::Private::Yes if facts.one_volume == Some(false) => fail(
                     "desktop_parks_folder",
                     name,
-                    format!(
-                        "{parks_dir} is on another volume than {}",
-                        facts.root.as_ref().map_or_else(
-                            |_| "Claude's data".into(),
-                            |root| root.display().to_string()
-                        )
+                    words::on_another_volume(
+                        &parks_dir,
+                        facts.root.as_ref().ok().map(|root| root.display()),
                     ),
-                    "Keep Pitboard's folder on the volume your home is on.",
+                    words::KEEP_ONE_VOLUME,
                 ),
                 crate::host::Private::Yes => ok(
                     "desktop_parks_folder",
                     name,
-                    format!("private  ·  {parks_dir}"),
+                    words::private_folder(&parks_dir),
                 ),
                 crate::host::Private::Shared => fail(
                     "desktop_parks_folder",
                     name,
-                    format!("{parks_dir} can be reached by others"),
+                    words::reached_by_others(&parks_dir),
                     // Claude Desktop is macOS only, so no SID is ever named.
-                    commands(&os.make_private_commands(
+                    words::run_them(&os.make_private_commands(
                         Kind::Directory,
                         &[&parks_dir.to_string()],
                         None,
-                    ))
-                    .map_or_else(String::new, |commands| format!("Run {commands}.")),
+                    )),
                 ),
                 crate::host::Private::Link => fail(
                     "desktop_parks_folder",
                     name,
-                    format!("{parks_dir} is a link"),
-                    "Pitboard parks no Claude Desktop login through a link.",
+                    words::is_a_link(&parks_dir),
+                    words::NO_PARK_THROUGH_A_LINK,
                 ),
                 crate::host::Private::NotOwn => fail(
                     "desktop_parks_folder",
                     name,
-                    format!("{parks_dir} is not yours"),
-                    "Pitboard parks no Claude Desktop login in a folder another user owns.",
+                    words::not_yours(&parks_dir),
+                    words::NO_PARK_IN_ANOTHERS,
                 ),
                 crate::host::Private::NotADirectory | crate::host::Private::Missing => fail(
                     "desktop_parks_folder",
                     name,
-                    format!("{parks_dir} is not a folder"),
-                    "Pitboard parks no Claude Desktop login there.",
+                    words::not_a_folder(&parks_dir),
+                    words::NO_PARK_THERE,
                 ),
             });
         }
@@ -335,7 +288,6 @@ pub(super) fn judge_desktop(
         let (holding, parts): (Vec<&crate::state::Aside>, Vec<&crate::state::Aside>) =
             asides.iter().partition(|aside| aside.login.is_some());
         let name = "folders set aside";
-        let n = asides.len();
         let account = |aside: &crate::state::Aside| {
             aside
                 .account
@@ -345,23 +297,26 @@ pub(super) fn judge_desktop(
         let kept_beside = |aside: &crate::state::Aside| {
             account(aside).is_some_and(|a| a.parked.is_some() || in_use.as_ref() == Some(&a.key()))
         };
-        let said = |aside: &crate::state::Aside| {
-            let when = moment(aside.at, now);
-            let typed = account(aside).map(|a| state.typed(&a.key()));
-            match (aside.why, typed) {
-                (crate::state::SetAside::AnotherMachine, Some(typed)) => {
-                    format!("`{typed}`'s login from another Mac")
+        let held: Vec<String> = holding
+            .iter()
+            .map(|aside| {
+                let when = moment(aside.at, now);
+                let typed = account(aside).map(|a| state.typed(&a.key()));
+                match (aside.why, typed) {
+                    (crate::state::SetAside::AnotherMachine, Some(typed)) => {
+                        words::from_another_mac(&typed)
+                    }
+                    (crate::state::SetAside::Superseded, Some(typed)) if kept_beside(aside) => {
+                        words::from_before_signing_in_again(&typed, &when)
+                    }
+                    (
+                        crate::state::SetAside::Superseded | crate::state::SetAside::GivenUp,
+                        Some(typed),
+                    ) => words::earlier_login(&typed, &when),
+                    _ => words::nobodys_login(&when),
                 }
-                (crate::state::SetAside::Superseded, Some(typed)) if kept_beside(aside) => {
-                    format!("`{typed}`'s login from before a sign-in again, set aside {when}")
-                }
-                (
-                    crate::state::SetAside::Superseded | crate::state::SetAside::GivenUp,
-                    Some(typed),
-                ) => format!("`{typed}`'s earlier login, set aside {when}"),
-                _ => format!("a login no account here holds, set aside {when}"),
-            }
-        };
+            })
+            .collect();
         // No session: an account's earlier keys, the parts of its login a give-up left, or
         // what Claude made while signed out.
         let mut rest: Vec<String> = parts
@@ -369,35 +324,24 @@ pub(super) fn judge_desktop(
             .filter_map(|aside| {
                 let when = moment(aside.at, now);
                 match (aside.why, account(aside).map(|a| state.typed(&a.key()))) {
-                    (_, Some(typed)) => {
-                        Some(format!("parts of `{typed}`'s login, set aside {when}"))
-                    }
+                    (_, Some(typed)) => Some(words::parts_of(&typed, &when)),
                     (crate::state::SetAside::InTheWay, None) => None,
-                    (_, None) => Some(format!(
-                        "parts of a login no account here holds, set aside {when}"
-                    )),
+                    (_, None) => Some(words::parts_of_nobodys(&when)),
                 }
             })
             .collect();
         let only_signed_out = rest.is_empty();
         if rest.len() < parts.len() {
-            rest.push("what Claude made while signed out".into());
+            rest.push(words::MADE_WHILE_SIGNED_OUT.into());
         }
-        let mut detail = match holding.as_slice() {
-            [] => format!("{n} in {parks_dir}, none holding a login"),
-            held => format!(
-                "{n} in {parks_dir}, {} holding a login: {}",
-                held.len(),
-                words::listed(held.iter().map(|aside| said(aside)))
-            ),
-        };
+        let mut detail = words::set_aside(asides.len(), &parks_dir, &held);
         if !rest.is_empty() {
-            let (whose, only) = match holding.is_empty() {
-                true if only_signed_out => ("they hold", "only "),
-                true => ("they hold", ""),
-                false => ("the rest hold", ""),
-            };
-            detail.push_str(&format!("; {whose} {only}{}", words::listed(rest)));
+            let none_held = holding.is_empty();
+            detail.push_str(&words::the_rest_hold(
+                none_held,
+                none_held && only_signed_out,
+                &rest,
+            ));
         }
         checks.push(if holding.iter().all(|aside| kept_beside(aside)) {
             ok("desktop_set_aside", name, detail)
@@ -406,9 +350,7 @@ pub(super) fn judge_desktop(
                 "desktop_set_aside",
                 name,
                 detail,
-                "`pitboard repair` gives one back to its account where it can. `pitboard \
-                 forget` of an account deletes those set aside for it, and `pitboard \
-                 uninstall` deletes them all.",
+                words::REPAIR_GIVES_ONE_BACK,
             )
         });
     }
@@ -425,14 +367,12 @@ pub(super) fn judge_desktop_login(
     let known = facts.known.as_ref()?;
     let name = "Claude Desktop in use";
     let tool = ProviderId::Desktop;
-    let enroll = "Open Claude, check which account it shows, quit it with Command-Q, then run \
-                  `pitboard enroll desktop/<label>` under that account's name.";
     let Some(last) = &known.last else {
         return Some(warn(
             "desktop_login",
             name,
-            "Pitboard has not read who is signed in to Claude",
-            "The next change to a Claude Desktop account reads it, with Claude closed.",
+            words::NOT_READ_WHO_IS_IN,
+            words::THE_NEXT_CHANGE_READS_IT,
         ));
     };
     let when = moment(last.known_at, now);
@@ -441,31 +381,24 @@ pub(super) fn judge_desktop_login(
         Some(crate::in_use::Doubt::LoginUnreadable) => warn(
             "desktop_login",
             name,
-            format!(
-                "Claude's settings could not be read, so this is as Pitboard last read it {when}"
-            ),
-            "`Claude settings` says why.",
+            words::settings_unreadable_since(&when),
+            words::THE_SETTINGS_CHECK_SAYS_WHY,
         ),
         Some(crate::in_use::Doubt::NamedMoved) => warn(
             "desktop_login",
             name,
-            words::desktop_named(
+            said::desktop_named(
                 &Stored::of(state, tool, known.own_record.as_ref()),
                 &who,
                 |stored| stored.said("nobody"),
             ),
-            enroll,
+            words::ENROLL_UNDER_ITS_NAME,
         ),
         _ if facts.signed_out => warn(
             "desktop_login",
             name,
-            format!(
-                "{}, as Pitboard last read it {when}; both token caches are emptied since, so \
-                 Claude looks signed out",
-                who.said("nobody")
-            ),
-            "The next change to a Claude Desktop account reads who is signed in, with Claude \
-             closed.",
+            words::looks_signed_out_since(&who.said("nobody"), &when),
+            words::THE_NEXT_CHANGE_READS_WHO,
         ),
         _ => match state.account_in_use(tool) {
             Some(account) if account.parked.is_some() => {
@@ -473,20 +406,14 @@ pub(super) fn judge_desktop_login(
                 warn(
                     "desktop_login",
                     name,
-                    format!("`{typed}` is recorded in use and also holds a parked login"),
-                    format!(
-                        "Open Claude, check which account it shows, and quit it with \
-                         Command-Q. If it shows `{typed}`, run `pitboard enroll {typed}`: its \
-                         older parked login is set aside, and nothing is deleted. If it shows \
-                         another account, run `pitboard enroll desktop/<label>` under that \
-                         account's name."
-                    ),
+                    words::in_use_and_parked(&typed),
+                    words::check_which_account_claude_shows(&typed),
                 )
             }
             _ => ok(
                 "desktop_login",
                 name,
-                format!("{}, as Pitboard last read it {when}", who.said("nobody")),
+                words::as_last_read(&who.said("nobody"), &when),
             ),
         },
     })
@@ -494,13 +421,13 @@ pub(super) fn judge_desktop_login(
 
 pub(super) fn judge_desktop_park(facts: &DesktopFacts, fact: &ParkFact, now: i64) -> Check {
     let name = format!("account {}", fact.typed());
-    let renew = format!("Run `pitboard enroll {} --sign-in`.", fact.typed());
+    let renew = words::sign_in_again(&fact.typed());
     let code = "desktop_parked_login";
     let Some(park) = &fact.park else {
         return if fact.active {
-            ok(code, name, "signed in; parked when you switch away")
+            ok(code, name, words::SIGNED_IN_PARKED_ON_A_SWITCH)
         } else {
-            warn(code, name, "nothing parked to switch to", renew)
+            warn(code, name, words::NOTHING_PARKED, renew)
         };
     };
     let here = facts
@@ -508,6 +435,7 @@ pub(super) fn judge_desktop_park(facts: &DesktopFacts, fact: &ParkFact, now: i64
         .iter()
         .find(|(service, _)| *service == park.service)
         .map(|(_, folder)| folder);
+    let parks_dir = facts.parks_dir.display();
     match here {
         Some(Ok(true)) => {}
         // What Pitboard could not look at is still there: no sign-in, as `use` asks none.
@@ -515,74 +443,44 @@ pub(super) fn judge_desktop_park(facts: &DesktopFacts, fact: &ParkFact, now: i64
             return warn(
                 code,
                 name,
-                format!(
-                    "not read: Pitboard could not look at it in {} ({e})",
-                    facts.parks_dir.display()
-                ),
-                format!(
-                    "Make {}, and each folder it is in, readable to you, then run `pitboard \
-                     doctor` again.",
-                    facts.parks_dir.display()
-                ),
+                words::not_looked_at(&parks_dir, e),
+                words::make_it_readable(&parks_dir),
             );
         }
         Some(Ok(false)) | None => {
             return fail(
                 code,
                 name,
-                format!(
-                    "its parked login is missing from {}",
-                    facts.parks_dir.display()
-                ),
-                format!(
-                    "Run `pitboard repair`. If it gives nothing back, run `pitboard enroll {} \
-                     --sign-in`.",
-                    fact.typed()
-                ),
+                words::missing_from(&parks_dir),
+                words::repair_then_sign_in(&fact.typed()),
             );
         }
     }
     let Some(at) = park.session_expires_at else {
-        return ok(code, name, "parked");
+        return ok(code, name, words::PARKED);
     };
     // The column `pitboard status` shows, after this check's own words.
-    let life = words::session_life_column(at, now);
+    let life = said::session_life_column(at, now);
     if at > now {
-        ok(code, name, format!("parked, {life}"))
+        ok(code, name, words::parked_with(&life))
     } else {
         warn(
             code,
             name,
-            format!("parked, {life}"),
-            format!(
-                "If Claude asks you to sign in once you use it, run `pitboard enroll {} \
-                 --sign-in`.",
-                fact.typed()
-            ),
+            words::parked_with(&life),
+            words::if_claude_asks(&fact.typed()),
         )
     }
 }
 
 // Said, never a gate: Pitboard checks the folder before each move, not the build.
 pub(super) fn judge_desktop_build(facts: &DesktopFacts) -> Check {
-    use crate::provider::desktop::assumptions::{
-        READ_FROM_CLAUDE_3, READ_FROM_THE_ARCHIVE, READ_FROM_THE_NEWER_BUNDLE, VERIFIED_AGAINST,
-    };
     match &facts.build {
-        Some(build) => ok(
-            "desktop_build",
-            "Claude",
-            format!(
-                "Claude {build}; Pitboard's facts were read from {VERIFIED_AGAINST}, \
-                 {READ_FROM_THE_ARCHIVE}, {READ_FROM_THE_NEWER_BUNDLE} and {READ_FROM_CLAUDE_3}, \
-                 and it checks the folder before each move, not the build"
-            ),
-        ),
-        None => ok("desktop_build", "Claude", "not found in /Applications"),
+        Some(build) => ok("desktop_build", "Claude", words::claude_build(build)),
+        None => ok("desktop_build", "Claude", words::NOT_IN_APPLICATIONS),
     }
 }
 
-// On every machine, so its shape is one: whether the folder is a directory, never what it holds.
 // What the report's `desktop` block says on every machine: whether the folder is a directory,
 // never what it holds.
 pub(crate) struct Installed {

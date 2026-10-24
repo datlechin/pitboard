@@ -1,10 +1,9 @@
-use super::{Check, Facts, ok, warn};
+use super::{Check, Facts, ok, warn, words};
 use crate::context::Context;
 use crate::host::Os;
 use crate::provider::claude::paths as claude;
 use crate::provider::codex::paths as codex;
 use crate::proxy::{SystemProxy, system_proxies};
-use crate::words;
 use std::path::PathBuf;
 
 pub(crate) struct WslFact {
@@ -79,25 +78,16 @@ pub(super) fn judge_windows_homes(facts: &Facts) -> Vec<Check> {
         checks.push(warn(
             "local_app_data",
             "local app data",
-            format!(
-                "Windows keeps this account's local app data in {}",
-                local.display()
-            ),
-            format!(
-                "Pitboard keeps its folder in {} whatever Windows says, so a run of the \
-                 renewal schedule and one by hand use the same folder.",
-                windows.default_pitboard_home.display()
-            ),
+            words::local_app_data_in(local.display()),
+            words::kept_in_one_folder(windows.default_pitboard_home.display()),
         ));
     }
     if windows.roams {
         checks.push(warn(
             "roaming_profile",
             "roaming profile",
-            "this Windows profile roams",
-            "Claude Code's and Codex's logins in it go to every computer this account signs in \
-             to, as their Credential Manager items do. Pitboard's own folder, in AppData\\Local, \
-             stays on this one.",
+            words::THE_PROFILE_ROAMS,
+            words::LOGINS_GO_WITH_IT,
         ));
     }
     checks
@@ -110,33 +100,20 @@ pub(super) fn judge_windows_settings(facts: &Facts) -> Vec<Check> {
     if !settings.wsl.is_empty() {
         // The ChatGPT app's WSL mode can hand a Linux codex this home (H9), not yet measured.
         checks.push(Check {
-            advice: format!(
-                "Claude Code and Codex installed there are installs of their own, which Pitboard \
-                 on Windows does not switch. Claude Code there keeps its own login. Where Codex \
-                 there uses {}, Codex's home here, a switch here changes its login too. WSL 2 \
-                 runs them in a virtual machine, so Windows' list of processes does not show \
-                 them running.",
-                facts.codex.home.display()
-            ),
-            ..ok(
-                "wsl",
-                "WSL",
-                format!("WSL holds {}", words::listed(settings.wsl)),
-            )
+            advice: words::installs_of_their_own(facts.codex.home.display()),
+            ..ok("wsl", "WSL", words::wsl_holds(&settings.wsl))
         });
     }
     if let [first, rest @ ..] = facts.pitboards.as_slice()
         && !rest.is_empty()
     {
-        let rest = rest.iter().map(|copy| copy.display().to_string());
+        let rest: Vec<String> = rest.iter().map(|copy| copy.display().to_string()).collect();
         checks.push(Check {
-            advice: "A shell runs the first, so updating another changes nothing there. Uninstall \
-                     the copies you do not use."
-                .into(),
+            advice: words::UNINSTALL_THE_OTHERS.into(),
             ..ok(
                 "pitboard_copies",
                 "copies of pitboard",
-                format!("{} on PATH, then {}", first.display(), words::listed(rest)),
+                words::copies_on_path(first.display(), &rest),
             )
         });
     }
@@ -155,80 +132,38 @@ pub(super) fn judge_windows_settings(facts: &Facts) -> Vec<Check> {
             .collect::<Vec<_>>()
             .join(";");
         let codex = match entries.as_slice() {
-            [one] if one.protocol.is_none() => "Codex sends its requests through it".to_string(),
-            [one] => format!(
-                "Codex reads the setting as one address, so it sends its requests to a proxy \
-                 named {}, and they fail",
-                one.masked()
-            ),
-            _ => format!(
-                "Codex reads the setting as one address, which a proxy for each protocol is not, \
-                 so its requests go {}",
-                way(facts.network.sets(&["ALL_PROXY", "all_proxy"]))
-            ),
+            [one] if one.protocol.is_none() => words::CODEX_GOES_THROUGH_IT.to_string(),
+            [one] => words::codex_fails_through(&one.masked()),
+            _ => words::codex_goes(&words::the_way(
+                facts.network.sets(&["ALL_PROXY", "all_proxy"]),
+            )),
         };
         // Claude Code reads no ALL_PROXY (`proxy_from_variables`).
         let claude = facts.network.sets(&["http_proxy", "HTTP_PROXY"]);
         let pitboard = facts.network.proxy.as_ref().map(|proxy| proxy.variable);
         let others = if claude.is_none() && pitboard.is_none() {
-            "Claude Code and Pitboard follow only the proxy variables, so theirs go out directly"
-                .to_string()
+            words::THE_OTHERS_GO_DIRECTLY.to_string()
         } else {
-            format!(
-                "Claude Code's go {}, and Pitboard's {}",
-                way(claude),
-                way(pitboard)
-            )
+            words::the_others_go(&words::the_way(claude), &words::the_way(pitboard))
         };
         checks.push(Check {
-            advice: format!(
-                "{codex}. {others}: set HTTPS_PROXY where this network needs the proxy."
-            ),
-            ..ok(
-                "system_proxy",
-                "Windows proxy",
-                format!("Windows' proxy settings name {shown}, and HTTPS_PROXY is not set"),
-            )
+            advice: words::set_https_proxy(&codex, &others),
+            ..ok("system_proxy", "Windows proxy", words::system_proxy(&shown))
         });
     }
     checks
 }
 
-pub(super) fn way(variable: Option<&str>) -> String {
-    match variable {
-        Some(variable) => format!("through the one {variable} names"),
-        None => "out directly".to_string(),
-    }
-}
-
 pub(super) fn judge_wsl(wsl: Option<&WslFact>) -> Option<Check> {
     let wsl = wsl?;
-    let detail = match &wsl.distribution {
-        Some(name) => format!("inside WSL, in {name}"),
-        None => "inside WSL".to_string(),
-    };
     let advice = match &wsl.codex_home_on_windows {
-        None => "Pitboard here switches what is installed in this Linux. Claude Code and Codex \
-                 installed on Windows keep their own logins, which Pitboard for Windows switches."
-            .to_string(),
+        None => words::WINDOWS_KEEPS_ITS_LOGINS.to_string(),
         // The ChatGPT app's WSL mode shares that folder with Codex on Windows (H9).
-        Some(home) => {
-            let (there, uses) = match on_windows(home) {
-                Some(path) => (format!("{path} on Windows"), path),
-                None => ("on a Windows drive".to_string(), "that folder".to_string()),
-            };
-            format!(
-                "Pitboard here switches what is installed in this Linux. Claude Code installed \
-                 on Windows keeps its own login, which Pitboard for Windows switches. Codex's \
-                 home, {}, is {there}, where Codex here starts no shared background server. \
-                 Where Codex on Windows uses {uses}, a switch here changes its login too.",
-                home.display()
-            )
-        }
+        Some(home) => words::codex_home_on_windows(home.display(), on_windows(home).as_deref()),
     };
     Some(Check {
         advice,
-        ..ok("wsl", "WSL", detail)
+        ..ok("wsl", "WSL", words::inside_wsl(wsl.distribution.as_deref()))
     })
 }
 
@@ -261,46 +196,34 @@ pub(super) fn runs_bare_pitboard(command: &str) -> bool {
 pub(super) fn judge_status_line(line: Option<&StatusLineFact>) -> Option<Check> {
     let line = line?;
     let runs = match (&line.git_bash.found, &line.powershell) {
-        (Some(bash), _) => format!("runs the status line in Git Bash, {}", bash.display()),
-        (None, Some(claude::PowerShell::Seven(found))) => format!(
-            "runs the status line in PowerShell 7, {}, finding no Git Bash",
-            found.display()
-        ),
-        (None, Some(claude::PowerShell::Windows(found))) => format!(
-            "runs the status line in Windows PowerShell, {}, finding no Git Bash",
-            found.display()
-        ),
-        (None, None) => "finds neither Git Bash nor PowerShell to run the status line in".into(),
+        (Some(bash), _) => words::in_git_bash(bash.display()),
+        (None, Some(claude::PowerShell::Seven(found))) => words::in_powershell_7(found.display()),
+        (None, Some(claude::PowerShell::Windows(found))) => {
+            words::in_windows_powershell(found.display())
+        }
+        (None, None) => words::NO_SHELL.into(),
     };
     let passed_over = line
         .git_bash
         .passed_over
         .as_ref()
-        .map_or_else(String::new, |named| {
-            format!(
-                "; it passes over {}, which CLAUDE_CODE_GIT_BASH_PATH names",
-                named.display()
-            )
-        });
+        .map_or_else(String::new, |named| words::passes_over(named.display()));
     Some(match &line.pitboard {
         Some(found) => ok(
             "status_line",
             "status line",
-            format!(
-                "Claude Code {runs}; `pitboard` there is {}{passed_over}",
-                found.display()
-            ),
+            words::pitboard_there(&runs, found.display(), &passed_over),
         ),
         None if line.runs_pitboard => warn(
             "status_line",
             "status line",
-            format!("Claude Code {runs}; no `pitboard` is on its PATH{passed_over}"),
-            "Add the folder pitboard.exe is in to your PATH, then start Claude Code again.",
+            words::no_pitboard_there(&runs, &passed_over),
+            words::ADD_PITBOARD_TO_PATH,
         ),
         None => ok(
             "status_line",
             "status line",
-            format!("Claude Code {runs}; no `pitboard` is on its PATH{passed_over}"),
+            words::no_pitboard_there(&runs, &passed_over),
         ),
     })
 }

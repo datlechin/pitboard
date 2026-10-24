@@ -29,12 +29,9 @@ fn codex_has_a_section_only_where_there_is_a_codex() {
         assert_eq!(check(&with, code).level, Level::Ok, "{code}");
     }
     assert!(healthy(&with));
-    let login = check(&with, "codex_login");
-    assert!(login.detail.contains("w@example.com"), "{}", login.detail);
-    assert!(
-        login.detail.contains("0123456789abcdef"),
-        "{}",
-        login.detail
+    assert_eq!(
+        check(&with, "codex_login").detail,
+        words::codex_login("w@example.com", "work-account", "0123456789abcdef")
     );
 
     // Accounts enrolled on a machine whose Codex home has gone still get the section, and
@@ -46,19 +43,14 @@ fn codex_has_a_section_only_where_there_is_a_codex() {
     let checks = evaluate(&f);
     let file = check(&checks, "codex_auth_file");
     assert_eq!(file.level, Level::Warn);
-    assert!(file.advice.contains("`codex login`"), "{}", file.advice);
-    assert!(
-        file.advice.contains("`pitboard use codex/<label>`"),
-        "{}",
-        file.advice
-    );
+    assert_eq!(file.advice, words::use_or_sign_in("codex"));
 
     // Windows PowerShell 5.1 refuses the `codex.ps1` beside npm's `codex.cmd`.
     f.os = Os::Windows;
     f.codex.program = Some(PathBuf::from("C:/Users/x/AppData/Roaming/npm/codex.cmd"));
     let checks = evaluate(&f);
     let file = check(&checks, "codex_auth_file");
-    assert!(file.advice.contains("`codex.cmd login`"), "{}", file.advice);
+    assert_eq!(file.advice, words::use_or_sign_in("codex.cmd"));
 }
 
 // The session's This PC listed no Codex section for a Codex installed with npm and never
@@ -86,18 +78,20 @@ fn codex_installed_and_never_run_has_its_section() {
 /// to look at about a setting they chose.
 #[test]
 fn each_codex_store_is_judged_for_what_pitboard_can_do_with_it() {
+    let setting = |backend: Backend| {
+        format!(
+            "`cli_auth_credentials_store = \"{}\"` in /home/x/.codex/config.toml",
+            backend.word()
+        )
+    };
+    let remedy = "To use the file store, set `cli_auth_credentials_store = \"file\"` in \
+                  /home/x/.codex/config.toml, then sign in again with `codex login`";
     let judged = |backend: Backend, enrolled: usize| {
         let codex = CodexFacts {
             backend,
             enrolled,
-            backend_setting: format!(
-                "`cli_auth_credentials_store = \"{}\"` in /home/x/.codex/config.toml",
-                backend.word()
-            ),
-            backend_remedy: "To use the file store, set `cli_auth_credentials_store = \
-                             \"file\"` in /home/x/.codex/config.toml, then sign in again \
-                             with `codex login`"
-                .into(),
+            backend_setting: setting(backend),
+            backend_remedy: remedy.into(),
             ..with_codex()
         };
         codex_checks(&codex)
@@ -110,21 +104,24 @@ fn each_codex_store_is_judged_for_what_pitboard_can_do_with_it() {
         Backend::Ephemeral,
     ] {
         let store = backend.word();
+        let described = match backend {
+            Backend::Ephemeral => words::in_memory_only(&setting(backend)),
+            _ => words::store_set_by(store, &setting(backend)),
+        };
         let checks = judged(backend, 1);
         let found = check(&checks, "codex_backend");
         assert_eq!(found.level, Level::Fail, "{store}");
-        assert!(found.detail.contains(store), "{}", found.detail);
-        assert!(
-            found.detail.contains("/home/x/.codex/config.toml"),
-            "says which file set it: {}",
-            found.detail
-        );
-        assert!(
-            found.advice.contains(
-                "set `cli_auth_credentials_store = \"file\"` in /home/x/.codex/config.toml"
-            ),
-            "says the line and where it goes: {}",
-            found.advice
+        assert_eq!(found.detail, described, "says which file set it");
+        assert_eq!(
+            found.advice,
+            match backend {
+                Backend::Ephemeral => words::nothing_at_rest(remedy),
+                _ => words::no_account_to_switch_to(
+                    crate::provider::codex::layers::file_store_only(crate::host::OS),
+                    remedy
+                ),
+            },
+            "says the line and where it goes"
         );
         assert!(!healthy(&checks), "{store}");
         assert!(
@@ -140,17 +137,7 @@ fn each_codex_store_is_judged_for_what_pitboard_can_do_with_it() {
             Level::Ok,
             "nothing Pitboard does is broken for somebody with no Codex accounts: {store}"
         );
-        assert!(found.detail.contains(store), "{}", found.detail);
-        assert!(found.detail.contains("file store"), "{}", found.detail);
-    }
-    let leaves = match crate::host::OS {
-        Os::MacOs | Os::Linux => "does not read an item",
-        Os::Windows => "does not follow Codex",
-    };
-    for backend in [Backend::Keyring, Backend::Either, Backend::Secrets] {
-        let found = judged(backend, 1);
-        let advice = &check(&found, "codex_backend").advice;
-        assert!(advice.contains(leaves), "{advice}");
+        assert_eq!(found.detail, words::switched_only_in_the_file(&described));
     }
 }
 
@@ -164,15 +151,9 @@ fn the_file_store_says_what_chose_it_and_what_is_not_read() {
     assert_eq!(found.level, Level::Ok);
     assert_eq!(
         found.detail,
-        "file (Codex's default)  ·  /home/x/.codex/auth.json"
+        words::file_store("Codex's default", "/home/x/.codex/auth.json")
     );
-    assert!(
-        found
-            .advice
-            .contains("does not read a project's own `.codex/config.toml`"),
-        "{}",
-        found.advice
-    );
+    assert_eq!(found.advice, words::PROJECTS_NOT_READ);
 }
 
 /// A store nobody can tell stops Codex itself, so it is broken rather than a choice: a
@@ -190,15 +171,12 @@ fn a_codex_store_nobody_can_tell_is_broken() {
         let checks = codex_checks(&unknown(enrolled));
         let found = check(&checks, "codex_backend");
         assert_eq!(found.level, level);
+        let facts = unknown(enrolled);
         assert_eq!(
             found.detail,
-            "cannot tell: /etc/codex/config.toml is not TOML Codex can read, at line 3"
+            words::cannot_tell_the_store(&facts.backend_setting)
         );
-        assert_eq!(
-            found.advice,
-            "Codex 0.160.0 does not start until that is put right. Pitboard parks and \
-             switches no Codex login while it cannot tell where Codex keeps it."
-        );
+        assert_eq!(found.advice, words::no_store_known(&facts.backend_remedy));
         assert!(checks.iter().all(|c| c.code != "codex_login"));
     }
 }
@@ -232,11 +210,7 @@ fn codexs_login_restrictions_are_named_with_the_accounts_they_rule_out() {
             config.display()
         )
     );
-    assert_eq!(
-        found.advice,
-        "Codex signs out of or does not use the logins of `codex/there`, so Pitboard does \
-         not put them in use."
-    );
+    assert_eq!(found.advice, words::codex_rules_out("`codex/there`"));
 
     host.administers(
         config.clone(),
@@ -251,11 +225,7 @@ fn codexs_login_restrictions_are_named_with_the_accounts_they_rule_out() {
     let checks = judged();
     let found = check(&checks, "codex_login_restrictions");
     assert_eq!(found.level, Level::Fail, "Codex accounts are enrolled");
-    assert!(
-        found.advice.starts_with("Codex does not start"),
-        "{}",
-        found.advice
-    );
+    assert_eq!(found.advice, words::RESTRICTIONS_UNREADABLE);
 }
 
 /// What this machine's folder of Codex's configuration and the person's own config say is
@@ -287,14 +257,13 @@ fn a_store_an_administrator_pinned_is_gathered_and_said() {
     let checks = codex_checks(&codex);
     let found = check(&checks, "codex_backend");
     assert_eq!(found.level, Level::Fail);
-    assert_eq!(found.detail, format!("{} ({setting})", backend.word()));
-    assert!(
-        found.advice.ends_with(&format!(
-            "No line in your own config.toml can change it: {named} pins it, and only an \
-             administrator can change that."
-        )),
-        "{}",
-        found.advice
+    assert_eq!(found.detail, words::store_set_by(backend.word(), &setting));
+    assert_eq!(
+        found.advice,
+        words::no_account_to_switch_to(
+            crate::provider::codex::layers::file_store_only(crate::host::OS),
+            &codex.backend_remedy
+        )
     );
 
     host.administers(required, "x = \n");
@@ -328,20 +297,16 @@ fn a_store_codex_uses_only_when_told_to_is_said_in_each_systems_words() {
         .advice
         .clone()
     };
-    for os in [Os::MacOs, Os::Linux] {
+    for os in [Os::MacOs, Os::Linux, Os::Windows] {
         assert_eq!(
             advice(os),
-            "Pitboard handles Codex's file store, auth.json, and does not read an item \
-             Codex created for itself, because every read would ask you for permission, so \
-             no enrolled Codex account can be switched to. To use the file store, set it."
+            words::no_account_to_switch_to(
+                crate::provider::codex::layers::file_store_only(os),
+                "To use the file store, set it"
+            ),
+            "{os:?}"
         );
     }
-    assert_eq!(
-        advice(Os::Windows),
-        "Pitboard handles Codex's file store, auth.json, and does not follow Codex into a \
-         store it uses only when told to, so no enrolled Codex account can be switched to. \
-         To use the file store, set it."
-    );
 }
 
 // By name alone, so no item's hex or secret is said, and only while Codex keeps the file.
@@ -365,8 +330,11 @@ fn codexs_items_in_credential_manager_are_a_note_counted_by_name() {
     let checks = codex_checks(&facts);
     let note = check(&checks, "codex_credential_manager");
     assert_eq!(note.level, Level::Ok);
-    assert_eq!(note.detail, "1 `cli|` item and 2 `secrets|` items");
-    assert!(note.advice.ends_with("Pitboard switches only auth.json."));
+    assert_eq!(
+        note.detail,
+        said::listed([words::items(1, "`cli|`"), words::items(2, "`secrets|`")])
+    );
+    assert_eq!(note.advice, words::CODEX_KEEPS_IT_THERE_TOO);
     assert!(!format!("{}{}", note.detail, note.advice).contains("0123456789abcdef"));
 
     std::fs::write(
@@ -396,13 +364,16 @@ fn a_codex_home_that_names_no_folder_is_said_as_it_is() {
         let checks = codex_checks(&facts);
         let found = check(&checks, "codex_login");
         assert_eq!(
-            (found.level, found.detail.as_str()),
+            (found.level, found.detail.clone()),
             (
                 level,
-                r"CODEX_HOME is C:\nowhere, which is no folder, so Codex does not start"
+                crate::error::codex_home_no_folder(std::path::Path::new(r"C:\nowhere"))
             )
         );
-        assert_eq!(found.advice, "Make that folder, or unset CODEX_HOME.");
+        assert_eq!(
+            found.advice,
+            format!("{}.", crate::error::CODEX_HOME_REMEDY)
+        );
     }
 }
 
@@ -412,12 +383,10 @@ fn a_codex_home_that_names_no_folder_is_said_as_it_is() {
 /// `codex` again.
 #[test]
 fn a_codex_login_with_an_api_key_is_a_choice_rather_than_a_fault() {
+    let why = "Codex is signed in with an API key rather than a ChatGPT account, so there is \
+               no account login to park or switch";
     let api_key = || CodexFacts {
-        login: Err(CodexLoginTrouble::NotAnAccount(
-            "Codex is signed in with an API key rather than a ChatGPT account, so there \
-             is no account login to park or switch"
-                .into(),
-        )),
+        login: Err(CodexLoginTrouble::NotAnAccount(why.into())),
         ..with_codex()
     };
 
@@ -428,7 +397,7 @@ fn a_codex_login_with_an_api_key_is_a_choice_rather_than_a_fault() {
         Level::Ok,
         "stated, for somebody with no Codex accounts"
     );
-    assert!(login.detail.contains("API key"), "{}", login.detail);
+    assert_eq!(login.detail, why);
     assert!(checks.iter().all(|c| c.level == Level::Ok));
 
     let checks = codex_checks(&CodexFacts {
@@ -438,13 +407,8 @@ fn a_codex_login_with_an_api_key_is_a_choice_rather_than_a_fault() {
     let login = check(&checks, "codex_login");
     assert_eq!(login.level, Level::Warn);
     assert!(healthy(&checks), "nothing is broken");
-    assert!(!login.detail.contains("cannot"), "{}", login.detail);
-    assert!(login.advice.contains("`codex login`"), "{}", login.advice);
-    assert!(
-        !login.advice.contains("again"),
-        "nothing to sign in again for: {}",
-        login.advice
-    );
+    assert_eq!(login.detail, why);
+    assert_eq!(login.advice, words::chatgpt_sign_ins_only("codex"));
 }
 
 /// Every check about a Codex account is in Codex's section and under a Codex code, so
@@ -508,19 +472,21 @@ fn a_codex_whose_version_cannot_be_read_is_not_called_missing() {
         version: None,
         ..with_codex()
     };
-    let version = check(&codex_checks(&found), "codex_version").detail.clone();
-    assert!(!version.contains("not found"), "{version}");
-    assert!(version.contains("/home/x/.volta/bin/codex"), "{version}");
+    let verified = read_from(ProviderId::Codex, crate::host::OS);
+    assert_eq!(
+        check(&codex_checks(&found), "codex_version").detail,
+        words::build_path_says_nothing("/home/x/.volta/bin/codex", verified)
+    );
 
     let missing = CodexFacts {
         program: None,
         version: None,
         ..with_codex()
     };
-    let version = check(&codex_checks(&missing), "codex_version")
-        .detail
-        .clone();
-    assert!(version.starts_with("not found here"), "{version}");
+    assert_eq!(
+        check(&codex_checks(&missing), "codex_version").detail,
+        words::build_not_found(verified)
+    );
 }
 
 #[test]
@@ -530,8 +496,14 @@ fn a_codex_login_anybody_can_read_or_nobody_can_parse_is_said() {
     let checks = judge_codex(Os::Linux, None, &codex, &[], NOW, &time::moment);
     let file = check(&checks, "codex_auth_file");
     assert_eq!(file.level, Level::Warn);
-    assert!(file.detail.contains("mode 644"), "{}", file.detail);
-    assert!(file.advice.contains("chmod 600"), "{}", file.advice);
+    assert_eq!(
+        file.detail,
+        words::open_to(codex.auth_file.display(), &mode(0o644))
+    );
+    assert_eq!(
+        file.advice,
+        words::codex_file_open(Os::Linux, &["chmod 600 /home/x/.codex/auth.json".into()])
+    );
 
     codex.auth_file = PathBuf::from(r"C:\Users\dana\.codex\auth.json");
     codex.auth_access = Some(open_to_users());
@@ -541,10 +513,7 @@ fn a_codex_login_anybody_can_read_or_nobody_can_parse_is_said() {
     let [reset, grant] = crate::host::acl::icacls(false, r"C:\Users\dana\.codex\auth.json", SID);
     assert_eq!(
         file.advice,
-        format!(
-            "It holds a usable login in plain text, and Codex gives it no access list of \
-             its own, so it takes its folder's: `{reset}` and `{grant}`."
-        )
+        words::codex_file_open(Os::Windows, &[reset, grant])
     );
 
     codex.auth_access = Some(mode(0o600));
@@ -559,7 +528,10 @@ fn a_codex_login_anybody_can_read_or_nobody_can_parse_is_said() {
     let checks = codex_checks(&codex);
     let login = check(&checks, "codex_login");
     assert_eq!(login.level, Level::Fail);
-    assert!(login.detail.contains("not readable"), "{}", login.detail);
+    assert_eq!(
+        login.detail,
+        words::cannot_be_used("its id token is not readable")
+    );
 }
 
 // Said, never warned about: running it is the point of having it.
@@ -580,31 +552,27 @@ fn running_codex_processes_are_reported_as_a_fact() {
         "codex",
         &[],
     ));
+    let said_of = |codex: &CodexFacts| {
+        let holding = codex.running.as_deref().expect("listed");
+        (
+            words::each_keeps_its_account(&crate::holder::described_with_pids(holding)),
+            crate::holder::remedies(holding, "to take a switch"),
+        )
+    };
     let checks = codex_checks(&codex);
     let running = check(&checks, "codex_running");
     assert_eq!(running.level, Level::Ok);
-    assert!(
-        running
-            .detail
-            .starts_with("2 `codex` sessions (pid 4321, 99)"),
-        "{}",
-        running.detail
-    );
-    assert!(
-        running.detail.contains("started again"),
-        "{}",
-        running.detail
-    );
     assert_eq!(
-        running.advice,
-        "Quit them and start again to take a switch."
+        (running.detail.clone(), running.advice.clone()),
+        said_of(&codex)
     );
 
     let many: Vec<Process> = (1..=23).map(|pid| at(pid, "codex")).collect();
     codex.running = Some(classify(&many, holders, "codex", &[]));
-    let detail = check(&codex_checks(&codex), "codex_running").detail.clone();
-    assert!(detail.starts_with("23 `codex` sessions"), "{detail}");
-    assert!(detail.contains("1, 2, 3 and 20 more"), "{detail}");
+    assert_eq!(
+        check(&codex_checks(&codex), "codex_running").detail,
+        said_of(&codex).0
+    );
 
     codex.running = Some(classify(
         &[at(
@@ -618,21 +586,12 @@ fn running_codex_processes_are_reported_as_a_fact() {
     ));
     let checks = codex_checks(&codex);
     let app = check(&checks, "codex_running");
-    assert!(
-        app.detail.starts_with("the ChatGPT app (pid 7)"),
-        "{}",
-        app.detail
-    );
-    assert_eq!(
-        app.advice,
-        "Quit ChatGPT with Command-Q and open it again to take a switch."
-    );
+    assert_eq!((app.detail.clone(), app.advice.clone()), said_of(&codex));
 
     codex.running = None;
-    assert!(
-        check(&codex_checks(&codex), "codex_running")
-            .detail
-            .contains("could not tell")
+    assert_eq!(
+        check(&codex_checks(&codex), "codex_running").detail,
+        words::COULD_NOT_TELL
     );
 }
 

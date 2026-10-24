@@ -31,25 +31,31 @@ fn the_network_check_names_the_proxy_and_the_variable_it_came_from() {
     let direct = network(None, &[]);
     assert_eq!(
         (direct.level, direct.name.as_str(), direct.detail.as_str()),
-        (Level::Ok, "network", "direct: no variable names a proxy")
+        (Level::Ok, "network", words::DIRECT)
     );
+    let both = [
+        "api.anthropic.com".to_string(),
+        "platform.claude.com".into(),
+    ];
     for (exempting, exempt, said) in [
-        (None, &[][..], ""),
+        (None, &[][..], String::new()),
         (
             Some("NO_PROXY"),
             &[],
-            "; NO_PROXY exempts none of the hosts Pitboard calls",
+            format!("; {}", words::exempts_none("NO_PROXY")),
         ),
         (
             Some("no_proxy"),
             &["api.anthropic.com"],
-            "; no_proxy exempts api.anthropic.com, which Pitboard reaches directly",
+            format!(
+                "; {}",
+                words::exempts("no_proxy", &["api.anthropic.com".into()])
+            ),
         ),
         (
             Some("NO_PROXY"),
             &["api.anthropic.com", "platform.claude.com"],
-            "; NO_PROXY exempts api.anthropic.com and platform.claude.com, which Pitboard \
-             reaches directly",
+            format!("; {}", words::exempts("NO_PROXY", &both)),
         ),
         (
             Some("NO_PROXY"),
@@ -59,15 +65,14 @@ fn the_network_check_names_the_proxy_and_the_variable_it_came_from() {
                 "auth.openai.com",
                 "chatgpt.com",
             ],
-            "; NO_PROXY exempts every host Pitboard calls, which it reaches directly",
+            format!("; {}", words::exempts_every_host("NO_PROXY")),
         ),
     ] {
-        let check = network(Some(through(exempting, exempt)), &[]);
+        let proxy = through(exempting, exempt);
+        let detail = words::through(&proxy.address, proxy.variable) + &said;
+        let check = network(Some(proxy), &[]);
         assert_eq!(check.level, Level::Ok, "{said}");
-        assert_eq!(
-            check.detail,
-            format!("through http://***:***@proxy.example.com:3128, from HTTPS_PROXY{said}")
-        );
+        assert_eq!(check.detail, detail);
         assert!(check.advice.is_empty(), "{}", check.advice);
     }
 }
@@ -95,14 +100,11 @@ fn network_read_from(pairs: &[(&'static str, &str)]) -> Check {
 fn a_socks_proxy_is_a_warning_naming_its_variable() {
     let socks = network_read_from(&[("all_proxy", "socks5://127.0.0.1:7890")]);
     assert_eq!(
-        (socks.level, socks.detail.as_str(), socks.advice.as_str()),
+        (socks.level, socks.detail, socks.advice),
         (
             Level::Warn,
-            "requests fail: Pitboard does not use SOCKS proxies yet, and all_proxy names \
-             one, socks5://127.0.0.1:7890",
-            "Pitboard goes through HTTP and HTTPS proxies only. For its requests to go \
-             out, set all_proxy to an HTTP proxy's address, such as \
-             http://proxy.example.com:8080, or unset it."
+            words::socks(true, "all_proxy", "socks5://127.0.0.1:7890"),
+            words::http_proxies_only("all_proxy", "it")
         )
     );
 
@@ -111,12 +113,14 @@ fn a_socks_proxy_is_a_warning_naming_its_variable() {
         ("NO_PROXY", "chatgpt.com"),
     ]);
     assert_eq!(
-        (some.level, some.detail.as_str()),
+        (some.level, some.detail),
         (
             Level::Warn,
-            "requests fail: Pitboard does not use SOCKS proxies yet, and ALL_PROXY names \
-             one, socks5h://***:***@p.example:1080; NO_PROXY exempts chatgpt.com, which \
-             Pitboard reaches directly"
+            format!(
+                "{}; {}",
+                words::socks(true, "ALL_PROXY", "socks5h://***:***@p.example:1080"),
+                words::exempts("NO_PROXY", &["chatgpt.com".into()])
+            )
         )
     );
 
@@ -125,27 +129,32 @@ fn a_socks_proxy_is_a_warning_naming_its_variable() {
         ("HTTPS_PROXY", "socks://p.example"),
     ]);
     assert_eq!(
-        (passed.level, passed.detail.as_str(), passed.advice.as_str()),
+        (passed.level, passed.detail, passed.advice),
         (
             Level::Warn,
-            "requests fail: Pitboard does not use SOCKS proxies yet, and HTTPS_PROXY \
-             names one, socks5://p.example:1080; ALL_PROXY holds no proxy's address \
-             Pitboard can read, so it is passed over",
-            "Pitboard goes through HTTP and HTTPS proxies only. For its requests to go \
-             out, set each of ALL_PROXY and HTTPS_PROXY to an HTTP proxy's address, such \
-             as http://proxy.example.com:8080, or unset them."
+            format!(
+                "{}; {}",
+                words::socks(true, "HTTPS_PROXY", "socks5://p.example:1080"),
+                words::passed_over(&["ALL_PROXY"])
+            ),
+            words::http_proxies_only(
+                &words::each_of(&["ALL_PROXY".into(), "HTTPS_PROXY".into()]),
+                "them"
+            )
         )
     );
 
     let every = network_read_from(&[("HTTPS_PROXY", "socks4://10.0.0.1"), ("no_proxy", "*")]);
     assert_eq!(
-        (every.level, every.detail.as_str(), every.advice.as_str()),
+        (every.level, every.detail, every.advice),
         (
             Level::Ok,
-            "direct: Pitboard does not use SOCKS proxies yet, and HTTPS_PROXY names one, \
-             socks4://10.0.0.1:1080; no_proxy exempts every host Pitboard calls, which it \
-             reaches directly",
-            ""
+            format!(
+                "{}; {}",
+                words::socks(false, "HTTPS_PROXY", "socks4://10.0.0.1:1080"),
+                words::exempts_every_host("no_proxy")
+            ),
+            String::new()
         )
     );
 }
@@ -158,13 +167,9 @@ fn a_variable_pitboard_cannot_read_is_a_warning() {
     assert_eq!(passed.level, Level::Warn);
     assert_eq!(
         passed.detail,
-        "direct: HTTPS_PROXY holds no proxy's address Pitboard can read, so it is passed \
-         over"
+        words::direct_passing_over(&words::passed_over(&["HTTPS_PROXY"]))
     );
-    assert_eq!(
-        passed.advice,
-        "Set it to a proxy's address, such as http://proxy.example.com:8080, or unset it."
-    );
+    assert_eq!(passed.advice, words::SET_IT_RIGHT);
     let both = ProxyFact {
         variable: "HTTP_PROXY",
         address: "http://proxy.example.com:8080".into(),
@@ -174,14 +179,13 @@ fn a_variable_pitboard_cannot_read_is_a_warning() {
     assert_eq!(passed.level, Level::Warn);
     assert_eq!(
         passed.detail,
-        "through http://proxy.example.com:8080, from HTTP_PROXY; ALL_PROXY and HTTPS_PROXY \
-         hold no proxy's address Pitboard can read, so they are passed over"
+        format!(
+            "{}; {}",
+            words::through("http://proxy.example.com:8080", "HTTP_PROXY"),
+            words::passed_over(&["ALL_PROXY", "HTTPS_PROXY"])
+        )
     );
-    assert_eq!(
-        passed.advice,
-        "Set each to a proxy's address, such as http://proxy.example.com:8080, or unset \
-         them."
-    );
+    assert_eq!(passed.advice, words::SET_EACH_RIGHT);
 }
 
 /// What doctor is given is read from the context, as the agent's proxy is, with the

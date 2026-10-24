@@ -1,4 +1,4 @@
-use super::{Check, Facts, fail, ok, read_from, warn};
+use super::{Check, Facts, fail, ok, read_from, warn, words};
 use crate::context::Context;
 use crate::error::Error;
 use crate::host::Os;
@@ -6,7 +6,8 @@ use crate::in_use::Stored;
 use crate::provider::claude::live as claude_live;
 use crate::provider::{LoginKind, ProviderId};
 use crate::state::{State, renewal_due};
-use crate::{store, words};
+use crate::store;
+use crate::words as said;
 use serde_json::Value;
 use std::path::PathBuf;
 
@@ -22,12 +23,7 @@ pub(crate) struct FallbackLogin {
 pub(super) fn login_pins(ctx: &Context, state: Option<&State>) -> (Vec<String>, Vec<String>) {
     let said = crate::settings::organisation_pins(ctx)
         .into_iter()
-        .map(|(layer, ids)| {
-            format!(
-                "`forceLoginOrgUUID` set to {} in {layer}",
-                words::listed_values(&ids)
-            )
-        })
+        .map(|(layer, ids)| words::org_pinned(&said::listed_values(&ids), layer))
         .collect();
     let LoginKind::Document(claude) = crate::provider::of(ProviderId::Claude) else {
         return (said, Vec::new());
@@ -118,10 +114,10 @@ pub(super) fn parts_of(document: &Value) -> Vec<(String, usize)> {
 // Claude Code writes its config and its account once it has run.
 pub(super) fn run_claude_once(facts: &Facts) -> String {
     let found = facts.claude_program.as_deref();
-    let program = words::spelling(facts.os, ProviderId::Claude, found).of(ProviderId::Claude);
+    let program = said::spelling(facts.os, ProviderId::Claude, found).of(ProviderId::Claude);
     match found {
-        Some(_) => format!("Run `{program}` once."),
-        None => format!("Install Claude Code, then run `{program}` once."),
+        Some(_) => words::run_once(program),
+        None => words::install_then_run_once(program),
     }
 }
 
@@ -130,20 +126,16 @@ pub(super) fn judge_config(facts: &Facts) -> Check {
         Ok(v) => ok(
             "config_file",
             "config file",
-            format!(
-                "{}  ({} keys)",
+            words::config_read(
                 facts.config_path.display(),
-                v.as_object().map_or(0, serde_json::Map::len)
+                v.as_object().map_or(0, serde_json::Map::len),
             ),
         ),
         // Claude Code writes it on its first run, and a switch does without it.
         Err(Error::ClaudeConfigMissing { path, .. }) if facts.claude_program.is_none() => warn(
             "config_file",
             "config file",
-            format!(
-                "Claude Code is not installed where Pitboard looks, and {} does not exist",
-                path.display()
-            ),
+            words::not_installed_and_no_config(path.display()),
             run_claude_once(facts),
         ),
         Err(missing @ Error::ClaudeConfigMissing { .. }) => warn(
@@ -166,16 +158,13 @@ pub(super) fn judge_identity(facts: &Facts) -> Check {
         Some(id) => ok(
             "identity",
             "identity",
-            format!("{}  ·  org {}", id.email, id.organization_uuid),
+            words::identity(&id.email, &id.organization_uuid),
         ),
         None => warn(
             "identity",
             "identity",
-            "Claude Code has not recorded a signed-in account",
-            format!(
-                "It writes this after its first successful call. {}",
-                run_claude_once(facts)
-            ),
+            words::NO_ACCOUNT_RECORDED,
+            words::written_after_the_first_call(&run_claude_once(facts)),
         ),
     }
 }
@@ -185,15 +174,9 @@ pub(super) fn judge_slot(facts: &Facts) -> Check {
         "slot",
         "slot",
         if facts.default_slot {
-            format!(
-                "default  ·  {}  ·  account {}",
-                facts.service, facts.account
-            )
+            words::default_slot(&facts.service, &facts.account)
         } else {
-            format!(
-                "{}  ·  account {}  (selected by {})",
-                facts.service, facts.account, facts.storage_dir
-            )
+            words::slot_selected_by(&facts.service, &facts.account, &facts.storage_dir)
         },
     )
 }
@@ -206,19 +189,15 @@ pub(super) fn judge_size(facts: &Facts) -> Option<Check> {
         return Some(judge_pieces(price, &facts.credential_parts));
     }
     let (bytes, limit) = (price.needs, price.limit);
+    let biggest = words::biggest(&facts.credential_parts);
     Some(if price.refused() {
         // The refusal was asked for. Say what it will cost when the day comes rather
         // than only on the day itself.
         fail(
             "credential_size",
             "login size",
-            format!(
-                "{bytes} of {limit} bytes, and PITBOARD_NO_ARGV refuses that{}",
-                biggest(&facts.credential_parts)
-            ),
-            "There is no third way to write a login this size. Sign out of MCP servers \
-             you no longer use to make it smaller, or unset PITBOARD_NO_ARGV and accept \
-             the argument-line write.",
+            words::size_refused(bytes, limit, &biggest),
+            words::NO_THIRD_WAY,
         )
     } else if price.over() {
         // Not a fault: `security` takes this much of a command from stdin and no more,
@@ -227,21 +206,11 @@ pub(super) fn judge_size(facts: &Facts) -> Option<Check> {
         warn(
             "credential_size",
             "login size",
-            format!(
-                "{bytes} of {limit} bytes: written on the argument line{}",
-                biggest(&facts.credential_parts)
-            ),
-            "A login this size can only be written by passing it as an argument, where \
-             a process running as you could read it while the call lasts. Signing out \
-             of MCP servers you no longer use makes it smaller; PITBOARD_NO_ARGV=1 \
-             refuses the switch instead.",
+            words::size_on_the_argument_line(bytes, limit, &biggest),
+            words::ONLY_AS_AN_ARGUMENT,
         )
     } else {
-        ok(
-            "credential_size",
-            "login size",
-            format!("{bytes} of {limit} bytes"),
-        )
+        ok("credential_size", "login size", words::size(bytes, limit))
     })
 }
 
@@ -250,42 +219,37 @@ pub(super) fn judge_no_argv(facts: &Facts) -> Option<Check> {
         warn(
             "no_argv",
             "PITBOARD_NO_ARGV",
-            "set, and it changes nothing on Windows",
-            "Claude Code's Credential Manager store takes a login of any size it writes in \
-             pieces, never on an argument line. Unset it.",
+            words::NO_ARGV_CHANGES_NOTHING,
+            words::UNSET_NO_ARGV,
         )
     })
 }
 
 pub(super) fn judge_store(facts: &Facts) -> Check {
     match &facts.backend {
-        Ok(store::Backend::Keychain) => ok("credential_store", "credential store", "keychain"),
+        Ok(store::Backend::Keychain) => ok("credential_store", "credential store", words::KEYCHAIN),
         // Enterprise persistence (`credman_attributes`).
         Ok(store::Backend::CredentialManager) => {
-            let detail = format!(
-                "Credential Manager  ·  {}/{}  ·  every logon of yours on this PC reads it",
-                facts.service, facts.account
-            );
+            let detail = words::in_credential_manager(&facts.service, &facts.account);
             if facts.windows.as_ref().is_some_and(|homes| homes.roams) {
                 warn(
                     "credential_store",
                     "credential store",
                     detail,
-                    "Your profile roams, and Credential Manager takes Claude Code's login with it \
-                     to every PC you sign in to, so a switch here changes the login there too.",
+                    words::ROAMS_WITH_THE_PROFILE,
                 )
             } else {
                 ok("credential_store", "credential store", detail)
             }
         }
         Ok(store::Backend::File) => {
-            let detail = format!("plaintext file  ·  {}", facts.credential_file.display());
+            let detail = words::plaintext_file(facts.credential_file.display());
             match facts.os {
                 Os::MacOs => warn(
                     "credential_store",
                     "credential store",
                     detail,
-                    "Claude Code fell back to a file, which means a keychain write failed at some point.",
+                    words::FELL_BACK_TO_A_FILE,
                 ),
                 // The chain is the file on Windows only where Credential Manager holds no login.
                 Os::Linux | Os::Windows => ok("credential_store", "credential store", detail),
@@ -295,8 +259,8 @@ pub(super) fn judge_store(facts: &Facts) -> Check {
         Ok(store::Backend::Unknown | store::Backend::SealedFile) => fail(
             "credential_store",
             "credential store",
-            "a store Pitboard does not read yet",
-            "Treat this as unknown, never as empty.",
+            words::NOT_READ_YET,
+            words::UNKNOWN_NOT_EMPTY,
         ),
         // As a switch refuses with `live_credential_elsewhere`: what would follow Claude Code
         // moving where it keeps a login.
@@ -304,15 +268,14 @@ pub(super) fn judge_store(facts: &Facts) -> Check {
             Some(named) => fail(
                 "credential_store",
                 "credential store",
-                words::named_but_not_found(facts.os, &named.email),
-                "Pitboard will not write a login where nobody reads it. Check for a Pitboard \
-                 update; if there is none, this is worth reporting.",
+                said::named_but_not_found(facts.os, &named.email),
+                words::NOWHERE_ANYBODY_READS,
             ),
             None => warn(
                 "credential_store",
                 "credential store",
-                "no credential in any backend",
-                "Nothing is signed in for this slot.",
+                words::NO_CREDENTIAL_ANYWHERE,
+                words::NOTHING_SIGNED_IN,
             ),
         },
         Err(e) => fail(
@@ -320,12 +283,8 @@ pub(super) fn judge_store(facts: &Facts) -> Check {
             "credential store",
             e.to_string(),
             match facts.os {
-                Os::MacOs | Os::Linux => "Treat this as unknown, never as empty.",
-                Os::Windows => {
-                    "Treat this as unknown, never as empty. While nothing turns Claude Code's \
-                     Credential Manager store on, its sessions read only .credentials.json, so a \
-                     login left only in Credential Manager is signed out to them."
-                }
+                Os::MacOs | Os::Linux => words::UNKNOWN_NOT_EMPTY,
+                Os::Windows => words::UNKNOWN_AND_SIGNED_OUT,
             },
         ),
     }
@@ -345,14 +304,9 @@ pub(super) fn judge_in_use(facts: &Facts, moment: &dyn Fn(i64, i64) -> String) -
     if known.last.is_none() && !enrolled {
         return None;
     }
-    let ask = "Run `pitboard status`, which asks Anthropic whose login Claude Code has stored.";
+    let ask = words::ASK_WITH_STATUS;
     let Some(last) = &known.last else {
-        return Some(warn(
-            code,
-            name,
-            "Anthropic has not been asked whose login Claude Code has stored",
-            ask,
-        ));
+        return Some(warn(code, name, words::NEVER_ASKED, ask));
     };
     let account = Stored::of(state, ProviderId::Claude, last.owner.as_ref());
     let in_use = account.said("no account");
@@ -360,18 +314,15 @@ pub(super) fn judge_in_use(facts: &Facts, moment: &dyn Fn(i64, i64) -> String) -
         Stored::of(state, ProviderId::Claude, known.own_record.as_ref()).said("no account");
     let when = moment(last.known_at, facts.now);
     let then = match &last.owner {
-        Some(_) => format!("Anthropic named {in_use} {when}"),
-        None => format!("Pitboard found no login stored {when}"),
+        Some(_) => words::anthropic_named(&in_use, &when),
+        None => words::found_none_stored(&when),
     };
     match known.unconfirmed() {
         Some(crate::in_use::Doubt::NeverEstablished) => {
             return Some(warn(
                 code,
                 name,
-                format!(
-                    "Anthropic has not been asked whose login Claude Code has stored since \
-                     Pitboard was updated; {in_use} is the account it last switched to"
-                ),
+                words::not_asked_since_an_update(&in_use),
                 ask,
             ));
         }
@@ -379,10 +330,7 @@ pub(super) fn judge_in_use(facts: &Facts, moment: &dyn Fn(i64, i64) -> String) -
             return Some(warn(
                 code,
                 name,
-                format!(
-                    "Claude Code's config has named {config} since {then}, so another login \
-                     may be stored"
-                ),
+                words::config_named_since(&config, &then),
                 ask,
             ));
         }
@@ -392,11 +340,8 @@ pub(super) fn judge_in_use(facts: &Facts, moment: &dyn Fn(i64, i64) -> String) -
         return Some(warn(
             code,
             name,
-            format!("{in_use}, as Anthropic said {when}, and Claude Code's config names {config}"),
-            format!(
-                "`/status` in Claude Code shows {config}. {}",
-                account.how_to_name()
-            ),
+            words::config_names_another(&in_use, &when, &config),
+            words::status_shows(&config, &account.how_to_name()),
         ));
     }
     // The login stored now by its fingerprint, empty for a login with no refresh token:
@@ -411,23 +356,17 @@ pub(super) fn judge_in_use(facts: &Facts, moment: &dyn Fn(i64, i64) -> String) -
         Ok(None) => Some(None),
         Err(_) => None,
     };
-    let renewed = "the next `pitboard status` asks whose it is";
     Some(ok(
         code,
         name,
         match (&last.owner, stored) {
-            (Some(_), Some(Some(now))) if now.is_empty() || now != last.login => format!(
-                "{in_use}, as Anthropic said {when} of a login renewed or replaced since; \
-                 {renewed}"
-            ),
-            (Some(_), Some(None)) => {
-                format!("{in_use}, as Anthropic said {when}; no login is stored since")
+            (Some(_), Some(Some(now))) if now.is_empty() || now != last.login => {
+                words::renewed_since(&in_use, &when)
             }
-            (Some(_), _) => format!("{in_use}, as Anthropic said {when}"),
-            (None, Some(Some(_))) => {
-                format!("no login stored, as Pitboard found {when}; one is since, and {renewed}")
-            }
-            (None, _) => format!("no login stored, as Pitboard found {when}"),
+            (Some(_), Some(None)) => words::none_stored_since(&in_use, &when),
+            (Some(_), _) => words::as_anthropic_said(&in_use, &when),
+            (None, Some(Some(_))) => words::one_stored_since(&when),
+            (None, _) => words::none_stored(&when),
         },
     ))
 }
@@ -443,31 +382,22 @@ pub(super) fn judge_credential(facts: &Facts) -> Check {
                 return warn(
                     "credential",
                     "credential",
-                    format!("signed out; the document keeps only {keys:?}"),
-                    "Nothing is signed in for this slot.",
+                    words::signed_out_keeps(&keys),
+                    words::NOTHING_SIGNED_IN,
                 );
             }
-            let changed = |detail: String| {
-                fail(
-                    "credential",
-                    "credential",
-                    detail,
-                    "The credential's shape changed. Do not switch accounts until this is understood.",
-                )
-            };
+            let changed =
+                |detail: String| fail("credential", "credential", detail, words::SHAPE_CHANGED);
             if !doc.is_object() {
-                return changed("the stored login is not a JSON object".into());
+                return changed(words::NOT_A_JSON_OBJECT.into());
             }
             let Some(oauth) = doc.get("claudeAiOauth").and_then(Value::as_object) else {
-                return changed(format!(
-                    "claudeAiOauth is not an object; the keys are {keys:?}"
-                ));
+                return changed(words::oauth_not_an_object(&keys));
             };
             let fingerprint = oauth
                 .get("refreshToken")
                 .and_then(Value::as_str)
-                .map(store::fingerprint)
-                .unwrap_or_else(|| "none".into());
+                .map_or_else(|| words::NO_TOKEN.into(), store::fingerprint);
             let Some(at) = crate::provider::claude_code()
                 .expiry(doc)
                 .refresh_expires_at
@@ -475,25 +405,15 @@ pub(super) fn judge_credential(facts: &Facts) -> Check {
                 return ok(
                     "credential",
                     "credential",
-                    format!("refresh {fingerprint}  ·  keys {keys:?}"),
+                    words::refresh_and_keys(&fingerprint, &keys),
                 );
             };
-            let life = words::parked_life_column(at, facts.now);
-            let detail = format!("refresh {fingerprint}  ·  {life}  ·  keys {keys:?}");
+            let life = said::parked_life_column(at, facts.now);
+            let detail = words::refresh_life_and_keys(&fingerprint, &life, &keys);
             if at <= facts.now {
-                warn(
-                    "credential",
-                    "credential",
-                    detail,
-                    "This login has expired: sign in to Claude Code again.",
-                )
+                warn("credential", "credential", detail, words::EXPIRED)
             } else if renewal_due(at, facts.now) {
-                warn(
-                    "credential",
-                    "credential",
-                    detail,
-                    "This login expires soon and will need signing in again.",
-                )
+                warn("credential", "credential", detail, words::EXPIRES_SOON)
             } else {
                 ok("credential", "credential", detail)
             }
@@ -501,8 +421,8 @@ pub(super) fn judge_credential(facts: &Facts) -> Check {
         Ok(None) => warn(
             "credential",
             "credential",
-            "nothing stored",
-            "Nothing is signed in for this slot.",
+            words::NOTHING_STORED,
+            words::NOTHING_SIGNED_IN,
         ),
         // Read in 2.1.294 (the register's `locked_keychain_keeps_last_login`): a session
         // keeps serving the login it last read while the keychain is locked, and one that
@@ -510,54 +430,35 @@ pub(super) fn judge_credential(facts: &Facts) -> Check {
         Err(store::Error::Locked) if facts.os == Os::Windows => fail(
             "credential",
             "credential",
-            "Credential Manager cannot be reached from this logon",
-            format!(
-                "A network logon, as {}, has no Credential Manager. Run Pitboard from a desktop \
-                 session. A Claude Code session started from this logon reads only {}.",
-                words::SSH_SIGN_IN,
-                facts.credential_file.display()
-            ),
+            words::CREDENTIAL_MANAGER_OUT_OF_REACH,
+            words::from_a_desktop_session(facts.credential_file.display()),
         ),
         Err(store::Error::Locked) => fail(
             "credential",
             "credential",
-            "the keychain is locked, and cannot ask to be unlocked from here",
-            format!(
-                "Unlock it with `security unlock-keychain`, or run Pitboard from a desktop \
-                 session. Until then a Claude Code session here keeps the login it last read \
-                 and follows no switch{}",
-                match facts
-                    .fallback_login
-                    .as_ref()
-                    .map(|left| (left.path.display(), &left.fingerprint))
-                {
-                    Some((path, Ok(Some(_)))) => {
-                        format!(", and one started here signs in with the login in {path}.")
-                    }
-                    Some((path, Err(_))) => format!(
-                        ", and whether one started here signs in with what {path} holds cannot \
-                         be told, since Pitboard could not read it."
-                    ),
-                    Some((_, Ok(None))) | None => ", and one started here is signed out.".into(),
-                }
-            ),
+            words::KEYCHAIN_LOCKED,
+            words::unlock_the_keychain(&match facts
+                .fallback_login
+                .as_ref()
+                .map(|left| (left.path.display(), &left.fingerprint))
+            {
+                Some((path, Ok(Some(_)))) => words::then_signs_in_with(path),
+                Some((path, Err(_))) => words::then_cannot_tell(path),
+                Some((_, Ok(None))) | None => words::THEN_SIGNED_OUT.into(),
+            }),
         ),
         // `claude auth login` writes nothing over it (`credman_move_lost_a_piece`).
         Err(store::Error::Broken { why, spelling }) => fail(
             "credential",
             "credential",
-            format!("{why}, which Claude Code cannot read either"),
-            format!(
-                "Run `{} auth logout`, which deletes it, then sign in to Claude Code again. \
-                 Signing in before that leaves it as it is.",
-                spelling.of(ProviderId::Claude)
-            ),
+            words::unreadable_to_claude_code_too(why),
+            words::log_out_to_delete_it(spelling.of(ProviderId::Claude)),
         ),
         Err(e) => fail(
             "credential",
             "credential",
             e.to_string(),
-            "Do not write to the store while this is failing.",
+            words::DO_NOT_WRITE,
         ),
     }
 }
@@ -568,57 +469,22 @@ pub(super) fn judge_credential(facts: &Facts) -> Check {
 pub(super) fn judge_fallback_login(facts: &Facts) -> Option<Check> {
     let left = facts.fallback_login.as_ref()?;
     let path = left.path.display();
-    let running = format!(
-        "While it is there, Claude Code sessions already running at a switch {}.",
-        words::kept_until_renewed()
-    );
-    let cannot = words::out_of_reach(facts.os);
-    let (could_not, such_as, as_login) = match facts.os {
-        Os::MacOs | Os::Linux => (
-            "the keychain could not be read",
-            "in a session started over SSH".to_owned(),
-            "`/login` over SSH does".to_owned(),
-        ),
-        Os::Windows => (
-            "Credential Manager could not be reached",
-            format!("in {}", words::SSH_SIGN_IN),
-            format!("`/login` does in {}", words::SSH_SIGN_IN),
-        ),
-    };
     let (detail, advice) = match &left.fingerprint {
         Ok(Some(fingerprint)) => (
-            format!(
-                "{path}  ·  refresh {}",
+            words::file_refresh(
+                path,
                 if fingerprint.is_empty() {
-                    "none"
+                    words::NO_TOKEN
                 } else {
-                    fingerprint.as_str()
-                }
+                    fingerprint
+                },
             ),
-            format!(
-                "Claude Code signs in with this wherever it {cannot}, such as {such_as}, and no \
-                 switch reaches it. A sign-in made where {could_not} leaves one, as {as_login}. \
-                 {running} `pitboard stow` keeps this login for its account, where Pitboard \
-                 holds no other it can switch to, then deletes the file, which leaves one login \
-                 for every session."
-            ),
+            words::the_file_signs_sessions_in(facts.os),
         ),
-        Ok(None) => (
-            format!("{path}  ·  no login in it"),
-            format!(
-                "It holds no Claude Code login. {running} `pitboard stow` deletes it, which \
-                 lets them follow a switch."
-            ),
-        ),
+        Ok(None) => (words::file_without_a_login(path), words::stow_deletes_it()),
         Err(e) => (
-            format!("{path}  ·  not read: {e}"),
-            format!(
-                "Pitboard could not read it, so whether it holds a login, which a session that \
-                 {cannot} signs in with, cannot be told, and `pitboard stow` cannot put it away. \
-                 {running} Deleting it lets them follow a switch, and takes whatever it holds \
-                 with it: `{}`.",
-                facts.os.remove_file_command(&left.path)
-            ),
+            words::file_not_read(path, e),
+            words::delete_it_yourself(facts.os, &facts.os.remove_file_command(&left.path)),
         ),
     };
     Some(warn("fallback_login", "fallback login", detail, advice))
@@ -643,21 +509,16 @@ pub(super) fn judge_storage_v5(facts: &Facts) -> Check {
         .and_then(Value::as_bool)
         .unwrap_or(false);
     if !(facts.hover_rest_env || flag_on) {
-        return ok("storage_v5", "storage v5", "inactive");
+        return ok("storage_v5", "storage v5", words::INACTIVE);
     }
     match facts.backend {
         Ok(store::Backend::File) => warn(
             "storage_v5",
             "storage v5",
-            "switched on, and this login is in the fallback store",
-            "Pitboard reads the plaintext file. If Claude Code was given a backend of its \
-             own, that is not the same file. Check for an update before switching.",
+            words::ON_IN_THE_FALLBACK_STORE,
+            words::MAYBE_NOT_THE_SAME_FILE,
         ),
-        _ => ok(
-            "storage_v5",
-            "storage v5",
-            "switched on; the keychain is still where the login is",
-        ),
+        _ => ok("storage_v5", "storage v5", words::ON_IN_THE_KEYCHAIN),
     }
 }
 
@@ -670,40 +531,17 @@ pub(super) fn judge_pieces(price: store::Cost, parts: &[(String, usize)]) -> Che
             "login size",
             format!(
                 "{}{}",
-                words::past_credential_manager(bytes, limit),
-                biggest(parts)
+                said::past_credential_manager(bytes, limit),
+                words::biggest(parts)
             ),
-            "Neither Pitboard nor Claude Code can write a login this size there. Sign out of \
-             MCP servers you no longer use to make it smaller.",
+            words::NEITHER_CAN_WRITE_IT,
         ),
-        Some(0) => ok(
-            "credential_size",
-            "login size",
-            format!("{bytes} bytes, in one item"),
-        ),
+        Some(0) => ok("credential_size", "login size", words::in_one_item(bytes)),
         Some(pieces) => ok(
             "credential_size",
             "login size",
-            format!(
-                "{bytes} bytes, in {pieces} pieces of {} characters",
-                crate::provider::claude::pieces::PIECE
-            ),
+            words::in_pieces(bytes, pieces, crate::provider::claude::pieces::PIECE),
         ),
-    }
-}
-
-/// The three things taking up the most room, for a check that would otherwise leave a
-/// person guessing which of them to do something about.
-pub(super) fn biggest(parts: &[(String, usize)]) -> String {
-    let named: Vec<String> = parts
-        .iter()
-        .take(3)
-        .map(|(what, bytes)| format!("{what} {bytes}"))
-        .collect();
-    if named.is_empty() {
-        String::new()
-    } else {
-        format!(". Mostly: {}", named.join(", "))
     }
 }
 
@@ -712,19 +550,15 @@ pub(super) fn judge_login_restrictions(facts: &Facts) -> Option<Check> {
         return None;
     }
     let name = "login restrictions";
-    let said = facts.organisation_pins.join("; ");
+    let pins = facts.organisation_pins.join("; ");
     Some(if facts.pinned_out.is_empty() {
-        ok("login_restrictions", name, said)
+        ok("login_restrictions", name, pins)
     } else {
         warn(
             "login_restrictions",
             name,
-            said,
-            format!(
-                "Claude Code refuses the logins of {} as a session starts, so Pitboard does not \
-                 put them in use.",
-                words::listed(facts.pinned_out.clone())
-            ),
+            pins,
+            words::refused_as_a_session_starts(&said::listed(facts.pinned_out.clone())),
         )
     })
 }
@@ -733,9 +567,9 @@ pub(super) fn judge_login_restrictions(facts: &Facts) -> Option<Check> {
 pub(super) fn judge_auth(facts: &Facts) -> Check {
     if facts.auth_overrides.is_empty() {
         let read = if facts.fallback_login.is_some() {
-            "the stored login, which is what Pitboard moves, once a session reads it again"
+            words::THE_STORED_LOGIN_ONCE_READ
         } else {
-            "the stored login, which is what Pitboard moves"
+            words::THE_STORED_LOGIN
         };
         return ok("auth_source", "what a session authenticates with", read);
     }
@@ -747,10 +581,8 @@ pub(super) fn judge_auth(facts: &Facts) -> Check {
     warn(
         "auth_source",
         "what a session authenticates with",
-        format!("something else: {}", named.join("; ")),
-        "Claude Code here authenticates with that rather than with the stored login, so \
-         switching accounts changes nothing a session would notice. Remove it, or accept \
-         that Pitboard is moving a login nothing reads.",
+        words::something_else(&named.join("; ")),
+        words::A_LOGIN_NOTHING_READS,
     )
 }
 
@@ -762,23 +594,15 @@ pub(super) fn judge_auth(facts: &Facts) -> Check {
 /// stopped holding, which is a probe's job and not a version number's.
 pub(super) fn judge_claude_version(facts: &Facts) -> Check {
     let verified = read_from(ProviderId::Claude, facts.os);
-    match facts.claude_version.as_deref() {
-        None => ok(
-            "claude_version",
-            "Claude Code build",
-            format!("not found here; Pitboard's facts were read from {verified}"),
-        ),
-        Some(installed) if installed == verified => ok(
-            "claude_version",
-            "Claude Code build",
-            format!("{installed}, which is what Pitboard's facts were read from"),
-        ),
-        Some(installed) => ok(
-            "claude_version",
-            "Claude Code build",
-            format!("{installed} installed; Pitboard's facts were read from {verified}"),
-        ),
-    }
+    ok(
+        "claude_version",
+        "Claude Code build",
+        match facts.claude_version.as_deref() {
+            None => words::build_not_found(verified),
+            Some(installed) if installed == verified => words::build_as_read(installed),
+            Some(installed) => words::build_installed(installed, verified),
+        },
+    )
 }
 
 /// Claude Code's supervisor daemon is a second writer of the login, on a schedule nobody
@@ -786,24 +610,16 @@ pub(super) fn judge_claude_version(facts: &Facts) -> Check {
 /// person reading a diagnosis should be able to see that it is there.
 pub(super) fn judge_daemon(facts: &Facts) -> Check {
     let Some(d) = &facts.daemon else {
-        return ok("claude_daemon", "Claude Code daemon", "none has run here");
+        return ok("claude_daemon", "Claude Code daemon", words::NO_DAEMON);
     };
-    let version = d
-        .version
-        .as_deref()
-        .map(|v| format!("Claude Code {v}"))
-        .unwrap_or_else(|| "an unrecorded version".into());
-    if d.running {
-        ok(
-            "claude_daemon",
-            "Claude Code daemon",
-            format!("running, {version}, pid {}", d.pid),
-        )
-    } else {
-        ok(
-            "claude_daemon",
-            "Claude Code daemon",
-            format!("not running; {version} ran here last"),
-        )
-    }
+    let version = words::daemon_version(d.version.as_deref());
+    ok(
+        "claude_daemon",
+        "Claude Code daemon",
+        if d.running {
+            words::daemon_running(&version, d.pid)
+        } else {
+            words::daemon_stopped(&version)
+        },
+    )
 }
