@@ -230,7 +230,8 @@ impl Provider for Claude {
     }
 
     // `CLAUDE_SECURESTORAGE_CONFIG_DIR` would pin the slot back to a real one, and
-    // `CLAUDE_CODE_FORCE_WINDOWS_CREDMAN` the login into Credential Manager (2.1.300).
+    // `CLAUDE_CODE_FORCE_WINDOWS_CREDMAN` the login into Credential Manager (2.1.300). Started
+    // in `dir`, it takes no project's settings (project_settings_folder).
     fn sign_in(
         &self,
         ctx: &Context,
@@ -242,7 +243,8 @@ impl Provider for Claude {
             .args(["auth", "login"])
             .env("CLAUDE_CONFIG_DIR", dir)
             .env_remove("CLAUDE_SECURESTORAGE_CONFIG_DIR")
-            .env_remove("CLAUDE_CODE_FORCE_WINDOWS_CREDMAN");
+            .env_remove("CLAUDE_CODE_FORCE_WINDOWS_CREDMAN")
+            .current_dir(dir);
         Ok(command)
     }
 
@@ -423,6 +425,17 @@ mod tests {
                 "{withheld}"
             );
         }
+    }
+
+    #[test]
+    fn a_sign_in_runs_in_its_private_folder() {
+        let ctx = Context::new(PathBuf::from("/nowhere"))
+            .with_claude_program(std::env::current_exe().expect("this test"));
+        let dir = std::path::Path::new("/tmp/pitboard-signin-scratch");
+        let command = Claude
+            .sign_in(&ctx, Permit::for_a_test(), dir)
+            .expect("found");
+        assert_eq!(command.get_current_dir(), Some(dir));
     }
 
     /// The manual address 2.1.289 prints, with its values made up.

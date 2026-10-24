@@ -201,6 +201,12 @@ pub(crate) const PER_SYSTEM: &[PerSystem] = &[
         windows: Read(WINDOWS_VERIFIED_AGAINST),
     },
     PerSystem {
+        name: "project_settings_folder",
+        macos: Read("2.1.310"),
+        linux: Read("2.1.310"),
+        windows: Read("2.1.310"),
+    },
+    PerSystem {
         name: "install_places",
         macos: Read("2.1.289"),
         linux: Read("2.1.289"),
@@ -882,6 +888,31 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
             // The refusal, then the handler returning rather than ending the process.
             "Invalid code. Please make sure the full code was copied.\n`);return}",
             "if(this.manualAuthCodeResolver)this.authorizationCodeReceived=!0",
+        ],
+        absent: &[],
+    },
+    Assumption {
+        name: "project_settings_folder",
+        fact: "Claude Code takes a project's settings from `.claude/settings.json` in the folder \
+               it starts in, the real path of its working folder, and local settings from \
+               `.claude/settings.local.json` at that folder's git root, or in the folder itself \
+               where the root is the home folder or another user's, and always on Windows. \
+               `--project-config-root` moves both. The settings every command composes, \
+               `claude auth login`'s among them, take both",
+        read_from: "the settings sources' files, the project and local folders' resolvers with \
+                    the git root's home and owner checks, and the working folder a run starts \
+                    with, the real path of `process.cwd()`, in the darwin-arm64, linux-x64, \
+                    win32-x64 and win32-arm64 builds of 2.1.310, read as bytes on 2026-10-24",
+        verified_against: "2.1.310",
+        depends: "Claude's Provider::sign_in, which starts `claude auth login` in its private \
+                  folder, as Codex's starts `codex login`, so a project's settings in the folder \
+                  Pitboard runs from do not reach it, and local ones only from a git repository \
+                  other than the home folder that Pitboard's own folder is in",
+        probe: &[
+            r#"case"projectSettings":return pe(n.projectConfigDir??"#,
+            r#"return fe(".claude","settings.json");case"localSettings":return fe(".claude","settings.local.json")"#,
+            "localSettings: not canonicalizing the consent store to ",
+            r#"typeof process.cwd==="function"&&typeof t==="function")try{let r=e();try{n="#,
         ],
         absent: &[],
     },
@@ -2219,9 +2250,9 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
                   switch goes on: a session takes the login a switch puts in place. \
                   settings::console_pin, so a sign-in under a managed `console` and no managed \
                   gateway, which would make an API key and leave nothing to enrol, refuses with \
-                  `sign_in_pinned_to_console` before `claude auth login` starts. The person's \
-                  own settings do not reach a sign-in in Pitboard's private folder; a project's \
-                  in the folder Pitboard runs from does, and is not looked for",
+                  `sign_in_pinned_to_console` before `claude auth login` starts. Neither the \
+                  person's own settings nor a project's reach a sign-in in Pitboard's private \
+                  folder (project_settings_folder)",
         probe: &[
             "forceLoginMethod is 'console' in ",
             "; log in with an Anthropic Console account instead.",
@@ -2314,6 +2345,7 @@ mod tests {
                 "oauth_client",
                 "sign_in_output",
                 "sign_in_takes_another_code",
+                "project_settings_folder",
                 "fallback_file_pins_session_login",
                 "login_is_one_organisation",
                 "config_may_name_no_organisation",

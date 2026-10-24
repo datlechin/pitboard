@@ -3531,6 +3531,11 @@ treated, and only the macOS build shows it. The run reads both builds since.
   them; a code the token exchange refuses ends the sign-in with `Login failed: ` and exit
   status 1. So the model offers the code field again once Claude Code has refused one, to
   the same sign-in, and starts nothing again.
+- Read on 24 October 2026 from the four builds of 2.1.310 (`project_settings_folder`): Claude
+  Code takes a project's settings from `.claude/settings.json` in the folder it starts in, and
+  local ones from that folder's git root, and `claude auth login` takes them as every command
+  does, so a project's `forceLoginMethod` would pin the sign-in. Pitboard's sign-in starts
+  `claude auth login` inside its private folder, as it starts `codex login`.
 - Read on 5 October 2026 from the macOS builds of 2.1.283 and 2.1.289 and the Linux build of
   2.1.289: the native installer puts its launcher at `~/.local/bin/claude`, and says so
   when that directory is not on `PATH`. A global npm install puts `claude` in npm's global
