@@ -558,29 +558,19 @@ fn watch(
         .stderr(std::process::Stdio::piped());
     let mut tool = crate::host::proc::start(command)?;
     let child = tool.child();
-    #[cfg(windows)]
     let pid = child.id();
     let (say, said) = std::sync::mpsc::channel();
     if let Some(first) = first {
         let _ = say.send(first);
     }
-    // Claude Code writes the browser URL and the paste prompt without a newline after them,
-    // so this reads by chunk rather than by line and lets the caller decide what to show.
-    // Codex writes its address to stderr, which is read the same way.
-    for stream in [
-        child.stdout.take().map(Readable::Out),
-        child.stderr.take().map(Readable::Err),
-    ]
-    .into_iter()
-    .flatten()
-    {
+    // Codex writes its address to stderr.
+    if let Some(stdout) = child.stdout.take() {
         let say = say.clone();
-        std::thread::spawn(move || {
-            #[cfg(windows)]
-            pump(stream, &say, pid);
-            #[cfg(not(windows))]
-            pump(stream, &say);
-        });
+        std::thread::spawn(move || crate::host::proc::pump(stdout, &say, pid));
+    }
+    if let Some(stderr) = child.stderr.take() {
+        let say = say.clone();
+        std::thread::spawn(move || crate::host::proc::pump(stderr, &say, pid));
     }
     Ok(WatchedSignIn {
         tool: Running::Program(tool),
@@ -588,87 +578,6 @@ fn watch(
         steps: Steps::default(),
         pending,
     })
-}
-
-enum Readable {
-    Out(std::process::ChildStdout),
-    Err(std::process::ChildStderr),
-}
-
-// Read the tool's output by chunk until its pipe closes.
-#[cfg(not(windows))]
-fn pump(stream: Readable, say: &std::sync::mpsc::Sender<String>) {
-    use std::io::Read;
-    let mut reader: Box<dyn Read> = match stream {
-        Readable::Out(o) => Box::new(o),
-        Readable::Err(e) => Box::new(e),
-    };
-    let mut buffer = [0_u8; 1024];
-    while let Ok(read) = reader.read(&mut buffer) {
-        if read == 0 {
-            break;
-        }
-        if say
-            .send(String::from_utf8_lossy(&buffer[..read]).into_owned())
-            .is_err()
-        {
-            break;
-        }
-    }
-}
-
-// On Windows a browser the tool opened inherits the tool's piped stdout and stderr, so the
-// pipe does not close when the tool exits and a blocking read would never return. Read what is
-// pending and stop once the tool itself is gone, whoever still holds the write end.
-#[cfg(windows)]
-fn pump(stream: Readable, say: &std::sync::mpsc::Sender<String>, pid: u32) {
-    use std::io::Read;
-    use std::os::windows::io::AsRawHandle;
-    use windows_sys::Win32::System::Pipes::PeekNamedPipe;
-    let handle = match &stream {
-        Readable::Out(o) => o.as_raw_handle(),
-        Readable::Err(e) => e.as_raw_handle(),
-    };
-    let mut reader: Box<dyn Read> = match stream {
-        Readable::Out(o) => Box::new(o),
-        Readable::Err(e) => Box::new(e),
-    };
-    let mut buffer = [0_u8; 1024];
-    loop {
-        let mut available = 0u32;
-        // SAFETY: an open pipe read handle; `available` is a valid out-param, the rest unused.
-        let peeked = unsafe {
-            PeekNamedPipe(
-                handle,
-                std::ptr::null_mut(),
-                0,
-                std::ptr::null_mut(),
-                &mut available,
-                std::ptr::null_mut(),
-            )
-        };
-        if peeked == 0 {
-            break;
-        }
-        if available > 0 {
-            match reader.read(&mut buffer) {
-                Ok(0) => break,
-                Ok(read) => {
-                    if say
-                        .send(String::from_utf8_lossy(&buffer[..read]).into_owned())
-                        .is_err()
-                    {
-                        break;
-                    }
-                }
-                Err(_) => break,
-            }
-        } else if crate::host::proc::may_be_running(pid) {
-            std::thread::sleep(std::time::Duration::from_millis(20));
-        } else {
-            break;
-        }
-    }
 }
 
 /// Enroll the account signed in to `which` now, or with `signed_in`, the one a sign-in just

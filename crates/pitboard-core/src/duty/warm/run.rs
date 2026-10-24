@@ -9,7 +9,7 @@
 //! of the person's own configuration, history or sessions is read or written.
 
 use crate::context::Context;
-use crate::host::Os;
+use crate::host::{Input, Os};
 use crate::permit::Permit;
 use crate::provider::ProviderId;
 use std::ffi::OsString;
@@ -136,7 +136,8 @@ impl Started {
 }
 
 /// Runs `headless` for at most [`CEILING`], or plays it where a test or a fixture said to.
-pub(crate) fn run(ctx: &Context, permit: Permit, headless: Headless) -> std::io::Result<Ran> {
+// Starting the tool asks for the permit, as a sign-in's `Provider::sign_in` does.
+pub(crate) fn run(ctx: &Context, _: Permit, headless: Headless) -> std::io::Result<Ran> {
     #[cfg(any(test, feature = "test-support"))]
     if let Some(script) = ctx.warm_script() {
         let command = &headless.command;
@@ -156,12 +157,21 @@ pub(crate) fn run(ctx: &Context, permit: Permit, headless: Headless) -> std::io:
     #[cfg(not(any(test, feature = "test-support")))]
     let _ = ctx;
     let Headless { command, token } = headless;
-    crate::host::proc::run_within(
-        permit,
-        command,
-        token.as_deref().map(str::as_bytes),
-        CEILING,
-    )
+    let input = token
+        .as_deref()
+        .map_or(Input::Nothing, |token| Input::Descriptor3(token.as_bytes()));
+    match crate::host::proc::run_within(command, input, CEILING) {
+        Ok(out) => Ok(Ran {
+            exit: out.status.code(),
+            stdout: String::from_utf8_lossy(&out.stdout).into_owned(),
+            timed_out: false,
+        }),
+        Err(e) if e.kind() == std::io::ErrorKind::TimedOut => Ok(Ran {
+            timed_out: true,
+            ..Ran::default()
+        }),
+        Err(e) => Err(e),
+    }
 }
 
 #[cfg(test)]

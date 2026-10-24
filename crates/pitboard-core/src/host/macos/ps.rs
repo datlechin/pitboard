@@ -1,6 +1,6 @@
 //! This user's processes on macOS, as `ps` lists them.
 
-use crate::host::Listed;
+use crate::host::{Input, Listed};
 use std::path::PathBuf;
 use std::process::Command;
 use std::time::Duration;
@@ -10,7 +10,7 @@ pub(super) fn listing() -> Result<Vec<Listed>, String> {
     // terminal.
     let mut ps = Command::new("/bin/ps");
     ps.args(["-x", "-o", "pid=,ppid=,comm="]);
-    let out = match super::helper::output_within(ps, b"", Duration::from_secs(5)) {
+    let out = match super::proc::run_within(ps, Input::Nothing, Duration::from_secs(5)) {
         Ok(out) => out,
         Err(e) if e.kind() == std::io::ErrorKind::TimedOut => {
             return Err("`ps` did not answer within 5 seconds".into());
@@ -143,7 +143,7 @@ garbage
         let owner = |pid: u32| {
             let mut ps = Command::new("ps");
             ps.args(["-o", "uid=", "-p", &pid.to_string()]);
-            super::super::helper::output_within(ps, b"", Duration::from_secs(5))
+            super::super::proc::run_within(ps, Input::Nothing, Duration::from_secs(5))
                 .map(|out| String::from_utf8_lossy(&out.stdout).trim().to_string())
                 .unwrap_or_default()
         };

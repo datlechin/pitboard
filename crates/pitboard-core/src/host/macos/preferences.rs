@@ -6,6 +6,7 @@
 //! `CFPreferencesAppValueIsForced` says a profile forces it, and must be a string. Claude
 //! Code reads the profile's plist whole instead (`macos_managed_preferences`).
 
+use crate::host::Input;
 use crate::host::administered::{self, Administered};
 use core_foundation::base::{CFType, TCFType};
 use core_foundation::string::CFString;
@@ -62,7 +63,7 @@ pub(super) fn as_json(path: &Path) -> Administered {
     let plutil = |args: &[&str]| {
         let mut plutil = Command::new("/usr/bin/plutil");
         plutil.args(args).arg("--").arg(path);
-        super::helper::output_within(plutil, b"", Duration::from_secs(5))
+        super::proc::run_within(plutil, Input::Nothing, Duration::from_secs(5))
     };
     let unfinished =
         |e: std::io::Error| Administered::Unreadable(format!("cannot be read by `plutil`: {e}"));

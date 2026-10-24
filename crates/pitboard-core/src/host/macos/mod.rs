@@ -1,7 +1,6 @@
 //! macOS: the login keychain, files, `ps`, launchd and managed preferences.
 
 mod bundle;
-mod helper;
 mod keychain;
 mod launchd;
 mod preferences;

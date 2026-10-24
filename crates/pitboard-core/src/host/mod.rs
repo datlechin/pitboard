@@ -735,8 +735,7 @@ pub enum JarError {
 #[cfg(any(test, feature = "test-support"))]
 pub(crate) use os::write_jar;
 
-/// What a program run with a ceiling ([`proc::run_within`]) came to: its exit status, `None`
-/// where a signal or the ceiling ended it, and what it printed on standard output.
+/// What a warm-up's run came to: `exit` is `None` where a signal or the ceiling ended it.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Ran {
     pub exit: Option<i32>,
@@ -744,56 +743,39 @@ pub struct Ran {
     pub timed_out: bool,
 }
 
-// How long what a run printed is waited for once it ended.
+// What `proc::run_within` hands the program to read. Windows refuses descriptor 3.
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum Input<'a> {
+    Nothing,
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+    Stdin(&'a [u8]),
+    #[cfg_attr(windows, allow(dead_code))]
+    Descriptor3(&'a [u8]),
+}
+
+// How long what a run printed is waited for once it ended: something that left its group may
+// still hold the pipe.
 const DRAINED: std::time::Duration = std::time::Duration::from_secs(5);
 
-impl Ran {
-    pub(crate) fn of(
-        status: Option<std::process::ExitStatus>,
-        timed_out: bool,
-        printed: &std::sync::mpsc::Receiver<String>,
-    ) -> Ran {
-        Ran {
-            exit: status
-                .and_then(|status| status.code())
-                .filter(|_| !timed_out),
-            stdout: printed.recv_timeout(DRAINED).unwrap_or_default(),
-            timed_out,
-        }
-    }
-}
-
-// Up to 1 MiB of what a run prints, read on a thread of its own.
-pub(crate) fn drained(
-    stdout: Option<std::process::ChildStdout>,
-) -> std::sync::mpsc::Receiver<String> {
-    use std::io::Read;
+// What a run's pipe carries, read on a thread of its own so a chatty program cannot stall.
+fn drained(pipe: Option<impl std::io::Read + Send + 'static>) -> impl FnOnce() -> Vec<u8> {
     let (said, printed) = std::sync::mpsc::channel();
     std::thread::spawn(move || {
-        let mut text = String::new();
-        if let Some(stdout) = stdout {
-            let _ = stdout.take(1 << 20).read_to_string(&mut text);
+        let mut bytes = Vec::new();
+        if let Some(mut pipe) = pipe {
+            let _ = pipe.read_to_end(&mut bytes);
         }
-        let _ = said.send(text);
+        let _ = said.send(bytes);
     });
-    printed
+    move || printed.recv_timeout(DRAINED).unwrap_or_default()
 }
 
-// How `child` ended, where it did within `within`.
-pub(crate) fn ended_within(
-    child: &mut std::process::Child,
-    within: std::time::Duration,
-) -> std::io::Result<Option<std::process::ExitStatus>> {
-    let began = std::time::Instant::now();
-    loop {
-        if let Some(status) = child.try_wait()? {
-            return Ok(Some(status));
-        }
-        if began.elapsed() >= within {
-            return Ok(None);
-        }
-        std::thread::sleep(std::time::Duration::from_millis(100));
-    }
+// What `ceiling` stopped, as `proc::run_within` says it.
+fn timed_out(ceiling: std::time::Duration) -> std::io::Error {
+    std::io::Error::new(
+        std::io::ErrorKind::TimedOut,
+        format!("no answer within {}s", ceiling.as_secs()),
+    )
 }
 
 /// The machine Pitboard is standing on, as one value rather than a set of `cfg` branches

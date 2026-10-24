@@ -94,7 +94,8 @@ window loads its site, and whatever the site's pages load, as a browser would.
     (`host/administered.rs`) and no app installed on the machine. `fs`, `proc` and `user`
     are plain functions for what the system does whoever asks: private files and
     directories, every other change to the disk, whether a process is alive, a program run
-    with a ceiling (`proc::run_within`), the login name, whether this process runs as root,
+    with a ceiling (`proc::run_within`, the one way Pitboard waits on `security`, `ps`,
+    `plutil` and a warm-up's tool), the login name, whether this process runs as root,
     and the `PATH` the person's login shell builds, which `unix/shell.rs` asks for. `fs`
     creates each private file itself and hands it back open (`create_private`,
     `open_private_append` and `open_private_lock`), so how a file is made private is the
@@ -1208,7 +1209,8 @@ window loads its site, and whatever the site's pages load, as a browser would.
   function in `host::fs` that makes, moves or removes a file or a directory,
   `RawStore::write` and `delete` (the keychain among the stores), `Scheduler::put` and
   `remove` and the service manager they ask, a tool's sign-in or warm-up run started
-  (`host::proc::run_within`), and the token exchange, `Provider::renew` down to the request.
+  (`Provider::sign_in`, `duty::warm::run::run`), and the token exchange, `Provider::renew`
+  down to the request.
   So a change that skips the gate does not compile, and nothing rotates a refresh token it
   could not then write down. Every change asks the gate before it reads, locks or records
   anything, so a refused one leaves even the audit log as it was. Where the gate refuses,

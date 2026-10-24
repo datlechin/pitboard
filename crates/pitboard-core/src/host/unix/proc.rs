@@ -1,42 +1,42 @@
 //! Processes, the POSIX way.
 
-use crate::host::Ran;
-use crate::permit::Permit;
+use crate::host::Input;
 use std::ffi::CString;
-use std::io::{self, Write};
+use std::io::{self, Read, Write};
 use std::os::fd::AsRawFd;
 use std::os::unix::ffi::OsStrExt;
 use std::os::unix::process::CommandExt;
 use std::path::Path;
-use std::process::{Child, Command, Stdio};
+use std::process::{Child, Command, Output, Stdio};
+use std::sync::mpsc::{self, Sender};
 use std::time::Duration;
 
 /// How long a run past its ceiling is given to end once asked, before it is made to.
 const GRACE: Duration = Duration::from_secs(2);
 
-/// Runs `command` in a process group of its own for at most `ceiling`, with `handed` to read on
-/// descriptor 3 and nothing on standard input. Past the ceiling, the group is asked to end and
-/// then made to; once the run ended, whatever it left in its group is ended too, so nothing it
-/// started outlives it or keeps its output open.
+// `security`, `ps`, `plutil` and a warm-up's tool, each in a process group of its own, ended past
+// the ceiling (`TimedOut`) and once the run ended, so nothing it started outlives it.
 pub(crate) fn run_within(
-    _: Permit,
     mut command: Command,
-    handed: Option<&[u8]>,
+    input: Input<'_>,
     ceiling: Duration,
-) -> io::Result<Ran> {
+) -> io::Result<Output> {
     command
-        .stdin(Stdio::null())
+        .stdin(match input {
+            Input::Stdin(_) => Stdio::piped(),
+            Input::Nothing | Input::Descriptor3(_) => Stdio::null(),
+        })
         .stdout(Stdio::piped())
-        .stderr(Stdio::null())
+        .stderr(Stdio::piped())
         .process_group(0);
-    let reader = match handed {
-        Some(bytes) => {
+    let reader = match input {
+        Input::Descriptor3(bytes) => {
             let (reader, mut writer) = io::pipe()?;
             writer.write_all(bytes)?;
             drop(writer);
             Some(reader)
         }
-        None => None,
+        Input::Nothing | Input::Stdin(_) => None,
     };
     if let Some(reader) = &reader {
         let fd = reader.as_raw_fd();
@@ -59,16 +59,78 @@ pub(crate) fn run_within(
     }
     let mut child = command.spawn()?;
     drop(reader);
-    let printed = crate::host::drained(child.stdout.take());
-    let mut status = crate::host::ended_within(&mut child, ceiling)?;
-    let timed_out = status.is_none();
-    if timed_out {
-        signal(&child, libc::SIGTERM);
-        status = crate::host::ended_within(&mut child, GRACE).ok().flatten();
+    let stdout = crate::host::drained(child.stdout.take());
+    let stderr = crate::host::drained(child.stderr.take());
+    if let (Input::Stdin(bytes), Some(mut stdin)) = (input, child.stdin.take()) {
+        let bytes = bytes.to_vec();
+        // Closed once written, which is how a helper reading commands learns there are no more.
+        // One that exits without reading them is not an error.
+        std::thread::spawn(move || stdin.write_all(&bytes));
     }
+    let exited = exits(&child);
+    let ended = exited.recv_timeout(ceiling).is_ok();
+    if !ended {
+        signal(&child, libc::SIGTERM);
+        if exited.recv_timeout(GRACE).is_err() {
+            signal(&child, libc::SIGKILL);
+            let _ = exited.recv();
+        }
+    }
+    // Before the run is waited for, while its group is still its own.
     signal(&child, libc::SIGKILL);
-    let status = status.or_else(|| child.wait().ok());
-    Ok(Ran::of(status, timed_out, &printed))
+    let status = child.wait()?;
+    if !ended {
+        return Err(crate::host::timed_out(ceiling));
+    }
+    Ok(Output {
+        status,
+        stdout: stdout(),
+        stderr: stderr(),
+    })
+}
+
+// Once `child` ended, left unreaped so its pid is not given to another process meanwhile.
+fn exits(child: &Child) -> mpsc::Receiver<()> {
+    let pid = child.id();
+    let (said, exited) = mpsc::channel();
+    std::thread::spawn(move || {
+        loop {
+            // SAFETY: an all-zero `siginfo_t` is a valid value for `waitid` to overwrite.
+            let mut info: libc::siginfo_t = unsafe { std::mem::zeroed() };
+            // SAFETY: waits on this process's own child, writing into `info`, which lives for
+            // the call; `WNOWAIT` leaves it waitable.
+            let waited = unsafe {
+                libc::waitid(
+                    libc::P_PID,
+                    pid,
+                    &raw mut info,
+                    libc::WEXITED | libc::WNOWAIT,
+                )
+            };
+            if waited == 0 || io::Error::last_os_error().kind() != io::ErrorKind::Interrupted {
+                break;
+            }
+        }
+        let _ = said.send(());
+    });
+    exited
+}
+
+// What a sign-in's tool prints, by chunk until its pipe closes, for its own words carry no
+// newline after an address or a prompt.
+pub(crate) fn pump(mut output: impl Read, said: &Sender<String>, _tool: u32) {
+    let mut buffer = [0_u8; 1024];
+    while let Ok(read) = output.read(&mut buffer) {
+        if read == 0 {
+            break;
+        }
+        if said
+            .send(String::from_utf8_lossy(&buffer[..read]).into_owned())
+            .is_err()
+        {
+            break;
+        }
+    }
 }
 
 // A sign-in's tool, which a cancel kills and reaps.
@@ -214,49 +276,92 @@ mod tests {
         command
     }
 
+    fn printed(out: &Output) -> String {
+        String::from_utf8_lossy(&out.stdout).into_owned()
+    }
+
+    #[test]
+    fn what_is_written_on_standard_input_is_read_back_whole() {
+        let out = run_within(
+            shell("cat -"),
+            Input::Stdin(b"hello"),
+            Duration::from_secs(5),
+        )
+        .expect("ran");
+        assert!(out.status.success());
+        assert_eq!(out.stdout, b"hello");
+    }
+
+    #[test]
+    fn what_a_run_says_on_its_errors_is_kept() {
+        let out = run_within(
+            shell("echo no >&2; exit 44"),
+            Input::Nothing,
+            Duration::from_secs(5),
+        )
+        .expect("ran");
+        assert_eq!(out.status.code(), Some(44));
+        assert_eq!(out.stderr, b"no\n");
+    }
+
+    #[test]
+    fn a_large_answer_cannot_stall_the_run() {
+        let mut head = Command::new("head");
+        head.args(["-c", "1000000", "/dev/zero"]);
+        let out = run_within(head, Input::Nothing, Duration::from_secs(10)).expect("ran");
+        assert_eq!(out.stdout.len(), 1_000_000);
+    }
+
     /// What is handed arrives on descriptor 3 and nowhere else: not on standard input, which
     /// Claude Code's print mode adds to its prompt, nor in an argument or a variable.
     #[test]
     fn what_is_handed_arrives_on_descriptor_three_alone() {
-        let ran = run_within(
-            Permit::for_a_test(),
+        let out = run_within(
             shell(r#"printf '%s|' "$(cat <&3)" "$(cat)" "$*""#),
-            Some(b"the-token"),
+            Input::Descriptor3(b"the-token"),
             Duration::from_secs(10),
         )
         .expect("ran");
-        assert_eq!(ran.exit, Some(0));
-        assert_eq!(ran.stdout, "the-token|||");
-        assert!(!ran.timed_out);
+        assert_eq!(out.status.code(), Some(0));
+        assert_eq!(printed(&out), "the-token|||");
     }
 
     #[test]
     fn with_nothing_handed_descriptor_three_is_closed() {
-        let ran = run_within(
-            Permit::for_a_test(),
+        let out = run_within(
             shell("cat <&3 2>/dev/null; echo $?"),
-            None,
+            Input::Nothing,
             Duration::from_secs(10),
         )
         .expect("ran");
-        assert_ne!(ran.stdout.trim(), "0");
+        assert_ne!(printed(&out).trim(), "0");
     }
 
-    /// Past the ceiling the run is stopped, and so is the child it started, which holds its
-    /// output open: left running, it would keep what the run printed from being read whole.
+    /// Past the ceiling the run is stopped, and so is the child it started, which holds a pipe
+    /// this test reads to its end.
     #[test]
     fn a_run_past_the_ceiling_is_stopped_with_its_children() {
-        let ran = run_within(
-            Permit::for_a_test(),
-            shell("(sleep 30; echo late) & echo started; sleep 30"),
-            None,
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let held = scratch.path().join("held");
+        let name = CString::new(held.as_os_str().as_bytes()).expect("a path");
+        // SAFETY: a NUL-terminated path that outlives the call.
+        assert_eq!(unsafe { libc::mkfifo(name.as_ptr(), 0o600) }, 0);
+        let (closed, closes) = mpsc::channel();
+        let reading = held.clone();
+        std::thread::spawn(move || {
+            let mut pipe = std::fs::File::open(reading).expect("its writer");
+            let _ = io::copy(&mut pipe, &mut io::sink());
+            let _ = closed.send(());
+        });
+        let refused = run_within(
+            shell(&format!("sleep 30 > '{}' & sleep 30", held.display())),
+            Input::Nothing,
             Duration::from_secs(1),
         )
-        .expect("ran");
-        assert!(ran.timed_out);
-        assert_eq!(ran.exit, None);
-        assert_eq!(
-            ran.stdout, "started\n",
+        .expect_err("stopped");
+        assert_eq!(refused.kind(), io::ErrorKind::TimedOut);
+        assert!(
+            closes.recv_timeout(Duration::from_secs(10)).is_ok(),
             "the child it started was stopped too"
         );
     }
@@ -265,14 +370,13 @@ mod tests {
     /// that child ends: the child is stopped, and what the run printed is read whole.
     #[test]
     fn what_a_run_left_behind_holding_its_output_is_stopped() {
-        let ran = run_within(
-            Permit::for_a_test(),
+        let out = run_within(
             shell("sleep 30 & echo done"),
-            None,
+            Input::Nothing,
             Duration::from_secs(60),
         )
         .expect("ran");
-        assert_eq!(ran.exit, Some(0));
-        assert_eq!(ran.stdout, "done\n");
+        assert_eq!(out.status.code(), Some(0));
+        assert_eq!(printed(&out), "done\n");
     }
 }
