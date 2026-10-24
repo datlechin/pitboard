@@ -515,6 +515,20 @@ pub(crate) fn organisation_pins(ctx: &Context) -> Vec<(String, Vec<String>)> {
         .collect()
 }
 
+// A managed source that sets `forceLoginMethod` to `console` (login_method_pin): any a session may
+// take, since Claude Code takes one of several, and any readable where one is unreadable.
+pub(crate) fn console_pin(ctx: &Context) -> Option<String> {
+    managed_taken(ctx)
+        .unwrap_or_else(|_| managed(ctx))
+        .into_iter()
+        .find(|layer| {
+            serde_json::from_str::<Value>(&layer.text).is_ok_and(|json| {
+                json.get("forceLoginMethod").and_then(Value::as_str) == Some("console")
+            })
+        })
+        .map(|layer| layer.name)
+}
+
 // It renames Claude Code's keychain item and config file, so it is a refusal, not a warning.
 pub(crate) fn custom_oauth(ctx: &Context) -> bool {
     if ctx.custom_oauth() {
@@ -1110,6 +1124,37 @@ mod managed_tests {
                     vec!["org-b".to_string(), "org-c".to_string()]
                 ),
             ]
+        );
+    }
+
+    // Read in 2.1.310 (login_method_pin): `console` alone, from the managed sources a session
+    // takes.
+    #[test]
+    fn a_managed_console_pin_is_read_from_the_sources_a_session_takes() {
+        let memory = MemoryHost::new();
+        let (ctx, _scratch) = on(Os::MacOs, &memory);
+        let drop_in = PathBuf::from("/Library/Application Support/ClaudeCode")
+            .join("managed-settings.d")
+            .join("10-login.json");
+        assert_eq!(console_pin(&ctx), None);
+        for method in ["claudeai", "gateway"] {
+            memory.administers(&drop_in, &json!({"forceLoginMethod": method}).to_string());
+            assert_eq!(console_pin(&ctx), None, "{method}");
+        }
+
+        memory.administers(
+            &drop_in,
+            &json!({"forceLoginMethod": "console"}).to_string(),
+        );
+        assert_eq!(console_pin(&ctx), Some(drop_in.display().to_string()));
+
+        let plist =
+            PathBuf::from("/Library/Managed Preferences").join("com.anthropic.claudecode.plist");
+        memory.administers(&plist, &json!({"forceLoginMethod": "claudeai"}).to_string());
+        assert_eq!(
+            console_pin(&ctx),
+            None,
+            "the plist is taken over the folder"
         );
     }
 

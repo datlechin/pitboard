@@ -3375,14 +3375,15 @@ tests, and read in the macOS app's Swift at 0.7.0 (277539b).
 - With looks back to back, each asked for as the last one answered, a rename, a forget,
   naming the login in use and a sign-in met it in none of 10 runs: the core writes its log
   of changes after the index and before the change answers, so the first look to read the
-  change's write answered first. Held behind a read on the lane of reads instead, which
-  waits for the lock usage readings are written under while the test holds it, a look reads
-  the index after the change and answers after it every time. Against the model before it
-  held the index for every change of its own,
-  `a_rename_is_read_after_it_whatever_the_poll_finds_meanwhile`,
+  change's write answered first. Held on the lane of reads instead, before it reads
+  anything, until the change has answered (`lanes::NextLook`), a look reads the index after
+  the change and answers after it every time. Against the model before it held the index for
+  every change of its own, `a_rename_is_read_after_it_whatever_the_poll_finds_meanwhile`,
   `naming_the_login_in_use_is_read_after_it_whatever_the_poll_finds_meanwhile` and
   `a_sign_in_is_read_after_it_enrols_whatever_the_poll_finds_meanwhile` failed in 10 of 10
-  runs, each with nothing read after the change; after, in none of 50.
+  runs, each with nothing read after the change; after, in none of 50. The same again on
+  24 October 2026 (macOS 27.0.1, Rust 1.98.1), when the tests moved the hold there from a
+  read held at the lock usage readings are written under.
 - The Swift model at 0.7.0 had the same race. PitboardService.swift asked `changedAt` on its
   queue of reads, and enrolled, renamed, forgot, renewed and gave up on an interrupted switch
   on its queue of changes. AppModel.swift's `enrol`, `rename`, `forget`,

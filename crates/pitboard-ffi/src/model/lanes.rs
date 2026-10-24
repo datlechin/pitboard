@@ -132,6 +132,11 @@ impl Lanes {
     pub(crate) fn sign_ins(&self) -> Arc<SignIns> {
         Arc::clone(&self.worker.sign_ins)
     }
+
+    #[cfg(test)]
+    pub(crate) fn next_look(&self) -> Arc<NextLook> {
+        Arc::clone(&self.worker.next_look)
+    }
 }
 
 /// What the model keeps that the app handed it or named: its preferences as its earlier
@@ -189,6 +194,8 @@ impl Lanes {
             quit_within: cadence.quit_within,
             quit_checked_every: cadence.quit_checked_every,
             sign_ins: Arc::default(),
+            #[cfg(test)]
+            next_look: Arc::default(),
         });
         Lanes {
             reads: lane("pitboard-reads", &worker, answers, |_| {}),
@@ -520,6 +527,32 @@ pub(crate) struct Worker {
     pub(crate) quit_within: Duration,
     pub(crate) quit_checked_every: Duration,
     pub(crate) sign_ins: Arc<SignIns>,
+    #[cfg(test)]
+    pub(crate) next_look: Arc<NextLook>,
+}
+
+// Where a test holds the next look for changes, on the lane of reads before it reads anything.
+#[cfg(test)]
+#[derive(Default)]
+pub(crate) struct NextLook(Mutex<Option<(Sender<()>, Receiver<()>)>>);
+
+#[cfg(test)]
+impl NextLook {
+    // The receiver hears once the look waits, and it goes on once the sender is dropped.
+    pub(crate) fn hold(&self) -> (Receiver<()>, Sender<()>) {
+        let (arrived, arrival) = channel();
+        let (release, held) = channel();
+        *self.0.lock().expect("a test's own lock") = Some((arrived, held));
+        (arrival, release)
+    }
+
+    fn wait_if_held(&self) {
+        let asked = self.0.lock().expect("a test's own lock").take();
+        if let Some((arrived, held)) = asked {
+            let _ = arrived.send(());
+            let _ = held.recv();
+        }
+    }
 }
 
 impl Worker {
@@ -550,10 +583,14 @@ impl Worker {
                 read: core.status_offline(),
                 warm: core.warm_overview(),
             },
-            Job::Look => Answer::Looked {
-                changed: core.changed_at(),
-                measured: core.readings_changed_at(),
-            },
+            Job::Look => {
+                #[cfg(test)]
+                self.next_look.wait_if_held();
+                Answer::Looked {
+                    changed: core.changed_at(),
+                    measured: core.readings_changed_at(),
+                }
+            }
             Job::AskInstalled => Answer::Installed {
                 tools: core.installed(),
             },
@@ -949,6 +986,7 @@ mod tests {
             quit_within: Duration::from_millis(50),
             quit_checked_every: Duration::from_millis(5),
             sign_ins: Arc::default(),
+            next_look: Arc::default(),
         }
     }
 

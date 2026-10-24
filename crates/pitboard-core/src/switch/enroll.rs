@@ -260,8 +260,13 @@ pub(crate) fn sign_in(
 // Asked before a browser opens, so nobody signs in to an account no switch could reach.
 pub(crate) fn ready_to_sign_in(ctx: &Context, driver: &'static dyn Provider) -> Result<()> {
     let tool = driver.id();
-    if tool == ProviderId::Claude && ctx.custom_oauth() {
-        return Err(Error::CustomOauthEndpoint);
+    if tool == ProviderId::Claude {
+        if ctx.custom_oauth() {
+            return Err(Error::CustomOauthEndpoint);
+        }
+        if let Some(layer) = crate::settings::console_pin(ctx) {
+            return Err(Error::SignInPinnedToConsole { layer });
+        }
     }
     state::load(ctx)?;
     super::live_store(ctx, driver)?;

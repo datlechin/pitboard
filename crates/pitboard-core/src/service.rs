@@ -2486,6 +2486,48 @@ mod tests {
         );
     }
 
+    // Under a managed `console` pin, Claude Code 2.1.310's sign-in makes an API key and stores no
+    // claude.ai login (login_method_pin). The person's own settings do not reach a sign-in in
+    // Pitboard's private folder.
+    #[test]
+    fn a_claude_code_sign_in_a_managed_console_pin_would_make_a_console_login_is_refused() {
+        let m = machine("console-pin");
+        // Named where nothing is, so a sign-in that got past the refusal would find no program
+        // to run rather than this machine's own `claude`.
+        let ctx = m.ctx.clone().with_claude_program("/nowhere/claude".into());
+        let managed = crate::settings::managed_dir(ctx.os).join("managed-settings.json");
+        let own = crate::provider::claude::paths::config_dir(&ctx).join("settings.json");
+        std::fs::create_dir_all(own.parent().expect("its folder")).expect("a config dir");
+        std::fs::write(&own, r#"{"forceLoginMethod": "console"}"#).expect("written");
+        m.mem
+            .administers(&managed, r#"{"forceLoginMethod": "claudeai"}"#);
+        let pitboard = Pitboard::new(ctx);
+        let started = pitboard.sign_in("new").expect_err("no program");
+        assert_eq!(started.error.code(), "claude_program_missing");
+
+        m.mem
+            .administers(&managed, r#"{"forceLoginMethod": "console"}"#);
+        for refused in [
+            pitboard.sign_in("new").expect_err("refused"),
+            pitboard.sign_in_watched("here").expect_err("refused"),
+        ] {
+            assert_eq!(refused.error.code(), "sign_in_pinned_to_console");
+            assert_eq!(refused.error.exit_code(), 3);
+            assert_eq!(
+                refused.error.to_string(),
+                format!(
+                    "{} sets `forceLoginMethod` to `console`, so Claude Code's sign-in makes an \
+                     Anthropic Console login, which Pitboard cannot enrol. No sign-in was \
+                     started. Only whoever manages this computer can change the setting.",
+                    managed.display()
+                )
+            );
+        }
+        pitboard
+            .switch_to("there")
+            .expect("a session still takes the login switched to");
+    }
+
     /// The park the interrupted switch reserved, as its record names it.
     fn reserved(m: &Rig) -> String {
         let raw = std::fs::read_to_string(crate::home::dir(&m.ctx).join("journal.json"))
