@@ -617,15 +617,7 @@ impl OwnCommandLine {
 /// How long after a login shell too slow to answer it is asked once more.
 pub(crate) const ASK_AGAIN_AFTER: Duration = Duration::from_secs(60);
 
-/// A `Made` made the first time it is asked for, by whichever thread asks first. Any other
-/// thread asking meanwhile waits for that one rather than making a second.
-///
-/// One made from a login shell that answered too late is made once more when asked to, a
-/// while later, and kept in its place if that answers: startup files are slowest while the
-/// machine is busy logging in, which is when an app that opens at login first asks. Once
-/// more and no more, because a shell that is always that slow would otherwise cost its
-/// five seconds every time. A caller asking meanwhile gets what was made first rather than
-/// waiting on the second ask.
+// A late shell is asked once more, and only once: its startup files are slowest at login.
 struct Kept {
     make: Box<dyn Fn() -> (Made, bool) + Send + Sync>,
     again_after: Duration,
@@ -698,7 +690,7 @@ impl Kept {
         again
     }
 
-    // Tells a test listening of a call that finds another making the value, and waits for it.
+    // Tells a listening test this call found the value being made, before it waits on the lock.
     #[cfg(test)]
     fn say_if_waiting(&self) {
         if let Some(waiting) = self.waiting.get() {
@@ -746,8 +738,7 @@ impl AppCore {
         ))
     }
 
-    /// A core made by `make` on first use, which also says whether the login shell it asked
-    /// was too slow to answer.
+    // `make` also says whether the login shell it asked answered too late.
     pub(crate) fn asking(
         make: impl Fn() -> (Made, bool) + Send + Sync + 'static,
         again_after: Duration,
@@ -1554,7 +1545,6 @@ mod tests {
         assert!(!named.schedule_repair().expect("nothing to repair"));
     }
 
-    // Asking the login shell can take seconds, and an app makes its model on its main thread.
     #[test]
     fn the_core_is_made_once_when_it_is_first_needed() {
         let asks = Asks::default();

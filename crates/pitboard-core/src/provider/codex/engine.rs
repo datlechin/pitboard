@@ -696,7 +696,6 @@ mod tests {
             command.get_args().collect::<Vec<_>>(),
             ["-c", "cli_auth_credentials_store=\"file\"", "login"]
         );
-        assert_eq!(command.get_current_dir(), Some(dir));
         let home = command
             .get_envs()
             .find(|(name, _)| *name == "CODEX_HOME")

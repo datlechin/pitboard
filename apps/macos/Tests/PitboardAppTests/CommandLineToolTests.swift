@@ -88,8 +88,6 @@ import Testing
     try run()
 }
 
-/// Anything where the link goes that is not a link is somebody's own, such as a Pitboard
-/// they copied there, so it is kept and no script runs.
 @Test func somebodysOwnFileWhereTheLinkGoesIsKept() async throws {
     let app = try StandInApp()
     defer { app.remove() }
@@ -127,8 +125,6 @@ import Testing
     #expect(scripts.ran.count == 3)
 }
 
-/// A password prompt somebody dismissed is their answer, not a failure: AppleScript raises
-/// -128 for it.
 @Test func aDismissedPasswordPromptIsAnAnswer() {
     func error(_ number: Int, _ message: String? = nil) -> NSDictionary {
         var error: [String: Any] = [NSAppleScript.errorNumber: number]

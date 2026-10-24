@@ -227,8 +227,7 @@ private func settingsHeight(_ tab: SettingsView.Tab, warming: Int = 0) -> CGFloa
     #expect(FileManager.default.fileExists(atPath: app.link))
 }
 
-/// Said beside the button, never as a failure in the window: the model is only asked to look
-/// again. A copy with nothing to link says so without asking for a password.
+// Said beside the button, never as a failure in the window: the model only looks again.
 @MainActor
 @Test func aLinkThatFailedSaysWhyAndADismissedPromptSaysNothing() async throws {
     let app = try StandInApp()
