@@ -648,8 +648,14 @@ function Measure-WatchService($User) {
                 (Invoke-CimMethod -InputObject $_ -MethodName GetOwner -ErrorAction SilentlyContinue).User -eq $User.Name
             }).Count
     }
+    $schedule = { $service = New-Object -ComObject 'Schedule.Service'; $service.Connect(); $service }
+    $pitboardFolder = { try { (& $schedule).GetFolder('\Pitboard') } catch { $null } }
     $pitboardHome = Join-Path $User.ProfileDir 'AppData\Local\Pitboard'
-    $r = [ordered]@{ home_before = Test-Path -LiteralPath $pitboardHome; read_before = & $read 'before' }
+    $r = [ordered]@{
+        home_before = Test-Path -LiteralPath $pitboardHome
+        folder_before = [bool] (& $pitboardFolder)
+        read_before = & $read 'before'
+    }
     try {
         $r.install = & $cli 'install' @('watch', 'install')
         Start-Sleep -Seconds 5
@@ -666,13 +672,19 @@ function Measure-WatchService($User) {
         $r.runs_after = & $runs
         $r.home_after = if (Test-Path -LiteralPath $pitboardHome) { @(Get-ChildItem -LiteralPath $pitboardHome -Recurse -Force -Name | Sort-Object) } else { $null }
     } finally {
-        # A task the uninstall left keeps \Pitboard\ from going.
+        # What the uninstall left would change what the job user's RF-E1 row reads of \Pitboard\.
+        # A task left in it keeps the folder from going.
         $r.left_its_task = Invoke-Fact {
-            $service = New-Object -ComObject 'Schedule.Service'
-            $service.Connect()
             $task = "Watch $($User.Sid)"
-            $folder = try { $service.GetFolder('\Pitboard') } catch { $null }
+            $folder = & $pitboardFolder
             if ($folder -and $(try { $folder.GetTask($task) } catch { $null })) { $folder.DeleteTask($task, 0); $true } else { $false }
+        }
+        $r.left_its_folder = Invoke-Fact {
+            $folder = & $pitboardFolder
+            if ($folder -and -not $r.folder_before -and $folder.GetTasks(1).Count -eq 0 -and $folder.GetFolders(0).Count -eq 0) {
+                (& $schedule).GetFolder('\').DeleteFolder('Pitboard', 0)
+                $true
+            } else { $false }
         }
     }
     $r
