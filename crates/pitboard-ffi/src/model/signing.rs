@@ -20,6 +20,8 @@ use super::testing::records::{
 };
 use super::{Intent, Pane, QuitQuestion, RestartNeeded, RunningSignIn, Sheet, WindowRequest};
 use crate::EnrolledAs;
+use crate::present::words;
+use pitboard_core::host::Os;
 use pitboard_core::switch::WaitStep;
 
 /// What `claude auth login` 2.1.289 writes once it reads a code typed back, as the register's
@@ -2300,7 +2302,10 @@ fn a_resumed_add_offers_to_put_its_account_back() {
     put_up(&mut model, &mut machine, add(Some("desktop")));
     let form = model.on_a_mac().sheet_text.expect("the form");
     assert_eq!(form.name, "travel");
-    assert_eq!(form.confirm, "Add the Account Claude Shows");
+    assert_eq!(
+        form.confirm,
+        words::add_account_shown(Os::MacOs, "Claude", false)
+    );
     model.send(travel());
     model.run(&mut machine);
     assert_eq!(
@@ -2313,7 +2318,7 @@ fn a_resumed_add_offers_to_put_its_account_back() {
     assert_eq!(
         page.undo.map(|undo| (undo.title, undo.intent)),
         Some((
-            "Put work Back".into(),
+            words::put_back(Os::MacOs, "work"),
             Intent::SwitchTo {
                 qualified: "desktop/work".into()
             }

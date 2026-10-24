@@ -5,10 +5,12 @@
 use super::advice::{Advice, Told};
 use super::switching::switch;
 use super::testing::machine::{Hand, Stub};
-use super::testing::records::{already_active, refusal, status, switched, titled, warned, warning};
+use super::testing::records::{already_active, refusal, status, switched, warned, warning};
 use super::{AtLimit, Intent, NotificationButton, Pane, RunOutNotice, Sheet, WindowRequest};
 use crate::Account;
 use crate::present::testing::{LimitExt, account, window};
+use crate::present::words;
+use pitboard_core::host::OS;
 use pitboard_core::status::Standing;
 
 /// `work`, in use, its five-hour limit `percent` used until `resets`.
@@ -285,7 +287,7 @@ fn a_run_out_is_notified_in_the_words_the_window_says_it() {
             body: "personal has 90% of its own left.".into(),
             clicked: "accounts".into(),
             button: Some(NotificationButton {
-                title: "Switch".into(),
+                title: words::SWITCH.into(),
                 clicked: "switch/claude/personal".into(),
             }),
         }]
@@ -502,9 +504,7 @@ fn updating_the_config_keeps_the_advice_about_the_account_in_use() {
         .notices
         .into_iter()
         .flat_map(|notice| notice.actions)
-        .find(|action| {
-            action.title == titled("Update Claude Code’s Config", "Update Claude Code’s config")
-        })
+        .find(|action| action.title == words::update_config(OS))
         .expect("offered");
 
     machine.answer = Ok(status(vec![work(100.0, 7_200), personal()]));
@@ -655,7 +655,7 @@ fn a_limit_at_the_share_is_notified_once_before_it_runs_out() {
             body: "personal has 90% of its own left.".into(),
             clicked: "accounts".into(),
             button: Some(NotificationButton {
-                title: "Switch".into(),
+                title: words::SWITCH.into(),
                 clicked: "switch/claude/personal".into(),
             }),
         }]

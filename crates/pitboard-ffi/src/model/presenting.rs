@@ -21,7 +21,7 @@ use crate::present::{
     present,
 };
 use crate::{Abandoned, Account, EnrolledAs, GaveUp, Limit, Warning};
-use pitboard_core::host::OS;
+use pitboard_core::host::{OS, Os};
 use pitboard_core::status::{Stale, Standing};
 use std::time::Duration;
 
@@ -120,22 +120,22 @@ fn ids(shown: &Snapshot) -> Vec<String> {
 
 fn give_up() -> NoticeAction {
     NoticeAction {
-        title: titled("Give Up…", "Give up…"),
+        title: words::give_up(OS, true),
         intent: Intent::AbandonStuckSwitch,
         dismisses: false,
         switches: false,
         enabled: true,
         confirm: Some(Question {
-            title: "Give up on the interrupted switch?".into(),
+            title: words::GIVE_UP_ON_SWITCH.into(),
             message: words::give_up_stuck(&[]),
-            confirm: titled("Give Up", "Give up"),
+            confirm: words::give_up(OS, false),
         }),
     }
 }
 
 fn dismiss(intent: Intent) -> NoticeAction {
     NoticeAction {
-        title: "Dismiss".into(),
+        title: words::DISMISS.into(),
         intent,
         dismisses: true,
         switches: false,
@@ -318,7 +318,7 @@ fn a_switch_running_holds_back_every_account_and_marks_only_its_own() {
     assert_eq!(other.action, None);
     // Its own menu holds its switch back too, and what else it offers it offers as the Swift
     // menu did, which held nothing else back for a switch.
-    let again = titled("Sign In Again…", "Sign in again…");
+    let again = words::sign_in_again(OS, true);
     assert_eq!(
         offered(&other),
         [
@@ -353,7 +353,7 @@ fn a_sign_in_running_holds_back_only_another_sign_in() {
         })
     );
     // Its own menu shows signing in again, held back, beside what can still be done.
-    let again = titled("Sign In Again…", "Sign in again…");
+    let again = words::sign_in_again(OS, true);
     assert_eq!(
         offered(&spare),
         [
@@ -415,7 +415,7 @@ fn an_accounts_own_menu_offers_what_can_be_done_to_it() {
             label: label.into(),
         })
     };
-    let sign_in_again = titled("Sign In Again…", "Sign in again…");
+    let sign_in_again = words::sign_in_again(OS, true);
     let offer = |title: &str, intent: Intent| ItemOffer {
         title: title.into(),
         intent,
@@ -529,11 +529,18 @@ fn the_account_menu_with_nothing_selected_keeps_its_items() {
     assert_eq!(
         model.on_a_mac().account_menu,
         AccountMenuShown {
-            offers: vec!["Use".into(), "Sign In Again…".into(), "Rename…".into()],
+            offers: vec![
+                "Use".into(),
+                words::sign_in_again(Os::MacOs, true),
+                "Rename…".into()
+            ],
             forget: "Forget…".into(),
         }
     );
-    assert_eq!(model.on_windows().account_menu.offers[1], "Sign in again…");
+    assert_eq!(
+        model.on_windows().account_menu.offers[1],
+        words::sign_in_again(Os::Windows, true)
+    );
 }
 
 /// An account's own menu opens each of its windows, one per site of its tool, named by the
@@ -1227,10 +1234,10 @@ fn an_interrupted_switch_is_said_first_with_the_way_out_and_only_once() {
         notice(
             "stuck",
             Severity::Error,
-            "An interrupted switch is waiting",
+            words::SWITCH_WAITING,
             &[
                 &words::switch_waits_for("Anthropic or OpenAI"),
-                "Giving up on it keeps every login. Nothing is deleted.",
+                words::GIVING_UP_KEEPS_LOGINS,
             ],
             vec![give_up()],
         )
@@ -1264,11 +1271,8 @@ fn an_interrupted_switch_that_stopped_the_read_gives_its_reason() {
         [notice(
             "stuck",
             Severity::Error,
-            "An interrupted switch is waiting",
-            &[
-                reason,
-                "Giving up on it keeps every login. Nothing is deleted."
-            ],
+            words::SWITCH_WAITING,
+            &[reason, words::GIVING_UP_KEEPS_LOGINS],
             vec![give_up()],
         )]
     );
@@ -1298,7 +1302,7 @@ fn a_failed_read_says_why_and_that_the_numbers_are_old() {
     assert_eq!(
         titles,
         [
-            "Couldn’t read usage",
+            words::COULD_NOT_READ_USAGE,
             "An environment variable overrides the login"
         ]
     );
@@ -1307,8 +1311,8 @@ fn a_failed_read_says_why_and_that_the_numbers_are_old() {
         notice(
             "read",
             Severity::Error,
-            "Couldn’t read usage",
-            &[reason, "The numbers shown are the last ones measured."],
+            words::COULD_NOT_READ_USAGE,
+            &[reason, words::LAST_MEASURED],
             Vec::new(),
         )
     );
@@ -1889,7 +1893,7 @@ fn giving_up_on_a_switch_says_what_was_kept_until_put_away() {
         [notice(
             "abandoned",
             Severity::Info,
-            "Gave up on the interrupted switch",
+            words::GAVE_UP_ON_SWITCH,
             &[&words::gave_up("personal", "work", 2)],
             vec![dismiss(Intent::DismissAbandoned)],
         )]
@@ -2168,7 +2172,7 @@ fn the_config_names_another_notice_offers_to_update_it() {
     assert_eq!(
         shown.notices[0].actions,
         [NoticeAction {
-            title: titled("Update Claude Code’s Config", "Update Claude Code’s config"),
+            title: words::update_config(OS),
             intent: Intent::UpdateConfig {
                 qualified: "claude/work".into()
             },
@@ -2229,11 +2233,15 @@ fn a_notices_action_is_either_a_button_or_what_puts_it_away() {
         .into_iter()
         .flat_map(|notice| notice.actions)
         .collect();
-    let titles: Vec<&str> = actions.iter().map(|a| a.title.as_str()).collect();
-    let give_up = titled("Give Up…", "Give up…");
+    let titles: Vec<String> = actions.iter().map(|a| a.title.clone()).collect();
     assert_eq!(
         titles,
-        [give_up.as_str(), "Switch to spare", "Dismiss", "Dismiss"]
+        [
+            words::give_up(OS, true),
+            words::switch_to("spare"),
+            words::DISMISS.into(),
+            words::DISMISS.into()
+        ]
     );
     let dismisses: Vec<bool> = actions.iter().map(|a| a.dismisses).collect();
     assert_eq!(dismisses, [false, false, true, true]);
@@ -2261,7 +2269,7 @@ fn the_menu_says_what_needs_attention_in_one_item() {
         menu.others,
         Some(MenuEntry {
             title: "An environment variable overrides the login".into(),
-            subtitle: Some("Show in Pitboard".into()),
+            subtitle: Some(words::SHOW_IN_PITBOARD.into()),
             help: Some("ANTHROPIC_API_KEY is set".into()),
             severity: Some(Severity::Warning),
             intent: Some(Intent::ShowWindow {
@@ -2279,10 +2287,7 @@ fn the_menu_says_what_needs_attention_in_one_item() {
     model.refresh(&mut machine);
     let others = model.shown().menu_notices.others.expect("one item");
     assert_eq!(others.title, words::things_to_look_at(2));
-    assert_eq!(
-        others.subtitle.as_deref(),
-        Some("An interrupted switch is waiting")
-    );
+    assert_eq!(others.subtitle.as_deref(), Some(words::SWITCH_WAITING));
     assert_eq!(others.help, None);
     assert_eq!(others.severity, Some(Severity::Error));
 
@@ -2306,8 +2311,8 @@ fn the_menu_says_what_needs_attention_in_one_item() {
     nothing.found = Vec::new();
     bare.refresh(&mut nothing);
     let install = bare.shown().menu_notices.install.expect("how to install");
-    assert_eq!(install.title, "Claude Code isn’t installed");
-    assert_eq!(install.subtitle.as_deref(), Some("Learn how to install it"));
+    assert_eq!(install.title, words::CLAUDE_CODE_MISSING);
+    assert_eq!(install.subtitle.as_deref(), Some(words::LEARN_TO_INSTALL));
     assert_eq!(
         install.link.as_deref(),
         Some("https://docs.claude.com/en/docs/claude-code/setup")
@@ -3556,7 +3561,10 @@ fn a_use_refused_in_doubt_opens_the_add_sheet_on_the_account_claude_shows() {
     model.send(present_sheet(add(Some("desktop"))));
     model.run(&mut machine);
     let form = model.on_a_mac().sheet_text.expect("the form");
-    assert_eq!(form.confirm, "Add the Account Claude Shows");
+    assert_eq!(
+        form.confirm,
+        words::add_account_shown(Os::MacOs, "Claude", false)
+    );
     assert_eq!(
         form.message,
         "Pitboard can’t identify the login Claude holds. Open Claude, check which account it \
@@ -3584,8 +3592,8 @@ fn escape_never_leaves_an_add_with_its_account_parked() {
     assert!(!waiting.escape_cancels, "Escape would leave work parked");
     assert_eq!(waiting.cancel.title, "Later");
     assert_eq!(
-        waiting.undo.map(|undo| undo.title).as_deref(),
-        Some("Put work Back")
+        waiting.undo.map(|undo| undo.title),
+        Some(words::put_back(Os::MacOs, "work"))
     );
 }
 

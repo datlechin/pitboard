@@ -18,7 +18,9 @@ use super::testing::records::{
     warning,
 };
 use super::{Intent, LastSwitch, Pane, QuitQuestion, RestartNeeded, Sheet, WindowRequest};
+use crate::present::words;
 use crate::{Abandoned, GaveUp};
+use pitboard_core::host::Os;
 use std::time::Duration;
 
 /// Asks for a switch to `qualified` and answers everything it leads to, as the Swift
@@ -1347,17 +1349,22 @@ fn desktop_switched() -> Result<crate::Switched, super::testing::records::Refusa
     switched("desktop", "desktop/work", "desktop/home", Vec::new())
 }
 
-fn notice_actions(model: &Hand, starts: &str) -> Vec<String> {
+// What a notice's buttons send: the sheet that adds the account Claude shows, and giving up.
+fn notice_actions(model: &Hand, starts: &str) -> Vec<Intent> {
     model
-        .on_a_mac()
+        .shown()
         .notices
         .into_iter()
         .find(|notice| notice.id.starts_with(starts))
         .expect("the notice")
         .actions
         .into_iter()
-        .map(|action| action.title)
+        .map(|action| action.intent)
         .collect()
+}
+
+fn add_shown() -> Intent {
+    Intent::PresentSheet { sheet: add_sheet() }
 }
 
 #[test]
@@ -1428,7 +1435,7 @@ fn a_use_refused_in_doubt_is_kept_for_the_add_sheet() {
     model.run(&mut machine);
     assert_eq!(
         model.on_a_mac().sheet_text.expect("the form").confirm,
-        "Add the Account Claude Shows"
+        words::add_account_shown(Os::MacOs, "Claude", false)
     );
     model.send(Intent::CloseSheet);
     machine.switched = desktop_switched();
@@ -1804,15 +1811,16 @@ fn a_stopped_claude_desktop_move_offers_give_up_and_the_account_claude_shows() {
         notice
             .actions
             .iter()
-            .map(|action| action.title.as_str())
+            .map(|action| action.intent.clone())
             .collect::<Vec<_>>(),
-        ["Add the Account Claude Shows…", "Give Up…"]
+        [add_shown(), Intent::AbandonStuckSwitch]
     );
-    let give_up = &notice.actions[1];
-    assert_eq!(give_up.intent, Intent::AbandonStuckSwitch);
     assert_eq!(
-        give_up.confirm.as_ref().map(|asked| asked.title.as_str()),
-        Some("Give up on the interrupted move?")
+        notice.actions[1]
+            .confirm
+            .as_ref()
+            .map(|asked| asked.title.as_str()),
+        Some(words::GIVE_UP_ON_MOVE)
     );
 }
 
@@ -1830,13 +1838,13 @@ fn a_waiting_move_offers_no_give_up_before_a_change_has_tried_to_settle_it() {
     model.refresh(&mut machine);
     assert_eq!(
         notice_actions(&model, "warning/move_waiting/"),
-        ["Add the Account Claude Shows…"]
+        [add_shown()]
     );
     machine.switched = Err(refusal("app_open", "Claude is open.", Vec::new()));
     switch(&mut model, &mut machine, "desktop/home");
     assert_eq!(
         notice_actions(&model, "warning/move_waiting/"),
-        ["Add the Account Claude Shows…"]
+        [add_shown()]
     );
 }
 
@@ -1863,7 +1871,7 @@ fn a_forget_refused_while_a_move_waits_offers_to_give_it_up() {
     );
     assert_eq!(
         notice_actions(&model, "warning/move_waiting/"),
-        ["Add the Account Claude Shows…", "Give Up…"]
+        [add_shown(), Intent::AbandonStuckSwitch]
     );
     machine.forgetting = Ok(());
     model.send(Intent::Forget {
@@ -1872,7 +1880,7 @@ fn a_forget_refused_while_a_move_waits_offers_to_give_it_up() {
     model.run(&mut machine);
     assert_eq!(
         notice_actions(&model, "warning/move_waiting/"),
-        ["Add the Account Claude Shows…"],
+        [add_shown()],
         "a forget that lands settled the move first"
     );
 }
@@ -1906,11 +1914,11 @@ fn giving_up_gives_up_a_waiting_move_too() {
         .iter()
         .find(|notice| notice.id == "moves_given_up")
         .expect("what was given up");
-    assert_eq!(notice.title, "Gave up on the interrupted move");
+    assert_eq!(notice.title, words::GAVE_UP_ON_MOVE);
     assert_eq!(notice.lines, [given]);
     assert_eq!(
         notice_actions(&model, "warning/move_waiting/"),
-        ["Add the Account Claude Shows…"],
+        [add_shown()],
         "what refused the last change is given up too"
     );
     model.send(Intent::DismissAbandoned);
@@ -1963,7 +1971,7 @@ fn a_move_the_give_up_settles_is_said_beside_the_read_after_it() {
     );
     assert_eq!(
         notice_actions(&model, "warning/move_waiting/"),
-        ["Add the Account Claude Shows…"],
+        [add_shown()],
         "what refused the last change is settled too"
     );
 }
@@ -2007,7 +2015,7 @@ fn a_move_the_give_up_left_waiting_is_still_offered_to_give_up() {
     );
     assert_eq!(
         notice_actions(&model, "warning/move_waiting/"),
-        ["Add the Account Claude Shows…", "Give Up…"],
+        [add_shown(), Intent::AbandonStuckSwitch],
         "what refused the last change still stands"
     );
 }

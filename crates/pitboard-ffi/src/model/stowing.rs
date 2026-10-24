@@ -4,10 +4,12 @@
 
 use super::state::{Answer, Job};
 use super::testing::machine::{Hand, Stub};
-use super::testing::records::{claude, refusal, titled, warned, warning};
+use super::testing::records::{claude, refusal, warned, warning};
 use super::{Intent, Sheet};
 use crate::Held;
 use crate::present::Severity;
+use crate::present::words;
+use pitboard_core::host::{OS, Os};
 use pitboard_core::provider::Owner;
 use pitboard_core::switch::{Foreseen, Kept, Left, Stowed};
 use std::path::PathBuf;
@@ -93,7 +95,7 @@ fn the_notice_of_a_login_left_in_a_file_offers_to_put_it_away() {
             continue;
         }
         assert_eq!(notice.actions.len(), 1, "{held:?}: {:?}", notice.actions);
-        assert_eq!(notice.actions[0].title, titled("Put Away…", "Put away…"));
+        assert_eq!(notice.actions[0].title, words::put_away(OS, true));
         assert_eq!(notice.actions[0].intent, stow_sheet());
         assert!(notice.actions[0].enabled);
         assert_eq!(notice.actions[0].confirm, None, "the sheet asks");
@@ -123,7 +125,7 @@ fn the_sheet_says_whose_the_login_is_once_it_is_known() {
 
     let text = model.on_a_mac().stow_text.expect("the sheet's words");
     assert_eq!(text.title, "Put Away the Login Left in a File");
-    assert_eq!(text.confirm, "Put Away");
+    assert_eq!(text.confirm, words::put_away(Os::MacOs, false));
     assert_eq!(text.looking, None);
     assert!(text.can_confirm);
     assert!(!text.saving);
@@ -193,7 +195,7 @@ fn putting_away_sends_what_the_sheet_showed_and_says_what_it_did() {
         .find(|notice| notice.id == "stowed")
         .expect("what it did");
     assert_eq!(notice.severity, Severity::Info);
-    assert_eq!(notice.title, "Put away the login left in a file");
+    assert_eq!(notice.title, words::STOWED);
     assert_eq!(
         notice.lines[0],
         format!("Parked the login {FILE} held for `work`, then deleted the file.")

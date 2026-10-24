@@ -159,11 +159,7 @@ fn in_app_form(seen: &Seen, sheet: &Sheet, provider: &str) -> (String, String) {
                      {} is parked. Sign in to it in {app} and quit {app}, then add it here.",
                     Key::parse(&awaiting.put_back).label
                 ),
-                words::titled(
-                    seen.os,
-                    &format!("Add the Account {app} Shows"),
-                    &format!("Add the account {app} shows"),
-                ),
+                words::add_account_shown(seen.os, app, false),
             ),
             None => (
                 format!(
@@ -171,11 +167,7 @@ fn in_app_form(seen: &Seen, sheet: &Sheet, provider: &str) -> (String, String) {
                      account it shows, and quit it. Pitboard records that account under this \
                      name: one you added, or a new one."
                 ),
-                words::titled(
-                    seen.os,
-                    &format!("Add the Account {app} Shows"),
-                    &format!("Add the account {app} shows"),
-                ),
+                words::add_account_shown(seen.os, app, false),
             ),
         },
         _ => match park {
@@ -416,7 +408,7 @@ pub(crate) fn stow_text(seen: &Seen) -> Option<StowText> {
         ),
         lines,
         looking,
-        confirm: words::titled(seen.os, "Put Away", "Put away"),
+        confirm: words::put_away(seen.os, false),
         can_confirm,
         saving,
     })
@@ -527,11 +519,7 @@ fn in_app_signing_in_text(seen: &Seen, signing: &crate::model::state::SigningIn)
         },
         escape_cancels: signing.started && put_back.is_none(),
         undo: put_back.map(|qualified| Choice {
-            title: words::titled(
-                seen.os,
-                &format!("Put {} Back", Key::parse(qualified).label),
-                &format!("Put {} back", Key::parse(qualified).label),
-            ),
+            title: words::put_back(seen.os, &Key::parse(qualified).label),
             intent: Intent::SwitchTo {
                 qualified: qualified.to_owned(),
             },
@@ -896,7 +884,7 @@ mod tests {
              it shows, and quit it. Pitboard records that account under this name: one you \
              added, or a new one."
                 .to_owned(),
-            "Add the Account Claude Shows".to_owned(),
+            words::add_account_shown(Os::MacOs, "Claude", false),
         );
         for code in ["in_use_unconfirmed", "move_waiting"] {
             assert_eq!(
@@ -924,7 +912,7 @@ mod tests {
             (
                 "Claude is signed out so you can sign in to the account you’re adding, and \
                  work is parked. Sign in to it in Claude and quit Claude, then add it here.",
-                "Add the Account Claude Shows",
+                words::add_account_shown(Os::MacOs, "Claude", false).as_str(),
                 "travel"
             )
         );

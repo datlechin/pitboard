@@ -14,7 +14,7 @@ use crate::model::{
     PitboardModel, PlatformError, QuitQuestion, RunOutNotice, Sheet, Snapshot, Tip,
 };
 use crate::present::testing::Utc;
-use crate::present::words::titled;
+use crate::present::words::{self, titled};
 use crate::present::{AccountItem, AccountsShown, Footing};
 use crate::{AppCore, Enrolled, EnrolledAs, FoundCommandLine, PitboardError, Schedule, Status};
 use pitboard_core::host::{OS, Os};
@@ -829,8 +829,8 @@ fn an_add_in_claude_desktop_parks_waits_and_enrols_with_claude_in_front() {
     let text = waiting.signing_in_text.expect("the page");
     assert_eq!(text.waiting, "Waiting for Claude to quit");
     assert_eq!(
-        text.undo.map(|undo| undo.title).as_deref(),
-        Some("Put work Back")
+        text.undo.map(|undo| undo.title),
+        Some(words::put_back(OS, "work"))
     );
     told.last_where("travel added and in use", |snapshot| {
         snapshot.signing_in.is_none()
@@ -892,9 +892,9 @@ fn an_add_left_halfway_is_put_back_by_use() {
         notice
             .actions
             .iter()
-            .map(|action| action.title.as_str())
+            .map(|action| action.title.clone())
             .collect::<Vec<_>>(),
-        ["Finish Adding…", "Put work Back"]
+        [words::finish(OS, false), words::put_back(OS, "work")]
     );
     model.send(notice.actions[1].intent.clone());
     told.last_where("work back in use", |snapshot| {
@@ -971,7 +971,7 @@ fn a_stopped_move_is_given_up_from_the_app() {
     });
     assert_eq!(
         actions_of(&waiting, "warning/move_waiting/"),
-        ["Add the Account Claude Shows…"],
+        [words::add_account_shown(OS, "Claude", true)],
         "no change has tried to settle it yet"
     );
     model.send(Intent::SwitchTo {
@@ -985,14 +985,17 @@ fn a_stopped_move_is_given_up_from_the_app() {
             .failure_alert
             .as_ref()
             .map(|alert| alert.title.as_str()),
-        Some(crate::present::words::could_not_switch("desktop/home").as_str())
+        Some(words::could_not_switch("desktop/home").as_str())
     );
     let notice = (refused.notices.iter())
         .find(|notice| notice.id.starts_with("warning/move_waiting/"))
         .expect("its notice");
     assert_eq!(
         actions_of(&refused, "warning/move_waiting/"),
-        ["Add the Account Claude Shows…", "Give Up…"]
+        [
+            words::add_account_shown(OS, "Claude", true),
+            words::give_up(OS, true)
+        ]
     );
     model.send(notice.actions[1].intent.clone());
     let gave_up = told.last_where("the move given up", |snapshot| {
@@ -1005,7 +1008,7 @@ fn a_stopped_move_is_given_up_from_the_app() {
     let notice = (gave_up.notices.iter())
         .find(|notice| notice.id == "moves_given_up")
         .expect("its notice");
-    assert_eq!(notice.title, "Gave up on the interrupted move");
+    assert_eq!(notice.title, words::GAVE_UP_ON_MOVE);
     assert!(
         notice.lines[0].starts_with("Pitboard gave up the move of work's login"),
         "{notice:?}"
@@ -1133,7 +1136,7 @@ fn a_machine_without_claude_code_says_so_first() {
             .install
             .as_ref()
             .map(|item| item.title.as_str()),
-        Some("Claude Code isn’t installed")
+        Some(words::CLAUDE_CODE_MISSING)
     );
     assert_eq!(shown.window_request.serial, 0);
     model.shutdown();
@@ -1211,7 +1214,7 @@ fn the_login_in_use_is_offered_a_name() {
 fn the_login_left_in_a_file_is_put_away_from_its_sheet() {
     let launched = made(World::LeftInFile);
     let (model, told) = started(&launched);
-    let put_away = titled(OS, "Put Away…", "Put away…");
+    let put_away = words::put_away(OS, true);
     told.last_where("the file said, with Put Away…", |snapshot| {
         actions_of(snapshot, "warning/fallback_login/") == [put_away.as_str()]
     });
@@ -1492,7 +1495,7 @@ fn accounts_are_renamed_and_forgotten_as_the_window_offers() {
         })
         .collect();
     let titles = |titles: &[&str]| titles.iter().map(|&title| title.to_owned()).collect();
-    let again = titled(OS, "Sign In Again…", "Sign in again…");
+    let again = words::sign_in_again(OS, true);
     let now = titled(OS, "Warm Up Now", "Warm up now");
     assert_eq!(
         menus,
@@ -1580,7 +1583,7 @@ fn a_failed_read_is_said_in_the_menu_and_in_the_window() {
     );
 
     let item = shown.menu_notices.others.expect("an item");
-    assert_eq!(item.title, "Couldn’t read usage");
+    assert_eq!(item.title, words::COULD_NOT_READ_USAGE);
     assert_eq!(
         item.intent,
         Some(Intent::ShowWindow {
@@ -1593,7 +1596,7 @@ fn a_failed_read_is_said_in_the_menu_and_in_the_window() {
             .iter()
             .map(|notice| (notice.id.as_str(), notice.title.as_str()))
             .collect::<Vec<_>>(),
-        [("read", "Couldn’t read usage")]
+        [("read", words::COULD_NOT_READ_USAGE)]
     );
     assert_eq!(shown.notices[0].lines, std::slice::from_ref(&failure));
 
@@ -1676,10 +1679,10 @@ fn an_interrupted_switch_is_offered_a_way_out_as_the_app_starts() {
     let notice = shown.notices.first().expect("a notice");
     assert_eq!(
         (notice.id.as_str(), notice.title.as_str()),
-        ("stuck", "An interrupted switch is waiting")
+        ("stuck", words::SWITCH_WAITING)
     );
     let give_up = notice.actions.first().expect("an action");
-    assert_eq!(give_up.title, titled(OS, "Give Up…", "Give up…"));
+    assert_eq!(give_up.title, words::give_up(OS, true));
     assert_eq!(give_up.intent, Intent::AbandonStuckSwitch);
     assert_eq!(
         give_up
@@ -1689,7 +1692,7 @@ fn an_interrupted_switch_is_offered_a_way_out_as_the_app_starts() {
         Some(titled(OS, "Give Up", "Give up"))
     );
     let item = shown.menu_notices.others.expect("an item");
-    assert_eq!(item.title, "An interrupted switch is waiting");
+    assert_eq!(item.title, words::SWITCH_WAITING);
     assert_eq!(
         item.intent,
         Some(Intent::ShowWindow {
@@ -1737,7 +1740,7 @@ fn an_interrupted_switch_is_offered_a_way_out_as_the_app_starts() {
         .iter()
         .find(|notice| notice.id == "abandoned")
         .expect("said");
-    assert_eq!(notice.title, "Gave up on the interrupted switch");
+    assert_eq!(notice.title, words::GAVE_UP_ON_SWITCH);
     assert!(
         notice
             .lines
@@ -1870,7 +1873,7 @@ fn this_pc_says_when_a_check_was_made_on_the_persons_clock() {
         .checks
         .lines
         .iter()
-        .find(|line| line.name == crate::present::words::check_name("in_use", "in use"))
+        .find(|line| line.name == words::check_name("in_use", "in use"))
         .expect("the account in use");
     let said = in_use
         .detail
@@ -2370,7 +2373,7 @@ fn a_run_out_is_posted_through_the_notifications_fixture_in_is_given() {
             body: "work has 58% of its own left.".into(),
             clicked: "accounts".into(),
             button: Some(NotificationButton {
-                title: "Switch".into(),
+                title: words::SWITCH.into(),
                 clicked: "switch/claude/work".into(),
             }),
         }]
@@ -2407,7 +2410,7 @@ fn a_login_replaced_outside_is_posted_through_the_notifications_fixture_in_is_gi
              personal’s login stored, and Pitboard holds no login for work."
                 .into(),
             Some(NotificationButton {
-                title: titled(OS, "Sign In Again", "Sign in again"),
+                title: words::sign_in_again(OS, false),
                 clicked: "sign-in-again/claude/work".into(),
             })
         )]

@@ -17,12 +17,14 @@ use super::testing::machine::{
 };
 use super::testing::platform::StandInApps;
 use super::testing::records::{
-    CLAUDE, claude, codex_account, enrolled_as, refusal, status, still_running, switched, titled,
-    warned, warning,
+    CLAUDE, claude, codex_account, enrolled_as, refusal, status, still_running, switched, warned,
+    warning,
 };
 use super::{Intent, Sheet};
 use crate::present::testing::account;
+use crate::present::words;
 use crate::{Account, EnrolledAs};
+use pitboard_core::host::OS;
 use pitboard_core::switch::Foreseen;
 use std::time::Duration;
 
@@ -821,9 +823,7 @@ fn the_update(model: &Hand) -> Intent {
         .notices
         .into_iter()
         .flat_map(|notice| notice.actions)
-        .find(|action| {
-            action.title == titled("Update Claude Code’s Config", "Update Claude Code’s config")
-        })
+        .find(|action| action.title == words::update_config(OS))
         .expect("offered")
         .intent
 }

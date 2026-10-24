@@ -8,11 +8,12 @@ use super::state::{Answer, Job};
 use super::switching::switch;
 use super::testing::machine::{Hand, Stub, any_read, fresh_read, installed_ask, offline_read};
 use super::testing::records::{
-    account, claude, claude_code, codex, codex_account, percent, refusal, status, titled, warned,
-    warning,
+    account, claude, claude_code, codex, codex_account, percent, refusal, status, warned, warning,
 };
 use super::{Intent, NotificationButton, ReadFailure, RunOutNotice, Sheet};
+use crate::present::words;
 use crate::{Account, Warning};
+use pitboard_core::host::OS;
 use pitboard_core::status::{Stale, Standing};
 use std::time::Duration;
 
@@ -283,7 +284,7 @@ fn a_login_replaced_outside_is_posted_once_while_it_stands() {
             body: replaced.message.clone(),
             clicked: "accounts".into(),
             button: Some(NotificationButton {
-                title: titled("Sign In Again", "Sign in again"),
+                title: words::sign_in_again(OS, false),
                 clicked: "sign-in-again/claude/work".into(),
             }),
         }]
@@ -326,7 +327,7 @@ fn a_login_replaced_outside_offers_to_sign_in_again() {
     assert_eq!(
         offered,
         [(
-            titled("Sign In Again…", "Sign in again…"),
+            words::sign_in_again(OS, true),
             Intent::PresentSheet {
                 sheet: Sheet::SignInAgain {
                     provider: "claude".into(),
@@ -414,12 +415,12 @@ fn a_parked_login_that_stops_being_usable_is_posted_once() {
         machine.posted,
         [RunOutNotice {
             id: "unusable/claude:work".into(),
-            title: "work needs signing in again".into(),
+            title: words::needs_signing_in("work"),
             subtitle: None,
-            body: "Its parked login can no longer be used, so Pitboard can’t switch to it.".into(),
+            body: words::UNUSABLE_LOGIN.into(),
             clicked: "accounts".into(),
             button: Some(NotificationButton {
-                title: titled("Sign In Again", "Sign in again"),
+                title: words::sign_in_again(OS, false),
                 clicked: "sign-in-again/claude/work".into(),
             }),
         }]

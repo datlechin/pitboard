@@ -269,7 +269,7 @@ pub(crate) fn warning_heading(os: Os, warning: &Warning) -> &'static str {
         "sign_in_parked_not_in_use" => "The new login was parked, not put in use",
         "interrupted_switch_finished" => "An interrupted switch was finished",
         "interrupted_switch_undone" => "An interrupted switch was undone",
-        "recovery_undetermined" => "An interrupted switch is waiting",
+        "recovery_undetermined" => SWITCH_WAITING,
         "login_replaced" => "A login was replaced outside Pitboard",
         "in_use_unconfirmed" => "The account in use is not confirmed",
         // `in_app_warning` words the two alike for an app.
@@ -342,6 +342,135 @@ pub(crate) fn gave_up(from: &str, to: &str, kept: u32) -> String {
         logins(kept)
     )
 }
+
+pub(crate) const DISMISS: &str = "Dismiss";
+
+pub(crate) const SWITCH_WAITING: &str = "An interrupted switch is waiting";
+
+pub(crate) const GIVING_UP_KEEPS_LOGINS: &str =
+    "Giving up on it keeps every login. Nothing is deleted.";
+
+pub(crate) const GIVE_UP_ON_SWITCH: &str = "Give up on the interrupted switch?";
+
+pub(crate) const GIVE_UP_ON_MOVE: &str = "Give up on the interrupted move?";
+
+pub(crate) fn give_up_on_move(app: &str) -> String {
+    format!(
+        "Every folder is kept and nothing is deleted. Whatever is in {app}’s folder stays there."
+    )
+}
+
+pub(crate) const GAVE_UP_ON_SWITCH: &str = "Gave up on the interrupted switch";
+
+pub(crate) const GAVE_UP_ON_MOVE: &str = "Gave up on the interrupted move";
+
+pub(crate) const STOWED: &str = "Put away the login left in a file";
+
+pub(crate) const COULD_NOT_READ_USAGE: &str = "Couldn’t read usage";
+
+pub(crate) const LAST_MEASURED: &str = "The numbers shown are the last ones measured.";
+
+/// The heading of a sign-in inside an app left halfway: of `again`, an account added
+/// already, or of a new `tool` account.
+pub(crate) fn unfinished(tool: &str, again: Option<&str>) -> String {
+    match again {
+        Some(label) => format!("Signing in to {label} again isn’t finished"),
+        None => format!("Adding a {tool} account isn’t finished"),
+    }
+}
+
+pub(crate) fn finish(os: Os, again: bool) -> String {
+    if again {
+        titled(os, "Finish Signing In…", "Finish signing in…")
+    } else {
+        titled(os, "Finish Adding…", "Finish adding…")
+    }
+}
+
+pub(crate) fn put_back(os: Os, label: &str) -> String {
+    titled(
+        os,
+        &format!("Put {label} Back"),
+        &format!("Put {label} back"),
+    )
+}
+
+// `asks`: the button opens a sheet or a question, and ends with an ellipsis; the one that
+// answers it does not.
+pub(crate) fn give_up(os: Os, asks: bool) -> String {
+    if asks {
+        titled(os, "Give Up…", "Give up…")
+    } else {
+        titled(os, "Give Up", "Give up")
+    }
+}
+
+pub(crate) fn put_away(os: Os, asks: bool) -> String {
+    if asks {
+        titled(os, "Put Away…", "Put away…")
+    } else {
+        titled(os, "Put Away", "Put away")
+    }
+}
+
+pub(crate) fn sign_in_again(os: Os, asks: bool) -> String {
+    if asks {
+        titled(os, "Sign In Again…", "Sign in again…")
+    } else {
+        titled(os, "Sign In Again", "Sign in again")
+    }
+}
+
+pub(crate) fn add_account_shown(os: Os, app: &str, asks: bool) -> String {
+    let (title, sentence) = (
+        format!("Add the Account {app} Shows"),
+        format!("Add the account {app} shows"),
+    );
+    if asks {
+        titled(os, &format!("{title}…"), &format!("{sentence}…"))
+    } else {
+        titled(os, &title, &sentence)
+    }
+}
+
+pub(crate) fn update_config(os: Os) -> String {
+    titled(
+        os,
+        "Update Claude Code’s Config",
+        "Update Claude Code’s config",
+    )
+}
+
+/// A notification's button that switches.
+pub(crate) const SWITCH: &str = "Switch";
+
+/// What a notification of a switch Pitboard made or held back by itself says: how much of a
+/// limit the account it would leave has used, "work has used 96% of its 5-hour limit.", then
+/// what came of it.
+pub(crate) fn used_then(account: &str, used: &str, then: &str) -> String {
+    format!("{}. {then}", pitboard_core::words::has_used(account, used))
+}
+
+pub(crate) const NOT_SWITCHED: &str = "Claude Code was not switched";
+
+pub(crate) const NOT_SWITCHING: &str = "Pitboard is not switching Claude Code";
+
+pub(crate) const COULD_NOT_SWITCH_ITSELF: &str = "Pitboard could not switch Claude Code";
+
+pub(crate) const COULD_NOT_WARM_ITSELF: &str = "Pitboard could not warm up an account";
+
+pub(crate) fn needs_signing_in(label: &str) -> String {
+    format!("{label} needs signing in again")
+}
+
+pub(crate) const UNUSABLE_LOGIN: &str =
+    "Its parked login can no longer be used, so Pitboard can’t switch to it.";
+
+pub(crate) const SHOW_IN_PITBOARD: &str = "Show in Pitboard";
+
+pub(crate) const CLAUDE_CODE_MISSING: &str = "Claude Code isn’t installed";
+
+pub(crate) const LEARN_TO_INSTALL: &str = "Learn how to install it";
 
 /// The heading of a tool's last switch: "Switched to work", "Switched Codex to work" beside
 /// another tool's accounts.
@@ -2074,6 +2203,79 @@ mod tests {
             move_waits_too("Claude Desktop", "Claude"),
             "A Claude Desktop move was interrupted too. With Claude quit, Give Up… settles it or \
              gives it up as well, and keeps every folder."
+        );
+        assert_eq!(
+            unfinished("Claude Desktop", None),
+            "Adding a Claude Desktop account isn’t finished"
+        );
+        assert_eq!(
+            unfinished("Claude Desktop", Some("home")),
+            "Signing in to home again isn’t finished"
+        );
+        assert_eq!(
+            give_up_on_move("Claude"),
+            "Every folder is kept and nothing is deleted. Whatever is in Claude’s folder stays \
+             there."
+        );
+        assert_eq!(
+            used_then("work", "96% of its 5-hour limit", "It ended."),
+            "work has used 96% of its 5-hour limit. It ended."
+        );
+        assert_eq!(needs_signing_in("work"), "work needs signing in again");
+    }
+
+    // A notice's and a notification's buttons, as each system titles a button.
+    #[test]
+    fn a_notice_offers_in_these_words() {
+        let both = |said: &dyn Fn(Os) -> String| (said(Os::MacOs), said(Os::Windows));
+        let pair = |mac: &str, windows: &str| (mac.to_owned(), windows.to_owned());
+        assert_eq!(
+            both(&|os| finish(os, false)),
+            pair("Finish Adding…", "Finish adding…")
+        );
+        assert_eq!(
+            both(&|os| finish(os, true)),
+            pair("Finish Signing In…", "Finish signing in…")
+        );
+        assert_eq!(
+            both(&|os| put_back(os, "work")),
+            pair("Put work Back", "Put work back")
+        );
+        assert_eq!(both(&|os| give_up(os, true)), pair("Give Up…", "Give up…"));
+        assert_eq!(both(&|os| give_up(os, false)), pair("Give Up", "Give up"));
+        assert_eq!(
+            both(&|os| put_away(os, true)),
+            pair("Put Away…", "Put away…")
+        );
+        assert_eq!(
+            both(&|os| put_away(os, false)),
+            pair("Put Away", "Put away")
+        );
+        assert_eq!(
+            both(&|os| sign_in_again(os, true)),
+            pair("Sign In Again…", "Sign in again…")
+        );
+        assert_eq!(
+            both(&|os| sign_in_again(os, false)),
+            pair("Sign In Again", "Sign in again")
+        );
+        assert_eq!(
+            both(&|os| add_account_shown(os, "Claude", true)),
+            pair(
+                "Add the Account Claude Shows…",
+                "Add the account Claude shows…"
+            )
+        );
+        assert_eq!(
+            both(&|os| add_account_shown(os, "Claude", false)),
+            pair(
+                "Add the Account Claude Shows",
+                "Add the account Claude shows"
+            )
+        );
+        assert_eq!(
+            both(&update_config),
+            pair("Update Claude Code’s Config", "Update Claude Code’s config")
         );
     }
 

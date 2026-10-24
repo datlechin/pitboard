@@ -10,6 +10,7 @@ use super::testing::machine::{Hand, Stub, any_read, offline_read};
 use super::testing::records::{Refusal, refusal, status, watching};
 use super::{AtLimit, Intent, RunOutNotice};
 use crate::present::testing::{LimitExt, account, window};
+use crate::present::words;
 use crate::{Account, Adoption, AutoLooked, AutoSwitched, Status};
 use std::time::Duration;
 
@@ -473,7 +474,7 @@ fn a_reason_it_did_not_switch_is_said_once() {
         "the look stands on what was recorded"
     );
     assert_eq!(machine.posted.len(), 1, "{:?}", machine.posted);
-    assert_eq!(machine.posted[0].title, "Claude Code was not switched");
+    assert_eq!(machine.posted[0].title, words::NOT_SWITCHED);
     assert_eq!(
         machine.posted[0].body,
         "work has used 97% of its 5-hour limit. Claude Code signs in another way, set by \
@@ -510,7 +511,7 @@ fn a_reason_it_is_not_watching_is_said_once() {
         machine.posted,
         [RunOutNotice {
             id: "auto-not-watching/switch_interrupted".into(),
-            title: "Pitboard is not switching Claude Code".into(),
+            title: words::NOT_SWITCHING.into(),
             subtitle: None,
             body: "A switch was interrupted, and the next change you make finishes it.".into(),
             clicked: "limits".into(),
@@ -551,10 +552,7 @@ fn a_refusal_is_said_once_and_lets_go() {
     model.refresh(&mut machine);
     assert_eq!(machine.auto_at.len(), 2);
     assert_eq!(machine.posted.len(), 1);
-    assert_eq!(
-        machine.posted[0].title,
-        "Pitboard could not switch Claude Code"
-    );
+    assert_eq!(machine.posted[0].title, words::COULD_NOT_SWITCH_ITSELF);
     assert!(model.state.switch_under_way().is_none());
     assert!(model.state.presented.is_none(), "nobody asked, so no alert");
 }
@@ -867,7 +865,7 @@ fn no_account_with_room_is_said_once_for_a_limit_and_its_reset() {
     model.refresh(&mut machine);
     assert_eq!(machine.auto_at.len(), 2);
     assert_eq!(machine.posted.len(), 1, "{:?}", machine.posted);
-    assert_eq!(machine.posted[0].title, "Claude Code was not switched");
+    assert_eq!(machine.posted[0].title, words::NOT_SWITCHED);
     assert_eq!(
         machine.posted[0].body,
         "work has used 97% of its 5-hour limit. No other Claude Code account has room below \

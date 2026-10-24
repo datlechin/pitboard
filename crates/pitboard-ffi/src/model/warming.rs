@@ -9,6 +9,7 @@ use super::testing::records::{Refusal, refusal, status, titled};
 use super::testing::world::World;
 use super::{Intent, RunOutNotice};
 use crate::present::testing::{LimitExt, account, window};
+use crate::present::words;
 use crate::{Account, PitboardError};
 use pitboard_core::duty::warm::{Choice, Failure, Halt, Overview, Range, Standing};
 use pitboard_core::error::Error;
@@ -159,7 +160,7 @@ fn a_warm_up_by_itself_that_came_to_nothing_is_notified_once_and_waits() {
         machine.posted,
         [RunOutNotice {
             id: "warm-failed/personal/warm_up_not_started".into(),
-            title: "Pitboard could not warm up an account".into(),
+            title: words::COULD_NOT_WARM_ITSELF.into(),
             subtitle: None,
             body: "`personal` was not warmed up: the request was answered, and Anthropic \
                    still has no period running."

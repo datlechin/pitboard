@@ -344,7 +344,7 @@ fn offers(os: Os, account: &Account, action: Option<&ItemAction>, busy: bool) ->
                     switches,
                 ),
                 offer(
-                    words::titled(os, "Sign In Again…", "Sign in again…"),
+                    words::sign_in_again(os, true),
                     Intent::PresentSheet {
                         sheet: Sheet::SignInAgain {
                             provider: provider.clone(),
@@ -447,7 +447,7 @@ pub(crate) fn account_menu(os: Os) -> AccountMenuShown {
     AccountMenuShown {
         offers: vec![
             "Use".into(),
-            words::titled(os, "Sign In Again…", "Sign in again…"),
+            words::sign_in_again(os, true),
             "Rename…".into(),
         ],
         forget: FORGET.into(),
@@ -496,7 +496,7 @@ fn action(
         });
     }
     (!busy).then(|| ItemAction {
-        title: words::titled(os, "Sign In Again…", "Sign in again…"),
+        title: words::sign_in_again(os, true),
         spoken: words::titled(
             os,
             &format!("Sign In to {spoken} Again…"),
