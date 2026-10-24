@@ -65,6 +65,10 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Breaking:** Pitboard refuses with `login_restricted` to switch Claude Code to an account of an
   organisation that a managed `forceLoginOrgUUID` leaves out, since Claude Code would refuse its
   login. Switch to an account of an organisation the setting names.
+- **Breaking:** Pitboard refuses with `sign_in_pinned_to_console` to start a Claude Code sign-in,
+  in `pitboard enroll --sign-in` and the app, where managed settings set `forceLoginMethod` to
+  `console`, since Claude Code would make an Anthropic Console login Pitboard cannot enrol. Only
+  whoever manages the computer can change the setting.
 - **Breaking:** `--json` names every five-hour limit `session` and every weekly one `weekly_all`,
   or `weekly_scoped` for one model's, where it passed on `five_hour` and `seven_day` from Claude
   Code's status line, Anthropic's answer without `limits` and Codex. Match `kind` against

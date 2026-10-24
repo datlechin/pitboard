@@ -26,6 +26,8 @@ The `what a session authenticates with` line warns and names the setting when Cl
 
 Where managed settings set `forceLoginOrgUUID`, Claude Code refuses a login of any other organisation, as read in Claude Code 2.1.309. Pitboard then refuses with `login_restricted` to switch to such an account. Only whoever manages this computer can change the setting.
 
+Where managed settings set `forceLoginMethod` to `console`, Claude Code's sign-in makes an Anthropic Console API key and keeps no claude.ai login, as read in Claude Code 2.1.310. Pitboard then refuses with `sign_in_pinned_to_console` to start a sign-in, and switches to accounts you already added go ahead. Only whoever manages this computer can change the setting.
+
 While `CLAUDE_CODE_CUSTOM_OAUTH_URL` is set, Pitboard refuses every change to Claude Code accounts with `custom_oauth_endpoint`. [Custom OAuth endpoint](/reference/environment-variables#custom-oauth-endpoint) says why.
 
 On Windows, Claude Code keeps its login in Credential Manager where `CLAUDE_CODE_FORCE_WINDOWS_CREDMAN` is `1`, or where a feature it caches turns that store on, as read in Claude Code 2.1.301. The `credential store` line of `pitboard doctor` names the store Pitboard reads. Where Credential Manager holds a Claude Code login and nothing Pitboard reads says Claude Code uses it, Pitboard refuses every change until you set the variable in `settings.json`:

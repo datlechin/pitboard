@@ -818,6 +818,13 @@ pub enum Error {
     )]
     SignInInProgress,
 
+    #[error(
+        "{layer} sets `forceLoginMethod` to `console`, so Claude Code's sign-in makes an \
+         Anthropic Console login, which Pitboard cannot enrol. No sign-in was started. Only \
+         whoever manages this computer can change the setting."
+    )]
+    SignInPinnedToConsole { layer: String },
+
     #[error("{}", pitboard_open(home))]
     PitboardOpen { home: PathBuf },
 
@@ -1071,6 +1078,7 @@ impl Error {
             SignInNotIsolated { .. } => "sign_in_not_isolated",
             RenewalFailed { .. } => "renewal_failed",
             SignInInProgress => "sign_in_in_progress",
+            SignInPinnedToConsole { .. } => "sign_in_pinned_to_console",
             AppOpen { .. } => "app_open",
             PitboardOpen { .. } => "pitboard_open",
             AppStateUnknown { .. } => "app_state_unknown",
@@ -1174,6 +1182,7 @@ impl Error {
             | LiveCredentialElsewhere { .. }
             | CredentialTooLarge { .. }
             | CustomOauthEndpoint
+            | SignInPinnedToConsole { .. }
             | RecoveryRecordCorrupt { .. }
             | LoginFolderUnknown { .. }
             | LoginInDoubt { .. }

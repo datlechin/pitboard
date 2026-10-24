@@ -71,6 +71,7 @@ These come from a Claude Code or Codex switch. A Claude Desktop switch has its o
 | `sign_in_incomplete` | 1 | The tool's sign-in stopped before it finished. Nothing was enrolled. | Run `pitboard enroll <label> --sign-in` again. |
 | `sign_in_not_isolated` | 1 | Codex keeps its login in memory only, so a sign-in would leave nothing to enrol. | See [Codex keeps its login outside its file store](/troubleshooting/codex#codex-keeps-its-login-outside-its-file-store). |
 | `sign_in_in_progress` | 1 | Another sign-in, from `pitboard enroll --sign-in` or the app, is still waiting. | Finish or cancel that one first. |
+| `sign_in_pinned_to_console` | 3 | Managed settings set Claude Code's `forceLoginMethod` to `console`, so its sign-in would make an Anthropic Console login, which Pitboard cannot enrol. No sign-in started. | Only whoever manages this computer can change the setting. See [Before you add a Claude Code account](/guides/claude-code#before-you-add-a-claude-code-account). |
 | `sign_in_not_installed` | 3 | Pitboard could not confirm the new login replaced the one in use, so it parked it. | Run `pitboard`. If nothing is signed in, sign in to any enrolled account with `claude` or `codex login`. Then run `pitboard use <label>`. |
 | `sign_in_not_installed` | 3 | The same, and Pitboard could not park it either. | Sign in to the account with `claude` or `codex login`. |
 | `sign_in_not_kept` | 1 | The new login could not be put in use, so Pitboard did not keep it. The tool keeps its login. | Run `pitboard enroll <label> --sign-in` again. |

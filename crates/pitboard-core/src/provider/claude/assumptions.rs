@@ -2200,16 +2200,19 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
                     `claude_authenticate`, `setup-token`, the desktop app's sign-in and a cloud \
                     session's sign-in, which refuse under it; the sign-in's token save, which \
                     keeps only a login with `user:inference`, and the API key it makes and saves \
-                    for any other; and the session's start, its token source and its renewal, \
-                    none of which reads it, in the darwin-arm64, linux-x64, win32-x64 and \
-                    win32-arm64 builds of 2.1.310, read as bytes on 2026-10-24",
+                    for any other; the person's settings file, `settings.json` in the config \
+                    folder `CLAUDE_CONFIG_DIR` names; and the session's start, its token source \
+                    and its renewal, none of which reads it, in the darwin-arm64, linux-x64, \
+                    win32-x64 and win32-arm64 builds of 2.1.310, read as bytes on 2026-10-24",
         verified_against: "2.1.310",
         depends: "settings::overrides, which leaves `forceLoginMethod` out where it is not \
                   `gateway`, so a switch under `console` warns of nothing and the automatic \
                   switch goes on: a session takes the login a switch puts in place. \
-                  provider::claude::engine's sign_in runs `claude auth login`, which under \
-                  `console` signs in to Console whatever its flags say, and Pitboard does not \
-                  look for the setting first",
+                  settings::console_pin, so a sign-in under a managed `console`, which would make \
+                  an API key and leave nothing to enrol, refuses with \
+                  `sign_in_pinned_to_console` before `claude auth login` starts. The person's \
+                  own settings do not reach a sign-in in Pitboard's private folder; a project's \
+                  in the folder Pitboard runs from does, and is not looked for",
         probe: &[
             "forceLoginMethod is 'console' in ",
             "; log in with an Anthropic Console account instead.",
