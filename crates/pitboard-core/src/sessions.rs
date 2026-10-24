@@ -64,13 +64,7 @@ pub(crate) fn last(ctx: &Context, id: &str) -> Option<Run> {
     load(ctx).remove(id).map(|seen| seen.run)
 }
 
-/// Records `run` as session `id`'s latest and returns its run before this one, or `None`
-/// when this session has not been seen before.
-///
-/// Written only when that changes something, under the readings' lock and to what is here
-/// once the lock is held, so two sessions running at once cannot each write back the
-/// other's older copy. A run that cannot be written is still compared, with nothing before
-/// it.
+// Merged under the lock into the file as it is then, so no session writes back an older copy.
 pub(crate) fn exchange(ctx: &Context, permit: Permit, id: &str, run: &Run) -> Option<Run> {
     let now = ctx.now();
     if let Some(seen) = load(ctx).remove(id)
@@ -90,8 +84,9 @@ pub(crate) fn exchange(ctx: &Context, permit: Permit, id: &str, run: &Run) -> Op
             seen_at: now,
         },
     );
+    // A run a power cut loses costs that session one filing.
     if let Ok(body) = serde_json::to_string(&all) {
-        let _ = atomic::write(permit, &path(ctx), body.as_bytes(), atomic::Perms::Secret);
+        let _ = atomic::write_unsynced(permit, &path(ctx), body.as_bytes());
     }
     before
 }
@@ -215,5 +210,19 @@ mod tests {
         }
         let kept: Vec<String> = load(&ctx).into_keys().collect();
         assert_eq!(kept, ["open"]);
+    }
+
+    // The status line keeps a run after every response, and a flush waits on the whole disk.
+    #[test]
+    fn a_run_is_kept_without_waiting_for_the_disk() {
+        let (ctx, _scratch) = machine();
+        let ctx = at(&ctx, NOW);
+        let (before, flushed) = crate::fault::failing_counted("atomic.synced", || {
+            exchange(&ctx, Permit::for_a_test(), "pane", &run(20.0));
+            exchange(&ctx, Permit::for_a_test(), "pane", &run(22.0))
+        });
+        assert_eq!(flushed, 0);
+        assert_eq!(before, Some(run(20.0)));
+        assert_eq!(last(&ctx, "pane"), Some(run(22.0)));
     }
 }
