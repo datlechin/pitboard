@@ -2907,6 +2907,72 @@ mod tests {
         }
     }
 
+    #[test]
+    fn giving_up_on_a_switch_nothing_can_finish_happens_once() {
+        for (tool, make) in MACHINES {
+            let m = stuck(make, &format!("give-up-once-{tool}"));
+            let pitboard = Pitboard::new(m.ctx.clone());
+
+            let gave = pitboard.abandon_recovery().expect("given up");
+            let abandoned = gave.switch.expect("the switch given up");
+            assert_eq!(
+                (abandoned.from, abandoned.to),
+                (m.key("here").typed(), m.key("there").typed())
+            );
+            let again = pitboard.abandon_recovery().expect("nothing to give up");
+            assert!(
+                again.switch.is_none() && again.moves.is_empty(),
+                "{tool}: {again:?}"
+            );
+
+            let read = pitboard.status(false).expect("a read");
+            assert_eq!(said(&read), [], "{tool}: nothing waits");
+            let changed = pitboard.switch_to(&m.key("there").typed());
+            assert!(
+                changed
+                    .as_ref()
+                    .err()
+                    .is_none_or(|refused| refused.error.code() != "recovery_undetermined"),
+                "{tool}: {:?}",
+                changed.err().map(|refused| refused.error)
+            );
+        }
+    }
+
+    #[test]
+    fn each_change_is_logged_newest_last_as_the_command_line_types_it() {
+        for (tool, make) in MACHINES {
+            let m = make(&format!("logged-{tool}"));
+            let pitboard = Pitboard::new(m.ctx.clone().with_caller("app".into()));
+
+            pitboard
+                .switch_to(&m.key("there").typed())
+                .expect("a switch");
+            pitboard
+                .rename(&m.key("here").typed(), "office")
+                .expect("renamed");
+
+            let log = pitboard.log(2);
+            let (here, there) = (m.key("here"), m.key("there"));
+            assert_eq!(
+                log.iter()
+                    .map(|change| (
+                        change.caller.as_str(),
+                        change.verb.as_str(),
+                        change.subject.clone(),
+                        change.outcome.as_str()
+                    ))
+                    .collect::<Vec<_>>(),
+                [
+                    ("app", "use", there.typed(), "ok"),
+                    ("app", "rename", format!("{here} -> office"), "ok"),
+                ],
+                "{tool}"
+            );
+            assert_eq!(pitboard.log(1), log[1..], "{tool}");
+        }
+    }
+
     /// Where only the service can say whose the live login is, a read asks it, as the next
     /// change would.
     #[test]
