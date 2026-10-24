@@ -381,9 +381,10 @@ them from the Mac after the session.
 
 The Windows app is C# in `apps/windows`, over the core's C# bindings. The
 [code map](ARCHITECTURE.md#code-map) says what each project holds. `Pitboard.slnx` holds the
-bindings and their tests. `Pitboard.Windows.slnx` adds the app, `PitboardShare.exe`, the MSI,
-the probe and their tests. The WinUI projects, `PitboardShare.exe` and the MSI build only on
-Windows, and the UI tests run only on CI's runners.
+bindings and their tests. `Pitboard.Windows.slnx` holds the bindings, the app,
+`PitboardShare.exe`, the MSI, the probe, and the app's and the MSI's tests. The WinUI
+projects, `PitboardShare.exe` and the MSI build only on Windows, and the UI tests run only on
+CI's runners.
 
 Each project restores only the packages its `packages.lock.json` pins, at the versions
 `Directory.Packages.props` names, with the exact .NET SDK `global.json` names:

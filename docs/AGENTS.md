@@ -6,7 +6,8 @@ go and how to preview, check and publish a change.
 Readers run the newest published release, betas included, so the facts come from the code at
 that release. Where a Markdown file in the repository disagrees with the code, the code wins.
 Release procedures, design notes and unreleased behaviour are not site content; they live in
-`RELEASING.md`, `ARCHITECTURE.md` and the code.
+`RELEASING.md`, `ARCHITECTURE.md`, `docs/facts` and the code. `facts/` keeps its own form, and
+`.mintignore` keeps it off the site, so these rules do not apply there.
 
 Run [the checks](README.md#check) before each commit, then read the page in
 [the preview](README.md#preview): the checks miss the silent failures listed under "MDX".
