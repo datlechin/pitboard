@@ -502,10 +502,12 @@ fn quitting_the_app_holding_the_login_switches_and_opens_it_again() {
     );
     assert_eq!(last.quit_question, None);
     assert_eq!(last.failure_alert, None);
-    let said = notice(last, "switch/codex").map_or(&[][..], |said| &said.lines[..]);
-    assert!(
-        said.iter().all(|line| !line.contains("codex sessions")),
-        "switched once ChatGPT had quit: {said:#?}"
+    let said = notice(last, "switch/codex")
+        .unwrap_or_else(|| panic!("the switch's notice: {:#?}", last.notices));
+    assert_eq!(
+        said.lines,
+        [crate::present::words::restart_notice("codex", "personal")],
+        "switched once ChatGPT had quit, with nothing left running to warn about"
     );
     model.shutdown();
 }
@@ -546,8 +548,7 @@ fn a_switch_on_a_process_list_nobody_could_read_says_so_and_asks_nothing() {
     };
     assert_eq!(
         restart,
-        "Any codex session started before this switch keeps using personal until it is quit \
-         and started again."
+        &crate::present::words::restart_notice("codex", "personal")
     );
     assert!(unknown.contains("codex/personal"), "{unknown:?}");
     assert!(

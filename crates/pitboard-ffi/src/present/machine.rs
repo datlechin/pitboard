@@ -495,7 +495,7 @@ fn checks(seen: &Seen) -> ChecksShown {
         .filter(|_| any)
         .map(|refused| Check {
             code: "notification_not_posted".into(),
-            name: "Notifications".into(),
+            name: words::NOTIFICATIONS.into(),
             level: Level::Warn,
             detail: words::not_posted(&refused.title, &seen.clock(refused.at), &refused.reason),
             advice: String::new(),

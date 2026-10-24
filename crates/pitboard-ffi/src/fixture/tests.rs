@@ -964,12 +964,19 @@ fn a_stopped_move_is_given_up_from_the_app() {
     let refused = told.last_where("the switch refused", |snapshot| {
         actions_of(snapshot, "warning/move_waiting/").len() == 2
     });
+    let undetermined = pitboard_core::error::Error::RecoveryUndetermined {
+        tool: ProviderId::Desktop,
+        from: "desktop/work".into(),
+        to: "desktop/work".into(),
+        detail: "Claude's folder holds a session that is not the one moving".into(),
+        spelling: pitboard_core::words::Spelling::Bare,
+    };
     assert_eq!(
-        refused
-            .failure_alert
-            .as_ref()
-            .map(|alert| alert.title.as_str()),
-        Some(words::could_not_switch("desktop/home").as_str())
+        refused.failure_alert,
+        Some(crate::account_windows::AlertText {
+            title: words::could_not_switch("desktop/home"),
+            message: words::in_app_refusal(OS, &undetermined).expect("the app's words"),
+        })
     );
     let notice = (refused.notices.iter())
         .find(|notice| notice.id.starts_with("warning/move_waiting/"))
@@ -1700,7 +1707,7 @@ fn an_interrupted_switch_is_offered_a_way_out_as_the_app_starts() {
         .checks
         .lines
         .iter()
-        .find(|line| line.name == "Interrupted switch")
+        .find(|line| line.name == words::check_name("interrupted_switch", "interrupted switch"))
         .expect("doctor's check");
     assert_eq!(interrupted.level, crate::Level::Warn);
     assert!(
@@ -1712,8 +1719,11 @@ fn an_interrupted_switch_is_offered_a_way_out_as_the_app_starts() {
             .all(|line| line.name != "Keychain")
     );
     assert_eq!(
-        checked.machine.checks.summary.as_deref(),
-        Some("2 things are worth looking at."),
+        checked.machine.checks.summary,
+        Some(words::typeset(&pitboard_core::words::doctor_summary([
+            pitboard_core::doctor::Level::Warn,
+            pitboard_core::doctor::Level::Warn
+        ]))),
         "personal's parked login, and the switch"
     );
 
@@ -1779,7 +1789,7 @@ fn this_mac_shows_the_cores_checks() {
         .collect();
     assert_eq!(
         worth_looking_at,
-        ["Account personal"],
+        [words::check_name("parked_login", "account personal")],
         "{:#?}",
         checks.lines
     );
@@ -1797,7 +1807,7 @@ fn this_mac_shows_the_cores_checks() {
     let personal = checks
         .lines
         .iter()
-        .find(|line| line.name == "Account personal")
+        .find(|line| line.name == words::check_name("parked_login", "account personal"))
         .expect("personal's");
     assert!(
         personal.detail.starts_with("Its parked login expires in "),
@@ -1805,9 +1815,9 @@ fn this_mac_shows_the_cores_checks() {
     );
     assert_eq!(
         checks.summary,
-        Some(pitboard_core::words::doctor_summary([
+        Some(words::typeset(&pitboard_core::words::doctor_summary([
             pitboard_core::doctor::Level::Warn
-        ]))
+        ])))
     );
     model.shutdown();
 }
@@ -2213,8 +2223,14 @@ fn an_exported_fixture_in_a_directory_of_its_own_is_made_there() {
     .expect("a fixture");
     assert!(pitboard_in(&made).is_dir());
     assert!(!told.exists(), "what the last launch told is gone");
+    let epoch = || {
+        let since = std::time::UNIX_EPOCH.elapsed().expect("after 1970");
+        i64::try_from(since.as_secs()).expect("in range")
+    };
+    let asked = epoch();
     model.send(Intent::Start);
     let shown = listener.last_where("the accounts read", read_in);
+    let answered = epoch();
     assert_eq!(
         listed(&shown),
         [
@@ -2222,7 +2238,15 @@ fn an_exported_fixture_in_a_directory_of_its_own_is_made_there() {
             ("claude/personal".into(), false)
         ]
     );
-    assert_eq!(shown.updated_menu, shown.updated_window);
+    // The read's time, on the person's clock.
+    let read_then: Vec<String> = (asked..=answered)
+        .map(|at| words::updated(&Utc.clock(at, false).expect("a time")))
+        .collect();
+    assert!(
+        read_then.contains(&shown.updated_menu),
+        "{} is none of {read_then:?}",
+        shown.updated_menu
+    );
     model.shutdown();
     assert!(made.is_dir(), "left there, as an app's is");
 }
@@ -2356,9 +2380,9 @@ fn a_run_out_is_posted_through_the_notifications_fixture_in_is_given() {
         posted,
         [RunOutNotice {
             id: format!("claude/personal/session/-{resets_at}"),
-            title: "personal has no 5-hour limit left".into(),
+            title: words::ran_out("personal", "5-hour"),
             subtitle: None,
-            body: "work has 58% of its own left.".into(),
+            body: words::room_left("work", Some(58)),
             clicked: "accounts".into(),
             button: Some(NotificationButton {
                 title: words::SWITCH.into(),
@@ -2441,7 +2465,7 @@ fn a_notification_the_system_refused_is_said_after_doctors_checks() {
             .checks
             .lines
             .last()
-            .is_some_and(|line| line.name == "Notifications")
+            .is_some_and(|line| line.name == words::NOTIFICATIONS)
     });
     model.shutdown();
 

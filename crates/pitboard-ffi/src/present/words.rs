@@ -710,6 +710,9 @@ pub(crate) fn warm_hours(
     Some(format!("{} to {to}", time_of_day(from)?))
 }
 
+// The check the app adds after doctor's for a notification its system refused.
+pub(crate) const NOTIFICATIONS: &str = "Notifications";
+
 // The command line keeps doctor's own names, which maintenance-commands.mdx documents.
 pub(crate) fn check_name(code: &str, name: &str) -> String {
     match code {
