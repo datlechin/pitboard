@@ -3,7 +3,7 @@
 //! UTC.
 
 use super::signing::{add, adding_in_claude, signs_in, travel};
-use super::state::{Answer, Job};
+use super::state::{Answer, Job, Recording};
 use super::switching::switch;
 use super::testing::machine::{Hand, Stub, desktop_machine};
 use super::testing::platform::StandInApps;
@@ -3093,51 +3093,35 @@ fn each_sheet_says_what_it_is_for() {
         model.shown().sheet_text.expect("the sheet")
     };
     let add = shown(Sheet::Add { provider: None });
-    assert_eq!(add.title, titled("Add Account", "Add account"));
+    assert_eq!(add.title, words::add_account(OS));
+    assert_eq!(add.message, words::sign_in_message("Claude Code", None));
     assert_eq!(
-        add.message,
-        "Pitboard opens Claude Code’s own sign-in in your browser. Sign in as the account \
-         you’re adding, and Pitboard parks its login beside the one in use."
+        (add.name.as_str(), add.prompt.as_str()),
+        ("", words::NAME_PROMPT)
     );
-    assert_eq!((add.name.as_str(), add.prompt.as_str()), ("", "work"));
     assert_eq!(add.account, None);
 
     let again = shown(Sheet::SignInAgain {
         provider: "codex".into(),
         label: "work".into(),
     });
-    assert_eq!(
-        again.title,
-        titled("Sign In to work Again", "Sign in to work again")
-    );
-    assert_eq!(
-        again.message,
-        "Pitboard opens Codex’s own sign-in in your browser. Sign in as work to give Pitboard \
-         a new login for it."
-    );
+    assert_eq!(again.title, words::sign_in_to_again(OS, "work"));
+    assert_eq!(again.message, words::sign_in_message("Codex", Some("work")));
     assert_eq!(again.account.as_deref(), Some("work"));
 
     let name = shown(Sheet::Name {
         provider: "codex".into(),
         email: "c@example.com".into(),
     });
-    assert_eq!(name.title, titled("Name This Account", "Name this account"));
-    assert_eq!(
-        name.message,
-        "c@example.com is signed in to Codex. Pitboard parks its login under this name \
-         whenever you switch to another account."
-    );
+    assert_eq!(name.title, words::name_this_account(OS));
+    assert_eq!(name.message, words::naming("c@example.com", "Codex"));
 
     let rename = shown(Sheet::Rename {
         provider: "claude".into(),
         label: "work".into(),
     });
-    assert_eq!(rename.title, "Rename “work”");
-    assert_eq!(
-        rename.message,
-        "The account keeps its parked login. Only the name you switch to it by changes, here \
-         and in the command line."
-    );
+    assert_eq!(rename.title, words::rename_title("work"));
+    assert_eq!(rename.message, words::RENAMING);
     assert_eq!(
         (rename.name.as_str(), rename.prompt.as_str()),
         ("work", "work")
@@ -3203,7 +3187,7 @@ fn each_sheets_default_button_says_what_it_does() {
         model.send(present_sheet(sheet));
         model.shown().sheet_text.expect("the sheet").confirm
     };
-    let sign_in = titled("Sign In", "Sign in");
+    let sign_in = words::sign_in(OS);
     assert_eq!(confirm(Sheet::Add { provider: None }), sign_in);
     assert_eq!(
         confirm(Sheet::SignInAgain {
@@ -3217,14 +3201,14 @@ fn each_sheets_default_button_says_what_it_does() {
             provider: "codex".into(),
             email: "c@example.com".into(),
         }),
-        "Save"
+        words::SAVE
     );
     assert_eq!(
         confirm(Sheet::Rename {
             provider: "claude".into(),
             label: "work".into(),
         }),
-        "Rename"
+        words::RENAME
     );
 }
 
@@ -3249,21 +3233,13 @@ fn a_sign_in_under_way_says_what_to_do_in_the_browser() {
         put_back: None,
     });
     let text = model.shown().signing_in_text.expect("what it says");
-    assert_eq!(
-        text.title,
-        titled("Signing In to Claude Code", "Signing in to Claude Code")
-    );
+    assert_eq!(text.title, words::signing_in_to(OS, "Claude Code"));
     assert!(text.offers_link, "a browser sign-in offers its page");
     assert_eq!(
         text.message,
-        "Finish signing in as travel in your browser. This closes once Claude Code says \
-         you’re in."
+        words::finish_in_browser("travel", "Claude Code")
     );
-    assert_eq!(
-        text.code_note,
-        "Claude Code takes the code shown after you sign in, whether or not your browser came \
-         back to it."
-    );
+    assert_eq!(text.code_note, words::code_note("Claude Code"));
     assert_eq!(text.refused, None);
 
     model.give(Answer::SignInSaid {
@@ -3281,11 +3257,7 @@ fn a_sign_in_under_way_says_what_to_do_in_the_browser() {
     });
     assert_eq!(
         model.shown().signing_in_text.and_then(|text| text.refused),
-        Some(
-            "Claude Code didn’t take that code. Copy the whole code your browser shows, and \
-             paste it again."
-                .into()
-        )
+        Some(words::code_refused("Claude Code"))
     );
 }
 
@@ -3301,11 +3273,8 @@ fn the_question_about_quitting_an_app_is_asked_in_its_name() {
     machine.apps = StandInApps::new(&[CHATGPT], true);
     switch(&mut model, &mut machine, "codex/spare");
     let asked = model.shown().quit_confirmation.expect("the question");
-    assert_eq!(asked.title, "Quit ChatGPT to switch?");
-    assert_eq!(
-        asked.confirm,
-        titled("Quit ChatGPT and Switch", "Quit ChatGPT and switch")
-    );
+    assert_eq!(asked.title, words::quit_to_switch("ChatGPT"));
+    assert_eq!(asked.confirm, words::quit_and_switch(OS, "ChatGPT"));
     model.send(Intent::KeepAppOpen);
     assert_eq!(model.shown().quit_confirmation, None);
 }
@@ -3539,7 +3508,7 @@ fn the_quit_question_is_carried_with_the_sheet_it_was_asked_from() {
     assert!(shown.quit_question.is_some());
     assert_eq!(
         shown.quit_confirmation.expect("asked").confirm,
-        "Quit Claude and Park work"
+        words::quit_and_park(Os::MacOs, "Claude", "work")
     );
     assert!(
         shown.sheet_text.expect("the form").saving,
@@ -3565,12 +3534,7 @@ fn a_use_refused_in_doubt_opens_the_add_sheet_on_the_account_claude_shows() {
         form.confirm,
         words::add_account_shown(Os::MacOs, "Claude", false)
     );
-    assert_eq!(
-        form.message,
-        "Pitboard can’t identify the login Claude holds. Open Claude, check which account it \
-         shows, and quit it. Pitboard records that account under this name: one you added, or \
-         a new one."
-    );
+    assert_eq!(form.message, words::record_unidentified("Claude"));
 }
 
 #[test]
@@ -3584,13 +3548,13 @@ fn escape_never_leaves_an_add_with_its_account_parked() {
         qualified: question.qualified,
     });
     let quitting = model.on_a_mac().signing_in_text.expect("the page");
-    assert_eq!(quitting.waiting, "Quitting Claude");
+    assert_eq!(quitting.waiting, words::quitting("Claude").1);
     assert!(!quitting.escape_cancels);
     assert!(!quitting.cancel.enabled);
     model.run(&mut machine);
     let waiting = model.on_a_mac().signing_in_text.expect("the page");
     assert!(!waiting.escape_cancels, "Escape would leave work parked");
-    assert_eq!(waiting.cancel.title, "Later");
+    assert_eq!(waiting.cancel.title, words::LATER);
     assert_eq!(
         waiting.undo.map(|undo| undo.title),
         Some(words::put_back(Os::MacOs, "work"))
@@ -3625,26 +3589,16 @@ fn the_sheet_says_claude_is_quitting_and_its_account_is_read() {
             qualified: question.qualified,
         });
         assert_eq!(
-            model
-                .on_a_mac()
-                .sheet_text
-                .expect("the form")
-                .progress
-                .as_deref(),
-            Some("Quitting Claude…"),
+            model.on_a_mac().sheet_text.expect("the form").progress,
+            Some(words::recording("Claude", Recording::Quitting)),
             "opened on {opened_on:?}"
         );
         let quit = model.next();
         let answer = machine.answer(quit);
         model.give(answer);
         assert_eq!(
-            model
-                .on_a_mac()
-                .sheet_text
-                .expect("the form")
-                .progress
-                .as_deref(),
-            Some("Reading Claude’s account…"),
+            model.on_a_mac().sheet_text.expect("the form").progress,
+            Some(words::recording("Claude", Recording::Reading)),
             "opened on {opened_on:?}"
         );
         model.run(&mut machine);

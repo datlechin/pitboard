@@ -13,14 +13,13 @@ use super::testing::machine::{
 };
 use super::testing::platform::StandInApps;
 use super::testing::records::{
-    CHATGPT, CLAUDE, MONITOR, already_active, chatgpt_holding, claude, codex_account,
-    desktop_account, desktop_warning, percent, refusal, status, still_running, switched, warned,
-    warning,
+    CHATGPT, CLAUDE, already_active, chatgpt_holding, claude, codex_account, desktop_account,
+    desktop_warning, percent, refusal, status, still_running, switched, warned, warning,
 };
 use super::{Intent, LastSwitch, Pane, QuitQuestion, RestartNeeded, Sheet, WindowRequest};
 use crate::present::words;
 use crate::{Abandoned, GaveUp};
-use pitboard_core::host::Os;
+use pitboard_core::host::{OS, Os};
 use std::time::Duration;
 
 /// Asks for a switch to `qualified` and answers everything it leads to, as the Swift
@@ -62,7 +61,7 @@ fn a_failed_switch_says_so_and_changes_nothing() {
     assert_eq!(machine.switched_to, ["work"]);
     let shown = model.shown();
     let failure = model.state.presented.clone().expect("the failure is said");
-    assert_eq!(failure.title, "Couldn’t switch to work");
+    assert_eq!(failure.title, words::could_not_switch("work"));
     assert_eq!(failure.message, "nothing parked");
     assert_eq!(failure.code.as_deref(), Some("nothing_parked"));
     assert_eq!(model.state.failure, None, "a switch is not a read");
@@ -802,7 +801,7 @@ fn each_failure_is_numbered_so_an_app_says_it_once() {
     let failure = model.state.presented.clone().expect("the newer failure");
     assert_eq!(
         (failure.id, failure.title.as_str()),
-        (2, "Couldn’t switch to x")
+        (2, words::could_not_switch("claude/x").as_str())
     );
     assert_eq!(model.shown().window_request.serial, 2);
 }
@@ -925,11 +924,10 @@ fn an_app_that_does_not_quit_stops_the_switch_before_anything_changes() {
     assert!(machine.switched_to.is_empty());
     assert_eq!(model.state.switch_under_way(), None);
     let failure = model.state.presented.clone().expect("the failure is said");
-    assert_eq!(failure.title, "Couldn’t switch to spare");
-    assert!(
-        failure
-            .message
-            .contains("ChatGPT is still open, so nothing has changed"),
+    assert_eq!(failure.title, words::could_not_switch("codex/spare"));
+    assert_eq!(
+        failure.message,
+        words::still_open("ChatGPT", "switch again"),
         "{failure:?}"
     );
 }
@@ -1108,7 +1106,7 @@ fn a_switch_lost_to_a_panic_is_said_and_over() {
     assert!(matches!(jobs[..], [Job::Open { .. }]), "{jobs:?}");
     assert_eq!(model.state.switch_under_way(), None);
     let failure = model.state.presented.clone().expect("said");
-    assert_eq!(failure.title, "Couldn’t switch to spare");
+    assert_eq!(failure.title, words::could_not_switch("codex/spare"));
     assert_eq!(failure.code, None);
 }
 
@@ -1299,7 +1297,7 @@ fn giving_up_that_is_refused_is_said_in_the_window() {
     model.run(&mut machine);
     let shown = model.shown();
     let failure = model.state.presented.clone().expect("the failure is said");
-    assert_eq!(failure.title, "Couldn’t give up on the interrupted switch");
+    assert_eq!(failure.title, words::COULD_NOT_GIVE_UP);
     assert_eq!(failure.message, "another Pitboard is changing accounts");
     assert_eq!(failure.code.as_deref(), Some("lock_busy"));
     assert_eq!(shown.window_request.serial, 1);
@@ -1392,18 +1390,11 @@ fn a_switch_reopens_the_app_behind_naming_its_tool() {
 #[test]
 fn put_back_that_cannot_quit_claude_keeps_the_wait_and_says_why() {
     for (quits, lingers, message) in [
-        (
-            false,
-            false,
-            "Claude is still open, so nothing has changed. Quit it, then switch again.",
-        ),
+        (false, false, words::still_open("Claude", "switch again")),
         (
             true,
             true,
-            &format!(
-                "Part of Claude is still running after it quit, so nothing has changed. Wait \
-                 until it ends, or quit it in {MONITOR}, then switch again."
-            ),
+            words::part_still_running(OS, "Claude", "switch again"),
         ),
     ] {
         let (mut model, mut machine, id) = waiting_in_claude();
@@ -1414,7 +1405,7 @@ fn put_back_that_cannot_quit_claude_keeps_the_wait_and_says_why() {
         model.run(&mut machine);
         let shown = model.on_a_mac();
         let alert = shown.failure_alert.expect("said in an alert");
-        assert_eq!(alert.title, "Couldn’t switch to work");
+        assert_eq!(alert.title, words::could_not_switch("desktop/work"));
         assert_eq!(alert.message, message);
         assert_eq!(shown.sheet, Some(add_sheet()), "{message}");
         assert_eq!(shown.signing_in.map(|signing| signing.id), Some(id));
@@ -1444,7 +1435,7 @@ fn a_use_refused_in_doubt_is_kept_for_the_add_sheet() {
     model.run(&mut machine);
     assert_eq!(
         model.on_a_mac().sheet_text.expect("the form").confirm,
-        "Park work",
+        words::park("work"),
         "a change of it that lands clears it"
     );
 }
@@ -1464,12 +1455,9 @@ fn an_app_that_leaves_part_of_itself_running_changes_nothing_and_is_opened_again
         [format!("quit {CLAUDE}"), format!("open {CLAUDE}")]
     );
     let failure = model.state.presented.clone().expect("said");
-    assert!(
-        failure
-            .message
-            .starts_with("Part of Claude is still running"),
-        "{}",
-        failure.message
+    assert_eq!(
+        failure.message,
+        words::part_still_running(OS, "Claude", "switch again")
     );
     assert_eq!(model.state.switch_under_way(), None);
 }
@@ -1867,7 +1855,7 @@ fn a_forget_refused_while_a_move_waits_offers_to_give_it_up() {
     model.run(&mut machine);
     assert_eq!(
         model.state.presented.clone().expect("said").title,
-        "Couldn’t forget home"
+        words::could_not_forget("desktop/home")
     );
     assert_eq!(
         notice_actions(&model, "warning/move_waiting/"),
@@ -2059,7 +2047,7 @@ fn a_switch_from_a_login_refused_for_good_asks_to_replace_it() {
     let asked = shown.replace_question.expect("asked");
     assert_eq!(asked.qualified, "work");
     assert_eq!(asked.question.message, REFUSED_FOR_GOOD);
-    assert_eq!(asked.question.confirm, "Replace");
+    assert_eq!(asked.question.confirm, words::REPLACE);
     assert_eq!(model.state.switch_under_way(), Some("work"));
     assert!(machine.replaced_with.is_empty());
 }

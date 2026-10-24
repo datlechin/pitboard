@@ -114,17 +114,14 @@ fn the_sheet_says_whose_the_login_is_once_it_is_known() {
 
     assert_eq!(model.count(a_look_left), 1);
     let looking = model.shown().stow_text.expect("the sheet's words");
-    assert_eq!(
-        looking.looking.as_deref(),
-        Some("Finding out whose login it is…")
-    );
+    assert_eq!(looking.looking.as_deref(), Some(words::FINDING_OUT_WHOSE));
     assert!(looking.lines.is_empty());
     assert!(!looking.can_confirm);
 
     model.run(&mut machine);
 
     let text = model.on_a_mac().stow_text.expect("the sheet's words");
-    assert_eq!(text.title, "Put Away the Login Left in a File");
+    assert_eq!(text.title, words::stow_title(Os::MacOs));
     assert_eq!(text.confirm, words::put_away(Os::MacOs, false));
     assert_eq!(text.looking, None);
     assert!(text.can_confirm);
@@ -146,15 +143,9 @@ fn the_sheet_says_whose_the_login_is_once_it_is_known() {
                 .to_string(),
         ]
     );
-    assert!(text.message.contains("in a file behind the keychain"));
+    assert_eq!(text.message, words::stow_message(Os::MacOs));
     let text = model.on_windows().stow_text.expect("the sheet's words");
-    assert!(
-        text.message.starts_with(
-            "Claude Code left a login in a file behind Credential Manager, which keeps"
-        ),
-        "{}",
-        text.message
-    );
+    assert_eq!(text.message, words::stow_message(Os::Windows));
     assert!(
         text.lines[1].ends_with("Claude Code's document in Credential Manager keeps its own.")
             && text.lines[2].contains("such as one in a sign-in over SSH with a key"),

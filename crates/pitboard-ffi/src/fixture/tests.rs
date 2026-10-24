@@ -387,14 +387,8 @@ fn a_refused_code_is_said_in_the_sheet_and_another_is_asked_for() {
                 .is_some_and(|text| text.refused.is_some())
     });
     assert_eq!(
-        refused
-            .signing_in_text
-            .and_then(|text| text.refused)
-            .as_deref(),
-        Some(
-            "Claude Code didn’t take that code. Copy the whole code your browser shows, and \
-             paste it again."
-        )
+        refused.signing_in_text.and_then(|text| text.refused),
+        Some(words::code_refused("Claude Code"))
     );
     model.send(Intent::PasteCode { code: CODE.into() });
     told.last_where("the account listed", |snapshot| {
@@ -734,7 +728,7 @@ fn claude_is_quit_for_a_switch_and_opened_again_behind() {
     assert_eq!(question.name, "Claude");
     assert_eq!(
         asked.quit_confirmation.expect("its words").title,
-        "Quit Claude to switch?"
+        words::quit_to_switch("Claude")
     );
     model.send(Intent::QuitAndSwitch {
         qualified: question.qualified,
@@ -815,19 +809,18 @@ fn an_add_in_claude_desktop_parks_waits_and_enrols_with_claude_in_front() {
     });
     assert_eq!(
         asked.quit_confirmation.expect("its words").confirm,
-        "Quit Claude and Park work"
+        words::quit_and_park(OS, "Claude", "work")
     );
     model.send(Intent::QuitAndSwitch {
         qualified: asked.quit_question.expect("asked").qualified,
     });
     let waiting = told.last_where("the wait, with Claude opened for it", |snapshot| {
-        snapshot
-            .signing_in_text
-            .as_ref()
-            .is_some_and(|text| text.message.starts_with("In Claude, sign in"))
+        snapshot.signing_in_text.as_ref().is_some_and(|text| {
+            text.message == words::in_app_waiting("Claude", "travel", false, None, true)
+        })
     });
     let text = waiting.signing_in_text.expect("the page");
-    assert_eq!(text.waiting, "Waiting for Claude to quit");
+    assert_eq!(text.waiting, words::waiting_to_quit("Claude"));
     assert_eq!(
         text.undo.map(|undo| undo.title),
         Some(words::put_back(OS, "work"))
@@ -869,11 +862,11 @@ fn an_add_left_halfway_is_put_back_by_use() {
             .is_some_and(|text| text.undo.is_some())
     });
     let text = waiting.signing_in_text.expect("the page");
-    assert!(
-        text.message.starts_with("Open Claude and sign in"),
-        "{text:?}"
+    assert_eq!(
+        text.message,
+        words::in_app_waiting("Claude", "travel", false, None, false)
     );
-    assert_eq!(text.cancel.title, "Later");
+    assert_eq!(text.cancel.title, words::LATER);
     assert!(!text.escape_cancels);
     model.send(Intent::CancelSignIn);
     let left = told.last_where("the add left halfway", |snapshot| {
@@ -1335,8 +1328,9 @@ fn a_codex_switch_says_sessions_keep_the_old_account() {
         .find(|notice| notice.id == "switch/codex")
         .expect("said");
     assert!(
-        notice.lines.iter().any(|line| line
-            .starts_with("Any codex session started before this switch keeps using main")),
+        notice
+            .lines
+            .contains(&words::restart_notice("codex", "main")),
         "{notice:?}"
     );
     model.shutdown();
@@ -1528,11 +1522,8 @@ fn accounts_are_renamed_and_forgotten_as_the_window_offers() {
         snapshot.sheet_failure.is_some()
     });
     assert_eq!(
-        refused
-            .sheet_failure
-            .map(|failure| failure.title)
-            .as_deref(),
-        Some("Couldn’t rename personal")
+        refused.sheet_failure.map(|failure| failure.title),
+        Some(words::could_not_rename("personal"))
     );
     model.send(Intent::Rename {
         provider: "claude".into(),
@@ -1815,8 +1806,10 @@ fn this_mac_shows_the_cores_checks() {
         "{personal:?}"
     );
     assert_eq!(
-        checks.summary.as_deref(),
-        Some("One thing is worth looking at.")
+        checks.summary,
+        Some(pitboard_core::words::doctor_summary([
+            pitboard_core::doctor::Level::Warn
+        ]))
     );
     model.shutdown();
 }
@@ -2333,10 +2326,10 @@ fn a_refusal_to_quit_from_the_apps_fixture_in_is_given_stops_the_switch() {
         snapshot.failure_alert.is_some()
     });
     let failure = refused.failure_alert.as_ref().expect("stopped");
-    assert_eq!(failure.title, "Couldn’t switch to spare");
+    assert_eq!(failure.title, words::could_not_switch("codex/spare"));
     assert_eq!(
         failure.message,
-        "ChatGPT is still open, so nothing has changed. Quit it, then switch again."
+        words::still_open("ChatGPT", "switch again")
     );
     assert!(uses(&refused, "codex/main"));
     assert!(apps.asked().is_empty(), "{:?}", apps.asked());
@@ -2402,13 +2395,27 @@ fn a_login_replaced_outside_is_posted_through_the_notifications_fixture_in_is_gi
         .filter(|notice| notice.id.starts_with("warning/login_replaced/"))
         .map(|notice| (notice.title, notice.body, notice.button))
         .collect();
+    let replaced = pitboard_core::service::Warning::LoginReplaced {
+        tool: ProviderId::Claude,
+        id: String::new(),
+        label: "claude/work".into(),
+        now: pitboard_core::service::Stored::Account("claude/personal".into()),
+    };
     assert_eq!(
         said,
         [(
-            "A login was replaced outside Pitboard".into(),
-            "work’s login was replaced by a sign-in outside Pitboard: Claude Code now has \
-             personal’s login stored, and Pitboard holds no login for work."
-                .into(),
+            words::warning_heading(
+                OS,
+                &crate::Warning {
+                    code: replaced.code().into(),
+                    message: String::new(),
+                    account: None,
+                    held: None,
+                    provider: None,
+                }
+            )
+            .into(),
+            words::in_app_warning(OS, &replaced).expect("the app's words"),
             Some(NotificationButton {
                 title: words::sign_in_again(OS, false),
                 clicked: "sign-in-again/claude/work".into(),

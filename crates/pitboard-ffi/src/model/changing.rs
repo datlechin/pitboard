@@ -980,7 +980,7 @@ fn recording_the_account_an_app_shows_asks_before_it_quits_the_app() {
             .quit_confirmation
             .expect("asked first")
             .title,
-        "Quit Claude to add travel?"
+        words::quit_to_record("Claude", "travel", false)
     );
     let mut model = Hand::new();
     recording_travel(&mut model, &mut machine);

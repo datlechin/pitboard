@@ -14,14 +14,13 @@ use super::testing::machine::{
 };
 use super::testing::platform::StandInApps;
 use super::testing::records::{
-    CLAUDE, MONITOR, awaiting, claude, claude_code, claude_desktop, codex, codex_account,
-    desktop_account, desktop_warning, enrolled_as, refusal, status, still_running, switched,
-    warning,
+    CLAUDE, awaiting, claude, claude_code, claude_desktop, codex, codex_account, desktop_account,
+    desktop_warning, enrolled_as, refusal, status, still_running, switched, warning,
 };
 use super::{Intent, Pane, QuitQuestion, RestartNeeded, RunningSignIn, Sheet, WindowRequest};
 use crate::EnrolledAs;
 use crate::present::words;
-use pitboard_core::host::Os;
+use pitboard_core::host::{OS, Os};
 use pitboard_core::switch::WaitStep;
 
 /// What `claude auth login` 2.1.289 writes once it reads a code typed back, as the register's
@@ -136,7 +135,7 @@ fn a_sign_in_that_cannot_start_is_reported() {
     assert_eq!(shown.signing_in, None);
     assert_eq!(shown.sheet, Some(add(None)));
     let failure = shown.sheet_failure.expect("said in the sheet");
-    assert_eq!(failure.title, "Couldn’t sign in to work");
+    assert_eq!(failure.title, words::could_not_sign_in("work"));
     assert_eq!(
         failure.message,
         "a sign-in here would write over the login in use"
@@ -308,7 +307,7 @@ fn a_sign_in_to_the_account_in_use_says_its_new_login_is_in_use() {
     );
     assert_eq!(
         last.said.as_deref(),
-        Some("Signed in to work again. Its new login is the one in use now.")
+        Some(words::signed_in_now("work", true, None).as_str())
     );
     assert_eq!(last.restart, None, "nothing switched away from anything");
     assert_eq!(last.follows_at, None);
@@ -329,7 +328,7 @@ fn a_first_sign_in_to_the_account_in_use_says_it_was_enrolled() {
     signs_in(&mut model, &mut machine, "codex", "work", &[]);
     assert_eq!(
         model.state.last_switches[0].said.as_deref(),
-        Some("Enrolled work, the account signed in now. Its new login is the one in use.")
+        Some(words::signed_in_now("work", false, None).as_str())
     );
 }
 
@@ -375,7 +374,7 @@ fn a_sign_in_to_the_account_in_use_keeps_what_the_last_switch_said() {
     );
     assert_eq!(
         last.said.as_deref(),
-        Some("Signed in to work again. Its new login is the one in use now.")
+        Some(words::signed_in_now("work", true, None).as_str())
     );
     assert_eq!(last.warnings, [still_running(), parked]);
 }
@@ -440,10 +439,8 @@ fn a_sign_in_that_could_not_tell_what_runs_says_it_once() {
     assert_eq!(
         notice.lines,
         [
-            "Signed in to work again. Its new login is the one in use now.".to_owned(),
-            "Any codex session started before this switch keeps using personal until it is \
-             quit and started again."
-                .to_owned(),
+            words::signed_in_now("work", true, None),
+            words::restart_notice("codex", "personal"),
             switch_untold.message,
         ]
     );
@@ -1198,7 +1195,7 @@ fn signing_in_again_to_the_account_in_use_says_it_has_a_new_login() {
     );
     assert_eq!(
         last.said.as_deref(),
-        Some("Signed in to work again. Its new login is the one in use now.")
+        Some(words::signed_in_now("work", true, None).as_str())
     );
     let work = &model.state.status.clone().expect("accounts").accounts[0];
     assert!(work.signed_in);
@@ -1427,7 +1424,7 @@ fn a_sign_in_that_fails_once_its_sheet_has_gone_says_so_in_the_window() {
 
     let shown = model.shown();
     let failure = model.state.presented.clone().expect("said in the window");
-    assert_eq!(failure.title, "Couldn’t sign in to work");
+    assert_eq!(failure.title, words::could_not_sign_in("work"));
     assert_eq!(failure.message, "The sign-in did not finish.");
     assert_eq!(
         shown.window_request,
@@ -1444,7 +1441,7 @@ fn a_sign_in_that_fails_once_its_sheet_has_gone_says_so_in_the_window() {
     let failure = model.state.presented.clone().expect("said in the window");
     assert_eq!(
         (failure.id, failure.title.as_str()),
-        (2, "Couldn’t sign in to other")
+        (2, words::could_not_sign_in("other").as_str())
     );
 }
 
@@ -1529,7 +1526,7 @@ fn a_sign_in_lost_to_a_panic_is_said_and_over() {
     let shown = model.shown();
     assert_eq!(shown.signing_in, None);
     let failure = shown.sheet_failure.expect("said in the sheet");
-    assert_eq!(failure.title, "Couldn’t sign in to work");
+    assert_eq!(failure.title, words::could_not_sign_in("work"));
     assert_eq!(model.sheet_failure_code(), None);
 
     let id = starts(&mut model, &mut machine, "claude", "work");
@@ -1627,7 +1624,7 @@ fn an_add_for_a_tool_that_signs_in_inside_its_app_asks_before_it_quits_the_app()
     );
     assert_eq!(
         shown.quit_confirmation.expect("asked").title,
-        "Quit Claude to add an account?"
+        words::quit_to_sign_in("Claude", None)
     );
     assert_eq!(shown.signing_in, None, "nothing parked before the answer");
     assert_eq!(model.state.switch_under_way(), None);
@@ -1652,11 +1649,11 @@ fn the_app_is_opened_in_front_once_the_account_in_use_is_parked() {
             front: true,
         }));
     let page = page(&model);
-    assert_eq!(page.waiting, "Waiting for Claude to quit");
+    assert_eq!(page.waiting, words::waiting_to_quit("Claude"));
     assert!(!page.offers_link, "Claude has no page to offer");
-    assert!(
-        page.message
-            .starts_with("In Claude, sign in to the account you’re adding.")
+    assert_eq!(
+        page.message,
+        words::in_app_waiting("Claude", "travel", false, None, true)
     );
 }
 
@@ -1678,11 +1675,11 @@ fn a_park_refused_opens_the_app_again_behind() {
     assert_eq!(shown.signing_in, None);
     assert_eq!(
         shown.sheet_failure.expect("said in the sheet").title,
-        "Couldn’t sign in to travel"
+        words::could_not_sign_in("travel")
     );
     assert_eq!(
         shown.sheet_text.expect("the form").confirm,
-        "Add the Account Claude Shows"
+        words::add_account_shown(Os::MacOs, "Claude", false)
     );
     machine.changed += 1;
     model.notice(&mut machine);
@@ -1816,16 +1813,13 @@ fn a_park_cancelled_in_flight_and_asked_again_keeps_each_hold_its_own() {
 
 // Claude's quit failing each way: (quits, lingers, lost, what is said, what the apps were asked).
 pub(super) fn quits_failed() -> [(bool, bool, bool, String, Vec<String>); 3] {
-    let still_open = "Claude is still open, so nothing has changed. Quit it, then try again.";
-    let lingering = format!(
-        "Part of Claude is still running after it quit, so nothing has changed. Wait until it \
-         ends, or quit it in {MONITOR}, then try again."
-    );
+    let still_open = words::still_open("Claude", "try again");
+    let lingering = words::part_still_running(OS, "Claude", "try again");
     let (quit, open) = (format!("quit {CLAUDE}"), format!("open {CLAUDE}"));
     [
-        (false, false, false, still_open.into(), vec![quit.clone()]),
+        (false, false, false, still_open.clone(), vec![quit.clone()]),
         (true, true, false, lingering, vec![quit, open]),
-        (true, false, true, still_open.into(), Vec::new()),
+        (true, false, true, still_open, Vec::new()),
     ]
 }
 
@@ -1852,7 +1846,7 @@ fn an_add_whose_app_does_not_quit_parks_nothing_and_lets_its_sheet_go() {
         assert_eq!(shown.signing_in, None);
         assert_eq!(shown.sheet, Some(add(Some("desktop"))));
         let failure = shown.sheet_failure.expect("said in the sheet");
-        assert_eq!(failure.title, "Couldn’t sign in to travel");
+        assert_eq!(failure.title, words::could_not_sign_in("travel"));
         assert_eq!(failure.message, message);
         assert!(!shown.sheet_text.expect("the form").saving, "{message}");
         assert_eq!(machine.apps.asked(), asked);
@@ -1916,7 +1910,7 @@ fn a_first_account_of_such_a_tool_is_recorded_as_the_one_signed_in() {
     put_up(&mut model, &mut machine, add(Some("desktop")));
     assert_eq!(
         model.on_a_mac().sheet_text.expect("the form").confirm,
-        "Add Account"
+        words::add_account(Os::MacOs)
     );
     let jobs = model.send(sign_in("desktop", "work"));
     assert_eq!(
@@ -1953,9 +1947,12 @@ fn a_first_account_refused_as_signed_out_offers_the_sign_in_next() {
     let shown = model.on_a_mac();
     assert_eq!(
         shown.sheet_failure.expect("said in the sheet").title,
-        "Couldn’t add work"
+        words::could_not_enrol(Some(&add(Some("desktop"))), "work")
     );
-    assert_eq!(shown.sheet_text.expect("the form").confirm, "Start Sign-In");
+    assert_eq!(
+        shown.sheet_text.expect("the form").confirm,
+        words::start_sign_in(Os::MacOs)
+    );
     let jobs = model.send(sign_in("desktop", "work"));
     assert!(
         matches!(
@@ -1978,7 +1975,7 @@ fn an_add_that_met_a_login_pitboard_cannot_place_records_the_account_claude_show
     assert_eq!(machine.signed_in, ["desktop/travel"]);
     assert_eq!(
         model.on_a_mac().sheet_text.expect("the form").confirm,
-        "Add the Account Claude Shows"
+        words::add_account_shown(Os::MacOs, "Claude", false)
     );
     let jobs = model.send(travel());
     assert!(
@@ -2008,25 +2005,21 @@ fn the_wait_says_each_step_it_meets() {
         });
         page(model)
     };
+    let said = |step| words::in_app_waiting("Claude", "travel", false, Some(step), false);
     let open = step(&mut model, "Claude is open.\n", WaitStep::Open);
-    assert!(
-        open.message
-            .starts_with("Open Claude and sign in to the account you’re adding."),
-        "Pitboard did not open it: {}",
-        open.message
+    assert_eq!(
+        open.message,
+        said(WaitStep::Open),
+        "Pitboard did not open it"
     );
-    assert_eq!(open.waiting, "Waiting for Claude to quit");
+    assert_eq!(open.waiting, words::waiting_to_quit("Claude"));
     assert_eq!(open.announce, None);
     let nobody = step(
         &mut model,
         "Claude quit with nobody signed in. Still waiting.\n",
         WaitStep::QuitSignedOut,
     );
-    assert!(
-        nobody
-            .message
-            .starts_with("Claude quit with nobody signed in.")
-    );
+    assert_eq!(nobody.message, said(WaitStep::QuitSignedOut));
     assert_eq!(
         nobody.announce.as_ref(),
         Some(&nobody.message),
@@ -2037,11 +2030,7 @@ fn the_wait_says_each_step_it_meets() {
         "Claude quit before it finished signing in.\n",
         WaitStep::QuitUnfinished,
     );
-    assert!(
-        unfinished
-            .message
-            .starts_with("Claude quit before it finished signing in.")
-    );
+    assert_eq!(unfinished.message, said(WaitStep::QuitUnfinished));
     assert_eq!(unfinished.announce.as_ref(), Some(&unfinished.message));
 }
 
@@ -2052,7 +2041,7 @@ fn later_stops_the_wait_and_reads_again() {
     model.send(travel());
     model.run(&mut machine);
     let id = running(&model).id;
-    assert_eq!(page(&model).cancel.title, "Later");
+    assert_eq!(page(&model).cancel.title, words::LATER);
     let reads = model.count(any_read);
     let jobs = model.send(Intent::CancelSignIn);
     assert!(jobs.contains(&Job::StopSignIn { id }), "{jobs:?}");
@@ -2261,7 +2250,7 @@ fn a_sign_in_again_of_the_account_in_use_is_said_as_a_new_login() {
     );
     assert_eq!(
         model.on_a_mac().sheet_text.expect("the form").confirm,
-        "Park work"
+        words::park("work")
     );
     model.send(sign_in("desktop", "work"));
     model.run(&mut machine);
@@ -2273,10 +2262,10 @@ fn a_sign_in_again_of_the_account_in_use_is_said_as_a_new_login() {
         .into_iter()
         .find(|notice| notice.id == "switch/desktop")
         .expect("what the sign-in did");
-    assert_eq!(notice.title, "work has a new login");
+    assert_eq!(notice.title, words::has_a_new_login(None, "work"));
     assert_eq!(
         notice.lines,
-        ["Signed in to work again. Claude is signed in to it now."]
+        [words::signed_in_now("work", true, Some("Claude"))]
     );
 }
 
@@ -2310,7 +2299,7 @@ fn a_resumed_add_offers_to_put_its_account_back() {
     model.run(&mut machine);
     assert_eq!(
         model.on_a_mac().sheet_text.expect("the form").confirm,
-        "Start Sign-In"
+        words::start_sign_in(Os::MacOs)
     );
     model.send(travel());
     model.run(&mut machine);
@@ -2324,7 +2313,7 @@ fn a_resumed_add_offers_to_put_its_account_back() {
             }
         ))
     );
-    assert_eq!(page.cancel.title, "Later");
+    assert_eq!(page.cancel.title, words::LATER);
     assert!(!page.escape_cancels);
 }
 
@@ -2346,13 +2335,13 @@ fn nothing_parked_from_a_logged_out_claude_offers_no_put_back() {
     put_up(&mut model, &mut machine, add(Some("desktop")));
     assert_eq!(
         model.on_a_mac().sheet_text.expect("the form").confirm,
-        "Start Sign-In"
+        words::start_sign_in(Os::MacOs)
     );
     model.send(travel());
     model.run(&mut machine);
     assert_eq!(machine.signed_in, ["desktop/travel"]);
     let page = page(&model);
-    assert_eq!(page.cancel.title, "Cancel");
+    assert_eq!(page.cancel.title, words::CANCEL);
     assert!(page.escape_cancels);
     assert_eq!(page.undo, None);
 }
@@ -2368,21 +2357,21 @@ fn no_undo_is_offered_before_the_core_says_what_it_parked() {
     let page = page(&model);
     assert_eq!(page.undo, None);
     assert!(!page.escape_cancels);
-    assert_eq!(page.cancel.title, "Cancel");
-    assert_eq!(page.waiting, "Parking work");
+    assert_eq!(page.cancel.title, words::CANCEL);
+    assert_eq!(page.waiting, words::parking("work").1);
 }
 
 #[test]
 fn the_page_says_pitboard_opened_claude_only_where_it_did() {
-    for (moving, said) in [
-        (true, "Open Claude and sign in"),
-        (false, "In Claude, sign in"),
-    ] {
+    for moving in [true, false] {
         let (mut model, mut machine) = adding_in_claude(true);
         machine.put_back = Some("desktop/work".into());
         machine.moving = moving;
         quit_for_it(&mut model, &mut machine);
-        let page = page(&model);
-        assert!(page.message.starts_with(said), "{moving}: {}", page.message);
+        assert_eq!(
+            page(&model).message,
+            words::in_app_waiting("Claude", "travel", false, None, !moving),
+            "{moving}"
+        );
     }
 }

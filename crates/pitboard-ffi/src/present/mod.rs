@@ -817,21 +817,21 @@ mod tests {
         assert_eq!(
             words(Os::MacOs),
             [
-                "No Accounts",
-                "Add Account…",
-                "Add Account",
-                "Sign In",
-                "No Activity"
+                "No Accounts".into(),
+                "Add Account…".into(),
+                words::add_account(Os::MacOs),
+                words::sign_in(Os::MacOs),
+                "No Activity".into()
             ]
         );
         assert_eq!(
             words(Os::Windows),
             [
-                "No accounts",
-                "Add account…",
-                "Add account",
-                "Sign in",
-                "No activity"
+                "No accounts".into(),
+                "Add account…".into(),
+                words::add_account(Os::Windows),
+                words::sign_in(Os::Windows),
+                "No activity".into()
             ]
         );
     }
