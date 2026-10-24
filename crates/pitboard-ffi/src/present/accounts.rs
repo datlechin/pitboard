@@ -1143,8 +1143,6 @@ mod tests {
     fn a_claude_desktop_row_says_no_usage_once_and_when_its_sign_in_may_lapse() {
         let home = Account {
             parked: Some(crate::Parked {
-                parked_at: NOW - 86_400,
-                access_expires_at: None,
                 refresh_expires_at: None,
                 session_expires_at: Some(NOW + 25 * 86_400 + 3_600),
             }),
@@ -1160,8 +1158,6 @@ mod tests {
         );
         let lapsed = Account {
             parked: Some(crate::Parked {
-                parked_at: 0,
-                access_expires_at: None,
                 refresh_expires_at: None,
                 session_expires_at: Some(NOW - 1),
             }),

@@ -22,9 +22,12 @@ fn a_read_fills_in_the_rows() {
     let mut machine = Stub::reading(Ok(status(vec![claude("work", true, 42.0)])));
     model.refresh(&mut machine);
     let shown = model.shown();
-    assert_eq!(shown.status.as_ref().map(|s| s.accounts.len()), Some(1));
+    assert_eq!(
+        model.state.status.as_ref().map(|s| s.accounts.len()),
+        Some(1)
+    );
     assert_eq!(percent(&shown, 0), Some(42.0));
-    assert_eq!(shown.read_failure, None);
+    assert_eq!(model.state.failure, None);
 }
 
 /// Pitboard's errors already say what to do, so the panel shows the message as it is.
@@ -37,16 +40,15 @@ fn a_failed_read_is_shown_as_its_own_message() {
         Vec::new(),
     )));
     model.refresh(&mut machine);
-    let shown = model.shown();
     assert_eq!(
-        shown.read_failure,
+        model.state.failure,
         Some(ReadFailure {
             code: "state_wrong_machine".into(),
             message: "was written on another computer".into(),
         })
     );
     assert_eq!(
-        shown.status.map(|s| s.accounts.is_empty()),
+        model.state.status.clone().map(|s| s.accounts.is_empty()),
         Some(true),
         "the panel falls back to what is already known, which here is nothing"
     );
@@ -94,8 +96,7 @@ fn a_change_made_somewhere_else_is_noticed_without_asking_anthropic() {
         "it read what is already known"
     );
     assert_eq!(model.count(fresh_read), 0, "and asked Anthropic nothing");
-    let shown = model.shown();
-    let accounts = shown.status.expect("accounts").accounts;
+    let accounts = model.state.status.clone().expect("accounts").accounts;
     assert_eq!(accounts[0].label.as_deref(), Some("work"));
 }
 
@@ -172,13 +173,12 @@ fn a_failed_first_read_falls_back_to_what_is_already_known() {
 
     model.refresh(&mut machine);
 
-    let shown = model.shown();
     assert_eq!(
-        shown.read_failure.map(|f| f.message).as_deref(),
+        model.state.failure.clone().map(|f| f.message).as_deref(),
         Some("could not reach Anthropic")
     );
     assert_eq!(
-        shown.status.map(|s| s.accounts.len()),
+        model.state.status.clone().map(|s| s.accounts.len()),
         Some(1),
         "the last numbers measured are still true"
     );
@@ -199,10 +199,14 @@ fn every_warning_is_kept_not_only_the_first() {
         ],
     )));
     model.refresh(&mut machine);
-    let shown = model.shown();
-    let codes: Vec<&str> = shown.warnings.iter().map(|w| w.code.as_str()).collect();
+    let codes: Vec<&str> = model
+        .state
+        .warnings
+        .iter()
+        .map(|w| w.code.as_str())
+        .collect();
     assert_eq!(codes, ["auth_overridden", "config_write_failed"]);
-    assert_eq!(shown.read_failure, None);
+    assert_eq!(model.state.failure, None);
 }
 
 /// A failure carries its own warnings. Leaving the last successful read's in place put a
@@ -218,9 +222,8 @@ fn a_failed_read_shows_its_own_warnings_rather_than_the_last_ones() {
         )],
     )));
     model.refresh(&mut machine);
-    let shown = model.shown();
-    assert_eq!(shown.warnings[0].code, "state_on_synced_drive");
-    assert_eq!(shown.read_failure, None, "a warning is not a failed read");
+    assert_eq!(model.state.warnings[0].code, "state_on_synced_drive");
+    assert_eq!(model.state.failure, None, "a warning is not a failed read");
 
     machine.answer = Err(refusal(
         "identity_unverifiable",
@@ -228,11 +231,15 @@ fn a_failed_read_shows_its_own_warnings_rather_than_the_last_ones() {
         vec![warning("overriding_env", "ANTHROPIC_API_KEY is set")],
     ));
     model.refresh(&mut machine);
-    let shown = model.shown();
-    let codes: Vec<&str> = shown.warnings.iter().map(|w| w.code.as_str()).collect();
+    let codes: Vec<&str> = model
+        .state
+        .warnings
+        .iter()
+        .map(|w| w.code.as_str())
+        .collect();
     assert_eq!(codes, ["overriding_env"]);
     assert_eq!(
-        shown.read_failure.map(|f| f.message).as_deref(),
+        model.state.failure.clone().map(|f| f.message).as_deref(),
         Some("Anthropic could not be reached")
     );
 }
@@ -559,7 +566,7 @@ fn a_login_replaced_a_failed_read_says_is_posted_once_while_it_stands() {
     machine.offline = Ok(warned(accounts(), vec![replaced.clone()]));
 
     model.refresh(&mut machine);
-    assert_eq!(model.shown().warnings, std::slice::from_ref(&replaced));
+    assert_eq!(model.state.warnings, std::slice::from_ref(&replaced));
     assert_eq!(bodies(&machine), [replaced.message.as_str()]);
 
     machine.answer = Ok(warned(accounts(), vec![replaced.clone()]));
@@ -598,7 +605,7 @@ fn a_login_replaced_a_refused_switch_says_is_posted() {
 
     switch(&mut model, &mut machine, "claude/work");
 
-    assert_eq!(model.shown().warnings, std::slice::from_ref(&replaced));
+    assert_eq!(model.state.warnings, std::slice::from_ref(&replaced));
     assert_eq!(bodies(&machine), [replaced.message.as_str()]);
 }
 
@@ -662,12 +669,12 @@ fn what_is_installed_is_asked_again_while_nothing_is_found() {
     let mut machine = Stub::reading(Ok(status(Vec::new())));
     machine.found = Vec::new();
     model.refresh(&mut machine);
-    assert_eq!(model.shown().installed, Some(Vec::new()));
+    assert_eq!(model.state.installed, Some(Vec::new()));
 
     machine.found = vec![claude_code()];
     model.refresh(&mut machine);
     assert_eq!(model.count(installed_ask), 2);
-    assert_eq!(model.shown().installed, Some(vec![claude_code()]));
+    assert_eq!(model.state.installed, Some(vec![claude_code()]));
     model.refresh(&mut machine);
     assert_eq!(model.count(installed_ask), 2);
 }
@@ -684,8 +691,7 @@ fn what_is_installed_is_asked_once() {
     machine.found = vec![claude_code(), codex()];
     assert_eq!(model.count(installed_ask), 0);
     assert_eq!(
-        model.shown().installed,
-        None,
+        model.state.installed, None,
         "nothing is known to be here until a read asks"
     );
     model.refresh(&mut machine);
@@ -694,7 +700,7 @@ fn what_is_installed_is_asked_once() {
     }
     model.refresh(&mut machine);
     assert_eq!(model.count(installed_ask), 1);
-    assert_eq!(model.shown().installed, Some(vec![claude_code(), codex()]));
+    assert_eq!(model.state.installed, Some(vec![claude_code(), codex()]));
 }
 
 /// A read that started before a change the poll noticed is dropped when it lands. The cases of
@@ -734,20 +740,18 @@ fn a_read_that_started_before_a_change_is_dropped_when_it_lands() {
     machine.changed += 1;
     model.later(Duration::from_secs(3));
     model.notice(&mut machine);
-    let said = model.shown();
-    assert_eq!(said.status.as_ref(), Some(&after));
+    assert_eq!(model.state.status.as_ref(), Some(&after));
+    let said = (model.state.warnings.clone(), model.state.updated_ms);
 
     model.later(Duration::from_secs(3));
     model.give(held);
-    let shown = model.shown();
     assert_eq!(
-        shown.status.as_ref(),
+        model.state.status.as_ref(),
         Some(&after),
         "not the accounts as they were before the change"
     );
-    assert_eq!(shown.warnings, said.warnings);
-    assert_eq!(shown.updated_at, said.updated_at);
-    assert!(!shown.reading);
+    assert_eq!((model.state.warnings.clone(), model.state.updated_ms), said);
+    assert!(!model.shown().reading);
 }
 
 /// A switch's case is in `switching.rs`; this is the same for a change the poll noticed. A read
@@ -781,9 +785,9 @@ fn a_failed_read_that_started_before_a_change_says_nothing_once_it_lands() {
 
     model.give(held);
     let shown = model.shown();
-    assert_eq!(shown.read_failure, None);
-    assert!(shown.warnings.is_empty());
-    assert_eq!(shown.status, Some(after));
+    assert_eq!(model.state.failure, None);
+    assert!(model.state.warnings.is_empty());
+    assert_eq!(model.state.status, Some(after));
     assert!(!shown.reading);
 }
 
@@ -809,10 +813,10 @@ fn a_change_made_during_a_read_is_noticed_on_the_next_look() {
     machine.changed += 1;
     machine.offline = Ok(elsewhere.clone());
     model.give(read);
-    assert_eq!(model.shown().status, Some(before));
+    assert_eq!(model.state.status, Some(before));
 
     model.notice(&mut machine);
-    assert_eq!(model.shown().status, Some(elsewhere));
+    assert_eq!(model.state.status, Some(elsewhere));
     assert_eq!(model.count(offline_read), 1);
     assert_eq!(model.count(fresh_read), 0);
 }
@@ -843,7 +847,7 @@ fn a_change_noticed_keeps_the_plan_shown_for_a_login_nobody_enrolled() {
     assert_eq!(model.count(offline_read), 1);
     let shown = model.shown();
     assert_eq!(percent(&shown, 1), Some(30.0), "the read that asks nobody");
-    let accounts = shown.status.unwrap().accounts;
+    let accounts = model.state.status.clone().unwrap().accounts;
     assert_eq!(accounts[0].plan.as_deref(), Some("Pro"));
     assert_eq!(accounts[1].plan, None);
 }
@@ -865,7 +869,7 @@ fn a_read_is_running_while_either_of_two_is() {
     assert!(model.shown().reading);
 
     model.give(first);
-    assert!(model.shown().updated_at.is_some());
+    assert!(model.state.updated_ms.is_some());
     assert!(model.shown().reading, "the other is still waiting");
 
     model.give(second);
@@ -961,12 +965,15 @@ fn a_read_landing_while_a_failed_one_falls_back_keeps_what_it_says_of_a_stuck_sw
     let answered = machine.answer(model.next());
 
     model.give(failed);
-    assert!(model.shown().stuck);
+    assert!(model.state.stuck);
     model.give(answered);
     model.run(&mut machine);
     let shown = model.shown();
-    assert!(!shown.stuck, "the read that landed found nothing stuck");
-    assert_eq!(shown.read_failure, None);
+    assert!(
+        !model.state.stuck,
+        "the read that landed found nothing stuck"
+    );
+    assert_eq!(model.state.failure, None);
     assert_eq!(percent(&shown, 0), Some(40.0));
 }
 
@@ -996,7 +1003,8 @@ fn numbers_land_on_a_read_that_landed_while_they_were_read() {
     model.run(&mut machine);
 
     let shown = model.shown();
-    let labels: Vec<Option<&str>> = shown
+    let labels: Vec<Option<&str>> = model
+        .state
         .status
         .as_ref()
         .expect("accounts")
@@ -1027,7 +1035,7 @@ fn a_read_lost_to_a_panic_is_over() {
     assert!(!model.shown().reading);
     assert_eq!(model.pending(), 0);
     model.refresh(&mut machine);
-    assert!(model.shown().status.is_some());
+    assert!(model.state.status.is_some());
 }
 
 /// The poll counts a change it notices, so a read under way when it does is dropped; looks

@@ -404,7 +404,7 @@ fn what_stands_in_for_a_failed_read_is_not_advised_on() {
     let kept = model.take(|job| matches!(job, super::state::Job::LoadKept));
     model.run(&mut machine);
     assert!(
-        model.shown().status.is_some(),
+        model.state.status.is_some(),
         "the last numbers measured are shown"
     );
     let answer = machine.answer(kept);
@@ -450,7 +450,7 @@ fn a_change_noticed_before_what_was_told_is_in_is_advised_on_after() {
     machine.offline = Ok(status(vec![work(100.0, 7_200), personal()]));
     machine.changed += 1;
     model.notice(&mut machine);
-    assert!(model.shown().status.is_some(), "the change is shown");
+    assert!(model.state.status.is_some(), "the change is shown");
     assert!(model.state.advice.is_empty(), "and not advised on yet");
 
     let answer = machine.answer(kept);

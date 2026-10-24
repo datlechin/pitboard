@@ -21,35 +21,39 @@ public sealed class AppModelTests
         Assert.IsEmpty(told);
     }
 
+    // Each call makes its arrays anew, as the bindings do for every snapshot told.
+    private static Snapshot Listing(ulong revision) =>
+        Snapshots.Read(revision) with { Sections = [Items.Section("claude", null, Items.Account("claude", "work", inUse: true))] };
+
     // Every list in the newer snapshot is a new array holding what the shown one held.
     [TestMethod]
     public void OnlyThePartsThatChangedAreAssignedAndTold()
     {
-        var model = new AppModel(Snapshots.Read(1));
-        var status = model.Status;
+        var model = new AppModel(Listing(1));
+        var sections = model.Sections;
         var told = new List<string?>();
         model.PropertyChanged += (_, changed) => told.Add(changed.PropertyName);
 
-        var assigned = model.Apply(Snapshots.Read(3) with { Reading = true });
+        var assigned = model.Apply(Listing(3) with { Reading = true });
 
         Assert.AreEqual("Revision, Reading", string.Join(", ", assigned));
         Assert.AreEqual("Revision, Reading", string.Join(", ", told));
-        Assert.AreSame(status, model.Status);
+        Assert.AreSame(sections, model.Sections);
         Assert.IsTrue(model.Reading);
     }
 
     [TestMethod]
     public void AChangeInsideAListIsAChangeOfItsPart()
     {
-        var model = new AppModel(Snapshots.Read(1));
-        var read = Snapshots.Read(2);
-        var status = read.Status!;
-        var renamed = status with { Accounts = [status.Accounts[0] with { Label = "office" }] };
+        var model = new AppModel(Listing(1));
+        var read = Listing(2);
+        var section = read.Sections[0];
+        var renamed = section with { Accounts = [section.Accounts[0] with { Title = "office" }] };
 
-        var assigned = model.Apply(read with { Status = renamed });
+        var assigned = model.Apply(read with { Sections = [renamed] });
 
-        Assert.AreEqual("Revision, Status", string.Join(", ", assigned));
-        Assert.AreEqual("office", model.Status!.Accounts[0].Label);
+        Assert.AreEqual("Revision, Sections", string.Join(", ", assigned));
+        Assert.AreEqual("office", model.Sections[0].Accounts[0].Title);
     }
 
     [TestMethod]

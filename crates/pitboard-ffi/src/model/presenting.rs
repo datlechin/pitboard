@@ -1094,7 +1094,6 @@ fn one_tool_looks_as_it_always_did() {
         assert_eq!(shown.sections[0].heading, None);
         assert_eq!(shown.sections[0].accounts.len(), 2);
         assert_eq!(shown.menu_bar.name_and_usage, "unnamed 80%");
-        assert!(!shown.shows_tools);
     }
     assert!(reading(Vec::new()).0.shown().sections.is_empty());
 }
@@ -1109,7 +1108,6 @@ fn accounts_of_two_tools_are_grouped_by_tool() {
         account(Some("side")).of("codex").signed_in().build(),
     ]);
     let shown = model.shown();
-    assert!(shown.shows_tools);
     let headings: Vec<Option<&str>> = shown
         .sections
         .iter()
@@ -1346,7 +1344,7 @@ fn a_failed_read_with_nothing_to_list_is_what_the_window_shows() {
     nothing.offline = failed();
     unknown.refresh(&mut nothing);
     let shown = unknown.shown();
-    assert_eq!(shown.status, None);
+    assert_eq!(unknown.state.status, None);
     assert_eq!(
         shown.footing,
         Footing::Ready,
@@ -1357,7 +1355,10 @@ fn a_failed_read_with_nothing_to_list_is_what_the_window_shows() {
     let mut empty = at_noon();
     empty.refresh(&mut Stub::reading(failed()));
     let shown = empty.shown();
-    assert_eq!(shown.status.map(|s| s.accounts.len()), Some(0));
+    assert_eq!(
+        empty.state.status.clone().map(|s| s.accounts.len()),
+        Some(0)
+    );
     assert_eq!(
         shown.footing,
         Footing::NoOneSignedIn,
@@ -1486,7 +1487,7 @@ fn a_switch_counts_down_only_until_open_sessions_have_followed() {
         model.shown().notices
     );
     assert_eq!(
-        model.shown().last_switches.len(),
+        model.state.last_switches.len(),
         1,
         "the switch is still kept"
     );
@@ -1553,8 +1554,8 @@ fn a_switch_that_sessions_take_at_renewal_counts_down_nothing() {
     switch(&mut model, &mut machine, "claude/work");
 
     let shown = model.shown();
-    assert_eq!(shown.last_switches[0].follows_at, None);
-    assert_eq!(shown.last_switches[0].restart, None);
+    assert_eq!(model.state.last_switches[0].follows_at, None);
+    assert_eq!(model.state.last_switches[0].restart, None);
     let [left_behind] = shown.notices.as_slice() else {
         panic!("no bare switch notice beside it: {:?}", shown.notices);
     };
@@ -1658,7 +1659,7 @@ fn a_switch_warning_the_read_repeats_is_said_once() {
     machine.switched = switched("claude", "a", "b", vec![overridden()]);
     switch(&mut model, &mut machine, "claude/b");
     let shown = model.shown();
-    assert_eq!(shown.warnings, [overridden()]);
+    assert_eq!(model.state.warnings, [overridden()]);
     let switched_notice = shown
         .notices
         .iter()
@@ -3372,7 +3373,7 @@ fn a_failure_away_from_the_window_is_said_in_it() {
     });
     model.run(&mut machine);
     let shown = model.shown();
-    assert_eq!(shown.failure, None);
+    assert_eq!(model.state.presented, None);
     assert_eq!(shown.failure_alert, None);
     assert_eq!(shown.window_request.serial, 0);
 
@@ -3396,7 +3397,7 @@ fn a_failure_away_from_the_window_is_said_in_it() {
 
     model.send(Intent::DismissFailure);
     let shown = model.shown();
-    assert_eq!(shown.failure, None);
+    assert_eq!(model.state.presented, None);
     assert_eq!(shown.failure_alert, None);
     assert_eq!(
         shown.window_request.serial, 1,
@@ -3416,7 +3417,7 @@ fn only_a_switch_asked_for_away_from_the_window_that_fails_opens_it() {
     machine.switched = switched("claude", "work", "personal", Vec::new());
     switch(&mut model, &mut machine, "claude/personal");
     let shown = model.shown();
-    assert_eq!(shown.failure, None);
+    assert_eq!(model.state.presented, None);
     assert_eq!(shown.window_request.serial, 0);
 
     machine.switched = Err(refusal(
@@ -3426,7 +3427,7 @@ fn only_a_switch_asked_for_away_from_the_window_that_fails_opens_it() {
     ));
     switch(&mut model, &mut machine, "claude/nobody");
     let shown = model.shown();
-    let failure = shown.failure.expect("said in the window");
+    let failure = model.state.presented.clone().expect("said in the window");
     assert_eq!(failure.title, "Couldn’t switch to nobody");
     assert_eq!(failure.message, "There is no account called claude/nobody.");
     assert_eq!(shown.window_request.serial, 1);
@@ -3481,7 +3482,7 @@ fn the_service_asked_is_named_for_the_tools_shown() {
         shown.notices[0].lines[0],
         words::switch_waits_for("Anthropic")
     );
-    assert!(!shown.shows_tools);
+    assert_eq!(shown.sections.len(), 1);
 
     machine.answer = Ok(warned(
         vec![
@@ -3496,7 +3497,7 @@ fn the_service_asked_is_named_for_the_tools_shown() {
         shown.notices[0].lines[0],
         words::switch_waits_for("Anthropic or OpenAI")
     );
-    assert!(shown.shows_tools);
+    assert_eq!(shown.sections.len(), 2);
 }
 
 // What a sign-in or a recording inside Claude says in its sheet, driven through the model.

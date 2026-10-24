@@ -75,10 +75,10 @@ fn put_up(model: &mut Hand, machine: &mut Stub, sheet: Sheet) {
 
 fn tos(model: &Hand) -> Vec<String> {
     model
-        .shown()
+        .state
         .last_switches
-        .into_iter()
-        .map(|last| last.to)
+        .iter()
+        .map(|last| last.to.clone())
         .collect()
 }
 
@@ -112,10 +112,10 @@ fn only_an_unenrolled_signed_in_account_can_be_named_here() {
     assert_eq!(refused.message, "There is already an account called work.");
     assert_eq!(shown.sheet, Some(name), "the sheet stays open to say why");
     assert!(
-        shown.warnings.is_empty(),
+        model.state.warnings.is_empty(),
         "said in the sheet, not in the panel"
     );
-    assert_eq!(shown.failure, None);
+    assert_eq!(model.state.presented, None);
 
     machine.enrolling_current = enrolled_as(EnrolledAs::Current, Vec::new());
     model.send(enrol("claude", "work"));
@@ -158,7 +158,7 @@ fn a_refused_forget_is_reported() {
     let mut machine = Stub::reading(Ok(status(Vec::new())));
     model.send(forget("claude/alpha"));
     model.run(&mut machine);
-    assert_eq!(model.shown().failure, None);
+    assert_eq!(model.state.presented, None);
 
     machine.forgetting = Err(refusal(
         "cannot_forget_active_account",
@@ -168,8 +168,7 @@ fn a_refused_forget_is_reported() {
     model.send(forget("claude/beta"));
     model.run(&mut machine);
     assert_eq!(machine.forgot, ["claude/alpha", "claude/beta"]);
-    let shown = model.shown();
-    let refused = shown.failure.expect("said");
+    let refused = model.state.presented.clone().expect("said");
     assert_eq!(refused.title, "Couldn’t forget beta");
     assert_eq!(
         refused.message,
@@ -181,9 +180,9 @@ fn a_refused_forget_is_reported() {
     );
     let codes: Vec<&str> = refused.warnings.iter().map(|w| w.code.as_str()).collect();
     assert_eq!(codes, ["auth_overridden"]);
-    assert_eq!(shown.read_failure, None, "a refusal is not a failed read");
+    assert_eq!(model.state.failure, None, "a refusal is not a failed read");
     assert!(
-        shown.warnings.is_empty(),
+        model.state.warnings.is_empty(),
         "its warnings are said with it, not in the panel"
     );
 }
@@ -324,7 +323,7 @@ pub(super) fn a_look_landing_after(after: Vec<Account>, change: impl FnOnce(&mut
     ])));
     model.refresh(&mut machine);
     model.notice(&mut machine);
-    let read_at = model.shown().updated_at;
+    let read_at = model.state.updated_ms;
 
     model.later(Duration::from_secs(3));
     model.look();
@@ -343,11 +342,11 @@ pub(super) fn a_look_landing_after(after: Vec<Account>, change: impl FnOnce(&mut
     model.run(&mut machine);
 
     let shown = model.shown();
-    assert_eq!(shown.status, Some(after));
-    assert_ne!(shown.updated_at, read_at);
+    assert_eq!(model.state.status, Some(after));
+    assert_ne!(model.state.updated_ms, read_at);
     assert_eq!(
-        shown.updated_at,
-        Some(model.now.epoch()),
+        model.state.updated_ms,
+        Some(model.now.epoch_ms),
         "the read after the change shown"
     );
     assert!(!shown.reading);
@@ -362,7 +361,7 @@ pub(super) fn a_look_landing_after(after: Vec<Account>, change: impl FnOnce(&mut
     machine.offline = Ok(elsewhere.clone());
     model.notice(&mut machine);
     assert_eq!(
-        model.shown().status,
+        model.state.status,
         Some(elsewhere),
         "a change made elsewhere since is noticed"
     );
@@ -555,7 +554,7 @@ fn however_a_change_ends_it_gives_the_index_back_to_the_poll() {
         machine.changed += 1;
         machine.offline = Ok(elsewhere.clone());
         model.notice(&mut machine);
-        assert_eq!(model.shown().status, Some(elsewhere), "{case}");
+        assert_eq!(model.state.status, Some(elsewhere), "{case}");
     }
 }
 
@@ -591,14 +590,13 @@ fn a_look_while_a_rename_is_made_leaves_what_was_said_about_the_account() {
     model.give(machine.answer(renaming));
     model.run(&mut machine);
 
-    let shown = model.shown();
-    assert_eq!(shown.status, Some(renamed));
+    assert_eq!(model.state.status, Some(renamed));
     assert_eq!(
         tos(&model),
         ["office"],
         "what the switch said, under the new name"
     );
-    assert_eq!(shown.last_switches[0].warnings, [still_running()]);
+    assert_eq!(model.state.last_switches[0].warnings, [still_running()]);
     assert_eq!(machine.posted.len(), 1, "and not told again");
     assert_eq!(
         model.state.told,
@@ -626,7 +624,7 @@ fn a_rename_carries_what_was_said_about_the_account() {
     switch(&mut model, &mut machine, "codex/work");
     assert_eq!(tos(&model), ["work", "codex/work"]);
     let from = |model: &Hand| {
-        model.shown().last_switches[1]
+        model.state.last_switches[1]
             .restart
             .as_ref()
             .map(|restart| restart.from.clone())
@@ -770,7 +768,7 @@ fn a_name_that_cannot_be_saved_once_its_sheet_has_gone_is_said_in_the_window() {
     model.run(&mut machine);
     let shown = model.shown();
     assert_eq!(shown.sheet_failure, None);
-    let failure = shown.failure.expect("said in the window");
+    let failure = model.state.presented.clone().expect("said in the window");
     assert_eq!(failure.title, "Couldn’t name this account");
     assert_eq!(shown.window_request.serial, requests + 1);
 
@@ -780,7 +778,7 @@ fn a_name_that_cannot_be_saved_once_its_sheet_has_gone_is_said_in_the_window() {
     let shown = model.shown();
     assert_eq!(shown.sheet_failure, None, "not in another sheet");
     assert_eq!(
-        shown.failure.map(|failure| failure.title),
+        model.state.presented.clone().map(|failure| failure.title),
         Some("Couldn’t rename work".into())
     );
 }
@@ -859,7 +857,7 @@ fn updating_claude_codes_config_is_no_switch() {
 
     model.send(the_update(&model));
     let shown = model.shown();
-    assert_eq!(shown.switch_under_way, None);
+    assert_eq!(model.state.switch_under_way(), None);
     let rows: Vec<(String, bool)> = shown
         .sections
         .into_iter()
@@ -877,7 +875,7 @@ fn updating_claude_codes_config_is_no_switch() {
     model.run(&mut machine);
     assert_eq!(machine.configs_updated, ["claude/work"]);
     assert!(machine.switched_to.is_empty());
-    assert!(model.shown().last_switches.is_empty());
+    assert!(model.state.last_switches.is_empty());
     let titles: Vec<String> = model
         .on_a_mac()
         .notices
@@ -911,7 +909,7 @@ fn a_config_that_could_not_be_updated_is_said_beside_the_read_after() {
         ]
     );
     assert_eq!(model.shown().notices[1].lines, [not_written.message]);
-    assert!(model.shown().last_switches.is_empty());
+    assert!(model.state.last_switches.is_empty());
 
     model.refresh(&mut machine);
     assert_eq!(
@@ -935,11 +933,10 @@ fn a_config_update_refused_is_said_in_the_window() {
     ));
     model.send(update_config("claude/work"));
     model.run(&mut machine);
-    let shown = model.shown();
-    let refused = shown.failure.expect("said");
+    let refused = model.state.presented.clone().expect("said");
     assert_eq!(refused.title, "Couldn’t update Claude Code’s config");
     assert_eq!(refused.code.as_deref(), Some("account_not_in_use"));
-    assert!(shown.last_switches.is_empty());
+    assert!(model.state.last_switches.is_empty());
     assert!(machine.switched_to.is_empty());
 }
 

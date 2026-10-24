@@ -1,7 +1,7 @@
 use crate::model::Snapshot;
 use crate::{
     Account, Adoption, AutoSwitched, Change, Check, Enrolled, EnrolledAs, Holding, Level, Limit,
-    PitboardError, Remedy, Source, Status, Switch, Switched, Tool, Usage, Warning,
+    PitboardError, Remedy, Status, Switch, Switched, Tool, Usage, Warning,
 };
 use pitboard_core::provider::ProviderId;
 
@@ -89,7 +89,6 @@ pub(crate) fn account(
         switchable: !signed_in && label.is_some(),
         parked: None,
         usage: Some(Usage {
-            source: Source::Live,
             observed_at: Some(0),
             windows,
             lists_every_limit: provider == "claude",
@@ -251,16 +250,14 @@ pub(crate) fn refusal(code: &str, message: &str, warnings: Vec<Warning>) -> Refu
     }
 }
 
-/// The percentage the first window of the account at `index` shows.
+// The percentage the first limit of the row at `index` shows.
 pub(crate) fn percent(snapshot: &Snapshot, index: usize) -> Option<f64> {
-    let usage = snapshot
-        .status
-        .as_ref()?
-        .accounts
-        .get(index)?
-        .usage
-        .as_ref()?;
-    Some(usage.windows.first()?.percent)
+    let row = snapshot
+        .sections
+        .iter()
+        .flat_map(|section| &section.accounts)
+        .nth(index)?;
+    Some(row.limits.first()?.percent)
 }
 
 /// The Pitboard directory of a test's app, as the account windows' records key it.
@@ -289,4 +286,9 @@ pub(crate) fn change(at: &str, caller: &str, verb: &str, subject: &str, outcome:
         subject: subject.into(),
         outcome: outcome.into(),
     }
+}
+
+// A read has answered: the window says when.
+pub(crate) fn read_in(snapshot: &Snapshot) -> bool {
+    !snapshot.reading && !snapshot.updated_window.is_empty()
 }

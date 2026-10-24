@@ -136,8 +136,8 @@ fn a_sign_in_that_cannot_start_is_reported() {
         "a sign-in here would write over the login in use"
     );
     assert_eq!(failure.code.as_deref(), Some("sign_in_not_isolated"));
-    assert_eq!(shown.failure, None, "not in an alert over it");
-    assert_eq!(shown.read_failure, None);
+    assert_eq!(model.state.presented, None, "not in an alert over it");
+    assert_eq!(model.state.failure, None);
 }
 
 // The core found no program where the last look did: the sheet says so under the tool, as it
@@ -163,7 +163,11 @@ fn a_sign_in_whose_program_has_gone_says_so_under_its_tool() {
 
     let shown = model.shown();
     assert_eq!(shown.sheet_failure, None, "said under the tool instead");
-    assert_eq!(shown.warnings, [recovered], "and what it found on the way");
+    assert_eq!(
+        model.state.warnings,
+        [recovered],
+        "and what it found on the way"
+    );
     let sheet = shown.sheet_text.expect("the sheet");
     let tool = sheet
         .tools
@@ -240,7 +244,7 @@ fn a_sheet_that_signs_in_looks_for_tools_again_when_asked() {
     machine.found = vec![claude_code(), codex()];
     assert_eq!(model.send(Intent::LookForTools), [Job::AskInstalled]);
     model.run(&mut machine);
-    assert_eq!(model.shown().installed, Some(vec![claude_code(), codex()]));
+    assert_eq!(model.state.installed, Some(vec![claude_code(), codex()]));
 
     model.send(Intent::CloseSheet);
     put_up(
@@ -289,9 +293,8 @@ fn a_sign_in_to_the_account_in_use_says_its_new_login_is_in_use() {
     machine.enrolling = enrolled_as(EnrolledAs::InUse { again: true }, vec![old_login.clone()]);
     signs_in(&mut model, &mut machine, "codex", "work", &[CODEX_ADDRESS]);
 
-    let shown = model.shown();
-    let [last] = &shown.last_switches[..] else {
-        panic!("what the sign-in said: {:#?}", shown.last_switches);
+    let [last] = &model.state.last_switches[..] else {
+        panic!("what the sign-in said: {:#?}", model.state.last_switches);
     };
     assert_eq!(
         (last.provider.as_str(), last.to.as_str()),
@@ -305,7 +308,7 @@ fn a_sign_in_to_the_account_in_use_says_its_new_login_is_in_use() {
     assert_eq!(last.follows_at, None);
     assert_eq!(last.warnings, std::slice::from_ref(&old_login));
     assert!(
-        !shown.warnings.contains(&old_login),
+        !model.state.warnings.contains(&old_login),
         "said once, with the sign-in"
     );
 }
@@ -319,7 +322,7 @@ fn a_first_sign_in_to_the_account_in_use_says_it_was_enrolled() {
     machine.enrolling = enrolled_as(EnrolledAs::InUse { again: false }, Vec::new());
     signs_in(&mut model, &mut machine, "codex", "work", &[]);
     assert_eq!(
-        model.shown().last_switches[0].said.as_deref(),
+        model.state.last_switches[0].said.as_deref(),
         Some("Enrolled work, the account signed in now. Its new login is the one in use.")
     );
 }
@@ -354,9 +357,8 @@ fn a_sign_in_to_the_account_in_use_keeps_what_the_last_switch_said() {
     );
     signs_in(&mut model, &mut machine, "codex", "work", &[]);
 
-    let shown = model.shown();
-    let [last] = &shown.last_switches[..] else {
-        panic!("one tool's: {:#?}", shown.last_switches);
+    let [last] = &model.state.last_switches[..] else {
+        panic!("one tool's: {:#?}", model.state.last_switches);
     };
     assert_eq!(
         last.restart,
@@ -396,8 +398,8 @@ fn a_sign_in_that_could_not_tell_what_runs_says_it_once() {
         vec![sign_in_untold.clone()],
     );
     signs_in(&mut model, &mut machine, "codex", "work", &[]);
-    let [last] = &model.shown().last_switches[..] else {
-        panic!("what the sign-in said: {:#?}", model.shown().last_switches);
+    let [last] = &model.state.last_switches[..] else {
+        panic!("what the sign-in said: {:#?}", model.state.last_switches);
     };
     assert_eq!(last.warnings, std::slice::from_ref(&sign_in_untold));
 
@@ -420,8 +422,8 @@ fn a_sign_in_that_could_not_tell_what_runs_says_it_once() {
     signs_in(&mut model, &mut machine, "codex", "work", &[]);
 
     let shown = model.shown();
-    let [last] = &shown.last_switches[..] else {
-        panic!("one tool's: {:#?}", shown.last_switches);
+    let [last] = &model.state.last_switches[..] else {
+        panic!("one tool's: {:#?}", model.state.last_switches);
     };
     assert_eq!(last.warnings, std::slice::from_ref(&switch_untold));
     let notice = shown
@@ -455,16 +457,12 @@ fn a_sign_in_that_was_parked_says_what_it_warned_about() {
     let id = starts(&mut model, &mut machine, "codex", "work");
     model.give(Answer::SignInQuiet { id });
     model.run_but(&mut machine, any_read);
-    assert!(
-        model.shown().warnings.is_empty(),
-        "not before the read lands"
-    );
+    assert!(model.state.warnings.is_empty(), "not before the read lands");
     let read = model.take(any_read);
     model.give(machine.answer(read));
 
-    let shown = model.shown();
-    assert_eq!(shown.warnings, [untold]);
-    assert!(shown.last_switches.is_empty());
+    assert_eq!(model.state.warnings, [untold]);
+    assert!(model.state.last_switches.is_empty());
 }
 
 /// From the sheet a sign-in is started from, a sign-in refused before it started says what that
@@ -494,7 +492,7 @@ fn a_refused_sign_in_says_what_it_found_on_the_way() {
         "a sign-in here would write over the login in use"
     );
     assert_eq!(failure.warnings, std::slice::from_ref(&recovered));
-    assert_eq!(shown.warnings, [recovered]);
+    assert_eq!(model.state.warnings, [recovered]);
 }
 
 /// A sign-in of another account adds a row and says nothing more.
@@ -510,9 +508,9 @@ fn a_sign_in_of_another_account_says_nothing_more() {
         &[CODEX_ADDRESS],
     );
     let shown = model.shown();
-    assert!(shown.last_switches.is_empty());
-    assert!(shown.warnings.is_empty());
-    assert_eq!((shown.failure, shown.sheet_failure), (None, None));
+    assert!(model.state.last_switches.is_empty());
+    assert!(model.state.warnings.is_empty());
+    assert_eq!((&model.state.presented, shown.sheet_failure), (&None, None));
 }
 
 /// Whether a code is asked for is the core's to read, in each tool's own words, and its cases
@@ -568,8 +566,8 @@ fn a_cancelled_sign_in_stops_the_tool_and_reports_nothing() {
     assert_eq!(machine.stopped, [id], "the tool is stopped");
     assert_eq!(machine.over, [(id, false)], "and nothing is enrolled");
     let shown = model.shown();
-    assert!(shown.warnings.is_empty());
-    assert_eq!((shown.failure, shown.sheet_failure), (None, None));
+    assert!(model.state.warnings.is_empty());
+    assert_eq!((&model.state.presented, shown.sheet_failure), (&None, None));
     assert_eq!(
         model.count(any_read),
         0,
@@ -659,9 +657,9 @@ fn a_sign_in_cancelled_while_it_starts_stops_what_started() {
     assert_eq!(machine.over, [(id, false)]);
     let shown = model.shown();
     assert_eq!(shown.signing_in, None);
-    assert!(shown.warnings.is_empty());
-    assert!(shown.last_switches.is_empty());
-    assert_eq!((shown.failure, shown.sheet_failure), (None, None));
+    assert!(model.state.warnings.is_empty());
+    assert!(model.state.last_switches.is_empty());
+    assert_eq!((&model.state.presented, shown.sheet_failure), (&None, None));
 }
 
 fn a_sign_in(job: &Job) -> bool {
@@ -776,7 +774,11 @@ fn a_sign_in_asked_for_after_a_cancel_starts_once_the_cancelled_one_has_stopped(
         assert_eq!(machine.signed_in, ["claude/work", "claude/work"], "{case}");
         assert_eq!(machine.over, [(first, false)], "{case}");
         let shown = model.shown();
-        assert_eq!((shown.failure, shown.sheet_failure), (None, None), "{case}");
+        assert_eq!(
+            (model.state.presented, shown.sheet_failure),
+            (None, None),
+            "{case}"
+        );
     }
 }
 
@@ -885,8 +887,7 @@ fn a_sign_in_waiting_on_a_cancelled_one_starts_once_that_one_has_let_go() {
         );
         assert_eq!(running(&model).id, second, "{case}");
         assert_eq!(
-            model.shown().failure,
-            None,
+            model.state.presented, None,
             "{case}: nothing said of the first"
         );
     }
@@ -999,8 +1000,8 @@ fn a_sign_in_cancelled_while_it_finishes_leaves_what_came_after_it() {
             .expect("the sign-in started since");
         assert_eq!((still.id, still.name.as_str()), (next, "other"));
         assert_eq!(shown.sheet, Some(add(Some("claude"))), "{stopped_first}");
-        assert!(shown.warnings.is_empty(), "{stopped_first}");
-        assert_eq!((shown.failure, shown.sheet_failure), (None, None));
+        assert!(model.state.warnings.is_empty(), "{stopped_first}");
+        assert_eq!((&model.state.presented, shown.sheet_failure), (&None, None));
         if stopped_first {
             assert_eq!(
                 model.count(any_read),
@@ -1010,7 +1011,13 @@ fn a_sign_in_cancelled_while_it_finishes_leaves_what_came_after_it() {
         } else {
             assert_eq!(model.count(any_read), reads + 1);
             assert!(
-                shown.status.expect("accounts").accounts.contains(&travel),
+                model
+                    .state
+                    .status
+                    .clone()
+                    .expect("accounts")
+                    .accounts
+                    .contains(&travel),
                 "enrolled all the same"
             );
         }
@@ -1136,14 +1143,14 @@ fn an_account_is_added_through_the_sheet_from_start_to_finish() {
     let shown = model.shown();
     assert_eq!(shown.signing_in, None);
     assert_eq!(shown.sheet, None);
-    let accounts = shown.status.expect("accounts").accounts;
+    let accounts = model.state.status.clone().expect("accounts").accounts;
     let travel = accounts
         .iter()
         .find(|account| account.qualified.as_deref() == Some("claude/travel"))
         .expect("travel enrolled");
     assert!(!travel.signed_in);
     assert!(travel.switchable);
-    assert!(shown.warnings.is_empty());
+    assert!(model.state.warnings.is_empty());
 }
 
 /// Signing in again to the account in use, from its row, keeps it the account in use and says
@@ -1167,7 +1174,11 @@ fn signing_in_again_to_the_account_in_use_says_it_has_a_new_login() {
 
     let shown = model.shown();
     assert_eq!(shown.sheet, None);
-    let last = shown.last_switches.first().expect("what the sign-in said");
+    let last = model
+        .state
+        .last_switches
+        .first()
+        .expect("what the sign-in said");
     assert_eq!(
         (last.provider.as_str(), last.to.as_str()),
         ("claude", "work")
@@ -1176,7 +1187,7 @@ fn signing_in_again_to_the_account_in_use_says_it_has_a_new_login() {
         last.said.as_deref(),
         Some("Signed in to work again. Its new login is the one in use now.")
     );
-    let work = &shown.status.expect("accounts").accounts[0];
+    let work = &model.state.status.clone().expect("accounts").accounts[0];
     assert!(work.signed_in);
     assert!(!work.switchable);
 }
@@ -1191,12 +1202,12 @@ fn what_is_installed_is_asked_again_when_the_form_for_another_account_opens() {
     let mut machine = Stub::reading(Ok(status(Vec::new())));
     machine.found = vec![claude_code()];
     model.refresh(&mut machine);
-    assert_eq!(model.shown().installed, Some(vec![claude_code()]));
+    assert_eq!(model.state.installed, Some(vec![claude_code()]));
 
     machine.found = vec![claude_code(), codex()];
     assert_eq!(model.send(present(add(None))), [Job::AskInstalled]);
     model.run(&mut machine);
-    assert_eq!(model.shown().installed, Some(vec![claude_code(), codex()]));
+    assert_eq!(model.state.installed, Some(vec![claude_code(), codex()]));
     assert_eq!(model.count(installed_ask), 2);
     assert_eq!(
         model.send(present(add(Some("codex")))),
@@ -1399,7 +1410,7 @@ fn a_sign_in_that_fails_once_its_sheet_has_gone_says_so_in_the_window() {
     ends(&mut model, &mut machine, id);
 
     let shown = model.shown();
-    let failure = shown.failure.expect("said in the window");
+    let failure = model.state.presented.clone().expect("said in the window");
     assert_eq!(failure.title, "Couldn’t sign in to work");
     assert_eq!(failure.message, "The sign-in did not finish.");
     assert_eq!(
@@ -1414,7 +1425,7 @@ fn a_sign_in_that_fails_once_its_sheet_has_gone_says_so_in_the_window() {
 
     machine.starting = Err(refusal("claude_program_missing", "no claude", Vec::new()));
     starts(&mut model, &mut machine, "claude", "other");
-    let failure = model.shown().failure.expect("said in the window");
+    let failure = model.state.presented.clone().expect("said in the window");
     assert_eq!(
         (failure.id, failure.title.as_str()),
         (2, "Couldn’t sign in to other")
@@ -1442,8 +1453,8 @@ fn a_sign_in_that_does_not_finish_says_so_in_its_sheet() {
     assert_eq!(shown.sheet, Some(add(Some("codex"))));
     let failure = shown.sheet_failure.expect("said in the sheet");
     assert_eq!(failure.message, "The sign-in did not finish.");
-    assert_eq!(shown.warnings, [undone]);
-    assert_eq!(shown.failure, None);
+    assert_eq!(model.state.warnings, [undone]);
+    assert_eq!(model.state.presented, None);
     assert_eq!(model.count(any_read), 0);
 }
 
@@ -1459,7 +1470,7 @@ fn what_went_wrong_in_a_sheet_goes_with_it() {
         qualified: "claude/spare".into(),
     });
     model.run(&mut machine);
-    assert_eq!(model.shown().failure.map(|f| f.id), Some(1));
+    assert_eq!(model.state.presented.clone().map(|f| f.id), Some(1));
 
     machine.starting = Err(refusal("sign_in_not_isolated", "not here", Vec::new()));
     put_up(&mut model, &mut machine, add(None));
@@ -1603,7 +1614,7 @@ fn an_add_for_a_tool_that_signs_in_inside_its_app_asks_before_it_quits_the_app()
         "Quit Claude to add an account?"
     );
     assert_eq!(shown.signing_in, None, "nothing parked before the answer");
-    assert_eq!(shown.switch_under_way, None);
+    assert_eq!(model.state.switch_under_way(), None);
     assert!(machine.signed_in.is_empty());
     assert!(machine.apps.asked().is_empty());
 }

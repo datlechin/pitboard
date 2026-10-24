@@ -220,8 +220,7 @@ impl ModelListener for Told {
                 .lock()
                 .expect("a test's own lock")
                 .push((snapshot.revision, inside));
-            if !snapshot.reading
-                && snapshot.status.is_some()
+            if super::records::read_in(&snapshot)
                 && let Some(once) = self.once_read.lock().expect("a test's own lock").take()
             {
                 once(&model);

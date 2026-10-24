@@ -72,33 +72,11 @@ public sealed class AppModel : INotifyPropertyChanged
 
     public ulong Revision => Part<ulong>();
 
-    public long Now => Part<long>();
-
     public bool Reading => Part<bool>();
-
-    public long? UpdatedAt => Part<long?>();
-
-    public Status? Status => Part<Status?>();
-
-    public Warning[] Warnings => Part<Warning[]>();
-
-    public ReadFailure? ReadFailure => Part<ReadFailure?>();
-
-    public bool Stuck => Part<bool>();
-
-    public Tool[]? Installed => Part<Tool[]?>();
-
-    public string? SwitchUnderWay => Part<string?>();
 
     public QuitQuestion? QuitQuestion => Part<QuitQuestion?>();
 
     public ReplaceQuestion? ReplaceQuestion => Part<ReplaceQuestion?>();
-
-    public LastSwitch[] LastSwitches => Part<LastSwitch[]>();
-
-    public Abandoned? Abandoned => Part<Abandoned?>();
-
-    public Failure? Failure => Part<Failure?>();
 
     public WindowRequest WindowRequest => Part<WindowRequest>();
 
@@ -113,8 +91,6 @@ public sealed class AppModel : INotifyPropertyChanged
     public AccountSection[] Sections => Part<AccountSection[]>();
 
     public AccountMenuShown AccountMenu => Part<AccountMenuShown>();
-
-    public bool ShowsTools => Part<bool>();
 
     public PanelNotice[] Notices => Part<PanelNotice[]>();
 

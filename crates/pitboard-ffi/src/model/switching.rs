@@ -39,10 +39,10 @@ fn quit_and_switch(qualified: &str) -> Intent {
 
 fn tos(model: &Hand) -> Vec<String> {
     model
-        .shown()
+        .state
         .last_switches
-        .into_iter()
-        .map(|last| last.to)
+        .iter()
+        .map(|last| last.to.clone())
         .collect()
 }
 
@@ -59,12 +59,12 @@ fn a_failed_switch_says_so_and_changes_nothing() {
 
     assert_eq!(machine.switched_to, ["work"]);
     let shown = model.shown();
-    let failure = shown.failure.expect("the failure is said");
+    let failure = model.state.presented.clone().expect("the failure is said");
     assert_eq!(failure.title, "Couldn’t switch to work");
     assert_eq!(failure.message, "nothing parked");
     assert_eq!(failure.code.as_deref(), Some("nothing_parked"));
-    assert_eq!(shown.read_failure, None, "a switch is not a read");
-    assert!(shown.last_switches.is_empty());
+    assert_eq!(model.state.failure, None, "a switch is not a read");
+    assert!(model.state.last_switches.is_empty());
     assert_eq!(
         shown.window_request,
         WindowRequest {
@@ -73,7 +73,7 @@ fn a_failed_switch_says_so_and_changes_nothing() {
             settings: false,
         }
     );
-    assert_eq!(shown.switch_under_way, None);
+    assert_eq!(model.state.switch_under_way(), None);
     assert_eq!(
         model.count(any_read),
         0,
@@ -91,9 +91,12 @@ fn a_switch_records_when_open_sessions_follow() {
     ])));
     machine.switched = switched("claude", "personal", "work", Vec::new());
     switch(&mut model, &mut machine, "claude/work");
-    let shown = model.shown();
-    let last = shown.last_switches.first().expect("what the switch said");
-    assert_eq!(last.follows_at.map(|at| at - shown.now), Some(33));
+    let last = model
+        .state
+        .last_switches
+        .first()
+        .expect("what the switch said");
+    assert_eq!(last.follows_at.map(|at| at - model.now.epoch()), Some(33));
     assert_eq!(last.restart, None);
 }
 
@@ -116,8 +119,11 @@ fn a_switch_that_needs_a_restart_says_so_and_counts_nothing_down() {
     );
     switch(&mut model, &mut machine, "codex/work");
 
-    let shown = model.shown();
-    let last = shown.last_switches.first().expect("what the switch said");
+    let last = model
+        .state
+        .last_switches
+        .first()
+        .expect("what the switch said");
     assert_eq!(last.follows_at, None, "no countdown");
     assert_eq!(
         last.restart,
@@ -129,14 +135,14 @@ fn a_switch_that_needs_a_restart_says_so_and_counts_nothing_down() {
     );
     assert_eq!(last.warnings, [still_running()]);
     assert!(
-        shown.warnings.is_empty(),
+        model.state.warnings.is_empty(),
         "the read after it does not say it"
     );
 
     model.send(Intent::DismissSwitch {
         provider: "codex".into(),
     });
-    assert!(model.shown().last_switches.is_empty());
+    assert!(model.state.last_switches.is_empty());
 }
 
 /// A switch replaces what its own tool's last switch said, and nothing another tool's said:
@@ -154,15 +160,15 @@ fn each_tool_keeps_what_its_own_last_switch_said() {
 
     machine.switched = switched("claude", "a", "b", Vec::new());
     switch(&mut model, &mut machine, "claude/b");
-    let shown = model.shown();
-    let providers: Vec<&str> = shown
+    let providers: Vec<&str> = model
+        .state
         .last_switches
         .iter()
         .map(|last| last.provider.as_str())
         .collect();
     assert_eq!(providers, ["codex", "claude"]);
-    assert_eq!(shown.last_switches[0].warnings, [still_running()]);
-    assert!(shown.last_switches[1].follows_at.is_some());
+    assert_eq!(model.state.last_switches[0].warnings, [still_running()]);
+    assert!(model.state.last_switches[1].follows_at.is_some());
 
     machine.answer = Ok(status(vec![
         claude("b", true, 0.0),
@@ -172,7 +178,7 @@ fn each_tool_keeps_what_its_own_last_switch_said() {
     switch(&mut model, &mut machine, "codex/c");
     assert_eq!(tos(&model), ["codex/c", "b"]);
     assert!(
-        model.shown().last_switches[0].warnings.is_empty(),
+        model.state.last_switches[0].warnings.is_empty(),
         "the last Codex switch, not the one before"
     );
 }
@@ -235,7 +241,7 @@ fn only_a_switch_made_elsewhere_puts_away_what_a_switch_said() {
     ]));
     machine.changed = 101;
     model.notice(&mut machine);
-    assert!(model.shown().last_switches.is_empty());
+    assert!(model.state.last_switches.is_empty());
 }
 
 /// A read that fails after a switch leaves the change unrecorded, so the poll finds it.
@@ -271,9 +277,12 @@ fn a_failed_read_after_a_switch_does_not_put_away_what_it_said() {
     machine.changed = 7;
     model.notice(&mut machine);
 
-    let shown = model.shown();
-    assert_eq!(shown.last_switches[0].warnings, [still_running()]);
-    assert_eq!(shown.status, Some(after), "and the panel shows the switch");
+    assert_eq!(model.state.last_switches[0].warnings, [still_running()]);
+    assert_eq!(
+        model.state.status,
+        Some(after),
+        "and the panel shows the switch"
+    );
 }
 
 /// A switch that failed moved nothing, so what the last one said is still true, and the
@@ -292,7 +301,7 @@ fn a_failed_switch_leaves_what_the_last_switch_said() {
         vec![still_running()],
     );
     switch(&mut model, &mut machine, "codex/work");
-    let before = model.shown().last_switches;
+    let before = model.state.last_switches.clone();
 
     let overridden = warning("auth_overridden", "ANTHROPIC_API_KEY is set");
     machine.switched = Err(refusal(
@@ -302,13 +311,12 @@ fn a_failed_switch_leaves_what_the_last_switch_said() {
     ));
     switch(&mut model, &mut machine, "claude/spare");
 
-    let shown = model.shown();
-    assert_eq!(shown.last_switches, before);
-    let failure = shown.failure.expect("the failure is said");
+    assert_eq!(model.state.last_switches, before);
+    let failure = model.state.presented.clone().expect("the failure is said");
     assert_eq!(failure.message, "spare's parked login has expired");
     assert_eq!(failure.warnings, std::slice::from_ref(&overridden));
     assert_eq!(
-        shown.warnings,
+        model.state.warnings,
         [overridden],
         "and the panel says it beside the accounts"
     );
@@ -330,16 +338,16 @@ fn a_switch_to_the_account_in_use_leaves_what_the_last_one_said() {
         vec![still_running()],
     );
     switch(&mut model, &mut machine, "codex/work");
-    let before = model.shown().last_switches;
+    let before = model.state.last_switches.clone();
 
     machine.switched = already_active("codex/work", Vec::new());
     switch(&mut model, &mut machine, "codex/work");
-    assert_eq!(model.shown().last_switches, before);
+    assert_eq!(model.state.last_switches, before);
 
     // Nor does one of a tool with no last switch, which has nothing to say either.
     machine.switched = already_active("home", Vec::new());
     switch(&mut model, &mut machine, "claude/home");
-    assert_eq!(model.shown().last_switches, before);
+    assert_eq!(model.state.last_switches, before);
 }
 
 /// What a switch to the account in use warned about is said beside what the last switch
@@ -362,17 +370,19 @@ fn a_switch_to_the_account_in_use_says_what_it_warned_beside_the_last() {
 
     machine.switched = already_active("codex/work", vec![still_running(), overridden.clone()]);
     switch(&mut model, &mut machine, "codex/work");
-    let shown = model.shown();
     assert_eq!(
-        shown.last_switches[0].warnings,
+        model.state.last_switches[0].warnings,
         [still_running(), overridden.clone()]
     );
-    assert!(shown.last_switches[0].restart.is_some(), "the switch's own");
+    assert!(
+        model.state.last_switches[0].restart.is_some(),
+        "the switch's own"
+    );
 
     machine.switched = already_active("home", vec![overridden.clone()]);
     switch(&mut model, &mut machine, "claude/home");
     assert_eq!(
-        model.shown().last_switches[1],
+        model.state.last_switches[1],
         LastSwitch {
             provider: "claude".into(),
             to: "home".into(),
@@ -400,7 +410,7 @@ fn numbers_moving_leave_who_is_signed_in_and_what_a_switch_said() {
     machine.switched = switched("claude", "a", "b", vec![lagging.clone()]);
     switch(&mut model, &mut machine, "claude/b");
     assert_eq!(
-        model.shown().last_switches[0].warnings,
+        model.state.last_switches[0].warnings,
         std::slice::from_ref(&lagging)
     );
 
@@ -413,7 +423,8 @@ fn numbers_moving_leave_who_is_signed_in_and_what_a_switch_said() {
 
     let shown = model.shown();
     assert_eq!(percent(&shown, 1), Some(30.0));
-    let signed_in: Vec<bool> = shown
+    let signed_in: Vec<bool> = model
+        .state
         .status
         .as_ref()
         .expect("accounts")
@@ -423,7 +434,7 @@ fn numbers_moving_leave_who_is_signed_in_and_what_a_switch_said() {
         .collect();
     assert_eq!(signed_in, [false, true], "only the numbers moved");
     assert_eq!(
-        shown.last_switches[0].warnings,
+        model.state.last_switches[0].warnings,
         [lagging],
         "and what the switch said stands"
     );
@@ -470,8 +481,9 @@ fn two_tools_work_accounts_are_switched_by_their_own_name() {
     ])));
     model.refresh(&mut machine);
     let codex_work = model
-        .shown()
+        .state
         .status
+        .clone()
         .expect("accounts")
         .accounts
         .into_iter()
@@ -517,21 +529,29 @@ pub(super) fn a_read_that_started_before(change: impl FnOnce(&mut Hand, &mut Stu
     machine.offline = Ok(after.clone());
     model.later(Duration::from_secs(3));
     change(&mut model, &mut machine);
-    let said = model.shown();
-    assert_eq!(said.status.as_ref(), Some(&after));
+    assert_eq!(model.state.status.as_ref(), Some(&after));
+    let said = (
+        model.state.last_switches.clone(),
+        model.state.warnings.clone(),
+        model.state.updated_ms,
+    );
 
     model.later(Duration::from_secs(3));
     model.give(held);
-    let shown = model.shown();
     assert_eq!(
-        shown.status.as_ref(),
+        model.state.status.as_ref(),
         Some(&after),
         "not the accounts as they were before the change"
     );
-    assert_eq!(shown.last_switches, said.last_switches);
-    assert_eq!(shown.warnings, said.warnings);
-    assert_eq!(shown.updated_at, said.updated_at);
-    assert!(!shown.reading);
+    assert_eq!(
+        (
+            model.state.last_switches.clone(),
+            model.state.warnings.clone(),
+            model.state.updated_ms,
+        ),
+        said
+    );
+    assert!(!model.shown().reading);
 }
 
 /// The case the stale read was found in: a Codex switch whose warning, that two sessions
@@ -547,7 +567,7 @@ fn a_read_that_started_before_a_switch_is_dropped_when_it_lands() {
         );
         switch(model, machine, "codex/work");
         assert_eq!(tos(model), ["codex/work"]);
-        assert_eq!(model.shown().last_switches[0].warnings, [still_running()]);
+        assert_eq!(model.state.last_switches[0].warnings, [still_running()]);
     });
 }
 
@@ -601,11 +621,10 @@ fn a_failed_read_that_started_before_a_switch_says_nothing_once_it_lands() {
     switch(&mut model, &mut machine, "codex/work");
 
     model.give(held);
-    let shown = model.shown();
-    assert_eq!(shown.read_failure, None);
-    assert!(shown.warnings.is_empty());
-    assert_eq!(shown.status, Some(after));
-    assert_eq!(shown.last_switches[0].warnings, [still_running()]);
+    assert_eq!(model.state.failure, None);
+    assert!(model.state.warnings.is_empty());
+    assert_eq!(model.state.status, Some(after));
+    assert_eq!(model.state.last_switches[0].warnings, [still_running()]);
 }
 
 /// `changing.rs`'s look landing after a change, for giving up on an interrupted switch, which
@@ -659,14 +678,14 @@ fn a_change_the_poll_saw_during_a_switch_is_noticed_once_the_switch_is_over() {
     let held = model.take(a_switch);
     model.give(machine.answer(held));
     assert_eq!(
-        model.shown().status,
+        model.state.status,
         Some(before),
         "left alone while the switch ran"
     );
     assert_eq!(model.count(offline_read), 0);
 
     model.notice(&mut machine);
-    assert_eq!(model.shown().status, Some(finished));
+    assert_eq!(model.state.status, Some(finished));
     assert_eq!(model.count(offline_read), 1);
 }
 
@@ -694,7 +713,7 @@ fn a_switch_asked_for_while_one_runs_does_nothing() {
     model.run(&mut machine);
     let shown = model.shown();
     assert_eq!(machine.switched_to, ["claude/personal"]);
-    assert_eq!(shown.failure, None);
+    assert_eq!(model.state.presented, None);
     assert_eq!(shown.window_request.serial, 0);
 }
 
@@ -713,10 +732,7 @@ fn a_switch_is_claimed_before_anything_is_asked() {
             then: After::Switch,
         }]
     );
-    assert_eq!(
-        model.shown().switch_under_way.as_deref(),
-        Some("codex/work")
-    );
+    assert_eq!(model.state.switch_under_way(), Some("codex/work"));
 }
 
 /// A switch is under way until the read after it has landed, as the Swift model's was until
@@ -737,10 +753,10 @@ fn a_switch_is_under_way_until_the_read_after_it_lands() {
     model.run_but(&mut machine, any_read);
     let read = model.take(any_read);
     let shown = model.shown();
-    assert_eq!(shown.switch_under_way.as_deref(), Some("claude/work"));
+    assert_eq!(model.state.switch_under_way(), Some("claude/work"));
     assert!(shown.reading);
     assert_eq!(
-        shown.updated_at, None,
+        model.state.updated_ms, None,
         "what was read before the switch is gone"
     );
     assert_eq!(
@@ -754,9 +770,8 @@ fn a_switch_is_under_way_until_the_read_after_it_lands() {
     assert_eq!(model.count(offline_read), 0, "the switch's own change");
 
     model.give(machine.answer(read));
-    let shown = model.shown();
-    assert_eq!(shown.switch_under_way, None);
-    assert!(shown.updated_at.is_some());
+    assert_eq!(model.state.switch_under_way(), None);
+    assert!(model.state.updated_ms.is_some());
     assert_eq!(machine.switched_to, ["claude/work"]);
 }
 
@@ -768,9 +783,13 @@ fn each_failure_is_numbered_so_an_app_says_it_once() {
     let mut machine = Stub::reading(Ok(status(Vec::new())));
     machine.switched = Err(refusal("nothing_parked", "nothing parked", Vec::new()));
     switch(&mut model, &mut machine, "claude/spare");
-    assert_eq!(model.shown().failure.map(|f| f.id), Some(1));
+    assert_eq!(model.state.presented.clone().map(|f| f.id), Some(1));
     model.refresh(&mut machine);
-    assert_eq!(model.shown().failure.map(|f| f.id), Some(1), "still there");
+    assert_eq!(
+        model.state.presented.clone().map(|f| f.id),
+        Some(1),
+        "still there"
+    );
 
     machine.switched = Err(refusal(
         "label_unknown",
@@ -778,7 +797,7 @@ fn each_failure_is_numbered_so_an_app_says_it_once() {
         Vec::new(),
     ));
     switch(&mut model, &mut machine, "claude/x");
-    let failure = model.shown().failure.expect("the newer failure");
+    let failure = model.state.presented.clone().expect("the newer failure");
     assert_eq!(
         (failure.id, failure.title.as_str()),
         (2, "Couldn’t switch to x")
@@ -823,7 +842,7 @@ fn a_switch_waits_for_the_app_holding_the_login_to_be_quit() {
         Some(Pane::Accounts),
         "asked in the window"
     );
-    assert_eq!(shown.switch_under_way.as_deref(), Some("codex/spare"));
+    assert_eq!(model.state.switch_under_way(), Some("codex/spare"));
 }
 
 #[test]
@@ -839,8 +858,8 @@ fn quitting_the_app_switches_and_opens_it_again() {
     assert_eq!(machine.switched_to, ["codex/spare"]);
     let shown = model.shown();
     assert_eq!(shown.quit_question, None);
-    assert_eq!(shown.switch_under_way, None);
-    assert_eq!(shown.failure, None);
+    assert_eq!(model.state.switch_under_way(), None);
+    assert_eq!(model.state.presented, None);
 }
 
 /// Pitboard opens the app as soon as the switch is made, and not after the read that
@@ -866,10 +885,7 @@ fn the_app_is_opened_again_before_the_read_after_the_switch() {
         matches!(after[..], [Job::Open { .. }, Job::Read { .. }]),
         "{after:?}"
     );
-    assert_eq!(
-        model.shown().switch_under_way.as_deref(),
-        Some("codex/spare")
-    );
+    assert_eq!(model.state.switch_under_way(), Some("codex/spare"));
 }
 
 /// Pitboard closed it, so Pitboard opens it, whether or not the switch worked.
@@ -888,7 +904,7 @@ fn the_app_is_opened_again_when_the_switch_fails() {
         machine.apps.asked(),
         [format!("quit {CHATGPT}"), format!("open {CHATGPT}")]
     );
-    let failure = model.shown().failure.expect("the failure is said");
+    let failure = model.state.presented.clone().expect("the failure is said");
     assert_eq!(failure.message, "spare's login has expired.");
 }
 
@@ -905,9 +921,8 @@ fn an_app_that_does_not_quit_stops_the_switch_before_anything_changes() {
         "and it is not opened: it never closed"
     );
     assert!(machine.switched_to.is_empty());
-    let shown = model.shown();
-    assert_eq!(shown.switch_under_way, None);
-    let failure = shown.failure.expect("the failure is said");
+    assert_eq!(model.state.switch_under_way(), None);
+    let failure = model.state.presented.clone().expect("the failure is said");
     assert_eq!(failure.title, "Couldn’t switch to spare");
     assert!(
         failure
@@ -924,7 +939,7 @@ fn keeping_the_app_open_switches_nothing() {
     assert_eq!(model.send(Intent::KeepAppOpen), []);
     let shown = model.shown();
     assert_eq!(shown.quit_question, None);
-    assert_eq!(shown.switch_under_way, None);
+    assert_eq!(model.state.switch_under_way(), None);
     assert!(machine.switched_to.is_empty());
     assert!(machine.apps.asked().is_empty());
 }
@@ -947,7 +962,7 @@ fn the_answer_to_quit_switches_whether_the_question_closed_before_or_after_it() 
         }
         assert_eq!(model.shown().quit_question, None, "{answers:?}");
         assert_eq!(
-            model.shown().switch_under_way.as_deref(),
+            model.state.switch_under_way(),
             Some("codex/spare"),
             "{answers:?}"
         );
@@ -958,7 +973,7 @@ fn the_answer_to_quit_switches_whether_the_question_closed_before_or_after_it() 
             "{answers:?}"
         );
         assert_eq!(machine.switched_to, ["codex/spare"], "{answers:?}");
-        assert_eq!(model.shown().failure, None, "{answers:?}");
+        assert_eq!(model.state.presented, None, "{answers:?}");
     }
 }
 
@@ -994,7 +1009,7 @@ fn an_answer_to_quit_is_taken_once_and_only_for_the_question_asked() {
         [],
         "another switch was asked for in its place"
     );
-    assert_eq!(model.shown().switch_under_way, None);
+    assert_eq!(model.state.switch_under_way(), None);
     assert_eq!(machine.switched_to, ["codex/spare", "claude/personal"]);
     assert_eq!(
         machine.apps.asked(),
@@ -1055,7 +1070,7 @@ fn one_switch_at_a_time_while_the_app_question_waits() {
     assert!(machine.switched_to.is_empty());
 
     let shown = model.shown();
-    assert_eq!(shown.switch_under_way.as_deref(), Some("codex/spare"));
+    assert_eq!(model.state.switch_under_way(), Some("codex/spare"));
     let asked = shown.window_request.serial;
     assert_eq!(
         model.send(Intent::SwitchTo {
@@ -1089,9 +1104,8 @@ fn a_switch_lost_to_a_panic_is_said_and_over() {
     let lost = model.take(a_switch);
     let jobs = model.give(Answer::Lost(lost));
     assert!(matches!(jobs[..], [Job::Open { .. }]), "{jobs:?}");
-    let shown = model.shown();
-    assert_eq!(shown.switch_under_way, None);
-    let failure = shown.failure.expect("said");
+    assert_eq!(model.state.switch_under_way(), None);
+    let failure = model.state.presented.clone().expect("said");
     assert_eq!(failure.title, "Couldn’t switch to spare");
     assert_eq!(failure.code, None);
 }
@@ -1117,9 +1131,8 @@ fn what_holds_a_login_lost_to_a_panic_holds_nothing_and_a_lost_quit_quit_nothing
     let quit = model.next();
     assert_eq!(model.give(Answer::Lost(quit)), []);
     assert_eq!(machine.switched_to, ["codex/spare"]);
-    let shown = model.shown();
-    assert_eq!(shown.switch_under_way, None);
-    assert!(shown.failure.is_some());
+    assert_eq!(model.state.switch_under_way(), None);
+    assert!(model.state.presented.is_some());
 }
 
 // Giving up on a stuck switch.
@@ -1140,7 +1153,7 @@ fn giving_up_on_a_switch_says_what_was_kept_until_put_away() {
         vec![interrupted],
     )));
     model.refresh(&mut machine);
-    assert!(model.shown().stuck);
+    assert!(model.state.stuck);
 
     machine.answer = Ok(status(vec![claude("work", true, 0.0)]));
     let kept = |logins_kept| Abandoned {
@@ -1156,15 +1169,14 @@ fn giving_up_on_a_switch_says_what_was_kept_until_put_away() {
     let given_up = model.next();
     model.give(machine.answer(given_up));
     assert!(
-        !model.shown().stuck,
+        !model.state.stuck,
         "nothing is stuck, before the read lands"
     );
     assert!(model.shown().reading);
     model.run(&mut machine);
-    let shown = model.shown();
-    assert_eq!(shown.abandoned, Some(kept(2)));
-    assert!(!shown.stuck);
-    assert_eq!(shown.failure, None);
+    assert_eq!(model.state.abandoned, Some(kept(2)));
+    assert!(!model.state.stuck);
+    assert_eq!(model.state.presented, None);
     assert_eq!(model.count(fresh_read), 1, "every service asked again");
 
     machine.abandoned = Ok(GaveUp {
@@ -1173,10 +1185,10 @@ fn giving_up_on_a_switch_says_what_was_kept_until_put_away() {
     });
     model.send(Intent::AbandonStuckSwitch);
     model.run(&mut machine);
-    assert_eq!(model.shown().abandoned, Some(kept(1)));
+    assert_eq!(model.state.abandoned, Some(kept(1)));
 
     model.send(Intent::DismissAbandoned);
-    assert_eq!(model.shown().abandoned, None);
+    assert_eq!(model.state.abandoned, None);
 }
 
 /// The tests here hand the model a read that says a switch is stuck. This one has the real
@@ -1196,7 +1208,7 @@ fn the_cores_own_read_of_a_stuck_switch_offers_to_give_up_on_it() {
     model.refresh(&mut machine);
 
     let shown = model.shown();
-    assert!(shown.stuck);
+    assert!(model.state.stuck);
     let notice = shown.notices.first().expect("said first");
     assert_eq!(notice.id, "stuck");
     assert!(
@@ -1230,12 +1242,12 @@ fn a_stuck_switch_is_taken_from_the_read_made_when_the_index_moves() {
     let mut model = Hand::new();
     let mut machine = Stub::reading(Ok(status(accounts())));
     model.refresh(&mut machine);
-    assert!(!model.shown().stuck);
+    assert!(!model.state.stuck);
 
     machine.offline = Ok(warned(accounts(), vec![interrupted.clone()]));
     machine.changed = 42;
     model.notice(&mut machine);
-    assert!(model.shown().stuck, "offered as the index moves");
+    assert!(model.state.stuck, "offered as the index moves");
     assert_eq!(model.count(any_read), 1, "asking nobody");
 
     // Given up on in a terminal.
@@ -1243,13 +1255,10 @@ fn a_stuck_switch_is_taken_from_the_read_made_when_the_index_moves() {
     machine.changed = 43;
     model.look();
     model.run_but(&mut machine, any_read);
-    assert!(
-        model.shown().stuck,
-        "until the read that asks says otherwise"
-    );
+    assert!(model.state.stuck, "until the read that asks says otherwise");
     assert_eq!(model.pending(), 1);
     model.run(&mut machine);
-    assert!(!model.shown().stuck);
+    assert!(!model.state.stuck);
     assert_eq!(model.count(any_read), 2);
     assert_eq!(model.count(fresh_read), 0, "asked as the timer asks");
 
@@ -1261,10 +1270,10 @@ fn a_stuck_switch_is_taken_from_the_read_made_when_the_index_moves() {
     // Stuck where only the service can tell, which the read that asks says.
     machine.answer = Ok(warned(accounts(), vec![interrupted]));
     model.refresh(&mut machine);
-    assert!(model.shown().stuck);
+    assert!(model.state.stuck);
     machine.changed = 45;
     model.notice(&mut machine);
-    assert!(model.shown().stuck, "kept");
+    assert!(model.state.stuck, "kept");
     assert_eq!(model.count(any_read), 4);
 }
 
@@ -1287,12 +1296,12 @@ fn giving_up_that_is_refused_is_said_in_the_window() {
     model.send(Intent::AbandonStuckSwitch);
     model.run(&mut machine);
     let shown = model.shown();
-    let failure = shown.failure.expect("the failure is said");
+    let failure = model.state.presented.clone().expect("the failure is said");
     assert_eq!(failure.title, "Couldn’t give up on the interrupted switch");
     assert_eq!(failure.message, "another Pitboard is changing accounts");
     assert_eq!(failure.code.as_deref(), Some("lock_busy"));
     assert_eq!(shown.window_request.serial, 1);
-    assert!(shown.stuck);
+    assert!(model.state.stuck);
     assert_eq!(model.count(any_read), 1, "only the read before it");
 }
 
@@ -1304,8 +1313,8 @@ fn giving_up_on_nothing_keeps_nothing_to_say() {
     machine.abandoned = Ok(GaveUp::default());
     model.send(Intent::AbandonStuckSwitch);
     model.run(&mut machine);
-    assert_eq!(model.shown().abandoned, None);
-    assert_eq!(model.shown().failure, None);
+    assert_eq!(model.state.abandoned, None);
+    assert_eq!(model.state.presented, None);
 }
 
 // Switching an app's login: Claude Desktop's.
@@ -1414,7 +1423,7 @@ fn a_use_refused_in_doubt_is_kept_for_the_add_sheet() {
     machine.switched = Err(refusal("login_in_doubt", "in doubt", Vec::new()));
     model.refresh(&mut machine);
     switch(&mut model, &mut machine, "desktop/home");
-    assert!(model.shown().failure.is_some());
+    assert!(model.state.presented.is_some());
     model.send(Intent::PresentSheet { sheet: add_sheet() });
     model.run(&mut machine);
     assert_eq!(
@@ -1447,7 +1456,7 @@ fn an_app_that_leaves_part_of_itself_running_changes_nothing_and_is_opened_again
         machine.apps.asked(),
         [format!("quit {CLAUDE}"), format!("open {CLAUDE}")]
     );
-    let failure = model.shown().failure.expect("said");
+    let failure = model.state.presented.clone().expect("said");
     assert!(
         failure
             .message
@@ -1455,7 +1464,7 @@ fn an_app_that_leaves_part_of_itself_running_changes_nothing_and_is_opened_again
         "{}",
         failure.message
     );
-    assert_eq!(model.shown().switch_under_way, None);
+    assert_eq!(model.state.switch_under_way(), None);
 }
 
 #[test]
@@ -1713,7 +1722,7 @@ fn a_question_for_a_sign_in_holds_back_no_switch() {
     model.run(&mut machine);
     let shown = model.shown();
     assert!(shown.quit_question.is_some());
-    assert_eq!(shown.switch_under_way, None);
+    assert_eq!(model.state.switch_under_way(), None);
     assert!(
         rows_enabled(&model),
         "the rows do not hold back for a sign-in's question"
@@ -1849,7 +1858,7 @@ fn a_forget_refused_while_a_move_waits_offers_to_give_it_up() {
     });
     model.run(&mut machine);
     assert_eq!(
-        model.shown().failure.expect("said").title,
+        model.state.presented.clone().expect("said").title,
         "Couldn’t forget home"
     );
     assert_eq!(
@@ -2038,12 +2047,12 @@ fn a_switch_from_a_login_refused_for_good_asks_to_replace_it() {
     switch(&mut model, &mut machine, "work");
 
     let shown = model.shown();
-    assert_eq!(shown.failure, None, "asked, not failed");
+    assert_eq!(model.state.presented, None, "asked, not failed");
     let asked = shown.replace_question.expect("asked");
     assert_eq!(asked.qualified, "work");
     assert_eq!(asked.question.message, REFUSED_FOR_GOOD);
     assert_eq!(asked.question.confirm, "Replace");
-    assert_eq!(shown.switch_under_way.as_deref(), Some("work"));
+    assert_eq!(model.state.switch_under_way(), Some("work"));
     assert!(machine.replaced_with.is_empty());
 }
 
@@ -2067,7 +2076,7 @@ fn an_agreed_replacement_is_made_once() {
     assert_eq!(machine.replaced_with, ["work"]);
     let shown = model.shown();
     assert_eq!(shown.replace_question, None);
-    assert_eq!(shown.failure, None);
+    assert_eq!(model.state.presented, None);
 }
 
 /// An app closes the alert before its button answers, as the quit question's does: the
@@ -2082,7 +2091,7 @@ fn a_replacement_answered_after_the_question_closed_is_made() {
     model.send(Intent::KeepLogin);
     model.run(&mut machine);
     assert_eq!(model.shown().replace_question, None, "closed");
-    assert_eq!(model.shown().switch_under_way, None);
+    assert_eq!(model.state.switch_under_way(), None);
     assert!(
         machine.replaced_with.is_empty(),
         "nothing replaced on a close"

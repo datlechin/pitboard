@@ -3,7 +3,7 @@
 
 use crate::model::state::{Cadence, State};
 use crate::model::{LocalTime, PlatformError};
-use crate::{Account, Awaiting, Limit, Parked, Source, Status, Tool, Usage, Warning};
+use crate::{Account, Awaiting, Limit, Parked, Status, Tool, Usage, Warning};
 use pitboard_core::provider::ProviderId;
 
 pub(crate) fn claude_code() -> Tool {
@@ -59,7 +59,6 @@ pub(crate) fn awaiting(label: &str, put_back: &str, again: bool) -> Awaiting {
         provider: "desktop".into(),
         label: label.into(),
         put_back: format!("desktop/{put_back}"),
-        since: 0,
         again,
     }
 }
@@ -224,8 +223,6 @@ impl AccountMade {
     pub(crate) fn parked_until(self, refresh_expires_at: i64) -> AccountMade {
         AccountMade {
             parked: Some(Parked {
-                parked_at: 0,
-                access_expires_at: None,
                 refresh_expires_at: Some(refresh_expires_at),
                 session_expires_at: None,
             }),
@@ -261,7 +258,6 @@ impl AccountMade {
                 .unwrap_or(!self.signed_in && self.label.is_some()),
             parked: self.parked,
             usage: self.measured.then_some(Usage {
-                source: Source::Live,
                 observed_at: Some(self.read_at),
                 windows: self.windows,
                 lists_every_limit: self.provider == "claude",

@@ -70,7 +70,6 @@ public sealed class AccountsPageTests
     {
         var (page, _, _) = await Over(Snapshots.Read(1) with
         {
-            ShowsTools = true,
             Sections =
             [
                 Items.Section("claude", "Claude Code", Items.Account("claude", "work", inUse: true)),
@@ -92,7 +91,6 @@ public sealed class AccountsPageTests
     {
         var two = Snapshots.Read(1) with
         {
-            ShowsTools = true,
             Sections =
             [
                 Items.Section("claude", "Claude Code", Items.Account("claude", "work", inUse: true), Items.Account("claude", "old")),
@@ -236,7 +234,6 @@ public sealed class AccountsPageTests
     {
         var (page, _, _) = await Over(Snapshots.Read(1) with
         {
-            ShowsTools = true,
             Sections =
             [
                 Items.Section("claude", "Claude Code", Items.Account("claude", "work", inUse: true)),

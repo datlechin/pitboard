@@ -728,22 +728,11 @@ pub(crate) fn present_on(os: Os, state: &State, now: i64, local: &dyn LocalTime)
     let menu_notices = notices::menu_notices(&seen, &footing, &notices);
     Snapshot {
         revision: 0,
-        now,
         reading: state.reads > 0,
-        updated_at: state.updated_ms.map(|ms| ms.div_euclid(1000)),
-        status: state.status.clone(),
-        warnings: state.warnings.clone(),
-        read_failure: state.failure.clone(),
-        stuck: state.stuck,
-        installed: state.installed.clone(),
-        switch_under_way: state.switch_under_way().map(str::to_owned),
         quit_question: state.asking().cloned(),
         replace_question: state
             .replace_asked()
             .map(|(qualified, why)| sheets::replace_question(&seen, qualified, why)),
-        last_switches: state.last_switches.clone(),
-        abandoned: state.abandoned.clone(),
-        failure: state.presented.clone(),
         window_request: state.window,
         signing_in: state.shown_sign_in(),
         sheet: state.sheet.clone(),
@@ -751,7 +740,6 @@ pub(crate) fn present_on(os: Os, state: &State, now: i64, local: &dyn LocalTime)
         menu_bar: accounts::menu_bar(&seen, &menu_notices),
         sections: accounts::sections(&seen),
         account_menu: accounts::account_menu(seen.os),
-        shows_tools: seen.shows_tools(),
         menu_notices,
         notices,
         setup: setup::step(&seen, &footing),

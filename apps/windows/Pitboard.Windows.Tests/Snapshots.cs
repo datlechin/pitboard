@@ -5,32 +5,16 @@ namespace Pitboard.Windows.Tests;
 // Each call makes every list anew, as the bindings do for every snapshot told.
 internal static class Snapshots
 {
-    private const long At = 1_800_000_000;
-
-    public static Snapshot Read(ulong revision)
-    {
-        var work = new Account(
-            Id: "claude:work", Provider: "claude", Label: "work", Qualified: "claude/work",
-            Unplaced: false, Email: "work@example.com", AccountId: "work", SignedIn: true,
-            Switchable: false, Parked: null,
-            Usage: new Usage(
-                Source.Live, At,
-                [new Limit("session", 18_000, null, 42.0, At + 3_600, null, true)],
-                ListsEveryLimit: true),
-            Stale: null, StaleExplanation: null, Plan: null, ReadAt: null);
-        return new Snapshot(
-            Revision: revision, Now: At, Reading: false, UpdatedAt: At,
-            Status: new Status(At, [work], [], []), Warnings: [], ReadFailure: null, Stuck: false,
-            Installed: [new Tool(Code: "claude", Name: "Claude Code", Program: "claude", Service: "Anthropic")],
-            SwitchUnderWay: null, QuitQuestion: null, ReplaceQuestion: null,
-            LastSwitches: [], Abandoned: null, Failure: null,
+    public static Snapshot Read(ulong revision) =>
+        new(
+            Revision: revision, Reading: false, QuitQuestion: null, ReplaceQuestion: null,
             WindowRequest: new WindowRequest(Serial: 0, Pane: null),
             SigningIn: null, Sheet: null, SheetFailure: null,
             MenuBar: new MenuBarText(
                 NameAndUsage: "work 42%", Usage: "42%", Spoken: "Pitboard, work 42%", Level: UsageLevel.Plenty, Attention: false,
                 Tip: "Pitboard\nwork: 5-hour 42%"),
             Sections: [], AccountMenu: new AccountMenuShown(Offers: ["Use", "Sign in again…", "Rename…"], Forget: "Forget…"),
-            ShowsTools: false, Notices: [],
+            Notices: [],
             MenuNotices: new MenuNotices(Install: null, Switches: [], Others: null),
             Footing: new Footing.OnlyOne(Provider: "claude", Label: "work"), Setup: null,
             AccountsShown: new AccountsShown.List(), MenuAccountsNote: null,
@@ -42,7 +26,6 @@ internal static class Snapshots
                 Waiting: new WindowWaiting(
                     WindowTitle: "Account", Shown: new WaitingShown.Reading(Title: "Reading accounts…")),
                 Closing: [], Deleting: [], Picker: null, Downloads: [], Held: []));
-    }
 
     private static MachineShown Unread() => new(
         Schedule: new ScheduleShown(

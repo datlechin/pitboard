@@ -4,16 +4,15 @@
 //! synchronous and may block on the keychain, a lock, the network or the person's login
 //! shell, so only the model's own threads make one.
 //!
-//! What the core answers is said in records of the bindings where a snapshot shows it, such
-//! as `Status` and `Abandoned`, and in the types here where only the model reads it, such as
-//! what a switch, an enrolment or a renewal came to, doctor's checks, and why something
-//! failed.
+//! What the core answers is said in the model's records, such as `Status` and `Abandoned`,
+//! and in the types here, such as what a switch, an enrolment or a renewal came to, doctor's
+//! checks, and why something failed. Only what `present` makes of them reaches an app.
 
 use crate::model::state::in_its_app;
 use crate::present::words::{in_app_given_up, in_app_refusal, in_app_warning, sentence};
 use crate::{
-    Abandoned, Account, Awaiting, FoundCommandLine, Level, Limit, Parked, Schedule, Source, Status,
-    Tool, Usage, Warning, found_command_line, tool,
+    Abandoned, Account, Awaiting, FoundCommandLine, Level, Limit, Parked, Schedule, Status, Tool,
+    Usage, Warning, found_command_line, tool,
 };
 use pitboard_core::app::AppContext;
 use pitboard_core::context::Environment;
@@ -23,7 +22,7 @@ use pitboard_core::provider::{self, ProviderId};
 use pitboard_core::service::{self, Changing};
 use pitboard_core::switch::warm::WarmUp;
 use pitboard_core::switch::{Left, Stowed};
-use pitboard_core::{doctor, status, switch, usage, words};
+use pitboard_core::{doctor, status, switch, words};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard};
@@ -345,16 +344,10 @@ fn account(row: status::Row, now: i64) -> Account {
         plan: row.plan,
         read_at: row.read_at,
         parked: row.parked.map(|p| Parked {
-            parked_at: p.parked_at,
-            access_expires_at: p.access_expires_at,
             refresh_expires_at: p.refresh_expires_at,
             session_expires_at: p.session_expires_at,
         }),
         usage: row.usage.map(|u| Usage {
-            source: match u.source {
-                usage::Source::Live => Source::Live,
-                usage::Source::Remembered => Source::Remembered,
-            },
             observed_at: u.observed_at,
             lists_every_limit: u.lists_every_limit,
             windows: u
@@ -420,7 +413,6 @@ fn status_of(done: service::Done<status::Report>) -> Status {
                 provider: awaited.provider.code().into(),
                 put_back: awaited.put_back.qualified(),
                 label: awaited.label.label,
-                since: awaited.since,
                 again: awaited.again,
             })
             .collect(),

@@ -831,7 +831,7 @@ mod tests {
         assert_eq!(sorted, severities);
     }
 
-    use crate::LastSwitch;
+    use crate::model::LastSwitch;
     use crate::present::present_on;
     use crate::present::testing::{
         Utc, account, awaiting, claude_code, claude_desktop, desktop_account, desktop_warning,

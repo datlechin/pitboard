@@ -294,7 +294,7 @@ fn asked_for_now_what_went_wrong_is_said_in_the_window() {
     model.run(&mut machine);
     assert_eq!(machine.warmed, [Some("claude/personal".to_owned())]);
     let shown = model.shown();
-    let failure = shown.failure.expect("said");
+    let failure = model.state.presented.clone().expect("said");
     assert_eq!(failure.title, "Couldn’t warm up personal");
     assert_eq!(failure.code.as_deref(), Some("warm_up_not_started"));
     assert!(machine.posted.is_empty());
@@ -371,7 +371,7 @@ fn a_setting_that_cannot_be_read_is_said_and_a_change_to_it_refused() {
         on: true,
     });
     model.run(&mut machine);
-    let failure = model.shown().failure.expect("refused");
+    let failure = model.state.presented.clone().expect("refused");
     assert_eq!(
         failure.title,
         "Couldn’t change which accounts are warmed up"

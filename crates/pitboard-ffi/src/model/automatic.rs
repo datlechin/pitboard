@@ -378,7 +378,7 @@ fn a_switch_it_made_is_said_and_taken_as_a_switch_somebody_asked_for() {
             button: None,
         }]
     );
-    let last = &model.shown().last_switches;
+    let last = &model.state.last_switches;
     assert_eq!(
         last.iter()
             .map(|s| (s.provider.as_str(), s.to.as_str()))
@@ -556,7 +556,7 @@ fn a_refusal_is_said_once_and_lets_go() {
         "Pitboard could not switch Claude Code"
     );
     assert!(model.state.switch_under_way().is_none());
-    assert!(model.shown().failure.is_none(), "nobody asked, so no alert");
+    assert!(model.state.presented.is_none(), "nobody asked, so no alert");
 }
 
 /// After a refusal it asks again no sooner than the core asks again after an attempt that
@@ -773,7 +773,7 @@ fn a_switch_made_as_it_was_turned_off_is_still_said() {
     );
     assert_eq!(
         model
-            .shown()
+            .state
             .last_switches
             .iter()
             .map(|s| s.to.as_str())

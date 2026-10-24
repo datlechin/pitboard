@@ -25,8 +25,7 @@ fn shown(model: &Hand) -> MachineShown {
 /// Whether the window says something went wrong: a read that did not answer, or something
 /// asked for that did not happen. What is about the schedule is said beside its switch.
 fn window_failure(model: &Hand) -> bool {
-    let snapshot = model.shown();
-    snapshot.read_failure.is_some() || snapshot.failure.is_some()
+    model.state.failure.is_some() || model.state.presented.is_some()
 }
 
 /// A machine with one account and nothing on its scheduler, as the core answers.

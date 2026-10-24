@@ -510,14 +510,14 @@ window loads its site, and whatever the site's pages load, as a browser would.
   the macOS app, a dynamic one for the Windows app. An app reaches the core through the
   model alone.
   - `lib.rs` declares what the bindings export beside the model and the account windows'
-    rules: the records a snapshot carries of what the core answered, such as `Status`,
-    `Account` and `Abandoned`, and three free functions, which the macOS app calls, none as
-    it draws: `app_command_line`, for the command line inside its bundle, as it starts and
-    as it links that one; `can_run`, whether that one runs, as it links it; and
-    `pitboard_directory`, for where `app.json` is and the key the account windows' records
-    are kept under, as it starts. The Windows app calls two more as it starts:
-    `launch_refusal`, what the gate every change passes refuses once it has named the app's
-    version to the release gate, the release gate first, then an elevated process, a
+    rules, and the records the model keeps of what the core answered, such as `Status`,
+    `Account` and `Abandoned`, which no snapshot carries. The macOS app calls three of its
+    free functions, none as it draws: `app_command_line`, for the command line inside its
+    bundle, as it starts and as it links that one; `can_run`, whether that one runs, as it
+    links it; and `pitboard_directory`, for where `app.json` is and the key the account
+    windows' records are kept under, as it starts. The Windows app calls two more as it
+    starts: `launch_refusal`, what the gate every change passes refuses once it has named the
+    app's version to the release gate, the release gate first, then an elevated process, a
     Windows build below 26100 and a home that is not a full path, which it shows in place
     of a model; and `windows_records_key`, its records' key. `Pitboard.exe --unregister`
     calls `unschedule_app`, which takes the renewal task away where it runs the command line
@@ -1302,8 +1302,8 @@ window loads its site, and whatever the site's pages load, as a browser would.
   to stop, and the core, a tool's sign-in and the app's `AppControl`, `Notifications` and
   `LocalTime` are called on the model's own threads. The free functions block on nothing,
   and an app may make them where it likes: `check_name` and `downloads_quit_question`,
-  which read only what they are given; `sites_for` and `site_names`, which are
-  `pitboard-sites`' and read only what they are given too;
+  which read only what they are given; `site_names`, which is `pitboard-sites`' and reads
+  only what it is given too;
   the account windows' rules, such as `decide_navigation`, `decide_response` and
   `window_note`, which read only what they are given as well, so a web view's delegate asks
   them as it is asked; `download_destination`, which asks the file system whether each name

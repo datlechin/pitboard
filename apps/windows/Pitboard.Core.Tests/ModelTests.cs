@@ -89,30 +89,16 @@ public sealed class ModelTests
         }
     }
 
-    private static Snapshot Read(ulong revision)
-    {
-        var work = new Account(
-            Id: "claude:work", Provider: "claude", Label: "work", Qualified: "claude/work",
-            Unplaced: false, Email: "work@example.com", AccountId: "work", SignedIn: true,
-            Switchable: false, Parked: null,
-            Usage: new Usage(
-                Source.Live, At,
-                [new Limit("session", 18_000, null, 42.0, At + 3_600, null, true)],
-                ListsEveryLimit: true),
-            Stale: null, StaleExplanation: null, Plan: null, ReadAt: null);
-        return new Snapshot(
-            Revision: revision, Now: At, Reading: false, UpdatedAt: At,
-            Status: new Status(At, [work], [], []), Warnings: [], ReadFailure: null, Stuck: false,
-            Installed: [new Tool(Code: "claude", Name: "Claude Code", Program: "claude", Service: "Anthropic")],
-            SwitchUnderWay: null, QuitQuestion: null, ReplaceQuestion: null,
-            LastSwitches: [], Abandoned: null, Failure: null,
+    private static Snapshot Read(ulong revision) =>
+        new(
+            Revision: revision, Reading: false, QuitQuestion: null, ReplaceQuestion: null,
             WindowRequest: new WindowRequest(Serial: 0, Pane: null),
             SigningIn: null, Sheet: null, SheetFailure: null,
             MenuBar: new MenuBarText(
                 NameAndUsage: "work 42%", Usage: "42%", Spoken: "Pitboard, work 42%", Level: UsageLevel.Plenty, Attention: false,
                 Tip: "Pitboard\nwork: 5-hour 42%"),
             Sections: [], AccountMenu: new AccountMenuShown(Offers: ["Use", "Sign in again…", "Rename…"], Forget: "Forget…"),
-            ShowsTools: false, Notices: [],
+            Notices: [],
             MenuNotices: new MenuNotices(Install: null, Switches: [], Others: null),
             Footing: new Footing.OnlyOne(Provider: "claude", Label: "work"), Setup: null,
             AccountsShown: new AccountsShown.List(), MenuAccountsNote: null,
@@ -120,7 +106,6 @@ public sealed class ModelTests
             SigningInText: null, StowText: null, QuitConfirmation: null, FailureAlert: null,
             Machine: Unread(),
             AccountWindows: NoWindows());
-    }
 
     private static AccountWindowsShown NoWindows() => new(
         Accounts: [], Menus: [], Open: [],
@@ -233,8 +218,7 @@ public sealed class ModelTests
 
             Assert.AreEqual(0UL, first.Revision);
             Assert.IsFalse(first.Reading);
-            Assert.IsNull(first.Status);
-            Assert.IsNull(first.Installed);
+            Assert.IsEmpty(first.Sections);
             Assert.AreEqual(new Footing.Ready(), first.Footing);
             Assert.AreEqual(new AccountsShown.Reading("Reading accounts…"), first.AccountsShown);
             Assert.AreEqual("Pitboard", first.MenuBar.Spoken);
@@ -288,60 +272,21 @@ public sealed class ModelTests
         Assert.AreNotEqual<Intent>(new Intent.KeepAppOpen(), intents[1]);
     }
 
-    // Generated in the core's field order, though Windows lists no such tool.
     [TestMethod]
-    public void AStatusCarriesAnAddLeftHalfway()
+    public void ASnapshotCarriesWhatASwitchAsks()
     {
-        var snapshot = Read(5) with
-        {
-            Status = new Status(
-                At, [], [],
-                [
-                    new Awaiting(
-                        Provider: "desktop", Label: "travel", PutBack: "desktop/work", Since: At,
-                        Again: false),
-                ]),
-        };
-        Assert.HasCount(1, snapshot.Status!.Awaiting);
-        var awaiting = snapshot.Status.Awaiting[0];
-        Assert.AreEqual("desktop", awaiting.Provider);
-        Assert.AreEqual("travel", awaiting.Label);
-        Assert.AreEqual("desktop/work", awaiting.PutBack);
-        Assert.AreEqual(At, awaiting.Since);
-        Assert.IsFalse(awaiting.Again);
-    }
-
-    [TestMethod]
-    public void ASnapshotCarriesWhatASwitchSaid()
-    {
-        var stillRunning = new Warning(
-            "sessions_still_running", "2 `codex` sessions are still running", Account: null, Held: null,
-            Provider: null);
-        var switched = new LastSwitch(
-            Provider: "codex", To: "codex/work", FollowsAt: null,
-            Restart: new RestartNeeded(Program: "codex", From: "personal"), Said: null, Warnings: [stillRunning]);
         var snapshot = Read(4) with
         {
-            SwitchUnderWay = "codex/spare",
             QuitQuestion = new QuitQuestion(Qualified: "codex/spare", AppId: "com.openai.codex", Name: "ChatGPT"),
-            LastSwitches = [switched],
-            Abandoned = new Abandoned(From: "personal", To: "work", LoginsKept: 2),
-            Failure = new Failure(
-                Id: 2, Title: "Couldn’t switch to spare", Message: "ChatGPT is still open, so nothing has changed.",
-                Code: null, Warnings: []),
+            FailureAlert = new AlertText(
+                Title: "Couldn’t switch to spare", Message: "ChatGPT is still open, so nothing has changed."),
             WindowRequest = new WindowRequest(Serial: 3, Pane: Pane.Accounts),
         };
 
         Assert.AreEqual("ChatGPT", snapshot.QuitQuestion?.Name);
-        Assert.AreEqual("personal", snapshot.LastSwitches[0].Restart?.From);
-        Assert.IsNull(snapshot.LastSwitches[0].FollowsAt);
-        Assert.AreEqual("sessions_still_running", snapshot.LastSwitches[0].Warnings[0].Code);
-        Assert.AreEqual(2U, snapshot.Abandoned?.LoginsKept);
-        Assert.AreEqual(2UL, snapshot.Failure?.Id);
-        Assert.IsNull(snapshot.Failure?.Code);
+        Assert.AreEqual("Couldn’t switch to spare", snapshot.FailureAlert?.Title);
         Assert.AreEqual(Pane.Accounts, snapshot.WindowRequest.Pane);
         Assert.AreEqual(new WindowRequest(3, Pane.Accounts), snapshot.WindowRequest);
-        Assert.AreEqual(new RestartNeeded("codex", "personal"), switched.Restart);
     }
 
     [TestMethod]
@@ -469,9 +414,6 @@ public sealed class ModelTests
             Id: 3, Provider: "claude", Name: "travel",
             Said: "Paste code here if prompted > Invalid code. Please make sure the full code was copied.\n",
             Url: "https://claude.com/cai/oauth/authorize?code=true", WantsCode: true, CodeRefused: true);
-        var signedIn = new LastSwitch(
-            Provider: "claude", To: "work", FollowsAt: null, Restart: null,
-            Said: "Signed in to work again. Its new login is the one in use now.", Warnings: []);
         var snapshot = Read(5) with
         {
             SigningIn = running,
@@ -479,7 +421,6 @@ public sealed class ModelTests
             SheetFailure = new Failure(
                 Id: 4, Title: "Couldn’t sign in to work", Message: "`claude` is not on this machine",
                 Code: "claude_program_missing", Warnings: []),
-            LastSwitches = [signedIn],
         };
 
         Assert.AreEqual(3UL, snapshot.SigningIn?.Id);
@@ -489,7 +430,6 @@ public sealed class ModelTests
         Assert.AreEqual(running, snapshot.SigningIn);
         Assert.AreEqual<Sheet?>(new Sheet.SignInAgain("claude", "work"), snapshot.Sheet);
         Assert.AreEqual("claude_program_missing", snapshot.SheetFailure?.Code);
-        Assert.AreEqual("Signed in to work again. Its new login is the one in use now.", snapshot.LastSwitches[0].Said);
         Assert.IsNull(Read(5).SigningIn);
     }
 
@@ -497,12 +437,17 @@ public sealed class ModelTests
     public void ASnapshotCarriesWhatWasRead()
     {
         var snapshot = Read(3);
-        var failed = snapshot with { ReadFailure = new ReadFailure("unreachable", "Anthropic could not be reached") };
+        var failed = snapshot with
+        {
+            AccountsShown = new AccountsShown.ReadFailed(
+                Title: "Couldn’t Read Accounts", Detail: "Anthropic could not be reached",
+                Retry: new Choice("Try Again", new Intent.Refresh(true), Enabled: true)),
+        };
 
-        Assert.AreEqual("work", snapshot.Status?.Accounts[0].Label);
-        Assert.AreEqual(42.0, snapshot.Status?.Accounts[0].Usage?.Windows[0].Percent);
-        Assert.AreEqual("Claude Code", snapshot.Installed?[0].Name);
-        Assert.AreEqual("unreachable", failed.ReadFailure?.Code);
+        Assert.AreEqual("work 42%", snapshot.MenuBar.NameAndUsage);
+        Assert.AreEqual("Updated 08:00", snapshot.UpdatedMenu);
+        Assert.AreEqual(
+            "Anthropic could not be reached", ((AccountsShown.ReadFailed)failed.AccountsShown).Detail);
         Assert.AreEqual(snapshot.Revision, failed.Revision);
         // Lists are arrays, which a record compares by reference, so the app goes by the revision.
         Assert.AreNotEqual(Read(3), Read(3));
@@ -597,7 +542,6 @@ public sealed class ModelTests
         var snapshot = Read(6) with
         {
             Sections = [new AccountSection(Id: "codex", Heading: "Codex", Accounts: [spare])],
-            ShowsTools = true,
             Notices = [stuck],
             MenuNotices = new MenuNotices(Install: null, Switches: [], Others: others),
             Setup = new SetupStep(
@@ -817,11 +761,13 @@ public sealed class ModelTests
     }
 
     private static bool ReadIn(Snapshot snapshot) =>
-        snapshot is { Reading: false, UpdatedAt: not null, Status.Accounts.Length: > 0 };
+        snapshot is { Reading: false, UpdatedWindow.Length: > 0, Sections.Length: > 0 };
+
+    private static IEnumerable<AccountItem> Rows(Snapshot snapshot) =>
+        snapshot.Sections.SelectMany(section => section.Accounts);
 
     private static bool Uses(Snapshot snapshot, string qualified) =>
-        snapshot is { SwitchUnderWay: null, Status: { } status }
-        && status.Accounts.Any(account => account.SignedIn && account.Qualified == qualified);
+        !Rows(snapshot).Any(row => row.Switching) && Rows(snapshot).Any(row => row.InUse && row.Qualified == qualified);
 
     private static Snapshot Start(PitboardModel model, Waiting waiting)
     {
@@ -842,9 +788,8 @@ public sealed class ModelTests
         var read = Start(model, waiting);
         model.Shutdown();
 
-        CollectionAssert.AreEqual(
-            OneToolsAccounts, read.Status!.Accounts.Select(account => account.Qualified).ToArray());
-        Assert.IsTrue(read.Status.Accounts[0].SignedIn);
+        CollectionAssert.AreEqual(OneToolsAccounts, Rows(read).Select(row => row.Qualified).ToArray());
+        Assert.IsTrue(Rows(read).First().InUse);
         Assert.AreEqual("work", read.Sections.Single().Accounts[0].Title);
         var claude = Assert.IsInstanceOfType<SiteMenu.Several>(read.AccountWindows.Menus.Single());
         Assert.AreEqual("Open claude.ai", claude.Title);
@@ -854,8 +799,7 @@ public sealed class ModelTests
         Assert.IsNotNull(waiting.TellingThread);
         Assert.AreNotEqual(Environment.CurrentManagedThreadId, waiting.TellingThread);
         Assert.IsFalse(waiting.ToldOnThePool, "told on a thread of .NET's thread pool");
-        var readAt = read.UpdatedAt!.Value;
-        Assert.AreEqual($"Updated {clock.Clock(readAt, !clock.SameDay(readAt, read.Now))}", read.UpdatedMenu);
+        Assert.AreEqual(read.UpdatedWindow, read.UpdatedMenu);
     }
 
     [TestMethod]
@@ -897,14 +841,13 @@ public sealed class ModelTests
         model.Send(new Intent.SwitchTo("codex/spare"));
         Assert.IsNotNull(waiting.Until(snapshot => snapshot.QuitQuestion is not null, Patience));
         model.Send(new Intent.QuitAndSwitch("codex/spare"));
-        var stopped = waiting.Until(snapshot => snapshot.Failure is not null, Patience);
+        var stopped = waiting.Until(snapshot => snapshot.FailureAlert is not null, Patience);
         model.Shutdown();
 
         Assert.IsNotNull(stopped, "the switch never stopped");
-        var failure = stopped.Failure!;
+        var failure = stopped.FailureAlert!;
         Assert.AreEqual("Couldn’t switch to spare", failure.Title);
         Assert.AreEqual("ChatGPT is still open, so nothing has changed. Quit it, then switch again.", failure.Message);
-        Assert.IsNull(failure.Code);
         Assert.IsTrue(Uses(stopped, "codex/main"));
         // Taken as a success, the quit would have been followed by a wait on Running.
         string[] refused = [$"running {StandInApps.ChatGpt}", $"running {StandInApps.ChatGpt}", $"quit {StandInApps.ChatGpt}"];
@@ -926,14 +869,13 @@ public sealed class ModelTests
         model.Shutdown();
 
         Assert.IsNotNull(switched, "the switch was never read back");
-        var resetsAt = switched.Status!.Accounts
-            .Single(account => account.Qualified == "claude/personal")
-            .Usage!.Windows.Single(limit => limit.Kind == "session")
-            .ResetsAt!.Value;
+        // When the limit resets is the read's.
+        var resetsAt = posted[0].Id["claude/personal/session/-".Length..];
+        Assert.IsTrue(long.TryParse(resetsAt, CultureInfo.InvariantCulture, out _), resetsAt);
         RunOutNotice[] ranOut =
         [
             new(
-                Id: $"claude/personal/session/-{resetsAt.ToString(CultureInfo.InvariantCulture)}",
+                Id: $"claude/personal/session/-{resetsAt}",
                 Title: "personal has no 5-hour limit left", Subtitle: null, Body: "work has 58% of its own left.",
                 Clicked: "accounts", Button: new NotificationButton("Switch", "switch/claude/work")),
         ];
@@ -1032,17 +974,19 @@ public sealed class ModelTests
 
             model.Send(new Intent.Start());
             var read = waiting.Until(
-                snapshot => snapshot.ReadFailure is not null || snapshot is { Reading: false, UpdatedAt: not null },
+                snapshot => snapshot is { Reading: false }
+                    && (snapshot.AccountsShown is AccountsShown.ReadFailed || snapshot.UpdatedWindow.Length > 0),
                 Patience);
             model.Shutdown();
 
             Assert.IsNotNull(read, "the model told of no read");
+            var failed = read.AccountsShown as AccountsShown.ReadFailed;
             if (ProductMajor() == 0)
             {
                 Assert.AreEqual(
-                    "windows_not_released", read.ReadFailure?.Code,
+                    "windows_not_released", refused?.Code,
                     "A library built with `--cfg pitboard_unreleased_windows` takes PitboardNativeLibraryOpened=true.");
-                Assert.AreEqual(read.ReadFailure, refused);
+                Assert.AreEqual(refused?.Message, failed?.Detail);
                 // Shutdown waits for the actor alone, so a lane may still write after it.
                 var settled = DateTime.UtcNow + TimeSpan.FromSeconds(2);
                 do
@@ -1057,7 +1001,7 @@ public sealed class ModelTests
             }
             else
             {
-                Assert.IsNull(read.ReadFailure, read.ReadFailure?.Message);
+                Assert.IsNull(failed, failed?.Detail);
                 Assert.IsNull(refused, refused?.Message);
             }
         }

@@ -107,7 +107,6 @@ public sealed class AccountsViewModelTests
         app.Apply(one with
         {
             Revision = 2,
-            ShowsTools = true,
             Sections =
             [
                 Items.Section("claude", "Claude Code", Items.Account("claude", "work", inUse: true)),

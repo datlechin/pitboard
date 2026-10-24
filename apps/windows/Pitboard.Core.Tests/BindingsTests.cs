@@ -23,7 +23,8 @@ public sealed class BindingsTests
         [
             "Pitboard", "SignIn", "Settings", "PitboardException", "Cause", "Switched", "Switch",
             "Adoption", "Enrolled", "EnrolledAs", "Changed", "Holding", "Remedy", "Diagnosis", "Change",
-            "SignInView", "Check", "Renewed", "LinkRefusal",
+            "SignInView", "Check", "Renewed", "LinkRefusal", "Status", "Account", "Usage", "Limit", "Parked",
+            "Awaiting", "Source", "Abandoned", "LastSwitch", "RestartNeeded", "Tool",
         ];
         var stillOffered = exported.Select(type => type.Name).Intersect(older).Order(StringComparer.Ordinal);
         string[] olderCalls =

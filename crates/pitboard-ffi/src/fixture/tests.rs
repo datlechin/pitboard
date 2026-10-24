@@ -8,13 +8,14 @@ use super::pages;
 use super::tools::{CLAUDE_ADDRESS, CLAUDE_REFUSES, CODEX_ADDRESS};
 use super::worlds::{Folder, Launched, World, make, out_of_reach};
 use crate::model::testing::platform::{PATIENCE, Posted, StandInApps, Told, eventually};
+use crate::model::testing::records::read_in;
 use crate::model::{
     AppControl, Intent, LocalTime, ModelListener, NotificationButton, Notifications, Pane,
     PitboardModel, PlatformError, QuitQuestion, RunOutNotice, Sheet, Snapshot, Tip,
 };
 use crate::present::testing::Utc;
 use crate::present::words::titled;
-use crate::present::{AccountsShown, Footing};
+use crate::present::{AccountItem, AccountsShown, Footing};
 use crate::{AppCore, Enrolled, EnrolledAs, FoundCommandLine, PitboardError, Schedule, Status};
 use pitboard_core::host::{OS, Os};
 use pitboard_core::provider::{self, ProviderId};
@@ -65,16 +66,6 @@ fn who(status: &Status) -> Vec<(String, bool)> {
         .accounts
         .iter()
         .filter_map(|account| Some((account.qualified.clone()?, account.signed_in)))
-        .collect()
-}
-
-/// The accounts in use, one per tool at most, by their names with their tools.
-fn in_use(status: &Status) -> Vec<String> {
-    status
-        .accounts
-        .iter()
-        .filter(|account| account.signed_in)
-        .filter_map(|account| account.qualified.clone())
         .collect()
 }
 
@@ -402,14 +393,7 @@ fn a_refused_code_is_said_in_the_sheet_and_another_is_asked_for() {
     );
     model.send(Intent::PasteCode { code: CODE.into() });
     told.last_where("the account listed", |snapshot| {
-        snapshot.signing_in.is_none()
-            && read_in(snapshot)
-            && snapshot.status.as_ref().is_some_and(|status| {
-                status
-                    .accounts
-                    .iter()
-                    .any(|account| account.qualified.as_deref() == Some("claude/third"))
-            })
+        snapshot.signing_in.is_none() && read_in(snapshot) && lists(snapshot, "claude/third")
     });
     model.shutdown();
 }
@@ -598,9 +582,34 @@ fn a_launch_keeps_its_command_line_in_its_own_folder() {
 
 // The model an app launches into a fixture.
 
-/// Whether the accounts have been read, and nothing is being read.
-fn read_in(snapshot: &Snapshot) -> bool {
-    snapshot.status.is_some() && !snapshot.reading && snapshot.updated_at.is_some()
+fn rows(snapshot: &Snapshot) -> impl Iterator<Item = &AccountItem> {
+    snapshot
+        .sections
+        .iter()
+        .flat_map(|section| &section.accounts)
+}
+
+/// The accounts a snapshot lists by their names with their tools, and whether each is in
+/// use, as `who` has a read's.
+fn listed(snapshot: &Snapshot) -> Vec<(String, bool)> {
+    rows(snapshot)
+        .filter_map(|row| Some((row.qualified.clone()?, row.in_use)))
+        .collect()
+}
+
+fn lists(snapshot: &Snapshot, qualified: &str) -> bool {
+    rows(snapshot).any(|row| row.qualified.as_deref() == Some(qualified))
+}
+
+/// The accounts in use a snapshot shows, with no switch under way.
+fn shows_in_use(snapshot: &Snapshot) -> Vec<String> {
+    if rows(snapshot).any(|row| row.switching) {
+        return Vec::new();
+    }
+    listed(snapshot)
+        .into_iter()
+        .filter_map(|(qualified, in_use)| in_use.then_some(qualified))
+        .collect()
 }
 
 /// The app's model over `launched`, started, once the accounts have been read.
@@ -620,10 +629,7 @@ fn a_launch_reads_without_being_asked() {
     let launched = made(World::TwoTools);
     let (model, told) = started(&launched);
     let last = told.last_where("the accounts read", read_in);
-    assert_eq!(
-        described(last.status.as_ref().expect("read")),
-        described(&read(&launched.core))
-    );
+    assert_eq!(listed(&last), who(&read(&launched.core)));
     model.shutdown();
 }
 
@@ -687,11 +693,7 @@ fn the_chatgpt_fixture_is_quit_for_a_codex_switch_and_opened_again() {
         qualified: question.qualified,
     });
     told.last_where("the switch, read back", |snapshot| {
-        snapshot.switch_under_way.is_none()
-            && snapshot
-                .status
-                .as_ref()
-                .is_some_and(|status| in_use(status).contains(&"codex/spare".into()))
+        shows_in_use(snapshot).contains(&"codex/spare".into())
     });
     assert_eq!(
         launched.apps.asked(),
@@ -733,11 +735,7 @@ fn claude_is_quit_for_a_switch_and_opened_again_behind() {
         qualified: question.qualified,
     });
     told.last_where("the switch, read back", |snapshot| {
-        snapshot.switch_under_way.is_none()
-            && snapshot
-                .status
-                .as_ref()
-                .is_some_and(|status| in_use(status).contains(&"desktop/home".into()))
+        shows_in_use(snapshot).contains(&"desktop/home".into())
     });
     model.shutdown();
     assert_eq!(
@@ -832,10 +830,7 @@ fn an_add_in_claude_desktop_parks_waits_and_enrols_with_claude_in_front() {
     told.last_where("travel added and in use", |snapshot| {
         snapshot.signing_in.is_none()
             && snapshot.sheet.is_none()
-            && snapshot
-                .status
-                .as_ref()
-                .is_some_and(|status| in_use(status).contains(&"desktop/travel".into()))
+            && shows_in_use(snapshot).contains(&"desktop/travel".into())
     });
     model.shutdown();
     assert_eq!(
@@ -898,15 +893,11 @@ fn an_add_left_halfway_is_put_back_by_use() {
     );
     model.send(notice.actions[1].intent.clone());
     told.last_where("work back in use", |snapshot| {
-        snapshot.switch_under_way.is_none()
-            && !snapshot
-                .notices
-                .iter()
-                .any(|notice| notice.id == "awaiting/desktop")
-            && snapshot
-                .status
-                .as_ref()
-                .is_some_and(|status| in_use(status).contains(&"desktop/work".into()))
+        !snapshot
+            .notices
+            .iter()
+            .any(|notice| notice.id == "awaiting/desktop")
+            && shows_in_use(snapshot).contains(&"desktop/work".into())
     });
     model.shutdown();
     assert_eq!(launched.apps.asked(), Vec::<String>::new());
@@ -986,10 +977,10 @@ fn a_stopped_move_is_given_up_from_the_app() {
     });
     assert_eq!(
         refused
-            .failure
+            .failure_alert
             .as_ref()
-            .and_then(|failure| failure.code.as_deref()),
-        Some("recovery_undetermined")
+            .map(|alert| alert.title.as_str()),
+        Some(crate::present::words::could_not_switch("desktop/home").as_str())
     );
     let notice = (refused.notices.iter())
         .find(|notice| notice.id.starts_with("warning/move_waiting/"))
@@ -1202,13 +1193,7 @@ fn the_login_in_use_is_offered_a_name() {
         name: "work".into(),
     });
     told.last_where("the account named", |snapshot| {
-        read_in(snapshot)
-            && snapshot.status.as_ref().is_some_and(|status| {
-                status
-                    .accounts
-                    .iter()
-                    .any(|account| account.qualified.as_deref() == Some("claude/work"))
-            })
+        read_in(snapshot) && lists(snapshot, "claude/work")
     });
     model.shutdown();
 }
@@ -1387,14 +1372,7 @@ fn accounts_are_added_through_each_tools_sign_in() {
     });
     model.send(Intent::PasteCode { code: CODE.into() });
     told.last_where("the account listed", |snapshot| {
-        snapshot.signing_in.is_none()
-            && read_in(snapshot)
-            && snapshot.status.as_ref().is_some_and(|status| {
-                status
-                    .accounts
-                    .iter()
-                    .any(|account| account.qualified.as_deref() == Some("claude/third"))
-            })
+        snapshot.signing_in.is_none() && read_in(snapshot) && lists(snapshot, "claude/third")
     });
     model.shutdown();
 
@@ -1405,14 +1383,7 @@ fn accounts_are_added_through_each_tools_sign_in() {
         name: "third".into(),
     });
     told.last_where("the account listed", |snapshot| {
-        snapshot.signing_in.is_none()
-            && read_in(snapshot)
-            && snapshot.status.as_ref().is_some_and(|status| {
-                status
-                    .accounts
-                    .iter()
-                    .any(|account| account.qualified.as_deref() == Some("codex/third"))
-            })
+        snapshot.signing_in.is_none() && read_in(snapshot) && lists(snapshot, "codex/third")
     });
     model.shutdown();
 }
@@ -1436,14 +1407,7 @@ fn adding_codex_in_first_launch_reaches_its_sign_in() {
     });
     let ended = told.last_where("the account listed or refused", |snapshot| {
         snapshot.sheet_failure.is_some()
-            || (snapshot.signing_in.is_none()
-                && read_in(snapshot)
-                && snapshot.status.as_ref().is_some_and(|status| {
-                    status
-                        .accounts
-                        .iter()
-                        .any(|account| account.qualified.as_deref() == Some("codex/work"))
-                }))
+            || (snapshot.signing_in.is_none() && read_in(snapshot) && lists(snapshot, "codex/work"))
     });
     assert_eq!(ended.sheet_failure, None);
     model.shutdown();
@@ -1462,7 +1426,7 @@ fn a_sign_in_asked_for_at_once_after_a_cancel_asks_for_the_code() {
         name: "third".into(),
     };
     let refused =
-        |snapshot: &Snapshot| snapshot.failure.is_some() || snapshot.sheet_failure.is_some();
+        |snapshot: &Snapshot| snapshot.failure_alert.is_some() || snapshot.sheet_failure.is_some();
     model.send(Intent::PresentSheet {
         sheet: Sheet::Add { provider: None },
     });
@@ -1484,7 +1448,7 @@ fn a_sign_in_asked_for_at_once_after_a_cancel_asks_for_the_code() {
                 .is_some_and(|signing| signing.id != first && signing.wants_code)
     });
     assert_eq!(
-        (asking.failure, asking.sheet_failure),
+        (asking.failure_alert, asking.sheet_failure),
         (None, None),
         "the second sign-in refused"
     );
@@ -1493,12 +1457,7 @@ fn a_sign_in_asked_for_at_once_after_a_cancel_asks_for_the_code() {
         refused(snapshot)
             || (snapshot.signing_in.is_none()
                 && read_in(snapshot)
-                && snapshot.status.as_ref().is_some_and(|status| {
-                    status
-                        .accounts
-                        .iter()
-                        .any(|account| account.qualified.as_deref() == Some("claude/third"))
-                }))
+                && lists(snapshot, "claude/third"))
     });
     model.shutdown();
 }
@@ -1574,23 +1533,14 @@ fn accounts_are_renamed_and_forgotten_as_the_window_offers() {
     });
     told.last_where("the account renamed", |snapshot| {
         read_in(snapshot)
-            && snapshot.status.as_ref().is_some_and(|status| {
-                in_use(status) == ["claude/work"]
-                    && status
-                        .accounts
-                        .iter()
-                        .any(|account| account.qualified.as_deref() == Some("claude/home"))
-            })
+            && shows_in_use(snapshot) == ["claude/work"]
+            && lists(snapshot, "claude/home")
     });
     model.send(Intent::Forget {
         qualified: "claude/home".into(),
     });
     told.last_where("the account forgotten", |snapshot| {
-        read_in(snapshot)
-            && snapshot
-                .status
-                .as_ref()
-                .is_some_and(|status| status.accounts.len() == 1)
+        read_in(snapshot) && rows(snapshot).count() == 1
     });
     model.shutdown();
 }
@@ -1611,14 +1561,16 @@ fn a_failed_read_is_said_in_the_menu_and_in_the_window() {
     let model = launched.model(Arc::clone(&told) as Arc<dyn ModelListener>, Arc::new(Utc));
     model.send(Intent::Start);
     let shown = told.last_where("the read failed", |snapshot| {
-        snapshot.read_failure.is_some() && !snapshot.reading
+        !snapshot.reading && matches!(snapshot.accounts_shown, AccountsShown::ReadFailed { .. })
     });
-    let failure = shown.read_failure.expect("failed");
-    assert_eq!(failure.code, "state_unreadable");
+    let AccountsShown::ReadFailed {
+        detail: failure, ..
+    } = shown.accounts_shown.clone()
+    else {
+        unreachable!("waited for")
+    };
     assert!(
-        failure
-            .message
-            .starts_with("Could not read Pitboard's account list at "),
+        failure.starts_with("Could not read Pitboard's account list at "),
         "{failure:?}"
     );
 
@@ -1638,13 +1590,9 @@ fn a_failed_read_is_said_in_the_menu_and_in_the_window() {
             .collect::<Vec<_>>(),
         [("read", "Couldn’t read usage")]
     );
-    assert_eq!(
-        shown.notices[0].lines,
-        std::slice::from_ref(&failure.message)
-    );
+    assert_eq!(shown.notices[0].lines, std::slice::from_ref(&failure));
 
-    assert_eq!(shown.status, None, "nothing is known");
-    assert!(shown.sections.is_empty());
+    assert!(shown.sections.is_empty(), "nothing is known");
     assert_eq!(
         shown.menu_accounts_note.as_deref(),
         Some("No accounts to show")
@@ -1653,7 +1601,7 @@ fn a_failed_read_is_said_in_the_menu_and_in_the_window() {
         shown.accounts_shown,
         AccountsShown::ReadFailed {
             title: titled(OS, "Couldn’t Read Accounts", "Couldn’t read accounts"),
-            detail: failure.message,
+            detail: failure,
             retry: crate::present::Choice {
                 title: titled(OS, "Try Again", "Try again"),
                 intent: Intent::Refresh { asked: true },
@@ -1699,7 +1647,10 @@ fn a_service_out_of_reach_leaves_the_last_numbers_and_says_why_on_each_account()
         );
         assert!(!item.limits.is_empty(), "the last numbers measured");
     }
-    assert!(shown.read_failure.is_none());
+    assert!(!matches!(
+        shown.accounts_shown,
+        AccountsShown::ReadFailed { .. }
+    ));
     assert!(shown.notices.iter().all(|notice| notice.id != "read"));
     model.shutdown();
 }
@@ -1717,7 +1668,6 @@ fn an_interrupted_switch_is_offered_a_way_out_as_the_app_starts() {
     let launched = made(World::Stuck);
     let (model, told) = started(&launched);
     let shown = told.last_where("the accounts read", read_in);
-    assert!(shown.stuck);
     let notice = shown.notices.first().expect("a notice");
     assert_eq!(
         (notice.id.as_str(), notice.title.as_str()),
@@ -1791,7 +1741,7 @@ fn an_interrupted_switch_is_offered_a_way_out_as_the_app_starts() {
         "{notice:?}"
     );
     told.last_where("nothing waiting", |snapshot| {
-        !snapshot.stuck && snapshot.notices.iter().all(|notice| notice.id != "stuck")
+        snapshot.notices.iter().all(|notice| notice.id != "stuck")
     });
     model.shutdown();
 }
@@ -2232,8 +2182,11 @@ fn an_exported_fixture_is_made_in_the_temporary_directory() {
     model.send(Intent::Start);
     let shown = listener.last_where("the accounts read", read_in);
     assert_eq!(
-        described(shown.status.as_ref().expect("read")),
-        ["claude/work, in use", "claude/personal"]
+        listed(&shown),
+        [
+            ("claude/work".into(), true),
+            ("claude/personal".into(), false)
+        ]
     );
     model.shutdown();
 }
@@ -2267,15 +2220,13 @@ fn an_exported_fixture_in_a_directory_of_its_own_is_made_there() {
     model.send(Intent::Start);
     let shown = listener.last_where("the accounts read", read_in);
     assert_eq!(
-        described(shown.status.as_ref().expect("read")),
-        ["claude/work, in use", "claude/personal"]
+        listed(&shown),
+        [
+            ("claude/work".into(), true),
+            ("claude/personal".into(), false)
+        ]
     );
-    let read_at = shown.updated_at.expect("read");
-    let today = Utc.same_day(read_at, shown.now).expect("a day");
-    assert_eq!(
-        shown.updated_menu,
-        format!("Updated {}", Utc.clock(read_at, !today).expect("a time"))
-    );
+    assert_eq!(shown.updated_menu, shown.updated_window);
     model.shutdown();
     assert!(made.is_dir(), "left there, as an app's is");
 }
@@ -2305,11 +2256,7 @@ fn started_in(
 }
 
 fn uses(snapshot: &Snapshot, qualified: &str) -> bool {
-    snapshot.switch_under_way.is_none()
-        && snapshot
-            .status
-            .as_ref()
-            .is_some_and(|status| in_use(status).iter().any(|used| used == qualified))
+    shows_in_use(snapshot).iter().any(|used| used == qualified)
 }
 
 #[test]
@@ -2374,14 +2321,15 @@ fn a_refusal_to_quit_from_the_apps_fixture_in_is_given_stops_the_switch() {
     model.send(Intent::QuitAndSwitch {
         qualified: "codex/spare".into(),
     });
-    let refused = told.last_where("the switch stopped", |snapshot| snapshot.failure.is_some());
-    let failure = refused.failure.as_ref().expect("stopped");
+    let refused = told.last_where("the switch stopped", |snapshot| {
+        snapshot.failure_alert.is_some()
+    });
+    let failure = refused.failure_alert.as_ref().expect("stopped");
     assert_eq!(failure.title, "Couldn’t switch to spare");
     assert_eq!(
         failure.message,
         "ChatGPT is still open, so nothing has changed. Quit it, then switch again."
     );
-    assert_eq!(failure.code, None);
     assert!(uses(&refused, "codex/main"));
     assert!(apps.asked().is_empty(), "{:?}", apps.asked());
     assert_eq!(apps.running_calls(), 2);
@@ -2397,22 +2345,19 @@ fn a_run_out_is_posted_through_the_notifications_fixture_in_is_given() {
     model.send(Intent::SwitchTo {
         qualified: "claude/personal".into(),
     });
-    let switched = told.last_where("the switch, read back", |snapshot| {
+    told.last_where("the switch, read back", |snapshot| {
         uses(snapshot, "claude/personal")
     });
     eventually("posted the run-out", || !posted.posted().is_empty());
-    let resets_at = switched
-        .status
-        .iter()
-        .flat_map(|status| &status.accounts)
-        .filter(|account| account.qualified.as_deref() == Some("claude/personal"))
-        .flat_map(|account| &account.usage)
-        .flat_map(|usage| &usage.windows)
-        .find(|limit| limit.kind == "session")
-        .and_then(|limit| limit.resets_at)
-        .expect("personal's 5-hour limit resets");
+    let posted = posted.posted();
+    // When the limit resets is the read's.
+    let resets_at = posted[0]
+        .id
+        .strip_prefix("claude/personal/session/-")
+        .expect("personal's 5-hour limit");
+    assert!(resets_at.parse::<i64>().is_ok(), "{resets_at}");
     assert_eq!(
-        posted.posted(),
+        posted,
         [RunOutNotice {
             id: format!("claude/personal/session/-{resets_at}"),
             title: "personal has no 5-hour limit left".into(),
