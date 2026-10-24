@@ -29,11 +29,11 @@ pub fn window_note(kind: WindowNoteKind, account: WindowAccount) -> String {
     let site = &account.site;
     match kind {
         WindowNoteKind::SignIn => format!(
-            "Sign in to {} as {}. Google’s sign-in does not work inside apps. {}",
+            "Sign in to {} as {}. Google’s sign-in doesn’t work inside apps. {}",
             site.name, account.email, site.sign_in_steps
         ),
         WindowNoteKind::GoogleRefused => format!(
-            "Google does not allow its pages inside apps, so Pitboard stopped it. Sign in as {} \
+            "Google doesn’t allow its pages inside apps, so Pitboard stopped it. Sign in as {} \
              another way. {} {}",
             account.email, site.sign_in_steps, site.blocked_services
         ),
@@ -74,7 +74,7 @@ fn remove_data_alert_on(os: Os, account: &WindowAccount) -> AlertText {
         title: format!("Remove {name} data for “{}”?", account.label),
         message: format!(
             "Pitboard removes the cookies and everything else {name} keeps in this window on \
-             {}, which signs this window out. {name} is not told: the account stays signed in \
+             {}, which signs this window out. {name} isn’t told: the account stays signed in \
              on your other devices and browsers.",
             this_machine(os)
         ),
@@ -91,7 +91,6 @@ mod tests {
         found.pop().expect("a window")
     }
 
-    /// Each note as WindowNote.swift said it, where the window's site and account fill it in.
     #[test]
     fn a_note_says_what_happened_to_whom() {
         let main = window("main", "codex");
@@ -99,7 +98,7 @@ mod tests {
         assert_eq!(
             window_note(WindowNoteKind::SignIn, main.clone()),
             format!(
-                "Sign in to chatgpt.com as main@example.com. Google’s sign-in does not work \
+                "Sign in to chatgpt.com as main@example.com. Google’s sign-in doesn’t work \
                  inside apps. {steps}"
             )
         );
@@ -107,9 +106,9 @@ mod tests {
         assert_eq!(
             window_note(WindowNoteKind::GoogleRefused, main.clone()),
             format!(
-                "Google does not allow its pages inside apps, so Pitboard stopped it. Sign in \
+                "Google doesn’t allow its pages inside apps, so Pitboard stopped it. Sign in \
                  as main@example.com another way. {steps} Google Drive, Gmail and Google \
-                 Calendar cannot be connected in this window."
+                 Calendar can’t be connected in this window."
             )
         );
         assert_eq!(
@@ -129,7 +128,7 @@ mod tests {
         let work = window("work", "claude");
         assert_eq!(
             window_note(WindowNoteKind::SignIn, work),
-            "Sign in to claude.ai as work@example.com. Google’s sign-in does not work inside \
+            "Sign in to claude.ai as work@example.com. Google’s sign-in doesn’t work inside \
              apps. Click Continue with email, open the email on your phone, tap its link, then \
              enter here the code claude.ai shows there."
         );
@@ -151,7 +150,6 @@ mod tests {
         assert_eq!(opening_note(true), None);
     }
 
-    /// As AccountWindowView.swift asked it, naming the machine on a Mac as it did.
     #[test]
     fn removing_a_windows_data_says_the_site_is_not_told() {
         let work = window("work", "claude");
@@ -160,7 +158,7 @@ mod tests {
         assert_eq!(
             mac.message,
             "Pitboard removes the cookies and everything else claude.ai keeps in this window on \
-             this Mac, which signs this window out. claude.ai is not told: the account stays \
+             this Mac, which signs this window out. claude.ai isn’t told: the account stays \
              signed in on your other devices and browsers."
         );
         let linux = remove_data_alert_on(Os::Linux, &work);
@@ -170,7 +168,7 @@ mod tests {
         assert_eq!(
             windows.message,
             "Pitboard removes the cookies and everything else claude.ai keeps in this window on \
-             this PC, which signs this window out. claude.ai is not told: the account stays \
+             this PC, which signs this window out. claude.ai isn’t told: the account stays \
              signed in on your other devices and browsers."
         );
         assert_eq!(

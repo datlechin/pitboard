@@ -273,10 +273,10 @@ pub(crate) fn warning_heading(os: Os, warning: &Warning) -> &'static str {
         "interrupted_switch_undone" => "An interrupted switch was undone",
         "recovery_undetermined" => SWITCH_WAITING,
         "login_replaced" => "A login was replaced outside Pitboard",
-        "in_use_unconfirmed" => "The account in use is not confirmed",
+        "in_use_unconfirmed" => "The account in use isn’t confirmed",
         // `in_app_warning` words the two alike for an app.
         "config_names_another" if warning.provider.as_deref().is_some_and(in_its_app) => {
-            "The account in use is not confirmed"
+            "The account in use isn’t confirmed"
         }
         "config_names_another" => "Claude Code’s config names another account",
         "login_taken_as_named" => "A login was taken as the account named for it",
@@ -1096,7 +1096,7 @@ pub(crate) fn renewal_about(os: Os, in_its_app: bool) -> String {
         Os::Windows => "Your PC’s own scheduler",
     };
     let about = format!(
-        "{scheduler} renews your parked logins once a day, so one you leave alone does not expire."
+        "{scheduler} renews your parked logins once a day, so one you leave alone doesn’t expire."
     );
     if in_its_app {
         format!("{about} A parked Claude Desktop login is never renewed.")
@@ -1754,7 +1754,7 @@ pub(crate) fn in_app_refusal(os: Os, error: &Error) -> Option<String> {
             bare(label)
         ),
         Error::ParkedCredentialCorrupt { label, detail } if inside_label(label) => format!(
-            "The parked login for {0} is not the one Pitboard recorded ({detail}). Choose Sign In \
+            "The parked login for {0} isn’t the one Pitboard recorded ({detail}). Choose Sign In \
              Again… on {0}’s row.",
             bare(label)
         ),
@@ -2588,7 +2588,7 @@ mod tests {
             ),
             ("recovery_undetermined", "An interrupted switch is waiting"),
             ("login_replaced", "A login was replaced outside Pitboard"),
-            ("in_use_unconfirmed", "The account in use is not confirmed"),
+            ("in_use_unconfirmed", "The account in use isn’t confirmed"),
             (
                 "config_names_another",
                 "Claude Code’s config names another account",

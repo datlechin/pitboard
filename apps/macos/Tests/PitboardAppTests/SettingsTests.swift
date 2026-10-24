@@ -253,6 +253,6 @@ private func settingsHeight(_ tab: SettingsView.Tab, warming: Int = 0) -> CGFloa
         model: AppModel(model: standIn))
     await unlinkable.install()
     #expect(
-        unlinkable.failed == "This copy of Pitboard cannot link the command line inside it.")
+        unlinkable.failed == "This copy of Pitboard can’t link the command line inside it.")
     #expect(scripts.ran.count == 2)
 }

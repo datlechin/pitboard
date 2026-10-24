@@ -32,7 +32,7 @@ public sealed class ReleaseGateTests
         using var launched = Launched.Start(Builds.Release);
 
         var window = launched.Window("Pitboard");
-        StringAssert.Contains(Launched.Said(window), "Pitboard for Windows is not released yet.");
+        StringAssert.Contains(Launched.Said(window), "Pitboard for Windows isn’t released yet.");
         Launched.Dismiss(window);
         Assert.IsTrue(launched.Process.WaitForExit(TimeSpan.FromSeconds(10)), "Pitboard went on running");
         Assert.AreEqual(1, launched.Process.ExitCode);

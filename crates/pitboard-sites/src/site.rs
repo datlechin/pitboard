@@ -59,7 +59,7 @@ pub static CLAUDE: Site = Site {
     sign_in_steps: "Click Continue with email, open the email on your phone, tap its link, then \
                     enter here the code claude.ai shows there.",
     passkeys: false,
-    blocked_services: "Gmail, Google Drive, Google Calendar and Google single sign-on cannot be \
+    blocked_services: "Gmail, Google Drive, Google Calendar and Google single sign-on can’t be \
                        connected in this window.",
 };
 
@@ -86,7 +86,7 @@ pub static CHATGPT: Site = Site {
     sign_in_steps: "Enter your email address, then its password or the code chatgpt.com emails \
                     you, or click Continue with Microsoft or Continue with Apple.",
     passkeys: true,
-    blocked_services: "Google Drive, Gmail and Google Calendar cannot be connected in this \
+    blocked_services: "Google Drive, Gmail and Google Calendar can’t be connected in this \
                        window.",
 };
 
