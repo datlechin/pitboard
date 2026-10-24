@@ -811,7 +811,7 @@ fn the_settings_offer_three_choices_and_the_terms_beside_switching() {
         .expect("beside switching");
     assert_eq!(
         terms.sentence,
-        "Anthropic's terms may cover automatic switching and warm-ups."
+        words::sentence(pitboard_core::words::TERMS_MAY_COVER_THIS)
     );
     assert_eq!(terms.link_title, "Is this allowed?");
 

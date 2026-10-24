@@ -9,7 +9,7 @@
 //! checks, and why something failed. Only what `present` makes of them reaches an app.
 
 use crate::model::state::in_its_app;
-use crate::present::words::{in_app_given_up, in_app_refusal, in_app_warning, sentence};
+use crate::present::words::{in_app_given_up, in_app_refusal, in_app_warning, sentence, typeset};
 use crate::{
     Abandoned, Account, Awaiting, FoundCommandLine, Level, Limit, Parked, Schedule, Status, Tool,
     Usage, Warning, found_command_line, tool,
@@ -340,7 +340,7 @@ fn account(row: status::Row, now: i64) -> Account {
         standing: row.standing(now),
         stale: row.stale,
         // In the row's own tool's words: a Codex row is not about Anthropic.
-        stale_explanation: row.explanation(),
+        stale_explanation: row.explanation().map(|said| typeset(&said)),
         plan: row.plan,
         read_at: row.read_at,
         parked: row.parked.map(|p| Parked {
@@ -1281,15 +1281,13 @@ mod tests {
             let PitboardError::Failed { message, .. } = error.into();
             message
         };
-        assert_eq!(
-            said(Error::ScheduleRefused {
-                detail: "access denied".into()
-            }),
-            "The scheduler refused: access denied."
-        );
+        let refused = || Error::ScheduleRefused {
+            detail: "access denied".into(),
+        };
+        assert_eq!(said(refused()), sentence(&refused().to_string()));
         assert_eq!(
             said(Error::SignInIncomplete),
-            "The sign-in did not finish, so nothing was enrolled."
+            sentence(&Error::SignInIncomplete.to_string())
         );
         let PitboardError::Failed {
             message, warnings, ..
@@ -1299,14 +1297,10 @@ mod tests {
             said_first: 0,
         }
         .into();
-        assert_eq!(
-            message,
-            "The sign-in did not finish, so nothing was enrolled."
-        );
+        assert_eq!(message, sentence(&Error::SignInIncomplete.to_string()));
         assert_eq!(
             warnings[0].message,
-            "2 parked login(s) no longer in use could not be removed yet; Pitboard tries again \
-             on its next change."
+            sentence(&service::Warning::ParksPendingRemoval(2).to_string())
         );
     }
 

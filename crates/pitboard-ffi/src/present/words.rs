@@ -3,7 +3,8 @@
 //! a format string a view fills in, so each can read a translation later by its name.
 //!
 //! What the command line says too is not here but there, and called from here: a limit's
-//! names, a reset, a pace, a parked login's life.
+//! names, a reset, a pace, a parked login's life. Each of its sentences an app shows passes
+//! `typeset` first.
 
 use crate::model::Sheet;
 use crate::model::state::{Recording, in_its_app};
@@ -230,10 +231,7 @@ pub(crate) fn pace_help(pace: &Pace) -> String {
 
 // The tool is named in the title above it.
 pub(crate) fn follows(adoption: &pitboard_core::provider::Adoption) -> String {
-    format!(
-        "{}.",
-        pitboard_core::words::after_a_switch(adoption, "Sessions")
-    )
+    sentence(&pitboard_core::words::after_a_switch(adoption, "Sessions"))
 }
 
 /// What a switch means for sessions of a tool that never picks one up by itself. Said of any
@@ -448,7 +446,10 @@ pub(crate) const SWITCH: &str = "Switch";
 /// limit the account it would leave has used, "work has used 96% of its 5-hour limit.", then
 /// what came of it.
 pub(crate) fn used_then(account: &str, used: &str, then: &str) -> String {
-    format!("{}. {then}", pitboard_core::words::has_used(account, used))
+    format!(
+        "{}. {then}",
+        typeset(&pitboard_core::words::has_used(account, used))
+    )
 }
 
 pub(crate) const NOT_SWITCHED: &str = "Claude Code was not switched";
@@ -697,13 +698,99 @@ pub(crate) fn check_name(code: &str, name: &str) -> String {
 }
 
 pub(crate) fn check_text(text: &str) -> String {
-    prose_capitalised(text).replace('`', "")
+    typeset(&prose_capitalised(text))
+}
+
+/// The core's words as the apps write them, where the command line keeps its own: each
+/// apostrophe curled and each "not" the apps contract contracted, as Apple's and Microsoft's
+/// style both write an app's text, and no backticks. What is in backticks, a name, a path or a
+/// command, keeps every letter. Every sentence of the core's an app shows passes through here.
+pub(crate) fn typeset(core: &str) -> String {
+    let mut said = String::with_capacity(core.len());
+    for (at, part) in core.split('`').enumerate() {
+        if at % 2 == 1 {
+            said.push_str(part);
+        } else {
+            let before = said.chars().next_back();
+            said.push_str(&contracted(&curled(part, before)));
+        }
+    }
+    said
+}
+
+// Only an apostrophe that ends a word, or starts its "s" or a contraction's end: not one inside
+// a name, such as o'brien@example.com's first.
+fn curled(text: &str, before: Option<char>) -> String {
+    let chars: Vec<char> = text.chars().collect();
+    let mut curled = String::with_capacity(text.len());
+    for (at, &c) in chars.iter().enumerate() {
+        if c != '\'' {
+            curled.push(c);
+            continue;
+        }
+        let previous = at.checked_sub(1).map(|at| chars[at]).or(before);
+        let after: String = (chars[at + 1..].iter())
+            .take_while(|c| c.is_alphanumeric())
+            .collect();
+        let apostrophe = match after.as_str() {
+            "s" => previous.is_some_and(|c| !c.is_whitespace()),
+            "" => previous == Some('s'),
+            "t" => previous == Some('n'),
+            "re" | "ve" | "ll" | "d" | "m" => previous.is_some_and(char::is_alphabetic),
+            _ => false,
+        };
+        curled.push(if apostrophe { '’' } else { c });
+    }
+    curled
+}
+
+// The ones the apps' own words use.
+const CONTRACTIONS: [(&str, &str); 10] = [
+    ("cannot", "can’t"),
+    ("could not", "couldn’t"),
+    ("is not", "isn’t"),
+    ("does not", "doesn’t"),
+    ("did not", "didn’t"),
+    ("do not", "don’t"),
+    ("has not", "hasn’t"),
+    ("have not", "haven’t"),
+    ("had not", "hadn’t"),
+    ("was not", "wasn’t"),
+];
+
+fn contracted(text: &str) -> String {
+    let mut contracted = String::with_capacity(text.len());
+    let mut rest = text;
+    let mut starts_word = true;
+    while let Some(c) = rest.chars().next() {
+        let whole = |long: &str| {
+            rest.get(..long.len())
+                .is_some_and(|head| head.eq_ignore_ascii_case(long))
+                && !rest[long.len()..].starts_with(char::is_alphanumeric)
+        };
+        if starts_word
+            && let Some((long, short)) = CONTRACTIONS.iter().find(|(long, _)| whole(long))
+        {
+            contracted.push_str(&if c.is_uppercase() {
+                capitalised(short)
+            } else {
+                (*short).to_owned()
+            });
+            rest = &rest[long.len()..];
+            starts_word = false;
+            continue;
+        }
+        contracted.push(c);
+        starts_word = !c.is_alphanumeric() && !matches!(c, '\'' | '’');
+        rest = &rest[c.len_utf8()..];
+    }
+    contracted
 }
 
 // The command line prints the core's words after "error:"; an app shows them on their own,
 // without a terminal's backticks.
 pub(crate) fn sentence(text: &str) -> String {
-    let text = prose_capitalised(text).replace('`', "");
+    let text = typeset(&prose_capitalised(text));
     if text.is_empty() || text.ends_with(['.', '!', '?', '…']) {
         text
     } else {
@@ -874,7 +961,7 @@ pub(crate) fn still_open(app: &str, again: &str) -> String {
 pub(crate) fn part_still_running(os: Os, app: &str, again: &str) -> String {
     format!(
         "Part of {app} is still running after it quit, so nothing has changed. {}",
-        pitboard_core::words::wait_for_still(os, again)
+        typeset(&pitboard_core::words::wait_for_still(os, again))
     )
 }
 
@@ -1302,7 +1389,7 @@ pub(crate) fn in_app_refusal(os: Os, error: &Error) -> Option<String> {
     let app = desktop.program();
     let inside = |tool: &ProviderId| in_its_app(tool.code());
     let inside_label = |label: &str| in_its_app(Key::parse(label).provider.code());
-    Some(match error {
+    let said = match error {
         Error::AppOpen { app, still } if still.is_empty() => format!(
             "{app} is open, and Pitboard changes its login only while it is closed. Quit {app}, \
              then try again. Nothing has changed."
@@ -1551,7 +1638,8 @@ pub(crate) fn in_app_refusal(os: Os, error: &Error) -> Option<String> {
             bare(label)
         ),
         _ => return None,
-    })
+    };
+    Some(typeset(&said))
 }
 
 // Its notice offers to sign in again, so the words name no command.
@@ -1579,7 +1667,7 @@ pub(crate) fn in_app_warning(os: Os, warning: &CoreWarning) -> Option<String> {
     } = warning
         && !in_its_app(tool.code())
     {
-        return Some(replaced(*tool, label, now));
+        return Some(typeset(&replaced(*tool, label, now)));
     }
     let tool = warning.tool().filter(|tool| in_its_app(tool.code()))?;
     let app = tool.program();
@@ -1593,7 +1681,7 @@ pub(crate) fn in_app_warning(os: Os, warning: &CoreWarning) -> Option<String> {
             pitboard_core::words::desktop_named(named, last, stored)
         )
     };
-    Some(match warning {
+    let said = match warning {
         CoreWarning::InUseUnconfirmed {
             named: by, last, ..
         } => named(by, last),
@@ -1684,7 +1772,8 @@ pub(crate) fn in_app_warning(os: Os, warning: &CoreWarning) -> Option<String> {
         } => awaiting_lines(app, &bare(label), &bare(put_back), *again).join(" "),
         CoreWarning::MoveNotGivenUp { label, why, .. } => not_given_up(os, tool, &bare(label), why),
         _ => return None,
-    })
+    };
+    Some(typeset(&said))
 }
 
 // After Give Up gave up a switch, so never that nothing has changed.
@@ -1711,8 +1800,8 @@ fn not_given_up(os: Os, tool: ProviderId, label: &str, why: &Error) -> String {
     };
     match because {
         Some(because) => format!(
-            "Pitboard didn’t give up the interrupted move of {label}’s login, because {}. {then}",
-            because.replace('`', "")
+            "Pitboard didn’t give up the interrupted move of {label}’s login, because {because}. \
+             {then}"
         ),
         None => {
             format!("Pitboard couldn’t give up the interrupted move of {label}’s login. {then}")
@@ -1722,15 +1811,14 @@ fn not_given_up(os: Os, tool: ProviderId, label: &str, why: &Error) -> String {
 
 pub(crate) fn in_app_given_up(given_up: &pitboard_core::switch::GivenUp) -> String {
     let app = given_up.tool.program();
-    pitboard_core::words::given_up(
+    typeset(&pitboard_core::words::given_up(
         given_up,
         &bare(&given_up.label),
         &format!(
             "choose Add Account… and Add the Account {app} Shows for the account {app} shows, or \
              Use on an account where {app} is signed out."
         ),
-    )
-    .replace('`', "")
+    ))
 }
 
 #[cfg(test)]
@@ -1787,7 +1875,7 @@ mod tests {
         );
         assert_eq!(
             sentence("the sign-in did not finish, so nothing was enrolled."),
-            "The sign-in did not finish, so nothing was enrolled."
+            "The sign-in didn’t finish, so nothing was enrolled."
         );
         assert_eq!(
             sentence("/Users/dana/Dropbox looks like it is inside Dropbox"),
@@ -1803,10 +1891,45 @@ mod tests {
         );
         assert_eq!(
             sentence("2 parked login(s) could not be removed yet"),
-            "2 parked login(s) could not be removed yet."
+            "2 parked login(s) couldn’t be removed yet."
+        );
+        assert_eq!(
+            sentence("could not read Pitboard's account list at `/Users/o'neill/.pitboard`"),
+            "Couldn’t read Pitboard’s account list at /Users/o'neill/.pitboard."
         );
         assert_eq!(sentence("Is it there?"), "Is it there?");
         assert_eq!(sentence(""), "");
+    }
+
+    // Apple's and Microsoft's style both curl an apostrophe and contract a "not" in an app's
+    // text; the command line keeps the core's own.
+    #[test]
+    fn the_cores_words_take_the_apps_typography() {
+        assert_eq!(
+            typeset("Claude Code's login is no longer accepted; run `claude` and sign in again"),
+            "Claude Code’s login is no longer accepted; run claude and sign in again"
+        );
+        assert_eq!(
+            typeset("`desktop/work`'s parked login, the accounts' logins"),
+            "desktop/work’s parked login, the accounts’ logins"
+        );
+        assert_eq!(
+            typeset(
+                "Cannot read it: it is not there, does not answer, did not finish, has not \
+                 started, was not read, had not been, and could not be. Do not run it."
+            ),
+            "Can’t read it: it isn’t there, doesn’t answer, didn’t finish, hasn’t started, \
+             wasn’t read, hadn’t been, and couldn’t be. Don’t run it."
+        );
+        assert_eq!(
+            typeset("o'brien@example.com's login, this nothing, `it is not` here"),
+            "o'brien@example.com’s login, this nothing, it is not here"
+        );
+        assert_eq!(
+            typeset("whether or not it will not, would not or must not"),
+            "whether or not it will not, would not or must not"
+        );
+        assert_eq!(typeset(""), "");
     }
 
     /// VoiceOver reads the column's "30m" as thirty meters and "5h" as letters, so a limit
@@ -2990,7 +3113,7 @@ mod tests {
             )
             .as_deref(),
             Some(
-                "The parked login for home is not the one Pitboard recorded (it was parked on \
+                "The parked login for home isn’t the one Pitboard recorded (it was parked on \
                  another Mac). Choose Sign In Again… on home’s row."
             )
         );
@@ -3042,8 +3165,8 @@ mod tests {
         assert_eq!(
             in_app_refusal(Os::MacOs, &refused).as_deref(),
             Some(
-                "Anthropic no longer accepts Claude Code's login in use (its login has expired \
-                 and cannot be renewed), so putting work's login in its place loses nothing."
+                "Anthropic no longer accepts Claude Code’s login in use (its login has expired \
+                 and can’t be renewed), so putting work’s login in its place loses nothing."
             )
         );
     }
@@ -3059,7 +3182,7 @@ mod tests {
         assert_eq!(
             in_app_warning(Os::MacOs, &unconfirmed).as_deref(),
             Some(
-                "Claude's settings have named an account you haven’t added since Pitboard last \
+                "Claude’s settings have named an account you haven’t added since Pitboard last \
                  read work in use, so Claude may hold another login. Open Claude, check which \
                  account it shows, quit it, then choose Add the Account Claude Shows."
             )
@@ -3138,8 +3261,8 @@ mod tests {
                 },
             )
             .expect("the app's words"),
-            "Pitboard didn’t give up the interrupted move of work’s login, because work's \
-             parked login at /Users/me/.pitboard/parks/a1 could not be looked at (permission \
+            "Pitboard didn’t give up the interrupted move of work’s login, because work’s \
+             parked login at /Users/me/.pitboard/parks/a1 couldn’t be looked at (permission \
              denied). Make that path, and each folder it is in, readable to you, then use any \
              Claude Desktop account: Pitboard settles the move first."
         );
@@ -3157,9 +3280,9 @@ mod tests {
         };
         assert_eq!(
             in_app_given_up(&given_up),
-            "Pitboard gave up the move of work's login and kept every folder: 1 parked, 0 set \
-             aside. The move was in /Volumes/Old/Claude, which Pitboard did not read. Session \
-             Storage stays in Claude's folder. Open Claude once and quit it with Command-Q, then \
+            "Pitboard gave up the move of work’s login and kept every folder: 1 parked, 0 set \
+             aside. The move was in /Volumes/Old/Claude, which Pitboard didn’t read. Session \
+             Storage stays in Claude’s folder. Open Claude once and quit it with Command-Q, then \
              choose Add Account… and Add the Account Claude Shows for the account Claude shows, \
              or Use on an account where Claude is signed out."
         );

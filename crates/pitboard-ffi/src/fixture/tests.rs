@@ -1002,9 +1002,16 @@ fn a_stopped_move_is_given_up_from_the_app() {
         .find(|notice| notice.id == "moves_given_up")
         .expect("its notice");
     assert_eq!(notice.title, words::GAVE_UP_ON_MOVE);
-    assert!(
-        notice.lines[0].starts_with("Pitboard gave up the move of work's login"),
-        "{notice:?}"
+    assert_eq!(
+        notice.lines,
+        [words::in_app_given_up(&pitboard_core::switch::GivenUp {
+            tool: ProviderId::Desktop,
+            label: "desktop/work".into(),
+            parked: 1,
+            set_aside: 0,
+            left: Vec::new(),
+            slot: None,
+        })]
     );
     assert!(!launched.core.moving("desktop"), "nothing waits");
 }
@@ -1568,10 +1575,10 @@ fn a_failed_read_is_said_in_the_menu_and_in_the_window() {
     else {
         unreachable!("waited for")
     };
-    assert!(
-        failure.starts_with("Could not read Pitboard's account list at "),
-        "{failure:?}"
-    );
+    let Err(PitboardError::Failed { code, message, .. }) = launched.core.status(true) else {
+        panic!("the core's read fails too");
+    };
+    assert_eq!((code.as_str(), &failure), ("state_unreadable", &message));
 
     let item = shown.menu_notices.others.expect("an item");
     assert_eq!(item.title, words::COULD_NOT_READ_USAGE);
@@ -1640,8 +1647,7 @@ fn a_service_out_of_reach_leaves_the_last_numbers_and_says_why_on_each_account()
     assert_eq!(items.len(), 2);
     for item in items {
         assert_eq!(
-            item.stale_note.as_deref(),
-            Some("Anthropic could not be reached"),
+            item.stale_note, fresh.accounts[0].stale_explanation,
             "{item:?}"
         );
         assert!(!item.limits.is_empty(), "the last numbers measured");

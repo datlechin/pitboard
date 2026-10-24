@@ -82,7 +82,7 @@ final class MenuBarTests: FixtureTestCase {
         item.click()
         XCTAssertTrue(app.staticTexts["Couldn’t Read Accounts"].waitForExistence(timeout: 5))
         XCTAssertTrue(
-            app.text("BEGINSWITH", "Could not read Pitboard's account list at ").exists)
+            app.text("BEGINSWITH", "Couldn’t read Pitboard’s account list at ").exists)
         XCTAssertTrue(app.buttons["Try Again"].exists)
         XCTAssertFalse(app.accountRow("claude/work").exists)
     }

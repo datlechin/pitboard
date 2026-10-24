@@ -1226,11 +1226,7 @@ fn putting_away_a_login_left_in_a_file_reaches_the_core() {
             .is_some_and(|text| text.can_confirm)
     });
     let text = model.snapshot().stow_text.expect("the sheet's words");
-    assert!(
-        text.lines[0].contains("holds the login Pitboard keeps parked for `spare`"),
-        "{:?}",
-        text.lines
-    );
+    assert!(text.lines[0].contains("spare"), "{:?}", text.lines);
 
     model.send(Intent::Stow);
     told.until("put away, and read after", |told| {

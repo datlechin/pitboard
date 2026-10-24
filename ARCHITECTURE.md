@@ -616,7 +616,10 @@ window loads its site, and whatever the site's pages load, as a browser would.
     downloads an app has under way, and `words.rs` the sentences both apps say and the
     command line does not, each a function of typed values. What the command line says too
     is `pitboard_core::words`', called from there, such as a renewal's note and doctor's
-    summary. A clock time, and a change's date
+    summary, and each such sentence, and each error and warning without words of the app's
+    own, passes `words::typeset`, which curls its apostrophes, contracts the "not"s the apps
+    contract and drops its backticks, as Apple's and Microsoft's style both write an app's
+    text. A clock time, and a change's date
     and time, are the person's to read, so they are asked of the app's `LocalTime`.
     A button the snapshot offers comes with its words beside the intent it sends, and with
     whether it can be pressed now where it can be held back, so a view never words an

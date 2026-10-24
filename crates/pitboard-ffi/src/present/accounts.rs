@@ -239,7 +239,8 @@ pub(crate) fn item(seen: &Seen, account: &Account) -> AccountItem {
     } else {
         let parked = account.parked.as_ref();
         let life = said::parked_life(parked.and_then(|p| p.refresh_expires_at), seen.now)
-            .or_else(|| said::session_life(parked.and_then(|p| p.session_expires_at), seen.now));
+            .or_else(|| said::session_life(parked.and_then(|p| p.session_expires_at), seen.now))
+            .map(|life| words::typeset(&life));
         match account.standing {
             status::Standing::Expiring => life.map(|life| words::sign_in_to_keep(&life)),
             _ => life,
@@ -247,7 +248,10 @@ pub(crate) fn item(seen: &Seen, account: &Account) -> AccountItem {
     };
     let pace = runs_out_first(account, seen.now).map(|(limit, in_seconds)| {
         let windows = account.usage.as_ref().map_or(&[][..], |u| &u.windows);
-        said::capitalised(&said::runs_out(&scoped_name(&windows[limit]), in_seconds))
+        words::typeset(&said::capitalised(&said::runs_out(
+            &scoped_name(&windows[limit]),
+            in_seconds,
+        )))
     });
     let in_place_of_limits = in_place_of_limits(seen, account);
     let figure = headline(account.usage.as_ref().map_or(&[], |usage| &usage.windows))
@@ -415,8 +419,8 @@ fn warm_note(seen: &Seen, account: &Account) -> Option<String> {
     }
     let standing = choice.standing.as_ref()?;
     let clock = |at| seen.clock(at);
-    Some(said::capitalised(&pitboard_core::words::warm_standing(
-        standing, &clock,
+    Some(words::typeset(&said::capitalised(
+        &pitboard_core::words::warm_standing(standing, &clock),
     )))
 }
 

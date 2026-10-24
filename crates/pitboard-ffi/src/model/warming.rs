@@ -361,11 +361,8 @@ fn a_setting_that_cannot_be_read_is_said_and_a_change_to_it_refused() {
     machine.warm_refused = Some(refusal("warm_setting_corrupt", message, Vec::new()));
     let mut model = started(&mut machine);
     assert_eq!(
-        model.shown().machine.warm.standing.as_deref(),
-        Some(
-            "Which accounts Pitboard warms up, at /home/warm.json, cannot be read (expected \
-             value). Delete it, then turn warm-up on again for each account you want it for."
-        )
+        model.shown().machine.warm.standing,
+        Some(pitboard_core::words::capitalised(message))
     );
     model.send(Intent::SetWarm {
         qualified: "claude/personal".into(),
@@ -452,9 +449,9 @@ fn a_halt_is_said_under_the_setting() {
     machine.warming = Ok(WarmUp::Stands(Box::new(halted)));
     let model = started(&mut machine);
     assert_eq!(
-        model.shown().machine.warm.standing.as_deref(),
-        Some(
-            "Pitboard is not warming up accounts: Claude Code is not installed where Pitboard looks."
-        )
+        model.shown().machine.warm.standing,
+        Some(words::typeset(&pitboard_core::words::warming_halted(
+            &Halt::ProgramMissing
+        )))
     );
 }

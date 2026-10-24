@@ -319,7 +319,10 @@ pub(crate) fn notices(seen: &Seen, footing: &Footing) -> Vec<PanelNotice> {
             "stowed".into(),
             Severity::Info,
             words::STOWED.into(),
-            said::stowed_lines(seen.os, stowed),
+            said::stowed_lines(seen.os, stowed)
+                .iter()
+                .map(|line| words::typeset(line))
+                .collect(),
             vec![dismiss(Intent::DismissStowed)],
         ));
     }
@@ -560,14 +563,14 @@ pub(crate) fn at_limit_notice(heads_up: &HeadsUp, now: i64) -> RunOutNotice {
             &said::limit_name(&limit.kind, limit.length_seconds),
         )
     } else {
-        said::has_used(
+        words::typeset(&said::has_used(
             &heads_up.ran,
             &said::share_of_limit(&crate::model::advice::window(limit)),
-        )
+        ))
     };
     let body = match (&heads_up.instead, limit.resets_at) {
         (Some((instead, left, _)), _) => words::room_left(instead, *left),
-        (None, Some(at)) => format!("{}.", said::capitalised(&said::resets(at, now))),
+        (None, Some(at)) => words::sentence(&said::resets(at, now)),
         (None, None) => String::new(),
     };
     RunOutNotice {
@@ -610,7 +613,7 @@ pub(crate) fn auto_skipped_notice(key: &str, from: &str, used: &str, why: &str) 
     posted(
         format!("auto-{key}"),
         words::NOT_SWITCHED.into(),
-        words::used_then(from, used, &format!("{}.", said::capitalised(why))),
+        words::used_then(from, used, &words::sentence(why)),
         &Clicked::Limits,
     )
 }
@@ -621,7 +624,7 @@ pub(crate) fn auto_not_watching_notice(key: &str, why: &str) -> RunOutNotice {
     posted(
         format!("auto-{key}"),
         words::NOT_SWITCHING.into(),
-        format!("{}.", said::capitalised(why)),
+        words::sentence(why),
         &Clicked::Limits,
     )
 }

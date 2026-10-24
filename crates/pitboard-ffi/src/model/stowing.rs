@@ -12,9 +12,15 @@ use crate::present::words;
 use pitboard_core::host::{OS, Os};
 use pitboard_core::provider::Owner;
 use pitboard_core::switch::{Foreseen, Kept, Left, Stowed};
+use pitboard_core::words as said;
 use std::path::PathBuf;
 
 const FILE: &str = "/Users/dana/.claude/.credentials.json";
+
+// The core's lines, as the app writes them.
+fn typeset(lines: Vec<String>) -> Vec<String> {
+    lines.iter().map(|line| words::typeset(line)).collect()
+}
 
 /// The warning every read gives while the file is behind the keychain, holding `held`.
 fn fallback_login(held: Held) -> crate::Warning {
@@ -126,32 +132,17 @@ fn the_sheet_says_whose_the_login_is_once_it_is_known() {
     assert_eq!(text.looking, None);
     assert!(text.can_confirm);
     assert!(!text.saving);
-    assert_eq!(
-        text.lines,
-        [
-            format!(
-                "{FILE} holds `work`'s login, and Pitboard holds no parked login of `work` to \
-                 keep in its place. Putting it away parks this one for `work`, then deletes \
-                 the file."
-            ),
-            "It also holds 1 other key, `mcpOAuth`, which goes with the file: Pitboard does not \
-             move it, and Claude Code's document in the keychain keeps its own."
-                .to_string(),
-            "Once the file is gone, Claude Code sessions already running follow a switch \
-             within 33 seconds again, and one that signed in with its login, such as one over \
-             SSH, is signed out."
-                .to_string(),
-        ]
-    );
+    let lines = |os| {
+        typeset(said::left_lines(
+            os,
+            &left(Foreseen::Kept(parked_now("work"))),
+        ))
+    };
+    assert_eq!(text.lines, lines(Os::MacOs));
     assert_eq!(text.message, words::stow_message(Os::MacOs));
     let text = model.on_windows().stow_text.expect("the sheet's words");
     assert_eq!(text.message, words::stow_message(Os::Windows));
-    assert!(
-        text.lines[1].ends_with("Claude Code's document in Credential Manager keeps its own.")
-            && text.lines[2].contains("such as one in a sign-in over SSH with a key"),
-        "{:?}",
-        text.lines
-    );
+    assert_eq!(text.lines, lines(Os::Windows));
 }
 
 /// Put Away sends what the sheet showed, which is put away only while the file still holds
@@ -165,11 +156,12 @@ fn putting_away_sends_what_the_sheet_showed_and_says_what_it_did() {
     model.send(stow_sheet());
     model.run(&mut machine);
     machine.answer = Ok(warned(vec![claude("work", true, 10.0)], Vec::new()));
-    machine.stowing = Ok(Stowed {
+    let stowed = Stowed {
         path: PathBuf::from(FILE),
         kept: parked_now("work"),
         dropped: vec!["mcpOAuth".into()],
-    });
+    };
+    machine.stowing = Ok(stowed.clone());
 
     model.send(Intent::Stow);
     assert!(model.shown().stow_text.expect("still up").saving);
@@ -187,10 +179,7 @@ fn putting_away_sends_what_the_sheet_showed_and_says_what_it_did() {
         .expect("what it did");
     assert_eq!(notice.severity, Severity::Info);
     assert_eq!(notice.title, words::STOWED);
-    assert_eq!(
-        notice.lines[0],
-        format!("Parked the login {FILE} held for `work`, then deleted the file.")
-    );
+    assert_eq!(notice.lines, typeset(said::stowed_lines(OS, &stowed)));
     assert!(
         shown
             .notices

@@ -12,6 +12,7 @@ use super::{AtLimit, Intent, RunOutNotice};
 use crate::present::testing::{LimitExt, account, window};
 use crate::present::words;
 use crate::{Account, Adoption, AutoLooked, AutoSwitched, Status};
+use pitboard_core::words as said;
 use std::time::Duration;
 
 /// `work`, in use, its five-hour limit `percent` used.
@@ -233,19 +234,27 @@ fn the_settings_say_which_account_it_watches_and_how_old_its_reading_is() {
     };
     machine.look = watching(None);
     model.refresh(&mut machine);
+    let used = "62% of its 5-hour limit";
     assert_eq!(
-        standing(&model).as_deref(),
-        Some("Watching work: 62% of its 5-hour limit, as of 07:40.")
+        standing(&model),
+        Some(words::typeset(&said::watching(
+            "work",
+            Some(used),
+            Some("07:40"),
+            None
+        )))
     );
 
     machine.look = watching(Some(now + 3_600));
     model.refresh(&mut machine);
     assert_eq!(
-        standing(&model).as_deref(),
-        Some(
-            "Watching work: 62% of its 5-hour limit, as of 07:40. Anthropic holds Pitboard off \
-             asking again until 09:00."
-        )
+        standing(&model),
+        Some(words::typeset(&said::watching(
+            "work",
+            Some(used),
+            Some("07:40"),
+            Some("09:00")
+        )))
     );
 
     model.send(Intent::SetAtLimit {
@@ -278,7 +287,11 @@ fn the_settings_say_why_it_is_not_switching() {
                 until: now + 60,
             }
         ),
-        "work has used 97% of its 5-hour limit. Pitboard tries again at 08:01."
+        words::typeset(&said::auto_waiting(
+            "work",
+            "97% of its 5-hour limit",
+            "08:01"
+        ))
     );
     assert_eq!(
         says(
@@ -292,8 +305,12 @@ fn the_settings_say_why_it_is_not_switching() {
                 until: Some(now + 300),
             }
         ),
-        "work has used 97% of its 5-hour limit. Pitboard is not switching: the account was put \
-         in use less than 5 minutes ago. It decides again at 08:05."
+        words::typeset(&said::auto_skipped(
+            "work",
+            "97% of its 5-hour limit",
+            "the account was put in use less than 5 minutes ago",
+            Some("08:05")
+        ))
     );
     assert_eq!(
         says(
@@ -307,8 +324,10 @@ fn the_settings_say_why_it_is_not_switching() {
                 until: Some(now + 60),
             }
         ),
-        "Pitboard is not switching Claude Code: whose login Claude Code has stored could not be \
-         told (could not reach Anthropic). It asks again at 08:01."
+        words::typeset(&said::auto_not_watching(
+            "whose login Claude Code has stored could not be told (could not reach Anthropic)",
+            Some("08:01")
+        ))
     );
     assert_eq!(
         says(
@@ -322,7 +341,11 @@ fn the_settings_say_why_it_is_not_switching() {
                 used: "97% of its 5-hour limit".into(),
             }
         ),
-        "Switched Claude Code from work to personal: work has used 97% of its 5-hour limit.",
+        words::typeset(&said::auto_switched(
+            "work",
+            "personal",
+            "97% of its 5-hour limit"
+        )),
         "as `pitboard watch` says it"
     );
 

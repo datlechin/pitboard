@@ -309,9 +309,12 @@ pub(crate) fn stow_text(seen: &Seen) -> Option<StowText> {
             (Vec::new(), Some(words::FINDING_OUT_WHOSE.to_owned()), false)
         }
         Some(Leftover::Unknown) => (Vec::new(), None, false),
-        Some(Leftover::Found(None)) => (vec![said::nothing_left().to_owned()], None, false),
+        Some(Leftover::Found(None)) => (vec![words::typeset(said::nothing_left())], None, false),
         Some(Leftover::Found(Some(left))) => (
-            said::left_lines(seen.os, left),
+            said::left_lines(seen.os, left)
+                .iter()
+                .map(|line| words::typeset(line))
+                .collect(),
             None,
             !saving && !matches!(left.login, Foreseen::NotEnrolled(_)),
         ),

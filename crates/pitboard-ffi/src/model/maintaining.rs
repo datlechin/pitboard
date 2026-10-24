@@ -12,7 +12,7 @@ use super::testing::machine::{Hand, Stub};
 use super::testing::records::{PLIST, change, check, claude, refusal, status, warned, warning};
 use super::{Intent, Pane};
 use crate::present::testing::Utc;
-use crate::present::{CheckLine, MachineShown, present_on};
+use crate::present::{CheckLine, MachineShown, present_on, words};
 use crate::{FoundCommandLine, Level, OwnCommandLine, Schedule, Warning};
 use pitboard_core::host::Os;
 use std::time::Duration;
@@ -468,7 +468,9 @@ fn doctors_checks_are_shown_with_when_they_were_made() {
                 level: Level::Warn,
                 spoken_level: "Worth looking at".into(),
                 detail: "Not scheduled".into(),
-                advice: Some("Turn on daily renewal in Pitboard's settings.".into()),
+                advice: Some(words::check_text(
+                    "Turn on daily renewal in Pitboard's settings."
+                )),
             },
         ]
     );
@@ -505,8 +507,10 @@ fn doctors_checks_are_shown_with_when_they_were_made() {
         Some("Unlock the login keychain.")
     );
     assert_eq!(
-        checks.summary.as_deref(),
-        Some("1 broken: do not switch accounts until fixed.")
+        checks.summary,
+        Some(words::typeset(&pitboard_core::words::doctor_summary([
+            pitboard_core::doctor::Level::Fail
+        ])))
     );
     assert_eq!(checks.checked.as_deref(), Some("Checked at 08:05"));
     assert_eq!(machine.doctor_asks, 2);
