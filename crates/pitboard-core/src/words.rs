@@ -9,9 +9,10 @@
 //! All of it is English. Clock times are not here: the command line writes them with
 //! `time::moment`, and the app in the format its Mac is set to.
 
-use crate::doctor::{Level, renewal_due};
+use crate::doctor::Level;
 use crate::host::{Os, WINDOWS_FLOOR, token};
 use crate::schedule::Job;
+use crate::state::renewal_due;
 use crate::time::{DAY, HOUR, MINUTE, WEEK};
 use crate::usage::pace::{Pace, Standing};
 use crate::usage::whole;
@@ -2153,7 +2154,7 @@ mod tests {
     /// to the minute, and from the moment it is due to be renewed, that it expires.
     #[test]
     fn a_parked_logins_life_in_a_column_says_when_it_expires() {
-        use crate::doctor::RENEW_WITHIN;
+        use crate::state::RENEW_WITHIN;
         const NOW: i64 = 1_789_935_000;
         let life = |left: i64| parked_life_column(NOW + left, NOW);
         assert_eq!(life(20 * 86_400), "good for 20d 0h");

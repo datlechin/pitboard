@@ -70,7 +70,7 @@ impl Due {
                 access_lapsed
                     || held
                         .refresh_expires_at
-                        .is_some_and(|at| crate::doctor::renewal_due(at, now))
+                        .is_some_and(|at| state::renewal_due(at, now))
             }
         }
     }

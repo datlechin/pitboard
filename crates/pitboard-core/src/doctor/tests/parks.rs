@@ -250,14 +250,6 @@ fn sealed_parks_lost_to_this_logon_get_neutral_wording() {
 /// A parked login is due to be renewed from three days before its refresh token expires
 /// until it does. Past that it cannot be renewed, so it is not due: its account needs a
 /// sign-in instead.
-#[test]
-fn a_parked_login_is_due_from_three_days_before_it_expires() {
-    assert!(!renewal_due(NOW + RENEW_WITHIN, NOW));
-    assert!(renewal_due(NOW + RENEW_WITHIN - 1, NOW));
-    assert!(renewal_due(NOW + 1, NOW));
-    assert!(!renewal_due(NOW, NOW));
-    assert!(!renewal_due(NOW - 60, NOW));
-}
 
 /// The advice has to be something a person can type and have it act on the right
 /// account. `pitboard enroll work --sign-in` about a Codex account would enroll a

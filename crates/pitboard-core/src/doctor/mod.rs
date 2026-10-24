@@ -31,6 +31,7 @@ use crate::provider::claude::live as claude_live;
 use crate::provider::claude::paths as claude_paths;
 use crate::provider::claude::{daemon, slot};
 use crate::state::State;
+pub use crate::state::renewal_due;
 use crate::{home, store, switch};
 use claude::FallbackLogin;
 use codex::CodexFacts;
@@ -473,19 +474,6 @@ fn account_code(
         ProviderId::Codex => codex,
         ProviderId::Desktop => desktop,
     }
-}
-
-/// A parked login this close to expiring is worth renewing now.
-pub(crate) const RENEW_WITHIN: i64 = 3 * 86_400;
-
-/// Whether a parked login is due to be renewed by when its refresh token expires, at
-/// `refresh_expires_at`: within `RENEW_WITHIN`, and not yet. One that has expired cannot
-/// be renewed, and its account needs a sign-in. A renewal run, doctor's parked login check,
-/// the standing `pitboard status` gives an account and the column form of a parked login's
-/// life all ask this, so they agree on when a login is due. A run also renews a login whose
-/// access token has lapsed, which `switch::renew` decides.
-pub fn renewal_due(refresh_expires_at: i64, now: i64) -> bool {
-    (1..RENEW_WITHIN).contains(&(refresh_expires_at - now))
 }
 
 fn read_from(tool: ProviderId, os: Os) -> &'static str {

@@ -1,11 +1,11 @@
-use super::{Check, Facts, fail, ok, read_from, renewal_due, warn};
+use super::{Check, Facts, fail, ok, read_from, warn};
 use crate::context::Context;
 use crate::error::Error;
 use crate::host::Os;
 use crate::provider::claude::live as claude_live;
 use crate::provider::{LoginKind, ProviderId};
 use crate::service::Stored;
-use crate::state::State;
+use crate::state::{State, renewal_due};
 use crate::{store, words};
 use serde_json::Value;
 use std::path::PathBuf;

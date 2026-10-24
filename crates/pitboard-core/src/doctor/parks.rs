@@ -1,8 +1,8 @@
-use super::{Check, Facts, account_code, fail, ok, renewal_due, running, warn};
+use super::{Check, Facts, account_code, fail, ok, running, warn};
 use crate::context::Context;
 use crate::error::Error;
 use crate::provider::{LoginKind, ProviderId};
-use crate::state::{Park, State};
+use crate::state::{Park, State, renewal_due};
 use crate::{park, store, words};
 
 pub(crate) struct ParkFact {
