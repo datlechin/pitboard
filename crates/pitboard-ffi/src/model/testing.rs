@@ -22,14 +22,15 @@ use pitboard_core::switch::warm::Apart;
 use pitboard_core::switch::{Left, Stowed};
 use pitboard_core::testing::desktop::{self, FakeClaude, JarAs};
 use pitboard_core::testing::{
-    MemoryHost, ScratchMachine, ScriptedApi, live_service, stand_in, unsigned_token,
+    Clock, FixedClock, MemoryHost, ScratchMachine, ScriptedApi, live_service, stand_in,
+    unsigned_token,
 };
 use std::collections::{BTreeSet, HashMap, VecDeque};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::mpsc::{Receiver, Sender, channel};
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime};
 
 /// A control's words as this system writes them, title case on a Mac and sentence case on
 /// Windows, for a test of what `shown` says.
@@ -56,6 +57,9 @@ pub(super) fn codex() -> Tool {
 pub(super) use crate::present::testing::{
     awaiting, claude_desktop, desktop_account, desktop_warning,
 };
+
+// The time every world's core stands at, as the core's switch harness pins its own.
+const NOW: i64 = 1_760_000_000;
 
 // Claude's bundle id, which is how the core's holder detection names it.
 pub(super) const CLAUDE: &str = "com.anthropic.claudefordesktop";
@@ -1392,6 +1396,7 @@ impl World {
                 .with_awaited_every(Duration::from_millis(2))
                 .with_caller("app".into())
                 .with_lock_waiting(2_000, Duration::from_millis(10))
+                .with_clock(Arc::new(FixedClock::at(NOW)) as Arc<dyn Clock>)
         });
         let (cores, cores_gone) = channel();
         World {
@@ -1414,7 +1419,7 @@ impl World {
 
     // As Anthropic answers the next read of `who`: no five-hour period running.
     pub(super) fn resting(&self, who: &str) {
-        let now = epoch_now();
+        let now = NOW;
         self.api.using(
             &format!("access-{who}"),
             pitboard_core::usage::Snapshot {
@@ -1723,7 +1728,7 @@ impl World {
 
     /// The same, with its access token named `access`.
     fn claude_login_as(&self, who: &str, access: &str, percent: f64) -> String {
-        let now = epoch_now();
+        let now = NOW;
         let access = access.to_owned();
         self.api.owned_by(
             &access,
@@ -1797,7 +1802,7 @@ impl World {
     /// A Codex login of the ChatGPT account `who`, in the shape `codex login` writes one,
     /// with OpenAI scripted to answer for it.
     fn codex_login(&self, who: &str) -> String {
-        let now = epoch_now();
+        let now = NOW;
         let id_token = unsigned_token(&serde_json::json!({
             "email": format!("{who}@example.com"),
             "exp": now + 3_600,
@@ -2041,12 +2046,4 @@ pub(super) fn a_program_at(path: &std::path::Path) {
         &Script::refusing("a test's program, never meant to run\n"),
     )
     .unwrap_or_else(|e| panic!("no program at {}: {e}", path.display()));
-}
-
-fn epoch_now() -> i64 {
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("after 1970")
-        .as_secs();
-    i64::try_from(now).expect("before 2262")
 }
