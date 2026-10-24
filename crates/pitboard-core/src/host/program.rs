@@ -4,7 +4,8 @@ use super::Os;
 use std::ffi::{OsStr, OsString};
 use std::path::{Path, PathBuf};
 
-// What runs without a script host, in the default `PATHEXT`'s order (RF-B1).
+// What runs without a script host, in the default `PATHEXT`'s order
+// (docs/facts/windows-runners.md).
 const RUNNABLE_ON_WINDOWS: [&str; 3] = [".exe", ".bat", ".cmd"];
 
 // The names a shell tries in one folder: on Windows each kept extension, in `PATHEXT`'s order.

@@ -12,8 +12,8 @@ use std::sync::Arc;
 pub(crate) const FOLDER: &str = r"\Pitboard";
 const ENVIRONMENT: &str = "schedule.env";
 const WATCH_ENVIRONMENT: &str = "watch.env";
-// Task Scheduler's own results that are no failure: RF-E1 read `NOT_RUN_YET` off a task whose
-// person was not signed in.
+// Task Scheduler's own results that are no failure: a task whose person is not signed in reads
+// `NOT_RUN_YET` (docs/facts/windows-runners.md).
 const RUNNING: i32 = 0x0004_1301;
 const NOT_RUN_YET: i32 = 0x0004_1303;
 const QUEUED: i32 = 0x0004_1325;
@@ -74,8 +74,8 @@ impl Task {
 }
 
 // InteractiveToken runs only while the person is signed in, when DPAPI and Credential Manager
-// open (RF-D2), and keeps no password. The proxy is in `schedule.env` or `watch.env`: a
-// definition has no environment, and an argument would show a proxy's password.
+// open (docs/facts/windows-runners.md), and keeps no password. The proxy is in `schedule.env` or
+// `watch.env`: a definition has no environment, and an argument would show a proxy's password.
 //
 // The watch service starts at the person's own sign-in (`UserId`, documented to take a SID) and
 // runs with no time limit (`PT0S`); renewal runs daily at `start`, for 10 minutes at most.

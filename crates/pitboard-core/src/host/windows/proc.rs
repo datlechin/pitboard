@@ -50,7 +50,8 @@ fn open(pid: u32, access: u32) -> Open {
         return Open::Handle(unsafe { OwnedHandle::from_raw_handle(handle) });
     }
     match std::io::Error::last_os_error().raw_os_error() {
-        // 87 for a pid never given out, 6 for one freed a while ago (RF-T8).
+        // 87 for a pid never given out, 6 for one freed a while ago
+        // (docs/facts/windows-runners.md).
         Some(code)
             if code == ERROR_INVALID_PARAMETER as i32 || code == ERROR_INVALID_HANDLE as i32 =>
         {

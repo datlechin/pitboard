@@ -265,8 +265,8 @@ pub(super) fn host() -> Arc<dyn Host> {
     })
 }
 
-// RF-E5: the path it was started by, through Scoop's junction or winget's link, which an
-// upgrade keeps.
+// The path it was started by, through Scoop's junction or winget's link, which an upgrade keeps
+// (docs/facts/windows-runners.md).
 pub(super) fn current_program() -> std::io::Result<PathBuf> {
     let same = |a: &Path, b: &Path| {
         std::fs::canonicalize(a).is_ok_and(|a| std::fs::canonicalize(b).is_ok_and(|b| a == b))

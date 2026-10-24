@@ -94,7 +94,8 @@ pub(crate) fn sid_text(sid: PSID) -> Option<String> {
     said
 }
 
-// RF-B1: `FOLDERID_Profile` ignores `USERPROFILE` and `HOME`. Codex's default home is in it.
+// `FOLDERID_Profile` ignores `USERPROFILE` and `HOME` (docs/facts/windows-runners.md). Codex's
+// default home is in it.
 pub(crate) fn profile() -> Option<PathBuf> {
     real_lookups()
         .then(|| known_folder(&windows_sys::Win32::UI::Shell::FOLDERID_Profile))

@@ -231,7 +231,8 @@ impl Tool {
         status
     }
 
-    // A browser the sign-in opened runs in the job too, and is the person's (RF-F2).
+    // A browser the sign-in opened runs in the job too, and is the person's
+    // (docs/facts/windows-runners.md).
     pub(crate) fn stop(&mut self) {
         end_the_chain(&self.job);
         let _ = self.child.kill();

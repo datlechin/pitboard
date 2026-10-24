@@ -1,22 +1,8 @@
-//! Taking over a Pitboard directory that another machine wrote.
-//!
-//! The machine stamp is right and the reason for it is sound: a parked login is a refresh
-//! token, and two machines taking turns presenting one makes Claude Code drop the login on
-//! both. What was wrong was the shape of the refusal. Every command reads the state, so a
-//! stamp that does not match stopped all of them, including `uninstall` and, in effect,
-//! `doctor`. A person who buys a new Mac and lets Migration Assistant bring their home and
-//! their keychain across arrives at a tool that will not do anything at all, with an error
-//! telling them to enrol their accounts again and no command that makes that possible.
-//!
-//! So this is that command. It keeps everything that is a fact about an account rather than
-//! about a machine: the label, the email, the account and organisation uuid, and the
-//! numbers Pitboard remembers.
-//!
-//! What it deliberately does not do is ask Anthropic whether a parked token still works.
-//! Finding out means exchanging it, and exchanging it is exactly the act that would rotate
-//! it past the other machine's copy. Until someone has measured, on a throwaway account and
-//! two machines, whether an exchange invalidates the copy the other machine holds, there is
-//! no safe probe and the honest default is to drop the login and say so.
+//! Taking over a Pitboard directory another machine wrote. It keeps what is about an account,
+//! not a machine: the label, the email, the account and organisation uuid and the numbers. It
+//! drops each login parked in a store and asks Anthropic nothing, since two machines taking
+//! turns with one refresh token make Claude Code drop the login on both, and whether an
+//! exchange revokes the other machine's copy is not measured (docs/facts/not-measured.md).
 
 use super::{exclusive, purge};
 use crate::context::Context;

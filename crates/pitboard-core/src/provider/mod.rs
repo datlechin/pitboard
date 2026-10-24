@@ -805,7 +805,8 @@ pub(crate) fn installed_among(
 }
 
 // The program's own folder goes in front of a search path that lacks it, so an npm script
-// finds the `node` beside it. A bare name on Windows would start one beside Pitboard (RF-F3).
+// finds the `node` beside it. A bare name on Windows would start one beside Pitboard
+// (docs/facts/windows-runners.md).
 pub(crate) fn command(
     ctx: &Context,
     _: Permit,

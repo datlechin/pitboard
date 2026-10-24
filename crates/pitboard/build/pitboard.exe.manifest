@@ -13,7 +13,8 @@
       </requestedPrivileges>
     </security>
   </trustInfo>
-  <!-- A run from a task, or from a program with no console, gets no console window (RF-E4). -->
+  <!-- A run from a task, or from a program with no console, gets no console window
+       (docs/facts/windows-runners.md). -->
   <asmv3:application>
     <asmv3:windowsSettings xmlns="http://schemas.microsoft.com/SMI/2024/WindowsSettings">
       <consoleAllocationPolicy>detached</consoleAllocationPolicy>

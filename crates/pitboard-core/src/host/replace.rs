@@ -3,8 +3,8 @@
 
 use std::time::Duration;
 
-// FILE_SUPPORTS_POSIX_UNLINK_RENAME (MC-posix). NTFS and ReFS report it; exFAT, FAT32 and an
-// SMB share mapped as a drive do not (RF-C3, RF-C3j, RF-C3r, RF-C3s).
+// FILE_SUPPORTS_POSIX_UNLINK_RENAME. NTFS and ReFS report it; exFAT, FAT32 and an SMB share
+// mapped as a drive do not (docs/facts/windows-runners.md).
 pub(crate) const POSIX_UNLINK_RENAME: u32 = 0x400;
 // FILE_PERSISTENT_ACLS: a volume that keeps an access list on each file. exFAT and FAT32 keep
 // none.
@@ -36,9 +36,10 @@ pub(crate) fn waited_out(error: Option<i32>) -> bool {
     matches!(error, Some(ERROR_ACCESS_DENIED | ERROR_SHARING_VIOLATION))
 }
 
-// RF-C4's budget: 50 waits doubling from 1 ms to 50 ms, about 2.3 s in all. Beside readers
-// that reopen the file without a pause, `MoveFileExW` needed at most 33 attempts on
-// windows-11-arm, and on windows-2025 ran out in 30 of 184 rounds, which no longer wait helps.
+// 50 waits doubling from 1 ms to 50 ms, about 2.3 s in all. Beside readers that reopen the file
+// without a pause, `MoveFileExW` needed at most 33 attempts on windows-11-arm, and on
+// windows-2025 ran out in 30 of 184 rounds, which no longer wait helps
+// (docs/facts/windows-runners.md).
 pub(crate) fn waits() -> impl Iterator<Item = Duration> {
     (0..50u32).map(|attempt| Duration::from_millis((1u64 << attempt.min(6)).min(50)))
 }

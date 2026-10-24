@@ -153,7 +153,7 @@ pub(crate) fn delete(target: &str) -> io::Result<bool> {
 }
 
 // What a call failed with, for a store: a network logon has no credential set, which says
-// nothing of what is kept (MC-net).
+// nothing of what is kept (docs/facts/windows-runners.md).
 pub(super) fn failed(e: &io::Error, said: impl FnOnce(String) -> Error) -> Error {
     if e.raw_os_error()
         .is_some_and(|code| code as u32 == ERROR_NO_SUCH_LOGON_SESSION)

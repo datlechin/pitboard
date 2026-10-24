@@ -182,7 +182,7 @@ impl Hidden {
 }
 
 // Each way a folder can be written in a report: as given, by its long name and its short one
-// (RF-B2), with `\\?\` and with forward slashes.
+// (docs/facts/windows-runners.md), with `\\?\` and with forward slashes.
 fn windows_spellings(folder: &std::path::Path) -> Vec<String> {
     let long = std::fs::canonicalize(folder)
         .ok()

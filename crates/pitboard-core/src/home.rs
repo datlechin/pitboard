@@ -131,7 +131,8 @@ impl From<Kept> for io::Error {
     }
 }
 
-// A file another program holds open keeps its folder on exFAT and FAT32 (RF-C6x).
+// A file another program holds open keeps its folder on exFAT and FAT32
+// (docs/facts/windows-runners.md).
 pub(crate) fn remove_all(permit: Permit, folder: &Path) -> std::result::Result<(), Kept> {
     let why = match crate::host::fs::remove_dir_all(permit, folder) {
         Ok(()) => return Ok(()),
@@ -252,8 +253,8 @@ pub(crate) fn check_location_with(path: &Path, syncing: &Syncing) -> Result<()> 
     }
 }
 
-// What Windows says it syncs, besides `synced_by`'s names: OneDrive's folders, a sync root
-// (MC-sync), and a roaming profile but its `AppData\Local` and `LocalLow` (MC-roam).
+// What Windows says it syncs, besides `synced_by`'s names: OneDrive's folders, a sync root, and
+// a roaming profile but its `AppData\Local` and `LocalLow` (docs/facts/windows-documented.md).
 pub(crate) struct Syncing<'a> {
     pub(crate) folders: Vec<PathBuf>,
     pub(crate) roaming: Option<PathBuf>,
