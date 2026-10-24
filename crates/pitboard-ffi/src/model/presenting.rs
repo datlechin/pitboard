@@ -1,8 +1,6 @@
-//! What the menu bar, the menu and the window say, as the Swift app said it: the tests of
-//! PresentationTests.swift and MenuTests.swift that drove a model, the rest of
-//! RoutingTests.swift, and AppModelTests.swift's tests of the footing, the sheets and the
-//! window's words, each under its own name in snake case. The state is driven through
-//! `State::apply` by hand and read as `present` makes it, its clock times in UTC.
+//! What the menu bar, the menu and the window say, as the Swift app said it. The state is
+//! driven through `State::apply` by hand and read as `present` makes it, its clock times in
+//! UTC.
 
 use super::signing::{add, adding_in_claude, signs_in, travel};
 use super::state::{Answer, Job};
@@ -175,8 +173,6 @@ fn notice(
 /// A row is called what a person called the account. One with no name yet is called by its
 /// address, the one thing about it they will recognise, and a login Pitboard cannot use by
 /// what is wrong with it, since it has neither.
-///
-/// PresentationTests.swift's anAccountIsCalledByItsNameOrItsAddressOrWhatIsWrongWithIt.
 #[test]
 fn an_account_is_called_by_its_name_or_its_address_or_what_is_wrong_with_it() {
     assert_eq!(described(account(Some("work")).build()).title, "work");
@@ -206,8 +202,6 @@ fn an_account_carries_the_plan_its_login_says() {
 
 /// The window's row draws every limit and says whose address it is and whether it is in
 /// use, from the row alone.
-///
-/// PresentationTests.swift's aDescriptionCarriesTheAddressWhetherItIsInUseAndEveryLimit.
 #[test]
 fn a_row_carries_the_address_whether_it_is_in_use_and_every_limit() {
     let in_use = described(
@@ -231,8 +225,6 @@ fn a_row_carries_the_address_whether_it_is_in_use_and_every_limit() {
 /// Pressing an account in the menu or the window does the one thing its state allows,
 /// decided in one place so the two cannot disagree: switch to it, sign in to it again, name
 /// it, or nothing at all.
-///
-/// PresentationTests.swift's pressingAnAccountDoesTheOneThingItsStateAllows.
 #[test]
 fn pressing_an_account_does_the_one_thing_its_state_allows() {
     let spare = described(account(Some("spare")).build());
@@ -299,8 +291,6 @@ fn pressing_an_account_does_the_one_thing_its_state_allows() {
 
 /// Each change waits for the one before, so while a switch runs nothing can be pressed, and
 /// only the account it is for says it is switching.
-///
-/// PresentationTests.swift's aSwitchRunningHoldsBackEveryAccountAndMarksOnlyItsOwn.
 #[test]
 fn a_switch_running_holds_back_every_account_and_marks_only_its_own() {
     let running = "claude/spare";
@@ -350,8 +340,6 @@ fn a_switch_running_holds_back_every_account_and_marks_only_its_own() {
 
 /// A sign-in waits on somebody in a browser. It holds back another sign-in and nothing else:
 /// switching meanwhile, or naming the login signed in now, is theirs to do.
-///
-/// PresentationTests.swift's aSignInRunningHoldsBackOnlyAnotherSignIn.
 #[test]
 fn a_sign_in_running_holds_back_only_another_sign_in() {
     let spare = described_while(account(Some("spare")).build(), signing_in);
@@ -585,8 +573,6 @@ fn an_accounts_own_menu_opens_its_windows() {
 /// Whether an account needs signing in again is a fact about the account, and a sign-in or a
 /// switch running elsewhere does not change it. Its item cannot be chosen meanwhile, and
 /// without the line saying why it reads as an account that simply does not work.
-///
-/// PresentationTests.swift's anAccountThatNeedsSigningInAgainSaysSoWhileSomethingElseRuns.
 #[test]
 fn an_account_that_needs_signing_in_again_says_so_while_something_else_runs() {
     let stale = || {
@@ -626,8 +612,6 @@ fn an_account_whose_login_could_not_be_read_is_not_said_to_need_signing_in() {
 
 /// The line under an account's name in the menu says what stands in its way before
 /// anything about its limits, since that is what decides whether it can be chosen.
-///
-/// PresentationTests.swift's theMenuSaysWhatStandsInAnAccountsWayBeforeItsLimits.
 #[test]
 fn the_menu_says_what_stands_in_an_accounts_way_before_its_limits() {
     let limits = || vec![window("session", 12.0)];
@@ -659,8 +643,6 @@ fn the_menu_says_what_stands_in_an_accounts_way_before_its_limits() {
 
 /// An account with nothing measured yet still has a line under its name, and its address is
 /// the one true thing to put there.
-///
-/// PresentationTests.swift's anAccountWithNothingMeasuredIsDescribedByItsAddress.
 #[test]
 fn an_account_with_nothing_measured_is_described_by_its_address() {
     assert_eq!(
@@ -680,8 +662,6 @@ fn an_account_with_nothing_measured_is_described_by_its_address() {
 /// Every limit in one line, in the order the service gave them, the way a sentence starts: a
 /// capital on its first word and on nothing after it. A limit scoped to one model is named
 /// with its model, so it does not read as the account's own.
-///
-/// PresentationTests.swift's limitsAreSaidInOneLineWithOnlyItsFirstLetterCapitalised.
 #[test]
 fn limits_are_said_in_one_line_with_only_its_first_letter_capitalised() {
     let summary =
@@ -709,7 +689,7 @@ fn limits_are_said_in_one_line_with_only_its_first_letter_capitalised() {
 /// still right. Used up is the core's: at the service's 100 as read, until its reset, after
 /// which the line gives the last figure, as `pitboard status` does, until a reading moves it.
 ///
-/// PresentationTests.swift's aUsedUpLimitSaysWhenItComesBack, the clock read in UTC.
+/// The clock is read in UTC.
 #[test]
 fn a_used_up_limit_says_when_it_comes_back() {
     let today = NOON + 2 * 3600;
@@ -768,8 +748,6 @@ fn a_clock_the_app_cannot_read_is_said_in_utc_rather_than_not_at_all() {
 /// Why an account cannot be used is said in full only where it cannot be: a login Pitboard
 /// cannot use, or an account that cannot be switched to. Numbers that are merely not live do
 /// not stop anybody choosing an account, and the account in use needs no switch.
-///
-/// PresentationTests.swift's onlyAnAccountThatCannotBeUsedSaysWhy.
 #[test]
 fn only_an_account_that_cannot_be_used_says_why() {
     let refused_login = "Its parked login was refused. Sign in to it again.";
@@ -816,8 +794,6 @@ fn only_an_account_that_cannot_be_used_says_why() {
 /// said beside the numbers of the account in use and of one that can be switched to, and not
 /// a second time where the account cannot be used and why is said already. The menu's help
 /// says whichever there is.
-///
-/// PresentationTests.swift's whyAUsableAccountsNumbersAreOldIsSaidBesideThem.
 #[test]
 fn why_a_usable_accounts_numbers_are_old_is_said_beside_them() {
     let old_numbers = "Anthropic did not answer, so these are the last numbers measured.";
@@ -859,8 +835,6 @@ fn why_a_usable_accounts_numbers_are_old_is_said_beside_them() {
 
 /// How long a parked login stays usable is about a switch to it, so it is said of every
 /// account but the one in use, whose login is not parked.
-///
-/// PresentationTests.swift's aParkedLoginsLifeIsSaidOnlyOfAnAccountNotInUse.
 #[test]
 fn a_parked_logins_life_is_said_only_of_an_account_not_in_use() {
     let parking = NOON + 3 * 86_400 + 60;
@@ -1018,9 +992,8 @@ fn only_an_enrolled_account_not_in_use_may_be_forgotten() {
     assert_eq!(described(unplaced("codex", false)).forget, None);
 }
 
-/// AppModelTests.swift's anAccountThatCannotBeSwitchedToIsSignedInToAgainFromThePanel, its
-/// rows: the sign-in itself is signing.rs's. An enrolled account that cannot be switched to
-/// is signed in to again from its row, in its own tool.
+/// An enrolled account that cannot be switched to is signed in to again from its row, in its
+/// own tool. The sign-in itself is signing.rs's.
 #[test]
 fn an_account_that_cannot_be_switched_to_is_signed_in_to_again_from_the_panel() {
     let (model, _) = reading(vec![
@@ -1061,8 +1034,6 @@ fn an_account_that_cannot_be_switched_to_is_signed_in_to_again_from_the_panel() 
 
 /// A tool Pitboard does not list yet still gets a section, after the ones it lists, headed by
 /// its code, rather than its accounts going missing.
-///
-/// PresentationTests.swift's aToolNobodyListsIsGroupedLastUnderItsCode.
 #[test]
 fn a_tool_nobody_lists_is_grouped_last_under_its_code() {
     let (model, _) = reading(vec![
@@ -1087,8 +1058,6 @@ fn a_tool_nobody_lists_is_grouped_last_under_its_code() {
 
 /// One tool's accounts are one section with no heading, known by the tool's code, with the
 /// rows in the order they came.
-///
-/// PresentationTests.swift's oneToolsAccountsAreOneSectionKnownByItsCode.
 #[test]
 fn one_tools_accounts_are_one_section_known_by_its_code() {
     let (model, _) = reading(vec![
@@ -1106,8 +1075,6 @@ fn one_tools_accounts_are_one_section_known_by_its_code() {
 /// One tool, whichever it is: no headings, the rows in the order the core gave them, and the
 /// bar naming the first account signed in, as it always has. A login signed in with no name
 /// yet is called unnamed there, which says what it is and fits where an address would not.
-///
-/// MenuTests.swift's oneToolLooksAsItAlwaysDid.
 #[test]
 fn one_tool_looks_as_it_always_did() {
     for tool in ["claude", "codex"] {
@@ -1135,8 +1102,6 @@ fn one_tool_looks_as_it_always_did() {
 
 /// More than one tool: a section per tool, headed by its name, in the order the tools are
 /// listed whatever order the rows came in.
-///
-/// MenuTests.swift's accountsOfTwoToolsAreGroupedByTool.
 #[test]
 fn accounts_of_two_tools_are_grouped_by_tool() {
     let (model, _) = reading(vec![
@@ -1162,7 +1127,7 @@ fn accounts_of_two_tools_are_grouped_by_tool() {
 
 // The menu bar.
 
-/// AppModelTests.swift's aReadFillsInTheTitleAndTheRows, its title.
+/// A read fills in the menu bar's title.
 #[test]
 fn a_read_fills_in_the_title() {
     let (model, _) = reading(vec![
@@ -1178,8 +1143,6 @@ fn a_read_fills_in_the_title() {
 
 /// The menu bar follows whichever account is closest to running out, and two tools can each
 /// have a `work`, so once there is more than one tool VoiceOver says which.
-///
-/// AppModelTests.swift's theMenuBarSaysWhichToolItIsAboutOnceThereAreTwo.
 #[test]
 fn the_menu_bar_says_which_tool_it_is_about_once_there_are_two() {
     let mut model = at_noon();
@@ -1211,8 +1174,6 @@ fn the_menu_bar_says_which_tool_it_is_about_once_there_are_two() {
 // What the window and the menu have to tell somebody.
 
 /// A machine with nothing wrong has nothing to say, before the first read and after it.
-///
-/// PresentationTests.swift's aMachineWithNothingWrongHasNoNotices.
 #[test]
 fn a_machine_with_nothing_wrong_has_no_notices() {
     let mut model = at_noon();
@@ -1231,8 +1192,6 @@ fn a_machine_with_nothing_wrong_has_no_notices() {
 /// An interrupted switch nothing can finish stops Pitboard working, so it is said first,
 /// with the way out, which asks first. The warning the read carries about it is the same
 /// fact and is not said a second time; anything else the read warned about still is.
-///
-/// PresentationTests.swift's anInterruptedSwitchIsSaidFirstWithTheWayOutAndOnlyOnce.
 #[test]
 fn an_interrupted_switch_is_said_first_with_the_way_out_and_only_once() {
     let mut model = at_noon();
@@ -1273,8 +1232,6 @@ fn an_interrupted_switch_is_said_first_with_the_way_out_and_only_once() {
 
 /// When the read itself failed because of the interrupted switch, what stopped it is the
 /// reason given, and it is not said again as a read that failed.
-///
-/// PresentationTests.swift's anInterruptedSwitchThatStoppedTheReadGivesItsReason.
 #[test]
 fn an_interrupted_switch_that_stopped_the_read_gives_its_reason() {
     let reason = "Anthropic could not be reached to finish the switch to work.";
@@ -1303,8 +1260,6 @@ fn an_interrupted_switch_that_stopped_the_read_gives_its_reason() {
 
 /// A read that failed says why, and that the numbers shown are the last ones measured rather
 /// than now's. A warning that only repeats why is not said twice; any other it carried is.
-///
-/// PresentationTests.swift's aFailedReadSaysWhyAndThatTheNumbersAreOld.
 #[test]
 fn a_failed_read_says_why_and_that_the_numbers_are_old() {
     let reason = "Anthropic could not be reached";
@@ -1347,8 +1302,6 @@ fn a_failed_read_says_why_and_that_the_numbers_are_old() {
 /// The line saying the numbers shown are the last ones measured is said only where there are
 /// numbers shown. With nothing measured, or nothing known at all, it pointed at numbers that
 /// were not there.
-///
-/// PresentationTests.swift's aFailedReadSaysTheNumbersAreOldOnlyWhereThereAreSome.
 #[test]
 fn a_failed_read_says_the_numbers_are_old_only_where_there_are_some() {
     let reason = "Anthropic could not be reached";
@@ -1375,8 +1328,6 @@ fn a_failed_read_says_the_numbers_are_old_only_where_there_are_some() {
 /// try again, and not a spinner that never stops or a list with nothing in it, whether
 /// nothing is known at all or what is known is empty. A machine without Claude Code says that
 /// instead. With accounts to show, the list stays, with the failure above it as a notice.
-///
-/// PresentationTests.swift's aFailedReadWithNothingToListIsWhatTheWindowShows.
 #[test]
 fn a_failed_read_with_nothing_to_list_is_what_the_window_shows() {
     let reason = "/Users/dana/.pitboard/state.json was written on another Mac.";
@@ -1475,8 +1426,6 @@ fn the_panes_try_again_is_held_back_while_the_accounts_are_read() {
 /// Without a tool there is nothing to read, and the menu says how to install one instead.
 /// A failed read beside that would be the same fact said as a fault. Once another tool has
 /// an account here the machine is not without a tool, and a failed read is one.
-///
-/// PresentationTests.swift's aMachineWithoutClaudeCodeIsNotToldItsReadFailed.
 #[test]
 fn a_machine_without_claude_code_is_not_told_its_read_failed() {
     let missing = || {
@@ -1506,8 +1455,6 @@ fn a_machine_without_claude_code_is_not_told_its_read_failed() {
 /// Sessions of a tool that follows a switch by itself pick it up within a moment, and the
 /// notice counts down to it. Once that moment has passed, the notice has nothing left to say
 /// that the row's In Use does not, so it goes. Dismissing it puts it away before then.
-///
-/// PresentationTests.swift's aSwitchCountsDownOnlyUntilOpenSessionsHaveFollowed.
 #[test]
 fn a_switch_counts_down_only_until_open_sessions_have_followed() {
     let (mut model, mut machine) = reading(vec![
@@ -1555,8 +1502,6 @@ fn a_switch_counts_down_only_until_open_sessions_have_followed() {
 
 /// With two tools each switch is said on its own, so it names its tool, and so does its
 /// countdown: one beside a Codex notice would otherwise read as contradicting it.
-///
-/// PresentationTests.swift's aSwitchNamesItsToolOnlyBesideAnother.
 #[test]
 fn a_switch_names_its_tool_only_beside_another() {
     let (mut model, mut machine) = reading(vec![
@@ -1641,8 +1586,6 @@ fn a_switch_that_sessions_take_at_renewal_counts_down_nothing() {
 /// A running `codex` never picks a switch up, so a countdown would promise what does not
 /// happen. The notice is a warning that says to start its sessions again, or, once the core
 /// has counted them, the core's own warning, which says the same with the count.
-///
-/// PresentationTests.swift's aSwitchThatNeedsARestartIsAWarningWithoutACountdown.
 #[test]
 fn a_switch_that_needs_a_restart_is_a_warning_without_a_countdown() {
     let (mut model, mut machine) = reading(vec![
@@ -1687,8 +1630,6 @@ fn a_switch_that_needs_a_restart_is_a_warning_without_a_countdown() {
 
 /// When the core could not count any sessions, the app's sentence is all there is, and it is
 /// said of any session rather than of ones that may not exist.
-///
-/// AppModelTests.swift's aRestartIsExplainedWhenNoSessionsWereCounted.
 #[test]
 fn a_restart_is_explained_when_no_sessions_were_counted() {
     let (mut model, mut machine) =
@@ -1707,9 +1648,7 @@ fn a_restart_is_explained_when_no_sessions_were_counted() {
 /// A warning the read after a switch also carries is shown once, not twice: the switch's
 /// notice leaves it to the read.
 ///
-/// AppModelTests.swift's aSwitchWarningTheReadRepeatsIsSaidOnce, and PresentationTests.swift's
-/// aWarningTheSwitchAndTheReadAfterItBothCarryIsSaidOnce, which the switch leaves to the read,
-/// so the read has to say it: a warning both carry is said once, and not dropped from both.
+/// So the read has to say it: a warning both carry is said once, and not dropped from both.
 #[test]
 fn a_switch_warning_the_read_repeats_is_said_once() {
     let mut model = at_noon();
@@ -1737,8 +1676,6 @@ fn a_switch_warning_the_read_repeats_is_said_once() {
 }
 
 /// A warning a switch carried is said with the switch, where it belongs, and nowhere else.
-///
-/// PresentationTests.swift's aWarningTheLastSwitchCarriedIsSaidWithItAndNowhereElse.
 #[test]
 fn a_warning_the_last_switch_carried_is_said_with_it_and_nowhere_else() {
     let (mut model, mut machine) = reading(vec![account(Some("work")).signed_in().build()]);
@@ -1753,8 +1690,6 @@ fn a_warning_the_last_switch_carried_is_said_with_it_and_nowhere_else() {
 /// Signing in to the account in use puts its new login in use at once, and sessions already
 /// running keep the old one, exactly as a switch leaves them on the old account. So it is
 /// said the way a switch is: the account has a new login, and what that means for them.
-///
-/// PresentationTests.swift's aSignInThatPutANewLoginInUseSaysTheAccountHasOne.
 #[test]
 fn a_sign_in_that_put_a_new_login_in_use_says_the_account_has_one() {
     let (mut model, mut machine) = reading(vec![account(Some("work")).signed_in().build()]);
@@ -1800,8 +1735,6 @@ fn a_sign_in_that_put_a_new_login_in_use_says_the_account_has_one() {
 
 /// Two tools can each have a `work`, so once both are shown a notice about one account says
 /// which tool it is for, as a switch's notice and advice both do.
-///
-/// PresentationTests.swift's aSignInNoticeNamesItsToolBesideAnother.
 #[test]
 fn a_sign_in_notice_names_its_tool_beside_another() {
     let (mut model, mut machine) = reading(vec![
@@ -1818,8 +1751,6 @@ fn a_sign_in_notice_names_its_tool_beside_another() {
 /// Every warning a read carries is a notice of its own, headed from its code so the menu can
 /// name it in a line, with the core's message under it saying what to do. Two warnings of
 /// one code are two notices, each with an identity of its own.
-///
-/// PresentationTests.swift's eachWarningAReadCarriesIsANoticeHeadedFromItsCode.
 #[test]
 fn each_warning_a_read_carries_is_a_notice_headed_from_its_code() {
     let second = warning("auth_overridden", "CLAUDE_CODE_OAUTH_TOKEN is set");
@@ -1913,8 +1844,6 @@ fn a_warning_about_an_account_is_its_notice_by_that_account() {
 
 /// Giving up on an interrupted switch deletes nothing, and says so, with how many logins were
 /// kept, until somebody puts it away.
-///
-/// PresentationTests.swift's givingUpOnASwitchSaysWhatWasKeptUntilPutAway, its notice.
 #[test]
 fn giving_up_on_a_switch_says_what_was_kept_until_put_away() {
     let mut model = at_noon();
@@ -1974,8 +1903,6 @@ fn giving_up_on_a_switch_says_what_was_kept_until_put_away() {
 
 /// The most pressing first: what stops Pitboard working, then an account that ran out, then
 /// what each tool's last switch said, then warnings, then what is only worth knowing.
-///
-/// PresentationTests.swift's noticesComeTheMostPressingFirst.
 #[test]
 fn notices_come_the_most_pressing_first() {
     let accounts = || {
@@ -2050,8 +1977,6 @@ fn notices_come_the_most_pressing_first() {
 /// Advice offers an account of the same tool with room, as a button that switches to it by
 /// its label with its tool. It names the tool only once two are shown, so a machine
 /// with one tool reads as it always did.
-///
-/// PresentationTests.swift's adviceOffersTheAccountWithRoomAndNamesItsToolOnlyBesideAnother.
 #[test]
 fn advice_offers_the_account_with_room_and_names_its_tool_only_beside_another() {
     let spent = || {
@@ -2120,8 +2045,6 @@ fn an_account_offered_without_the_limit_that_ran_out_is_said_to_have_no_such_lim
 /// A switch of one tool leaves another tool's accounts as they were. Advice about a Claude
 /// Code account still out, beside another that still has room, is as true after a Codex
 /// switch as before it, and it is never told again, so putting it away loses it.
-///
-/// PresentationTests.swift's adviceAboutOneToolOutlivesASwitchOfAnother.
 #[test]
 fn advice_about_one_tool_outlives_a_switch_of_another() {
     let spent = || {
@@ -2159,9 +2082,6 @@ fn advice_about_one_tool_outlives_a_switch_of_another() {
 
 /// The menu turns advice into an item that switches, held back while a switch is under way,
 /// and only advice: a notice offers an account when one of its actions is a switch to it.
-///
-/// PresentationTests.swift's aNoticeOffersAnAccountOnlyWhenItCanSwitchToOne, over what the
-/// model says rather than notices a test made up.
 #[test]
 fn a_notice_offers_an_account_only_when_it_can_switch_to_one() {
     let (mut model, _) = reading(vec![
@@ -2251,8 +2171,6 @@ fn the_config_names_another_notice_offers_to_update_it() {
 
 /// What can be done about a notice is a button under it, and putting it away is the icon at
 /// its end: never both, and never neither.
-///
-/// PresentationTests.swift's aNoticesActionIsEitherAButtonOrWhatPutsItAway.
 #[test]
 fn a_notices_action_is_either_a_button_or_what_puts_it_away() {
     let accounts = |percent: f64| {
@@ -2497,8 +2415,6 @@ fn footing(accounts: Vec<Account>) -> Footing {
 
 /// A new install of the app. Before the first read there is nothing true to say, and a setup
 /// step shown to somebody who finished it years ago is worse than silence.
-///
-/// AppModelTests.swift's nothingIsAskedOfAnyoneBeforeTheFirstRead.
 #[test]
 fn nothing_is_asked_of_anyone_before_the_first_read() {
     let shown = Hand::new().shown();
@@ -2509,8 +2425,6 @@ fn nothing_is_asked_of_anyone_before_the_first_read() {
 /// The one state Pitboard cannot do anything about. It has to say so rather than show an
 /// empty panel, which reads as an app that does not work. The core's read succeeds with
 /// nothing to list on such a machine, so what says it is that no tool was found.
-///
-/// AppModelTests.swift's aMachineWithoutClaudeCodeIsToldThatFirst.
 #[test]
 fn a_machine_without_claude_code_is_told_that_first() {
     let mut model = Hand::new();
@@ -2527,8 +2441,6 @@ fn a_machine_without_claude_code_is_told_that_first() {
 
 /// A tool that was found, or a login or an account of any tool, means a tool is here, and
 /// the machine is one to set up rather than one to install on.
-///
-/// AppModelTests.swift's aToolFoundOrSignedInIsNotAMachineWithoutOne.
 #[test]
 fn a_tool_found_or_signed_in_is_not_a_machine_without_one() {
     let mut found = Hand::new();
@@ -2546,8 +2458,7 @@ fn a_tool_found_or_signed_in_is_not_a_machine_without_one() {
     assert_ne!(unfound.shown().footing, Footing::NoClaudeCode);
 }
 
-/// AppModelTests.swift's whatIsInstalledIsAskedAgainWhileNothingIsFound, its footing: the
-/// asking is reading.rs's. Once a tool is found the machine is one to sign in on.
+/// Once a tool is found the machine is one to sign in on. The asking is reading.rs's.
 #[test]
 fn what_is_installed_is_asked_again_while_nothing_is_found() {
     let mut model = Hand::new();
@@ -2560,7 +2471,6 @@ fn what_is_installed_is_asked_again_while_nothing_is_found() {
     assert_eq!(model.shown().footing, Footing::NoOneSignedIn);
 }
 
-/// AppModelTests.swift's anEmptyMachineIsAskedToSignInOnce.
 #[test]
 fn an_empty_machine_is_asked_to_sign_in_once() {
     assert_eq!(footing(Vec::new()), Footing::NoOneSignedIn);
@@ -2569,8 +2479,6 @@ fn an_empty_machine_is_asked_to_sign_in_once() {
 /// A login with no name cannot be parked, so this is the step between signing in and
 /// Pitboard being able to do anything at all. Until it has one it is called by its email
 /// address, which is how the person knows it.
-///
-/// AppModelTests.swift's anAccountSignedInWithoutANameIsAskedForOne.
 #[test]
 fn an_account_signed_in_without_a_name_is_asked_for_one() {
     let (model, _) = reading(vec![account(None).signed_in().uuid("a").build()]);
@@ -2603,8 +2511,8 @@ fn an_account_signed_in_without_a_name_is_asked_for_one() {
     );
 }
 
-/// AppModelTests.swift's oneEnrolledAccountIsToldThereIsNothingToSwitchTo, and what the step
-/// above the accounts says of it, which can be declined for its tool.
+/// One enrolled account is told there is nothing to switch to, by the step above the accounts,
+/// which can be declined for its tool.
 #[test]
 fn one_enrolled_account_is_told_there_is_nothing_to_switch_to() {
     let (model, _) = reading(vec![
@@ -2651,8 +2559,6 @@ fn one_enrolled_account_is_told_there_is_nothing_to_switch_to() {
 
 /// Two Claude Code accounts are asked what happens at a limit, until somebody chooses in the
 /// settings, where the sentence on the plans' terms sits beside switching by itself.
-///
-/// AppModelTests.swift's twoAccountsAreAskedNothing, before there was the choice.
 #[test]
 fn two_accounts_are_asked_what_happens_at_a_limit() {
     let (model, _) = reading(vec![
@@ -2890,16 +2796,12 @@ fn an_app_that_does_not_open_at_login_is_asked_to() {
 /// Mid-switch, and a login signed out from somewhere else, both leave accounts enrolled with
 /// nobody signed in. Neither is a machine that needs setting up, and asking somebody to sign
 /// in again there would have them sign in over an account Pitboard already holds.
-///
-/// AppModelTests.swift's enrolledAccountsWithNobodySignedInAreNotAskedToStartOver.
 #[test]
 fn enrolled_accounts_with_nobody_signed_in_are_not_asked_to_start_over() {
     assert_eq!(footing(vec![account(Some("work")).build()]), Footing::Ready);
 }
 
 /// Somebody signed in to Codex is not somebody nobody is signed in to.
-///
-/// AppModelTests.swift's aCodexLoginIsNotAnEmptyMachine.
 #[test]
 fn a_codex_login_is_not_an_empty_machine() {
     assert_eq!(
@@ -2914,8 +2816,6 @@ fn a_codex_login_is_not_an_empty_machine() {
 /// A Claude Code account and a Codex account are two accounts and nothing to switch to: an
 /// account is only ever switched to another of its own tool. The step names the tool, once
 /// there are two.
-///
-/// AppModelTests.swift's onlyOneAccountIsCountedPerTool.
 #[test]
 fn only_one_account_is_counted_per_tool() {
     let (model, _) = reading(vec![
@@ -2943,8 +2843,6 @@ fn only_one_account_is_counted_per_tool() {
 
 /// A login Pitboard could not read, or cannot switch, has no account behind it. Offering to
 /// name it would enrol something that can never be switched to.
-///
-/// AppModelTests.swift's anUnplacedLoginIsNeitherUnenrolledNorOfferedAName.
 #[test]
 fn an_unplaced_login_is_neither_unenrolled_nor_offered_a_name() {
     for row in [unplaced("codex", false), unplaced("codex", true)] {
@@ -3056,8 +2954,6 @@ fn every_tool_is_offered_and_one_not_found_says_how_to_get_it() {
 }
 
 // Nothing found leaves nothing to sign in with, which each tool says.
-//
-// AppModelTests.swift's nothingFoundOffersClaudeCodeAlone.
 #[test]
 fn nothing_found_starts_on_claude_code_and_says_none_is_here() {
     let sheet = adding(Vec::new(), Vec::new())
@@ -3086,8 +2982,7 @@ fn nothing_found_starts_on_claude_code_and_says_none_is_here() {
     );
 }
 
-/// AppModelTests.swift's whatIsInstalledIsAskedOnce, what the sheet offers: the asking is
-/// reading.rs's. Nothing is known to be here until a read asks.
+/// Nothing is known to be here until a read asks. The asking is reading.rs's.
 #[test]
 fn what_is_installed_is_asked_once() {
     let mut model = at_noon();
@@ -3100,9 +2995,7 @@ fn what_is_installed_is_asked_once() {
     assert_eq!(tools_and_missing(&sheet).1, ["desktop"]);
 }
 
-/// AppModelTests.swift's whatIsInstalledIsAskedAgainWhenTheFormForAnotherAccountOpens, what
-/// the sheet offers: the asking is signing.rs's. The sheet offers what the answer found once
-/// it is in.
+/// The sheet offers what the answer found once it is in. The asking is signing.rs's.
 #[test]
 fn what_is_installed_is_asked_again_when_the_form_for_another_account_opens() {
     let mut model = at_noon();
@@ -3123,8 +3016,6 @@ fn what_is_installed_is_asked_again_when_the_form_for_another_account_opens() {
 }
 
 /// The form starts on the tool it was asked about, and otherwise on the first it offers.
-///
-/// AppModelTests.swift's theFormStartsOnTheToolItIsAbout.
 #[test]
 fn the_form_starts_on_the_tool_it_is_about() {
     let starts = |sheet: Sheet| {
@@ -3398,8 +3289,7 @@ fn the_question_about_quitting_an_app_is_asked_in_its_name() {
 /// the sheet is about. Opening the window by itself leaves whatever sheet is up, and whichever
 /// pane was showing.
 ///
-/// RoutingTests.swift's aSheetIsPutUpOverTheWindow, the window opened by itself: putting the
-/// sheet up is signing.rs's.
+/// Putting the sheet up is signing.rs's.
 #[test]
 fn opening_the_window_by_itself_leaves_the_sheet_up() {
     let rename = Sheet::Rename {
@@ -3425,8 +3315,6 @@ fn opening_the_window_by_itself_leaves_the_sheet_up() {
 /// the menu's item for one opens the window there, whichever pane it was left on. A request
 /// that asks for none leaves the pane as it is, so it does not carry a pane an earlier
 /// request asked for, and a failure said in the window is over every pane.
-///
-/// RoutingTests.swift's aRequestForTheWindowCanAskForAPane.
 #[test]
 fn a_request_for_the_window_can_ask_for_a_pane() {
     let mut model = Hand::new();
@@ -3476,8 +3364,6 @@ fn a_request_for_the_window_can_ask_for_a_pane() {
 /// A failure of something asked for away from the window is said in the window, which is
 /// opened for it, as an alert with everything it warned about, until somebody has read it.
 /// Nothing that went wrong opens nothing.
-///
-/// RoutingTests.swift's aFailureAwayFromTheWindowIsSaidInIt.
 #[test]
 fn a_failure_away_from_the_window_is_said_in_it() {
     let mut model = Hand::new();
@@ -3522,9 +3408,6 @@ fn a_failure_away_from_the_window_is_said_in_it() {
 /// A switch asked for from the menu or a notification that fails is said in the window,
 /// since neither has anywhere to put a sentence. One that works opens nothing: the menu bar
 /// already shows it.
-///
-/// RoutingTests.swift's onlyASwitchAskedForAwayFromTheWindowThatFailsOpensIt, on the model's
-/// own state where the Swift drove its fixture.
 #[test]
 fn only_a_switch_asked_for_away_from_the_window_that_fails_opens_it() {
     let (mut model, mut machine) = reading(vec![
@@ -3586,8 +3469,6 @@ fn what_depends_on_the_time_is_made_again_every_minute() {
 
 /// The words for who is asked follow the tools shown, so a machine with Claude Code alone
 /// reads exactly as it did: here in what an interrupted switch waits for.
-///
-/// AppModelTests.swift's theServiceAskedIsNamedForTheToolsShown.
 #[test]
 fn the_service_asked_is_named_for_the_tools_shown() {
     let mut model = at_noon();

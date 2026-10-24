@@ -1,7 +1,6 @@
 //! The app's own preferences, which the model keeps in `app.json` in Pitboard's directory, as
-//! the Swift app kept them in UserDefaults: AppModelTests.swift's tests on the per-tool "Not
-//! Now", each under its own name in snake case, and the first launch's window from
-//! MenuBarLabel.swift, driven through `State::apply` by hand.
+//! the Swift app kept them in UserDefaults: the per-tool "Not Now", and the first launch's
+//! window from MenuBarLabel.swift, driven through `State::apply` by hand.
 
 use super::preferences::Preferences;
 use super::state::{Answer, Job};
@@ -52,8 +51,6 @@ fn declined(preferences: &Preferences) -> Vec<&str> {
 /// Keeping one Claude Code account on purpose says nothing about Codex. The prompt for a
 /// second account is declined per tool, and a declined one does not stand in front of the
 /// next tool's. It is remembered, in Pitboard's directory.
-///
-/// AppModelTests.swift's aSecondAccountIsDeclinedPerTool.
 #[test]
 fn a_second_account_is_declined_per_tool() {
     let mut machine = one_of_each();
@@ -159,8 +156,7 @@ fn opening_the_settings_from_the_tip_ends_it() {
 /// there was, and does not hide the prompt for a first Codex account. It is moved into the
 /// model's file once, so the earlier store is read no more.
 ///
-/// AppModelTests.swift's aNudgeDeclinedBeforeCodexWasAboutClaudeCode. Removing the old key
-/// from UserDefaults is the macOS app's to do as it hands it over.
+/// Removing the old key from UserDefaults is the macOS app's to do as it hands it over.
 #[test]
 fn a_nudge_declined_before_codex_was_about_claude_code() {
     let mut machine = one_of_each();

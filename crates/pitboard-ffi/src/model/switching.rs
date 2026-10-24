@@ -97,12 +97,10 @@ fn a_switch_records_when_open_sessions_follow() {
     assert_eq!(last.restart, None);
 }
 
-/// AppModelTests.swift's aSwitchThatNeedsARestartSaysSoAndCountsNothingDown, apart from the
-/// sentence, which comes with what the window says. A running `codex` never picks a switch
-/// up, so a countdown there would promise something that does not happen. When the core
-/// counted the sessions still running, its warning says so, with the count and with what not
-/// to do in them, and it outlives the read after the switch, which would otherwise replace
-/// it.
+/// A running `codex` never picks a switch up, so a countdown there would promise something that
+/// does not happen. When the core counted the sessions still running, its warning says so, with
+/// the count and with what not to do in them, and it outlives the read after the switch, which
+/// would otherwise replace it. The sentence comes with what the window says.
 #[test]
 fn a_switch_that_needs_a_restart_says_so_and_counts_nothing_down() {
     let mut model = Hand::new();
@@ -387,11 +385,10 @@ fn a_switch_to_the_account_in_use_says_what_it_warned_beside_the_last() {
     );
 }
 
-/// AppModelTests.swift's numbersMovingLeaveWhoIsSignedInAndWhatASwitchSaid. A reading moving
-/// says nothing about who is signed in, so only its numbers are taken. Here the read that
-/// brings them names the account before the switch, and taken whole it would put away the
-/// one warning the switch gave. Numbers move several times a minute, so within seconds of
-/// the switch.
+/// A reading moving says nothing about who is signed in, so only its numbers are taken. Here
+/// the read that brings them names the account before the switch, and taken whole it would put
+/// away the one warning the switch gave. Numbers move several times a minute, so within seconds
+/// of the switch.
 #[test]
 fn numbers_moving_leave_who_is_signed_in_and_what_a_switch_said() {
     let lagging = warning("config_write_failed", "the config did not update");
@@ -459,10 +456,9 @@ fn numbers_recorded_during_a_switch_are_taken_once_it_is_over() {
     assert_eq!(percent(&model.shown(), 0), Some(22.0));
 }
 
-/// AppModelTests.swift's twoToolsWorkAccountsAreSwitchedAndForgottenByTheirOwnName, the
-/// switch: forgetting comes with the account changes, and the row's name with what the
-/// window says. Two tools can each have a `work`, and the switch names the one meant, with
-/// its tool, as the row gives it.
+/// Two tools can each have a `work`, and the switch names the one meant, with its tool, as the
+/// row gives it. Forgetting comes with the account changes, and the row's name with what the
+/// window says.
 #[test]
 fn two_tools_work_accounts_are_switched_by_their_own_name() {
     let mut model = Hand::new();
@@ -489,12 +485,12 @@ fn two_tools_work_accounts_are_switched_by_their_own_name() {
 /// What `change` does while a read started before it waits on a service: the read lands
 /// after it, and is dropped.
 ///
-/// AppModelTests.swift's aReadThatStartedBeforeAChangeIsDroppedWhenItLands, for a change
-/// this app makes. A read waits on a service with who was signed in when it started, and
-/// whatever is changed meanwhile is changed before the read lands. Taken as it was, the read
-/// showed the accounts as they had been and put away what the change had said, a Codex
-/// switch's warning that sessions keep the account it left among it. It is dropped: the read
-/// the change starts itself says what is true now.
+/// A read that started before a change this app makes is dropped when it lands. A read waits on
+/// a service with who was signed in when it started, and whatever is changed meanwhile is
+/// changed before the read lands. Taken as it was, the read showed the accounts as they had
+/// been and put away what the change had said, a Codex switch's warning that sessions keep the
+/// account it left among it. It is dropped: the read the change starts itself says what is true
+/// now.
 pub(super) fn a_read_that_started_before(change: impl FnOnce(&mut Hand, &mut Stub)) {
     let before = vec![
         codex_account("personal", true),
@@ -1128,10 +1124,10 @@ fn what_holds_a_login_lost_to_a_panic_holds_nothing_and_a_lost_quit_quit_nothing
 
 // Giving up on a stuck switch.
 
-/// PresentationTests.swift's givingUpOnASwitchSaysWhatWasKeptUntilPutAway, apart from what
-/// the notice says. Giving up on an interrupted switch deletes nothing, and what it kept is
-/// kept to say until somebody puts it away. Nothing is stuck once it is given up, and every
-/// service is asked again, since who is signed in is what the switch had left unknown.
+/// Giving up on an interrupted switch deletes nothing, and what it kept is kept to say until
+/// somebody puts it away. Nothing is stuck once it is given up, and every service is asked
+/// again, since who is signed in is what the switch had left unknown. What the notice says is
+/// presenting's.
 #[test]
 fn giving_up_on_a_switch_says_what_was_kept_until_put_away() {
     let interrupted = warning(
@@ -1220,14 +1216,13 @@ fn the_cores_own_read_of_a_stuck_switch_offers_to_give_up_on_it() {
     );
 }
 
-/// Every read says whether a switch is stuck, the one made when the account index moves
-/// too, as AppModelTests.swift's aStuckSwitchIsTakenFromTheReadMadeWhenTheIndexMoves has
-/// it. A switch interrupted in a terminal that nothing can finish is offered to give up on
-/// as the index moves. One given up on in a terminal stopped being offered only at the next
-/// read every few minutes, and offering it meanwhile offered nothing to give up on. A read
-/// that asks nobody says nothing of it then, which is also what it says of a switch only a
-/// service could judge, so the model asks: the read that asks says which, and until it
-/// lands what is offered stays.
+/// Every read says whether a switch is stuck, the one made when the account index moves too. A
+/// switch interrupted in a terminal that nothing can finish is offered to give up on as the
+/// index moves. One given up on in a terminal stopped being offered only at the next read every
+/// few minutes, and offering it meanwhile offered nothing to give up on. A read that asks
+/// nobody says nothing of it then, which is also what it says of a switch only a service could
+/// judge, so the model asks: the read that asks says which, and until it lands what is offered
+/// stays.
 #[test]
 fn a_stuck_switch_is_taken_from_the_read_made_when_the_index_moves() {
     let accounts = || vec![claude("work", true, 0.0)];

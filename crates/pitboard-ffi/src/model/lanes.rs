@@ -1095,10 +1095,10 @@ mod tests {
         assert_eq!(Job::AutoSwitch { at: 95 }.lane(), Lane::Changes);
     }
 
-    /// AppModelTests.swift's onlyARunningAppHoldingTheToolIsAskedAbout once more, on the real
-    /// core, whose holder detection reads the process list: `switching.rs` has it over the
-    /// holdings a test says. What is left of an app that has gone cannot be quit, and a tool
-    /// nothing holds is switched at once: ChatGPT holds Codex's login, not Claude Code's.
+    /// Only a running app holding the tool is asked about, on the real core, whose holder
+    /// detection reads the process list: `switching.rs` has it over the holdings a test says.
+    /// What is left of an app that has gone cannot be quit, and a tool nothing holds is
+    /// switched at once: ChatGPT holds Codex's login, not Claude Code's.
     #[test]
     fn the_core_says_which_running_app_holds_a_login() {
         let world = World::new("holder");
@@ -1163,10 +1163,9 @@ mod tests {
         assert_eq!(found.map(|q| q.app_id), Some(CHATGPT.into()));
     }
 
-    /// AppModelTests.swift's anAppIsGivenItsTimeToQuitAndNoMore. An app that quits when
-    /// asked is waited for, and the copy that ran is the one to open again; one not running
-    /// is not asked; one that does not quit is given its time and no more, and is left
-    /// running.
+    /// An app that quits when asked is waited for, and the copy that ran is the one to open
+    /// again; one not running is not asked; one that does not quit is given its time and no
+    /// more, and is left running.
     #[test]
     fn an_app_is_given_its_time_to_quit_and_no_more() {
         let apps = StandInApps::new(&[CHATGPT], true);
@@ -1552,7 +1551,6 @@ mod tests {
         format!("pitboard{}", std::env::consts::EXE_SUFFIX)
     }
 
-    // MachineModelTests.swift's theCommandLineIsLookedForWhereATerminalWouldFindIt.
     #[test]
     fn the_command_line_is_looked_for_where_a_terminal_would_find_it() {
         use crate::FoundCommandLine;
@@ -1591,8 +1589,8 @@ mod tests {
         );
     }
 
-    // AppModelTests.swift's theSettingsLookForTheCommandLineWhereTheLoginShellSays. Nothing of
-    // this machine is looked in: each tool is named outright, and no login shell or registry read.
+    // Nothing of this machine is looked in: each tool is named outright, and no login shell or
+    // registry read.
     #[test]
     fn the_settings_look_for_the_command_line_where_the_login_shell_says() {
         use crate::{FoundCommandLine, Made, OwnCommandLine};
@@ -1724,9 +1722,6 @@ mod tests {
     /// Whether this copy has a command line a schedule or a link would keep reaching is read
     /// from the file inside it each time: none at all, one nobody may run, and one that runs.
     /// A copy with none, or one that cannot run, is refused before the scheduler is asked.
-    ///
-    /// MachineModelTests.swift's anAppWithoutACommandLineItCanRunCannotLinkOrSchedule, over a
-    /// real file.
     #[test]
     fn the_command_line_inside_is_read_from_the_file_each_time() {
         let read = |worker: &Worker| match worker.work(Job::ReadSchedule {

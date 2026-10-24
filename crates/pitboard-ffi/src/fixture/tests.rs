@@ -1,7 +1,7 @@
-//! The fixtures, each made on the real core: the macOS app's FixtureTests.swift, ported to
-//! the worlds that replace its FixtureCore, and what each UI test reads in its world, asked
-//! of the model an app launches into it. Where the real core answers otherwise than the
-//! Swift fixture did, the test says so and holds what the core does.
+//! The fixtures, each made on the real core: where each starts, the tools and apps it stands
+//! in for, and what each UI test reads in its world, asked of the model an app launches into
+//! it. Where the real core answers otherwise than the Swift fixture did, the test says so and
+//! holds what the core does.
 
 use super::apps::{CHATGPT, CLAUDE, chatgpt};
 use super::pages;
@@ -101,8 +101,6 @@ fn read(core: &AppCore) -> Status {
 /// read says nothing of it, since only Anthropic could say whose Claude Code's login is.
 /// leftInFile's read warns of the login left in a file, which a read that asks nobody does
 /// not look at.
-///
-/// FixtureTests.swift's eachFixtureStartsWhereItsTestsExpect.
 #[test]
 fn each_fixture_starts_where_its_tests_expect() {
     let work = "claude/work, in use";
@@ -212,9 +210,6 @@ fn each_fixture_starts_where_its_tests_expect() {
 
 /// The UI tests launch a fixture by its name, from a list of their own, so a name changed
 /// here has to change there.
-///
-/// FixtureTests.swift's theUITestsNameEveryFixtureAsTheAppDoes, but for the variable, which
-/// is the app's to read.
 #[test]
 fn the_ui_tests_name_every_fixture_as_the_app_does() {
     assert_eq!(
@@ -279,8 +274,6 @@ fn an_account_turned_on_is_warmed_up_as_the_app_starts() {
 /// Claude Code's sign-in prints the address to open and asks for the code from the browser,
 /// which the sheet shows as a link and a field, and goes no further until a code is typed
 /// back. Finishing then parks the new account beside the one in use.
-///
-/// FixtureTests.swift's aClaudeCodeSignInWaitsForTheCodeAndThenParksTheAccount.
 #[test]
 fn a_claude_code_sign_in_waits_for_the_code_and_then_parks_the_account() {
     let launched = made(World::OneTool);
@@ -423,8 +416,6 @@ fn a_refused_code_is_said_in_the_sheet_and_another_is_asked_for() {
 
 /// Codex's sign-in prints the address to open beside the loopback address the browser comes
 /// back to, reads nothing typed, and finishes by itself once the browser is done.
-///
-/// FixtureTests.swift's aCodexSignInFinishesByItself.
 #[test]
 fn a_codex_sign_in_finishes_by_itself() {
     let launched = made(World::TwoTools);
@@ -459,8 +450,6 @@ fn a_codex_sign_in_finishes_by_itself() {
 /// says there was nothing to take away. Nothing is ever repaired. The schedule is a file in
 /// the fixture's own folder, which no scheduler is asked to start: on Windows, the task's
 /// definition as the pretend Task Scheduler keeps it.
-///
-/// FixtureTests.swift's theScheduleTurnsOnAndOff.
 #[test]
 fn the_schedule_turns_on_and_off() {
     let launched = made(World::OneTool);
@@ -511,8 +500,7 @@ fn the_schedule_turns_on_and_off() {
 /// app launches into is kept from one launch to the next, so what the first left is there
 /// to be emptied.
 ///
-/// FixtureTests.swift's everyLaunchStartsWhereTheLastOneDid, but for the login item and
-/// notifications' permission, which are the app's.
+/// The login item and notifications' permission are the app's.
 #[test]
 fn every_launch_starts_where_the_last_one_did() {
     use pitboard_core::app::AppFile;
@@ -580,8 +568,6 @@ fn every_launch_starts_where_the_last_one_did() {
 /// The command line is inside a stand-in app in the fixture's own folder, one a schedule
 /// would keep reaching and a link could reach, and a terminal finds none until one is linked
 /// in the folder's `bin`, where the macOS app's fixture links it: linking is the app's own.
-///
-/// FixtureTests.swift's aLaunchLinksItsCommandLineInATemporaryDirectory, but for linking.
 #[test]
 fn a_launch_keeps_its_command_line_in_its_own_folder() {
     let launched = made(World::OneTool);
@@ -629,8 +615,6 @@ fn started(launched: &Launched) -> (Arc<PitboardModel>, Arc<Told>) {
 /// The UI tests open the menu before the window, and the menu shows only what a read has
 /// found. The app launched into a fixture reads by itself, as it does on a real machine,
 /// with nothing opened and nothing pressed.
-///
-/// FixtureTests.swift's aLaunchReadsWithoutBeingAsked.
 #[test]
 fn a_launch_reads_without_being_asked() {
     let launched = made(World::TwoTools);
@@ -677,8 +661,6 @@ fn the_chatgpt_fixture_is_the_app_the_core_finds_on_each_system() {
 /// The fixture's ChatGPT runs Codex's login while it is open, as the process list shows it,
 /// and its app control quits and opens it: a switch through the fixture quits it, switches
 /// and opens it again, which is what the UI test drives.
-///
-/// FixtureTests.swift's theChatGPTFixtureIsQuitForACodexSwitchAndOpenedAgain.
 #[test]
 fn the_chatgpt_fixture_is_quit_for_a_codex_switch_and_opened_again() {
     let launched = made(World::ChatGptOpen);

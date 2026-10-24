@@ -819,8 +819,7 @@ mod tests {
     /// sounded the same an error would pass for a note, and they order by how pressing they
     /// are.
     ///
-    /// PresentationTests.swift's everySeverityLooksAndSoundsLikeItselfAndOrdersByHowPressingItIs,
-    /// whose symbols stay the app's.
+    /// Their symbols stay the app's.
     #[test]
     fn every_severity_sounds_like_itself_and_orders_by_how_pressing_it_is() {
         let severities = [Severity::Info, Severity::Warning, Severity::Error];

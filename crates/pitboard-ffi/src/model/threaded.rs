@@ -450,11 +450,10 @@ fn a_codex_switchs_warning_reaches_the_snapshot() {
     model.shutdown();
 }
 
-/// AppModelTests.swift's aSwitchWaitsForTheAppHoldingTheLoginToBeQuit and
-/// quittingTheAppSwitchesAndOpensItAgain, through the lanes over the real core, whose
-/// holder detection reads ChatGPT's own `codex` in the process list. The switch waits for
-/// the person; told to go ahead, ChatGPT is asked to quit, the switch is made once it has,
-/// with nothing left running the old login to warn about, and ChatGPT is opened again.
+/// A switch waits for the app holding the login to be quit, through the lanes over the real
+/// core, whose holder detection reads ChatGPT's own `codex` in the process list. The switch
+/// waits for the person; told to go ahead, ChatGPT is asked to quit, the switch is made once it
+/// has, with nothing left running the old login to warn about, and ChatGPT is opened again.
 #[test]
 fn quitting_the_app_holding_the_login_switches_and_opens_it_again() {
     let world = two_codex_accounts("codex-quit");
@@ -810,9 +809,9 @@ fn a_code_claude_code_refused_is_typed_again_into_the_same_sign_in() {
     at.model.shutdown();
 }
 
-/// RoutingTests.swift's signingInAgainToTheAccountInUseSaysItHasANewLogin, on the real core
-/// with a stand-in for `claude`: signing in again to the account in use puts its new login in
-/// use, keeps it the account in use, and says so beside what Claude Code's last switch said.
+/// On the real core with a stand-in for `claude`, signing in again to the account in use puts
+/// its new login in use, keeps it the account in use, and says so beside what Claude Code's
+/// last switch said.
 #[test]
 fn signing_in_again_to_the_account_in_use_puts_its_new_login_in_use() {
     let at = signing_in_world("sign-in-again");
@@ -853,9 +852,8 @@ fn signing_in_again_to_the_account_in_use_puts_its_new_login_in_use() {
     at.model.shutdown();
 }
 
-/// AppModelTests.swift's aCancelledSignInStopsTheToolAndReportsNothing, on the real core with
-/// a stand-in for `claude` waiting for a code: cancelling stops the tool, whose process is
-/// gone, nothing is typed to it or enrolled, and the sign-in's thread ends.
+/// On the real core with a stand-in for `claude` waiting for a code, cancelling stops the tool,
+/// whose process is gone, nothing is typed to it or enrolled, and the sign-in's thread ends.
 #[test]
 fn cancelling_a_sign_in_stops_its_tool() {
     let at = signing_in_world("cancel");

@@ -19,12 +19,10 @@
 //!
 //! The model and what it presents came from the macOS app's Swift. Where a comment here
 //! names a Swift file the app no longer has, such as `AppModel.swift`, `MachineModel.swift`
-//! or `Notifier.swift`, or a test in `AppModelTests.swift`, `PresentationTests.swift` or
-//! `MenuTests.swift`, it means that file as it was before the app ran on the model, at
-//! commit 277539b. The `AppModelTests.swift` the app's package has since is another. The
-//! account windows' bookkeeping moved later, and a comment that names its Swift, such as
-//! `LinkInbox.swift`, `StoreJanitor.swift`'s sweep or `AccountPickerTests.swift`, means it as
-//! it was at commit a3e5ce0, where the comment says so.
+//! or `Notifier.swift`, it means that file as it was before the app ran on the model, at
+//! commit 277539b. The account windows' bookkeeping moved later, and a comment that names its
+//! Swift, such as `LinkInbox.swift`, `StoreJanitor.swift`'s sweep or
+//! `AccountPickerTests.swift`, means it as it was at commit a3e5ce0, where the comment says so.
 
 use pitboard_core::context::{Context, Environment};
 use pitboard_core::host::Os;

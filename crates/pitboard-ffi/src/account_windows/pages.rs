@@ -104,8 +104,7 @@ mod tests {
         assert!(!page_may_close(PageRole::Window));
     }
 
-    /// A dialog says who asks: the page, or a page embedded in it. From
-    /// AccountWindowsTests.swift.
+    /// A dialog says who asks: the page, or a page embedded in it.
     #[test]
     fn a_dialog_says_who_asks() {
         assert_eq!(dialog_title("chatgpt.com".into(), true), "chatgpt.com says");
@@ -146,7 +145,6 @@ mod tests {
         );
     }
 
-    /// From AccountWindowsTests.swift.
     #[test]
     fn a_sign_in_window_is_sized_as_the_page_asks() {
         let size = |width, height| {

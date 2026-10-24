@@ -448,8 +448,6 @@ mod tests {
 
     use NavigationDecision::{Download, Ignore, Load, LoadInPage, Popup, Refuse};
 
-    // Each test is one of NavigationPolicyTests.swift, with the answer it had there.
-
     // An account window's own page.
 
     #[test]

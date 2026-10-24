@@ -111,8 +111,8 @@ fn sign_in_over(job: &Job) -> bool {
     matches!(job, Job::SignInOver { .. })
 }
 
-/// AppModelTests.swift's aSignInThatCannotStartIsReported. A sign-in that cannot start says
-/// why in the sheet that started it, which stays up to say it, and leaves nothing half-shown.
+/// A sign-in that cannot start says why in the sheet that started it, which stays up to say it,
+/// and leaves nothing half-shown.
 #[test]
 fn a_sign_in_that_cannot_start_is_reported() {
     let mut model = Hand::new();
@@ -258,9 +258,8 @@ fn a_sheet_that_signs_in_looks_for_tools_again_when_asked() {
     );
 }
 
-/// AppModelTests.swift's aCodexSignInIsForCodex. Codex's sign-in prints an address and reads
-/// nothing, so the tool is named in the label the core is given, and the sign-in finishes and
-/// enrols.
+/// Codex's sign-in prints an address and reads nothing, so the tool is named in the label the
+/// core is given, and the sign-in finishes and enrols.
 #[test]
 fn a_codex_sign_in_is_for_codex() {
     let mut model = Hand::new();
@@ -274,11 +273,10 @@ fn a_codex_sign_in_is_for_codex() {
     assert_eq!(shown.sheet, None, "and the sheet that started it is done");
 }
 
-/// AppModelTests.swift's aSignInToTheAccountInUseSaysItsNewLoginIsInUse, apart from the notice,
-/// which comes with what the window says. Signing in again to the account in use puts its new
-/// login in use at once. It says so, and what the core warned about sessions still on the old
-/// login stays beside it until the tool has another account in use, the way a switch's
-/// warning does, rather than among the read's warnings, which the next read replaces.
+/// Signing in again to the account in use puts its new login in use at once. It says so, and
+/// what the core warned about sessions still on the old login stays beside it until the tool
+/// has another account in use, the way a switch's warning does, rather than among the read's
+/// warnings, which the next read replaces. The notice comes with what the window says.
 #[test]
 fn a_sign_in_to_the_account_in_use_says_its_new_login_is_in_use() {
     let old_login = warning(
@@ -312,9 +310,8 @@ fn a_sign_in_to_the_account_in_use_says_its_new_login_is_in_use() {
     );
 }
 
-/// AppModelTests.swift's aFirstSignInToTheAccountInUseSaysItWasEnrolled. A browser often signs
-/// in to the session it already has, so the account signed in now can be enrolled by a
-/// sign-in under a new name. It says it was enrolled, not signed in to again.
+/// A browser often signs in to the session it already has, so the account signed in now can be
+/// enrolled by a sign-in under a new name. It says it was enrolled, not signed in to again.
 #[test]
 fn a_first_sign_in_to_the_account_in_use_says_it_was_enrolled() {
     let mut model = Hand::new();
@@ -327,11 +324,10 @@ fn a_first_sign_in_to_the_account_in_use_says_it_was_enrolled() {
     );
 }
 
-/// AppModelTests.swift's aSignInToTheAccountInUseKeepsWhatTheLastSwitchSaid. The tool did not
-/// switch, so what its last switch said about sessions still using the account it left is
-/// still true, and stays: the restart it asked for, and the warning not to sign out inside
-/// one. The sign-in's own count of the same sessions, naming this account's old login, would
-/// contradict it and is not added.
+/// The tool did not switch, so what its last switch said about sessions still using the account
+/// it left is still true, and stays: the restart it asked for, and the warning not to sign out
+/// inside one. The sign-in's own count of the same sessions, naming this account's old login,
+/// would contradict it and is not added.
 #[test]
 fn a_sign_in_to_the_account_in_use_keeps_what_the_last_switch_said() {
     let mut model = Hand::new();
@@ -445,9 +441,8 @@ fn a_sign_in_that_could_not_tell_what_runs_says_it_once() {
     );
 }
 
-/// AppModelTests.swift's aSignInThatWasParkedSaysWhatItWarnedAbout. A sign-in that parked its
-/// login rather than put it in use says why, after the read that follows it, which would
-/// otherwise put the warning away.
+/// A sign-in that parked its login rather than put it in use says why, after the read that
+/// follows it, which would otherwise put the warning away.
 #[test]
 fn a_sign_in_that_was_parked_says_what_it_warned_about() {
     let untold = warning(
@@ -472,10 +467,10 @@ fn a_sign_in_that_was_parked_says_what_it_warned_about() {
     assert!(shown.last_switches.is_empty());
 }
 
-/// AppModelTests.swift's aRefusedSignInSaysWhatItFoundOnTheWay, from the sheet a sign-in is
-/// started from. A sign-in refused before it started says what that refusal found on the
-/// way, such as a switch interrupted earlier and finished now, not only why it was refused.
-/// The panel says it too, since what was found is about the machine and outlives the sheet.
+/// From the sheet a sign-in is started from, a sign-in refused before it started says what that
+/// refusal found on the way, such as a switch interrupted earlier and finished now, not only
+/// why it was refused. The panel says it too, since what was found is about the machine and
+/// outlives the sheet.
 #[test]
 fn a_refused_sign_in_says_what_it_found_on_the_way() {
     let recovered = warning(
@@ -502,8 +497,7 @@ fn a_refused_sign_in_says_what_it_found_on_the_way() {
     assert_eq!(shown.warnings, [recovered]);
 }
 
-/// AppModelTests.swift's aSignInOfAnotherAccountSaysNothingMore. A sign-in of another account
-/// adds a row and says nothing more.
+/// A sign-in of another account adds a row and says nothing more.
 #[test]
 fn a_sign_in_of_another_account_says_nothing_more() {
     let mut model = Hand::new();
@@ -521,11 +515,10 @@ fn a_sign_in_of_another_account_says_nothing_more() {
     assert_eq!((shown.failure, shown.sheet_failure), (None, None));
 }
 
-/// AppModelTests.swift's aCodeIsAskedForOnlyWhereTheToolTakesOne. Whether a code is asked for
-/// is the core's to read, in each tool's own words, and its cases are the core's tests. The
-/// sheet asks it about the tool being signed in to, and a code typed back is not asked for
-/// again. What is typed goes to the tool on the lane of sign-in calls, apart from the actor
-/// and from the sign-in's own thread, which waits on the browser.
+/// Whether a code is asked for is the core's to read, in each tool's own words, and its cases
+/// are the core's tests. The sheet asks it about the tool being signed in to, and a code typed
+/// back is not asked for again. What is typed goes to the tool on the lane of sign-in calls,
+/// apart from the actor and from the sign-in's own thread, which waits on the browser.
 #[test]
 fn a_code_is_asked_for_only_where_the_tool_takes_one() {
     for (provider, takes) in [("claude", true), ("codex", false)] {
@@ -554,10 +547,9 @@ fn a_code_is_asked_for_only_where_the_tool_takes_one() {
     }
 }
 
-/// AppModelTests.swift's aCancelledSignInStopsTheToolAndReportsNothing. Cancel stops the tool
-/// on the lane of sign-in calls: stopping waits for the tool, and a Codex sign-in waiting on
-/// the browser held the whole app while it did. What the stopped tool leaves behind is not a
-/// failure to report, and nothing is enrolled.
+/// Cancel stops the tool on the lane of sign-in calls: stopping waits for the tool, and a Codex
+/// sign-in waiting on the browser held the whole app while it did. What the stopped tool leaves
+/// behind is not a failure to report, and nothing is enrolled.
 #[test]
 fn a_cancelled_sign_in_stops_the_tool_and_reports_nothing() {
     let mut model = Hand::new();
@@ -585,11 +577,10 @@ fn a_cancelled_sign_in_stops_the_tool_and_reports_nothing() {
     );
 }
 
-/// AppModelTests.swift's anAccountThatCannotBeSwitchedToIsSignedInToAgainFromThePanel, apart
-/// from the row's action, which comes with what the window says. An account whose parked
-/// login can no longer be used is signed in to again through the sign-in a new account gets,
-/// so the address Codex prints shows the same way. The sheet has the label alone, and the
-/// core is given it with its tool once, as for a new account.
+/// An account whose parked login can no longer be used is signed in to again through the
+/// sign-in a new account gets, so the address Codex prints shows the same way. The sheet has
+/// the label alone, and the core is given it with its tool once, as for a new account. The
+/// row's action comes with what the window says.
 #[test]
 fn an_account_that_cannot_be_switched_to_is_signed_in_to_again() {
     let mut model = Hand::new();
@@ -627,9 +618,8 @@ fn an_account_that_cannot_be_switched_to_is_signed_in_to_again() {
     assert_eq!(machine.signed_in, ["codex/work", "claude/spare"]);
 }
 
-/// AppModelTests.swift's aSecondSignInWhileOneRunsStartsNothing. One sign-in at a time. A
-/// second asked for while one runs would take the place of the one on screen and leave the
-/// first tool waiting on a browser with nothing to stop it.
+/// One sign-in at a time. A second asked for while one runs would take the place of the one on
+/// screen and leave the first tool waiting on a browser with nothing to stop it.
 #[test]
 fn a_second_sign_in_while_one_runs_starts_nothing() {
     let mut model = Hand::new();
@@ -645,9 +635,8 @@ fn a_second_sign_in_while_one_runs_starts_nothing() {
     assert_eq!(model.shown().signing_in, None);
 }
 
-/// AppModelTests.swift's aSignInCancelledWhileItStartsStopsWhatStarted. Cancel can be pressed
-/// before the tool has started. What then starts is stopped rather than watched, and nothing
-/// is enrolled or said.
+/// Cancel can be pressed before the tool has started. What then starts is stopped rather than
+/// watched, and nothing is enrolled or said.
 #[test]
 fn a_sign_in_cancelled_while_it_starts_stops_what_started() {
     let mut model = Hand::new();
@@ -915,12 +904,11 @@ fn a_sign_in_waiting_on_a_cancelled_one_starts_once_that_one_has_let_go() {
     assert_eq!(model.send(sign_in("claude", "three")).len(), 1, "at once");
 }
 
-/// AppModelTests.swift's aFinishedSignInClosesOnlyTheSheetItStartedFrom. A sign-in that
-/// finishes closes the sheet it was started from. A sheet up by then would be somebody
-/// else's, such as a name half typed, and closing it threw that away. Here no other sheet can
-/// be up while a sign-in runs, since it keeps its own and nothing puts one up any other way,
-/// as the Swift test's direct assignment did: so one closed meanwhile stays closed, and the
-/// next is put up once the sign-in is over.
+/// A sign-in that finishes closes the sheet it was started from. A sheet up by then would be
+/// somebody else's, such as a name half typed, and closing it threw that away. Here no other
+/// sheet can be up while a sign-in runs, since it keeps its own and nothing puts one up any
+/// other way, as the Swift test's direct assignment did: so one closed meanwhile stays closed,
+/// and the next is put up once the sign-in is over.
 #[test]
 fn a_finished_sign_in_closes_only_the_sheet_it_started_from() {
     let rename = Sheet::Rename {
@@ -947,12 +935,11 @@ fn a_finished_sign_in_closes_only_the_sheet_it_started_from() {
     assert_eq!(model.shown().sheet, Some(rename));
 }
 
-/// AppModelTests.swift's aSignInCancelledWhileItFinishesLeavesWhatCameAfterIt, both ways.
-/// Cancel pressed while what the tool signed in to is being enrolled comes too late to stop
-/// it. It is enrolled all the same, so the accounts are read again, and nothing else is
-/// touched: the sign-in and the sheet on screen by then are somebody else's, a sign-in started
-/// since among them. Where the cancel reached the tool first and finishing fails as stopped,
-/// that was somebody's answer and says nothing.
+/// Cancel pressed while what the tool signed in to is being enrolled comes too late to stop it.
+/// It is enrolled all the same, so the accounts are read again, and nothing else is touched:
+/// the sign-in and the sheet on screen by then are somebody else's, a sign-in started since
+/// among them. Where the cancel reached the tool first and finishing fails as stopped, that was
+/// somebody's answer and says nothing.
 #[test]
 fn a_sign_in_cancelled_while_it_finishes_leaves_what_came_after_it() {
     for stopped_first in [false, true] {
@@ -1030,9 +1017,8 @@ fn a_sign_in_cancelled_while_it_finishes_leaves_what_came_after_it() {
     }
 }
 
-/// AppModelTests.swift's aReadThatStartedBeforeAChangeIsDroppedWhenItLands, for a sign-in, the
-/// case `switching.rs` has with the others: a read that started before this app's sign-in
-/// finished lands after it with who was signed in before, and is dropped.
+/// A read that started before this app's sign-in finished lands after it with who was signed in
+/// before, and is dropped, as `switching.rs` has it for the other changes.
 #[test]
 fn a_read_that_started_before_a_sign_in_is_dropped_when_it_lands() {
     a_read_that_started_before(|model, machine| {
@@ -1064,11 +1050,10 @@ fn a_look_landing_after_a_sign_in_enrols_leaves_the_read_after_it() {
     });
 }
 
-/// RoutingTests.swift's aRunningSignInKeepsItsSheet. The menu stays usable while the window
-/// has a sheet up, and its Add Account… or an item that names an account puts up a sheet.
-/// Over a running sign-in that replaced the sheet that could finish or stop it, and left the
-/// tool waiting on a browser with nothing on screen. The sign-in keeps its sheet, and the
-/// window is still brought forward on the accounts pane.
+/// The menu stays usable while the window has a sheet up, and its Add Account… or an item that
+/// names an account puts up a sheet. Over a running sign-in that replaced the sheet that could
+/// finish or stop it, and left the tool waiting on a browser with nothing on screen. The
+/// sign-in keeps its sheet, and the window is still brought forward on the accounts pane.
 #[test]
 fn a_running_sign_in_keeps_its_sheet() {
     let rename = Sheet::Rename {
@@ -1111,12 +1096,10 @@ fn a_running_sign_in_keeps_its_sheet() {
     assert_eq!(model.shown().sheet, Some(rename), "once it is over");
 }
 
-/// RoutingTests.swift's anAccountIsAddedThroughTheSheetFromStartToFinish, apart from the tool
-/// the sheet starts on, which comes with what the window says. The Swift drove its fixture;
-/// this drives the model's own state, and `threaded.rs` adds one through the real core and a
-/// stand-in for `claude`. The sheet over the window, the tool's sign-in with the code it asks
-/// for typed back, and the new account parked beside the one in use once the sheet has closed
-/// by itself.
+/// The sheet over the window, the tool's sign-in with the code it asks for typed back, and the
+/// new account parked beside the one in use once the sheet has closed by itself, on the model's
+/// own state. `threaded.rs` adds one through the real core and a stand-in for `claude`, and the
+/// tool the sheet starts on comes with what the window says.
 #[test]
 fn an_account_is_added_through_the_sheet_from_start_to_finish() {
     let mut model = Hand::new();
@@ -1163,10 +1146,8 @@ fn an_account_is_added_through_the_sheet_from_start_to_finish() {
     assert!(shown.warnings.is_empty());
 }
 
-/// RoutingTests.swift's signingInAgainToTheAccountInUseSaysItHasANewLogin, on the model's own
-/// state where the Swift ran its fixture. Signing in again to the account in use, from its
-/// row, keeps it the account in use and says its new login is the one in use now, as a
-/// sign-in through the core does.
+/// Signing in again to the account in use, from its row, keeps it the account in use and says
+/// its new login is the one in use now, as a sign-in through the core does.
 #[test]
 fn signing_in_again_to_the_account_in_use_says_it_has_a_new_login() {
     let mut model = Hand::new();
@@ -1200,11 +1181,10 @@ fn signing_in_again_to_the_account_in_use_says_it_has_a_new_login() {
     assert!(!work.switchable);
 }
 
-/// AppModelTests.swift's whatIsInstalledIsAskedAgainWhenTheFormForAnotherAccountOpens, apart
-/// from what the sheet offers, which comes with what the window says. Opening the form for
-/// another account asks again what is installed: the first answer may have come while the
-/// person's login shell was too slow to say, and the core asks it once more when that was so.
-/// Naming the account in use asks nothing, nor does a read once something is found.
+/// Opening the form for another account asks again what is installed: the first answer may have
+/// come while the person's login shell was too slow to say, and the core asks it once more when
+/// that was so. Naming the account in use asks nothing, nor does a read once something is
+/// found. What the sheet offers comes with what the window says.
 #[test]
 fn what_is_installed_is_asked_again_when_the_form_for_another_account_opens() {
     let mut model = Hand::new();
@@ -1252,9 +1232,8 @@ fn what_is_installed_is_asked_again_when_the_form_for_another_account_opens() {
     );
 }
 
-/// RoutingTests.swift's aSheetIsPutUpOverTheWindow, the sheet: a sheet is over the main
-/// window, so putting one up opens the window too, on the accounts the sheet is about. The
-/// rest of it, opening the window by itself, comes with what the window says.
+/// A sheet is over the main window, so putting one up opens the window too, on the accounts the
+/// sheet is about. Opening the window by itself comes with what the window says.
 #[test]
 fn a_sheet_is_put_up_over_the_window() {
     let rename = Sheet::Rename {

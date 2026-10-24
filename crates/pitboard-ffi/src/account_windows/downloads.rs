@@ -192,8 +192,7 @@ mod tests {
             .into_owned()
     }
 
-    /// A download never overwrites a file, and two downloads never get one name. From
-    /// AccountWindowsTests.swift.
+    /// A download never overwrites a file, and two downloads never get one name.
     #[test]
     fn a_download_is_numbered_past_names_taken() {
         assert_eq!(
@@ -429,7 +428,7 @@ mod tests {
         assert_eq!(name, Path::new("/d/B\u{e1}o c\u{e1}o 2.pdf"));
     }
 
-    /// From AccountWindowsTests.swift, and an address's host as `URL.host` gives it.
+    /// An address's host as `URL.host` gives it.
     #[test]
     fn a_downloads_host_is_read_from_inside_a_blob_link() {
         let host = |url: Option<&str>| download_host(url.map(str::to_owned));

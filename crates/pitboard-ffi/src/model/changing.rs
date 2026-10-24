@@ -85,8 +85,6 @@ fn tos(model: &Hand) -> Vec<String> {
 /// The account signed in but not enrolled is the one the app can record by itself: no
 /// browser, no terminal. The sheet closes once the name is taken, and stays open with the
 /// name in it when it is refused, so it can be corrected rather than typed again.
-///
-/// AppModelTests.swift's onlyAnUnenrolledSignedInAccountCanBeNamedHere.
 #[test]
 fn only_an_unenrolled_signed_in_account_can_be_named_here() {
     let mut model = Hand::new();
@@ -132,8 +130,6 @@ fn only_an_unenrolled_signed_in_account_can_be_named_here() {
 
 /// Naming a Codex login enrols it as Codex's. A bare name means Claude Code to the core, and
 /// would have enrolled nothing or the wrong tool's login.
-///
-/// AppModelTests.swift's aCodexLoginIsNamedAsCodexs.
 #[test]
 fn a_codex_login_is_named_as_codexs() {
     let mut model = Hand::new();
@@ -156,8 +152,6 @@ fn a_codex_login_is_named_as_codexs() {
 
 /// Forgetting is destructive, so what the model does with a refusal matters. The refusal is
 /// said to whoever asked, in the core's own words, and one that went through says nothing.
-///
-/// AppModelTests.swift's aRefusedForgetIsReported.
 #[test]
 fn a_refused_forget_is_reported() {
     let mut model = Hand::new();
@@ -197,8 +191,7 @@ fn a_refused_forget_is_reported() {
 /// Two tools can each have a `work`. Every call names the one meant, with its tool, and the
 /// rows are told apart by their id rather than by a label they share.
 ///
-/// AppModelTests.swift's twoToolsWorkAccountsAreSwitchedAndForgottenByTheirOwnName, the
-/// forgetting and the row's name: the switch is switching.rs's.
+/// The switch is switching.rs's.
 #[test]
 fn two_tools_work_accounts_are_forgotten_by_their_own_name() {
     let mut model = Hand::new();
@@ -238,8 +231,6 @@ fn two_tools_work_accounts_are_forgotten_by_their_own_name() {
 /// Naming or renaming closes its own sheet once it is done, and only that. The name is saved
 /// even when somebody has since put up another sheet, and closing that one threw away
 /// whatever was in it.
-///
-/// AppModelTests.swift's namingAndRenamingCloseOnlyTheirOwnSheet.
 #[test]
 fn naming_and_renaming_close_only_their_own_sheet() {
     let mut model = Hand::new();
@@ -283,8 +274,7 @@ fn naming_and_renaming_close_only_their_own_sheet() {
     );
 }
 
-/// AppModelTests.swift's aReadThatStartedBeforeAChangeIsDroppedWhenItLands, for an
-/// enrolment.
+/// A read that started before an enrolment is dropped when it lands, as for every change.
 #[test]
 fn a_read_that_started_before_naming_an_account_is_dropped_when_it_lands() {
     a_read_that_started_before(|model, machine| {
@@ -621,8 +611,6 @@ fn a_look_while_a_rename_is_made_leaves_what_was_said_about_the_account() {
 /// said under the new name, and one tool's rename says nothing about another tool's accounts.
 /// Keyed by the old name, the read after a rename took the switch for undone and the advice
 /// for new, and told it again.
-///
-/// AppModelTests.swift's aRenameCarriesWhatWasSaidAboutTheAccount.
 #[test]
 fn a_rename_carries_what_was_said_about_the_account() {
     let mut model = Hand::new();

@@ -15,8 +15,7 @@ use super::{Intent, NotificationButton, ReadFailure, RunOutNotice, Sheet};
 use crate::{Account, Warning};
 use std::time::Duration;
 
-/// AppModelTests.swift's aReadFillsInTheTitleAndTheRows. The title is said with the menu
-/// bar's wording; the number it says is here.
+/// The title is said with the menu bar's wording; the number it says is here.
 #[test]
 fn a_read_fills_in_the_rows() {
     let mut model = Hand::new();
@@ -654,10 +653,9 @@ fn an_offline_read_in_doubt_asks_one_read_per_config_value() {
     );
 }
 
-/// AppModelTests.swift's whatIsInstalledIsAskedAgainWhileNothingIsFound, apart from what
-/// the window says about it. A login shell too slow to answer finds nothing the first time,
-/// and the core asks it once more later, so a read asks again while nothing has been found.
-/// Once a tool is found the question stops.
+/// A login shell too slow to answer finds nothing the first time, and the core asks it once
+/// more later, so a read asks again while nothing has been found. Once a tool is found the
+/// question stops. What the window says about it is presenting's.
 #[test]
 fn what_is_installed_is_asked_again_while_nothing_is_found() {
     let mut model = Hand::new();
@@ -674,9 +672,8 @@ fn what_is_installed_is_asked_again_while_nothing_is_found() {
     assert_eq!(model.count(installed_ask), 2);
 }
 
-/// AppModelTests.swift's whatIsInstalledIsAskedOnce, apart from what the sheet offers. What
-/// the app found does not change while it runs, so it is asked once, and not each time what
-/// is shown is taken, nor on every read.
+/// What the app found does not change while it runs, so it is asked once, and not each time
+/// what is shown is taken, nor on every read. What the sheet offers is presenting's.
 ///
 /// Not when the model is made either: finding a tool can mean waiting on the person's login
 /// shell.
@@ -700,9 +697,9 @@ fn what_is_installed_is_asked_once() {
     assert_eq!(model.shown().installed, Some(vec![claude_code(), codex()]));
 }
 
-/// AppModelTests.swift's aReadThatStartedBeforeAChangeIsDroppedWhenItLands, for a change the
-/// poll noticed. The cases of a switch and of giving up are in `switching.rs`; enrolling,
-/// renaming, forgetting and signing in come with those changes.
+/// A read that started before a change the poll noticed is dropped when it lands. The cases of
+/// a switch and of giving up are in `switching.rs`; enrolling, renaming, forgetting and signing
+/// in come with those changes.
 ///
 /// A read waits on a service with who was signed in when it started, and whatever is changed
 /// meanwhile, by this app or somewhere else the poll noticed, is changed before the read
@@ -753,10 +750,9 @@ fn a_read_that_started_before_a_change_is_dropped_when_it_lands() {
     assert!(!shown.reading);
 }
 
-/// AppModelTests.swift's aFailedReadThatStartedBeforeASwitchSaysNothingOnceItLands is a
-/// switch's, and is in `switching.rs`; this is the same for a change the poll noticed. A
-/// read that fails, started before the change and landing after it, failed on the machine
-/// as it was, and is not said over what the change showed.
+/// A switch's case is in `switching.rs`; this is the same for a change the poll noticed. A read
+/// that fails, started before the change and landing after it, failed on the machine as it was,
+/// and is not said over what the change showed.
 #[test]
 fn a_failed_read_that_started_before_a_change_says_nothing_once_it_lands() {
     let mut model = Hand::new();

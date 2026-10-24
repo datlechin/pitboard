@@ -1,6 +1,4 @@
-//! Advice about which account to switch to, and telling each run-out once, as the Swift
-//! model did them: AppModelTests.swift's tests on those and PresentationTests.swift's on what
-//! the window says of them, each under its own name in snake case, driven through
+//! Advice about which account to switch to, and telling each run-out once, driven through
 //! `State::apply` by hand. Telling is a notification posted through the app's system, which a
 //! test's machine keeps, and the record of what was told, which it keeps too.
 
@@ -43,8 +41,6 @@ fn told_work() -> String {
 /// A session's status line records that the account in use has run out, and the menu bar
 /// shows it within seconds. The advice to switch, and its notification, came only with the
 /// app's next read of its own, minutes later.
-///
-/// AppModelTests.swift's numbersThatRunAnAccountOutAdviseAtOnceAndTellItOnce.
 #[test]
 fn numbers_that_run_an_account_out_advise_at_once_and_tell_it_once() {
     let mut model = Hand::new();
@@ -80,8 +76,6 @@ fn numbers_that_run_an_account_out_advise_at_once_and_tell_it_once() {
 
 /// Advice says the account in use has none of a limit left. Once what is recorded shows the
 /// window after it, with room, that is no longer true.
-///
-/// AppModelTests.swift's adviceTheNumbersNoLongerBearOutIsPutAway.
 #[test]
 fn advice_the_numbers_no_longer_bear_out_is_put_away() {
     let mut model = Hand::new();
@@ -98,8 +92,6 @@ fn advice_the_numbers_no_longer_bear_out_is_put_away() {
 /// Advice told when what sessions recorded ran the account out stays while the numbers bear
 /// it out, whatever read comes next. The app's own read worked advice out afresh, leaving out
 /// what had been told, so opening the panel put it away with the account still at 100%.
-///
-/// AppModelTests.swift's adviceToldFromWhatSessionsRecordedOutlastsTheAppsNextRead.
 #[test]
 fn advice_told_from_what_sessions_recorded_outlasts_the_apps_next_read() {
     let mut model = Hand::new();
@@ -118,8 +110,6 @@ fn advice_told_from_what_sessions_recorded_outlasts_the_apps_next_read() {
 
 /// The same for advice a read told: the next read found the window already told about and
 /// left it out, so it was gone a minute later, or at once if the panel was opened again.
-///
-/// AppModelTests.swift's adviceToldByAReadOutlastsTheNextReadAndIsToldOnce.
 #[test]
 fn advice_told_by_a_read_outlasts_the_next_read_and_is_told_once() {
     let mut model = Hand::new();
@@ -141,8 +131,6 @@ fn advice_told_by_a_read_outlasts_the_next_read_and_is_told_once() {
 /// A change to the account index can leave the account in use run out, and the poll that
 /// notices it reads who is signed in and the numbers again. What they show is advised then,
 /// not at the app's next read of its own.
-///
-/// AppModelTests.swift's theAccountIndexChangingElsewhereIsAdvisedOnAtOnce.
 #[test]
 fn the_account_index_changing_elsewhere_is_advised_on_at_once() {
     let mut model = Hand::new();
@@ -161,8 +149,6 @@ fn the_account_index_changing_elsewhere_is_advised_on_at_once() {
 /// account offered may have been forgotten, may need signing in again or may have run out
 /// itself since, and choosing it then failed. What it says is left follows the numbers, and
 /// with nothing left to offer the advice goes.
-///
-/// AppModelTests.swift's adviceOffersWhatCanStillBeUsedAfterEveryRead.
 #[test]
 fn advice_offers_what_can_still_be_used_after_every_read() {
     let spent = || work(100.0, 7_200);
@@ -249,8 +235,7 @@ fn advice_offers_what_can_still_be_used_after_every_read() {
 /// A switch puts away the advice about its own tool, which is about the account it has just
 /// left, and leaves another tool's: as true as it was, and never told again.
 ///
-/// AppModelTests.swift's `use`, which the Swift tested through PresentationTests.swift's
-/// adviceAboutOneToolOutlivesASwitchOfAnother, and that test's notices are presenting's.
+/// What its notices say is presenting's.
 #[test]
 fn a_switch_puts_away_the_advice_about_its_own_tool() {
     let mut model = Hand::new();
@@ -281,9 +266,6 @@ fn a_switch_puts_away_the_advice_about_its_own_tool() {
 /// same words, and switches to the account offered: worked once for both, where the Swift
 /// worded the panel's, the notification's and a sentence only its tests spoke each their own
 /// way. Beside another tool's accounts it names the tool beneath its title.
-///
-/// Advice.swift's `notification` and Notices.swift's advice, which the Swift tested only
-/// through MenuTests.swift's theAccountWithTheMostLeftIsOffered and its userInfo.
 #[test]
 fn a_run_out_is_notified_in_the_words_the_window_says_it() {
     let mut model = Hand::new();

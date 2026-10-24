@@ -1299,8 +1299,6 @@ mod tests {
 
     /// A phrase that starts a line starts with a capital, and nothing else about it changes:
     /// a figure first stays as it is, and so does a phrase already capitalised.
-    ///
-    /// PresentationTests.swift's onlyTheFirstLetterOfAPhraseIsCapitalised.
     #[test]
     fn only_the_first_letter_of_a_phrase_is_capitalised() {
         assert_eq!(capitalised(""), "");
@@ -1348,8 +1346,6 @@ mod tests {
     /// VoiceOver reads the column's "30m" as thirty meters and "5h" as letters, so a limit
     /// is said in words: its name as a sentence says it, what it has used, and when it
     /// resets.
-    ///
-    /// WordingTests.swift's aLimitIsSpokenInWordsAndNotInItsColumnsShorthand.
     #[test]
     fn a_limit_is_spoken_in_words_and_not_in_its_columns_shorthand() {
         assert_eq!(
@@ -1434,8 +1430,6 @@ mod tests {
     /// Pitboard says everything in English, so a span of time VoiceOver reads inside one of
     /// its sentences is English too, whatever the region: the Swift app wrote it in
     /// `en_US_POSIX` for that reason. Here it has no region to follow.
-    ///
-    /// WordingTests.swift's aSpokenSpanOfTimeReadsTheSameInEveryRegion.
     #[test]
     fn a_spoken_span_of_time_reads_the_same_in_every_region() {
         assert_eq!(
@@ -1778,8 +1772,6 @@ mod tests {
 
     /// A warning is named in the menu by a heading from its code, each its own, and a code
     /// the app does not know yet still gets one rather than an empty line.
-    ///
-    /// PresentationTests.swift's everyWarningCodeHasItsOwnHeadingAndAnUnknownOneAGeneralOne.
     #[test]
     fn every_warning_code_has_its_own_heading_and_an_unknown_one_a_general_one() {
         let headings = [
@@ -1902,8 +1894,6 @@ mod tests {
     /// A `pitboard` installed apart from the app is updated the way it was installed, and none
     /// of those ways does it by itself. Saying it "updates on its own" read as though nothing
     /// needed doing, until the app moved on and the command line refused its newer files.
-    ///
-    /// WordingTests.swift's aCommandLineInstalledApartSaysHowToUpdateIt.
     #[test]
     fn a_command_line_installed_apart_says_how_to_update_it() {
         assert_eq!(
@@ -1919,8 +1909,6 @@ mod tests {
     /// A check is shown as a shape and a colour, and said as a word. If two levels ever came
     /// to sound the same, a broken check would read as a passing one. Its shape and its colour
     /// are each app's own.
-    ///
-    /// WordingTests.swift's everyLevelLooksAndSoundsLikeItself, but for the symbols.
     #[test]
     fn every_level_sounds_like_itself() {
         let spoken: Vec<&str> = [Level::Ok, Level::Warn, Level::Fail]
@@ -1937,8 +1925,6 @@ mod tests {
 
     /// The activity list names a change by the verb the log keeps, in words, and one it does
     /// not know yet by the verb itself made readable rather than not at all.
-    ///
-    /// PresentationTests.swift's aChangeIsNamedByItsVerbAndAnUnknownOneReadably.
     #[test]
     fn a_change_is_named_by_its_verb_and_an_unknown_one_readably() {
         for (verb, name) in [
@@ -2003,8 +1989,6 @@ mod tests {
 
     /// A change that worked says so in a word, and one that did not says what stopped it,
     /// from the code the log keeps.
-    ///
-    /// PresentationTests.swift's aChangeSaysHowItEnded.
     #[test]
     fn a_change_says_how_it_ended() {
         assert_eq!(change_outcome("ok"), "Done");
@@ -2017,8 +2001,6 @@ mod tests {
 
     /// Who asked for a change: this app, a terminal, or a line written before that was
     /// recorded, and a caller the app does not know yet by its own name.
-    ///
-    /// PresentationTests.swift's aChangeSaysWhoAskedForIt.
     #[test]
     fn a_change_says_who_asked_for_it() {
         assert_eq!(change_caller("app"), "Pitboard app");

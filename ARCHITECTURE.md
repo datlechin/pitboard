@@ -648,8 +648,8 @@ window loads its site, and whatever the site's pages load, as a browser would.
     `fixture_names` and `fixture_page`, which without the feature refuse, naming it, or name
     none. `fixture` makes its model over the fixture's apps and notifications; `fixture_in`,
     for a test of an app's bindings, over the `AppControl` and `Notifications` it is handed,
-    as `new` takes them. `tests.rs` is the macOS app's former `FixtureTests.swift` ported,
-    and what each UI test reads in its world.
+    as `new` takes them. `tests.rs` is where each fixture starts, the tools and apps it
+    stands in for, and what each UI test reads in its world.
 - `crates/pitboard-sites`: the sites an account's window opens, and what a link from outside
   may be. A leaf, with no I/O and nothing of the core, whose one dependency is `url`, for
   IDNA alone.
