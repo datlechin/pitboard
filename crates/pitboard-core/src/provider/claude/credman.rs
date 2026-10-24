@@ -694,13 +694,17 @@ mod tests {
         let service = claude::live_service(&scratch.ctx);
         let chain = super::super::live::chain(&scratch.ctx);
         assert_eq!(
-            crate::store::resolve(&chain, &service).expect("readable"),
-            Backend::Absent
+            crate::store::holder(&chain, &service)
+                .expect("readable")
+                .map(|held| held.kind()),
+            None
         );
         crate::store::write_raw(&chain, Permit::for_a_test(), &service, "{}").expect("written");
         assert_eq!(
-            crate::store::resolve(&chain, &service).expect("readable"),
-            Backend::File
+            crate::store::holder(&chain, &service)
+                .expect("readable")
+                .map(|held| held.kind()),
+            Some(Backend::File)
         );
         scratch
             .memory
@@ -758,8 +762,10 @@ mod tests {
         let chain = super::super::live::chain(&scratch.ctx);
         crate::store::write_raw(&chain, Permit::for_a_test(), &service, "{}").expect("written");
         assert_eq!(
-            crate::store::resolve(&chain, &service).expect("readable"),
-            Backend::CredentialManager
+            crate::store::holder(&chain, &service)
+                .expect("readable")
+                .map(|held| held.kind()),
+            Some(Backend::CredentialManager)
         );
         assert_eq!(scratch.memory.live().peek(&service).as_deref(), Some("{}"));
     }

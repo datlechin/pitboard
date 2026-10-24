@@ -315,8 +315,10 @@ mod tests {
         std::fs::write(config.join(".credentials.json"), r#"{"claudeAiOauth":{}}"#)
             .expect("a login");
         assert_eq!(
-            crate::store::resolve(&live.chain, &live.service).expect("readable"),
-            crate::store::Backend::File
+            crate::store::holder(&live.chain, &live.service)
+                .expect("readable")
+                .map(|held| held.kind()),
+            Some(crate::store::Backend::File)
         );
 
         let signin = crate::switch::enroll::signin_dir(&ctx);

@@ -347,25 +347,6 @@ fn with_live<T>(live: &Live, run: impl FnOnce(&[&dyn RawStore]) -> T) -> T {
     run(&live.refs())
 }
 
-/// Which backend holds a credential, or `Absent`.
-///
-/// Settled in 2.1.278, which the earlier note here left open. Claude Code builds its live
-/// chain as keychain-with-plaintext-fallback and the successor backend ("storageV5", gated
-/// on `tengu_hover_rest`) does not change that: it replaces what backs the fallback half,
-/// and only for a caller that hands a backend in. An ordinary `claude` hands none in, so
-/// the fallback stays `<storage dir>/.credentials.json` and the keychain stays first. The
-/// order below is therefore the order Claude Code reads in, not a guess.
-///
-/// One divergence, on purpose. Claude Code demotes to the plaintext file when a keychain
-/// write fails for good, and deletes the keychain item when it does; from 2.1.281 a locked
-/// keychain whose item the process has seen is not failing for good. Pitboard never
-/// demotes: see the note on `write_in`.
-pub(crate) fn resolve(live: &Live, service: &str) -> Result<Backend, Error> {
-    with_live(live, |chain| {
-        Ok(resolve_in(chain, service)?.map_or(Backend::Absent, RawStore::kind))
-    })
-}
-
 /// The nearest backend after the one in `chain` holding `service` that holds it too, by its
 /// own look. The chain is a parameter so tests can pass backends that fail on demand.
 fn behind_in<'a>(
@@ -757,7 +738,7 @@ mod tests {
             Backend::Unknown,
             Error::Unreadable("not built yet".into()),
         ))]);
-        unreadable(resolve(&live, "svc").map(|b| b.name().to_string()));
+        unreadable(holder(&live, "svc").map(|held| format!("{}", held.is_some())));
     }
 
     // Credential Manager out of a network logon's reach is no keychain locked (MC-net).
