@@ -122,6 +122,7 @@ pub(crate) fn automatically(
     ledger
         .save(ctx, permit)
         .map_err(|error| stopped(&to, error))?;
+    crate::fault::point("auto.attempt_recorded");
     match switch_from(state, ctx, permit, tool, &plan.to, outgoing) {
         Ok((
             Switched {
@@ -1270,6 +1271,35 @@ mod tests {
             look()
         );
         assert!(!lock.exists(), "a look makes no lock file");
+    }
+
+    // A decision records its attempt before its switch leaves a record. A look between the
+    // two, as the app's or the watch service's, goes on to the lock and finds the switch made,
+    // where it once said the account switched from waits a minute.
+    #[test]
+    fn an_attempt_another_run_is_making_is_left_to_the_lock() {
+        let (m, _) = nearly_out("auto-attempt-under-way", 96.0);
+        let looked = Arc::new(std::sync::Mutex::new(None));
+        let switched = fault::meanwhile(
+            "auto.attempt_recorded",
+            {
+                let (ctx, looked) = (m.ctx.clone(), Arc::clone(&looked));
+                move || {
+                    let state = state::load(&ctx).expect("state");
+                    let look = crate::duty::autoswitch::look(&ctx, &state, Threshold::DEFAULT);
+                    *looked.lock().expect("kept") = Some(look);
+                }
+            },
+            || auto(&m),
+        )
+        .expect("a switch")
+        .value;
+        assert!(matches!(switched, Auto::Switched { .. }), "{switched:?}");
+        let looked = looked.lock().expect("kept").take();
+        assert!(matches!(looked, Some(Look::Act)), "{looked:?}");
+
+        let looked = auto(&m).expect("a look").value;
+        assert_eq!(watching(&looked), Some("there"), "{looked:?}");
     }
 
     /// Under a custom OAuth endpoint Claude Code keeps its login where Pitboard does not act,

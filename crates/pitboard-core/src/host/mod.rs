@@ -829,8 +829,8 @@ pub(crate) trait Host: Send + Sync + std::fmt::Debug {
     fn app_version(&self, bundle: &Path) -> Option<String>;
     fn app_id(&self, bundle: &Path) -> Option<String>;
 
-    /// The system's own scheduler, which runs daily renewal. `None` where there is none
-    /// Pitboard knows how to ask.
+    /// The system's own scheduler, which runs Pitboard's jobs ([`crate::schedule::Job`]).
+    /// `None` where there is none Pitboard knows how to ask.
     fn scheduler(&self) -> Option<&dyn Scheduler>;
 
     /// Whether this process runs as the person themselves, which is what the one gate every
@@ -1352,7 +1352,7 @@ mod tests {
             ctx.host().elevation(&ctx)
         };
         #[cfg(target_os = "linux")]
-        let unsudoed = |ctx: &Context| user::linux_elevation(false, ctx.home());
+        let unsudoed = |ctx: &Context| user::linux_elevation(false, &crate::home::written(ctx));
         #[cfg(not(target_os = "linux"))]
         let unsudoed = |_: &Context| user::elevation(false);
         assert_eq!(

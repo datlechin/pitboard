@@ -10,7 +10,11 @@ In each case here, reads such as `pitboard status` and the status line still ans
 
 With `sudo`, Pitboard refuses every change with `elevated`: a file or keychain item made as root would be out of reach of your own runs. On macOS, it refuses every change as root too.
 
-On Linux, root changes what it owns in its own home, as on a server or container whose only user is root. Pitboard refuses root only in a home another user owns, such as the one `su` without `-` keeps.
+On Linux, root changes things where root owns every folder Pitboard writes in, as on a server or container whose only user is root. Those are your home, the Pitboard directory and the homes of Claude Code and Codex. Pitboard refuses root where another user owns one of them:
+
+- `su -m` and `su -p` keep your `HOME`.
+- `su` keeps `CLAUDE_CONFIG_DIR`, `CODEX_HOME` and `PITBOARD_HOME` where you set them.
+- A container can be given your `~/.claude` or `~/.codex` in place of root's.
 
 Run Pitboard as yourself. [Remove files Pitboard made as root](/install/remove#remove-files-pitboard-made-as-root) cleans up after an earlier Pitboard run as root.
 

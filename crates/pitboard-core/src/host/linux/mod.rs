@@ -96,7 +96,7 @@ impl Host for Linux {
     }
 
     fn elevation(&self, ctx: &Context) -> Elevation {
-        user::linux_elevation(ctx.sudo(), ctx.home())
+        user::linux_elevation(ctx.sudo(), &crate::home::written(ctx))
     }
 
     fn floor(&self) -> Floor {

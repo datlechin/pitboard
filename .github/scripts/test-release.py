@@ -669,7 +669,8 @@ class WindowsAppcast(unittest.TestCase):
                 self.assertEqual(enclosure.get("length"), str(len(msi)))
                 self.assertEqual(enclosure.get(f"{sparkle}os"), f"windows-{arch}")
                 self.assertEqual(
-                    enclosure.get(f"{sparkle}installerArguments"), "/passive LAUNCHAFTERINSTALL=1"
+                    enclosure.get(f"{sparkle}installerArguments"),
+                    "/passive /norestart LAUNCHAFTERINSTALL=1",
                 )
                 signature = base64.b64decode(enclosure.get(f"{sparkle}edSignature"))
                 self.assertTrue(ed_verify(public, msi, signature))

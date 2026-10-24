@@ -107,7 +107,6 @@ pub(crate) struct Facts {
     pub desktop: Option<DesktopFacts>,
     /// The daily renewal schedule, where this home has one installed.
     pub(crate) schedule: Option<ScheduleFact>,
-    // The watch service, where this home has one installed.
     pub(crate) watch_service: Option<WatchServiceFact>,
     /// How Pitboard's requests leave this machine, as its environment says.
     pub(crate) network: NetworkFact,
@@ -206,7 +205,6 @@ pub(crate) struct ScheduleFact {
     pub(crate) network_differs: bool,
 }
 
-// The watch service as it is installed, read from what Pitboard wrote.
 pub(crate) struct WatchServiceFact {
     pub(crate) location: crate::schedule::Location,
     pub(crate) program: Option<PathBuf>,
@@ -679,7 +677,6 @@ fn schedule_fact(ctx: &Context) -> Option<ScheduleFact> {
     })
 }
 
-// The watch service, where this home has one.
 fn watch_service_fact(ctx: &Context) -> Option<WatchServiceFact> {
     if !crate::schedule::serves(ctx) {
         return None;
@@ -951,9 +948,9 @@ fn running_codex(ctx: &Context) -> Option<Vec<crate::holder::Holding>> {
     crate::holder::find(ctx, ProviderId::Codex, program, holders)
 }
 
-/// The check that fails where this process runs as root or under sudo, or elevated on
-/// Windows, or nobody could tell whether it does, since then Pitboard changes nothing: `None`
-/// where it runs as the person themselves.
+/// The check that fails where the host says this process is not the person themselves
+/// ([`crate::host::Host::elevation`]), or nobody could tell whether it is, since then Pitboard
+/// changes nothing: `None` where it runs as the person themselves.
 fn elevated(
     os: Os,
     elevation: crate::host::Elevation,

@@ -1,16 +1,4 @@
-//! Watching Claude Code without a terminal left open: `pitboard watch`, started by the system's
-//! own service manager from the person's sign-in on, for as long as their session lasts.
-//!
-//! Opt-in, as `pitboard watch` in a terminal is: somebody installs it knowing that it switches
-//! and warms up by itself ([`crate::duty::autoswitch`], [`crate::duty::warm`]). It runs what the
-//! terminal runs, at the share it was installed with. The app and it may both be switching: a
-//! switch is decided again under the lock every change takes, so two front ends never make two
-//! switches from one reading ([`crate::switch`]'s `auto`).
-//!
-//! What it installs is the system's own: a LaunchAgent on macOS, a systemd user service on
-//! Linux, and a task in Task Scheduler that starts at the person's sign-in on Windows. Like the
-//! renewal schedule ([`crate::schedule`]), it is the default home's alone, and it is given the
-//! installing Pitboard's proxy variables.
+//! `pitboard watch` run by the system's own service manager; ARCHITECTURE.md has its rules.
 
 use crate::context::Context;
 use crate::duty::autoswitch::Threshold;
@@ -69,6 +57,8 @@ pub(crate) fn install(ctx: &Context, permit: Permit, at: Threshold) -> Result<Lo
             job: Job::Watch,
         });
     }
+    // A run of the service a reinstall ends is then between changes, never mid-renewal.
+    let _quiet = crate::switch::exclusive(ctx, permit)?;
     let location = schedule::put(
         ctx,
         permit,
@@ -81,8 +71,21 @@ pub(crate) fn install(ctx: &Context, permit: Permit, at: Threshold) -> Result<Lo
     Ok(location)
 }
 
-/// Stop it and take it away. `false` when there was nothing installed.
+/// Stop it and take it away. `false` when there was nothing installed. Its run is ended only
+/// while Pitboard's lock is held, so never in the middle of a change.
 pub(crate) fn uninstall(ctx: &Context, permit: Permit) -> Result<bool> {
+    let watched = ctx.clone().with_pitboard_home(ctx.default_pitboard_home());
+    let _quiet = match schedule::scheduler(ctx) {
+        Some(s) if s.installed(ctx, Job::Watch) => {
+            Some(crate::switch::exclusive(&watched, permit)?)
+        }
+        _ => None,
+    };
+    taken_away(ctx, permit)
+}
+
+// `uninstall`, for a change that holds Pitboard's lock already.
+pub(crate) fn taken_away(ctx: &Context, permit: Permit) -> Result<bool> {
     if !schedule::remove(ctx, permit, Job::Watch)? {
         return Ok(false);
     }
@@ -323,6 +326,39 @@ mod tests {
                     at: Some(at(95))
                 }
             );
+        }
+    }
+
+    // Ended while a change is under way, the service's run could lose the login it was renewing.
+    #[test]
+    fn the_services_run_is_ended_only_between_changes() {
+        for machine in [Machine::new(), Machine::scheduling_tasks()] {
+            let ctx = machine.ctx(&[]);
+            install(&ctx, Permit::for_a_test(), at(90)).expect("installed");
+            for (reinstalling, before) in [(true, 90), (false, 80)] {
+                let changing =
+                    crate::switch::exclusive(&ctx, Permit::for_a_test()).expect("a change");
+                let asked = ctx.clone();
+                let waiting = std::thread::spawn(move || {
+                    if reinstalling {
+                        install(&asked, Permit::for_a_test(), at(80)).map(|_| true)
+                    } else {
+                        uninstall(&asked, Permit::for_a_test())
+                    }
+                });
+                std::thread::sleep(std::time::Duration::from_millis(200));
+                assert!(
+                    !waiting.is_finished(),
+                    "{reinstalling}: it waits for the change"
+                );
+                assert!(matches!(
+                    status(&ctx),
+                    Installed::Yes { at: share, .. } if share == Some(at(before))
+                ));
+                drop(changing);
+                assert!(waiting.join().expect("it ends").expect("done"));
+            }
+            assert_eq!(status(&ctx), Installed::No);
         }
     }
 

@@ -131,7 +131,6 @@ impl Service for System {
 }
 
 impl System {
-    // `then` on the task named, where there is one.
     fn on_task(
         name: &str,
         then: impl FnOnce(&IRegisteredTask) -> windows::core::Result<()> + Send,

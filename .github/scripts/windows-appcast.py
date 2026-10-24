@@ -11,8 +11,10 @@ from xml.sax.saxutils import quoteattr
 REPO = Path(__file__).resolve().parents[2]
 APP = REPO / "apps" / "windows" / "Pitboard.App" / "Pitboard.App.csproj"
 ARCHITECTURES = ("x64", "arm64")
-# LAUNCHAFTERINSTALL has the MSI start Pitboard again once it has replaced it.
-INSTALLER_ARGUMENTS = "/passive LAUNCHAFTERINSTALL=1"
+# LAUNCHAFTERINSTALL has the MSI start Pitboard again once it has replaced it. /passive alone
+# restarts Windows unasked when a file in use, such as the watch service's pitboard.exe, needs
+# a restart to be replaced.
+INSTALLER_ARGUMENTS = "/passive /norestart LAUNCHAFTERINSTALL=1"
 FULL_RELEASE = re.compile(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)")
 
 
