@@ -48,7 +48,9 @@ pub(crate) use enroll::planted;
 pub use enroll::{Enrolled, Said, SignIn, Steps, WatchedSignIn};
 #[cfg(any(test, feature = "test-support"))]
 pub use enroll::{ScriptedSignIn, SignInScript};
-pub(crate) use enroll::{one_at_a_time, running_already, sign_in, sign_in_watched_as};
+pub(crate) use enroll::{
+    one_at_a_time, ready_to_sign_in, running_already, sign_in, sign_in_watched_as,
+};
 pub use folder::awaited::WaitStep;
 pub use folder::{Ended, GivenUp, MoveSettled};
 pub(crate) use forget::forget;

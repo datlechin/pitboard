@@ -286,11 +286,7 @@ fn decided(
             warnings: Vec::new(),
         })),
         Ok(Look::Act) => None,
-        Err(error) => Some(Err(Failed {
-            error,
-            warnings: Vec::new(),
-            said_first: 0,
-        })),
+        Err(error) => Some(Err(Failed::from(error))),
     }
 }
 
@@ -1365,14 +1361,10 @@ mod tests {
         fn a_failure_of_one_account_is_said_once_until_it_warms_up() {
             let mut told = WarmTold::default();
             let failed = || {
-                Err(Failed {
-                    error: Error::WarmUpFailed {
-                        label: "work".into(),
-                        why: pitboard_core::duty::warm::Failure::NotStarted,
-                    },
-                    warnings: Vec::new(),
-                    said_first: 0,
-                })
+                Err(Failed::from(Error::WarmUpFailed {
+                    label: "work".into(),
+                    why: pitboard_core::duty::warm::Failure::NotStarted,
+                }))
             };
             assert_eq!(told.untold(failed()).len(), 1);
             assert!(told.untold(failed()).is_empty());
@@ -1403,14 +1395,10 @@ mod tests {
         fn another_error_is_said_once_for_each_account_it_names() {
             let mut told = WarmTold::default();
             let expired = |label: &str| {
-                Err(Failed {
-                    error: Error::ParkedLoginRefused {
-                        tool: ProviderId::Claude,
-                        label: label.into(),
-                    },
-                    warnings: Vec::new(),
-                    said_first: 0,
-                })
+                Err(Failed::from(Error::ParkedLoginRefused {
+                    tool: ProviderId::Claude,
+                    label: label.into(),
+                }))
             };
             assert_eq!(told.untold(expired("work")).len(), 1);
             assert!(told.untold(expired("work")).is_empty());

@@ -257,6 +257,33 @@ pub(crate) fn sign_in(
     Ok(pending)
 }
 
+// Asked before a browser opens, so nobody signs in only to be told the account could never be
+// switched to.
+pub(crate) fn ready_to_sign_in(ctx: &Context, driver: &'static dyn Provider) -> Result<()> {
+    let tool = driver.id();
+    if tool == ProviderId::Claude && ctx.custom_oauth() {
+        return Err(Error::CustomOauthEndpoint);
+    }
+    state::load(ctx)?;
+    super::live_store(ctx, driver)?;
+    // Where pointing the tool's home at a scratch folder does not isolate it, a sign-in would
+    // write over the login in use, and nothing may force past that.
+    if let provider::Isolation::NotIsolated { reason } = driver.private_signin_isolation(ctx) {
+        return Err(Error::SignInNotIsolated { reason });
+    }
+    if driver.program(ctx).is_none() {
+        return Err(Error::ProgramMissing {
+            tool,
+            program: ctx
+                .program_for(tool)
+                .unwrap_or(std::path::Path::new(tool.program()))
+                .display()
+                .to_string(),
+        });
+    }
+    Ok(())
+}
+
 // Windows alone, which is not released, so macOS and Linux say what they said before.
 pub(crate) fn running_already(ctx: &Context, which: ProviderId) -> Option<String> {
     if ctx.os != crate::host::Os::Windows || which != ProviderId::Codex {

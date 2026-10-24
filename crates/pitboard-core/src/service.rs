@@ -11,7 +11,7 @@ use crate::host::Os;
 pub use crate::in_use::Stored;
 pub use crate::permit::Permit;
 use crate::permit::gate;
-use crate::provider::{LoginKind, Provider, ProviderId};
+use crate::provider::{LoginKind, ProviderId};
 use crate::state::{self, Account, Key};
 use crate::switch::{self, Enrolled, Outcome, Renewal, Settled, SignIn};
 use crate::usage::readings;
@@ -49,6 +49,17 @@ impl Failed {
             error,
             warnings,
             said_first,
+        }
+    }
+}
+
+// A refusal with nothing found on the way.
+impl From<Error> for Failed {
+    fn from(error: Error) -> Failed {
+        Failed {
+            error,
+            warnings: Vec::new(),
+            said_first: 0,
         }
     }
 }
@@ -92,11 +103,7 @@ impl Pitboard {
 
     /// The gate's answer as the refusal of a change, which has found nothing on the way.
     fn permitted(&self) -> std::result::Result<Permit, Failed> {
-        self.permit().map_err(|error| Failed {
-            error,
-            warnings: Vec::new(),
-            said_first: 0,
-        })
+        self.permit().map_err(Failed::from)
     }
 
     /// Who is signed in and what every account has left. Parked logins whose access has
@@ -289,11 +296,7 @@ impl Pitboard {
     /// [`auto_look`]: Pitboard::auto_look
     pub fn auto_switch(&self, threshold: Threshold) -> Changing<Auto> {
         let permit = self.permitted()?;
-        let looked = self.auto_look(threshold).map_err(|error| Failed {
-            error,
-            warnings: Vec::new(),
-            said_first: 0,
-        })?;
+        let looked = self.auto_look(threshold).map_err(Failed::from)?;
         if let Look::Stands(value) = looked {
             return Ok(Done {
                 value: *value,
@@ -329,11 +332,7 @@ impl Pitboard {
     /// a bare `work` on the same terms, and the one place that decides what an ambiguous
     /// bare label does is the one place that knows every provider's accounts.
     fn named(&self, permit: Permit, verb: &str, typed: &str) -> std::result::Result<Key, Failed> {
-        let state = state::load(&self.ctx).map_err(|error| Failed {
-            error,
-            warnings: Vec::new(),
-            said_first: 0,
-        })?;
+        let state = state::load(&self.ctx).map_err(Failed::from)?;
         crate::label::resolve(&state, typed)
             .map(Account::key)
             .map_err(|error| self.refused(permit, verb, typed, error.code(), error))
@@ -358,7 +357,7 @@ impl Pitboard {
     /// still stuck to the front of it, which would enrol an account literally called
     /// `claude/work`.
     fn chosen(&self, permit: Permit, verb: &str, typed: &str) -> std::result::Result<Key, Failed> {
-        self.enrolling(typed)
+        crate::label::enrolling(state::load(&self.ctx).ok().as_ref(), typed)
             .map_err(|error| self.refused(permit, verb, typed, "label_unusable", error))
     }
 
@@ -395,46 +394,22 @@ impl Pitboard {
         Failed::of(error, warnings)
     }
 
-    // An account enrolled already keeps the name it has, which a new one may no longer get:
-    // 0.1.x wrote labels with a slash, and the app took labels with a space.
-    fn enrolling(&self, typed: &str) -> Result<Key> {
-        if let Ok(state) = state::load(&self.ctx) {
-            let whole = state
-                .accounts
-                .iter()
-                .find(|a| typed.contains(crate::label::SEPARATOR) && a.label == typed);
-            let named = match crate::label::parse(typed) {
-                Ok(crate::label::Spec::Bare(label)) => {
-                    state.get(&Key::new(crate::label::DEFAULT, label))
-                }
-                Ok(crate::label::Spec::Qualified(provider, label)) => {
-                    state.get(&Key::new(provider, label))
-                }
-                Err(_) => None,
-            };
-            if let Some(existing) = whole.or(named) {
-                return Ok(existing.key());
-            }
-        }
-        crate::label::choose(typed)
-            .map(|chosen| Key::new(chosen.provider, chosen.label))
-            .map_err(Error::Usage)
-    }
-
     /// The enrolled account `pitboard enroll <typed>` would sign in to again, if it names
     /// one, for saying whose login to sign in with before a browser opens.
     pub fn account_to_enroll(&self, typed: &str) -> Option<Account> {
-        let key = self.enrolling(typed).ok()?;
-        state::load(&self.ctx).ok()?.get(&key).cloned()
+        let state = state::load(&self.ctx).ok()?;
+        let key = crate::label::enrolling(Some(&state), typed).ok()?;
+        state.get(&key).cloned()
     }
 
     /// What to type to name the account `pitboard enroll <typed>` is about, on this
     /// machine: bare where that names it alone, qualified where another tool shares it.
     pub fn name_to_type(&self, typed: &str) -> String {
-        let Ok(key) = self.enrolling(typed) else {
-            return typed.to_string();
-        };
-        state::load(&self.ctx).map_or_else(|_| key.typed(), |state| state.typed(&key))
+        let state = state::load(&self.ctx).ok();
+        match crate::label::enrolling(state.as_ref(), typed) {
+            Ok(key) => state.map_or_else(|| key.typed(), |state| state.typed(&key)),
+            Err(_) => typed.to_string(),
+        }
     }
 
     // What the tool already runs, for a front end to print before a program sign-in, since the
@@ -460,7 +435,7 @@ impl Pitboard {
                     .map_err(|error| self.not_started(permit, typed, error));
             }
         };
-        self.ready_to_sign_in(driver)
+        switch::ready_to_sign_in(&self.ctx, driver)
             .and_then(|()| switch::sign_in(&self.ctx, permit, driver))
             .map_err(|error| self.not_started(permit, typed, error))
     }
@@ -494,7 +469,7 @@ impl Pitboard {
                     .map(|started| started.value);
             }
         };
-        self.ready_to_sign_in(driver)
+        switch::ready_to_sign_in(&self.ctx, driver)
             .and_then(|()| switch::sign_in_watched_as(&self.ctx, permit, driver, &key))
             .map_err(|error| self.not_started(permit, typed, error))
     }
@@ -520,46 +495,7 @@ impl Pitboard {
     /// A sign-in that did not start, or did not finish, for a reason other than its name.
     fn not_started(&self, permit: Permit, typed: &str, error: Error) -> Failed {
         audit::record(&self.ctx, permit, "enroll", typed, error.code());
-        Failed {
-            error,
-            warnings: Vec::new(),
-            said_first: 0,
-        }
-    }
-
-    /// Checked before a sign-in starts, so a person does not sign in through a browser
-    /// only to be told the state file belongs to another machine, that the tool is not
-    /// installed, or that the account could never be switched to afterwards.
-    fn ready_to_sign_in(&self, driver: &'static dyn Provider) -> Result<()> {
-        let tool = driver.id();
-        if tool == ProviderId::Claude && self.ctx.custom_oauth() {
-            return Err(Error::CustomOauthEndpoint);
-        }
-        state::load(&self.ctx)?;
-        // An account signed in here is one to switch to later, which needs a live store
-        // Pitboard can write. Asked now rather than after a browser round trip.
-        switch::live_store(&self.ctx, driver)?;
-        // A private sign-in works by pointing the tool's own login at a scratch directory
-        // through its home variable. Where that does not really isolate it, running one
-        // would write over the login somebody is using, and there is no override: forcing
-        // past "this could touch your live login" is what the rule exists to prevent.
-        if let crate::provider::Isolation::NotIsolated { reason } =
-            driver.private_signin_isolation(&self.ctx)
-        {
-            return Err(Error::SignInNotIsolated { reason });
-        }
-        if driver.program(&self.ctx).is_none() {
-            return Err(Error::ProgramMissing {
-                tool,
-                program: self
-                    .ctx
-                    .program_for(tool)
-                    .unwrap_or(std::path::Path::new(tool.program()))
-                    .display()
-                    .to_string(),
-            });
-        }
-        Ok(())
+        Failed::from(error)
     }
 
     pub fn enroll_signed_in(&self, typed: &str, login: SignIn) -> Changing<Enrolled> {
@@ -830,14 +766,7 @@ impl Pitboard {
                     Error::Usage(refusal),
                 )
             })?;
-        // Only a prefix somebody actually typed can disagree: a bare new name stays inside
-        // the account's own tool whatever tool a bare name would mean for a new account.
-        if to.contains(crate::label::SEPARATOR) && chosen.provider != from.provider {
-            let error = Error::Usage(format!(
-                "`{from}` is a {} account, and a rename cannot move it to {}. Sign in to that \
-                 tool and enrol the account there instead.",
-                from.provider, chosen.provider
-            ));
+        if let Some(error) = crate::label::moved_by_a_rename(&from, to, chosen.provider) {
             return Err(self.refused(permit, "rename", &from.typed(), error.code(), error));
         }
         let to = chosen.label;
@@ -874,11 +803,7 @@ impl Pitboard {
     /// whether one may be, waiting on no lock.
     pub fn warm_up(&self) -> Changing<switch::warm::WarmUp> {
         let permit = self.permitted()?;
-        let looked = self.warm_look().map_err(|error| Failed {
-            error,
-            warnings: Vec::new(),
-            said_first: 0,
-        })?;
+        let looked = self.warm_look().map_err(Failed::from)?;
         if let crate::duty::Look::Stands(overview) = looked {
             return Ok(Done {
                 value: switch::warm::WarmUp::Stands(overview),
@@ -1084,11 +1009,7 @@ impl Pitboard {
     ) -> std::result::Result<(Settled, Option<Warning>), Failed> {
         let (settled, recovered) = switch::settle(&self.ctx, permit, tool).map_err(|error| {
             audit::record(&self.ctx, permit, verb, subject, error.code());
-            Failed {
-                error,
-                warnings: Vec::new(),
-                said_first: 0,
-            }
+            Failed::from(error)
         })?;
         let recovered = recovered.map(|r| {
             audit::record(&self.ctx, permit, "recover", &r.to, r.code());
@@ -3001,11 +2922,7 @@ mod tests {
     /// What one change came to, as a change refused at the gate is reported: its error,
     /// and the warnings found on the way, of which there must be none.
     fn failed<T>(outcome: Result<T>) -> Option<Failed> {
-        outcome.err().map(|error| Failed {
-            error,
-            warnings: Vec::new(),
-            said_first: 0,
-        })
+        outcome.err().map(Failed::from)
     }
 
     type Change = fn(&Pitboard, &Rig) -> Option<Failed>;
