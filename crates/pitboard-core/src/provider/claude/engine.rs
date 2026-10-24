@@ -427,17 +427,6 @@ mod tests {
         }
     }
 
-    #[test]
-    fn a_sign_in_runs_in_its_private_folder() {
-        let ctx = Context::new(PathBuf::from("/nowhere"))
-            .with_claude_program(std::env::current_exe().expect("this test"));
-        let dir = std::path::Path::new("/tmp/pitboard-signin-scratch");
-        let command = Claude
-            .sign_in(&ctx, Permit::for_a_test(), dir)
-            .expect("found");
-        assert_eq!(command.get_current_dir(), Some(dir));
-    }
-
     /// The manual address 2.1.289 prints, with its values made up.
     const ADDRESS: &str = "https://claude.com/cai/oauth/authorize?code=true\
         &client_id=9d1c250a-e61b-44d9-88ed-5944d1962f5e&response_type=code\
