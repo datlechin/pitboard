@@ -406,16 +406,16 @@ fn auto_standing(seen: &Seen, standing: &AutoStanding) -> String {
             as_of,
             held_until,
         }) => pitboard_core::words::watching(
-            account,
+            &words::quoted(account),
             used.as_deref(),
             as_of.map(|at| seen.clock(at)).as_deref(),
             held_until.map(|until| seen.clock(until)).as_deref(),
         ),
         AutoStanding::Came(AutoSwitched::Waiting { from, used, until }) => {
-            pitboard_core::words::auto_waiting(from, used, &seen.clock(*until))
+            pitboard_core::words::auto_waiting(&words::quoted(from), used, &seen.clock(*until))
         }
         AutoStanding::Came(AutoSwitched::Switched { from, to, used, .. }) => {
-            pitboard_core::words::auto_switched(from, to, used)
+            pitboard_core::words::auto_switched(&words::quoted(from), &words::quoted(to), used)
         }
         AutoStanding::Came(AutoSwitched::Skipped {
             from,
@@ -424,7 +424,7 @@ fn auto_standing(seen: &Seen, standing: &AutoStanding) -> String {
             until,
             ..
         }) => pitboard_core::words::auto_skipped(
-            from,
+            &words::quoted(from),
             used,
             why,
             until.map(|until| seen.clock(until)).as_deref(),

@@ -264,6 +264,23 @@ fn the_settings_say_which_account_it_watches_and_how_old_its_reading_is() {
     assert_eq!(standing(&model), None);
 }
 
+// A label is the person's, as they typed it.
+#[test]
+fn the_settings_name_the_account_as_it_was_typed() {
+    let mut model = Hand::new();
+    let mut machine = Stub::reading(Ok(status(vec![work(97.0), personal()])));
+    turned_on(&mut model, &mut machine);
+    machine.look = Ok(AutoLooked::Stands(AutoSwitched::Watching {
+        account: "dana's".into(),
+        used: None,
+        as_of: None,
+        held_until: None,
+    }));
+    model.refresh(&mut machine);
+    let said = standing(&model).expect("something said");
+    assert!(said.contains("dana's"), "{said}");
+}
+
 /// Where it does not switch, the settings say why, with when it acts again where the core
 /// says.
 #[test]

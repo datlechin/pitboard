@@ -19,6 +19,7 @@ use pitboard_core::time::{DAY, HOUR, MINUTE};
 use pitboard_core::usage::pace::{Pace, Standing};
 use pitboard_core::usage::whole;
 use pitboard_core::words::{capitalised, figure, listed};
+use std::ops::Range;
 use unicode_segmentation::UnicodeSegmentation;
 
 pub(crate) const NOT_KNOWN_HOW_IT_WENT: &str =
@@ -452,7 +453,7 @@ pub(crate) const SWITCH: &str = "Switch";
 pub(crate) fn used_then(account: &str, used: &str, then: &str) -> String {
     format!(
         "{}. {then}",
-        typeset(&pitboard_core::words::has_used(account, used))
+        typeset(&pitboard_core::words::has_used(&quoted(account), used))
     )
 }
 
@@ -712,21 +713,75 @@ pub(crate) fn check_text(text: &str) -> String {
     typeset(&prose_capitalised(text))
 }
 
-/// The core's words as the apps write them, where the command line keeps its own: each
-/// apostrophe curled and each "not" the apps contract contracted, as Apple's and Microsoft's
-/// style both write an app's text, and no backticks. What is in backticks, a name, a path or a
-/// command, keeps every letter. Every sentence of the core's an app shows passes through here.
+// The apps' typography for the core's words. What the core quotes, in backticks or not, keeps
+// every letter: a name, a command, a path, an address or a system's own message.
 pub(crate) fn typeset(core: &str) -> String {
     let mut said = String::with_capacity(core.len());
     for (at, part) in core.split('`').enumerate() {
         if at % 2 == 1 {
             said.push_str(part);
-        } else {
-            let before = said.chars().next_back();
-            said.push_str(&contracted(&curled(part, before)));
+            continue;
         }
+        let mut done = 0;
+        for kept in quoted_in(part) {
+            let before = said.chars().next_back();
+            said.push_str(&contracted(&curled(&part[done..kept.start], before)));
+            said.push_str(&part[kept.clone()]);
+            done = kept.end;
+        }
+        let before = said.chars().next_back();
+        said.push_str(&contracted(&curled(&part[done..], before)));
     }
     said
+}
+
+// A name an app puts in the core's sentence, which `typeset` then leaves as it is.
+pub(crate) fn quoted(name: &str) -> String {
+    format!("`{name}`")
+}
+
+// Where the core quotes without backticks, in order: a word with a path's or a link's slash in
+// it, an address up to its domain's end, and a system's message as Rust and Windows end one.
+fn quoted_in(text: &str) -> Vec<Range<usize>> {
+    let mut spans = Vec::new();
+    let mut start = 0;
+    for piece in text.split_inclusive(char::is_whitespace) {
+        let word = piece.trim_end();
+        if word.contains(['/', '\\']) {
+            spans.push(start..start + word.len());
+        } else if let Some(at) = word.find('@') {
+            let domain = word[at + 1..]
+                .find(|c: char| !(c.is_alphanumeric() || matches!(c, '.' | '-')))
+                .map_or(word.len(), |end| at + 1 + end);
+            spans.push(start..start + domain);
+        }
+        start += piece.len();
+    }
+    let number = |text: &str, radix| !text.is_empty() && text.chars().all(|c| c.is_digit(radix));
+    for (at, _) in text.match_indices(" (") {
+        let Some(code) = text[at + 2..].split_once(')').map(|(code, _)| code) else {
+            continue;
+        };
+        let os = code
+            .strip_prefix("os error ")
+            .is_some_and(|n| number(n, 10));
+        let windows = (code.strip_prefix("0x")).is_some_and(|n| n.len() == 8 && number(n, 16));
+        if os || windows {
+            let from = (text[..at].rfind(": ").map(|colon| colon + 2))
+                .max(text[..at].rfind('(').map(|open| open + 1))
+                .unwrap_or(0);
+            spans.push(from..at + 2 + code.len() + 1);
+        }
+    }
+    spans.sort_by_key(|span| span.start);
+    let mut merged: Vec<Range<usize>> = Vec::new();
+    for span in spans {
+        match merged.last_mut() {
+            Some(last) if span.start <= last.end => last.end = last.end.max(span.end),
+            _ => merged.push(span),
+        }
+    }
+    merged
 }
 
 // Only an apostrophe that ends a word, or starts its "s" or a contraction's end: not one inside
@@ -1431,7 +1486,7 @@ pub(crate) fn quit_and_record(os: Os, name: &str, again: bool) -> String {
 
 // An account the core names as typed, `desktop/work`, as the app names it: `work`.
 fn bare(typed: &str) -> String {
-    Key::parse(typed).label
+    quoted(&Key::parse(typed).label)
 }
 
 // Where an account is named: one added by its name, any other as the app can say it.
@@ -1995,6 +2050,51 @@ mod tests {
             "whether or not it will not, would not or must not"
         );
         assert_eq!(typeset(""), "");
+    }
+
+    // A path, an address and a system's own message are quoted by the core, not its words.
+    #[test]
+    fn what_the_core_quotes_keeps_every_letter() {
+        assert_eq!(
+            sentence(
+                "could not write to Pitboard's directory at C:\\Users\\Dan O'Brien\\.pitboard: \
+                 The system cannot find the path specified. (os error 3)"
+            ),
+            "Couldn’t write to Pitboard’s directory at C:\\Users\\Dan O'Brien\\.pitboard: The \
+             system cannot find the path specified. (os error 3)."
+        );
+        assert_eq!(
+            typeset("could not read /Users/dan/dan's files/state.json: Permission denied"),
+            "couldn’t read /Users/dan/dan's files/state.json: Permission denied"
+        );
+        assert_eq!(
+            typeset(
+                "the scheduler refused: Task Scheduler said The system cannot find the file \
+                 specified. (0x80070002)"
+            ),
+            "the scheduler refused: Task Scheduler said The system cannot find the file \
+             specified. (0x80070002)"
+        );
+        assert_eq!(
+            typeset("cannot.reply@example.com's login cannot be read"),
+            "cannot.reply@example.com’s login can’t be read"
+        );
+    }
+
+    // As its row, the menu and the rename field write it.
+    #[test]
+    fn a_label_keeps_every_letter_in_a_sentence() {
+        let said = in_app_warning(
+            Os::MacOs,
+            &CoreWarning::LooksSignedOut {
+                tool: ProviderId::Desktop,
+                label: "desktop/dana's".into(),
+            },
+        )
+        .expect("said");
+        assert!(said.contains(" read dana's in use."), "{said}");
+        let said = used_then("cannot", "96% of its 5-hour limit", "");
+        assert!(said.starts_with("cannot has used "), "{said}");
     }
 
     /// VoiceOver reads the column's "30m" as thirty meters and "5h" as letters, so a limit

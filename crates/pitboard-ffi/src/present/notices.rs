@@ -564,7 +564,7 @@ pub(crate) fn at_limit_notice(heads_up: &HeadsUp, now: i64) -> RunOutNotice {
         )
     } else {
         words::typeset(&said::has_used(
-            &heads_up.ran,
+            &words::quoted(&heads_up.ran),
             &said::share_of_limit(&crate::model::advice::window(limit)),
         ))
     };
