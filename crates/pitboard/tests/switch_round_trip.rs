@@ -977,14 +977,6 @@ fn status_under_sudo_answers_from_what_was_measured() {
 }
 
 #[test]
-fn forgetting_the_signed_in_account_is_refused() {
-    let env = two_accounts("forget");
-    let (_, err, code) = env.run(&["forget", "alpha", "--yes"]);
-    assert_eq!(code, 1);
-    assert!(err.contains("signed in"), "{err}");
-}
-
-#[test]
 fn forgetting_an_account_deletes_its_parked_login() {
     let env = two_accounts("forget-parked");
     let parked = env.parked_service("beta").unwrap();

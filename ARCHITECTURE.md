@@ -5111,7 +5111,7 @@ Measured on 6 October 2026 on macOS 27.0, with `pitboard-ffi` built for
   skipped and says why.
 - The real core answers some things in the fixtures otherwise than the Swift `FixtureCore`
   did, which the UI tests were written against and read since the macOS app launches into
-  the Rust worlds, each held by a test in `crates/pitboard-ffi/src/fixture/tests.rs`:
+  the Rust worlds, each held by a test of the fixtures, the core or the `--json` contract:
   - A read whose service cannot be reached answers, each account's numbers the last
     measured and saying "Anthropic could not be reached"; `status` fails only where the
     account index cannot be read, and the read of what is known fails with it. The Swift
