@@ -105,7 +105,7 @@ With `--sign-in`:
 | Codex | Runs `codex -c 'cli_auth_credentials_store="file"' login` with `CODEX_HOME` set to `signin` in Pitboard's directory. Codex stores the new login in `auth.json` there. |
 | Claude Desktop, on macOS | Runs nothing. Parks the account in use, which leaves Claude signed out, then waits while you open Claude, sign in and quit it. Enrols the account Claude is then signed in to. |
 
-A Claude Code or Codex sign-in leaves the account in use signed in. Before each one, Pitboard deletes `signin` and makes it again, private to you. It reads the new login from there, then deletes the directory and, on macOS, that keychain item. On Windows, it deletes that Credential Manager item too.
+A Claude Code or Codex sign-in leaves the account in use signed in. Before each one, Pitboard deletes `signin` and makes it again, private to you. It runs the tool in `signin-work`, which it empties first. It reads the new login from `signin`, then deletes that directory and, on macOS, that keychain item. On Windows, it deletes that Credential Manager item too.
 
 On Windows, before a Codex sign-in, Pitboard names on standard error what runs Codex: a Codex sign-in open there ends as this one starts.
 

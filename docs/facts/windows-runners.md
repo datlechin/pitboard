@@ -372,6 +372,15 @@ Processes and jobs:
   a process in a job, runs all its 8 to 10 processes inside that job. `TerminateJobObject`
   ends them all. Ending only the probe's processes, or letting the opener exit, leaves Edge
   running.
+- A browser started from a fresh folder with no browser running, through `rundll32
+  url,OpenURL` as Claude Code's sign-in starts one or as a child given the http association's
+  program as Codex's does, the starter then gone: Edge, the http browser of every account but
+  the fresh standard user on windows-11-arm, and Chrome ran every process in their own program
+  folders, so the folder could be removed while they stayed open. Firefox ran every process in
+  that folder, and removing it failed with 32 until Firefox was ended. That fresh user has no
+  http browser, and the association's program is `OpenWith.exe`: the shell started it elsewhere
+  and it closed within 5 s, while started as Codex starts it, it stayed in the folder and held it
+  the same way (RF-F3, runs 40140023267, 40140838594 and 40142612998).
 
 Handing a descriptor:
 

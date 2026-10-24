@@ -179,10 +179,9 @@ pub(crate) const PER_SYSTEM: &[PerSystem] = &[
         linux: NotRead("a Linux install names its version in its path or its package.json"),
         windows: Read(WINDOWS_VERIFIED_AGAINST),
     },
-    // Its static half read on 2026-10-16 in 0.162.1's codex-rs/login/src/server.rs and webbrowser
-    // 1.2.4: it binds 127.0.0.1:1455, sends `GET /cancel` to a login server already there and
-    // falls back to 1457, opens the browser with the `http` association's command
-    // (`AssocQueryStringW`) as a child of its own with no stdio, and reads nothing typed back.
+    // Its static half read on 2026-10-16 in 0.162.1's codex-rs/login/src/server.rs: it binds
+    // 127.0.0.1:1455, sends `GET /cancel` to a login server already there and falls back to 1457,
+    // opens the browser as codex_windows_browser_open says, and reads nothing typed back.
     later_on_windows(
         "codex_login_is_driveable",
         VERIFIED_AGAINST,
@@ -191,6 +190,18 @@ pub(crate) const PER_SYSTEM: &[PerSystem] = &[
          session step 9",
     ),
     everywhere("codex_login_prints_its_address", "0.164.0"),
+    PerSystem {
+        name: "codex_windows_browser_open",
+        macos: NotRead(
+            "a folder a program runs in can be removed on macOS, so how Codex opens a browser \
+             decides nothing",
+        ),
+        linux: NotRead(
+            "a folder a program runs in can be removed on Linux, so how Codex opens a browser \
+             decides nothing",
+        ),
+        windows: Read("0.164.0"),
+    },
     PerSystem {
         name: "codex_store_layers",
         macos: Read("0.164.0"),
@@ -758,6 +769,34 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
         absent: &[],
     },
     Assumption {
+        name: "codex_windows_browser_open",
+        fact: "on Windows `codex login` opens its sign-in page through webbrowser 1.2.4, which \
+               asks `AssocQueryStringW` for the `http` association's command and starts its \
+               program with the address as a child of Codex's, with no standard handles, no \
+               working folder of its own and no wait, so the program runs in Codex's working \
+               folder. Where no browser answers for `http`, the program is the shell's \
+               `OpenWith.exe`. Started that way from a fresh folder with no browser running, Edge \
+               and Chrome ran every process in their own program folders, and the folder could be \
+               removed while they stayed open. Firefox ran every process in it, and `OpenWith.exe` \
+               stayed in it: removing it failed with 32, `ERROR_SHARING_VIOLATION`, until they \
+               were ended (RF-F3, windows-facts runs 40140023267, 40140838594 and 40142612998)",
+        read_from: "`webbrowser::open` in run_login_server in codex-rs/login/src/server.rs at tag \
+                    rust-v0.164.0, whose Cargo.lock pins webbrowser 1.2.4, and that crate's \
+                    open_browser_internal and get_browser_cmd in src/windows.rs and run_command \
+                    in src/common.rs, read on 2026-10-25. The win32-x64 and win32-arm64 builds \
+                    of 0.164.0 hold its errors and import no `ShellExecuteW`",
+        verified_against: "0.164.0",
+        depends: "host::windows::job, which ends only the tool's own programs on a cancel, so a \
+                  browser Codex's sign-in started keeps running (RF-F2), and \
+                  switch::enroll::signin_work_dir, where a sign-in runs, kept once it ends so \
+                  `signin` goes while such a browser stays",
+        probe: &[
+            "failed to get default browser",
+            "The default web browser command contains invalid unicode characters",
+        ],
+        absent: &[],
+    },
+    Assumption {
         name: "codex_store_layers",
         fact: "the store is `cli_auth_credentials_store` as the highest layer that sets it \
                says, lowest first: the packaged default `file`, `/etc/codex/config.toml`, an \
@@ -1150,6 +1189,7 @@ mod tests {
                 "codex_windows_install_places",
                 "codex_windows_version",
                 "codex_login_prints_its_address",
+                "codex_windows_browser_open",
                 "codex_windows_store_layers",
                 "codex_login_takes_a_store_override",
                 "codex_login_restrictions",
@@ -1171,6 +1211,7 @@ mod tests {
             "codex_windows_home",
             "codex_windows_install_places",
             "codex_windows_version",
+            "codex_windows_browser_open",
             "codex_windows_store_layers",
             "codex_windows_system_proxy",
             "codex_windows_sandbox_token",

@@ -335,7 +335,7 @@ impl Provider for Codex {
         command
             .args(["-c", layers::FILE_STORE, "login"])
             .env("CODEX_HOME", dir)
-            .current_dir(dir);
+            .current_dir(crate::switch::enroll::signin_work_dir(ctx));
         Ok(command)
     }
 

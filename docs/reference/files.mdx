@@ -26,6 +26,7 @@ Pitboard creates each directory at mode 0700 and each file at 0600. On Windows, 
 | `warm.lock` | The lock that allows one warm-up at a time | A warm-up |
 | `warm/` | Where Claude Code runs a warm-up, in `warm/claude/`, with a home and config of its own made for the run and removed after it. | A warm-up |
 | `signin/` | Where a tool signs in, apart from the login in use. Removed when the sign-in ends, or by the next one. | A sign-in |
+| `signin-work/` | The folder a tool's sign-in runs in. Emptied as each sign-in starts and kept after it, since the browser it opens may run there. | A sign-in |
 | `vault/` | Linux and Windows: the parked logins of Claude Code and Codex, one file each, sealed to your Windows account on Windows | Anything that parks or renews a login |
 | `parks/` | macOS: the parked logins of Claude Desktop and the folders set aside, one folder each, as [Folders in parks](/reference/files#folders-in-parks) lists | A change to a Claude Desktop account, `repair` and `adopt` |
 | `usage.json` | The newest usage reading of each account | Reading usage, and the status line |

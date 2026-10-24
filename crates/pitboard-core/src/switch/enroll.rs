@@ -168,6 +168,12 @@ pub(crate) fn signin_dir(ctx: &Context) -> PathBuf {
     home::dir(ctx).join("signin")
 }
 
+// Where a program's sign-in runs, never removed as one ends: Firefox keeps the folder it starts
+// in as its own, which Windows will not let go (`codex_windows_browser_open`).
+pub(crate) fn signin_work_dir(ctx: &Context) -> PathBuf {
+    home::dir(ctx).join("signin-work")
+}
+
 // Each tool's login a sign-in in `dir` may have left in its slot, with the one-at-a-time lock
 // held.
 pub(crate) fn discard_signins(ctx: &Context, permit: Permit, dir: &std::path::Path) {
@@ -195,11 +201,18 @@ fn reserve_signin(
     // lock above means no other sign-in is using it. Every tool's leftovers, because the
     // one that was killed need not be the one starting now.
     discard_signins(ctx, permit, &dir);
-    let _ = crate::host::fs::remove_dir_all(permit, &dir);
-    crate::host::fs::create_private_dir(permit, &dir).map_err(|source| Error::HomeUnwritable {
-        path: dir.clone(),
-        source,
-    })?;
+    // Emptied too, so a project's `.claude/` never steers a sign-in. A browser an earlier one
+    // opened may still hold the folder itself.
+    let work = signin_work_dir(ctx);
+    for each in [&dir, &work] {
+        let _ = crate::host::fs::remove_dir_all(permit, each);
+        crate::host::fs::create_private_dir(permit, each).map_err(|source| {
+            Error::HomeUnwritable {
+                path: each.clone(),
+                source,
+            }
+        })?;
+    }
     let pending = SignIn {
         provider: tool.id(),
         how: How::Privately {
@@ -2116,6 +2129,78 @@ mod tests {
             "said ends once the tool exits, though the browser still holds the pipes"
         );
         let _ = watched.finish();
+    }
+
+    // A project's `.claude/` never steers a sign-in, and a browser it opens may stay where it ran.
+    #[test]
+    #[allow(
+        clippy::disallowed_methods,
+        reason = "a test leaves a project's settings where a sign-in runs"
+    )]
+    fn a_sign_ins_working_folder_is_emptied_as_it_starts_and_kept_once_it_ends() {
+        for (tool, make) in MACHINES {
+            let m = make("signin-work");
+            let work = home::dir(&m.ctx).join("signin-work");
+            std::fs::create_dir_all(work.join(".claude")).expect("a project's folder");
+            std::fs::write(work.join(".claude").join("settings.json"), "{}").expect("settings");
+
+            let login = planted(
+                &m.ctx,
+                Permit::for_a_test(),
+                provider::document(m.which),
+                harness::document("newcomer-refresh"),
+            )
+            .unwrap_or_else(|e| panic!("{tool}: {e}"));
+            assert_eq!(
+                std::fs::read_dir(&work).map(Iterator::count).ok(),
+                Some(0),
+                "{tool}: emptied"
+            );
+            drop(login);
+            assert!(!signin_dir(&m.ctx).exists(), "{tool}: its own folder goes");
+            assert!(work.is_dir(), "{tool}: the folder it ran in stays");
+        }
+    }
+
+    // Firefox keeps the folder it starts in as its own working folder, which Windows will not
+    // let anything remove (`codex_windows_browser_open`).
+    #[cfg(windows)]
+    #[test]
+    fn a_sign_ins_own_folder_goes_while_the_browser_it_opened_stays_where_it_ran() {
+        use crate::helper::{self, Job};
+        let exe = std::env::current_exe().expect("this test");
+        for which in [ProviderId::Claude, ProviderId::Codex] {
+            let home = tempfile::tempdir().expect("a scratch home");
+            let ctx = Context::new(home.path().to_path_buf())
+                .with_pitboard_home(home.path().join(".pitboard"))
+                .with_claude_program(exe.clone())
+                .with_codex_program(exe.clone());
+            let tool = provider::document(which);
+            let (pending, dir) =
+                reserve_signin(&ctx, Permit::for_a_test(), tool).expect("reserved");
+            let command = tool
+                .sign_in(&ctx, Permit::for_a_test(), &dir)
+                .expect("the tool's command");
+            let ran_in = command.get_current_dir().expect("a folder").to_path_buf();
+            let file = home.path().join("browser.state");
+            let held = helper::hold(&file);
+            let mut browser = helper::command(&exe, Job::Waits, &file)
+                .current_dir(&ran_in)
+                .stdin(std::process::Stdio::null())
+                .stdout(std::process::Stdio::null())
+                .spawn()
+                .expect("the browser stand-in starts");
+            helper::written(&file);
+
+            drop(pending);
+            let gone = !dir.exists();
+            drop(held);
+            let _ = browser.wait();
+            assert!(
+                gone,
+                "{which}: the sign-in's folder stayed with the browser in it"
+            );
+        }
     }
 
     #[test]
