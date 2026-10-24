@@ -1205,7 +1205,7 @@ window loads its site, and whatever the site's pages load, as a browser would.
   refusal is `system_too_old`, said before how the process runs, since no way of running
   Pitboard changes the system. One gate, `permit::gate`, asks the host's `floor` and
   `elevation` and hands out a `Permit`, a value only it makes,
-  and everything that changes anything takes one as an argument: `atomic::write`, every
+  and everything that changes anything takes one as an argument: `atomic`'s writes, every
   function in `host::fs` that makes, moves or removes a file or a directory,
   `RawStore::write` and `delete` (the keychain among the stores), `Scheduler::put` and
   `remove` and the service manager they ask, a tool's sign-in or warm-up run started
@@ -1878,6 +1878,11 @@ window loads its site, and whatever the site's pages load, as a browser would.
 - An answer from Anthropic that Pitboard read whole replaces a Claude Code account's
   reading, and a session only moves that reading, within the limits the answer gave. So
   numbers filed under the wrong account go at that account's next answer.
+- `usage.json` and `sessions.json`, which the status line writes after each response, are
+  replaced whole and never flushed (`atomic::write_unsynced`): a flush waits on every
+  program's writes to the disk, and Claude Code 2.1.302 cancels a run of the line still going
+  when it starts the next, 300 ms after a change. A power cut may take either back to an
+  earlier copy or leave it unreadable, which reads as no reading and no run. Every other file is flushed, and its folder after the rename (`atomic::write`).
 - Pitboard files usage only under the account it is proven to be of: an answer for that
   account's own login, or a session's numbers whose windows that account's answered reading
   holds, where no other account's reading does. That reading holds no other running window
@@ -2874,6 +2879,12 @@ Flushing and times:
   attributes alone fails 5. On the SMB share the flush fails 1.
 - NTFS, ReFS and the SMB share keep mtimes in 100 ns steps, exFAT and FAT32 in whole seconds
   (run 38418961905).
+- Beside the rest of the suite, 10,000 replaces through `atomic::write`, which flushes the
+  file and then its folder, took 75 to 360 s on windows-2025 and 154 to 246 s on
+  windows-11-arm, against about 13 s for the probe's unflushed replaces in a job of their
+  own. A status line run, which wrote two files that way, took 27 to 97 ms past a start on
+  windows-2025, once 351 ms, and 49 to 59 ms on windows-11-arm (CI runs 40036129585 to
+  40071211611).
 
 Locks:
 

@@ -82,12 +82,7 @@ pub(crate) fn moved(ctx: &Context, permit: Permit, id: &str, passed: &[Window]) 
     });
 }
 
-/// The readings changed by `fold`, which says whether it changed anything.
-///
-/// Written only when it did: a status line runs in every open session, as often as every
-/// second, and mostly passes what is already here. A change is made under a lock, to what
-/// is here once the lock is held, so two front ends writing at once cannot each write back
-/// the other's older copy.
+// Folded again under the lock into the file as it is then, so no writer puts back an older copy.
 fn change(ctx: &Context, permit: Permit, fold: impl Fn(&mut HashMap<String, Snapshot>) -> bool) {
     if !fold(&mut load(ctx)) {
         return;
@@ -96,10 +91,11 @@ fn change(ctx: &Context, permit: Permit, fold: impl Fn(&mut HashMap<String, Snap
         return;
     };
     let mut all = load(ctx);
+    // A reading a power cut loses comes back with its account's next answer.
     if fold(&mut all)
         && let Ok(body) = serde_json::to_string(&all)
     {
-        let _ = atomic::write(permit, &path(ctx), body.as_bytes(), atomic::Perms::Secret);
+        let _ = atomic::write_unsynced(permit, &path(ctx), body.as_bytes());
     }
 }
 
@@ -359,5 +355,26 @@ mod tests {
         let laid_out = laid_out(&ctx);
         answered(&ctx, Permit::for_a_test(), &[("parked".into(), idle)]);
         assert_eq!(std::fs::read_to_string(path(&ctx)).unwrap(), laid_out);
+    }
+
+    // The status line records here after every response, and a flush waits on the whole disk.
+    #[test]
+    fn readings_change_without_waiting_for_the_disk() {
+        let (ctx, _scratch) = machine();
+        let ((), flushed) = crate::fault::failing_counted("atomic.synced", || {
+            answered(
+                &ctx,
+                Permit::for_a_test(),
+                &[
+                    ("work".into(), answer("session", 20.0, NOW - 60)),
+                    ("gone".into(), answer("session", 5.0, NOW - 60)),
+                ],
+            );
+            passes(&ctx, "five_hour", 25.0);
+            forget(&ctx, Permit::for_a_test(), "gone");
+        });
+        assert_eq!(flushed, 0);
+        assert_eq!(five_hour(&ctx, "work"), Some(25.0));
+        assert_eq!(five_hour(&ctx, "gone"), None);
     }
 }
