@@ -1,0 +1,454 @@
+use super::*;
+
+#[test]
+fn section_names_the_tool_whose_checks_these_are() {
+    for code in [
+        "claude_version",
+        "claude_daemon",
+        "credential",
+        "state",
+        "schedule_proxy",
+        "system_too_old",
+        "desktop",
+        "codexy",
+    ] {
+        assert_eq!(section(code), None, "{code}");
+    }
+    for code in ["codex_backend", "codex_login", "codex_parked_login"] {
+        assert_eq!(section(code), Some(ProviderId::Codex), "{code}");
+    }
+    let mut state = State::default();
+    state
+        .accounts
+        .push(desktop_account("work", Some(folder_park("p", None))));
+    let checks = judge_desktop(Os::MacOs, &desktop(), &state, &[], NOW, &time::moment);
+    assert!(!checks.is_empty());
+    for check in checks {
+        assert_eq!(
+            section(check.code),
+            Some(ProviderId::Desktop),
+            "{}",
+            check.code
+        );
+    }
+}
+
+// On Windows two `icacls` a path, and none where the person's SID could not be read.
+#[test]
+fn advice_names_a_command_only_where_there_is_one() {
+    assert_eq!(
+        running(&Os::MacOs.make_private_commands(Kind::File, &["/a"], Some(SID))),
+        ": `chmod 600 /a`."
+    );
+    assert_eq!(
+        running(&Os::Linux.make_private_commands(Kind::Directory, &["/a", "/b"], None)),
+        ": `chmod 700 /a /b`."
+    );
+    let windows = Os::Windows.make_private_commands(Kind::File, &[r"C:\a", r"C:\b c\"], Some(SID));
+    assert_eq!(
+        windows,
+        [r"C:\a", r"C:\b c"]
+            .map(|path| crate::host::acl::icacls(false, path, SID))
+            .concat()
+    );
+    assert_eq!(
+        running(&windows),
+        format!(
+            ": `{}`, `{}`, `{}` and `{}`.",
+            windows[0], windows[1], windows[2], windows[3]
+        )
+    );
+    assert!(
+        Os::Windows
+            .make_private_commands(Kind::File, &[r"C:\a"], None)
+            .is_empty()
+    );
+    // No one `icacls` line serves a file and a folder alike.
+    assert!(
+        Os::Windows
+            .make_private_commands(Kind::Any, &[r"C:\a"], Some(SID))
+            .is_empty()
+    );
+    assert_eq!(running(&[]), ".");
+}
+
+#[test]
+fn a_healthy_machine_reports_no_failures() {
+    let checks = evaluate(&facts());
+    assert!(checks.iter().all(|c| c.level != Level::Fail));
+    assert!(healthy(&checks));
+}
+
+#[test]
+fn every_failure_and_warning_tells_the_user_something() {
+    let mut f = facts();
+    f.credential = Ok(Some(json!({"slackTag": {}})));
+    f.home_access = Some(mode(0o755));
+    for c in evaluate(&f) {
+        if c.level != Level::Ok {
+            assert!(!c.advice.is_empty(), "{} has no advice", c.code);
+        }
+    }
+}
+
+/// Advice is read as sentences, and a string broken across lines in the source without
+/// its continuation keeps the indentation as a run of spaces in the middle of one.
+#[test]
+fn advice_reads_as_it_was_written() {
+    let mut f = facts();
+    f.credential = Ok(Some(json!({"slackTag": {}})));
+    f.home_access = Some(mode(0o755));
+    f.readable_by_others = vec![(
+        "/home/a/.claude/.credentials.json".into(),
+        Kind::File,
+        mode(0o644),
+    )];
+    for c in evaluate(&f) {
+        assert!(!c.advice.contains("  "), "{}: {:?}", c.code, c.advice);
+    }
+}
+
+#[test]
+fn each_check_is_told_apart_by_code_and_name() {
+    let mut f = facts();
+    f.parks = vec![parked("work", None), parked("personal", None)];
+    let checks = evaluate(&f);
+    let mut keys: Vec<(&str, &str)> = checks.iter().map(|c| (c.code, c.name.as_str())).collect();
+    keys.sort_unstable();
+    let before = keys.len();
+    keys.dedup();
+    assert_eq!(keys.len(), before);
+}
+
+/// The app says a moment on the person's own clock, which the command line's 24 hours
+/// are not, so a front end can write each moment a check names.
+#[test]
+fn each_moment_a_check_names_is_written_as_the_front_end_writes_it() {
+    use crate::switch::harness::{NOW, machine};
+    let m = machine("doctor-in-use-moment");
+    let diagnosis = crate::service::Pitboard::new(m.ctx.clone())
+        .doctor_with(&|at, now| format!("at {at} of {now}"));
+
+    assert_eq!(
+        check(&diagnosis.checks, "in_use").detail,
+        format!("`here`, as Anthropic said at {NOW} of {NOW}")
+    );
+}
+
+// Windows' facts are read from builds of their own, which its version lines name.
+#[test]
+fn a_build_is_set_beside_the_one_read_for_this_system() {
+    use crate::assumptions::{Platform, verified_against};
+    for os in [Os::MacOs, Os::Linux, Os::Windows] {
+        let claude = verified_against(ProviderId::Claude, Platform::of(os));
+        let mut f = facts();
+        f.os = os;
+        f.claude_version = None;
+        assert_eq!(
+            check(&evaluate(&f), "claude_version").detail,
+            format!("not found here; Pitboard's facts were read from {claude}"),
+            "{os:?}"
+        );
+        f.claude_version = Some(claude.into());
+        assert_eq!(
+            check(&evaluate(&f), "claude_version").detail,
+            format!("{claude}, which is what Pitboard's facts were read from"),
+            "{os:?}"
+        );
+
+        let codex = verified_against(ProviderId::Codex, Platform::of(os));
+        let installed = CodexFacts {
+            version: Some(codex.into()),
+            ..with_codex()
+        };
+        let checks = judge_codex(os, None, &installed, &[], NOW, &time::moment);
+        assert_eq!(
+            check(&checks, "codex_version").detail,
+            format!("{codex}, which is what Pitboard's facts were read from"),
+            "{os:?}"
+        );
+    }
+}
+
+#[test]
+fn no_system_is_told_a_warm_up_is_not_available() {
+    let mut facts = facts();
+    for os in [Os::MacOs, Os::Linux, Os::Windows] {
+        facts.os = os;
+        assert!(
+            evaluate(&facts).iter().all(|c| c.code != "warm_up"),
+            "{os:?}"
+        );
+    }
+}
+
+/// A machine that uses only Codex is not told Claude Code is broken, nor to run a
+/// program it does not use. Everything about Pitboard itself is still checked.
+#[test]
+fn a_machine_with_only_codex_is_not_judged_on_claude_code() {
+    let mut windows = facts();
+    windows.os = Os::Windows;
+    windows.fallback_login = Some(FallbackLogin {
+        path: windows.credential_file.clone(),
+        fingerprint: Ok(None),
+    });
+    windows.status_line = Some(StatusLineFact {
+        git_bash: claude_paths::GitBash {
+            found: None,
+            passed_over: None,
+        },
+        powershell: None,
+        pitboard: None,
+        runs_pitboard: false,
+    });
+    windows.organisation_pins = vec!["`forceLoginOrgUUID` set to `org` there".into()];
+    let made: Vec<&str> = evaluate(&windows).iter().map(|c| c.code).collect();
+    // A name no check makes hides nothing, and the loop under it would pass over it.
+    for own in CLAUDE_CODES_OWN {
+        assert!(made.contains(own), "{own} is no check's code");
+    }
+
+    for mut facts in [facts(), windows] {
+        facts.claude_present = false;
+        facts.config = Err(Error::ClaudeConfigMissing {
+            path: PathBuf::from("/nowhere/.claude.json"),
+            spelling: words::Spelling::Bare,
+        });
+        facts.codex.present = true;
+        let checks = evaluate(&facts);
+        for own in CLAUDE_CODES_OWN {
+            assert!(
+                checks.iter().all(|c| c.code != *own),
+                "{own} is about Claude Code, which is not here"
+            );
+        }
+        assert!(
+            checks.iter().any(|c| c.code == "state"),
+            "Pitboard's own still is"
+        );
+        assert!(checks.iter().any(|c| c.code.starts_with("codex_")));
+    }
+}
+
+#[test]
+fn a_home_that_is_not_a_full_path_still_hears_why_nothing_changes() {
+    use crate::context::Environment;
+    let env: Environment = [("HOME", "")].into_iter().collect();
+    let host = crate::host::memory::MemoryHost::new();
+    host.runs_on(crate::host::Floor::Below { build: 22631 });
+    host.runs_with(crate::host::Elevation::Unknown);
+    let ctx = Context::for_command_line(&env).with_memory_stores(host);
+    let codes: Vec<&str> = run(&ctx, &time::moment)
+        .checks
+        .iter()
+        .map(|c| c.code)
+        .collect();
+    assert_eq!(codes, ["system_too_old", "elevated", "homes"]);
+}
+
+/// With neither tool present, a new machine is told what to do first, as it always was.
+#[test]
+fn a_machine_with_neither_tool_still_hears_about_claude_code() {
+    let mut facts = facts();
+    facts.claude_present = false;
+    let checks = evaluate(&facts);
+    assert!(checks.iter().any(|c| c.code == "config_file"));
+}
+
+/// Where a home the environment names is not a full path, doctor says so and checks
+/// nothing else, since every other check reads under one of the homes. It read Claude
+/// Code's and Pitboard's files under whatever folder it was run from.
+#[test]
+fn doctor_checks_nothing_under_a_home_that_is_not_a_full_path() {
+    use crate::context::Environment;
+    let variable = crate::host::OS.home_variable();
+    let scratch = tempfile::tempdir().expect("a scratch folder");
+    let full = scratch.path().to_string_lossy().into_owned();
+    let empty = format!("{variable} is empty");
+    for (pairs, said) in [
+        (&[(variable, "")][..], empty.as_str()),
+        (
+            &[(variable, full.as_str()), ("CODEX_HOME", "codex")],
+            "CODEX_HOME is `codex`, which is not a full path",
+        ),
+    ] {
+        let env: Environment = pairs.iter().copied().collect();
+        let ctx = Context::for_command_line(&env)
+            .with_memory_stores(crate::host::memory::MemoryHost::new());
+        let diagnosis = run(&ctx, &time::moment);
+        let checks: Vec<(&str, Level, &str)> = diagnosis
+            .checks
+            .iter()
+            .map(|c| (c.code, c.level, c.detail.as_str()))
+            .collect();
+        assert_eq!(checks, [("homes", Level::Fail, said)], "{pairs:?}");
+        assert!(
+            diagnosis.checks[0]
+                .advice
+                .starts_with("Set it to a full path")
+        );
+        assert_eq!(diagnosis.environment, json!({}));
+    }
+}
+
+// `pitboard doctor` prints its checks in this order: the command line heads each tool's
+// section where its codes start.
+#[test]
+fn the_checks_come_in_the_order_each_system_prints_them() {
+    let codes = |os| -> Vec<&'static str> {
+        evaluate(&everything_said(os))
+            .iter()
+            .map(|c| c.code)
+            .collect()
+    };
+    assert_eq!(
+        codes(Os::MacOs),
+        [
+            "system_too_old",
+            "elevated",
+            "security_tool",
+            "config_file",
+            "identity",
+            "in_use",
+            "slot",
+            "credential_size",
+            "credential_store",
+            "credential",
+            "fallback_login",
+            "home",
+            "private_on_disk",
+            "state",
+            "parked_login",
+            "interrupted_switch",
+            "discarded",
+            "machine_id",
+            "storage_v5",
+            "claude_daemon",
+            "pending_parks",
+            "schedule",
+            "schedule_proxy",
+            "watch_service",
+            "claude_version",
+            "auth_source",
+            "login_restrictions",
+            "asking",
+            "network",
+            "dormant_account",
+            "codex_backend",
+            "codex_login_restrictions",
+            "codex_auth_file",
+            "codex_login",
+            "codex_parked_login",
+            "codex_dormant_account",
+            "codex_version",
+            "codex_running",
+            "desktop_data_folder",
+            "desktop_settings",
+            "desktop_layout",
+            "desktop_login",
+            "desktop_parked_login",
+            "desktop_parked_login",
+            "desktop_move",
+            "desktop_awaiting",
+            "desktop_parks_folder",
+            "desktop_set_aside",
+            "desktop_build",
+        ]
+    );
+    assert_eq!(
+        codes(Os::Windows),
+        [
+            "system_too_old",
+            "elevated",
+            "config_file",
+            "identity",
+            "in_use",
+            "slot",
+            "credential_size",
+            "no_argv",
+            "credential_store",
+            "credential",
+            "fallback_login",
+            "home",
+            "private_on_disk",
+            "vault",
+            "state",
+            "parked_login",
+            "interrupted_switch",
+            "discarded",
+            "machine_id",
+            "local_app_data",
+            "roaming_profile",
+            "wsl",
+            "pitboard_copies",
+            "system_proxy",
+            "storage_v5",
+            "claude_daemon",
+            "pending_parks",
+            "schedule",
+            "schedule_proxy",
+            "watch_service",
+            "claude_version",
+            "status_line",
+            "auth_source",
+            "login_restrictions",
+            "asking",
+            "network",
+            "dormant_account",
+            "codex_installer_home",
+            "codex_backend",
+            "codex_login_restrictions",
+            "codex_auth_file",
+            "codex_login",
+            "codex_credential_manager",
+            "codex_parked_login",
+            "codex_dormant_account",
+            "codex_version",
+            "codex_running",
+            "desktop_data_folder",
+        ]
+    );
+    assert_eq!(
+        codes(Os::Linux),
+        [
+            "system_too_old",
+            "elevated",
+            "config_file",
+            "identity",
+            "in_use",
+            "slot",
+            "credential_size",
+            "credential_store",
+            "credential",
+            "fallback_login",
+            "home",
+            "private_on_disk",
+            "state",
+            "parked_login",
+            "interrupted_switch",
+            "discarded",
+            "machine_id",
+            "wsl",
+            "storage_v5",
+            "claude_daemon",
+            "pending_parks",
+            "schedule",
+            "schedule_proxy",
+            "watch_service",
+            "claude_version",
+            "auth_source",
+            "login_restrictions",
+            "asking",
+            "network",
+            "dormant_account",
+            "codex_backend",
+            "codex_login_restrictions",
+            "codex_auth_file",
+            "codex_login",
+            "codex_parked_login",
+            "codex_dormant_account",
+            "codex_version",
+            "codex_running",
+        ]
+    );
+}
