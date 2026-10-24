@@ -200,10 +200,12 @@ window loads its site, and whatever the site's pages load, as a browser would.
     `auto.rs`, enrolling, adopting, renaming, forgetting, renewing, repairing, abandoning,
     uninstalling, and putting away a login Claude Code left in a file behind the keychain or
     Credential Manager in `stow.rs`), and the journal that finishes an interrupted switch of
-    a Claude Code or Codex login (`journal.rs`). `identify.rs` says whose login Claude Code
-    or Codex has stored: the record's owner where the login's refresh token has the
-    fingerprint the record was made for, which asks nobody, and the tool's service otherwise
-    (`whose`). A login whose access token has expired is never asked about with it, and one
+    a Claude Code or Codex login (`journal.rs`), which `settle.rs` settles before each
+    change, gives up on, or reads for the refusal it would make. `identify.rs` says whose
+    login Claude Code or Codex has stored: the record's owner where the login's refresh
+    token has the fingerprint the record was made for, which asks nobody, and the tool's
+    service otherwise (`whose`).
+    A login whose access token has expired is never asked about with it, and one
     the service refuses is not asked about again (`told`): a change renews it first, and so
     does a read, where it takes `state.lock` without waiting and no switch waits to be
     finished (`told_by_a_read`); usage alone renews nothing, and a Codex login names its
@@ -413,7 +415,9 @@ window loads its site, and whatever the site's pages load, as a browser would.
     an answer gave (`usage::moved`): a higher share in the same window, or the next window
     once the last has reset. They never add a limit or found a reading, since they do not
     say whose they are. A reading's `answered_at` is when its service last answered, absent
-    from one an older Pitboard wrote.
+    from one an older Pitboard wrote. A limit's kind is a `usage::LimitKind`, read where
+    Anthropic's answer, a session's status line and Codex's answer are read, so `five_hour`
+    and `seven_day` are `session` and `weekly_all` from then on.
   - `status.rs`, `doctor/`, `statusline.rs` and `schedule.rs` serve the commands of the
     same names. `doctor/` has a module per concern, each with its facts, its gather and its
     judges: `mod.rs` makes the checks in the order `pitboard doctor` prints them, and
