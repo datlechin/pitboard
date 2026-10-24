@@ -436,16 +436,15 @@ pub(crate) fn switch(
                 session,
                 as_named,
             } => {
-                let mac = moves::may_start(&ctx, permit, app, &root)?;
-                let checked = moves::check_park(&ctx, &state, app, key, &mac)?;
+                let mover = moves::may_start(&ctx, permit, app, &root)?;
+                let checked = moves::check_park(&mover, &state, key)?;
                 let from = state.typed(&holder);
                 let leaving = moves::Leaving {
                     key: &holder,
                     session: &session,
                     awaited: None,
                 };
-                let (parked, said) =
-                    moves::leave(&ctx, permit, &mut state, app, &root, leaving, &mac)?;
+                let (parked, said) = moves::leave(&mover, &mut state, leaving)?;
                 if as_named {
                     warnings.push(Warning::TakenAsNamed {
                         tool,
@@ -455,17 +454,13 @@ pub(crate) fn switch(
                 }
                 warnings.extend(said);
                 warnings.extend(moves::arrive(
-                    &ctx,
-                    permit,
+                    &mover,
                     &mut state,
-                    app,
-                    &root,
                     key,
                     checked,
                     false,
                     Some(from.clone()),
                     &[],
-                    &mac,
                 )?);
                 Ok(Outcome::Switched {
                     provider: tool,
@@ -476,14 +471,13 @@ pub(crate) fn switch(
                 })
             }
             Verdict::Nobody { leftovers } => {
-                let mac = moves::may_start(&ctx, permit, app, &root)?;
-                let checked = moves::check_park(&ctx, &state, app, key, &mac)?;
+                let mover = moves::may_start(&ctx, permit, app, &root)?;
+                let checked = moves::check_park(&mover, &state, key)?;
                 // Saved with the arrive's record: whoever was recorded in use signed out since.
                 let now = ctx.now();
                 let (_, noticed) = identify::record(&mut state, tool, moves::nobody(now), now);
                 warnings.extend(moves::arrive(
-                    &ctx, permit, &mut state, app, &root, key, checked, leftovers, None, &noticed,
-                    &mac,
+                    &mover, &mut state, key, checked, leftovers, None, &noticed,
                 )?);
                 Ok(Outcome::Installed {
                     provider: tool,
