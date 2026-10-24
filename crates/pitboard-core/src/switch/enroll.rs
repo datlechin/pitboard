@@ -2118,7 +2118,6 @@ mod tests {
         let _ = watched.finish();
     }
 
-    // The copy a process another thread is starting holds (docs/facts/sign-in-lock.md).
     #[test]
     fn a_cancelled_sign_in_lets_the_next_start_while_a_copy_of_its_lock_is_open() {
         for (tool, make) in MACHINES {

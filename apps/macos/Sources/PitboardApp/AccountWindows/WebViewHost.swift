@@ -39,8 +39,9 @@ private struct WebViewHost: NSViewRepresentable {
     }
 }
 
-/// A web view shows no find bar of its own (docs/facts/webkit.md), so this view contains the
-/// system's, with the web view as its `NSTextFinder`'s client, as SwiftUI's `WebView` does.
+/// The view around a web view that holds the system's find bar, as SwiftUI's `WebView` does.
+// A web view shows no find bar of its own, so its `NSTextFinder`'s client is the web view
+// (docs/facts/webkit.md).
 final class WebContainer: NSView, @preconcurrency NSTextFinderBarContainer, NSMenuItemValidation
 {
     private var webView: WKWebView

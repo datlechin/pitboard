@@ -10,8 +10,8 @@ a scratch item.
   Every later read of it by `security` takes about a second instead of 0.01 seconds. On a
   scratch item, reads went from 0.01 seconds to 20.55, then settled around 0.8.
 - Claude Code reads its login at every miss of its cache (`credential_cache`), so writing its
-  item through the framework would slow Claude Code for good. Pitboard writes a large login on the argument line
-  instead, where `ps` can see it for the length of one call.
+  item through the framework would slow Claude Code for good. Pitboard writes a large login on
+  the argument line instead, where `ps` can see it for the length of one call.
 - On throwaway items, a read in process by a program the item does not trust adds that
   program to the item's access list, and a write in process replaces its partition list.
   Every read by `/usr/bin/security` after that takes 1 to 3 seconds instead of 0.02, or waits

@@ -33,8 +33,8 @@ use windows_sys::Win32::Storage::FileSystem::{
 };
 
 const SHARE_ALL: u32 = FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE;
-// FILE_RENAME_FLAG_REPLACE_IF_EXISTS and FILE_RENAME_FLAG_POSIX_SEMANTICS (MC-rename), which
-// windows-sys does not name.
+// FILE_RENAME_FLAG_REPLACE_IF_EXISTS and FILE_RENAME_FLAG_POSIX_SEMANTICS, which windows-sys
+// does not name.
 const REPLACE_IF_EXISTS: u32 = 0x1;
 const POSIX_SEMANTICS: u32 = 0x2;
 
@@ -395,8 +395,8 @@ pub(crate) fn copy_access(_: Permit, existing: &Path, temp: &Path) -> io::Result
 }
 
 // A rename lasts once its folder is flushed, which NTFS, ReFS, exFAT and FAT32 let a standard
-// user do (RF-C5, RF-C5j). An SMB share refuses with 1, and is replaced by `MoveFileExW`, which
-// writes through.
+// user do. An SMB share refuses with 1 (docs/facts/windows-runners.md), and is replaced by
+// `MoveFileExW`, which writes through.
 pub(crate) fn sync_dir(dir: &Path) {
     let _ = flush_dir(dir);
 }
@@ -423,7 +423,7 @@ pub(crate) fn copy(_: Permit, from: &Path, to: &Path) -> io::Result<u64> {
 }
 
 // Never over a read-only file, whose owner said it is not to change, and never by clearing the
-// attribute. A reader or a scanner holding `to` is waited out for RF-C4's budget.
+// attribute. A reader or a scanner holding `to` is waited out for `replace::waits`.
 pub(crate) fn rename(_: Permit, from: &Path, to: &Path) -> io::Result<()> {
     let name = to.file_name().unwrap_or(to.as_os_str()).to_string_lossy();
     if std::fs::symlink_metadata(to).is_ok_and(|found| found.permissions().readonly()) {
@@ -553,8 +553,8 @@ pub(crate) fn remove_dir(_: Permit, path: &Path) -> io::Result<()> {
     std::fs::remove_dir(path)
 }
 
-// On exFAT and FAT32 a file another program holds open keeps its folder, which fails 145
-// (RF-C6x); NTFS and ReFS let it go.
+// On exFAT and FAT32 a file another program holds open keeps its folder, which fails 145;
+// NTFS and ReFS let it go (docs/facts/windows-runners.md).
 pub(crate) fn remove_dir_all(_: Permit, path: &Path) -> io::Result<()> {
     std::fs::remove_dir_all(path)
 }
@@ -577,7 +577,8 @@ pub(crate) fn same_volume(_a: &Path, _b: &Path) -> io::Result<bool> {
     Err(macos_only())
 }
 
-// The 8.3 name Windows keeps beside a long one, where the volume keeps them (RF-B2).
+// The 8.3 name Windows keeps beside a long one, where the volume keeps them
+// (docs/facts/windows-runners.md).
 pub(crate) fn short_path(path: &Path) -> Option<std::path::PathBuf> {
     use std::os::windows::ffi::OsStringExt;
     use windows_sys::Win32::Storage::FileSystem::GetShortPathNameW;
@@ -594,7 +595,8 @@ pub(crate) fn short_path(path: &Path) -> Option<std::path::PathBuf> {
         .then(|| std::path::PathBuf::from(std::ffi::OsString::from_wide(&short[..len as usize])))
 }
 
-// MC-sync: asked of the deepest folder there, since a folder not made yet is in no root.
+// Asked of the deepest folder there, since a folder not made yet is in no root
+// (docs/facts/windows-documented.md).
 pub(crate) fn in_a_sync_root(path: &Path) -> bool {
     use windows_sys::Win32::Storage::CloudFilters::{
         CF_SYNC_ROOT_BASIC_INFO, CF_SYNC_ROOT_INFO_BASIC, CfGetSyncRootInfoByPath,
@@ -637,7 +639,8 @@ pub(crate) fn fixed_drives() -> Vec<char> {
         .collect()
 }
 
-// The volume and the file's id on it (MC-fileid), a folder's included, through a junction.
+// The volume and the file's id on it, a folder's included, through a junction
+// (docs/facts/windows-runners.md).
 #[cfg(any(test, feature = "test-support"))]
 pub(crate) fn file_id(path: &Path) -> Option<(u64, u128)> {
     id(path, 0).ok()

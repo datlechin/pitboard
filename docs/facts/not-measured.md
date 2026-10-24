@@ -28,6 +28,9 @@ not measured, and the register cannot hold them, since every fact in it is read 
   stops with `signed_in_account_changed`, nothing is written over the renewed login, the
   account it would have switched to keeps its parked login, and the next attempt, a minute
   on, switches.
+- Whether exchanging a parked refresh token, to see whether it still works, revokes the copy
+  another machine holds. So `pitboard adopt` drops each login parked in a store, and asks
+  Anthropic nothing.
 
 ## Codex
 
@@ -37,9 +40,9 @@ not measured, and the register cannot hold them, since every fact in it is read 
 - When a Codex limit's period starts. Pitboard warms up Claude Code accounts alone.
 - Whether an `OPENAI_API_KEY` in the environment wins over a ChatGPT login. Pitboard names no
   override for Codex.
-- Whether the ChatGPT app's WSL mode hands its Linux codex the Windows Codex home (session
-  M8). So doctor on Windows says a switch changes the login of a Codex in WSL that uses that
-  home, of no distribution in particular.
+- Whether the ChatGPT app's WSL mode hands its Linux codex the Windows Codex home. So doctor
+  on Windows says a switch changes the login of a Codex in WSL that uses that home, of no
+  distribution in particular.
 
 ## Claude Desktop
 

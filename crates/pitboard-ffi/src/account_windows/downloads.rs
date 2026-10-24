@@ -6,17 +6,11 @@ use pitboard_sites::WebAddress;
 use std::path::{Path, PathBuf};
 use unicode_normalization::UnicodeNormalization;
 
-/// The file a download suggested as `suggested` is saved as in `folder`: its name, then that
-/// name numbered as the system numbers a copy, while a name is one of `reserved`, given to a
-/// download still running, or a file already in `folder`. Looks at the file system for each
-/// name it tries.
-///
-/// The web view wants a file that does not exist yet, and two downloads can ask at once. It
-/// has already made the name safe (docs/facts/webkit.md).
-///
-/// A path in `reserved` may come back in another Unicode form than it was given in: the macOS
-/// app keeps each as a `URL`, whose `path` Foundation gives decomposed
-/// (docs/facts/foundation-urls.md).
+/// Where a download suggested as `suggested` is saved in `folder`, past its files and `reserved`.
+// Numbered as the system numbers a copy, past the downloads still running, since the web view
+// wants a file that is not there yet and two can ask at once. The web view has made the name safe
+// (docs/facts/webkit.md). A path in `reserved` may come in another Unicode form: the macOS app
+// keeps each as a `URL`, whose `path` Foundation gives decomposed (docs/facts/foundation-urls.md).
 #[uniffi::export]
 pub fn download_destination(folder: String, suggested: String, reserved: Vec<String>) -> String {
     let taken = |candidate: &Path| {
@@ -72,19 +66,17 @@ fn numbered(os: Os, name: &str, base: &str, extension: Option<&str>, nth: u64) -
     }
 }
 
-/// Whether `os` takes the paths `one` and `other` for one file. A Mac's file system takes
-/// names that are canonically equivalent in Unicode for one (docs/facts/foundation-urls.md),
-/// so they are compared decomposed. No app runs on Linux, which compares them as the Mac
-/// does; where its file system takes them for two, a name is numbered that need not be.
-/// Windows takes names in any case for one, and does not normalise them, so two forms of one
-/// name are two files there ([`pitboard_core::host::same_path_in_any_case`]).
+/// Whether `os` takes the paths `one` and `other` for one file.
 fn same_file(os: Os, one: &Path, other: &Path) -> bool {
     match os {
+        // APFS takes names canonically equivalent in Unicode for one
+        // (docs/facts/foundation-urls.md). No app runs on Linux, compared as the Mac.
         Os::MacOs | Os::Linux => {
             let decomposed =
                 |path: &Path| PathBuf::from(path.to_string_lossy().nfd().collect::<String>());
             decomposed(one) == decomposed(other)
         }
+        // Two Unicode forms of one name are two files there.
         Os::Windows => pitboard_core::host::same_path_in_any_case(one, other),
     }
 }

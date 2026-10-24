@@ -1136,8 +1136,10 @@ fn six_to_seven(document: &mut Value) {
     document["schema"] = serde_json::json!(7);
 }
 
-// A bump: every earlier release reads `discarded` as names, and would call a file of typed
-// entries corrupt.
+// Schema 8 holds Claude Desktop's login, kept as files, beside one kept as a document: a park's
+// `kind`, `discarded` as typed entries that say `forgotten`, `moving`, `aside`, `awaiting`, and
+// Claude Desktop's `in_use` slot, the data folder's path. A bump: every earlier release reads
+// `discarded` as names, and would call a file of typed entries corrupt.
 fn seven_to_eight(document: &mut Value) {
     if let Some(discarded) = document.get_mut("discarded").and_then(Value::as_array_mut) {
         for entry in discarded {

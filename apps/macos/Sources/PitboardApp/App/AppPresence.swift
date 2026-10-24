@@ -1,14 +1,11 @@
 import AppKit
 import SwiftUI
 
-/// Whether Pitboard is a menu bar app or a regular one: in the Dock, in Command-Tab and with
-/// its menus in the menu bar while any of its windows is open, and only in the menu bar
-/// while none is.
-///
-/// A window behind another app has no way back without a Dock icon, and a window whose app
-/// has no menus has no Edit menu to copy from and no shortcuts. Counted from each window's
-/// root view, which appears when its window opens and disappears when it closes, not when it
-/// is minimised or becomes a background tab (docs/facts/webkit.md).
+/// Whether Pitboard is a regular app, while any of its windows is open, or a menu bar app.
+// A window behind another app has no way back without a Dock icon, and an app with no menus
+// has no Edit menu and no shortcuts. Counted from each window's root view, which comes and
+// goes with its window, not when it is minimised or becomes a background tab
+// (docs/facts/webkit.md).
 @MainActor
 final class AppPresence {
     private var open: Set<UUID> = []
@@ -62,12 +59,9 @@ final class AppPresence {
         }
     }
 
-    /// Brings Pitboard to the front for something that came from another app, a shared link,
-    /// while Pitboard may be in the background with nobody's click on it.
-    ///
-    /// `NSApp.activate()` from an app in the background is refused, and a link from the Share
-    /// extension at a launch leaves Pitboard there. Launch Services opening the app does bring
-    /// it forward, so Pitboard asks it to (docs/facts/webkit.md).
+    /// Brings Pitboard to the front for a shared link, while it may be in the background.
+    // `NSApp.activate()` from the background is refused, and a link from the Share extension at
+    // a launch leaves Pitboard there, so Launch Services opens it (docs/facts/webkit.md).
     func comeForward() {
         apply(.regular)
         if isActive() {

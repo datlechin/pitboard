@@ -108,10 +108,11 @@ built with a `context::Context`:
 The other crates:
 
 - `crates/pitboard`: the command line. `main.rs` holds the commands, `render/` what each says
-  to a person, `json.rs` the one writer of `--json`, and `watch.rs` and `warm.rs` their
-  commands. `build/` is a Windows build's manifest and version resource, which the FFI crates
-  include too. `tests/cli/` is its one integration test binary, with the `--json` snapshots,
-  and its example `stand-in` the program every test starts in place of a tool.
+  to a person, `ui.rs` its styles and column widths, `json.rs` the one writer of `--json`,
+  `manpage.rs` the man page, and `watch.rs` and `warm.rs` their commands. `build/` is a
+  Windows build's manifest and version resource, which the FFI crates include too.
+  `tests/cli/` is its one integration test binary, with the `--json` snapshots, and its
+  example `stand-in` the program every test starts in place of a tool.
 - `crates/pitboard-ffi`: the core as UniFFI bindings for both apps.
   - `lib.rs`: what the bindings export beside the model, and the free functions an app calls
     as it starts.
@@ -150,8 +151,7 @@ The apps:
     tests.
   - `scripts/`: the libraries' build, the app's build, which fails a bundle that breaks a
     rule below, its build number and the docs' pictures.
-- `apps/windows/`: the Windows app. `Pitboard.slnx` holds the bindings and their tests, which
-  build on every system, and `Pitboard.Windows.slnx` adds the rest.
+- `apps/windows/`: the Windows app.
   - `Pitboard.Core`, `Pitboard.Share.Core`: the two libraries' C# bindings, generated into
     `Generated/`, the second with what `PitboardShare.exe` does with a share, and their tests.
   - `Pitboard.Windows`: the glue, no XAML: `AppModel`, the icon, notifications, the other
@@ -174,9 +174,10 @@ The rest:
 - `.github/workflows/`: `ci.yml` for every push and pull request, `release.yml` for a `v` tag,
   `conformance.yml` for the registers, `windows-facts.yml` for the Windows runners and the
   session bundle, `rotation.yml` for the update key's rehearsal, and `sparkle.yml` and
-  `winsparkle.yml` for the updaters' new releases.
+  `winsparkle.yml` for new releases of the updaters and the Windows App SDK.
 - `.github/actions/`: the steps the workflows share.
-- `.github/scripts/`: what the workflows run, and its tests, `test-*.py` and `test-*.ps1`.
+- `.github/scripts/`: what the workflows run, and its tests, `test-*.py`,
+  `test-windows-app.ps1` and `test-windows-release.ps1`.
 
 ## Invariants
 
@@ -241,8 +242,8 @@ keeps it is in the header of the module named.
 
 ### Logins
 
-- Nothing outside `pitboard-core` writes Pitboard's index. Every change goes through `switch`,
-  which records what it is about to do first.
+- Nothing outside `pitboard-core` writes Pitboard's index (`state::save` is `pub(crate)`).
+  Every change goes through `switch`, which records what it is about to do first.
 - Additive writes become durable before destructive ones: a run that dies midway through a
   Claude Code or Codex switch leaves a spare copy of a login, never a missing one
   (`switch/crash.rs`, `tests/cli/crash_recovery.rs`).
@@ -312,8 +313,10 @@ keeps it is in the header of the module named.
   register's `statusline_run_timing`). An answer's reading and an account forgotten are
   flushed.
 - Pitboard switches by itself only for a front end somebody asked to, the app with its setting
-  on or `pitboard watch`, and switches Claude Code alone. The status line and daily renewal
-  never switch, and an automatic switch never quits an app.
+  on or `pitboard watch`, and switches Claude Code alone, which has no app to quit
+  (`nothing_is_switched_by_itself_unless_somebody_turned_it_on`, `codex_is_never_switched`).
+  Only those two call `Pitboard::auto_switch`, so the status line and daily renewal never
+  switch.
 - An automatic switch is decided once, under `state.lock`, from one telling of whose login
   Claude Code has stored, and made from that same login (`switch/auto.rs`), so front ends
   deciding from one reading make one switch
@@ -349,8 +352,8 @@ keeps it is in the header of the module named.
   folders.
 - No test starts the person's login shell or reaches the system's scheduler. A test names a
   shell of its own, and the real hosts refuse launchd, systemd and Task Scheduler in any build
-  for tests (`a_test_never_reaches_the_systems_own_scheduler`), but for the Release build
-  `ReleaseGateTests` starts at 1.x as a runner's fresh standard user.
+  for tests (`a_test_never_reaches_the_systems_own_scheduler`). The Release build
+  `ReleaseGateTests` starts at 1.x only reads Task Scheduler and writes no task.
 - No test addresses a name a real login may be kept under, or a folder that is, holds or lies
   in a real login place: `guard_not_live` refuses `provider::names`' families, `host::lies_in`
   answers for folders, and CI's Windows legs check afterwards that nothing leaked
@@ -413,10 +416,6 @@ keeps it is in the header of the module named.
 - A notice's button is a change of the app's own, never a switch: updating Claude Code's
   config is refused where another account is in use by then, and **Put Away** puts away only
   the file its sheet looked at (`model/changing.rs`, `model/stowing.rs`).
-- The app has no rule of its own for what the core decides: its homes, Pitboard's directory,
-  whether a path is a program, the sites and the links it opens are the core's, and every
-  word and button a view shows is the model's. `AppControl` names an app by the id holder
-  detection gives it.
 - One thread tells a `ModelListener`, in revision order and only a snapshot that differs from
   the last, so a test waits for what a snapshot says once something is over
   (`snapshots_made_while_many_threads_send_arrive_in_order`).
@@ -463,9 +462,6 @@ on.
 - A window's page goes only to its site, its sign-in hosts and blank pages. Google's sign-in is
   refused, other pages go to the browser, a frame gets no sign-in window, and a window's last
   page is never a sign-in path (`account_windows/policy.rs`).
-- Hands off the session: Pitboard makes, wipes and deletes a store, never reads what a site
-  keeps there, adds no script and sets no user agent, and no window is given a Claude Code or
-  Codex login.
 - The Pitboard link's format is a contract pinned by `handoff.rs`'s tests, and a release
   claims `pitboard://` and a debug build `pitboard-debug://`, which `build-app.sh` holds. On
   Windows only an installer registers `pitboard`, and a Debug build outside a fixture refuses
@@ -474,8 +470,9 @@ on.
   core's bindings check every export as they load, and two Rust static libraries never meet in
   one binary. `build-app.sh` fails a signature that is not sandboxed and either binary that
   holds the other library's symbols.
-- `pitboard-sites` stays a leaf: no I/O, nothing of the core and no UniFFI. Each binding
-  crate declares its own types over it, since the C# generator cannot use another crate's.
+- `pitboard-sites` stays a leaf: no I/O, nothing of the core and no UniFFI (its `Cargo.toml`
+  depends on `url` alone). Each binding crate declares its own types over it, since the C#
+  generator cannot use another crate's.
 - A deleted WebView2 profile's folder goes only as its browser process exits, so on Windows
   `StoreJanitor` answers `StoreHeld` until it has gone and the model opens no window of a held
   store (`ProfileTests`).
@@ -491,13 +488,19 @@ on.
 - In that interface, adding an error, warning or check code is not a breaking change; renaming
   or removing one is. `pitboard-core` has a version of its own, and a breaking change gets a
   new minor version of it.
+- Each app and the core meet at the model. The app has no rule of its own for what the core
+  decides: its homes, Pitboard's directory, whether a path is a program, the sites and the
+  links it opens are the core's, and every word and button a view shows is the model's.
+  `AppControl` names an app by the id holder detection gives it.
 - Pitboard and each tool meet at the tool's [register](#tool-registers).
 - Pitboard and each service meet at a few requests, which
   [What leaves your machine](https://docs.usepitboard.com/security#what-leaves-your-machine)
   lists with what each carries.
 - Pitboard and claude.ai or chatgpt.com meet at an account's window, which a person opens. The
   site's own pages sign it in, WebKit or WebView2 keeps that sign-in in the account's store,
-  and Pitboard decides only where each navigation goes.
+  and Pitboard decides only where each navigation goes. It makes, wipes and deletes a store,
+  never reads what a site keeps there, adds no script, sets no user agent, and gives no window
+  a Claude Code or Codex login.
 - Pitboard and a browser meet at the Share extension and `PitboardShare.exe`, which hand the
   app the one link shared, as a Pitboard link. Pitboard reads nothing a browser keeps.
 - Pitboard and Claude meet at Claude's data folder. Pitboard reads `config.json`, its journal,

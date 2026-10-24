@@ -81,9 +81,7 @@ use refresh::Refreshing;
 use serde_json::Value;
 use std::path::PathBuf;
 
-/// Claude Code serves the credential from a 30 second cache, so a session already running
-/// picks up a swap within about 33 seconds, wherever no `.credentials.json` sits behind the
-/// keychain (the register's `credential_cache`).
+/// Seconds a running Claude Code session takes to pick up a switch (`credential_cache`).
 pub const ADOPTION_CEILING_SECONDS: u32 = 33;
 
 #[derive(Debug)]
@@ -438,10 +436,9 @@ pub(crate) fn update_config(settled: Settled, key: &Key) -> Result<(Outcome, Vec
     }
 }
 
-/// Why the login in use no longer works, where its service refuses its refresh token for
-/// good, as Claude Code takes `invalid_grant` alone to mean (the register's
-/// `token_refusals`), or it has none. Never for any other refusal: a login its service will
-/// not name may work, and one on hold comes back.
+/// Why the login in use no longer works, where its service refused it for good or it has none.
+// For good is `invalid_grant` alone, as Claude Code takes it (the register's `token_refusals`): a
+// login its service will not name may work, and one on hold comes back.
 fn refused_for_good(error: &Error) -> Option<String> {
     matches!(error, Error::SessionExpired { refused: true, .. }).then(|| identify::untold(error))
 }

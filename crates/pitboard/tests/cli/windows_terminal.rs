@@ -430,8 +430,8 @@ fn status_lines_side_by_side_each_keep_their_session() {
     assert!(all < BUDGET * 8 * 4, "{all:?}");
 }
 
-// mintty hands a program its pty as named pipes, which Rust's std takes for a terminal by their
-// names (`msys_tty_on`, read in 1.98.1's library/std/src/sys/io/is_terminal/windows.rs).
+// mintty hands a program its pty as named pipes, which std takes for a terminal by their names
+// (docs/facts/windows-runners.md).
 #[test]
 fn forget_asks_under_mintty_as_in_a_console_and_a_refusal_names_yes() {
     use std::os::windows::ffi::OsStrExt;
@@ -486,7 +486,7 @@ fn forget_asks_under_mintty_as_in_a_console_and_a_refusal_names_yes() {
         .expect("the pty's output");
     let mut forget = env.command(&["forget", "beta"]);
     // mintty's own default. Without TERM anstream writes to a terminal through the console API,
-    // which a pipe refuses.
+    // which a pipe refuses (docs/facts/windows-runners.md).
     forget
         .env("TERM", "xterm")
         .stdin(stdin)

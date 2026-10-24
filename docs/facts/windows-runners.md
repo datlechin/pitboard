@@ -7,9 +7,8 @@ Every run met the same images: windows-2025 (Windows Server 2025 Datacenter, 24H
 probe as the job's user and as three throwaway users it makes: a standard user, a standard
 user whose name is not ASCII, and a member of Administrators. Its Bun is 1.4.3 from Bun's
 release, with proper-lockfile 4.1.2; which Bun each Claude Code build embeds is in its
-register. A fact holds on both images unless it
-names one. The tokens these list, and the session machine's, are the only ones the Windows face
-has been seen to read.
+register. A fact holds on both images unless it names one. The tokens these list, and the
+session machine's, are the only ones the Windows face has been seen to read.
 
 Accounts and tokens:
 
@@ -158,6 +157,11 @@ Accounts and tokens:
   `pitboard_exe_carries_its_version_resource`, CI run 39254279757).
 - clap's parser of every subcommand outgrows the 1 MB main stack of a debug build: each probe
   exited 0xC00000FD (run 39316394518), so the probe links with an 8 MB stack.
+- Under mintty, Git Bash's own terminal, a program's standard handles are an msys pty's named
+  pipes, which std's `is_terminal` takes for a terminal (`msys_tty_on` in Rust 1.98.1's
+  `library/std/src/sys/io/is_terminal/windows.rs`). mintty sets `TERM`, `xterm` by default.
+  Without it anstream 1.0.0 writes through the console API, which the pipe refuses (run
+  38901801954).
 
 Homes and variables:
 

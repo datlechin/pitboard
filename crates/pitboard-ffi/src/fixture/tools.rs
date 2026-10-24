@@ -45,11 +45,9 @@ pub(crate) const CODEX_ADDRESS: &str =
 pub(crate) const CLAUDE_REFUSES: &str =
     "Invalid code. Please make sure the full code was copied.\n";
 
-/// Claude Code's headless run of a warm-up on a fixture's machine, played through
-/// pitboard-core's seam for a run that starts no program. It answers as print mode does when
-/// a request is answered, as the register's `headless_result` has it print, and the
-/// five-hour period of the account whose access token it was handed starts, as Anthropic's
-/// next answer says.
+/// Claude Code's headless warm-up on a fixture's machine, which starts no program.
+// It prints what print mode prints for an answered request (`headless_result`), and starts the
+// five-hour period of the account whose access token it was handed.
 pub(crate) struct Warmer {
     machine: Arc<Stage>,
 }

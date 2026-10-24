@@ -156,7 +156,8 @@ pub(super) fn judge_wsl(wsl: Option<&WslFact>) -> Option<Check> {
     let wsl = wsl?;
     let advice = match &wsl.codex_home_on_windows {
         None => words::WINDOWS_KEEPS_ITS_LOGINS.to_string(),
-        // The ChatGPT app's WSL mode shares that folder with Codex on Windows (H9).
+        // The ChatGPT app's WSL mode may share that folder with Codex on Windows
+        // (docs/facts/not-measured.md).
         Some(home) => words::codex_home_on_windows(home.display(), on_windows(home).as_deref()),
     };
     Some(Check {

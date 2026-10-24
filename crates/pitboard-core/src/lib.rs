@@ -238,7 +238,7 @@ pub mod testing {
             )
         }
 
-        // As `Bun.secrets.set` writes one (RF-G3).
+        // As `Bun.secrets.set` writes one (docs/facts/windows-runners.md).
         pub fn write_as_bun(target: &str, user: &str, value: &str) -> std::io::Result<()> {
             refused(target)?;
             crate::host::windows_credman::write(target, user, value.as_bytes())

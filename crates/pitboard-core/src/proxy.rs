@@ -249,7 +249,7 @@ impl std::fmt::Debug for Proxies {
 }
 
 // Each of `names` that `env` sets, in their order, once a variable and as it was spelled:
-// on Windows `all_proxy` and `ALL_PROXY` are one variable (RF-B4).
+// on Windows `all_proxy` and `ALL_PROXY` are one variable (docs/facts/windows-runners.md).
 fn set_in(env: &Environment, names: &[&'static str]) -> Vec<&'static str> {
     let mut set: Vec<&'static str> = Vec::new();
     for &name in names {

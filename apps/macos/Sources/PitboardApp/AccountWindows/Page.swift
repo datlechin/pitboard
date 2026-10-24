@@ -3,8 +3,9 @@ import Foundation
 import PitboardKit
 import WebKit
 
-/// `WebPage` cannot host an account window (docs/facts/webkit.md), so this keeps its shape,
-/// and moving to it once it can is a matter of conformances.
+/// An account window's page, in `WebPage`'s shape.
+// `WebPage` cannot host an account window (docs/facts/webkit.md). Moving to it once it can is a
+// matter of conformances.
 @MainActor
 @Observable
 final class Page {

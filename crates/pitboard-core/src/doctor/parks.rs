@@ -105,7 +105,8 @@ pub(super) fn judge_dormant(park: &ParkFact, now: i64) -> Option<Check> {
     ))
 }
 
-// `CryptUnprotectData`'s code after an administrator resets the password (RF-D1d).
+// `CryptUnprotectData`'s code after an administrator resets the password
+// (docs/facts/windows-runners.md).
 pub(super) const DPAPI_KEY_RESET: i32 = 0x8009_000B_u32 as i32;
 
 // Every sealed park lost at once is one finding, worded for a reset only where the code says so.

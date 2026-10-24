@@ -430,7 +430,7 @@ impl MemoryHost {
         *locked(&self.credentials_fault) = Some(Error::Unreadable(why.into()));
     }
 
-    // As a network logon finds it, with no credential set (MC-net).
+    // As a network logon finds it, with no credential set (docs/facts/windows-runners.md).
     #[cfg(test)]
     pub(crate) fn credentials_unreachable(&self) {
         *locked(&self.credentials_fault) = Some(Error::Locked);

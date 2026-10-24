@@ -2,7 +2,7 @@
 
 What Pitboard's code rests on about the systems, frameworks, libraries and sites around it,
 each as it was measured or read, with the build, run or date it comes from. Measure a fact
-again before changing code that rests on it.
+again, as [AGENTS.md](../../AGENTS.md) allows, before changing code that rests on it.
 
 What Pitboard rests on about Claude Code, Codex and Claude Desktop is in each tool's register,
 `crates/pitboard-core/src/provider/<tool>/assumptions.rs`, which `pitboard-conformance` reads.

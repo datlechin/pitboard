@@ -102,7 +102,8 @@ impl Service for System {
                     Err(e) if !not_found(&e) => return Err(e),
                     _ => {}
                 }
-                // Refused, ERROR_DIR_NOT_EMPTY, while another person's task is in it (RF-E1c).
+                // Refused, ERROR_DIR_NOT_EMPTY, while another person's task is in it
+                // (docs/facts/windows-runners.md).
                 let _ = service
                     .GetFolder(&BSTR::from(r"\"))
                     .and_then(|root| root.DeleteFolder(&BSTR::from(&FOLDER[1..]), 0));
@@ -212,8 +213,8 @@ fn folder(service: &ITaskService) -> windows::core::Result<Option<ITaskFolder>> 
     }
 }
 
-// RF-E1: a standard user may make `\Pitboard\`, and its probe made it after any error of
-// GetFolder's, as this does.
+// A standard user may make `\Pitboard\` (docs/facts/windows-runners.md), after any error of
+// GetFolder's, as the probe did.
 fn made_folder(service: &ITaskService) -> windows::core::Result<ITaskFolder> {
     // SAFETY: a connected service, and the root folder it gave.
     unsafe {

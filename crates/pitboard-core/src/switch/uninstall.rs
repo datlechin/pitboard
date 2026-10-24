@@ -185,7 +185,7 @@ fn remove_job(ctx: &Context, permit: Permit, job: Job) -> Result<bool> {
 
 // A warm-up runs its tool in a home inside this one for as long as it holds `warm.lock`. This
 // run's own `state.lock` is let go of first: on exFAT and FAT32 a file held open keeps its
-// folder (RF-C6x).
+// folder (docs/facts/windows-runners.md).
 fn remove_home(ctx: &Context, permit: Permit, exclusive: std::fs::File) -> Home {
     if super::warm::RunLock::is_held(ctx) {
         return Home::WarmingUp;

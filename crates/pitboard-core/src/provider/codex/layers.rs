@@ -178,10 +178,9 @@ pub(crate) fn config_layers(os: Os) -> &'static [Layer] {
     }
 }
 
-/// The layers Codex 0.160.0 reads requirements from on `os`, lowest first.
-///
-/// `/etc/codex/managed_config.toml` and its managed preference are requirements too, but only
-/// for approvals and the sandbox (`legacy_requirements_to_toml_value`), so they pin no store.
+/// The layers Codex reads requirements from on `os`, lowest first (`codex_store_layers`).
+// `managed_config.toml` and its managed preference are requirements only for approvals and the
+// sandbox (`legacy_requirements_to_toml_value`), so they pin no store.
 pub(crate) fn requirement_layers(os: Os) -> &'static [Layer] {
     match os {
         Os::MacOs => &[Layer::Required, Layer::RequiredByPreference],
@@ -287,10 +286,8 @@ struct Unknown {
 /// What Codex does over the layer [`Unknown`] names.
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Then {
-    /// Codex 0.160.0 does not start.
     Stops,
-    /// The profile a `profile = "<name>"` line chooses where no table defines it, which
-    /// 0.160.0 refuses as it refuses every such line, and 0.99.0 as one it cannot find.
+    /// A `profile = "<name>"` line no table defines (`codex_store_layers`).
     NoProfile(String),
 }
 
@@ -352,10 +349,7 @@ impl Store {
             .map(|unknown| format!("{} {}", self.place(unknown.layer), unknown.why))
     }
 
-    /// What Codex does with what [`Store::why_unknown`] names, as sentences with no last full
-    /// stop, for [`Backend::Unknown`]. Codex 0.160.0 does not start over any of it, and a
-    /// `profile = "<name>"` line naming a profile no table defines is one 0.99.0, which
-    /// chooses a profile with the line, refuses as not found.
+    /// What Codex does over [`Store::why_unknown`], with no last full stop (`codex_store_layers`).
     pub(crate) fn while_unknown(&self) -> Option<String> {
         self.unknown.as_ref().map(|unknown| match &unknown.then {
             Then::Stops => "Codex 0.160.0 does not start until that is put right".into(),
@@ -508,11 +502,7 @@ fn kind(value: &toml::Value) -> String {
     format!("{article} {name}")
 }
 
-/// The profile a layer's table chooses with `profile = "<name>"`. 0.160.0 calls the line
-/// legacy and no longer supported: once the layers are merged, and none can take it away, it
-/// refuses to start with one (`load_config_with_layer_stack`). 0.99.0 has no such refusal,
-/// and chooses the profile with it, as Pitboard reads it. A `profile` that is not a name
-/// stops 0.160.0 before that, which reads it as an `Option<String>`.
+/// The profile a layer's table chooses with `profile = "<name>"` (`codex_store_layers`).
 fn profile_in(table: &toml::Table) -> Set<String> {
     match table.get("profile") {
         None => Set::Unset,
@@ -524,12 +514,9 @@ fn profile_in(table: &toml::Table) -> Set<String> {
     }
 }
 
-/// Whether a layer's table defines the profile `name`, as `[profiles.<name>]`. Codex reads
-/// `profiles` as a `HashMap<String, ConfigProfile>`, so a `profiles`, or a profile in it,
-/// that is not a table is a value it cannot take. What the profile's table holds is not
-/// read: neither 0.99.0's `ConfigProfile` nor 0.160.0's has `cli_auth_credentials_store`,
-/// 0.160.0 does not apply its `[features]`, and none of 0.99.0's features is about the
-/// store.
+/// Whether a layer's table defines the profile `name`, as `[profiles.<name>]`.
+// Codex reads `profiles` as a map of tables, and no store in a profile's table
+// (`codex_store_layers`).
 fn profile_table_in(table: &toml::Table, name: &str) -> Set<()> {
     let not_a_table = |key: &str, value: &toml::Value| {
         Set::Refused(format!(
@@ -679,11 +666,9 @@ pub(crate) fn resolve(os: Os, places: &Places, read: &dyn Fn(Layer) -> Administe
         }),
     };
 
-    // A profile chosen in a file chooses the profile a table defines, wherever each is.
-    // Its table holds no store 0.99.0 or 0.160.0 reads, so the store is still the layers',
-    // but a profile no table defines is one nobody can tell: 0.160.0 refuses every such line
-    // once it has read the configuration, and 0.99.0, which chooses a profile with it,
-    // refuses one it cannot find.
+    // A profile chosen in any layer is the one a table in any layer defines. Its table holds no
+    // store Codex reads, so the store is still the layers', but a profile no table defines is
+    // one nobody can tell (`codex_store_layers`).
     match highest(config.iter(), profile_in) {
         Some((layer, Ok(name))) => {
             match highest(config.iter(), |table| profile_table_in(table, &name)) {

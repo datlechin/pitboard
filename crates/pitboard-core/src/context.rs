@@ -127,7 +127,8 @@ impl Environment {
                 Os::MacOs | Os::Linux => {
                     variables.insert(key, (name, value));
                 }
-                // RF-B4: Windows hands a program the first of two spellings of a name.
+                // Windows hands a program the first of two spellings of a name
+                // (docs/facts/windows-runners.md).
                 Os::Windows => {
                     variables.entry(key).or_insert((name, value));
                 }

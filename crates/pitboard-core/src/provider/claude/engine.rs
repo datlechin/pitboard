@@ -23,7 +23,6 @@ use std::path::PathBuf;
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct Claude;
 
-// The 30 second cache and the round trip after it (`credential_cache`).
 const ADOPTION_SECONDS: u32 = switch::ADOPTION_CEILING_SECONDS;
 
 // Every system's answer, so each is tested on every system.
