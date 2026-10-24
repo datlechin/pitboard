@@ -968,3 +968,22 @@ fn a_stored_login_that_is_not_an_object_leaves_the_account_in_use_as_named() {
         format!("`here`, as Anthropic said {}", time::moment(NOW, NOW))
     );
 }
+
+// On macOS each read is a `security` call, and a renewal between two makes the facts disagree.
+#[test]
+fn claude_codes_login_is_read_once() {
+    let m = switch::harness::machine("doctor-one-read");
+    m.mem.live().takes_on_stdin(4032);
+    let before = m.mem.trail().len();
+    let facts = gather(&m.ctx);
+    let reads = m.mem.trail()[before..]
+        .iter()
+        .filter(|touch| touch.call == "read" && touch.service == m.service)
+        .count();
+    assert_eq!(reads, 1);
+    assert!(matches!(facts.backend, Ok(store::Backend::Keychain)));
+    assert!(matches!(facts.credential, Ok(Some(_))));
+    assert!(facts.credential_cost.is_some());
+    assert!(!facts.credential_parts.is_empty());
+    assert!(facts.claude_present);
+}

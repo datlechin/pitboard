@@ -164,6 +164,7 @@ pub(crate) fn gather(ctx: &Context) -> Facts {
     let home = home::dir(ctx);
     let config_account = config.as_ref().ok().and_then(claude_paths::config_account);
     let (organisation_pins, pinned_out) = claude::login_pins(ctx, state.as_ref().ok());
+    let found = claude::found(ctx, &service);
     Facts {
         os: crate::host::OS,
         sid: ctx.sid.clone(),
@@ -177,20 +178,13 @@ pub(crate) fn gather(ctx: &Context) -> Facts {
         account: slot::account_name(ctx),
         default_slot: claude_paths::is_default_slot(ctx),
         storage_dir: claude_paths::storage_dir(ctx),
-        backend: store::resolve(&claude_live::chain(ctx), &service),
+        backend: found.backend,
         vault: store::vault_kind(ctx),
         credential_file: claude_live::credential_file(ctx),
-        credential_cost: store::read_raw(&claude_live::chain(ctx), &service)
-            .ok()
-            .flatten()
-            .and_then(|raw| store::cost(&claude_live::chain(ctx), &service, &raw)),
+        credential_cost: found.cost,
         no_argv: !ctx.argv_fallback(),
-        credential_parts: store::read(&claude_live::chain(ctx), &service)
-            .ok()
-            .flatten()
-            .map(|doc| claude::parts_of(&doc))
-            .unwrap_or_default(),
-        credential: store::read(&claude_live::chain(ctx), &service),
+        credential_parts: found.parts,
+        credential: found.credential,
         home_access: crate::host::fs::access(&home),
         readable_by_others: machine::loose_logins(ctx),
         home,
@@ -234,8 +228,7 @@ pub(crate) fn gather(ctx: &Context) -> Facts {
             .map(|refusal| refusal.to_string()),
         claude_present: claude_paths::config_file(ctx).exists()
             || claude_paths::program(ctx).is_some()
-            || store::read_raw(&claude_live::chain(ctx), &service)
-                .is_ok_and(|found| found.is_some())
+            || found.stored
             || state.as_ref().is_ok_and(|s| {
                 s.accounts
                     .iter()

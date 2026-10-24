@@ -177,6 +177,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   unfinished.
 - On Windows, the app, the status line and `pitboard status` no longer show no accounts for a
   moment while another Pitboard run saves its list of accounts.
+- `pitboard doctor` reads the Claude Code login in use once, so its checks of that login agree
+  where Claude Code renews it while they run.
 
 ## [1.0.0-beta.5] - 2026-10-23
 

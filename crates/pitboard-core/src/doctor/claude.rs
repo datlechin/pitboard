@@ -55,6 +55,40 @@ pub(super) fn fallback_login(ctx: &Context) -> Option<FallbackLogin> {
     })
 }
 
+// Claude Code's login in use from one look down its chain and one read.
+pub(super) struct Found {
+    pub(super) backend: Result<store::Backend, store::Error>,
+    pub(super) credential: Result<Option<Value>, store::Error>,
+    pub(super) cost: Option<store::Cost>,
+    pub(super) parts: Vec<(String, usize)>,
+    pub(super) stored: bool,
+}
+
+pub(super) fn found(ctx: &Context, service: &str) -> Found {
+    let chain = claude_live::chain(ctx);
+    let holder = store::holder(&chain, service);
+    let raw = holder
+        .clone()
+        .and_then(|held| held.map_or(Ok(None), |backend| backend.read(service)));
+    let credential = raw.clone().and_then(store::parsed);
+    Found {
+        backend: holder
+            .as_ref()
+            .map(|held| held.map_or(store::Backend::Absent, |backend| backend.kind()))
+            .map_err(Clone::clone),
+        cost: match (&holder, &raw) {
+            (Ok(held), Ok(Some(raw))) => store::cost_at(&chain, *held, service, raw),
+            _ => None,
+        },
+        parts: match &credential {
+            Ok(Some(document)) => parts_of(document),
+            _ => Vec::new(),
+        },
+        stored: matches!(raw, Ok(Some(_))),
+        credential,
+    }
+}
+
 /// What is taking up the room in a credential document, largest first.
 ///
 /// A login that will not fit is almost never the login: on one real machine the OAuth block

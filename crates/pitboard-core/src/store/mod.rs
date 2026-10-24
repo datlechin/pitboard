@@ -413,12 +413,12 @@ pub(crate) fn read_raw(live: &Live, service: &str) -> Result<Option<String>, Err
 }
 
 pub(crate) fn read(live: &Live, service: &str) -> Result<Option<Value>, Error> {
-    match read_raw(live, service)? {
-        None => Ok(None),
-        Some(raw) => serde_json::from_str(&raw)
-            .map(Some)
-            .map_err(|e| Error::Malformed(e.to_string())),
-    }
+    parsed(read_raw(live, service)?)
+}
+
+pub(crate) fn parsed(raw: Option<String>) -> Result<Option<Value>, Error> {
+    raw.map(|raw| serde_json::from_str(&raw).map_err(|e| Error::Malformed(e.to_string())))
+        .transpose()
 }
 
 /// Write the live credential where it already lives. A failed keychain write is never
@@ -489,10 +489,21 @@ pub(crate) fn vault_kind(ctx: &Context) -> Backend {
 /// write. A login living in the fallback file has no ceiling, and used to be told it had
 /// the keychain's.
 pub(crate) fn cost(live: &Live, service: &str, contents: &str) -> Option<Cost> {
-    with_live(live, |chain| {
-        let first = (!live.takes_over).then(|| resolve_in(chain, service).ok().flatten());
-        first.flatten().unwrap_or(chain[0]).cost(service, contents)
-    })
+    let held = (!live.takes_over)
+        .then(|| holder(live, service).ok().flatten())
+        .flatten();
+    cost_at(live, held, service, contents)
+}
+
+// As `cost`, where `held` is the backend a look already found holding the login.
+pub(crate) fn cost_at(
+    live: &Live,
+    held: Option<&dyn RawStore>,
+    service: &str,
+    contents: &str,
+) -> Option<Cost> {
+    let first = held.filter(|_| !live.takes_over);
+    first.unwrap_or(&*live.backends[0]).cost(service, contents)
 }
 
 /// A handle for comparing and logging tokens without the secret leaving this process.
