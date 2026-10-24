@@ -238,8 +238,12 @@ pub(crate) fn item(seen: &Seen, account: &Account) -> AccountItem {
         None
     } else {
         let parked = account.parked.as_ref();
-        said::parked_life(parked.and_then(|p| p.refresh_expires_at), seen.now)
-            .or_else(|| said::session_life(parked.and_then(|p| p.session_expires_at), seen.now))
+        let life = said::parked_life(parked.and_then(|p| p.refresh_expires_at), seen.now)
+            .or_else(|| said::session_life(parked.and_then(|p| p.session_expires_at), seen.now));
+        match account.standing {
+            status::Standing::Expiring => life.map(|life| words::sign_in_to_keep(&life)),
+            _ => life,
+        }
     };
     let pace = runs_out_first(account, seen.now).map(|(limit, in_seconds)| {
         let windows = account.usage.as_ref().map_or(&[][..], |u| &u.windows);
@@ -1148,12 +1152,45 @@ mod tests {
                 refresh_expires_at: None,
                 session_expires_at: Some(NOW - 1),
             }),
+            standing: status::Standing::Expiring,
             ..desktop_account("home", false)
         };
+        let life = said::session_life(Some(NOW - 1), NOW).expect("a date");
         assert_eq!(
-            desktop_rows(vec![lapsed])[0].parked_note.as_deref(),
-            Some("Its sign-in may have lapsed")
+            desktop_rows(vec![lapsed])[0].parked_note,
+            Some(words::sign_in_to_keep(&life)),
+            "as `pitboard status` hints a sign-in for it"
         );
+    }
+
+    // As `pitboard status` hints a sign-in for it; it still switches until it expires.
+    #[test]
+    fn a_row_says_to_sign_in_again_to_a_parked_login_due_to_expire() {
+        let row = |account: Account| {
+            let state = read(status(vec![account], Vec::new()), vec![claude_code()]);
+            present_on(Os::MacOs, &state, NOW, &Utc)
+                .sections
+                .into_iter()
+                .flat_map(|section| section.accounts)
+                .next()
+                .expect("a row")
+        };
+        let due = NOW + 2 * 86_400;
+        let expiring = row(account(Some("work"))
+            .parked_until(due)
+            .standing(status::Standing::Expiring)
+            .build());
+        let life = said::parked_life(Some(due), NOW).expect("a date");
+        assert_eq!(expiring.parked_note, Some(words::sign_in_to_keep(&life)));
+        assert!(!expiring.needs_sign_in);
+        assert!(matches!(
+            expiring.action.map(|action| action.intent),
+            Some(Intent::SwitchTo { .. })
+        ));
+
+        let lasting = NOW + 20 * 86_400;
+        let ready = row(account(Some("work")).parked_until(lasting).build());
+        assert_eq!(ready.parked_note, said::parked_life(Some(lasting), NOW));
     }
 
     fn menu_titles(os: Os, accounts: Vec<Account>) -> Vec<String> {

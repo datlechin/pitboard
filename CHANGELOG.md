@@ -100,6 +100,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   asks `Replace it?`.
 - `pitboard doctor` says why Pitboard leaves a Codex keychain store alone, and that Claude Code's
   config names somebody no store holds, in the words a refused switch uses.
+- An account's row in the app says to sign in again where its parked login is due to expire, or
+  its Claude Desktop sign-in may have lapsed, as `pitboard status` does.
 
 ### Removed
 

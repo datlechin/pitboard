@@ -76,6 +76,12 @@ pub(crate) fn could_not_enrol(from: Option<&Sheet>, name: &str) -> String {
     }
 }
 
+// A parked login that switches for now, as its row's note says it: one due to expire, or
+// whose sign-in may have lapsed, as `pitboard status` hints a sign-in for it.
+pub(crate) fn sign_in_to_keep(life: &str) -> String {
+    format!("{life}: sign in again to keep it")
+}
+
 /// A button's, a menu item's or a heading's words as each system writes them: title case
 /// on macOS, as Apple's guidelines have it, and sentence case on Windows, which Microsoft's
 /// writing guidance gives all of an app's text.
@@ -1282,6 +1288,18 @@ pub(crate) fn in_app_given_up(given_up: &pitboard_core::switch::GivenUp) -> Stri
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_parked_login_a_sign_in_keeps_says_so_after_its_life() {
+        assert_eq!(
+            sign_in_to_keep("Parked login good for 2 more days"),
+            "Parked login good for 2 more days: sign in again to keep it"
+        );
+        assert_eq!(
+            sign_in_to_keep("Its sign-in may have lapsed"),
+            "Its sign-in may have lapsed: sign in again to keep it"
+        );
+    }
 
     #[test]
     fn what_is_left_of_an_app_that_quit_is_quit_in_task_manager_on_windows() {
