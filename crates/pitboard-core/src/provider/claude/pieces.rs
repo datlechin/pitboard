@@ -144,23 +144,34 @@ pub(crate) fn read(items: &dyn Items, target: &str) -> Result<Option<String>, Er
     let Some(text) = found(items, MANIFEST)? else {
         return found(items, WHOLE);
     };
-    let broken = |why: String| Error::Broken {
-        why,
-        spelling: items.spelling(),
-    };
-    let unreadable = |why: &str| Err(broken(format!("`{target}` {why}")));
     let Some(manifest) = Manifest::read(&text) else {
-        return unreadable("has a manifest `#m` Claude Code does not write");
+        return Err(broken(
+            items,
+            format!("`{target}` has a manifest `#m` Claude Code does not write"),
+        ));
     };
     if found(items, PENDING)?.is_some() {
         return Err(Error::Unfinished(format!(
             "`{target}` has pieces a write left unfinished, as its `#p` says"
         )));
     }
+    joined(items, target, manifest).map(Some)
+}
+
+fn broken(items: &dyn Items, why: String) -> Error {
+    Error::Broken {
+        why,
+        spelling: items.spelling(),
+    }
+}
+
+// The login the pieces `manifest` names hold, whatever `#p` says.
+fn joined(items: &dyn Items, target: &str, manifest: Manifest) -> Result<String, Error> {
+    let unreadable = |why: String| Err(broken(items, format!("`{target}` {why}")));
     let mut joined = String::with_capacity(manifest.l);
     for k in 0..manifest.n {
         let Some(part) = items.get(&piece(k))? else {
-            return unreadable(&format!(
+            return unreadable(format!(
                 "lacks piece #{k} of the {} its manifest names",
                 manifest.n
             ));
@@ -168,7 +179,7 @@ pub(crate) fn read(items: &dyn Items, target: &str) -> Result<Option<String>, Er
         joined.push_str(&part);
     }
     if joined.len() != manifest.l {
-        return unreadable(&format!(
+        return unreadable(format!(
             "has {} characters in its pieces, where its manifest names {}",
             joined.len(),
             manifest.l
@@ -178,8 +189,12 @@ pub(crate) fn read(items: &dyn Items, target: &str) -> Result<Option<String>, Er
         .decode(&joined)
         .ok()
         .and_then(|bytes| String::from_utf8(bytes).ok())
-        .map(Some)
-        .ok_or_else(|| broken(format!("`{target}` has pieces that are not base64 of text")))
+        .ok_or_else(|| {
+            broken(
+                items,
+                format!("`{target}` has pieces that are not base64 of text"),
+            )
+        })
 }
 
 // Each step is a durable change a test can stop a write after.
@@ -213,12 +228,33 @@ pub(crate) fn write(
     if !in_pieces {
         return Ok(());
     }
-    match read(items, target)? {
-        Some(back) if back == contents => Ok(()),
-        Some(_) => Err(Error::NotDurable(format!(
+    // Credential Manager can still show `#p` just after its delete (runs 39137503718, 39909919492).
+    let ours = || {
+        matches!(manifest(items), Ok(Some(named))
+            if joined(items, target, named).is_ok_and(|held| held == contents))
+    };
+    let mut deleted = Ok(());
+    let mut again = 0;
+    let back = loop {
+        let back = read(items, target);
+        if again == 5 || !matches!(back, Err(Error::Unfinished(_))) || !ours() {
+            break back;
+        }
+        again += 1;
+        deleted = items.delete(permit, PENDING);
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    };
+    match back {
+        Ok(Some(back)) if back == contents => Ok(()),
+        Ok(Some(_)) => Err(Error::NotDurable(format!(
             "`{target}` holds different bytes"
         ))),
-        None => Err(Error::NotDurable(format!("`{target}` reads back empty"))),
+        Ok(None) => Err(Error::NotDurable(format!("`{target}` reads back empty"))),
+        Err(Error::Unfinished(why)) => Err(Error::Unfinished(match deleted {
+            Ok(()) => why,
+            Err(failed) => format!("{why}; deleting it failed: {failed}"),
+        })),
+        Err(other) => Err(other),
     }
 }
 
@@ -289,7 +325,7 @@ pub(crate) fn login(bytes: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::cell::RefCell;
+    use std::cell::{Cell, RefCell};
     use std::collections::BTreeMap;
 
     #[derive(Default)]
@@ -552,6 +588,74 @@ mod tests {
                 );
             }
         }
+    }
+
+    // Credential Manager beside another reader: a delete that fails, a read that lags.
+    #[derive(Default)]
+    struct Lagging {
+        kept: Kept,
+        failing_deletes: Cell<usize>,
+        stale_reads: Cell<usize>,
+        deleted: RefCell<Option<String>>,
+    }
+
+    impl Items for Lagging {
+        fn get(&self, name: &str) -> Result<Option<String>, Error> {
+            let stale = self.deleted.borrow().clone();
+            if name == PENDING && self.stale_reads.get() > 0 && stale.is_some() {
+                self.stale_reads.set(self.stale_reads.get() - 1);
+                return Ok(stale);
+            }
+            self.kept.get(name)
+        }
+
+        fn set(&self, permit: Permit, name: &str, value: &str) -> Result<(), Error> {
+            self.kept.set(permit, name, value)
+        }
+
+        fn delete(&self, permit: Permit, name: &str) -> Result<(), Error> {
+            if name == PENDING && self.failing_deletes.get() > 0 {
+                self.failing_deletes.set(self.failing_deletes.get() - 1);
+                return Err(Error::Write("`t#p`: Access is denied. (os error 5)".into()));
+            }
+            if name == PENDING
+                && let Some(held) = self.kept.get(name)?
+            {
+                *self.deleted.borrow_mut() = Some(held);
+            }
+            self.kept.delete(permit, name)
+        }
+
+        fn spelling(&self) -> crate::words::Spelling {
+            crate::words::Spelling::Bare
+        }
+    }
+
+    #[test]
+    fn a_write_in_pieces_deletes_its_marker_again_where_credential_manager_still_shows_it() {
+        let text = login(9000);
+        let pieces = ["#0", "#1", "#2", "#3", "#4", MANIFEST];
+        let stale = Lagging::default();
+        stale.stale_reads.set(1);
+        write(&stale, Permit::for_a_test(), &text, "t").expect("a read that lagged");
+        assert_eq!(read(&stale, "t").unwrap().as_ref(), Some(&text));
+        assert_eq!(stale.kept.names(), pieces);
+
+        let refused = Lagging::default();
+        refused.failing_deletes.set(1);
+        write(&refused, Permit::for_a_test(), &text, "t").expect("a delete refused once");
+        assert_eq!(refused.kept.names(), pieces);
+
+        let kept = Lagging::default();
+        kept.failing_deletes.set(usize::MAX);
+        let Err(Error::Unfinished(why)) = write(&kept, Permit::for_a_test(), &text, "t") else {
+            panic!("a `#p` no delete takes away");
+        };
+        assert_eq!(
+            why,
+            "`t` has pieces a write left unfinished, as its `#p` says; deleting it failed: \
+             writing the credential failed: `t#p`: Access is denied. (os error 5)"
+        );
     }
 
     #[test]

@@ -1145,9 +1145,7 @@ window loads its site, and whatever the site's pages load, as a browser would.
   `pitboard-citest-*` is in its Credential Manager, that Task Scheduler's `\Pitboard\` is
   empty, and that no real login folder appeared. A test that writes Credential Manager's
   items is in nextest's `credential-manager` group, which runs one at a time: two writers at
-  once in one logon session can leave an item deleted for the next logon to find. The two
-  that write a login in pieces run alone: beside other tests' reads, a read can still find
-  an item just deleted (runs 39137503718 and 39909919492).
+  once in one logon session can leave an item deleted for the next logon to find.
 - Every program the command line's tests and `pitboard-ffi`'s tests start in place of a
   tool, or put where one is looked for, is one compiled program, the `pitboard` crate's
   example `stand-in`, playing the script written beside its copy
@@ -3553,8 +3551,11 @@ treated, and only the macOS build shows it. The run reads both builds since.
   with one step of its own: while it replaces pieces in place, the manifest names a length
   no base64 has, and as many pieces as the write may leave, so Claude Code's read fails, and
   a session keeps the login it has, rather than read a mix. A write takes away every piece
-  the manifest or a `#p` a stopped write left counts. Pitboard reads a manifest Claude Code
-  would pass over, or `#p` beside one, as unreadable, and only a whole write ends a write
+  the manifest or a `#p` a stopped write left counts. Beside other readers, the read after a
+  write in pieces has found the `#p` it deleted (runs 39137503718 and 39909919492): where
+  the pieces hold the login, the write deletes `#p` again, five times at most, 20 ms apart,
+  and one that still finds it says what the delete said. Pitboard reads a manifest Claude
+  Code would pass over, or `#p` beside one, as unreadable, and only a whole write ends a write
   that stopped there: a switch whose write failed partway writes the login that was there
   back, and one killed partway is finished by the next change, which writes the incoming
   login whole, without the outgoing document's part that is no account's, such as MCP
