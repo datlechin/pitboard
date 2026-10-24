@@ -2821,8 +2821,11 @@ Replacing a file:
   each open 50 ms, needed no retry: about 13 s on NTFS on both images, and 2000 took 1.4 s
   on ReFS. No reader saw a torn or empty file.
 - A reader thread in the renaming process itself found the file missing in 10788 of its
-  69694 opens during those renames on windows-2025, and in none on windows-11-arm. Readers in
-  other processes never did.
+  69694 opens during those renames on windows-2025, and in none on windows-11-arm. In later
+  runs the probe reader in a process of its own did too, `CreateFileW` failing 2: in 5658 of
+  208735 opens on windows-2025 (run 39320680285) and 2323 of 186195 on windows-11-arm (run
+  40030964166). In run 38878569423 no reader found it missing on either image, and on ReFS
+  none ever has.
 - Beside readers that reopen the file without a pause, one not sharing delete,
   `MoveFileExW` fails 5 most of the time. In 180 s it replaced the file 154 times on
   windows-2025, 30 rounds running out of 50 retries, and 2439 times on windows-11-arm, in up
