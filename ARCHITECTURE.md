@@ -2230,8 +2230,8 @@ rests on are under [WebKit and SwiftUI](#webkit-and-swiftui) and
 - `crates/pitboard-sites`: what a site is, and what a link from outside may be, in the
   [code map](#code-map). The app reaches it through `pitboard-ffi`'s `Site` and `SiteLink`
   records and `site_names`, and the model reads each Pitboard link with `pitboard-sites`'
-  `read_pitboard_link` and says a refusal in its words. The app tests build a site with
-  `sites_for`. The Share extension reaches it through `pitboard-share-ffi`.
+  `read_pitboard_link` and says a refusal in its words. The app tests build a site record by
+  hand. The Share extension reaches it through `pitboard-share-ffi`.
 - `apps/macos/Sources/PitboardLinkTarget`: where a Pitboard link goes, which the app and the
   Share extension both link. `LinkTarget.swift` names the Info.plist key `PitboardURLScheme`
   that gives each build its scheme, and finds the app an extension is inside.

@@ -22,12 +22,34 @@ package func status(_ labels: String...) -> Status {
     status(labels.enumerated().map { account($1, signedIn: $0 == 0) })
 }
 
+extension Site {
+    // A site as a snapshot carries one, for a test of what the app does with it.
+    package static let claude = site("claude.ai", of: "claude")
+    package static let chatGPT = site("chatgpt.com", of: "codex")
+
+    private static func site(_ host: String, of provider: String) -> Site {
+        Site(
+            host: host, name: host, provider: provider, aliases: [], hosts: [host],
+            signInHosts: [], blockedHosts: [], signInPaths: [], storeName: provider,
+            signInSteps: "", blockedServices: "")
+    }
+}
+
+package func window(
+    _ label: String, on site: Site = .claude, email: String? = nil, inUse: Bool = false,
+    store: String
+) -> WindowAccount {
+    WindowAccount(
+        site: site, label: label, email: email ?? "\(label)@example.com", store: store,
+        inUse: inUse, title: label)
+}
+
 package func windowsShown(
-    _ accounts: [Account] = [], closing: [String] = [], deleting: [StoreDeletion] = []
+    _ accounts: [WindowAccount] = [], menus: [SiteMenu] = [], closing: [String] = [],
+    deleting: [StoreDeletion] = []
 ) -> AccountWindowsShown {
     AccountWindowsShown(
-        accounts: windowAccounts(accounts: accounts), menus: siteMenus(accounts: accounts),
-        open: [],
+        accounts: accounts, menus: menus, open: [],
         waiting: WindowWaiting(
             windowTitle: "Account", shown: .reading(title: "Reading accounts…")),
         closing: closing, deleting: deleting, picker: nil, downloads: [])

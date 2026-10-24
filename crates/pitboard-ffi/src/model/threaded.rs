@@ -1774,7 +1774,7 @@ fn an_account_enrolled_by_0_8_0_keeps_its_window() {
     std::fs::write(&file, written.to_string()).expect("written as 0.8.0 writes it");
 
     let accounts = world.core().status(false).expect("a read").accounts;
-    let stores: Vec<String> = crate::account_windows::window_accounts(accounts)
+    let stores: Vec<String> = crate::account_windows::window_accounts(&accounts)
         .into_iter()
         .map(|window| window.store)
         .collect();

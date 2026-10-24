@@ -543,7 +543,7 @@ fn an_accounts_own_menu_opens_its_windows() {
             .build(),
     ];
     let (model, _) = reading(accounts.clone());
-    let listed = crate::window_accounts(accounts);
+    let listed = crate::account_windows::window_accounts(&accounts);
     let [work, main] = &rows(&model)[..] else {
         panic!("two rows");
     };

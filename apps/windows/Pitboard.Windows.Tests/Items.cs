@@ -15,9 +15,18 @@ internal static class Items
             Summary: "", Problem: null, StaleNote: null, Pace: null, ParkedNote: null, WarmNote: null, Help: null,
             Limits: [], Offers: [], Windows: [], Forget: null);
 
+    // A site as a snapshot carries one, chatgpt.com's with the sign-in host its window loads.
+    public static Site Site(string provider) =>
+        provider == "codex" ? SiteOf("chatgpt.com", provider, ["auth.openai.com"]) : SiteOf("claude.ai", provider, []);
+
+    private static Site SiteOf(string host, string provider, string[] signInHosts) =>
+        new(
+            Host: host, Name: host, Provider: provider, Aliases: [], Hosts: [host], SignInHosts: signInHosts,
+            BlockedHosts: [], SignInPaths: [], StoreName: provider, SignInSteps: "", BlockedServices: "");
+
     public static WindowAccount Window(string provider, string label, bool inUse = false) =>
         new(
-            Site: PitboardFfiMethods.SitesFor(provider).Single(), Label: label, Email: $"{label}@example.com",
+            Site: Site(provider), Label: label, Email: $"{label}@example.com",
             Store: $"{provider}-{label}", InUse: inUse, Title: label);
 
     public static LimitRow Limit(double percent, PaceStanding standing = PaceStanding.Even) =>

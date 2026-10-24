@@ -379,15 +379,8 @@ public sealed class ModelTests
         Assert.AreEqual("pitboard", launch.Windows?.LinkScheme);
         Assert.IsNull(new AppLaunch(new Dictionary<string, string>(), null).Windows);
 
-        var work = PitboardFfiMethods.WindowAccounts(
-            [
-                new Account(
-                    Id: "claude:work", Provider: "claude", Label: "work", Qualified: "claude/work",
-                    Unplaced: false, Email: "work@example.com",
-                    AccountId: "4f3c2a10-8b7e-4d2a-9c1e-5a6b7c8d9e0f", SignedIn: true, Switchable: false,
-                    Parked: null, Usage: null, Stale: null, StaleExplanation: null, Plan: null,
-                    ReadAt: null),
-            ])[0];
+        var work = new WindowAccount(
+            Sites.Claude, Label: "work", Email: "work@example.com", Store: Store, InUse: true, Title: "work");
         var link = new SiteLink(work.Site, "https://claude.ai/chat/x");
         var windows = NoWindows() with
         {
@@ -562,14 +555,9 @@ public sealed class ModelTests
             Resets: "resets in 1h 05m", Pace: null,
             Spoken: "5-hour limit, 72 percent used, resets in 1 hour, 5 minutes");
         var use = new ItemAction(Title: "Use", Spoken: "Use spare (Codex)", Intent: new Intent.SwitchTo("codex/spare"));
-        var window = PitboardFfiMethods.WindowAccounts(
-            [
-                new Account(
-                    Id: "codex:spare", Provider: "codex", Label: "spare", Qualified: "codex/spare",
-                    Unplaced: false, Email: "spare@example.com", AccountId: "spare", SignedIn: false,
-                    Switchable: true, Parked: null, Usage: null, Stale: null, StaleExplanation: null, Plan: null,
-                    ReadAt: null),
-            ])[0];
+        var window = new WindowAccount(
+            Sites.ChatGpt, Label: "spare", Email: "spare@example.com", Store: "5d3a8c72-9e1b-5f4a-8c2d-3e6f7a8b9c40",
+            InUse: false, Title: "spare");
         var spare = new AccountItem(
             Id: "codex:spare", Provider: "codex", Qualified: "codex/spare", Title: "spare",
             Email: "spare@example.com", Plan: null, MenuTitle: "spare", SpokenName: "spare (Codex)",
@@ -763,6 +751,8 @@ public sealed class ModelTests
 
     private static readonly string[] OneToolsAccounts = ["claude/work", "claude/personal"];
 
+    private static readonly string[] OneToolsLabels = ["work", "personal"];
+
     [TestMethod]
     public void AFixtureIsNamedOrRefusedWithWhy()
     {
@@ -856,6 +846,11 @@ public sealed class ModelTests
             OneToolsAccounts, read.Status!.Accounts.Select(account => account.Qualified).ToArray());
         Assert.IsTrue(read.Status.Accounts[0].SignedIn);
         Assert.AreEqual("work", read.Sections.Single().Accounts[0].Title);
+        var claude = Assert.IsInstanceOfType<SiteMenu.Several>(read.AccountWindows.Menus.Single());
+        Assert.AreEqual("Open claude.ai", claude.Title);
+        Assert.AreEqual("claude.ai", claude.Site.Host);
+        CollectionAssert.AreEqual(
+            OneToolsLabels, read.AccountWindows.Accounts.Select(window => window.Label).ToArray());
         Assert.IsNotNull(waiting.TellingThread);
         Assert.AreNotEqual(Environment.CurrentManagedThreadId, waiting.TellingThread);
         Assert.IsFalse(waiting.ToldOnThePool, "told on a thread of .NET's thread pool");

@@ -3,7 +3,7 @@
 //! An app makes one `PitboardModel`, sends it what was asked of it, and shows the snapshots
 //! its listener is told of. Nothing the model exports waits on the core: `launch.rs` makes
 //! the core from what the app was started with, and only the model's own threads call it.
-//! Beside the model and the records its snapshots carry, the bindings export the sites
+//! Beside the model and the records its snapshots carry, the bindings export the sites' names
 //! (`sites.rs`), the account windows' rules (`account_windows`), `check_name` and
 //! `downloads_quit_question` of `present`, the fixtures' `fixture_names` and `fixture_page`,
 //! and three free functions the macOS app asks of its bundle and its environment,
@@ -34,7 +34,7 @@ use std::path::{Path, PathBuf};
 uniffi::setup_scaffolding!();
 
 mod sites;
-pub use sites::{Conjunction, Site, SiteLink, site_names, sites_for};
+pub use sites::{Conjunction, Site, SiteLink, site_names};
 
 mod model;
 pub use model::{
@@ -68,7 +68,7 @@ pub use account_windows::{
     SignInWindowSize, SiteMenu, WindowAccount, WindowNoteKind, after_content_process_ended,
     decide_navigation, decide_response, dialog_title, download_destination, download_host,
     download_question, frame_asker, opening_note, page_may_close, page_may_use, remove_data_alert,
-    sign_in_window_size, site_menus, window_accounts, window_home, window_note,
+    sign_in_window_size, window_home, window_note,
 };
 
 // The core the model's lanes call, made from what the app was started with, and what it

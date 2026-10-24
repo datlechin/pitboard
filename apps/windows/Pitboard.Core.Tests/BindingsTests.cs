@@ -32,6 +32,7 @@ public sealed class BindingsTests
             "HomeDirectory", "LimitColumn", "LimitName", "UsageLevel", "Resets", "Runway", "ParkedLife",
             "RenewalNote", "DoctorSummary", "SameReset", "PitboardLink", "LinkRefusalReason", "Sites",
             "SiteLink", "ReadPitboardLink", "WindowOfStore", "IsSitePage", "WindowAddress", "StoreId",
+            "SitesFor", "WindowAccounts", "SiteMenus",
         ];
         var stillCalled = typeof(PitboardFfiMethods).GetMethods()
             .Select(method => method.Name)

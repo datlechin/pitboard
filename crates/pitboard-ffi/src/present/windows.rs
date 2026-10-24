@@ -208,7 +208,7 @@ pub enum DownloadState {
 pub(crate) fn account_windows(seen: &Seen) -> AccountWindowsShown {
     let windows = &seen.state.windows;
     let status = seen.state.status.as_ref();
-    let accounts = window_accounts(seen.accounts().to_vec());
+    let accounts = window_accounts(seen.accounts());
     let open = windows
         .open
         .iter()
@@ -238,7 +238,7 @@ pub(crate) fn account_windows(seen: &Seen) -> AccountWindowsShown {
         })
         .collect();
     AccountWindowsShown {
-        menus: site_menus(seen.accounts().to_vec()),
+        menus: site_menus(seen.accounts()),
         accounts,
         open,
         waiting: waiting(seen),

@@ -87,7 +87,7 @@ mod tests {
     use super::*;
 
     fn window(label: &str, provider: &str) -> WindowAccount {
-        let mut found = window_accounts(vec![account(Some(label), provider, "dana")]);
+        let mut found = window_accounts(&[account(Some(label), provider, "dana")]);
         found.pop().expect("a window")
     }
 
