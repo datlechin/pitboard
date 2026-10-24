@@ -477,10 +477,8 @@ fn signing_in_again_killed_at_any_step_recovers_to_something_whole() {
     }
 }
 
-/// The one Claude Code write this lock cannot exclude (`logout_skips_the_lock`): a `/logout`
-/// that has given up waiting deletes the credential with nothing held. If it lands just
-/// after the install, the incoming login is gone, and Pitboard used to print "Switched to
-/// work" and exit 0 over an account that was signed out.
+// A `/logout` that gave up waiting deletes the credential with no lock held
+// (`logout_skips_the_lock`), here just after the install.
 #[test]
 fn a_switch_whose_login_was_removed_again_does_not_report_a_switch() {
     let m = machine("did-not-hold");

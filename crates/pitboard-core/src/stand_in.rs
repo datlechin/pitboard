@@ -278,11 +278,9 @@ fn write_whole(at: &Path, contents: &str) -> io::Result<()> {
     std::fs::rename(&part, at)
 }
 
-/// Puts a stand-in at `at` that plays `script`: the script beside it, then a copy of the
-/// built stand-in, which the stand-in itself makes.
-///
-/// Another process writes the program, so no test thread holds it open for writing
-/// (docs/facts/sign-in-lock.md). The script is data the stand-in reads, so it is written here.
+/// Puts a stand-in at `at` that plays `script`, the script beside a copy of the built stand-in.
+// The stand-in copies itself, so no test thread holds a program open for writing
+// (docs/facts/sign-in-lock.md). The script is data it reads, so it is written here.
 pub fn install(at: &Path, script: &Script) -> io::Result<()> {
     let built = built().map_err(|missing| io::Error::new(io::ErrorKind::NotFound, missing))?;
     let text = serde_json::to_string_pretty(script).map_err(io::Error::other)?;
@@ -290,9 +288,8 @@ pub fn install(at: &Path, script: &Script) -> io::Result<()> {
     run_job(&built, &Job::CopiesItselfTo(at.to_path_buf()))
 }
 
-/// A program at `at` holding `contents`, such as a script starting with a `#!` line, written
-/// by the built stand-in and made runnable, for the reason [`install`] has another process
-/// write the program.
+/// A program at `at` holding `contents`, such as a `#!` script, made runnable.
+// Written by the built stand-in, as `install`'s copy is.
 pub fn write_program(at: &Path, contents: &str) -> io::Result<()> {
     let built = built().map_err(|missing| io::Error::new(io::ErrorKind::NotFound, missing))?;
     run_job(

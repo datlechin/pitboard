@@ -13,8 +13,9 @@ final class StoreJanitor {
     /// snapshots list it before the model has heard how it went.
     private var taken: Set<StoreDeletion> = []
 
-    /// How long to wait between attempts to delete a store WebKit still holds for a moment
-    /// after its last web view and object go (docs/facts/webkit.md).
+    /// How long to wait between attempts to delete a store.
+    // WebKit holds one for a moment after its last web view and object go
+    // (docs/facts/webkit.md).
     nonisolated static let retries: [Duration] = [50, 100, 200, 400, 800, 1600].map {
         .milliseconds($0)
     }
@@ -24,8 +25,8 @@ final class StoreJanitor {
         self.pause = pause
     }
 
-    /// Removes everything `store` keeps, while its windows go on using it: cookies, storage,
-    /// caches and the rest (docs/facts/webkit.md).
+    /// Removes everything `store` keeps, while its windows go on using it.
+    // It clears a store a page is using, cookies and storage included (docs/facts/webkit.md).
     func wipe(_ store: WKWebsiteDataStore) async {
         await store.removeData(
             ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(), modifiedSince: .distantPast)

@@ -1276,13 +1276,8 @@ fn a_sheet_is_put_up_over_the_window() {
 
 // What the Swift model did not do.
 
-/// After Claude Code refuses a code typed back, the person may paste one again: the owner's
-/// decision. Claude Code refuses a line that is not the whole code with `Invalid
-/// code.` and goes on reading in the same sign-in, as the register's
-/// `sign_in_takes_another_code` holds, so the field is offered again for the same sign-in,
-/// saying the code was refused, and the next code goes to the same tool. The Swift model took
-/// any code typed back as the one, and never asked again, leaving the person a sign-in that
-/// could only be cancelled.
+// The owner's decision. Claude Code refuses a line that is not the whole code and reads on in
+// the same sign-in (`sign_in_takes_another_code`), where the Swift model took any code as the one.
 #[test]
 fn a_code_claude_code_refused_may_be_pasted_again() {
     let mut model = Hand::new();
@@ -1350,10 +1345,8 @@ fn only_what_the_tool_says_after_a_code_refuses_it() {
     assert!(!shown.wants_code && !code_refused(&model));
 }
 
-/// A name and a code are taken without the white space around them, as the Swift sheets took
-/// it away with Foundation's `whitespacesAndNewlines`, which holds U+200B ZERO WIDTH SPACE as
-/// well as Unicode's White_Space (docs/facts/foundation-urls.md); one with nothing else in it
-/// starts or types nothing.
+// As the Swift sheets trimmed them, with Foundation's `whitespacesAndNewlines`, which holds
+// U+200B ZERO WIDTH SPACE as well as Unicode's White_Space (docs/facts/foundation-urls.md).
 #[test]
 fn a_name_and_a_code_are_trimmed_as_the_sheet_trimmed_them() {
     let mut model = Hand::new();

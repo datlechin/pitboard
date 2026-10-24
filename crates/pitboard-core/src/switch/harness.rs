@@ -640,13 +640,7 @@ pub(crate) fn lets_go_of_the_write_lock(m: &Rig) -> impl FnOnce() + 'static {
     move || std::fs::remove_dir(&writing).expect("the session lets go")
 }
 
-/// A session renewing the login `store` holds at the moment it is called, as Claude Code
-/// does (the register's `refresh_lock`): the keychain's, or the file's for a session
-/// that signed in with the file. It takes the refresh lock, as a directory, without waiting
-/// here: held, it waits, which is all that happens. Taken, it sends the refresh token stored,
-/// which spends it, then saves the renewed login, with an access token good for an hour,
-/// under the write lock where it can take it, and otherwise once [`saves`] says it is let go
-/// of.
+/// A session renewing the login `store` holds, as Claude Code does (the register's `refresh_lock`).
 pub(crate) fn renews_meanwhile(
     m: &Rig,
     store: Arc<store::memory::MemoryStore>,
@@ -731,9 +725,8 @@ pub(crate) fn usage_answer(percent: f64) -> Value {
     json!({"limits": [{"kind": "session", "percent": percent, "resets_at": resets_at.to_string()}]})
 }
 
-/// Claude Code's usage cache, put in its config as Claude Code writes one
-/// (`usage_cache_stamp_is_the_configs`): stamped with `here`, the account the config names,
-/// whichever login `answer` was asked with.
+/// Claude Code's usage cache, as it writes one (`usage_cache_stamp_is_the_configs`).
+// Stamped with `here`, the account the config names, whichever login `answer` was asked with.
 pub(crate) fn cache_usage(m: &Rig, answer: Value) {
     let path = m.root.path().join(".claude.json");
     let mut config: Value =

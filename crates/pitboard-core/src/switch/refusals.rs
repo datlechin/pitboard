@@ -284,11 +284,9 @@ fn the_first_account_goes_in_where_nothing_is_signed_in() {
     }
 }
 
-/// While `.credentials.json` sits behind the keychain, a session already running keeps the
-/// login it holds until that login is next renewed, whatever the file holds, as the
-/// register's `fallback_file_pins_session_login` has it: it looks at the file and never reads
-/// it to decide. A switch says so, naming the file, in place of the 33 seconds
-/// it takes without one, also where Pitboard cannot read what the file holds.
+// A running session keeps its login until it renews it, whatever the file behind the keychain
+// holds (`fallback_file_pins_session_login`), so a switch says so, naming the file, even where
+// Pitboard cannot read the file.
 #[test]
 #[cfg_attr(
     target_os = "linux",

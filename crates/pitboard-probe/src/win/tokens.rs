@@ -178,7 +178,6 @@ pub(super) fn safer(spawn: bool, scratch: Option<&Path>) -> Report {
     Report::ok("safer", logon, data)
 }
 
-// Codex's unelevated sandbox flags (`codex_windows_sandbox_token`).
 const SE_GROUP_LOGON_ID: u32 = 0xC000_0000;
 
 /// A copy of the logon session SID in `token`'s groups, which Codex uses as a restricting SID.

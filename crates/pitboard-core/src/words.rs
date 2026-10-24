@@ -297,8 +297,8 @@ pub fn warm_standing(
     }
 }
 
-/// What sessions already running do after a switch while a file sits behind their store
-/// (`fallback_file_pins_session_login`); the subject is each place's own.
+/// What sessions already running do after a switch while a file sits behind their store.
+// Each place says the subject (`fallback_file_pins_session_login`).
 pub fn kept_until_renewed() -> &'static str {
     "keep the account they are on until their login is next renewed, or until they are \
      started again"
@@ -345,7 +345,7 @@ pub(crate) fn out_of_reach(os: Os) -> &'static str {
     }
 }
 
-// A network logon, which has no Credential Manager (MC-net).
+// A network logon, which has no Credential Manager (docs/facts/windows-runners.md).
 pub(crate) const SSH_SIGN_IN: &str = "a sign-in over SSH with a key";
 
 // Said where switching by itself and warming up are turned on, in each front end, with the link.

@@ -169,11 +169,11 @@ pub enum Command {
         file: String,
     },
     /// D2b/H7: build a restricted token shaped like Codex's unelevated sandbox
-    /// (codex_windows_sandbox_token), then from it, on a private
-    /// desktop, run the probe's `dpapi --action unseal` on a park it sealed and `acl --open`
-    /// on a protected file it made, to see whether a token that cannot see the marker still
-    /// opens a vault-style file. Writes those two files first, so it needs the marker; the
-    /// children only read, so they need the scratch check alone.
+    /// (codex_windows_sandbox_token), then from it, on a private desktop, run the probe's
+    /// `dpapi --action unseal` on a park it sealed and `acl --open` on a protected file it made,
+    /// to see whether a token that cannot see the marker still opens a vault-style file. Writes
+    /// those two files first, so it needs the marker; the children only read, so they need the
+    /// scratch check alone.
     RestrictedToken {
         #[arg(long)]
         scratch: PathBuf,

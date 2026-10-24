@@ -4,8 +4,8 @@ use crate::address;
 use crate::site::{ALL, Conjunction, Site};
 use std::fmt;
 
-/// `text` without the white space Foundation's `whitespacesAndNewlines` trims, U+200B
-/// included, as the macOS app trimmed what was typed or shared (docs/facts/foundation-urls.md).
+/// `text` without the white space Foundation's `whitespacesAndNewlines` trims, U+200B included.
+// As the macOS app trimmed what was typed or shared (docs/facts/foundation-urls.md).
 pub fn trimmed(text: &str) -> &str {
     text.trim_matches(|c: char| c.is_whitespace() || c == '\u{200b}')
 }
