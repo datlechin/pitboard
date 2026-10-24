@@ -183,8 +183,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   moment while another Pitboard run saves its list of accounts.
 - `pitboard doctor` reads the Claude Code login in use once, so its checks of that login agree
   where Claude Code renews it while they run.
-- The status line records what a session passed without waiting for the disk, where a busy
-  Windows disk slowed it enough for Claude Code to cancel it.
+- The status line no longer waits for the disk after each response, which took it past half a
+  second on a busy Windows disk.
 
 ## [1.0.0-beta.5] - 2026-10-23
 

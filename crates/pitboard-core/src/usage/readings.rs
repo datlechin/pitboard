@@ -17,7 +17,8 @@ use crate::permit::Permit;
 use crate::usage::{Snapshot, Source, Window};
 use crate::{atomic, home};
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::io;
+use std::path::{Path, PathBuf};
 
 fn path(ctx: &Context) -> PathBuf {
     home::dir(ctx).join("usage.json")
@@ -40,17 +41,14 @@ pub(crate) fn changed_at(ctx: &Context) -> i64 {
     crate::time::changed_at(&path(ctx))
 }
 
-/// Drop what was remembered for an account that is no longer enrolled. Nothing here is
-/// secret, but an account someone has dropped should leave no trace behind either.
+// Flushed: a forgotten account's reading that a power cut brought back would stay for good.
 pub(crate) fn forget(ctx: &Context, permit: Permit, id: &str) {
-    change(ctx, permit, |all| all.remove(id).is_some());
+    change(ctx, permit, flushed, |all| all.remove(id).is_some());
 }
 
-/// Answers about accounts, each recorded as that account's reading as
-/// [`crate::usage::answered`] folds it in.
 pub(crate) fn answered(ctx: &Context, permit: Permit, answers: &[(String, Snapshot)]) {
     let now = ctx.now();
-    change(ctx, permit, |all| {
+    change(ctx, permit, flushed, |all| {
         let mut changed = false;
         for (id, answer) in answers {
             let mut next = crate::usage::answered(all.get(id), answer, now);
@@ -65,12 +63,11 @@ pub(crate) fn answered(ctx: &Context, permit: Permit, answers: &[(String, Snapsh
     });
 }
 
-/// What a session on account `id` passed its status line, recorded where it moves a limit
-/// of that account's reading, as [`crate::usage::moved`] says. An account with no reading
-/// gets none from it.
+// The status line's, so not flushed: a move a power cut loses comes back with the account's
+// next answer.
 pub(crate) fn moved(ctx: &Context, permit: Permit, id: &str, passed: &[Window]) {
     let now = ctx.now();
-    change(ctx, permit, |all| {
+    change(ctx, permit, atomic::write_unsynced, |all| {
         let Some(next) = all
             .get(id)
             .and_then(|known| crate::usage::moved(known, passed, now))
@@ -82,8 +79,17 @@ pub(crate) fn moved(ctx: &Context, permit: Permit, id: &str, passed: &[Window]) 
     });
 }
 
+fn flushed(permit: Permit, path: &Path, body: &[u8]) -> io::Result<()> {
+    atomic::write(permit, path, body, atomic::Perms::Secret)
+}
+
 // Folded again under the lock into the file as it is then, so no writer puts back an older copy.
-fn change(ctx: &Context, permit: Permit, fold: impl Fn(&mut HashMap<String, Snapshot>) -> bool) {
+fn change(
+    ctx: &Context,
+    permit: Permit,
+    write: fn(Permit, &Path, &[u8]) -> io::Result<()>,
+    fold: impl Fn(&mut HashMap<String, Snapshot>) -> bool,
+) {
     if !fold(&mut load(ctx)) {
         return;
     }
@@ -91,11 +97,10 @@ fn change(ctx: &Context, permit: Permit, fold: impl Fn(&mut HashMap<String, Snap
         return;
     };
     let mut all = load(ctx);
-    // A reading a power cut loses comes back with its account's next answer.
     if fold(&mut all)
         && let Ok(body) = serde_json::to_string(&all)
     {
-        let _ = atomic::write_unsynced(permit, &path(ctx), body.as_bytes());
+        let _ = write(permit, &path(ctx), body.as_bytes());
     }
 }
 
@@ -357,24 +362,37 @@ mod tests {
         assert_eq!(std::fs::read_to_string(path(&ctx)).unwrap(), laid_out);
     }
 
-    // The status line records here after every response, and a flush waits on the whole disk.
     #[test]
-    fn readings_change_without_waiting_for_the_disk() {
+    fn a_sessions_move_is_written_without_waiting_for_the_disk() {
         let (ctx, _scratch) = machine();
+        answered(
+            &ctx,
+            Permit::for_a_test(),
+            &[("work".into(), answer("session", 20.0, NOW - 60))],
+        );
         let ((), flushed) = crate::fault::failing_counted("atomic.synced", || {
-            answered(
-                &ctx,
-                Permit::for_a_test(),
-                &[
-                    ("work".into(), answer("session", 20.0, NOW - 60)),
-                    ("gone".into(), answer("session", 5.0, NOW - 60)),
-                ],
-            );
             passes(&ctx, "five_hour", 25.0);
-            forget(&ctx, Permit::for_a_test(), "gone");
         });
         assert_eq!(flushed, 0);
         assert_eq!(five_hour(&ctx, "work"), Some(25.0));
-        assert_eq!(five_hour(&ctx, "gone"), None);
+    }
+
+    #[test]
+    fn an_answer_and_a_forgotten_account_wait_for_the_disk() {
+        let (ctx, _scratch) = machine();
+        let gone = || {
+            answered(
+                &ctx,
+                Permit::for_a_test(),
+                &[("gone".into(), answer("session", 5.0, NOW - 60))],
+            );
+        };
+        let ((), flushed) = crate::fault::failing_counted("atomic.synced", gone);
+        assert_eq!(flushed, 1);
+        gone();
+        let ((), flushed) = crate::fault::failing_counted("atomic.synced", || {
+            forget(&ctx, Permit::for_a_test(), "gone");
+        });
+        assert_eq!(flushed, 1);
     }
 }

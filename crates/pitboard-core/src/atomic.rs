@@ -19,7 +19,7 @@ pub(crate) fn write(permit: Permit, path: &Path, contents: &[u8], perms: Perms) 
     write_at(permit, path, contents, perms, "atomic.temp_written")
 }
 
-// For a file a power cut may roll back or leave unreadable: a flush waits on the whole disk.
+// For the status line, whose budget a flush can outlast: a power cut may undo the write.
 pub(crate) fn write_unsynced(permit: Permit, path: &Path, contents: &[u8]) -> io::Result<()> {
     replace(
         permit,
