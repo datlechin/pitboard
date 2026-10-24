@@ -134,8 +134,17 @@ pub(crate) struct Settled {
 /// when a process ends, so there is no staleness rule for two runs to both satisfy.
 pub(crate) fn exclusive(ctx: &Context, permit: Permit) -> Result<std::fs::File> {
     let (file, path) = lock_file(ctx, permit)?;
-    file.lock()
-        .map_err(|source| Error::HomeUnwritable { path, source })?;
+    match file.try_lock() {
+        Ok(()) => {}
+        Err(std::fs::TryLockError::WouldBlock) => {
+            fault::point("switch.lock_busy");
+            file.lock()
+                .map_err(|source| Error::HomeUnwritable { path, source })?;
+        }
+        Err(std::fs::TryLockError::Error(source)) => {
+            return Err(Error::HomeUnwritable { path, source });
+        }
+    }
     Ok(file)
 }
 
