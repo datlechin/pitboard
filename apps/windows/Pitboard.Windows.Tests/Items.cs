@@ -19,14 +19,15 @@ internal static class Items
     public static AccountItem Acting(AccountItem item, ItemAction? action) =>
         action is null ? item with { Action = null } : item with { Action = action, End = new RowEnd.Button(action) };
 
-    // A site as a snapshot carries one, chatgpt.com's with the sign-in host its window loads.
+    // A site as a snapshot carries one, chatgpt.com's with the sign-in host its window loads, each refusing Google's sign-in.
     public static Site Site(string provider) =>
         provider == "codex" ? SiteOf("chatgpt.com", provider, ["auth.openai.com"]) : SiteOf("claude.ai", provider, []);
 
     private static Site SiteOf(string host, string provider, string[] signInHosts) =>
         new(
             Host: host, Name: host, Provider: provider, Aliases: [], Hosts: [host], SignInHosts: signInHosts,
-            BlockedHosts: [], SignInPaths: [], StoreName: provider, SignInSteps: "", BlockedServices: "");
+            BlockedHosts: ["accounts.google.com"], SignInPaths: [], StoreName: provider, SignInSteps: "",
+            BlockedServices: "");
 
     public static WindowAccount Window(string provider, string label, bool inUse = false) =>
         new(
