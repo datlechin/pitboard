@@ -46,8 +46,7 @@ pub struct Site {
 /// Google's sign-in, which Google refuses inside apps.
 const GOOGLE: &[&str] = &["accounts.google.com"];
 
-/// claude.ai, for Claude Code's accounts. Its emailed sign-in link is under `/magic-link`, and
-/// its email sign-in never leaves claude.ai.
+// Its email sign-in never leaves claude.ai.
 pub static CLAUDE: Site = Site {
     host: "claude.ai",
     provider: "claude",
@@ -63,13 +62,7 @@ pub static CLAUDE: Site = Site {
                        connected in this window.",
 };
 
-/// chatgpt.com, for Codex's accounts: a Codex login is a ChatGPT sign-in. Measured on 29
-/// September 2026, `chat.openai.com` answers 308, `www.chatgpt.com` 301 and `chat.com` 307,
-/// each to the same path on chatgpt.com. Its sign-in pages are on auth.openai.com, which
-/// OpenAI's help centre names among the hosts its sign-in needs, and it offers Microsoft and
-/// Apple, whose pages these are (article 7426629, read on 29 September 2026). It comes back
-/// through `/api/auth`. It offers a passkey too, which a window on a Mac cannot use: see
-/// `pitboard-ffi`.
+// ARCHITECTURE.md's "claude.ai and chatgpt.com" says where its hosts and aliases were read.
 pub static CHATGPT: Site = Site {
     host: "chatgpt.com",
     provider: "codex",

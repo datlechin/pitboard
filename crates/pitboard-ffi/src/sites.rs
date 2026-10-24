@@ -58,8 +58,6 @@ impl From<&pitboard_sites::Site> for Site {
     }
 }
 
-/// How to sign in to `site` in a window on `os`: the steps its sign-in page shows, then a
-/// passkey's, where the site offers one and a window on `os` cannot use it.
 fn sign_in_steps(os: Os, site: &pitboard_sites::Site) -> String {
     let passkeys = match os {
         // WebKit gives a page a passkey only in an app macOS lets act as a browser, and

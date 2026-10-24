@@ -49,8 +49,7 @@ struct CommandLineTool: Sendable {
         return canRun(path: helper)
     }
 
-    /// Off the main thread, since the prompt waits on a person. Anything at `link` that is not
-    /// a link is somebody's own, and is left where it is.
+    // Off the main thread, since the password prompt waits on a person.
     func install() async -> Linked {
         guard let helper, linkable else {
             return .failed("This copy of Pitboard can’t link the command line inside it.")
@@ -96,8 +95,6 @@ struct CommandLineTool: Sendable {
         return error
     }
 
-    /// A dismissed password prompt raises `userCanceledErr`, which is an answer and not a
-    /// failure.
     static func outcome(of error: NSDictionary?) -> Linked {
         guard let error else { return .linked }
         if error[NSAppleScript.errorNumber] as? Int == userCanceledErr { return .cancelled }
