@@ -461,8 +461,7 @@ pub(crate) fn shown(state: &State, which: ProviderId) -> bool {
     which == crate::label::DEFAULT || state.accounts.iter().any(|a| a.provider() == which)
 }
 
-// What a read says for as long as it stands. `found` is whose login a store holds as this read
-// learned it; for every other tool, what Pitboard recorded stands.
+// What a read says while it stands: `found` is what this read learned; other tools' records stand.
 pub(crate) fn standing(
     ctx: &Context,
     state: &State,

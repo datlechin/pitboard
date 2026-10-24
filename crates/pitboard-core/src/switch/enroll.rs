@@ -257,8 +257,7 @@ pub(crate) fn sign_in(
     Ok(pending)
 }
 
-// Asked before a browser opens, so nobody signs in only to be told the account could never be
-// switched to.
+// Asked before a browser opens, so nobody signs in to an account no switch could reach.
 pub(crate) fn ready_to_sign_in(ctx: &Context, driver: &'static dyn Provider) -> Result<()> {
     let tool = driver.id();
     if tool == ProviderId::Claude && ctx.custom_oauth() {
@@ -266,8 +265,7 @@ pub(crate) fn ready_to_sign_in(ctx: &Context, driver: &'static dyn Provider) -> 
     }
     state::load(ctx)?;
     super::live_store(ctx, driver)?;
-    // Where pointing the tool's home at a scratch folder does not isolate it, a sign-in would
-    // write over the login in use, and nothing may force past that.
+    // A scratch home that does not isolate the tool would have a sign-in write over the login.
     if let provider::Isolation::NotIsolated { reason } = driver.private_signin_isolation(ctx) {
         return Err(Error::SignInNotIsolated { reason });
     }

@@ -2,8 +2,7 @@ use crate::context::Context;
 use crate::error::{Error, Result};
 use crate::host::{Elevation, Floor};
 
-/// Proof that this process may change something here, which only [`gate`] makes: everything
-/// that writes, removes, renews or starts a run takes one.
+/// Proof that this process may change something here, which only the gate makes.
 #[derive(Debug, Clone, Copy)]
 pub struct Permit {
     _only_the_gate_makes_one: (),
@@ -20,9 +19,7 @@ impl Permit {
     }
 }
 
-// A file or keychain item written by root or an administrator might never be read, replaced
-// or removed by the person's own runs again, and one under a relative home would land under
-// whichever folder it ran from.
+// What root or an administrator wrote, the person's own runs might never read or remove again.
 pub(crate) fn gate(ctx: &Context) -> Result<Permit> {
     crate::release::check()?;
     // Before elevation, which cannot change it.
