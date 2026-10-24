@@ -127,6 +127,7 @@ pub(crate) struct Facts {
     pub claude_present: bool,
     // Claude Desktop's, where an account of it is enrolled or a folder is set aside for it.
     pub desktop: Option<DesktopFacts>,
+    pub(crate) desktop_app: desktop::Installed,
     /// The daily renewal schedule, where this home has one installed.
     pub(crate) schedule: Option<ScheduleFact>,
     pub(crate) watch_service: Option<WatchServiceFact>,
@@ -165,6 +166,12 @@ pub(crate) fn gather(ctx: &Context) -> Facts {
     let config_account = config.as_ref().ok().and_then(claude_paths::config_account);
     let (organisation_pins, pinned_out) = claude::login_pins(ctx, state.as_ref().ok());
     let found = claude::found(ctx, &service);
+    let claude_build = desktop::desktop_build(ctx);
+    let desktop = state
+        .as_ref()
+        .ok()
+        .and_then(|s| desktop::desktop_facts(ctx, s, claude_build.clone()));
+    let desktop_app = desktop::installed(ctx, desktop.as_ref(), claude_build);
     Facts {
         os: crate::host::OS,
         sid: ctx.sid.clone(),
@@ -215,10 +222,8 @@ pub(crate) fn gather(ctx: &Context) -> Facts {
             .map(|s| parks::park_facts(ctx, s))
             .unwrap_or_default(),
         codex: codex::codex_facts(ctx, state.as_ref().ok()),
-        desktop: state
-            .as_ref()
-            .ok()
-            .and_then(|s| desktop::desktop_facts(ctx, s)),
+        desktop,
+        desktop_app,
         // Read as the next change reads it, without the one question it may put to a
         // service: `doctor` sends no request.
         stuck: state
@@ -523,7 +528,11 @@ pub(crate) fn run(ctx: &Context, moment: &dyn Fn(i64, i64) -> String) -> Diagnos
                     .then_some(facts.codex.auth_access.is_some()),
                 "version": facts.codex.version,
             },
-            "desktop": desktop::desktop_environment(ctx, &facts),
+            "desktop": {
+                "data_folder": facts.desktop_app.folder,
+                "present": facts.desktop_app.present,
+                "build": facts.desktop_app.build,
+            },
         }),
     }
 }

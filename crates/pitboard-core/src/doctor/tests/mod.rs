@@ -152,6 +152,11 @@ pub(super) fn facts() -> Facts {
         stuck: None,
         codex: no_codex(),
         desktop: None,
+        desktop_app: Installed {
+            folder: None,
+            present: false,
+            build: None,
+        },
         claude_present: true,
         schedule: None,
         watch_service: None,

@@ -250,7 +250,8 @@ fn claude_desktops_facts_come_from_one_read_of_its_settings() {
     use crate::provider::folder::Sidecar;
     let m = switch::harness::desktop_machine("doctor-facts");
     let state = crate::state::load(&m.ctx).expect("state");
-    let (facts, reads) = crate::fault::counting("settings.read", || desktop_facts(&m.ctx, &state));
+    let (facts, reads) =
+        crate::fault::counting("settings.read", || desktop_facts(&m.ctx, &state, None));
     let facts = facts.expect("an account is enrolled");
     assert_eq!(reads, 1);
     assert_eq!(facts.settings, Some(Ok((Sidecar::None, true))));
@@ -263,7 +264,7 @@ fn claude_desktops_facts_come_from_one_read_of_its_settings() {
     assert!(!facts.signed_out);
 
     std::fs::remove_file(m.ctx_home().join("claude/data/config.json")).expect("removed");
-    let facts = desktop_facts(&m.ctx, &state).expect("an account is enrolled");
+    let facts = desktop_facts(&m.ctx, &state, None).expect("an account is enrolled");
     assert_eq!(facts.settings, Some(Ok((Sidecar::None, false))));
     let checks = judge_desktop(
         Os::MacOs,
@@ -315,7 +316,7 @@ fn a_park_doctor_cannot_look_at_is_never_said_missing() {
     let state = crate::state::load(&m.ctx).expect("state");
     let parks_dir = store::folder::parks_dir(&m.ctx);
     crate::host::fs::testing::deny_reading(&parks_dir).expect("parks shut");
-    let facts = desktop_facts(&m.ctx, &state);
+    let facts = desktop_facts(&m.ctx, &state, None);
     crate::host::fs::testing::make_private(&parks_dir).expect("parks open again");
     let facts = facts.expect("an account is enrolled");
     let parks = park_facts(&m.ctx, &state);
@@ -363,7 +364,8 @@ fn a_data_folder_is_found_where_only_a_folder_set_aside_is_left() {
         account: None,
         login: None,
     });
-    let facts = desktop_facts(&m.ctx, &state).expect("a folder set aside shows Claude Desktop");
+    let facts =
+        desktop_facts(&m.ctx, &state, None).expect("a folder set aside shows Claude Desktop");
     let parks = park_facts(&m.ctx, &state);
     let checks = judge_desktop(
         Os::MacOs,

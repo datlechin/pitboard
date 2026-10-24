@@ -1,12 +1,11 @@
 use super::parks::ParkFact;
-use super::{Check, Facts, commands, fail, ok, warn};
+use super::{Check, commands, fail, ok, warn};
 use crate::context::Context;
 use crate::host::{Kind, Os};
 use crate::provider::{LoginKind, ProviderId};
 use crate::service::Stored;
 use crate::state::{Key, State};
 use crate::{store, switch, words};
-use serde_json::{Value, json};
 use std::path::PathBuf;
 
 // Read from the index, the settings and the data folder's first-level names: no jar, no process.
@@ -38,7 +37,11 @@ pub(super) fn claude_desktop() -> Option<&'static dyn crate::provider::folder::F
     }
 }
 
-pub(super) fn desktop_facts(ctx: &Context, state: &State) -> Option<DesktopFacts> {
+pub(super) fn desktop_facts(
+    ctx: &Context,
+    state: &State,
+    build: Option<String>,
+) -> Option<DesktopFacts> {
     let tool = ProviderId::Desktop;
     let app = claude_desktop()?;
     let enrolled = crate::status::shown(state, tool);
@@ -78,7 +81,7 @@ pub(super) fn desktop_facts(ctx: &Context, state: &State) -> Option<DesktopFacts
                 (park.service.clone(), folder)
             })
             .collect(),
-        build: desktop_build(ctx),
+        build,
     };
     if let Ok(root) = &root {
         facts.refused = app.refuses(root);
@@ -580,19 +583,28 @@ pub(super) fn judge_desktop_build(facts: &DesktopFacts) -> Check {
 }
 
 // On every machine, so its shape is one: whether the folder is a directory, never what it holds.
-pub(super) fn desktop_environment(ctx: &Context, facts: &Facts) -> Value {
-    let (root, build) = match &facts.desktop {
-        Some(desktop) => (desktop.root.clone().ok(), desktop.build.clone()),
-        None => (
-            claude_desktop().and_then(|app| app.root(ctx).ok()),
-            desktop_build(ctx),
-        ),
+// What the report's `desktop` block says on every machine: whether the folder is a directory,
+// never what it holds.
+pub(crate) struct Installed {
+    pub(crate) folder: Option<PathBuf>,
+    pub(crate) present: bool,
+    pub(crate) build: Option<String>,
+}
+
+pub(super) fn installed(
+    ctx: &Context,
+    facts: Option<&DesktopFacts>,
+    build: Option<String>,
+) -> Installed {
+    let folder = match facts {
+        Some(desktop) => desktop.root.clone().ok(),
+        None => claude_desktop().and_then(|app| app.root(ctx).ok()),
     };
-    json!({
-        "data_folder": root,
-        "present": root.as_ref().is_some_and(|root| root.is_dir()),
-        "build": build,
-    })
+    Installed {
+        present: folder.as_ref().is_some_and(|root| root.is_dir()),
+        folder,
+        build,
+    }
 }
 
 // Claude Desktop is macOS's alone.
