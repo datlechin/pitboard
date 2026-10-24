@@ -15,8 +15,9 @@
 //! In any build that is not a test this is an empty inline function. There is no feature to
 //! set wrongly and nothing to strip from a release: `cfg(test)` cannot be on in one.
 
-/// A durable step just finished, or a wait came to nothing. In a test that armed this name,
-/// the run dies here; in one that hung something on it, that runs here first.
+/// A durable step just finished, a wait came to nothing, or one is about to begin. In a test
+/// that armed this name, the run dies here; in one that hung something on it, that runs here
+/// first.
 #[cfg(test)]
 pub(crate) fn point(name: &'static str) {
     TRAIL.with(|trail| {

@@ -22,8 +22,8 @@
 
 use crate::context::{Context, Environment};
 use crate::error::Result;
+use crate::permit::Permit;
 use crate::schedule::Job;
-use crate::service::Permit;
 use crate::store::RawStore;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -735,65 +735,83 @@ pub enum JarError {
 #[cfg(any(test, feature = "test-support"))]
 pub(crate) use os::write_jar;
 
-/// What a program run with a ceiling ([`proc::run_within`]) came to: its exit status, `None`
-/// where a signal or the ceiling ended it, and what it printed on standard output.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct Ran {
-    pub exit: Option<i32>,
-    pub stdout: String,
-    pub timed_out: bool,
+// What a run is handed to read. Windows takes `Nothing` alone.
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum Input<'a> {
+    Nothing,
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+    Stdin(&'a [u8]),
+    #[cfg_attr(windows, allow(dead_code))]
+    Descriptor3(&'a [u8]),
 }
 
-// How long what a run printed is waited for once it ended.
+// What is kept of what a warm-up's tool prints.
+const TOOL_PRINTS: u64 = 1 << 20;
+
+// How long what a run printed is waited for once it ended: something that left its group may
+// still hold a pipe.
 const DRAINED: std::time::Duration = std::time::Duration::from_secs(5);
 
-impl Ran {
-    pub(crate) fn of(
-        status: Option<std::process::ExitStatus>,
-        timed_out: bool,
-        printed: &std::sync::mpsc::Receiver<String>,
-    ) -> Ran {
-        Ran {
-            exit: status
-                .and_then(|status| status.code())
-                .filter(|_| !timed_out),
-            stdout: printed.recv_timeout(DRAINED).unwrap_or_default(),
-            timed_out,
-        }
-    }
-}
-
-// Up to 1 MiB of what a run prints, read on a thread of its own.
-pub(crate) fn drained(
-    stdout: Option<std::process::ChildStdout>,
-) -> std::sync::mpsc::Receiver<String> {
-    use std::io::Read;
+// Up to `kept` bytes of what a pipe carries, read on a thread of its own so a chatty program
+// cannot stall.
+fn drained(
+    pipe: Option<impl std::io::Read + Send + 'static>,
+    kept: u64,
+) -> std::sync::mpsc::Receiver<Vec<u8>> {
     let (said, printed) = std::sync::mpsc::channel();
     std::thread::spawn(move || {
-        let mut text = String::new();
-        if let Some(stdout) = stdout {
-            let _ = stdout.take(1 << 20).read_to_string(&mut text);
+        use std::io::Read;
+        let mut bytes = Vec::new();
+        if let Some(pipe) = pipe {
+            let _ = pipe.take(kept).read_to_end(&mut bytes);
         }
-        let _ = said.send(text);
+        let _ = said.send(bytes);
     });
     printed
 }
 
-// How `child` ended, where it did within `within`.
-pub(crate) fn ended_within(
-    child: &mut std::process::Child,
-    within: std::time::Duration,
-) -> std::io::Result<Option<std::process::ExitStatus>> {
-    let began = std::time::Instant::now();
-    loop {
-        if let Some(status) = child.try_wait()? {
-            return Ok(Some(status));
-        }
-        if began.elapsed() >= within {
-            return Ok(None);
-        }
-        std::thread::sleep(std::time::Duration::from_millis(100));
-    }
+// What a run that ended with `status` printed, both pipes by one deadline.
+fn output(
+    status: std::process::ExitStatus,
+    stdout: std::sync::mpsc::Receiver<Vec<u8>>,
+    stderr: std::sync::mpsc::Receiver<Vec<u8>>,
+) -> std::io::Result<std::process::Output> {
+    let by = std::time::Instant::now() + DRAINED;
+    let (stdout, stderr) = printed(&stdout, &stderr, by)?;
+    Ok(std::process::Output {
+        status,
+        stdout,
+        stderr,
+    })
+}
+
+// A pipe still open at `by` fails the run, rather than answer with part of what it said.
+fn printed(
+    stdout: &std::sync::mpsc::Receiver<Vec<u8>>,
+    stderr: &std::sync::mpsc::Receiver<Vec<u8>>,
+    by: std::time::Instant,
+) -> std::io::Result<(Vec<u8>, Vec<u8>)> {
+    let read = |pipe: &std::sync::mpsc::Receiver<Vec<u8>>| {
+        pipe.recv_timeout(by.saturating_duration_since(std::time::Instant::now()))
+            .map_err(|_| {
+                std::io::Error::new(
+                    std::io::ErrorKind::TimedOut,
+                    format!(
+                        "its output was still open {}s after it ended",
+                        DRAINED.as_secs()
+                    ),
+                )
+            })
+    };
+    Ok((read(stdout)?, read(stderr)?))
+}
+
+// What `ceiling` stopped, as a run says it.
+fn timed_out(ceiling: std::time::Duration) -> std::io::Error {
+    std::io::Error::new(
+        std::io::ErrorKind::TimedOut,
+        format!("no answer within {}s", ceiling.as_secs()),
+    )
 }
 
 /// The machine Pitboard is standing on, as one value rather than a set of `cfg` branches
@@ -857,7 +875,7 @@ pub(crate) trait Host: Send + Sync + std::fmt::Debug {
     fn scheduler(&self) -> Option<&dyn Scheduler>;
 
     /// Whether this process runs as the person themselves, which is what the one gate every
-    /// change passes asks ([`crate::service::Permit`]). Takes the context because part of
+    /// change passes asks ([`crate::permit::Permit`]). Takes the context because part of
     /// the answer can be in the environment this process was started with, such as the
     /// `SUDO_UID` sudo sets.
     fn elevation(&self, ctx: &Context) -> Elevation;
@@ -1060,6 +1078,26 @@ pub(crate) fn current_program() -> std::io::Result<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // As a pipe a program started meanwhile took with it, or one that left the run's group.
+    #[test]
+    fn a_pipe_still_open_once_a_run_ended_fails_the_run() {
+        let closed = || {
+            let (reader, writer) = std::io::pipe().expect("a pipe");
+            drop(writer);
+            drained(Some(reader), u64::MAX)
+        };
+        let soon = std::time::Instant::now() + DRAINED;
+        assert!(printed(&closed(), &closed(), soon).is_ok());
+        let (reader, _held) = std::io::pipe().expect("a pipe");
+        let refused = printed(
+            &drained(Some(reader), u64::MAX),
+            &closed(),
+            std::time::Instant::now(),
+        )
+        .expect_err("still open");
+        assert_eq!(refused.kind(), std::io::ErrorKind::TimedOut);
+    }
 
     // This crate's clippy.toml replaces the root's, so it repeats each of its rules.
     #[test]

@@ -14,7 +14,7 @@ use crate::audit;
 use crate::duty::autoswitch::{self, Auto, Blind, Judged, Ledger, Threshold};
 use crate::error::{Error, Result};
 use crate::provider::{self, ProviderId};
-use crate::service::Warning;
+use crate::warning::Warning;
 
 /// Switches Claude Code where a limit of the account in use has reached `threshold` and
 /// another account has room, as [`crate::duty::autoswitch`] says, and records what it came to.
@@ -249,10 +249,11 @@ mod tests {
     use crate::api::scripted::Trouble;
     use crate::duty::autoswitch::{Auto, Blind, Decision, Ledger, Look, Skip, Threshold, decide};
     use crate::duty::cadence::{ATTEMPTS, RETRY_SECONDS};
-    use crate::service::{Permit, Pitboard};
+    use crate::permit::Permit;
+    use crate::service::Pitboard;
     use crate::store::memory::Fault;
     use crate::time::{Clock, FixedClock};
-    use crate::usage::{Snapshot, Source, Window};
+    use crate::usage::{LimitKind, Snapshot, Source, Window};
     use std::sync::Arc;
 
     /// What Anthropic has just answered of `uuid`'s five-hour and weekly limits.
@@ -951,7 +952,7 @@ mod tests {
                     why: Skip::GaveUp,
                     limit,
                     ..
-                } if limit.kind == "weekly_all"
+                } if limit.kind == LimitKind::WeeklyAll
             ),
             "{looked:?}"
         );

@@ -40,9 +40,9 @@
 use crate::context::Context;
 use crate::duty::cadence::retry_after;
 use crate::duty::ledger::{self, Tries};
+use crate::permit::Permit;
 use crate::provider::Owner;
 use crate::provider::ProviderId;
-use crate::service::Permit;
 use crate::state::{Account, Key, State};
 use crate::status::Row;
 use crate::switch::Holder;
@@ -547,11 +547,10 @@ fn path(ctx: &Context) -> PathBuf {
     home::dir(ctx).join("autoswitch.json")
 }
 
-/// A limit of an account, by the names a limit goes by.
 fn entry(id: &str, limit: &Window) -> String {
     [
         id,
-        usage::limit_name(&limit.kind),
+        limit.kind.as_str(),
         limit.scope.as_deref().unwrap_or_default(),
     ]
     .join("/")
@@ -805,7 +804,7 @@ mod tests {
     use crate::duty::cadence::{ATTEMPTS, RETRY_SECONDS};
     use crate::state::Park;
     use crate::switch::harness::{NOW, account, window};
-    use crate::usage::Source;
+    use crate::usage::{LimitKind, Source};
 
     fn scoped(kind: &str, model: &str, percent: f64) -> Window {
         Window {
@@ -990,7 +989,7 @@ mod tests {
             (plan.from.label.as_str(), plan.from_id.as_str()),
             ("work", "work")
         );
-        assert_eq!(plan.limit.kind, "session");
+        assert_eq!(plan.limit.kind, LimitKind::Session);
     }
 
     /// The share is judged as the app, `pitboard status` and the status line show it: a
@@ -1044,7 +1043,7 @@ mod tests {
         let Decision::Switch(plan) = decided(&[work_at_both(), spare()]) else {
             panic!("a switch")
         };
-        assert_eq!(plan.limit.kind, "weekly_all");
+        assert_eq!(plan.limit.kind, LimitKind::WeeklyAll);
     }
 
     /// A limit whose reset has passed counts as reset, and is not the one nearest the share.
@@ -1563,7 +1562,7 @@ mod tests {
         assert_eq!(at(&ledger, NOW + RETRY_SECONDS - 1), waiting);
         let decision = at(&ledger, NOW + RETRY_SECONDS);
         assert!(
-            matches!(&decision, Decision::Switch(plan) if plan.limit.kind == "session"),
+            matches!(&decision, Decision::Switch(plan) if plan.limit.kind == LimitKind::Session),
             "{decision:?}"
         );
 
@@ -1609,13 +1608,13 @@ mod tests {
         let rows = [work_at_both(), spare()];
         let state = state_of(&rows);
         let weekly = plan(&rows);
-        assert_eq!(weekly.limit.kind, "weekly_all");
+        assert_eq!(weekly.limit.kind, LimitKind::WeeklyAll);
         let mut ledger = Ledger::default();
         ledger.attempt(&weekly, NOW - 3600);
         ledger.switched(&weekly);
         let decision = decided_with(&state, &rows, &ledger, Threshold::DEFAULT, NOW);
         assert!(
-            matches!(&decision, Decision::Switch(plan) if plan.limit.kind == "session"),
+            matches!(&decision, Decision::Switch(plan) if plan.limit.kind == LimitKind::Session),
             "{decision:?}"
         );
     }

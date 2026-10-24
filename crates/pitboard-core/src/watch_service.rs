@@ -3,8 +3,8 @@
 use crate::context::Context;
 use crate::duty::autoswitch::Threshold;
 use crate::error::{Error, Result};
+use crate::permit::Permit;
 use crate::schedule::{self, Job, Location};
-use crate::service::Permit;
 use std::path::PathBuf;
 
 /// Whether the watch service is installed, and what it is.
@@ -339,18 +339,18 @@ mod tests {
                 let changing =
                     crate::switch::exclusive(&ctx, Permit::for_a_test()).expect("a change");
                 let asked = ctx.clone();
+                let (entered, waits) = std::sync::mpsc::channel();
                 let waiting = std::thread::spawn(move || {
-                    if reinstalling {
-                        install(&asked, Permit::for_a_test(), at(80)).map(|_| true)
-                    } else {
-                        uninstall(&asked, Permit::for_a_test())
-                    }
+                    let told = move || entered.send(()).expect("the test waits");
+                    crate::fault::meanwhile("switch.lock_busy", told, || {
+                        if reinstalling {
+                            install(&asked, Permit::for_a_test(), at(80)).map(|_| true)
+                        } else {
+                            uninstall(&asked, Permit::for_a_test())
+                        }
+                    })
                 });
-                std::thread::sleep(std::time::Duration::from_millis(200));
-                assert!(
-                    !waiting.is_finished(),
-                    "{reinstalling}: it waits for the change"
-                );
+                waits.recv().expect("it waits for the change");
                 assert!(matches!(
                     status(&ctx),
                     Installed::Yes { at: share, .. } if share == Some(at(before))

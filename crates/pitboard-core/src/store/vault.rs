@@ -4,7 +4,7 @@
 use super::{Backend, Error, RawStore};
 use crate::atomic;
 use crate::context::Context;
-use crate::service::Permit;
+use crate::permit::Permit;
 use std::borrow::Cow;
 use std::path::PathBuf;
 

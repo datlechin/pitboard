@@ -174,6 +174,23 @@ pub(crate) fn lasting(running: PathBuf, same: impl Fn(&Path, &Path) -> bool) -> 
         .unwrap_or(running)
 }
 
+pub(crate) fn looks_like_a_version(name: &str) -> bool {
+    let parts: Vec<&str> = name.split('.').collect();
+    parts.len() == 3
+        && parts
+            .iter()
+            .all(|p| !p.is_empty() && p.bytes().all(|b| b.is_ascii_digit()))
+}
+
+pub(crate) fn version_where(path: &Path, key: &str, expected: &str) -> Option<String> {
+    let json: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(path).ok()?).ok()?;
+    if json.get(key)?.as_str()? != expected {
+        return None;
+    }
+    Some(json.get("version")?.as_str()?.to_string())
+}
+
 #[cfg(test)]
 #[allow(
     clippy::disallowed_methods,
@@ -408,5 +425,13 @@ mod tests {
         assert_eq!(npm_shim_target(&plain), None);
         assert_eq!(npm_shim_target(&dir.path().join("absent.cmd")), None);
         assert_eq!(npm_shim_target(&dir.path().join("claude.exe")), None);
+    }
+
+    #[test]
+    fn a_release_folder_is_named_for_its_version() {
+        assert!(looks_like_a_version("0.154.0"));
+        assert!(!looks_like_a_version("releases"));
+        assert!(!looks_like_a_version("0.154"));
+        assert!(!looks_like_a_version("v0.154.0"));
     }
 }

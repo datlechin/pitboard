@@ -3,8 +3,8 @@ use super::{
     watched,
 };
 use super::{data, settled, snapshot, tree, unchanged, whereabouts};
+use crate::permit::Permit;
 use crate::provider::ProviderId;
-use crate::service::Permit;
 use crate::state::{self, SetAside};
 use crate::switch::harness::{
     HOME, NOW, Rig, STRANGER, WORK, desktop_machine, desktop_pair, hold_where_twice, recover,

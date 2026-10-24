@@ -201,6 +201,39 @@ pub fn choose(typed: &str) -> std::result::Result<Chosen, String> {
     }
 }
 
+// An account enrolled already keeps the name it has, which a new one may no longer get:
+// 0.1.x wrote labels with a slash, and the app took labels with a space.
+pub(crate) fn enrolling(state: Option<&State>, typed: &str) -> Result<Key> {
+    if let Some(state) = state {
+        let whole = state
+            .accounts
+            .iter()
+            .find(|a| typed.contains(SEPARATOR) && a.label == typed);
+        let named = match parse(typed) {
+            Ok(Spec::Bare(label)) => state.get(&Key::new(DEFAULT, label)),
+            Ok(Spec::Qualified(provider, label)) => state.get(&Key::new(provider, label)),
+            Err(_) => None,
+        };
+        if let Some(existing) = whole.or(named) {
+            return Ok(existing.key());
+        }
+    }
+    choose(typed)
+        .map(|chosen| Key::new(chosen.provider, chosen.label))
+        .map_err(Error::Usage)
+}
+
+// Only a prefix somebody typed can name another tool: a bare new name stays in the account's.
+pub(crate) fn moved_by_a_rename(from: &Key, to: &str, chosen: ProviderId) -> Option<Error> {
+    (to.contains(SEPARATOR) && chosen != from.provider).then(|| {
+        Error::Usage(format!(
+            "`{from}` is a {} account, and a rename cannot move it to {chosen}. Sign in to that \
+             tool and enrol the account there instead.",
+            from.provider
+        ))
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

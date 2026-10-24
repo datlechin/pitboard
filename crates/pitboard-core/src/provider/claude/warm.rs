@@ -6,8 +6,8 @@ use crate::context::Context;
 use crate::duty::warm::Failure;
 use crate::duty::warm::run::{self, Headless, Ran};
 use crate::host::Os;
+use crate::permit::Permit;
 use crate::provider::{ProviderError, ProviderId};
-use crate::service::Permit;
 use serde_json::Value;
 use std::path::Path;
 

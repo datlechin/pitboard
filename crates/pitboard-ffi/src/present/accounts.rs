@@ -8,6 +8,7 @@ use super::{
     MenuBarText, MenuNotices, PaceStanding, Question, RowEnd, Seen, WindowOffer,
 };
 use crate::account_windows::{forget_message_on, windows_of_account};
+use crate::model::advice::window;
 use crate::model::{Intent, Sheet};
 use crate::{Account, Limit, Tool};
 use pitboard_core::host::Os;
@@ -536,7 +537,7 @@ fn action(
 
 /// A limit's name as a sentence says it, with the model it is scoped to: "weekly Fable".
 fn scoped_name(limit: &Limit) -> String {
-    said::scoped_limit_name(&limit.kind, limit.length_seconds, limit.scope.as_deref())
+    said::scoped_limit_name(&window(limit))
 }
 
 /// A limit's pace as read at `read_at` and told at `now`, as `pitboard status` works it out.
@@ -612,7 +613,7 @@ fn limits_said(seen: &Seen, account: &Account) -> String {
         .enumerate()
         .map(|(at, limit)| {
             let scoped = scoped_name(limit);
-            let used_up = crate::model::advice::window(limit).used_up(seen.now);
+            let used_up = window(limit).used_up(seen.now);
             match (used_up, limit.resets_at, first) {
                 (true, Some(back), _) => format!("{scoped} used up until {}", seen.clock(back)),
                 (true, None, _) => format!("{scoped} used up"),
@@ -633,7 +634,7 @@ pub(crate) fn limit_row(limit: &Limit, read_at: i64, now: i64) -> LimitRow {
     let name = scoped_name(limit);
     let pace = pace_of(limit, read_at, now);
     LimitRow {
-        short: said::limit_column(&limit.kind, limit.length_seconds, limit.scope.as_deref()),
+        short: said::limit_column(&window(limit)),
         percent: limit.percent,
         figure: said::figure(limit.percent),
         level: crate::usage_level(limit.percent),

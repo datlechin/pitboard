@@ -1,6 +1,6 @@
 //! Processes on Windows, and the programs a Windows shell starts.
 
-pub(crate) use super::job::{Tool, run_within, start};
+pub(crate) use super::job::{Tool, run_tool, start};
 use crate::host::Listed;
 use crate::host::owner::{self, Owner, Told};
 use std::collections::HashMap;
@@ -21,6 +21,7 @@ use windows_sys::Win32::Storage::Packaging::Appx::GetPackageFamilyName;
 use windows_sys::Win32::System::Diagnostics::ToolHelp::{
     CreateToolhelp32Snapshot, PROCESSENTRY32W, Process32FirstW, Process32NextW, TH32CS_SNAPPROCESS,
 };
+use windows_sys::Win32::System::Pipes::PeekNamedPipe;
 use windows_sys::Win32::System::RemoteDesktop::{
     WTS_CURRENT_SERVER_HANDLE, WTS_INFO_CLASS, WTS_PROCESS_INFO_EXW, WTSDomainName,
     WTSEnumerateProcessesExW, WTSFreeMemory, WTSFreeMemoryExW, WTSQuerySessionInformationW,
@@ -68,6 +69,52 @@ pub(crate) fn may_be_running(pid: u32) -> bool {
         }
         Open::Refused => true,
         Open::Gone => false,
+    }
+}
+
+// What a sign-in's tool prints, by chunk. A browser the tool opened inherits its pipes, so they
+// do not close when the tool exits: what is pending is read, and the reading stops once the tool
+// itself is gone, whoever still holds the write end.
+pub(crate) fn pump(
+    mut output: impl std::io::Read + AsRawHandle,
+    said: &std::sync::mpsc::Sender<String>,
+    tool: u32,
+) {
+    let handle = output.as_raw_handle();
+    let mut buffer = [0_u8; 1024];
+    loop {
+        let mut available = 0u32;
+        // SAFETY: an open pipe read handle; `available` is a valid out-param, the rest unused.
+        let peeked = unsafe {
+            PeekNamedPipe(
+                handle,
+                std::ptr::null_mut(),
+                0,
+                std::ptr::null_mut(),
+                &mut available,
+                std::ptr::null_mut(),
+            )
+        };
+        if peeked == 0 {
+            break;
+        }
+        if available > 0 {
+            match output.read(&mut buffer) {
+                Ok(0) | Err(_) => break,
+                Ok(read) => {
+                    if said
+                        .send(String::from_utf8_lossy(&buffer[..read]).into_owned())
+                        .is_err()
+                    {
+                        break;
+                    }
+                }
+            }
+        } else if may_be_running(tool) {
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        } else {
+            break;
+        }
     }
 }
 

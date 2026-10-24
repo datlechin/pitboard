@@ -215,7 +215,7 @@ Each object in `windows` is one limit:
 
 | Field | Type | Meaning |
 | --- | --- | --- |
-| `kind` | string | The limit, such as `session` or `five_hour` for a five-hour limit and `weekly_all` or `seven_day` for a weekly one. |
+| `kind` | string | The limit: `session` for a five-hour limit, `weekly_all` for a weekly one, `weekly_scoped` for a weekly one of one model or surface, or a name for another, such as `1_day`. |
 | `scope` | string or null | The model or surface a narrower limit applies to, by the name Anthropic or OpenAI gives it. `null` for the account's own limit. |
 | `percent` | number | How much of the limit is used. Over 100 when the limit is exceeded. |
 | `resets_at` | integer or null | When the limit resets. |

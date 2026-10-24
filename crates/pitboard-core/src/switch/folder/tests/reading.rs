@@ -5,12 +5,13 @@ use super::{
 use super::{data, snapshot};
 use crate::desktop_testing::{EMPTIED, write_stand_in_jar};
 use crate::host::Cookie;
+use crate::permit::Permit;
 use crate::provider::ProviderId;
-use crate::service::{Permit, Warning};
 use crate::state;
 use crate::switch::harness::{
     HOME, STRANGER, WORK, desktop_machine, desktop_pair, hold, hold_where_deleted, hold_where_twice,
 };
+use crate::warning::Warning;
 use serde_json::json;
 
 #[test]

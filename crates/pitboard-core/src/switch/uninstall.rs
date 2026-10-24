@@ -3,10 +3,11 @@
 use super::{Result, Settled, purge};
 use crate::context::Context;
 use crate::error::Error;
+use crate::permit::Permit;
 use crate::provider::{self, LoginKind, ProviderId};
 use crate::schedule::Job;
-use crate::service::{Permit, Warning};
 use crate::state::Account;
+use crate::warning::Warning;
 use crate::{home, schedule, state};
 
 /// What was removed, for the report. It may say more in a later release, so it cannot be

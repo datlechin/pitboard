@@ -8,9 +8,9 @@
 use crate::context::Context;
 use crate::error::{Error, Result};
 use crate::in_use::{Identified, InUse, Replaced};
+use crate::permit::Permit;
 use crate::provider::ProviderId;
 use crate::provider::{Identity, Owner};
-use crate::service::Permit;
 use crate::{atomic, home};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -159,6 +159,14 @@ impl Park {
     pub(crate) fn askable_at(&self, now: i64) -> bool {
         self.access_expires_at.is_none_or(|at| at > now)
     }
+}
+
+pub(crate) const RENEW_WITHIN: i64 = 3 * 86_400;
+
+/// Whether a login whose refresh token expires at `refresh_expires_at` is due to be renewed:
+/// within three days, and not yet expired.
+pub fn renewal_due(refresh_expires_at: i64, now: i64) -> bool {
+    (1..RENEW_WITHIN).contains(&(refresh_expires_at - now))
 }
 
 /// What one provider keeps about an account that the others have no equivalent of.
@@ -2348,6 +2356,16 @@ mod tests {
             unknown.restorable_at(i64::MAX),
             "no expiry recorded is not expired"
         );
+    }
+
+    #[test]
+    fn a_parked_login_is_due_from_three_days_before_it_expires() {
+        const NOW: i64 = 1_789_935_600;
+        assert!(!renewal_due(NOW + RENEW_WITHIN, NOW));
+        assert!(renewal_due(NOW + RENEW_WITHIN - 1, NOW));
+        assert!(renewal_due(NOW + 1, NOW));
+        assert!(!renewal_due(NOW, NOW));
+        assert!(!renewal_due(NOW - 60, NOW));
     }
 
     #[test]

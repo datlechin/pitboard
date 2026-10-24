@@ -355,7 +355,7 @@ fn account(row: status::Row, now: i64) -> Account {
                 .into_iter()
                 .map(|w| Limit {
                     length_seconds: w.length_seconds,
-                    kind: w.kind,
+                    kind: w.kind.into(),
                     scope: w.scope,
                     percent: w.percent,
                     resets_at: w.resets_at,

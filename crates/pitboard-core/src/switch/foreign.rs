@@ -15,7 +15,7 @@ use super::harness::{
 };
 use super::*;
 use crate::api::scripted::Trouble;
-use crate::service::Permit;
+use crate::permit::Permit;
 use serde_json::json;
 
 type Make = fn(&str) -> Rig;

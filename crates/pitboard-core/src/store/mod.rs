@@ -15,7 +15,7 @@ pub(crate) mod vault;
 pub(crate) use file::PlainFile;
 
 use crate::context::Context;
-use crate::service::Permit;
+use crate::permit::Permit;
 
 use serde_json::Value;
 use std::path::PathBuf;
@@ -347,40 +347,29 @@ fn with_live<T>(live: &Live, run: impl FnOnce(&[&dyn RawStore]) -> T) -> T {
     run(&live.refs())
 }
 
-/// Which backend holds a credential, or `Absent`.
-///
-/// Settled in 2.1.278, which the earlier note here left open. Claude Code builds its live
-/// chain as keychain-with-plaintext-fallback and the successor backend ("storageV5", gated
-/// on `tengu_hover_rest`) does not change that: it replaces what backs the fallback half,
-/// and only for a caller that hands a backend in. An ordinary `claude` hands none in, so
-/// the fallback stays `<storage dir>/.credentials.json` and the keychain stays first. The
-/// order below is therefore the order Claude Code reads in, not a guess.
-///
-/// One divergence, on purpose. Claude Code demotes to the plaintext file when a keychain
-/// write fails for good, and deletes the keychain item when it does; from 2.1.281 a locked
-/// keychain whose item the process has seen is not failing for good. Pitboard never
-/// demotes: see the note on `write_in`.
-pub(crate) fn resolve(live: &Live, service: &str) -> Result<Backend, Error> {
-    with_live(live, |chain| {
-        Ok(resolve_in(chain, service)?.map_or(Backend::Absent, RawStore::kind))
-    })
-}
-
 /// The nearest backend after the one in `chain` holding `service` that holds it too, by its
 /// own look. The chain is a parameter so tests can pass backends that fail on demand.
 fn behind_in<'a>(
     chain: &[&'a dyn RawStore],
     service: &str,
 ) -> Result<Option<&'a dyn RawStore>, Error> {
-    let mut in_use = false;
-    for backend in chain {
-        if !in_use {
-            in_use = backend.contains(service)?;
-        } else if backend.contains(service)? {
-            return Ok(Some(*backend));
-        }
+    match resolve_in(chain, service)? {
+        Some(holder) => after_in(chain, holder, service),
+        None => Ok(None),
     }
-    Ok(None)
+}
+
+// The nearest backend after `holder` in `chain` that holds `service` too, by its own look.
+fn after_in<'a>(
+    chain: &[&'a dyn RawStore],
+    holder: &dyn RawStore,
+    service: &str,
+) -> Result<Option<&'a dyn RawStore>, Error> {
+    let after = chain
+        .iter()
+        .position(|backend| std::ptr::addr_eq(*backend, holder))
+        .map_or(chain.len(), |at| at + 1);
+    resolve_in(&chain[after..], service)
 }
 
 /// The backend after the one holding the login in use that holds something under `service`
@@ -398,6 +387,15 @@ pub(crate) fn holder<'a>(live: &'a Live, service: &str) -> Result<Option<&'a dyn
     resolve_in(&live.refs(), service)
 }
 
+/// [`behind`], with the backend holding the login in use, `holder`, already found in `live`.
+pub(crate) fn behind_holder<'a>(
+    live: &'a Live,
+    holder: &dyn RawStore,
+    service: &str,
+) -> Result<Option<&'a dyn RawStore>, Error> {
+    after_in(&live.refs(), holder, service)
+}
+
 /// The backend in `live` of the kind [`Backend::name`] calls `kind`.
 pub(crate) fn of_kind<'a>(live: &'a Live, kind: &str) -> Option<&'a dyn RawStore> {
     live.refs()
@@ -413,12 +411,12 @@ pub(crate) fn read_raw(live: &Live, service: &str) -> Result<Option<String>, Err
 }
 
 pub(crate) fn read(live: &Live, service: &str) -> Result<Option<Value>, Error> {
-    match read_raw(live, service)? {
-        None => Ok(None),
-        Some(raw) => serde_json::from_str(&raw)
-            .map(Some)
-            .map_err(|e| Error::Malformed(e.to_string())),
-    }
+    parsed(read_raw(live, service)?)
+}
+
+pub(crate) fn parsed(raw: Option<String>) -> Result<Option<Value>, Error> {
+    raw.map(|raw| serde_json::from_str(&raw).map_err(|e| Error::Malformed(e.to_string())))
+        .transpose()
 }
 
 /// Write the live credential where it already lives. A failed keychain write is never
@@ -489,10 +487,21 @@ pub(crate) fn vault_kind(ctx: &Context) -> Backend {
 /// write. A login living in the fallback file has no ceiling, and used to be told it had
 /// the keychain's.
 pub(crate) fn cost(live: &Live, service: &str, contents: &str) -> Option<Cost> {
-    with_live(live, |chain| {
-        let first = (!live.takes_over).then(|| resolve_in(chain, service).ok().flatten());
-        first.flatten().unwrap_or(chain[0]).cost(service, contents)
-    })
+    let held = (!live.takes_over)
+        .then(|| holder(live, service).ok().flatten())
+        .flatten();
+    cost_at(live, held, service, contents)
+}
+
+// As `cost`, where `held` is the backend a look already found holding the login.
+pub(crate) fn cost_at(
+    live: &Live,
+    held: Option<&dyn RawStore>,
+    service: &str,
+    contents: &str,
+) -> Option<Cost> {
+    let first = held.filter(|_| !live.takes_over);
+    first.unwrap_or(&*live.backends[0]).cost(service, contents)
 }
 
 /// A handle for comparing and logging tokens without the secret leaving this process.
@@ -746,7 +755,7 @@ mod tests {
             Backend::Unknown,
             Error::Unreadable("not built yet".into()),
         ))]);
-        unreadable(resolve(&live, "svc").map(|b| b.name().to_string()));
+        unreadable(holder(&live, "svc").map(|held| format!("{}", held.is_some())));
     }
 
     // Credential Manager out of a network logon's reach is no keychain locked (MC-net).

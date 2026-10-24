@@ -1,11 +1,12 @@
 //! A tool Pitboard starts on Windows, in a job of its own from its first instruction on.
 
 use super::proc::image;
-use crate::host::Ran;
+use crate::host::Input;
+use crate::permit::Permit;
 use std::io;
 use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
 use std::os::windows::process::CommandExt;
-use std::process::{Child, Command, ExitStatus, Stdio};
+use std::process::{Child, Command, ExitStatus, Output, Stdio};
 use std::time::{Duration, Instant};
 use windows_sys::Win32::Foundation::{ERROR_MORE_DATA, INVALID_HANDLE_VALUE, WAIT_OBJECT_0};
 use windows_sys::Win32::System::Console::GetConsoleWindow;
@@ -73,17 +74,18 @@ fn spawn_into(mut command: Command, job: &Job) -> io::Result<Child> {
     Ok(child)
 }
 
-// All of it ends past the ceiling or with Pitboard.
-pub(crate) fn run_within(
-    _: crate::service::Permit,
+// A warm-up's tool, started by the gate's permit, and all it starts, ended past the ceiling
+// (`TimedOut`) or with Pitboard: its errors unread, its first MiB kept.
+pub(crate) fn run_tool(
+    _: Permit,
     mut command: Command,
-    handed: Option<&[u8]>,
+    input: Input<'_>,
     ceiling: Duration,
-) -> io::Result<Ran> {
-    if handed.is_some() {
+) -> io::Result<Output> {
+    if !matches!(input, Input::Nothing) {
         return Err(io::Error::new(
             io::ErrorKind::Unsupported,
-            "a run on Windows is handed nothing on a descriptor",
+            "a run on Windows is handed nothing to read",
         ));
     }
     command
@@ -93,12 +95,17 @@ pub(crate) fn run_within(
         .creation_flags(flags(false));
     let job = job(JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE)?;
     let mut child = spawn_into(command, &job)?;
-    let printed = crate::host::drained(child.stdout.take());
-    let status = crate::host::ended_within(&mut child, ceiling)?;
+    let stdout = crate::host::drained(child.stdout.take(), crate::host::TOOL_PRINTS);
+    let stderr = crate::host::drained(child.stderr.take(), crate::host::TOOL_PRINTS);
+    let millis = u32::try_from(ceiling.as_millis()).unwrap_or(u32::MAX - 1);
+    // SAFETY: the child's own process handle, which it holds open until it is dropped.
+    let ended = unsafe { WaitForSingleObject(child.as_raw_handle(), millis) } == WAIT_OBJECT_0;
     end_all(&job);
-    let timed_out = status.is_none();
-    let status = status.or_else(|| child.wait().ok());
-    Ok(Ran::of(status, timed_out, &printed))
+    let status = child.wait()?;
+    if !ended {
+        return Err(crate::host::timed_out(ceiling));
+    }
+    crate::host::output(status, stdout, stderr)
 }
 
 // A process leaves the job's list before it ends, so each is waited on by a handle taken then.
@@ -618,16 +625,17 @@ mod tests {
                 child
             })
         };
-        let ran = run_within(
-            crate::service::Permit::for_a_test(),
+        let out = run_tool(
+            Permit::for_a_test(),
             command,
-            None,
+            Input::Nothing,
             Duration::from_secs(60),
         )
         .expect("ran");
         let child = watching.join().expect("both started");
-        assert_eq!((ran.exit, ran.timed_out), (Some(0), false));
-        assert!(ran.stdout.contains("pitboard-helper: "), "{}", ran.stdout);
+        assert_eq!(out.status.code(), Some(0));
+        let printed = String::from_utf8_lossy(&out.stdout);
+        assert!(printed.contains("pitboard-helper: "), "{printed}");
         assert!(!runs(child), "what the run started ended with it");
     }
 
@@ -642,15 +650,15 @@ mod tests {
             let (started, opened) = (started.clone(), opened.clone());
             std::thread::spawn(move || (pid_in(&started), pid_in(&opened)))
         };
-        let ran = run_within(
-            crate::service::Permit::for_a_test(),
+        let refused = run_tool(
+            Permit::for_a_test(),
             command,
-            None,
+            Input::Nothing,
             Duration::from_secs(10),
         )
-        .expect("ran");
+        .expect_err("stopped");
         let (tool, child) = watching.join().expect("both started");
-        assert_eq!((ran.exit, ran.timed_out), (None, true));
+        assert_eq!(refused.kind(), io::ErrorKind::TimedOut);
         assert!(!runs(tool) && !runs(child));
     }
 
@@ -661,14 +669,14 @@ mod tests {
         let (tool, child, started, opened) = tool_and_child(dir);
         let _held = (helper::hold(&started), helper::hold(&opened));
         let command = helper::starting(&tool, true, &started, (&child, Job::Waits, &opened));
-        let ran = run_within(
-            crate::service::Permit::for_a_test(),
+        let out = run_tool(
+            Permit::for_a_test(),
             command,
-            None,
+            Input::Nothing,
             Duration::from_secs(60),
         )
         .expect("ran");
-        assert_eq!(ran.exit, Some(0));
+        assert_eq!(out.status.code(), Some(0));
         let said = helper::written(&started);
         assert!(said.starts_with("refused"), "{said}");
         assert!(!opened.exists(), "nothing started");
@@ -684,10 +692,10 @@ mod tests {
             Job::SaysItsConsole,
             &said,
         ));
-        let refused = run_within(
-            crate::service::Permit::for_a_test(),
+        let refused = run_tool(
+            Permit::for_a_test(),
             command,
-            Some(b"access".as_slice()),
+            Input::Descriptor3(b"access"),
             Duration::from_secs(60),
         )
         .map(drop)

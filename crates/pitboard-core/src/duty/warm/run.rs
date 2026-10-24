@@ -9,9 +9,9 @@
 //! of the person's own configuration, history or sessions is read or written.
 
 use crate::context::Context;
-use crate::host::Os;
+use crate::host::{Input, Os};
+use crate::permit::Permit;
 use crate::provider::ProviderId;
-use crate::service::Permit;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -26,7 +26,13 @@ pub(crate) struct Headless {
     pub(crate) token: Option<String>,
 }
 
-pub(crate) use crate::host::Ran;
+/// What a warm-up's run came to: `exit` is `None` where a signal or the ceiling ended it.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Ran {
+    pub exit: Option<i32>,
+    pub stdout: String,
+    pub timed_out: bool,
+}
 
 // Under Pitboard's directory; `prepare` makes its `home`, `tmp`, `work` and `config` folders.
 pub(crate) fn home(ctx: &Context, tool: ProviderId) -> PathBuf {
@@ -156,12 +162,21 @@ pub(crate) fn run(ctx: &Context, permit: Permit, headless: Headless) -> std::io:
     #[cfg(not(any(test, feature = "test-support")))]
     let _ = ctx;
     let Headless { command, token } = headless;
-    crate::host::proc::run_within(
-        permit,
-        command,
-        token.as_deref().map(str::as_bytes),
-        CEILING,
-    )
+    let input = token
+        .as_deref()
+        .map_or(Input::Nothing, |token| Input::Descriptor3(token.as_bytes()));
+    match crate::host::proc::run_tool(permit, command, input, CEILING) {
+        Ok(out) => Ok(Ran {
+            exit: out.status.code(),
+            stdout: String::from_utf8_lossy(&out.stdout).into_owned(),
+            timed_out: false,
+        }),
+        Err(e) if e.kind() == std::io::ErrorKind::TimedOut => Ok(Ran {
+            timed_out: true,
+            ..Ran::default()
+        }),
+        Err(e) => Err(e),
+    }
 }
 
 #[cfg(test)]

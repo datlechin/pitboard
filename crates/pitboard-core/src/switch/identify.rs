@@ -15,9 +15,9 @@ use super::{Result, journal};
 use crate::context::Context;
 use crate::error::Error;
 use crate::in_use::{self, InUse};
+use crate::permit::Permit;
 use crate::provider::Owner;
 use crate::provider::{self, LoginKind, Provider, ProviderError, ProviderId};
-use crate::service::Permit;
 use crate::state::{self, Account, Key, State};
 use crate::status::{Plan, Seen};
 use crate::{audit, fault, store};
@@ -336,9 +336,9 @@ pub(crate) struct Login {
 
 impl Login {
     /// What a change that told whose this login is says of a lock lost while renewing it.
-    pub(crate) fn lock_warning(&self, which: ProviderId) -> Option<crate::service::Warning> {
+    pub(crate) fn lock_warning(&self, which: ProviderId) -> Option<crate::warning::Warning> {
         self.lock_lost
-            .then_some(crate::service::Warning::LockCompromised { tool: which })
+            .then_some(crate::warning::Warning::LockCompromised { tool: which })
     }
 }
 
@@ -659,6 +659,7 @@ mod tests {
     use crate::error::Cause;
     use crate::service::Pitboard;
     use crate::store::memory::Fault;
+    use crate::usage::budget::Ask;
     use std::cell::Cell;
     use std::rc::Rc;
     use std::sync::Arc;
@@ -723,7 +724,7 @@ mod tests {
         let codes: Vec<&str> = read
             .warnings
             .iter()
-            .map(crate::service::Warning::code)
+            .map(crate::warning::Warning::code)
             .collect();
         assert!(codes.is_empty(), "{codes:?}");
     }
@@ -804,7 +805,7 @@ mod tests {
         parked["subscriptionType"] = "pro".into();
         m.mem.vault().plant(&there.service, &parked.to_string());
         let read = state::load(&m.ctx).expect("state");
-        let answers = crate::status::ask(&m.ctx, Permit::for_a_test(), &read, true);
+        let answers = crate::status::ask(&m.ctx, Permit::for_a_test(), &read, Ask::Now);
         enrolled_again(&m, "there", on_max(&m, "there", "there-new"));
 
         record_read(&m.ctx, Permit::for_a_test(), &answers.found, &answers.plans);
@@ -816,7 +817,7 @@ mod tests {
         live["claudeAiOauth"]["subscriptionType"] = "pro".into();
         m.sign_in(&live);
         let read = state::load(&m.ctx).expect("state");
-        let answers = crate::status::ask(&m.ctx, Permit::for_a_test(), &read, true);
+        let answers = crate::status::ask(&m.ctx, Permit::for_a_test(), &read, Ask::Now);
         enrolled_again(&m, "here", on_max(&m, "here", "here-new"));
 
         record_read(&m.ctx, Permit::for_a_test(), &answers.found, &answers.plans);
@@ -1533,7 +1534,7 @@ mod tests {
         let codes: Vec<&str> = done
             .warnings
             .iter()
-            .map(crate::service::Warning::code)
+            .map(crate::warning::Warning::code)
             .collect();
         assert_eq!(codes, ["lock_compromised"]);
     }

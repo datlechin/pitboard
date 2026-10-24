@@ -23,8 +23,8 @@ use super::harness::{
 use super::*;
 use crate::api::scripted::{ScriptedApi, Trouble};
 use crate::fault;
+use crate::permit::Permit;
 use crate::provider::claude::api::Renewed;
-use crate::service::Permit;
 use crate::store::memory::Fault;
 use serde_json::json;
 use std::sync::Arc;

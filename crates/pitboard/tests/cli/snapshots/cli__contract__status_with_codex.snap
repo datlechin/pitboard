@@ -35,7 +35,7 @@ expression: "serde_json :: json! ({ \"exit\" : code, \"envelope\" : value })"
             "observed_at": "[time]",
             "windows": [
               {
-                "kind": "five_hour",
+                "kind": "session",
                 "scope": null,
                 "percent": 12.0,
                 "resets_at": 1789986600,
@@ -45,7 +45,7 @@ expression: "serde_json :: json! ({ \"exit\" : code, \"envelope\" : value })"
                 "pace": null
               },
               {
-                "kind": "seven_day",
+                "kind": "weekly_all",
                 "scope": null,
                 "percent": 40.0,
                 "resets_at": 1790474400,
@@ -82,7 +82,7 @@ expression: "serde_json :: json! ({ \"exit\" : code, \"envelope\" : value })"
             "observed_at": "[time]",
             "windows": [
               {
-                "kind": "five_hour",
+                "kind": "session",
                 "scope": null,
                 "percent": 12.0,
                 "resets_at": 1789986600,
@@ -92,7 +92,7 @@ expression: "serde_json :: json! ({ \"exit\" : code, \"envelope\" : value })"
                 "pace": null
               },
               {
-                "kind": "seven_day",
+                "kind": "weekly_all",
                 "scope": null,
                 "percent": 40.0,
                 "resets_at": 1790474400,
@@ -124,7 +124,7 @@ expression: "serde_json :: json! ({ \"exit\" : code, \"envelope\" : value })"
             "observed_at": "[time]",
             "windows": [
               {
-                "kind": "five_hour",
+                "kind": "session",
                 "scope": null,
                 "percent": 25.0,
                 "resets_at": 1789990000,
@@ -134,7 +134,7 @@ expression: "serde_json :: json! ({ \"exit\" : code, \"envelope\" : value })"
                 "pace": null
               },
               {
-                "kind": "seven_day",
+                "kind": "weekly_all",
                 "scope": null,
                 "percent": 60.0,
                 "resets_at": 1790500000,

@@ -6,14 +6,15 @@ use super::{
 use super::{data, rested, settled, snapshot, unchanged, whereabouts};
 use crate::desktop_testing::EMPTIED;
 use crate::error::Error;
+use crate::permit::Permit;
 use crate::provider::ProviderId;
-use crate::service::{Permit, Warning};
 use crate::state::{self, SetAside};
 use crate::switch::harness::{
     HOME, STRANGER, WORK, audit_lines, desktop_machine, desktop_pair, hold, hold_where_deleted,
     recover, sign_in_inside,
 };
 use crate::switch::{Outcome, enroll};
+use crate::warning::Warning;
 use std::sync::mpsc::RecvTimeoutError;
 
 #[test]

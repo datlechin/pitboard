@@ -7,11 +7,12 @@ use super::{
 use super::{data, rested, settled, snapshot, tree, unchanged, whereabouts};
 use crate::desktop_testing::{Person, write_stand_in_jar};
 use crate::error::Error;
+use crate::permit::Permit;
 use crate::provider::ProviderId;
-use crate::service::{Permit, Warning};
 use crate::state::{self, SetAside};
 use crate::switch::harness::{HOME, Rig, STRANGER, WORK, desktop_pair, hold};
 use crate::switch::repair;
+use crate::warning::Warning;
 use serde_json::{Map, Value};
 use std::path::PathBuf;
 

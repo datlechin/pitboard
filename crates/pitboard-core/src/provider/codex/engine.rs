@@ -6,11 +6,11 @@
 use super::{api, layers, paths};
 use crate::context::Context;
 use crate::host::Os;
+use crate::permit::Permit;
 use crate::provider::{
     Adoption, Behind, Credential, Expiry, Identity, Isolation, LiveStore, Owner, ParkSemantics,
     Provider, ProviderError, ProviderId, SignInView, jwt,
 };
-use crate::service::Permit;
 use crate::store::{self, Live, RawStore};
 use crate::usage::Snapshot;
 use serde_json::Value;
@@ -342,7 +342,7 @@ impl Provider for Codex {
         Ok(command)
     }
 
-    fn read_signin(
+    fn login_from_sign_in(
         &self,
         ctx: &Context,
         dir: &std::path::Path,
@@ -713,7 +713,7 @@ mod tests {
         std::fs::write(dir.join("auth.json"), login().to_string()).expect("a login");
         let ctx = Context::new(std::path::PathBuf::from("/nowhere"))
             .with_codex_home("/somewhere/else".into());
-        let read = Codex.read_signin(&ctx, &dir).expect("readable");
+        let read = Codex.login_from_sign_in(&ctx, &dir).expect("readable");
         assert_eq!(
             read.map(|raw| serde_json::from_str::<Value>(&raw).unwrap()),
             Some(login())

@@ -315,8 +315,10 @@ mod tests {
         std::fs::write(config.join(".credentials.json"), r#"{"claudeAiOauth":{}}"#)
             .expect("a login");
         assert_eq!(
-            crate::store::resolve(&live.chain, &live.service).expect("readable"),
-            crate::store::Backend::File
+            crate::store::holder(&live.chain, &live.service)
+                .expect("readable")
+                .map(|held| held.kind()),
+            Some(crate::store::Backend::File)
         );
 
         let signin = crate::switch::enroll::signin_dir(&ctx);
@@ -324,14 +326,14 @@ mod tests {
         std::fs::write(signin.join(".credentials.json"), r#"{"claudeAiOauth":{}}"#)
             .expect("a sign-in's login");
         assert_eq!(
-            crate::provider::claude::live::read_signin(&ctx, &signin)
+            crate::provider::claude::live::login_from_sign_in(&ctx, &signin)
                 .expect("readable")
                 .as_deref(),
             Some(r#"{"claudeAiOauth":{}}"#)
         );
         crate::provider::claude::live::discard_signin(
             &ctx,
-            crate::service::Permit::for_a_test(),
+            crate::permit::Permit::for_a_test(),
             &signin,
         )
         .expect("discarded");
@@ -402,7 +404,7 @@ mod tests {
         assert_eq!(vault.kind(), crate::store::Backend::SealedFile);
         assert!(!host().vault_is_shared());
         vault
-            .write(crate::service::Permit::for_a_test(), park, login)
+            .write(crate::permit::Permit::for_a_test(), park, login)
             .expect("sealed");
         assert_eq!(vault.read(park).expect("opened").as_deref(), Some(login));
         assert_eq!(vault.list().expect("listed"), Some(vec![park.to_string()]));
@@ -499,7 +501,7 @@ mod tests {
             let refused = tasks
                 .put(
                     &ctx,
-                    crate::service::Permit::for_a_test(),
+                    crate::permit::Permit::for_a_test(),
                     job,
                     Path::new(r"C:\Program Files\Pitboard\bin\pitboard.exe"),
                     &[],
@@ -513,7 +515,7 @@ mod tests {
             );
             assert!(
                 !tasks
-                    .remove(&ctx, crate::service::Permit::for_a_test(), job)
+                    .remove(&ctx, crate::permit::Permit::for_a_test(), job)
                     .expect("nothing there")
             );
         }
@@ -540,7 +542,7 @@ mod tests {
         );
         assert_eq!(user::elevation(true), Elevation::Normal);
         assert_eq!(ctx.host().floor(), Floor::Met);
-        assert!(crate::service::gate(&ctx).is_ok());
+        assert!(crate::permit::gate(&ctx).is_ok());
     }
 
     // Claude Desktop's folders are never moved here.
@@ -548,7 +550,7 @@ mod tests {
     fn no_apps_folder_is_moved() {
         let scratch = tempfile::tempdir().expect("a scratch folder");
         let dir = scratch.path().join("dir");
-        let permit = crate::service::Permit::for_a_test();
+        let permit = crate::permit::Permit::for_a_test();
         let unsupported = |made: std::io::Result<()>| {
             assert_eq!(
                 made.map_err(|e| e.kind()),

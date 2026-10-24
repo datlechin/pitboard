@@ -13,7 +13,7 @@
 //! any of them has seen of that account. Nothing here is secret.
 
 use crate::context::Context;
-use crate::service::Permit;
+use crate::permit::Permit;
 use crate::usage::{Snapshot, Source, Window};
 use crate::{atomic, home};
 use std::collections::HashMap;
@@ -146,7 +146,7 @@ mod tests {
             resets_at: Some(RESETS),
             is_active: true,
             severity: None,
-            length_seconds: crate::usage::anthropic_window_length(kind),
+            length_seconds: crate::usage::LimitKind::from(kind).length(),
         }
     }
 
@@ -246,11 +246,11 @@ mod tests {
             load(&ctx)[id]
                 .windows
                 .iter()
-                .map(|w| w.kind.clone())
+                .map(|w| w.kind.to_string())
                 .collect()
         };
-        assert_eq!(kinds("claude"), ["seven_day"]);
-        assert_eq!(kinds("codex"), ["five_hour", "seven_day"]);
+        assert_eq!(kinds("claude"), ["weekly_all"]);
+        assert_eq!(kinds("codex"), ["session", "weekly_all"]);
         assert!(
             load(&ctx)["claude"].lists_every_limit,
             "and kept as it was said"

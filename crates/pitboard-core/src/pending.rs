@@ -14,8 +14,8 @@
 use crate::context::Context;
 use crate::error::{Error, Result};
 use crate::park::Orphan;
+use crate::permit::Permit;
 use crate::provider::LoginKind;
-use crate::service::Permit;
 use crate::state::{Key, Park, ParkKind, State};
 use crate::{atomic, home, park};
 use std::path::PathBuf;

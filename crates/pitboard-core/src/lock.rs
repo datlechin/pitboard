@@ -35,7 +35,7 @@
 //! The writers are a session and [`crate::daemon`], the supervisor that outlives sessions
 //! and refreshes on a timer of its own. Both come through here.
 
-use crate::service::Permit;
+use crate::permit::Permit;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};

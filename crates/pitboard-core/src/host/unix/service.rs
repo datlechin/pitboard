@@ -2,7 +2,7 @@
 //! start or stop it the way a person would type it. launchd and systemd both work this way.
 
 use crate::error::{Error, Result};
-use crate::service::Permit;
+use crate::permit::Permit;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 

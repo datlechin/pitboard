@@ -253,7 +253,7 @@ pub(crate) enum Schedule {
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct Limit {
-    // Anthropic's `session`, `weekly_all` or `weekly_scoped`, or one named after its length
+    // `session`, `weekly_all`, `weekly_scoped`, or another limit's name, such as `1_day`
     pub kind: String,
     pub length_seconds: Option<i64>,
     // the model a scoped limit applies to

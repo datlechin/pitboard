@@ -5,8 +5,8 @@
 use super::{journal, purge, try_exclusive};
 use crate::context::Context;
 use crate::error::{Error, Result};
+use crate::permit::Permit;
 use crate::provider::{LoginKind, Provider};
-use crate::service::Permit;
 use crate::state::{Key, Park, ParkKind, State};
 use crate::{park, state};
 use serde_json::Value;
@@ -70,7 +70,7 @@ impl Due {
                 access_lapsed
                     || held
                         .refresh_expires_at
-                        .is_some_and(|at| crate::doctor::renewal_due(at, now))
+                        .is_some_and(|at| state::renewal_due(at, now))
             }
         }
     }

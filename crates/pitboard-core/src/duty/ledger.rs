@@ -4,7 +4,7 @@
 //! account ids, names of limits, times, counts and codes.
 
 use super::cadence::{ATTEMPTS, retry_after};
-use crate::service::Permit;
+use crate::permit::Permit;
 use crate::{atomic, error};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};

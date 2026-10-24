@@ -15,8 +15,8 @@
 use crate::context::{Context, Environment};
 use crate::error::{Error, Result};
 use crate::host::{self, LoginPath, OS, Os};
+use crate::permit::Permit;
 use crate::provider::ProviderId;
-use crate::service::Permit;
 use crate::{atomic, home};
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};

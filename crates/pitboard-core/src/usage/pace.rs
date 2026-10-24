@@ -165,6 +165,7 @@ pub(crate) fn until_reset(windows: &[Window], now: i64) -> Option<Lasts<'_>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::usage::LimitKind;
 
     const NOW: i64 = 1_789_935_000;
     const HOUR: i64 = 3_600;
@@ -311,7 +312,7 @@ mod tests {
         let Some(Lasts::RunsOut { limit, in_seconds }) = lasts(&busy, NOW, NOW) else {
             panic!("the week runs out");
         };
-        assert_eq!(limit.kind, "weekly_all");
+        assert_eq!(limit.kind, LimitKind::WeeklyAll);
         assert_eq!(in_seconds, (67.0 * (10 * HOUR) as f64 / 33.0) as i64);
 
         let calm = window("weekly_all", 5.0, 3 * DAY, WEEK);

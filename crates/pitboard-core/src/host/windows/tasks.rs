@@ -4,7 +4,7 @@
 use crate::context::Context;
 use crate::error::{Error, Result};
 use crate::host::task::{FOLDER, Registered, Service, from_ole_date};
-use crate::service::Permit;
+use crate::permit::Permit;
 use windows::Win32::Foundation::RPC_E_CHANGED_MODE;
 use windows::Win32::System::Com::{
     CLSCTX_INPROC_SERVER, COINIT_MULTITHREADED, CoCreateInstance, CoInitializeEx, CoUninitialize,

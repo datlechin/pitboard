@@ -5,9 +5,9 @@
 use super::Range;
 use crate::duty::ledger::{self, Tries};
 use crate::home;
-use crate::service::Permit;
+use crate::permit::Permit;
 use crate::state::{Account, Key};
-use crate::usage::{self, Snapshot, Window};
+use crate::usage::{LimitKind, Snapshot, Window};
 use jiff::Timestamp;
 use jiff::tz::TimeZone;
 use serde::{Deserialize, Serialize};
@@ -321,7 +321,7 @@ pub(crate) fn startable(reading: &Snapshot) -> Option<&Window> {
     reading
         .windows
         .iter()
-        .find(|window| usage::limit_name(&window.kind) == "session" && window.scope.is_none())
+        .find(|window| window.kind == LimitKind::Session && window.scope.is_none())
 }
 
 /// One of the account's own limits used up as of `now`, where one is: the one that resets
@@ -457,7 +457,7 @@ mod tests {
                 &zone(),
             );
             assert!(
-                matches!(&standing, Standing::Held(Hold::LimitUsedUp { limit }) if limit.kind == "weekly_all"),
+                matches!(&standing, Standing::Held(Hold::LimitUsedUp { limit }) if limit.kind == LimitKind::WeeklyAll),
                 "{standing:?}"
             );
         }

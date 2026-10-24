@@ -9,11 +9,6 @@ use pitboard_core::usage::{Snapshot, Source, Window};
 use pitboard_core::{time, words};
 use serde_json::{Value, json};
 
-/// A window in the column form, beside its bar, which the app's columns use too.
-fn window_name(w: &Window) -> String {
-    words::limit_column(&w.kind, w.length_seconds, w.scope.as_deref())
-}
-
 /// How somebody would type this row's account, or a placeholder in its tool's own shape
 /// for a row nothing has enrolled: `<label>` for Claude Code, `codex/<label>` for Codex.
 /// A bare `<label>` on a Codex row would have them enroll a Claude Code account.
@@ -153,7 +148,7 @@ pub(crate) fn human(report: &Report) -> String {
         .rows
         .iter()
         .flat_map(|r| r.usage.iter().flat_map(|u| u.windows.iter()))
-        .map(|w| ui::columns(&window_name(w)))
+        .map(|w| ui::columns(&words::limit_column(w)))
         .max()
         .unwrap_or(0);
     // So the paces after them line up, where there are any.
@@ -258,7 +253,7 @@ pub(crate) fn human(report: &Report) -> String {
                 };
                 block.push_str(&format!(
                     "    {}  {}  {}  {after}\n",
-                    pad(&window_name(w), name_width),
+                    pad(&words::limit_column(w), name_width),
                     ui::bar(w.percent, pace.as_ref(), 10),
                     paint(
                         ui::level(w.percent),
@@ -272,11 +267,7 @@ pub(crate) fn human(report: &Report) -> String {
             if row.signed_in
                 && let Some(Lasts::RunsOut { limit, in_seconds }) = row.lasts(now)
             {
-                let name = words::scoped_limit_name(
-                    &limit.kind,
-                    limit.length_seconds,
-                    limit.scope.as_deref(),
-                );
+                let name = words::scoped_limit_name(limit);
                 block.push_str(&format!(
                     "    {}  {}\n",
                     pad("", name_width),
@@ -796,28 +787,6 @@ mod tests {
             is_active: true,
             severity: None,
             length_seconds,
-        }
-    }
-
-    /// Named by how long it runs, which is what makes one tool's window read like
-    /// another's; by its kind only where the length is not known. A length that is not a
-    /// whole number of hours is named by its minutes or seconds, as the app names it, and
-    /// not by the kind Pitboard gives such a window, `90_minute`.
-    #[test]
-    fn a_window_is_named_by_how_long_it_runs() {
-        for (kind, length, named) in [
-            ("five_hour", Some(18_000), "5h"),
-            ("seven_day", Some(604_800), "week"),
-            ("1_day", Some(86_400), "day"),
-            ("2_day", Some(172_800), "2d"),
-            ("3_hour", Some(10_800), "3h"),
-            ("90_minute", Some(5_400), "90m"),
-            ("45_second", Some(45), "45s"),
-            ("primary", None, "primary"),
-            ("session", None, "5h"),
-            ("weekly_all", None, "week"),
-        ] {
-            assert_eq!(window_name(&window(kind, length)), named, "{kind}");
         }
     }
 

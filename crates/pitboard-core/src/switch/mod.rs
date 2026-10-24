@@ -32,6 +32,7 @@ mod refresh;
 mod refusals;
 mod rename;
 pub(crate) mod renew;
+mod settle;
 mod stow;
 #[cfg(test)]
 mod two_tools;
@@ -48,7 +49,9 @@ pub(crate) use enroll::planted;
 pub use enroll::{Enrolled, Said, SignIn, Steps, WatchedSignIn};
 #[cfg(any(test, feature = "test-support"))]
 pub use enroll::{ScriptedSignIn, SignInScript};
-pub(crate) use enroll::{one_at_a_time, running_already, sign_in, sign_in_watched_as};
+pub(crate) use enroll::{
+    one_at_a_time, ready_to_sign_in, running_already, sign_in, sign_in_watched_as,
+};
 pub use folder::awaited::WaitStep;
 pub use folder::{Ended, GivenUp, MoveSettled};
 pub(crate) use forget::forget;
@@ -57,6 +60,9 @@ pub(crate) use journal::{Asking, interrupted_tool, pending as interrupted};
 pub(crate) use rename::rename;
 pub use renew::Renewal;
 pub(crate) use renew::{Due, renew_due, renew_parked};
+pub use settle::{GaveUp, abandon};
+use settle::{drop_live_twins, purge};
+pub(crate) use settle::{repair, settle, stuck};
 pub(crate) use stow::find as left_login;
 pub(crate) use stow::stow;
 pub use stow::{Foreseen, Kept, Left, Stowed};
@@ -66,10 +72,11 @@ pub(crate) use uninstall::uninstall;
 use crate::context::Context;
 use crate::error::{Error, Result};
 use crate::in_use::{self, InUse};
-use crate::service::{Permit, Warning};
+use crate::permit::Permit;
 use crate::state::{Account, Key, Park, ParkKind, State};
-use crate::{fault, holder, home, lock, park, pending, state, store};
-use journal::{Journal, clear_journal, reconcile, write_journal};
+use crate::warning::Warning;
+use crate::{fault, holder, home, lock, park, state, store};
+use journal::{Journal, clear_journal, write_journal};
 use refresh::Refreshing;
 use serde_json::Value;
 use std::path::PathBuf;
@@ -122,217 +129,22 @@ pub(crate) struct Settled {
     permit: Permit,
 }
 
-// What giving up came to, of both kinds of change.
-#[derive(Debug, Default)]
-pub struct GaveUp {
-    pub switch: Option<Abandoned>,
-    pub moves: Vec<GivenUp>,
-    // what settling said, and each move abandon could not give up after giving up a switch
-    pub warnings: Vec<Warning>,
-}
-
-// Gives up an interrupted switch, and each move that cannot be settled, keeping every copy
-// they name. Under a custom Claude Code endpoint only a Claude Code switch is refused.
-pub fn abandon(ctx: &Context, permit: Permit) -> Result<GaveUp> {
-    // With no switch waiting the endpoint is not asked: it never stops an app's give-up.
-    if let Some(tool) = interrupted_tool(ctx) {
-        refuse_custom_oauth(ctx, Some(tool))?;
-    }
-    let _exclusive = exclusive(ctx, permit)?;
-    let mut state = state::load(ctx)?;
-    // Whatever an app's state: no Claude Code or Codex change waits on an app's move.
-    let mut gave_up = GaveUp {
-        switch: journal::abandon(ctx, permit, &mut state)?,
-        ..GaveUp::default()
-    };
-    // A move that can be settled is settled and said: only one that cannot is given up.
-    for &tool in ProviderId::ALL {
-        let LoginKind::Folder(app) = provider::of(tool) else {
-            continue;
-        };
-        let Some(label) = state
-            .moving(tool)
-            .map(|moving| state.typed(&Key::new(tool, moving.label.clone())))
-        else {
-            continue;
-        };
-        let done =
-            gave_up.switch.is_some() || !gave_up.moves.is_empty() || !gave_up.warnings.is_empty();
-        match folder::abandon(ctx, permit, &mut state, app) {
-            Ok((given_up, said)) => {
-                gave_up.moves.extend(given_up);
-                gave_up.warnings.extend(said);
-            }
-            // Said beside what was done, whose "nothing has changed" would be false.
-            Err(why) if done => {
-                gave_up
-                    .warnings
-                    .push(Warning::MoveNotGivenUp { tool, label, why });
-                // A refusal can leave in memory what it never saved, and the next save would.
-                state = state::load(ctx)?;
-            }
-            Err(refused) => return Err(refused),
-        }
-    }
-    Ok(gave_up)
-}
-
-/// Under a custom OAuth endpoint Claude Code's live login is in "Claude Code-custom-oauth-
-/// credentials", not the item Pitboard reads. Acting on it would park nothing and restore
-/// into an item nobody reads, so Pitboard does not act on Claude Code at all: not a change
-/// to one of its accounts, not a change that could touch every tool's, and not the
-/// recovery of an interrupted Claude Code switch. A change to another tool's account goes
-/// ahead; its login is somewhere this setting does not move.
-fn refuse_custom_oauth(ctx: &Context, tool: Option<ProviderId>) -> Result<()> {
-    if !crate::settings::custom_oauth(ctx) {
-        return Ok(());
-    }
-    let claude = Some(ProviderId::Claude);
-    if tool.is_none() || tool == claude || interrupted_tool(ctx) == claude {
-        return Err(Error::CustomOauthEndpoint);
-    }
-    Ok(())
-}
-
-/// What recovery found is returned apart from the `Settled`, so it can be reported whether
-/// or not the command that follows succeeds.
-///
-/// `tool` is the tool the change that follows is about, where it is about one.
-pub(crate) fn settle(
-    ctx: &Context,
-    permit: Permit,
-    tool: Option<ProviderId>,
-) -> Result<(Settled, Option<Recovered>)> {
-    refuse_custom_oauth(ctx, tool)?;
-    let exclusive = exclusive(ctx, permit)?;
-    let mut state = state::load(ctx)?;
-    let recovered = reconcile(ctx, permit, &mut state)?;
-    // A copy that cannot be saved yet stops what acts on its slot's login, where that asks
-    // again (`refresh::finished`), and nothing else.
-    let _ = refresh::finish(ctx, permit, &mut state);
-    // After the journal has had its say, so a switch's own park is already accounted for.
-    pending::sweep(ctx, permit, &mut state)?;
-    drop_live_twins(ctx, permit, &mut state)?;
-    purge(ctx, permit, &mut state);
-    Ok((
-        Settled {
-            _exclusive: exclusive,
-            state,
-            ctx: ctx.clone(),
-            permit,
-        },
-        recovered,
-    ))
-}
-
-/// Why the next change would stop at an interrupted switch it cannot finish: the refusal
-/// that change would make, in its words. `None` where no switch is waiting, where the next
-/// change finishes or undoes it by itself, and where telling which would need the service
-/// and `asking` says not to ask it.
-///
-/// Worked out the way [`settle`] works it out, from the same reads and the same decision,
-/// and only read: no lock is taken, nothing is written, and the record stays for whatever
-/// finishes it or gives up on it. A switch under way in another run has a record too, and
-/// what it leaves at every step is what the next change could settle, ordinarily from the
-/// fingerprints alone, so it does not read as stuck.
-pub(crate) fn stuck(ctx: &Context, state: &State, asking: Asking) -> Option<Error> {
-    if !journal::pending(ctx) {
-        return None;
-    }
-    // Under a custom Claude Code endpoint no change comes to a Claude Code switch: each is
-    // refused over the endpoint first, as settling it and giving up on it are. A Codex
-    // switch is settled there, and given up on, as anywhere.
-    refuse_custom_oauth(ctx, interrupted_tool(ctx)).ok()?;
-    journal::refusal(ctx, state, asking)
-}
-
-/// Ask the store itself what parked logins are on this machine, and resolve every one the
-/// state does not name. `settle` already does this from Pitboard's own list of names on
-/// every change; this is the thorough version, for a machine whose list was lost with its
-/// state file, or written by a version that kept no list.
-pub(crate) fn repair(settled: Settled) -> Result<(Reclaimed, Vec<Warning>)> {
-    let Settled {
-        _exclusive,
-        mut state,
-        ctx,
-        permit,
-    } = settled;
-    // Nothing of an app is read but where a move of its login waits.
-    let mut warnings = Vec::new();
-    for &tool in ProviderId::ALL {
-        match provider::of(tool) {
-            LoginKind::Document(_) => {}
-            LoginKind::Folder(app) => {
-                warnings.extend(folder::settle_for_repair(&ctx, permit, &mut state, app));
-            }
-        }
-    }
-    let mut reclaimed = pending::reclaim(&ctx, permit, &mut state)?;
-    give_back_asides(&ctx, permit, &mut state, &mut reclaimed)?;
-    purge(&ctx, permit, &mut state);
-    Ok((reclaimed, warnings))
-}
-
-// A folder set aside goes back to its account where its manifest, keys and jar agree.
-fn give_back_asides(
-    ctx: &Context,
-    permit: Permit,
-    state: &mut State,
-    reclaimed: &mut Reclaimed,
-) -> Result<()> {
-    let folders = park::parks(ParkKind::Folder);
-    let names: Vec<String> = state.aside.iter().map(|aside| aside.name.clone()).collect();
-    let mut given = false;
-    for name in names {
-        let park::Orphan::Login { id, park, .. } = folders.orphan(ctx, state, &name) else {
-            continue;
-        };
-        let Some(key) = pending::takes(ctx, state, &id) else {
-            continue;
-        };
-        state.drop_aside(&name);
-        pending::give_back(ctx, permit, state, &key, *park, reclaimed);
-        given = true;
-    }
-    if given {
-        state::save(ctx, permit, state)?;
-    }
-    Ok(())
-}
-
-/// Drop every park that is a copy of the login its tool has in use now, and say so in the
-/// state before anything deletes it. The journal records the one copy a switch makes on
-/// purpose; this finds the one nothing records, which a new login leaves when it was put in
-/// use and could not be read back, and was parked as well.
-fn drop_live_twins(ctx: &Context, permit: Permit, state: &mut State) -> Result<()> {
-    let twins = park::live_twins(ctx, state);
-    if twins.is_empty() {
-        return Ok(());
-    }
-    for service in &twins {
-        state.discard(service, ParkKind::Vault);
-    }
-    state::save(ctx, permit, state)
-}
-
-/// Delete what no account refers to any more. A failed save only leaves deleted names
-/// listed, and deleting a missing item succeeds, so a later run clears them.
-fn purge(ctx: &Context, permit: Permit, state: &mut State) -> usize {
-    let listed = state.discarded.len();
-    let remaining = park::purge(ctx, permit, state);
-    if remaining != listed {
-        let _ = state::save(ctx, permit, state);
-    }
-    remaining
-}
-
 /// Makes Pitboard runs exclusive of each other. A kernel lock, unlike the directory lock
 /// Claude Code's protocol requires around its own writes: the operating system releases it
 /// when a process ends, so there is no staleness rule for two runs to both satisfy.
 pub(crate) fn exclusive(ctx: &Context, permit: Permit) -> Result<std::fs::File> {
     let (file, path) = lock_file(ctx, permit)?;
-    file.lock()
-        .map_err(|source| Error::HomeUnwritable { path, source })?;
+    match file.try_lock() {
+        Ok(()) => {}
+        Err(std::fs::TryLockError::WouldBlock) => {
+            fault::point("switch.lock_busy");
+            file.lock()
+                .map_err(|source| Error::HomeUnwritable { path, source })?;
+        }
+        Err(std::fs::TryLockError::Error(source)) => {
+            return Err(Error::HomeUnwritable { path, source });
+        }
+    }
     Ok(file)
 }
 
