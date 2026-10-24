@@ -3861,11 +3861,13 @@ real `auth.json` that build wrote. The register is `provider/codex/assumptions.r
   one `app.asar` and one codex in all three, and the app stays open after its last window
   closes while the notification-area icon it always puts up on Linux is there.
 - Read on 16 October 2026 from Codex's source at tag `rust-v0.162.1` and its win32 builds:
-  - (`codex_windows_app_server`) the background app server runs
-    `<CODEX_HOME>\packages\app-server-daemon\current\bin\codex.exe`, `current` a
-    junction Codex points at one of its releases. It is started with `DETACHED_PROCESS |
-    CREATE_BREAKAWAY_FROM_JOB`, never from an elevated terminal, so its remedy there says to
-    run `codex app-server daemon restart` from a terminal that is not elevated.
+  - (`codex_windows_app_server`) the background app server runs the `bin\codex.exe` of the
+    release `<CODEX_HOME>\packages\app-server-daemon\current` resolves to, `current` a
+    junction Codex points at one of its releases: `pid_start.rs` starts the path
+    canonicalised, already at 0.162.1, which this note first missed. It is started with
+    `DETACHED_PROCESS | CREATE_BREAKAWAY_FROM_JOB`, never from an elevated terminal, so its
+    remedy there says to run `codex app-server daemon restart` from a terminal that is not
+    elevated.
   - (`codex_windows_app_identity`) the desktop app for Windows, ChatGPT- or Codex-branded,
     is the package of family `OpenAI.Codex_2p2nqsd0c76g0`, its app
     `OpenAI.Codex_2p2nqsd0c76g0!App`, and Codex tells its process by that family. So

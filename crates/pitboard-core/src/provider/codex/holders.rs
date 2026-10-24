@@ -6,7 +6,7 @@
 //! 26.928.31416, its bundled codex 0.159.2, Codex's app-server daemon 0.159.3 and terminal
 //! sessions, with the facts in `assumptions`. No editor with the Codex extension was
 //! running there, so its place is the extension's packaged layout, unmeasured. On Windows the
-//! app server's place and ChatGPT's package are read from 0.162.1's source; that ChatGPT's own
+//! app server's place and ChatGPT's package are read from 0.164.0's source; that ChatGPT's own
 //! codex runs in that package waits on the session's step 10. ChatGPT for Linux is read from
 //! its packages, 26.1016.61520 and 26.1021.22027, not run.
 
@@ -47,7 +47,8 @@ pub(crate) const HOLDERS: &[Holder] = &[
     },
     // `~/.codex/packages/app-server-daemon/releases/0.159.3-aarch64-apple-darwin/bin/codex`,
     // a child of launchd, which terminal sessions can share. On Windows
-    // `current\bin\codex.exe` there, through a junction (codex_windows_app_server).
+    // `releases\<version>-<target>\bin\codex.exe` there, which `current` resolves to
+    // (codex_windows_app_server).
     Holder {
         kind: "app_server_daemon",
         noun: Noun::One("Codex's background app server"),
@@ -166,7 +167,7 @@ mod tests {
                 Some("OpenAI.Codex_2p2nqsd0c76g0"),
             ),
             (
-                "C:/Users/a/.codex/packages/app-server-daemon/current/bin/codex.exe",
+                "C:/Users/a/.codex/packages/app-server-daemon/releases/0.164.0-x86_64-pc-windows-msvc/bin/codex.exe",
                 None,
             ),
             (
