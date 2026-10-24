@@ -503,7 +503,7 @@ fn enroll_signing_in(pitboard: &Pitboard, label: &str) -> Report {
             while let Some(line) = said.next() {
                 eprint!("{line}");
             }
-            watched.finish().map_err(Failed::from)
+            watched.finish().map_err(Failed::refused)
         }),
     };
     match signed_in {

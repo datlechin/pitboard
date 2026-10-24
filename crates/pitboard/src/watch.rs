@@ -286,7 +286,7 @@ fn decided(
             warnings: Vec::new(),
         })),
         Ok(Look::Act) => None,
-        Err(error) => Some(Err(Failed::from(error))),
+        Err(error) => Some(Err(Failed::refused(error))),
     }
 }
 
@@ -1361,7 +1361,7 @@ mod tests {
         fn a_failure_of_one_account_is_said_once_until_it_warms_up() {
             let mut told = WarmTold::default();
             let failed = || {
-                Err(Failed::from(Error::WarmUpFailed {
+                Err(Failed::refused(Error::WarmUpFailed {
                     label: "work".into(),
                     why: pitboard_core::duty::warm::Failure::NotStarted,
                 }))
@@ -1395,7 +1395,7 @@ mod tests {
         fn another_error_is_said_once_for_each_account_it_names() {
             let mut told = WarmTold::default();
             let expired = |label: &str| {
-                Err(Failed::from(Error::ParkedLoginRefused {
+                Err(Failed::refused(Error::ParkedLoginRefused {
                     tool: ProviderId::Claude,
                     label: label.into(),
                 }))

@@ -48,11 +48,9 @@ impl Failed {
             said_first,
         }
     }
-}
 
-// A refusal with nothing found on the way.
-impl From<Error> for Failed {
-    fn from(error: Error) -> Failed {
+    /// A refusal with nothing found on the way.
+    pub fn refused(error: Error) -> Failed {
         Failed {
             error,
             warnings: Vec::new(),
@@ -89,7 +87,7 @@ impl Pitboard {
     }
 
     fn permitted(&self) -> std::result::Result<Permit, Failed> {
-        self.permit().map_err(Failed::from)
+        self.permit().map_err(Failed::refused)
     }
 
     /// Who is signed in and what every account has left; `fresh` asks each anew.
@@ -207,7 +205,7 @@ impl Pitboard {
     /// Switches Claude Code where a limit of the account in use has reached `threshold`.
     pub fn auto_switch(&self, threshold: Threshold) -> Changing<Auto> {
         let permit = self.permitted()?;
-        let looked = self.auto_look(threshold).map_err(Failed::from)?;
+        let looked = self.auto_look(threshold).map_err(Failed::refused)?;
         if let Look::Stands(value) = looked {
             return Ok(Done {
                 value: *value,
@@ -233,7 +231,7 @@ impl Pitboard {
 
     // Here, so every command takes `codex/work` and a bare `work` on the same terms.
     fn named(&self, permit: Permit, verb: &str, typed: &str) -> std::result::Result<Key, Failed> {
-        let state = state::load(&self.ctx).map_err(Failed::from)?;
+        let state = state::load(&self.ctx).map_err(Failed::refused)?;
         crate::label::resolve(&state, typed)
             .map(Account::key)
             .map_err(|error| self.refused(permit, verb, typed, error.code(), error))
@@ -379,7 +377,7 @@ impl Pitboard {
 
     fn not_started(&self, permit: Permit, typed: &str, error: Error) -> Failed {
         audit::record(&self.ctx, permit, "enroll", typed, error.code());
-        Failed::from(error)
+        Failed::refused(error)
     }
 
     pub fn enroll_signed_in(&self, typed: &str, login: SignIn) -> Changing<Enrolled> {
@@ -640,7 +638,7 @@ impl Pitboard {
     /// Warms up the first account turned on that is due, as [`crate::duty::warm`] says.
     pub fn warm_up(&self) -> Changing<switch::warm::WarmUp> {
         let permit = self.permitted()?;
-        let looked = self.warm_look().map_err(Failed::from)?;
+        let looked = self.warm_look().map_err(Failed::refused)?;
         if let crate::duty::Look::Stands(overview) = looked {
             return Ok(Done {
                 value: switch::warm::WarmUp::Stands(overview),
@@ -814,7 +812,7 @@ impl Pitboard {
     ) -> std::result::Result<(Settled, Option<Warning>), Failed> {
         let (settled, recovered) = switch::settle(&self.ctx, permit, tool).map_err(|error| {
             audit::record(&self.ctx, permit, verb, subject, error.code());
-            Failed::from(error)
+            Failed::refused(error)
         })?;
         let recovered = recovered.map(|r| {
             audit::record(&self.ctx, permit, "recover", &r.to, r.code());
@@ -2727,7 +2725,7 @@ mod tests {
     /// What one change came to, as a change refused at the gate is reported: its error,
     /// and the warnings found on the way, of which there must be none.
     fn failed<T>(outcome: Result<T>) -> Option<Failed> {
-        outcome.err().map(Failed::from)
+        outcome.err().map(Failed::refused)
     }
 
     type Change = fn(&Pitboard, &Rig) -> Option<Failed>;
