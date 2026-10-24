@@ -11,10 +11,7 @@ use pitboard_core::testing::{
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::mpsc::{Receiver, Sender, channel};
-use std::time::{Duration, SystemTime};
-
-// The time every world's core stands at, as the core's switch harness pins its own.
-const NOW: i64 = 1_760_000_000;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 /// A machine of a test's own for the real core: a home in a scratch directory, Claude Code's
 /// keychain, the vault and the scheduler in memory, and Anthropic scripted. Nothing of the
@@ -25,6 +22,8 @@ pub(crate) struct World {
     pub host: Arc<MemoryHost>,
     pub api: Arc<ScriptedApi>,
     ctx: Context,
+    // The machine's time when the world was made, which the model's own clock agrees with.
+    now: i64,
     /// The command line inside the app, where a test gives it one.
     helper: Option<PathBuf>,
     /// Where the app looks for the `pitboard` a terminal would run: the test's own places
@@ -61,6 +60,11 @@ impl World {
             &stand_in::Script::refusing("a test's Claude Code, never meant to run\n"),
         )
         .expect("a Claude Code to find");
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_or(0, |since| {
+                i64::try_from(since.as_secs()).unwrap_or(i64::MAX)
+            });
         let ScratchMachine { ctx, host, api } = ScratchMachine::at(root, |ctx| {
             ctx.with_pitboard_home(root.join(".pitboard"))
                 .with_codex_home(root.join(".codex").to_string_lossy().into_owned())
@@ -71,7 +75,7 @@ impl World {
                 .with_awaited_every(Duration::from_millis(2))
                 .with_caller("app".into())
                 .with_lock_waiting(2_000, Duration::from_millis(10))
-                .with_clock(Arc::new(FixedClock::at(NOW)) as Arc<dyn Clock>)
+                .with_clock(Arc::new(FixedClock::at(now)) as Arc<dyn Clock>)
         });
         let (cores, cores_gone) = channel();
         World {
@@ -80,6 +84,7 @@ impl World {
             host,
             api,
             ctx,
+            now,
             helper: None,
             places: Vec::new(),
             search_path: None,
@@ -94,7 +99,7 @@ impl World {
 
     // As Anthropic answers the next read of `who`: no five-hour period running.
     pub(crate) fn resting(&self, who: &str) {
-        let now = NOW;
+        let now = self.now;
         self.api.using(
             &format!("access-{who}"),
             pitboard_core::usage::Snapshot {
@@ -403,7 +408,7 @@ impl World {
 
     /// The same, with its access token named `access`.
     fn claude_login_as(&self, who: &str, access: &str, percent: f64) -> String {
-        let now = NOW;
+        let now = self.now;
         let access = access.to_owned();
         self.api.owned_by(
             &access,
@@ -478,14 +483,14 @@ impl World {
     /// with OpenAI scripted to answer for it.
     fn codex_login(&self, who: &str) -> String {
         let access = unsigned_token(
-            &serde_json::json!({"exp": NOW + 10 * 86_400, "for": format!("refresh-{who}")}),
+            &serde_json::json!({"exp": self.now + 10 * 86_400, "for": format!("refresh-{who}")}),
         );
         self.api.using(
             &access,
             pitboard_core::usage::Snapshot {
                 windows: Vec::new(),
-                observed_at: Some(NOW),
-                answered_at: Some(NOW),
+                observed_at: Some(self.now),
+                answered_at: Some(self.now),
                 lists_every_limit: false,
                 source: pitboard_core::usage::Source::Live,
             },
