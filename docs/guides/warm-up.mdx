@@ -4,7 +4,7 @@ sidebarTitle: "Warm up"
 description: "Have Pitboard start the five-hour period of the accounts you choose as soon as the last one resets."
 ---
 
-Pitboard warms up Claude Code accounts only. A five-hour period starts with the account's first request after the last one reset, so one started early resets early. A warm-up has Claude Code send one short message with the account's login as soon as the last period resets. [When a period starts](/concepts/usage#when-a-period-starts) has the measurements.
+Pitboard warms up Claude Code accounts only. A five-hour period starts with the account's first request after the last one reset, so one started early resets early. A warm-up has Claude Code send one short message with the account's login as soon as the last period resets. [When a period starts](/concepts/usage#when-a-period-starts) has the measurements, and [What a warm-up sends](/security#what-a-warm-up-sends) what goes to Anthropic.
 
 Warm-up is off for every account until you turn it on for one. Pitboard warms up between hours you choose, 06:00 to 22:00 by default.
 
@@ -38,6 +38,8 @@ Pitboard warms up these accounts from 07:00 to 23:00, while the app or `pitboard
 
 The app, `pitboard watch` and `pitboard warm` share one setting. [`warm`](/reference/account-commands#warm) lists every form of the command.
 
+Anthropic's terms may cover warm-ups: see [Is this allowed](/concepts/limits#is-this-allowed).
+
 ## Warm up an account now
 
 <Tabs>
@@ -56,16 +58,6 @@ pitboard warm now work
 ```
 
 It ignores the hours. It starts nothing while the account's five-hour period is running.
-
-## What a warm-up sends
-
-`claude -p` sends Anthropic one message on Claude Code's smallest model, with no tools, and fetches what Claude Code fetches as it starts, such as the account's profile and policy limits. Measured with Claude Code 2.1.296, the request costs about 3,100 tokens of the plan.
-
-Pitboard starts it from a folder of its own in the Pitboard directory, with `PATH`, your user name and any proxy variables from its own environment and nothing else. It hands Claude Code the account's access token on a pipe, never a refresh token, so the run cannot renew or spend a login. As read in 2.1.296, Claude Code keeps that token in no store.
-
-On Windows, Pitboard also passes on `SystemRoot`, and names the Git Bash it finds in `CLAUDE_CODE_GIT_BASH_PATH`. As read in 2.1.301 on Windows, Claude Code reads no token from a pipe. As read in 2.1.303, it takes one in `CLAUDE_CODE_OAUTH_TOKEN` instead, as a login with no refresh token. Pitboard hands the access token in that variable, and `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB` keeps it from most programs Claude Code starts. Some get Claude Code's whole environment, token included: `where.exe` as it looks for Git where Pitboard found no Git Bash to name, some `git` commands, and a `proxyAuthHelper` set in managed settings. No warm-up on Windows has been measured against Anthropic, so whether Claude Code keeps the token in a store there is not known.
-
-[What leaves your machine](/security#what-leaves-your-machine) lists Pitboard's own requests.
 
 ## When it holds back
 
@@ -91,4 +83,4 @@ Pitboard warms up no account at all while one of these holds:
 | A switch was interrupted. | Your next change finishes it, or [`pitboard abandon`](/reference/recovery-commands#abandon) gives up on it. |
 | Claude Code uses [`CLAUDE_CODE_CUSTOM_OAUTH_URL`](/reference/environment-variables). | You unset it. |
 
-The app posts **Pitboard could not warm up an account** once for each account and reason a warm-up came to nothing. [`pitboard log`](/reference/maintenance-commands#log) records every warm-up as `warm-up`.
+The app posts **Pitboard could not warm up an account** once for each account and reason a warm-up came to nothing.

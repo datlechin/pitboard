@@ -53,7 +53,7 @@ The second line says where the schedule is: on Windows, the task's path, such as
 
 Each run renews whatever is due. Behind a proxy, turn it on with `pitboard schedule install` from a shell that sets the proxy, and run it again after the proxy changes. [`schedule`](/reference/maintenance-commands#schedule) lists the variables it keeps.
 
-It renews only the parked logins in Pitboard's own directory: `~/.pitboard`, or `%LOCALAPPDATA%\Pitboard` on Windows. While `PITBOARD_HOME` names another directory, turning it on fails with `schedule_not_default_home`. To renew the parked logins there, run `pitboard renew` yourself with `PITBOARD_HOME` set.
+It renews only the parked logins in Pitboard's own directory: `~/.pitboard`, or `%USERPROFILE%\AppData\Local\Pitboard` on Windows. While `PITBOARD_HOME` names another directory, turning it on fails with `schedule_not_default_home`. To renew the parked logins there, run `pitboard renew` yourself with `PITBOARD_HOME` set.
 
 ## Check or turn off daily renewal
 

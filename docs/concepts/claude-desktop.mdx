@@ -10,37 +10,32 @@ A Claude Desktop login is claude.ai's session cookie in `Cookies`, the site's st
 
 ## What Pitboard does not do for Claude Desktop
 
-Pitboard reads no usage for a Claude Desktop account and asks claude.ai nothing.
-
-- Pitboard never switches Claude Desktop by itself: it has no usage to decide from.
-- Pitboard never renews a parked Claude Desktop login. It shows when the sign-in may lapse, from the date the session cookie carries. That date is a guess: claude.ai may end the sign-in sooner or keep it longer.
+- Pitboard reads no usage for a Claude Desktop account, so it never switches Claude Desktop by itself.
+- Pitboard never renews a parked Claude Desktop login. It shows when the sign-in may lapse, from the date the session cookie carries. That date is a guess: claude.ai may end the sign-in sooner or later.
 - A parked login that no longer works opens Claude signed out. [Sign in again](/guides/claude-desktop#sign-in-again) mends it.
-- A Claude Desktop account has no [account window](/guides/account-windows). Those belong to Claude Code and Codex accounts.
 
 ## Claude Desktop logins
 
 Pitboard asks claude.ai nothing and decrypts nothing, so no service tells it whose a login is. It knows a login by an 8-byte fingerprint of its session cookie as stored. As measured in Claude 2.19675.0, that stored value stays the same across a quit and an open.
 
-Pitboard records the fingerprint when you enrol the account and when it puts the account in use. It reads the cookie only during a change, with Claude closed. A read opens only Claude's settings, `config.json` and `config.json.journal`, and says who is in use as Pitboard last read it, with when.
+Pitboard records the fingerprint when it enrols the account or puts it in use. It reads the cookie only during a change, with Claude closed. A read opens only `config.json` and `config.json.journal`, and says who was in use at Pitboard's last read of Claude.
 
-Claude can replace an account's session cookie while it stays signed in, as seen once in 2.19675.0 on 5 October 2026. So Pitboard takes a session cookie it has not seen as the account Claude names in one case: `config.json` names the account Pitboard last read in use, that account holds no parked login, and neither token cache is emptied. A switch then parks that login under that account and warns `login_taken_as_named`. Nothing is deleted on Claude's word.
+Claude can replace an account's session cookie while it stays signed in, as seen once in 2.19675.0 on 5 October 2026. So Pitboard takes a session cookie it has not seen as the account Claude names in one case: `config.json` names the account Pitboard last read in use, that account holds no parked login, and neither token cache is emptied. A switch then parks it under that account and warns [`login_taken_as_named`](/reference/errors#warning-codes). Nothing is deleted on Claude's word.
 
-A session cookie Pitboard has not seen beside an emptied token cache is a sign-in Claude has not finished. Any other login Pitboard cannot tie to its own record stops each change, with nothing changed. [`login_in_doubt`](/reference/errors#claude-desktop) says what to do.
+A session cookie Pitboard has not seen beside an emptied token cache is a sign-in Claude has not finished. Any other login Pitboard cannot tie to its own record stops each change. [`login_in_doubt`](/reference/errors#claude-desktop) says what to do.
 
-Not known: how often Claude replaces its own login. Not known either: whether quitting Claude within seconds of a sign-in leaves the new login under the previous account's name.
+Not known: how often Claude replaces its own login, or whether quitting Claude within seconds of a sign-in leaves the new login under the previous account's name.
 
 ## What a Claude Desktop switch does
 
-Pitboard renames these files into a folder of its own and back, and never copies a file. A rename cannot leave a file half written, so each is whole in one of two places: Claude's data folder, or one folder under `~/.pitboard/parks`. `state.json` names both places before the first rename. Pitboard moves the keys by rewriting `config.json`, and keeps them in that folder while the account is parked.
+Pitboard renames these files into a folder of its own and back, and never copies a file. A rename cannot leave a file half written, so each is whole in one of two places: Claude's data folder, or one folder under `~/.pitboard/parks`. `state.json` names both places before the first rename.
 
-As measured in Claude 2.19675.0, Claude writes its cookie store, its settings and the site's storage as it quits. Pitboard moves them only while Claude is closed. It reads the list of processes before it starts, again before it records the move, and after its last write. Any program inside Claude, or inside the data folder, counts as Claude open. [Claude Desktop files](/reference/files#claude-desktop-files) says how Pitboard tells Claude, and gives the exceptions.
+As measured in Claude 2.19675.0, Claude writes its cookie store, settings and site storage as it quits, so Pitboard moves them only while Claude is closed. It reads the list of processes before it starts, again before it records the move, and after its last write. Its lock on the data folder keeps another Pitboard directory from changing anything there. [Claude Desktop files](/reference/files#claude-desktop-files) says how Pitboard tells Claude is open.
 
-While it moves them, Pitboard holds a lock on the data folder, so another Pitboard directory changes nothing there.
-
-A switch parks one account, which leaves Claude signed out, then puts the other in. Pitboard records each half as done before the next begins. Adding an account parks the account in use and stops there: you sign in inside Claude, and Pitboard enrols that account once Claude quits. Neither signs anything out at claude.ai.
+A switch parks one account, which leaves Claude signed out, then puts the other in, and signs nothing out at claude.ai. Pitboard records each half as done before the next begins.
 
 ## Interrupted moves
 
-A Claude Desktop move that stops partway stays recorded in `state.json`, and reads say `move_waiting`. The next change to a Claude Desktop account settles it first, with Claude closed. It never carries on with the second half of a switch: it takes items out of the data folder and never puts one in. Claude Code and Codex changes do not wait for it.
+A Claude Desktop move that stops partway stays recorded in `state.json`. The next change to a Claude Desktop account settles it first, with Claude closed. It never carries on with the second half of a switch: it takes items out of the data folder and never puts one in. Claude Code and Codex changes do not wait for it.
 
-[Claude Desktop](/reference/errors#claude-desktop) lists what Pitboard says meanwhile, and [A Claude Desktop move was interrupted](/troubleshooting/recovery#a-claude-desktop-move-was-interrupted) how to give up on one.
+[A Claude Desktop move was interrupted](/troubleshooting/recovery#a-claude-desktop-move-was-interrupted) says what to do.

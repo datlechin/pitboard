@@ -14,6 +14,7 @@ import {
   appZip,
   fileRows,
   formatSize,
+  windowsAhead,
   windowsMsi,
   windowsZip,
   type Asset,
@@ -67,6 +68,7 @@ const windowsStatus = !windows.prerelease
   : windowsSigned
     ? " Pitboard for Windows is in beta."
     : " Pitboard for Windows is in beta, and its files are not signed.";
+const ahead = windowsAhead(windows, downloads.macos.release);
 // Cells written as one string: on a phone their text follows a label drawn by CSS, so a space
 // from the template's line breaks would show.
 const none = '<span class="text-muted" data-none>None</span>';
@@ -173,7 +175,9 @@ const jsonLd = [application(Astro.site!, downloads)];
       >
         <h2 class={panelHead}>{platformNames.windows}</h2>
         <div class={versionLine}>
-          <p class="max-w-[40em] text-pretty">{released("windows")}{windowsStatus}</p>
+          <p class="max-w-[40em] text-pretty">
+            {released("windows")}{windowsStatus}{ahead && ` ${ahead}`}
+          </p>
           <p><a href={`/changelog#v${windows.version}`}>Release notes</a></p>
         </div>
         <div class={columns}>

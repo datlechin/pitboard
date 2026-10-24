@@ -71,7 +71,7 @@ Usage: pitboard schedule [OPTIONS] <COMMAND>
 
 The job runs `pitboard renew` once a day, from the `pitboard` that installed it, by full path. If that file is gone, `pitboard doctor` fails its `schedule` check: see [Daily renewal stopped working](/troubleshooting/renewal#daily-renewal-stopped-working). [Renewal schedule](/reference/files#renewal-schedule) lists its files.
 
-The job renews the parked logins in Pitboard's own directory, `~/.pitboard` or, on Windows, `%LOCALAPPDATA%\Pitboard`, whatever `PITBOARD_HOME` it is given. While `PITBOARD_HOME` names another directory, `install` refuses with `schedule_not_default_home`, and `status` says which directory the schedule renews. A link to the default directory counts as another directory. `uninstall` works whatever `PITBOARD_HOME` says.
+The job renews the parked logins in Pitboard's own directory, `~/.pitboard` or, on Windows, `%USERPROFILE%\AppData\Local\Pitboard`, whatever `PITBOARD_HOME` it is given. While `PITBOARD_HOME` names another directory, `install` refuses with `schedule_not_default_home`, and `status` says which directory the schedule renews. A link to the default directory counts as another directory. `uninstall` works whatever `PITBOARD_HOME` says.
 
 The system starts the job without your shell's environment. `install` gives it each proxy variable it was started with: `ALL_PROXY`, `HTTPS_PROXY`, `HTTP_PROXY` and `NO_PROXY`, in either case. Run `install` again after your proxy changes. Until then, `pitboard doctor` warns with `schedule_proxy`. The app's **Renew parked logins daily** setting gives the job the app's variables, not your shell's: see [The schedule uses another proxy](/troubleshooting/renewal#the-schedule-uses-another-proxy).
 
@@ -183,13 +183,7 @@ While the Pitboard app is open, `pitboard uninstall` refuses with `pitboard_open
 3. Deletes every parked login this Pitboard wrote, and every folder set aside in `~/.pitboard/parks`.
 4. Deletes Pitboard's directory, once every parked login and folder set aside is gone.
 
-Step 1 refuses with:
-
-| Code | When |
-| --- | --- |
-| `app_open` | Claude is open. |
-| `uninstall_would_strand` | Claude is signed out, so deleting the parked and set-aside logins would leave no Claude Desktop login. |
-| Another code in [Claude Desktop](/reference/errors#claude-desktop) | Pitboard cannot settle the move, or cannot identify the login Claude holds. |
+Step 1 stops with a code from [Claude Desktop](/reference/errors#claude-desktop), such as `app_open` or `uninstall_would_strand`.
 
 The login each tool is using stays. On macOS, so do parked logins that `pitboard repair` gave back and this Pitboard did not write. The keychain is shared, so another Pitboard may own them.
 

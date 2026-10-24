@@ -11,7 +11,7 @@ pitboard doctor
 
 Do not switch accounts while any check shows `✗`, broken. [`doctor`](/reference/maintenance-commands#doctor) lists every check and mark.
 
-`pitboard log` lists the last 20 changes and how each ended; `-n 50` lists 50. In the app, the Pitboard window's **This Mac** pane makes the same checks, and **Activity** shows the log. On Windows, the pane is **This PC**.
+`pitboard log` lists the last changes and how each ended. In the app, the Pitboard window's **This Mac** pane, or **This PC** on Windows, makes the same checks, and **Activity** shows the log.
 
 [Error and warning codes](/reference/errors) gives the cause and fix of each code a message names. These pages cover the rest:
 
@@ -20,7 +20,7 @@ Do not switch accounts while any check shows `✗`, broken. [`doctor`](/referenc
 - [Fix Codex accounts](/troubleshooting/codex)
 - [Fix Claude Desktop accounts](/troubleshooting/claude-desktop)
 - [Recover after a crash, a restore or a change of computer](/troubleshooting/recovery)
-- [Fix problems in account windows](/troubleshooting/account-windows)
+- [Use each account's site](/guides/account-windows), for account windows
 - [Fix Pitboard refusing every change](/troubleshooting/refused-changes)
 
 ## Claude Code over SSH uses another account
@@ -42,38 +42,32 @@ A Claude Code session started over SSH can stay on another account than Pitboard
   </Tab>
 </Tabs>
 
-When `stow` deletes nothing, its message says why, and [`stow`](/reference/recovery-commands#stow) lists every outcome. If it cannot read the file, make the file readable to you, or delete `.credentials.json`, login and all.
+If [`stow`](/reference/recovery-commands#stow) cannot read the file, make it readable to you, or delete `.credentials.json`, login and all.
 
 ## An account reads `login replaced outside Pitboard`
 
-The only login of the account in use ended outside Pitboard. Pitboard held no copy, so that login is gone, and every read warns with `login_replaced`.
+The only login of the account in use ended outside Pitboard. A sign-in such as `/login` or `codex login` wrote over it, or the account was signed out in Claude. Pitboard held no copy, so that login is gone, and every read warns with `login_replaced`.
 
-| Tool | What ended it |
-| --- | --- |
-| Claude Code | A sign-in outside Pitboard, such as `/login`, wrote over it. |
-| Codex | A sign-in outside Pitboard, such as `codex login`, wrote over it. |
-| Claude Desktop | A sign-in outside Pitboard replaced it, or the account was signed out in Claude, which ends its login at claude.ai. |
-
-[Sign in to the account again](/guides/sign-in-again), or [forget it](/guides/accounts#forget-an-account). Either stops the warning. To add another account without ending the login in use, follow [Add another account](/guides/accounts#add-another-account).
+[Sign in to the account again](/guides/sign-in-again), or [forget it](/guides/accounts#forget-an-account). To add another account without ending the login in use, follow [Add another account](/guides/accounts#add-another-account).
 
 ## Smart App Control blocks Pitboard
 
-On Windows, Smart App Control blocks unsigned apps that Microsoft's cloud service cannot vouch for. It cannot allow a single app, as Microsoft's [What is Smart App Control](https://support.microsoft.com/en-us/topic/what-is-smart-app-control-285ea03d-fa88-4d56-882e-6698afdb7003) says.
+On Windows, Smart App Control blocks unsigned apps that Microsoft's cloud service cannot vouch for, and cannot allow a single app, as Microsoft's [What is Smart App Control](https://support.microsoft.com/en-us/topic/what-is-smart-app-control-285ea03d-fa88-4d56-882e-6698afdb7003) says.
 
-With Smart App Control on, Windows opened Pitboard's unsigned installer and command line with no prompt, measured on 18 October 2026 on Windows 11 build 26300. Whether Smart App Control lets the app start has not been measured. The app loads `WinSparkle.dll`, which stays unsigned in signed releases too, as the [code signing policy](/install/code-signing-policy) says.
+With Smart App Control on, Windows opened Pitboard's unsigned installer and command line with no prompt, measured on 18 October 2026 on Windows 11 build 26300. Whether Smart App Control lets the app start has not been measured. The app loads `WinSparkle.dll`, which no release signs: see the [code signing policy](/install/code-signing-policy).
 
 <Warning>
   Microsoft's page says recent Windows updates let you turn Smart App Control on again, and names none of them. On a Windows without them, it turns on again only after a clean installation of Windows.
 </Warning>
 
-To run a Pitboard file it blocks, open **Windows Security**, select **App & browser control** > **Smart App Control settings**, then **Off**. Windows asks for an administrator's consent.
+To run a Pitboard file it blocks, open **Windows Security**, select **App & browser control** > **Smart App Control settings**, then **Off**.
 
 ## Report a problem
 
 Open a [GitHub issue](https://github.com/datlechin/pitboard/issues/new/choose) with:
 
 - What you ran, what it printed and what you expected.
-- The output of `pitboard doctor --json`, not plain `pitboard doctor`: it replaces email addresses and account identifiers with digests, and your home with `~`.
+- The output of `pitboard doctor --json`, not plain `pitboard doctor`: it hides email addresses, account identifiers and your home.
 - `pitboard --version`, and `claude --version` or `codex --version`.
 - How you installed Pitboard, and your macOS or Linux version. On Windows, give the build and the system type, x64 or ARM64, which **Settings** > **System** > **About** shows.
 - The last lines of `pitboard log`, if they help. A `reclaim` line can name an account identifier.

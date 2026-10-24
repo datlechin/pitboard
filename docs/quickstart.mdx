@@ -1,9 +1,54 @@
 ---
 title: "Quickstart"
-description: "Install Pitboard, enrol two Claude Code accounts, switch between them and read what each has left."
+description: "Install Pitboard, add two Claude Code accounts, switch between them and see what each has left."
 ---
 
-You need Claude Code signed in to one of your accounts. If it is not, run `claude` and sign in. In Windows PowerShell, run a Claude Code installed with npm as `claude.cmd`: its default execution policy, `Restricted`, refuses npm's `claude.ps1`.
+You need Claude Code signed in to one of your accounts. If it is not, run `claude` and sign in.
+
+<Warning>
+  Add accounts only through Pitboard, never with Claude Code's `/login`. It replaces the login in use without Pitboard parking it, so that account needs a browser sign-in again.
+</Warning>
+
+## In the app
+
+The app runs on macOS and Windows. On Linux, follow [On the command line](#on-the-command-line).
+
+<Tabs>
+  <Tab title="macOS">
+    <Steps>
+      <Step title="Install">
+        Download the app from [Download Pitboard](https://usepitboard.com/download), move `Pitboard.app` to your Applications folder, then open it. The first time, it opens the Pitboard window.
+      </Step>
+      <Step title="Name the account you are signed in to">
+        In the **Accounts** pane, click **Name** in the tip **Give this account a name**. Keep the name the dialog suggests, or enter another such as `personal`, then click **Save**.
+      </Step>
+      <Step title="Add a second account">
+        Click **Add Account** in the tip **Add a second account**. Enter a name such as `work`, then click **Sign In**. Sign in as your second account in the browser that opens. If a **Code** field appears, paste the code the page gives you, then click **Submit Code**.
+      </Step>
+      <Step title="Switch">
+        Click Pitboard's item in the menu bar, then choose `work`. Under each account, the menu shows how much of each limit it has used, such as **5-hour 12%, weekly 40%**.
+      </Step>
+    </Steps>
+  </Tab>
+  <Tab title="Windows">
+    <Steps>
+      <Step title="Install">
+        Download the installer from [Download Pitboard](https://usepitboard.com/download#windows) and open it, as [Install the app](/install#install-the-app) shows. Open **Pitboard** from Start: it opens the Pitboard window. Its icon starts among the hidden icons of the notification area.
+      </Step>
+      <Step title="Name the account you are signed in to">
+        In the **Accounts** pane, select **Name** in the tip **Give this account a name**. Keep the name the dialog suggests, or enter another such as `personal`, then select **Save**.
+      </Step>
+      <Step title="Add a second account">
+        Select **Add account** in the tip **Add a second account**. Enter a name such as `work`, then select **Sign in**. Sign in as your second account in the browser that opens. If a **Code** field appears, paste the code the page gives you, then select **Submit code**.
+      </Step>
+      <Step title="Switch">
+        Right-click Pitboard's icon in the notification area, then select `work`. Point to an account to see how much of each limit it has used, such as **5-hour 12%, weekly 40%**.
+      </Step>
+    </Steps>
+  </Tab>
+</Tabs>
+
+## On the command line
 
 <Steps>
   <Step title="Install">
@@ -15,17 +60,9 @@ You need Claude Code signed in to one of your accounts. If it is not, run `claud
 
     If it says `~/.local/bin` is not on your `PATH`, do as it says.
 
-    On Windows, install the app as [Install the app](/install#install-the-app) shows. It puts the command line on your `PATH`, so open a terminal after it finishes. For the command line alone, follow [Install the command line on Windows](/install#install-the-command-line-on-windows).
+    If you installed the app on macOS, put its command line on your `PATH` as [Install the app](/install#install-the-app) shows, in place of the script.
 
-    Then check that it runs:
-
-    ```sh
-    pitboard --version
-    ```
-
-    It prints `pitboard` and its version.
-
-    For the app on macOS, or to install with Homebrew, see [Install Pitboard](/install).
+    On Windows, the app puts the command line on your `PATH`, where a terminal opened after the install finds it. For the command line alone, follow [Install the command line on Windows](/install#install-the-command-line-on-windows).
   </Step>
   <Step title="Enrol the account you are signed in to">
     Pitboard knows each account by a [label](/reference/commands#labels), a short name you choose. Enrol the account in use as `personal`:
@@ -53,10 +90,6 @@ You need Claude Code signed in to one of your accounts. If it is not, run `claud
     ```text
     Enrolled work (me@company.com). Switch to it with: pitboard use work
     ```
-
-    <Warning>
-      Add accounts only as [Add another account](/guides/accounts#add-another-account) shows, never with Claude Code's `/login`. It replaces the login in use without Pitboard parking it. The account that was in use then needs a browser sign-in again.
-    </Warning>
   </Step>
   <Step title="Switch">
     ```sh
@@ -69,8 +102,6 @@ You need Claude Code signed in to one of your accounts. If it is not, run `claud
     ```
 
     `personal`'s login stays [parked](/concepts/switching#parked-logins) until you switch back with `pitboard use personal`.
-
-    If the second line names `.credentials.json` instead, a login file sits behind the keychain. On Windows, it sits behind Credential Manager. To put it away with `pitboard stow`, follow [Claude Code over SSH uses another account](/troubleshooting#claude-code-over-ssh-uses-another-account).
   </Step>
   <Step title="See what each account has left">
     ```sh

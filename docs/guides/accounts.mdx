@@ -9,8 +9,6 @@ Claude Desktop accounts are added inside Claude, on macOS, as [Use Pitboard with
 
 ## Add the account you are signed in to
 
-For OpenAI's Codex CLI, check [Before you enrol a Codex account](/guides/codex#before-you-enrol-a-codex-account) first.
-
 <Tabs>
   <Tab title="macOS">
     In the **Accounts** pane of the Pitboard window, click **Name** in the tip **Give this account a name**. Keep the name the dialog suggests, or enter another such as `personal`, then click **Save**.
@@ -20,7 +18,7 @@ For OpenAI's Codex CLI, check [Before you enrol a Codex account](/guides/codex#b
   </Tab>
 </Tabs>
 
-The tip shows a Codex login only once a Codex account is enrolled. Until then the tip **Use Pitboard with Codex** adds it: see [Add Codex accounts](/guides/codex#add-codex-accounts). On the command line:
+Until a Codex account is enrolled, the tip **Use Pitboard with Codex** adds Codex's login instead: see [Add Codex accounts](/guides/codex#add-codex-accounts). On the command line:
 
 ```sh
 pitboard enroll personal          # Claude Code
@@ -65,7 +63,7 @@ Pitboard runs the tool's own sign-in in a private directory, so the account in u
   </Tab>
 </Tabs>
 
-If the dialog says Pitboard cannot find the tool, see [Pitboard cannot find a tool](/troubleshooting/accounts#pitboard-cannot-find-a-tool). On the command line, sign in as the account you are adding when your browser opens. If Claude Code asks for a code, paste in the one the browser shows.
+If the dialog says Pitboard cannot find the tool, see [Pitboard cannot find a tool](/troubleshooting/accounts#pitboard-cannot-find-a-tool). On the command line, sign in when your browser opens, and paste the code the browser shows if Claude Code asks for one.
 
 ```sh
 pitboard enroll work --sign-in          # Claude Code
@@ -86,15 +84,7 @@ Each organisation your Anthropic account belongs to is a separate account, as ar
 
 ## Choose a label
 
-When you enrol an account, write its label for its tool:
-
-| Tool | Label |
-| --- | --- |
-| Claude Code | `work` |
-| Codex | `codex/work` |
-| Claude Desktop, on macOS | `desktop/work` |
-
-In the app, choose the tool and enter the name alone. [Labels](/reference/commands#labels) gives the rules for a label.
+On the command line, a label names its tool: `work` for Claude Code, `codex/work` for Codex and, on macOS, `desktop/work` for Claude Desktop. In the app, choose the tool and enter the name alone. [Labels](/reference/commands#labels) gives the rules.
 
 ## Rename an account
 
@@ -119,14 +109,7 @@ pitboard rename wrong right
 
 To forget the account in use, switch to another account first.
 
-Forgetting an account deletes its parked login and what Pitboard keeps beside it on this computer:
-
-| Tool | Deleted with the parked login |
-| --- | --- |
-| Claude Code, Codex | Everything the account's [window](/guides/account-windows) keeps, its sign-in included |
-| Claude Desktop | The folders Pitboard set aside for the account |
-
-On Windows, a window's data goes once every account window has closed.
+Forgetting an account deletes its parked login on this computer, with everything its [account window](/guides/account-windows) keeps, or a Claude Desktop account's folders set aside.
 
 <Tabs>
   <Tab title="macOS">
@@ -137,15 +120,6 @@ On Windows, a window's data goes once every account window has closed.
   </Tab>
 </Tabs>
 
-On the command line, add `--yes` to skip the question:
-
-```sh
-pitboard forget old
-```
-
-```text
-Forget old and delete its parked login? Adding it again needs a browser sign-in. [y/N] y
-Forgot old (old@example.com).
-```
+On the command line, `pitboard forget old` asks first, and `--yes` skips the question.
 
 Pitboard does not revoke the login it deletes. That login stays valid until it expires: see [SECURITY.md](https://github.com/datlechin/pitboard/blob/main/SECURITY.md#out-of-scope).

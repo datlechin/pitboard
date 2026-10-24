@@ -5,13 +5,11 @@ description: "Check that a release file came from Pitboard's release workflow, u
 
 ## What each release attests
 
-An attestation is a signed record, kept by GitHub, of the workflow and commit that built a file. Every release attests these files:
+An attestation is a signed record, kept by GitHub, of the workflow and commit that built a file. Every release attests:
 
-- each command line archive: a tarball for macOS or Linux, a zip for Windows
-- the macOS app's zip file and the Windows app's installers
-- a CycloneDX bill of materials (`.cdx.json`) beside each archive, the macOS app and each installer
+- each command line archive, the macOS app's zip and the Windows app's installers, each with a CycloneDX bill of materials (`.cdx.json`)
 - `install.sh`, the [install script](/install#install-with-the-script)
-- `SHA256SUMS`, the checksums of the archives, the macOS app, the installers and `install.sh`
+- `SHA256SUMS`, the checksums of the archives, the app's zip, the installers and `install.sh`
 - `appcast.xml` and `appcast-windows.xml`, the feeds the apps update from
 
 Only a full release published as the latest carries the feeds. A release candidate, tagged like `v1.2.0-rc1`, or a beta, tagged like `v1.3.0-beta.1`, has neither.
@@ -26,7 +24,7 @@ In the download's folder, run this with the file's name:
 gh attestation verify Pitboard-v<version>-macos.zip --repo datlechin/pitboard
 ```
 
-When a workflow in `datlechin/pitboard` attested that exact file, `gh` prints `Verification succeeded!` and exits with status 0. A changed file has no attestation, and the command fails.
+When a workflow in `datlechin/pitboard` attested that exact file, `gh` prints `Verification succeeded!`. A changed file has no attestation, and the command fails.
 
 With `--repo` alone, `gh` accepts an attestation from any workflow in the repository. Add `--signer-workflow` to accept only the release workflow:
 
@@ -42,7 +40,7 @@ Download `SHA256SUMS` from the same release and check its attestation first:
 gh attestation verify SHA256SUMS --repo datlechin/pitboard
 ```
 
-On its own, `SHA256SUMS` shows only that a download arrived whole. Anyone able to change the release could change a file and its checksum together.
+On its own, `SHA256SUMS` shows only that a download arrived whole: anyone able to change the release could change a file and its checksum together.
 
 Then, in the folder that holds both files, on macOS:
 
@@ -70,11 +68,9 @@ On Windows, in PowerShell:
 Select-String -Path SHA256SUMS -Pattern (Get-ChildItem Pitboard-*.msi, pitboard-*.zip | Get-FileHash).Hash
 ```
 
-It prints the line of `SHA256SUMS` that holds the checksum of each installer and zip in the folder. A file of that release whose line it does not print differs from the one the release published.
+It prints the line of `SHA256SUMS` for each installer and zip in the folder that matches. A file whose line it does not print differs from the one the release published.
 
-Homebrew and the install script check what they install against the checksums the release workflow took. Each refuses a download changed on the release page later.
-
-On Windows, nothing checks an installer or a zip you download against them, so check it as this section shows.
+Homebrew and the install script check what they install against these checksums, and refuse a download changed on the release page later. On Windows, nothing checks an installer or a zip for you.
 
 ## Check the install script
 

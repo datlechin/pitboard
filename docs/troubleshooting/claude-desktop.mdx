@@ -40,15 +40,7 @@ To undo it, click **Put work Back** on the notice, or run `pitboard use desktop/
 
 Give up only when an error about an interrupted move says to. [A Claude Desktop move was interrupted](/troubleshooting/recovery#a-claude-desktop-move-was-interrupted) says what comes first.
 
-In the app, click **Give Up** on the notice **An interrupted move is waiting**, then **Give Up** again to confirm. On the command line:
-
-```sh
-pitboard abandon
-```
-
-```text
-Pitboard gave up the move of `desktop/work`'s login and kept every folder: 1 parked, 1 set aside. Run `pitboard enroll desktop/<label>` for the account Claude shows, or `pitboard use desktop/<label>` where Claude is signed out.
-```
+In the app, click **Give Up** on the notice **An interrupted move is waiting**, then **Give Up** again to confirm. On the command line, run `pitboard abandon`, then do what its output says. [`abandon`](/reference/recovery-commands#abandon) lists what it prints.
 
 ## A parked Claude Desktop account opens signed out
 
@@ -64,4 +56,4 @@ Quit Claude, then [sign in to the account again](/guides/claude-desktop#sign-in-
 error: Claude's data folder holds `Cookies-wal`, a part of the account's data this Pitboard has not read, so Pitboard moves no Claude Desktop login. Update Pitboard, or report it at https://github.com/datlechin/pitboard/issues if no release reads it yet. Nothing has changed.
 ```
 
-A build of Claude keeps part of a store Pitboard moves where Pitboard has no record of it, so a move would split the store. [Update Pitboard](/install#update-pitboard). If no release reads it yet, [report a problem](/troubleshooting#report-a-problem) with the name. Claude Code and Codex switches go ahead.
+This build of Claude keeps part of a store Pitboard moves where Pitboard has no record of it, so a move would split the store. [Update Pitboard](/install#update-pitboard), or [report a problem](/troubleshooting#report-a-problem) with the name if no release reads it yet. Claude Code and Codex switches go ahead.

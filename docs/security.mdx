@@ -3,7 +3,7 @@ title: "Security and privacy"
 description: "Pitboard keeps parked logins on your machine, sends them only to the service that issued them, and has no telemetry."
 ---
 
-Pitboard moves and stores the OAuth refresh tokens of Claude Code and OpenAI's Codex CLI, and on macOS the files that hold a Claude Desktop login. Each grants full access to a paid account. [SECURITY.md](https://github.com/datlechin/pitboard/blob/main/SECURITY.md) lists what Pitboard protects against and how to report a vulnerability. [How account windows keep their data](/concepts/account-windows) covers each window's sign-in.
+Pitboard moves and stores the OAuth refresh tokens of Claude Code and OpenAI's Codex CLI, and on macOS the files that hold a Claude Desktop login. Each grants full access to a paid account. [SECURITY.md](https://github.com/datlechin/pitboard/blob/main/SECURITY.md) lists what Pitboard protects against and how to report a vulnerability. [Website data](/reference/account-windows#website-data) covers each account window's sign-in.
 
 ## Where parked logins are kept
 
@@ -14,7 +14,7 @@ Pitboard moves and stores the OAuth refresh tokens of Claude Code and OpenAI's C
     Codex keeps its own login in a plaintext `auth.json`. `pitboard doctor` fails if anyone else has access to a login file Claude Code left behind the keychain, and warns for Codex's `auth.json`.
   </Tab>
   <Tab title="Windows">
-    Parked logins are files in `vault` in Pitboard's directory, `%LOCALAPPDATA%\Pitboard`. Pitboard seals each with Windows' data protection under your own Windows account, never the machine's, so no other account can open one. Pitboard makes its folders and files reachable only by you, SYSTEM and Administrators.
+    Parked logins are files in `vault` in Pitboard's directory, `%USERPROFILE%\AppData\Local\Pitboard`. Pitboard seals each with Windows' data protection under your own Windows account, never the machine's, so no other account can open one. Pitboard makes its folders and files reachable only by you, SYSTEM and Administrators.
 
     Claude Code keeps its own login in a plaintext `.credentials.json`, which takes the access list of its folder, or in Credential Manager, which every sign-in of yours on that PC reads. Codex keeps its login in a plaintext `auth.json`. `pitboard doctor` fails if anyone else can reach a parked login or Claude Code's file, and warns for Codex's `auth.json`, each time with the `icacls` commands that fix it.
   </Tab>
@@ -45,9 +45,15 @@ Pitboard has no server of its own and sends no request for a Claude Desktop acco
 
 GitHub redirects each release download to `release-assets.githubusercontent.com`, as measured on 12 October 2026. The command line never checks for updates.
 
-A [warm-up](/guides/warm-up#what-a-warm-up-sends) is Claude Code's own request, made with the account's access token and never a refresh token. On Windows, the token goes in the run's environment, and some programs Claude Code starts get it too. Another process running as you can read it there while the run lasts, at most 2 minutes.
-
 Pitboard's own requests verify TLS against your system's trust store and time out after 5 seconds. Each names Pitboard in its `User-Agent`, `pitboard/<version>`. A [proxy](/reference/environment-variables#proxies) sees each request's host, not what it carries. A company proxy whose root certificate your system trusts can decrypt each request, tokens included.
+
+## What a warm-up sends
+
+A [warm-up](/guides/warm-up) is Claude Code's own request: `claude -p` sends Anthropic one message on Claude Code's smallest model, with no tools, and fetches what Claude Code fetches as it starts, such as the account's profile and policy limits. Measured with Claude Code 2.1.296, the request costs about 3,100 tokens of the plan.
+
+Pitboard starts it from a folder of its own in the Pitboard directory, with `PATH`, your user name and any proxy variables from its own environment and nothing else. It hands Claude Code the account's access token on a pipe, never a refresh token, so the run cannot renew or spend a login. As read in 2.1.296, Claude Code keeps that token in no store.
+
+On Windows, Pitboard also passes on `SystemRoot`, and names the Git Bash it finds in `CLAUDE_CODE_GIT_BASH_PATH`. As read in 2.1.301 on Windows, Claude Code reads no token from a pipe. As read in 2.1.303, it takes one in `CLAUDE_CODE_OAUTH_TOKEN` instead, as a login with no refresh token. Pitboard hands the access token in that variable, and `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB` keeps it from most programs Claude Code starts. Some get Claude Code's whole environment, token included: `where.exe` as it looks for Git where Pitboard found no Git Bash to name, some `git` commands, and a `proxyAuthHelper` set in managed settings. Another process running as you can read the token there while the run lasts, at most 2 minutes. No warm-up on Windows has been measured against Anthropic, so whether Claude Code keeps the token in a store there is not known.
 
 ## Large logins on macOS
 

@@ -7,7 +7,7 @@ Removing the program alone leaves every parked login on the machine.
 
 ## Delete parked logins first
 
-`pitboard uninstall` turns off daily renewal, deletes every parked login this Pitboard wrote, then deletes the Pitboard directory, `~/.pitboard`. On Windows, the directory is `%LOCALAPPDATA%\Pitboard`.
+`pitboard uninstall` turns off daily renewal, deletes every parked login this Pitboard wrote, then deletes the Pitboard directory, `~/.pitboard`. On Windows, the directory is `%USERPROFILE%\AppData\Local\Pitboard`.
 
 <Warning>
   `pitboard uninstall` cannot be undone. Each tool stays signed in to the account in use. Every other account needs a sign-in again before you can use it.
@@ -54,13 +54,7 @@ Turned off the daily renewal schedule.
 ~/.pitboard is gone. Remove Pitboard itself the way you installed it.
 ```
 
-On Windows, the last line names the directory in full:
-
-```text
-Removed 2 parked login(s). The login each tool is signed in with is untouched.
-Turned off the daily renewal schedule.
-C:\Users\me\AppData\Local\Pitboard is gone. Remove Pitboard itself the way you installed it.
-```
+On Windows, the last line names the directory in full, such as `C:\Users\me\AppData\Local\Pitboard`.
 
 Deleting the directory by hand leaves daily renewal on, which `pitboard schedule uninstall` turns off. On Linux and Windows, the parked logins are files in the directory and go with it.
 

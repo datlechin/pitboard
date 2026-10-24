@@ -8,6 +8,7 @@ import {
   readPublished,
   readRelease,
   readStars,
+  windowsAhead,
   windowsMsi,
   windowsRelease,
   windowsSigned,
@@ -395,6 +396,16 @@ test("takes Windows files from the latest release once it has both installers, a
   const full = installers("1.0.0");
   assert.equal(windowsRelease(full, [installers("1.1.0-beta.1")]), full);
   assert.throws(() => windowsRelease(r, []), /no published release has the Windows installers/);
+});
+
+test("says macOS and Linux stay behind only while Windows takes a beta", async () => {
+  const r = await latest();
+  assert.equal(
+    windowsAhead(windowsRelease(r, [await beta()]), r),
+    "Until 1.0.0, Windows gets betas, and macOS and Linux get 0.15.0.",
+  );
+  const full = installers("1.0.0");
+  assert.equal(windowsAhead(windowsRelease(full, [installers("1.1.0-beta.1")]), full), null);
 });
 
 test("finds the Windows installer and zip of each architecture", async () => {

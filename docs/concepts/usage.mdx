@@ -9,11 +9,11 @@ Pitboard asks Anthropic about Claude Code accounts and OpenAI about OpenAI's Cod
 
 Pitboard asks nothing with a login it cannot read or [identify](/concepts/identity), since the numbers could land on the wrong account. It takes no numbers from an OpenAI answer that names another account than the login asked about.
 
-As read in Codex 0.164.0, OpenAI's answer also gives a model's own limits. Pitboard shows each under the model's name, as it shows a Claude Code model's weekly limit.
+As read in Codex 0.164.0, OpenAI's answer also gives a model's own limits, which Pitboard shows under the model's name.
 
 ## How often Pitboard asks
 
-Pitboard asks about an account again only after 1% of its shortest limit's period: 3 minutes for a five-hour limit, about 1 hour 41 minutes for a weekly one and 1 minute with no reading yet. After a rate limit or an error, it waits longer, as [`asking.json`](/reference/files#the-pitboard-directory) records.
+Pitboard asks about an account again only after 1% of its shortest limit's period: 3 minutes for a five-hour limit, and 1 minute with no reading yet. After a rate limit or an error, it waits longer, as [`asking.json`](/reference/files#the-pitboard-directory) records.
 
 The app and [`pitboard watch`](/reference/account-commands#watch) read when they start and every 5 minutes, and look every 2 seconds for switches and numbers other runs recorded. The app also reads when the computer wakes, and when you open its menu or its **Accounts** pane once its numbers are a minute old.
 
@@ -26,13 +26,13 @@ The command line, the app and the [status line](/reference/integration-commands#
 Where an answer may leave a limit out, Pitboard keeps that limit until it resets:
 
 - An Anthropic answer without its list of limits, or with a row Pitboard cannot read.
-- Every OpenAI answer. Either of its two periods can be empty. A Pro plan's answer gives no five-hour period: OpenAI's [Codex pricing](https://developers.openai.com/codex/pricing) said on 23 October 2026 that Pro plans have no five-hour limit. For other plans the reason is not known.
+- Every OpenAI answer. Either of its two periods can be empty. A Pro plan has no five-hour limit, as OpenAI's [Codex pricing](https://developers.openai.com/codex/pricing) said on 23 October 2026. For other plans the reason is not known.
 
 ## When a period starts
 
 A Claude Code account's five-hour period starts with its first request after the last one reset, one on the smallest model included. It starts at the start of the ten minutes that request fell in: a request at 17:52 starts a period that resets at 22:50. Until then, Anthropic gives the limit no reset.
 
-The weekly limit runs on a fixed cycle. At its reset, the next week starts at once, at 0%, whether or not anything is sent.
+The weekly limit runs on a fixed cycle: the next week starts at its reset, at 0%, whether or not anything is sent.
 
 While one of the account's own limits is used up, Anthropic refuses every request, and a refused request starts no five-hour period. A model's limit used up alone was not measured.
 
@@ -42,10 +42,8 @@ All three were measured on 12 October 2026 with Claude Code 2.1.296 on a Team an
 
 An even pace uses a limit at one rate from the start of its period to its reset: 50% by halfway through a week. Pitboard gives the difference in percentage points.
 
-Over pace is more than 5 points over: at its rate so far, the limit runs out before it resets. Under pace is more than 5 points under. Anything closer is on pace. A weekly limit 40% used is `11% over pace` 2 days into the week, and `31% under pace` with 2 days left.
+Over pace is more than 5 points over: at its rate so far, the limit runs out before it resets. Under pace is more than 5 points under. Anything closer is on pace.
 
 There is no pace in a period's first 3%, for a limit used up, or where its reset or length is unknown.
-
-For the account in use, a line names the limit that runs out first: `weekly limit runs out in 11h 05m at this pace`.
 
 Pace is as of the reading, so old numbers do not drift towards under pace and hide a warning. Between readings, only a run-out time counts down.

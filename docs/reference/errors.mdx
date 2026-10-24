@@ -205,7 +205,7 @@ An interrupted Claude Desktop move shows `move_waiting` on each read, as [Warnin
 | Code | Exit | Meaning | What to do |
 | --- | --- | --- | --- |
 | `schedule_unsupported` | 1 | This system has no scheduler Pitboard writes to. On Linux, systemd did not start the system, as in many containers. | Run `pitboard renew` yourself from time to time. |
-| `schedule_not_default_home` | 1 | `PITBOARD_HOME` names a directory other than Pitboard's own, `~/.pitboard` or `%LOCALAPPDATA%\Pitboard`, and the schedule renews only that one. A link to it counts as another directory. | Unset `PITBOARD_HOME`, then [turn on daily renewal](/guides/renewal#turn-on-daily-renewal) again. For the other directory, run `pitboard renew` with `PITBOARD_HOME` set. |
+| `schedule_not_default_home` | 1 | `PITBOARD_HOME` names a directory other than Pitboard's own, `~/.pitboard` or `%USERPROFILE%\AppData\Local\Pitboard`, and the schedule renews only that one. A link to it counts as another directory. | Unset `PITBOARD_HOME`, then [turn on daily renewal](/guides/renewal#turn-on-daily-renewal) again. For the other directory, run `pitboard renew` with `PITBOARD_HOME` set. |
 | `schedule_refused` | 1 | `launchctl` on macOS, Task Scheduler on Windows or `systemctl` on Linux refused the schedule. The message gives its answer. | Fix what it names, then turn on daily renewal again. |
 | `schedule_program_missing` | 1 | The app only: the command line inside the app, which the schedule would run, is not there. | Install the app again. |
 | `schedule_program_temporary` | 1 | On macOS, the app runs from a temporary copy macOS made, which is gone once the app quits. | Move Pitboard to your Applications folder, open it from there and turn on daily renewal again. |
@@ -277,6 +277,7 @@ An interrupted Claude Desktop move shows `move_waiting` on each read, as [Warnin
 | `parked_access_expired` | None | Nothing. The parked login's access token has expired, and Pitboard could not renew it this time. |
 | `nothing_parked` | None | The account has no parked login. [Sign in to it again](/guides/sign-in-again). |
 | `login_replaced` | `its login was replaced by a sign-in outside Pitboard; sign in again` | See [An account reads `login replaced outside Pitboard`](/troubleshooting#an-account-reads-login-replaced-outside-pitboard). Given with `--offline` too. |
+| `login_replaced` | `its login was signed out or replaced in Claude; sign in again` | Claude Desktop: see [An account reads `login replaced outside Pitboard`](/troubleshooting#an-account-reads-login-replaced-outside-pitboard). Given with `--offline` too. |
 | `no_usage` | `Pitboard reads no usage for Claude Desktop`, once for all its accounts | Nothing. A Claude Desktop account has no usage to read: see [What Pitboard does not do for Claude Desktop](/concepts/claude-desktop#what-pitboard-does-not-do-for-claude-desktop). |
 
 ## Cause codes
