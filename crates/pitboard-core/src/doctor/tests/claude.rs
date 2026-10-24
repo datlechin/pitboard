@@ -859,8 +859,13 @@ fn claude_codes_login_is_read_once() {
         .iter()
         .filter(|touch| touch.call == "read" && touch.service == m.service)
         .count();
-    assert_eq!(reads, 1);
-    assert!(matches!(facts.backend, Ok(store::Backend::Keychain)));
+    // A Credential Manager look is a read, so there the looks of found and fallback_login count.
+    let (backend, looks) = match crate::host::OS {
+        Os::Windows => (store::Backend::CredentialManager, 2),
+        Os::MacOs | Os::Linux => (store::Backend::Keychain, 0),
+    };
+    assert_eq!(reads, 1 + looks);
+    assert!(matches!(facts.backend, Ok(held) if held == backend));
     assert!(matches!(facts.credential, Ok(Some(_))));
     assert!(facts.credential_cost.is_some());
     assert!(!facts.credential_parts.is_empty());
