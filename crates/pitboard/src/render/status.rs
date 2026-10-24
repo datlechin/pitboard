@@ -1,10 +1,9 @@
 //! `pitboard status` for a person and for a program.
 
 use crate::ui::{self, BAD, BOLD, DIM, GOOD, WARN, pad, paint};
-use pitboard_core::doctor::renewal_due;
 use pitboard_core::provider::ProviderId;
 use pitboard_core::state::Key;
-use pitboard_core::status::{Report, Row, Stale};
+use pitboard_core::status::{Report, Row, Stale, Standing};
 use pitboard_core::usage::pace::Lasts;
 use pitboard_core::usage::{Snapshot, Source, Window};
 use pitboard_core::{time, words};
@@ -26,79 +25,63 @@ fn typed(row: &Row) -> String {
 
 /// Whether the account can be switched to, and what to do when it cannot.
 fn standing(row: &Row, now: i64) -> String {
-    // A login Pitboard could not pin on any account: nothing to type at it but `doctor`,
-    // which the line under it says.
-    if row.unplaced() {
-        return paint(
+    let sign_in_again = || format!("pitboard enroll {} --sign-in", typed(row));
+    match row.standing(now) {
+        // Nothing to type at it but `doctor`, which the line under it says.
+        Standing::Unplaced => paint(
             WARN,
             match row.stale {
                 Some(Stale::LoginUnusable) => "login cannot be switched",
                 Some(Stale::LoginUnreadable) => "login could not be read",
                 _ => "account could not be identified",
             },
-        );
-    }
-    if row.signed_in {
-        return match (&row.label, row.read_at) {
-            (Some(_), Some(at)) => format!(
+        ),
+        Standing::InUse => match row.read_at {
+            Some(at) => format!(
                 "{} {}",
                 paint(GOOD, "signed in"),
                 paint(DIM, format!("· read {} ago", words::span(now - at)))
             ),
-            (Some(_), None) => paint(GOOD, "signed in"),
-            (None, _) => format!(
-                "{} {}",
-                paint(GOOD, "signed in"),
-                paint(
-                    WARN,
-                    format!("· not enrolled: pitboard enroll {}", typed(row))
-                )
-            ),
-        };
-    }
-    let sign_in_again = format!("pitboard enroll {} --sign-in", typed(row));
-    match &row.parked {
-        // Its login may be the one in use that could not be read; the line under it says so.
-        None if row.stale == Some(Stale::LoginUnreadable) => paint(WARN, "login could not be read"),
-        None if row.stale == Some(Stale::LoginReplaced) => paint(
-            WARN,
-            format!("login replaced outside Pitboard · {sign_in_again}"),
-        ),
-        None => paint(WARN, format!("nothing parked · {sign_in_again}")),
-        Some(_) if row.stale == Some(Stale::LoginRefused) => {
-            paint(BAD, format!("login refused · {sign_in_again}"))
-        }
-        Some(p) if !p.restorable_at(now) => paint(BAD, format!("login expired · {sign_in_again}")),
-        Some(p) => match p.refresh_expires_at {
-            Some(at) if renewal_due(at, now) => paint(
+            None => paint(GOOD, "signed in"),
+        },
+        Standing::NotEnrolled => format!(
+            "{} {}",
+            paint(GOOD, "signed in"),
+            paint(
                 WARN,
-                format!(
-                    "ready · {} · {sign_in_again}",
-                    words::parked_life_column(at, now)
-                ),
-            ),
-            Some(at) => format!(
-                "{} {}",
-                paint(GOOD, "ready"),
-                paint(DIM, format!("· {}", words::parked_life_column(at, now)))
-            ),
+                format!("· not enrolled: pitboard enroll {}", typed(row))
+            )
+        ),
+        // Its login may be the one in use that could not be read; the line under it says so.
+        Standing::LoginUnread => paint(WARN, "login could not be read"),
+        Standing::LoginReplaced => paint(
+            WARN,
+            format!("login replaced outside Pitboard · {}", sign_in_again()),
+        ),
+        Standing::NothingParked => paint(WARN, format!("nothing parked · {}", sign_in_again())),
+        Standing::LoginRefused => paint(BAD, format!("login refused · {}", sign_in_again())),
+        Standing::LoginExpired => paint(BAD, format!("login expired · {}", sign_in_again())),
+        standing @ (Standing::Ready | Standing::Expiring) => {
             // A session cookie's date, which nothing renews: hedged, and never "expired".
-            None => match p.session_expires_at {
-                Some(at) if at > now => format!(
+            let life = row.parked.as_ref().and_then(|p| {
+                match (p.refresh_expires_at, p.session_expires_at) {
+                    (Some(at), _) => Some(words::parked_life_column(at, now)),
+                    (None, Some(at)) => Some(words::session_life_column(at, now)),
+                    (None, None) => None,
+                }
+            });
+            match (standing, life) {
+                (Standing::Expiring, Some(life)) => {
+                    paint(WARN, format!("ready · {life} · {}", sign_in_again()))
+                }
+                (_, Some(life)) => format!(
                     "{} {}",
                     paint(GOOD, "ready"),
-                    paint(DIM, format!("· {}", words::session_life_column(at, now)))
+                    paint(DIM, format!("· {life}"))
                 ),
-                Some(at) => paint(
-                    WARN,
-                    format!(
-                        "ready · {} · {sign_in_again}",
-                        words::session_life_column(at, now)
-                    ),
-                ),
-                None => paint(GOOD, "ready"),
-            },
-        },
+                (_, None) => paint(GOOD, "ready"),
+            }
+        }
     }
 }
 
